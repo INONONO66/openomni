@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Subprocess } from "bun";
 
 const DEFAULT_WORKER_STOP_GRACE_MS = 5_000;
@@ -14,10 +13,12 @@ const workerEnvKeys = new Set([
   "BUN_INSTALL",
   "NODE_ENV",
   "CI",
+  "OPENOMNI_DB_PATH",
+  "OPENOMNI_MODELS_URL",
+  "OPENOMNI_MODELS_PATH",
+  "OPENOMNI_DISABLE_MODELS_FETCH",
   "OPENOMNI_WORKER_ENV_FIXTURE",
   "OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS",
-  "OPENOMNI_WORKER_FIRST_READY_DELAY_MS",
-  "OPENOMNI_WORKER_BOOTSTRAP_REJECTS",
 ]);
 
 export function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
@@ -27,147 +28,6 @@ export function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string
     if (value !== undefined) env[key] = value;
   }
   return env;
-}
-
-export const WORKER_GENERATION_KEY_BYTES = 32;
-
-export function createWorkerGenerationKey(): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(WORKER_GENERATION_KEY_BYTES));
-}
-
-export interface WorkerGenerationKeySignerContext {
-  readonly runtimeId: string;
-  readonly workerId: string;
-  readonly generation: number;
-  readonly principalId: string;
-  readonly attempt: Readonly<{
-    version: "attempt-ref-v1";
-    workItemId: string;
-    attemptId: string;
-    attemptSeq: number;
-  }>;
-  readonly processId: number;
-}
-
-export interface WorkerGenerationKeySigner {
-  readonly context: WorkerGenerationKeySignerContext;
-  sign(bytes: Uint8Array): Uint8Array;
-  dispose(): void;
-}
-
-export function createWorkerGenerationKeySigner(
-  key: Uint8Array,
-  context: WorkerGenerationKeySignerContext,
-): WorkerGenerationKeySigner {
-  if (key.byteLength !== WORKER_GENERATION_KEY_BYTES) {
-    throw new TypeError("invalid worker generation key");
-  }
-  let available = true;
-  return Object.freeze({
-    context: Object.freeze(context),
-    sign(bytes: Uint8Array): Uint8Array {
-      if (!available) throw new Error("worker generation key unavailable");
-      available = false;
-      try {
-        return new Uint8Array(createHmac("sha256", key).update(bytes).digest());
-      } finally {
-        key.fill(0);
-      }
-    },
-    dispose(): void {
-      available = false;
-      key.fill(0);
-    },
-  });
-}
-
-export function workerGenerationToken(key: Uint8Array): string {
-  if (key.byteLength !== WORKER_GENERATION_KEY_BYTES) {
-    throw new TypeError("invalid worker generation key");
-  }
-  return createHmac("sha256", key)
-    .update("openomni.worker-generation-token.v1")
-    .digest("base64url");
-}
-
-export type WorkerBootstrapProofContext = Readonly<{
-  runtimeId?: string;
-  workerId: string;
-  generation: number;
-}>;
-
-export function createWorkerBootstrapChallenge(): string {
-  return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
-}
-
-export function workerBootstrapProof(
-  authToken: string,
-  challenge: string,
-  phase: "request" | "ready",
-  context: WorkerBootstrapProofContext,
-): string {
-  return createHmac("sha256", authToken)
-    .update("openomni.worker-bootstrap-proof.v1\0")
-    .update(phase)
-    .update("\0")
-    .update(challenge)
-    .update("\0")
-    .update(context.runtimeId ?? "")
-    .update("\0")
-    .update(context.workerId)
-    .update("\0")
-    .update(String(context.generation))
-    .digest("base64url");
-}
-
-export function isWorkerBootstrapProof(value: unknown, expected: string): boolean {
-  if (typeof value !== "string") return false;
-  const actualBytes = Buffer.from(value);
-  const expectedBytes = Buffer.from(expected);
-  return (
-    actualBytes.byteLength === expectedBytes.byteLength &&
-    timingSafeEqual(actualBytes, expectedBytes)
-  );
-}
-
-export function writeWorkerGenerationKey(
-  proc: Subprocess<"pipe", "pipe", "pipe">,
-  key: Uint8Array,
-): void {
-  try {
-    const written = proc.stdin.write(key);
-    if (written !== key.byteLength) throw new Error("incomplete worker generation key write");
-  } finally {
-    key.fill(0);
-  }
-}
-
-export function writeWorkerPrivateFrame(
-  proc: Subprocess<"pipe", "pipe", "pipe">,
-  frame: Uint8Array,
-): void {
-  try {
-    if (frame.byteLength > 0xffff_ffff) throw new RangeError("worker private frame is too large");
-    const lengthPrefix = new Uint8Array(4);
-    new DataView(lengthPrefix.buffer).setUint32(0, frame.byteLength, false);
-    if (proc.stdin.write(lengthPrefix) !== lengthPrefix.byteLength) {
-      throw new Error("incomplete worker private frame length write");
-    }
-    if (proc.stdin.write(frame) !== frame.byteLength) {
-      throw new Error("incomplete worker private frame write");
-    }
-    proc.stdin.flush();
-  } finally {
-    frame.fill(0);
-  }
-}
-
-export function closeWorkerPrivatePipe(proc: Subprocess<"pipe", "pipe", "pipe">): void {
-  try {
-    void proc.stdin.end();
-  } catch {
-    // The process exit path may race an explicit stop that already closed it.
-  }
 }
 
 export function workerStopGraceMs(): number {

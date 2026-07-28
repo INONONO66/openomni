@@ -1,22 +1,21 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { Ipc } from "@openomni/protocol";
-
-type BootstrapParams = ReturnType<(typeof Ipc.Methods)["coordinator.bootstrap"]["params"]["parse"]>;
+import type { Auth } from "@openomni/llm";
+import { Operational, WorkerBootstrap } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 export namespace WorkerBootstrapHandler {
   interface ServerPort {
     useConnection(id: string): void;
     notify(method: string, params?: Record<string, unknown>): void;
-    closeConnection(id: string): void;
   }
 
-  export interface State {
+  interface State {
     readonly ready: Promise<void>;
-    getBootstrap(): BootstrapParams | null;
+    getBootstrap(): WorkerBootstrap.Bootstrap | null;
+    resolveAuth(provider: string): Auth.Info | undefined;
   }
 
   interface CreateStateOptions {
-    readonly onBootstrap?: (bootstrap: BootstrapParams) => void;
+    readonly onBootstrap?: (bootstrap: WorkerBootstrap.Bootstrap) => void;
   }
 
   interface HandleOptions {
@@ -30,61 +29,13 @@ export namespace WorkerBootstrapHandler {
   }
 
   interface MutableState extends State {
-    setBootstrap(bootstrap: BootstrapParams): void;
+    setBootstrap(bootstrap: WorkerBootstrap.Bootstrap): void;
     markReady(): void;
     rejectReady(error: Error): void;
   }
 
-  function bootstrapProof(
-    authToken: string,
-    challenge: string,
-    phase: "request" | "ready",
-    bootstrap: Pick<BootstrapParams, "runtimeId" | "workerId" | "generation">,
-  ): string {
-    return createHmac("sha256", authToken)
-      .update("openomni.worker-bootstrap-proof.v1\0")
-      .update(phase)
-      .update("\0")
-      .update(challenge)
-      .update("\0")
-      .update(bootstrap.runtimeId)
-      .update("\0")
-      .update(bootstrap.workerId)
-      .update("\0")
-      .update(String(bootstrap.generation))
-      .digest("base64url");
-  }
-
-  function matchesProof(value: string, expected: string): boolean {
-    const actualBytes = Buffer.from(value);
-    const expectedBytes = Buffer.from(expected);
-    return (
-      actualBytes.byteLength === expectedBytes.byteLength &&
-      timingSafeEqual(actualBytes, expectedBytes)
-    );
-  }
-
-  function rejectBootstrap(options: HandleOptions, error: string): void {
-    options.respond({ ok: false, error });
-    queueMicrotask(() => options.server.closeConnection(options.connectionId));
-  }
-
-  function parseBootstrapCredential(
-    value: string,
-  ): { challenge: string; proof: string } | undefined {
-    const separator = value.indexOf(".");
-    if (
-      separator <= 0 ||
-      separator === value.length - 1 ||
-      value.indexOf(".", separator + 1) >= 0
-    ) {
-      return undefined;
-    }
-    return { challenge: value.slice(0, separator), proof: value.slice(separator + 1) };
-  }
-
   export function createState(options: CreateStateOptions = {}): MutableState {
-    let bootstrap: BootstrapParams | null = null;
+    let bootstrap: WorkerBootstrap.Bootstrap | null = null;
     let resolveReady: () => void = () => undefined;
     let rejectReady: (_error: Error) => void = () => undefined;
 
@@ -96,6 +47,7 @@ export namespace WorkerBootstrapHandler {
     return {
       ready,
       getBootstrap: () => bootstrap,
+      resolveAuth: (provider) => resolveBootstrapAuth(bootstrap, provider),
       setBootstrap(nextBootstrap) {
         bootstrap = nextBootstrap;
         options.onBootstrap?.(nextBootstrap);
@@ -108,45 +60,66 @@ export namespace WorkerBootstrapHandler {
   }
 
   export function handleBootstrap(options: HandleOptions): void {
-    let bootstrap: BootstrapParams;
-    try {
-      bootstrap = Ipc.Methods["coordinator.bootstrap"].params.parse(options.params);
-    } catch (error) {
-      const failure = error instanceof Error ? error : new Error(String(error));
-      options.state.rejectReady(failure);
-      rejectBootstrap(options, failure.message);
+    if (options.params?.authToken !== options.ipcAuthToken) {
+      options.respond({ ok: false, error: "unauthorized" });
       return;
     }
-    const credential = parseBootstrapCredential(bootstrap.authToken);
-    const alreadyBootstrapped = options.state.getBootstrap() !== null;
-    if (
-      credential === undefined ||
-      bootstrap.workerId !== options.workerId ||
-      alreadyBootstrapped ||
-      !matchesProof(
-        credential.proof,
-        bootstrapProof(options.ipcAuthToken, credential.challenge, "request", bootstrap),
-      )
-    ) {
-      rejectBootstrap(options, "unauthorized coordinator bootstrap");
-      return;
-    }
+
     try {
-      options.server.useConnection(options.connectionId);
+      const bootstrap = WorkerBootstrap.Bootstrap.parse(options.params.bootstrap);
       options.state.setBootstrap(bootstrap);
-      options.server.notify("worker.bootstrap_ready", {
-        authToken: bootstrapProof(options.ipcAuthToken, credential.challenge, "ready", bootstrap),
-        runtimeId: bootstrap.runtimeId,
-        workerId: bootstrap.workerId,
-        generation: bootstrap.generation,
-      });
+      options.server.useConnection(options.connectionId);
       options.state.markReady();
+      options.server.notify("worker.bootstrap_ready", {
+        workerId: options.workerId,
+        authToken: options.ipcAuthToken,
+      });
+      Bus.publish(Operational.Info, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "worker bootstrap received",
+        context: {
+          workerId: options.workerId,
+          agents: bootstrap.agents.length,
+          runtimeTools: bootstrap.toolCatalog.length,
+        },
+      });
       options.respond({ ok: true });
-    } catch (error) {
-      const failure = error instanceof Error ? error : new Error(String(error));
-      options.state.rejectReady(failure);
-      options.respond({ ok: false, error: failure.message });
-      queueMicrotask(() => options.server.closeConnection(options.connectionId));
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      options.state.rejectReady(error);
+      options.respond({ ok: false, error: error.message });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "worker bootstrap failed",
+        context: {
+          workerId: options.workerId,
+          err: error.message,
+        },
+      });
     }
+  }
+
+  function resolveBootstrapAuth(
+    bootstrap: WorkerBootstrap.Bootstrap | null,
+    provider: string,
+  ): Auth.Info | undefined {
+    const credentials = bootstrap?.credentials;
+    if (!credentials) return undefined;
+
+    const prefix = provider.toUpperCase();
+    const apiKey = credentials[`${prefix}_API_KEY`];
+    const baseURL = credentials[`${prefix}_BASE_URL`];
+
+    if (baseURL) {
+      return { type: "proxy", baseURL, ...(apiKey ? { apiKey } : {}) };
+    }
+    if (apiKey) {
+      return { type: "api", key: apiKey };
+    }
+    return undefined;
   }
 }

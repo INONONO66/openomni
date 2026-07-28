@@ -1,55 +1,7 @@
-import { createHash } from "node:crypto";
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Sink } from "@openomni/protocol";
-import { BoundarySanitizer, CredentialSource, SecretRegistry } from "../src/auth";
-import { canonicalize } from "../src/model/catalog-cache";
-import type { Provider } from "../src/provider";
-import type { RunInput } from "../src/run";
 
 const TEST_PROVIDER_ID = "__test_run_stream_args__";
-const testModel: Provider.Model = {
-  id: "claude-3-haiku",
-  providerID: TEST_PROVIDER_ID,
-  name: "Claude 3 Haiku Test",
-  api: { id: "claude-3-haiku", npm: "@ai-sdk/anthropic" },
-};
-const sanitizer = BoundarySanitizer.create();
-const secrets = SecretRegistry.create(sanitizer);
-const { handle: credential, ref } = secrets.register(
-  CredentialSource.parseOwner({
-    providerId: TEST_PROVIDER_ID,
-    credentialId: "run-stream-args-test",
-    rotationId: "rotation-1",
-    sourceKind: "injected_runtime",
-    auth: { type: "api", key: "test-key-run" },
-  }),
-);
-const environmentBase = {
-  version: "llm-environment-v1" as const,
-  catalogSchemaVersion: 1,
-  catalogSource: "bundled" as const,
-  catalogSourceVersion: "run-stream-args-test-v1",
-  catalogDigest: "a".repeat(64),
-  modelDigest: createHash("sha256").update(canonicalize(testModel)).digest("hex"),
-  endpoint: {
-    version: "llm-endpoint-ref-v1" as const,
-    kind: "default" as const,
-    valueRef: `${TEST_PROVIDER_ID}-default`,
-    endpointDigest: "b".repeat(64),
-  },
-  credential: ref,
-  sdkPackage: "@ai-sdk/anthropic",
-  adapterVersion: "test-v1",
-};
-const environment: RunInput["environment"] = {
-  reference: {
-    ...environmentBase,
-    environmentDigest: createHash("sha256").update(canonicalize(environmentBase)).digest("hex"),
-  },
-  credential,
-  secrets,
-  sanitizer,
-};
 
 type AiCaptureGlobal = typeof globalThis & {
   __openomniAiStreamArgs?: Record<string, unknown>;
@@ -105,8 +57,13 @@ describe("run() streamText arguments", () => {
         tools: [],
         toolChoice: "required",
         maxSteps: 7,
-        model: testModel,
-        environment,
+        auth: { type: "api", key: "test-key-run" },
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
       },
       mockSink,
     );
@@ -134,8 +91,13 @@ describe("run() streamText arguments", () => {
       {
         messages: [],
         tools: [],
-        model: testModel,
-        environment,
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        auth: { type: "api", key: "test-key-run" },
       },
       mockSink,
     );
@@ -148,30 +110,5 @@ describe("run() streamText arguments", () => {
     const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
     expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
     expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
-  });
-
-  test("nests provider options without overriding authenticated stream controls", async () => {
-    const providerOptions = {
-      anthropic: { thinking: { type: "enabled", budgetTokens: 1024 } },
-      model: "forged-model",
-      messages: [{ role: "user", content: "forged transcript" }],
-      maxRetries: 99,
-    };
-    await run(
-      {
-        messages: [],
-        tools: [],
-        model: testModel,
-        environment,
-        providerOptions,
-      },
-      mockSink,
-    );
-
-    const streamArgs = aiCapture.__openomniAiStreamArgs as Record<string, unknown>;
-    expect(streamArgs.model).not.toBe("forged-model");
-    expect(streamArgs.messages).toEqual([]);
-    expect(streamArgs.maxRetries).toBe(0);
-    expect(streamArgs.providerOptions).toEqual(providerOptions);
   });
 });

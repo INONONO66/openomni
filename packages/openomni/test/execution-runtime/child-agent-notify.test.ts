@@ -8,10 +8,8 @@ import {
   createChildAgentRuntime,
   createChildAgentTool,
 } from "../../src/execution-runtime";
-import { createTestLlmEnvironment } from "../helpers/llm-environment.ts";
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
-const { environment, modelCatalog } = createTestLlmEnvironment();
 
 const successfulResult: AgentResult = {
   text: "background result",
@@ -40,8 +38,6 @@ describe("child_agent completion notification", () => {
     const injectionQueue = InjectionQueue.create();
     const runtime = createChildAgentRuntime({
       model,
-      environment,
-      modelCatalog,
       parentMessages: [],
       parentTools: [],
       traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
@@ -87,8 +83,6 @@ describe("child_agent completion notification", () => {
     const injectionQueue = InjectionQueue.create();
     const runtime = createChildAgentRuntime({
       model,
-      environment,
-      modelCatalog,
       parentMessages: [],
       parentTools: [],
       traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
@@ -126,8 +120,6 @@ describe("child_agent completion notification", () => {
     const controller = new AbortController();
     const runtime = createChildAgentRuntime({
       model,
-      environment,
-      modelCatalog,
       parentMessages: [],
       parentTools: [],
       traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },

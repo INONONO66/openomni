@@ -122,7 +122,7 @@ export function emitErrorRetry(
     time: Date.now(),
     attempt: options.attempt,
     maxAttempts: options.maxAttempts,
-    error: "retryable run failure",
+    error: options.error,
   });
   Bus.publish(AgentExecution.ErrorRetry, {
     ...agentBase,
@@ -130,18 +130,18 @@ export function emitErrorRetry(
     time: Date.now(),
     attempt: options.attempt,
     maxAttempts: options.maxAttempts,
-    error: "retryable run failure",
+    error: options.error,
   });
 }
 
-export function emitRunFailed(agentBase: AgentRunBase, _error: string): void {
+export function emitRunFailed(agentBase: AgentRunBase, error: string): void {
   Bus.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId || undefined,
     component: "agent",
     msg: "agent.run.failed",
-    error: "agent run failed",
+    error,
   });
 }
 

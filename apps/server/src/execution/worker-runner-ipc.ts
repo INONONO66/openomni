@@ -1,94 +1,28 @@
-import type { BoundarySanitizer } from "@openomni/llm/credential-runtime";
 import {
   DispatchRuntime,
-  type BoundWorkerKernelPortV1,
   type DispatchHandler,
   type DispatchToolRuntime,
   ToolProxyProvider,
 } from "@openomni/openomni";
-import { Execution, Tool } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
 const WORKER_RESIDENT_ASK_IPC_TIMEOUT_MS = 5 * 60_000;
-const WORKER_KERNEL_IPC_TIMEOUT_MS = 30_000;
-
-function sanitizeIpcFailure(
-  sanitizer: BoundarySanitizer,
-  boundary: string,
-  error: unknown,
-): string {
-  const message = sanitizer.sanitizeError(boundary, error).message;
-  let bounded = "";
-  let replacingControlCharacters = false;
-  for (const character of message) {
-    const characterCode = character.charCodeAt(0);
-    if (characterCode <= 31 || characterCode === 127) {
-      if (!replacingControlCharacters) bounded += " ";
-      replacingControlCharacters = true;
-      continue;
-    }
-    bounded += character;
-    replacingControlCharacters = false;
-    if (bounded.length >= 512) break;
-  }
-  return bounded.trim().slice(0, 512) || "unspecified";
-}
 
 export interface WorkerRunIpcServer {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
 }
 
-export function createWorkerKernelPort(options: {
-  readonly server: WorkerRunIpcServer;
-  readonly ipcAuthToken: string;
-  readonly workerId: string;
-  readonly generation: number;
-  readonly sessionId: string;
-  readonly runId: string;
-}): BoundWorkerKernelPortV1 {
-  const channel = {
-    authToken: options.ipcAuthToken,
-    workerId: options.workerId,
-    generation: options.generation,
-    sessionId: options.sessionId,
-    runId: options.runId,
-  };
-  return Object.freeze({
-    async execute(command: Parameters<BoundWorkerKernelPortV1["execute"]>[0]) {
-      const raw = await options.server.call(
-        "worker.kernel_transition",
-        { ...channel, command },
-        WORKER_KERNEL_IPC_TIMEOUT_MS,
-      );
-      return Execution.KernelTransitionResultV1.parse(raw);
-    },
-    async query(request: Parameters<BoundWorkerKernelPortV1["query"]>[0]) {
-      const raw = await options.server.call(
-        "worker.kernel_query",
-        { ...channel, request },
-        WORKER_KERNEL_IPC_TIMEOUT_MS,
-      );
-      return Execution.KernelQueryResultV1.parse(raw);
-    },
-  });
-}
-
 export function createWorkerDispatchRuntime(options: {
   readonly server: WorkerRunIpcServer;
   readonly ipcAuthToken: string;
   readonly workerId: string;
-  readonly generation: number;
   readonly sessionId: string;
   readonly runId: string;
   readonly workspaceRoot?: string;
-  readonly waitKernel: ConstructorParameters<typeof DispatchRuntime>[0]["waitKernel"];
-  readonly authorityQueries: ConstructorParameters<typeof DispatchRuntime>[0]["authorityQueries"];
 }): DispatchToolRuntime {
-  const runtime = new DispatchRuntime({
-    waitKernel: options.waitKernel,
-    authorityQueries: options.authorityQueries,
-  });
+  const runtime = new DispatchRuntime();
   const handler: DispatchHandler = async (command, context) => {
     if (!context?.wait) {
       throw new Error("worker dispatch resident.ask requires wait: true");
@@ -100,31 +34,12 @@ export function createWorkerDispatchRuntime(options: {
     const callId = command.dispatchId;
     const payload =
       typeof command.payload === "string" ? command.payload : JSON.stringify(command.payload);
-    if (context.sessionId !== undefined && context.sessionId !== options.sessionId) {
-      throw new Error("worker dispatch session substitution denied");
-    }
-    if (context.runId !== undefined && context.runId !== options.runId) {
-      throw new Error("worker dispatch run substitution denied");
-    }
-    if (context.workspaceRoot !== undefined && context.workspaceRoot !== options.workspaceRoot) {
-      throw new Error("worker dispatch workspace substitution denied");
-    }
-    const sessionId = options.sessionId;
-    const runId = options.runId;
+    const sessionId = context.sessionId ?? options.sessionId;
+    const runId = context.runId ?? options.runId;
+    const workspaceRoot = context.workspaceRoot ?? options.workspaceRoot;
     const cancelInboundWait = () => {
       void options.server
-        .call(
-          "worker.inbound_wait_cancel",
-          {
-            authToken: options.ipcAuthToken,
-            workerId: options.workerId,
-            generation: options.generation,
-            sessionId,
-            runId,
-            callId,
-          },
-          5_000,
-        )
+        .call("worker.inbound_wait_cancel", { sessionId, runId, callId }, 5_000)
         .catch(() => undefined);
     };
 
@@ -135,11 +50,11 @@ export function createWorkerDispatchRuntime(options: {
           {
             authToken: options.ipcAuthToken,
             workerId: options.workerId,
-            generation: options.generation,
             sessionId,
             runId,
             callId,
             payload,
+            ...(workspaceRoot ? { workspaceRoot } : {}),
           },
           WORKER_RESIDENT_ASK_IPC_TIMEOUT_MS,
         ),
@@ -179,17 +94,12 @@ export function createWorkerDispatchRuntime(options: {
 
 export function createMcpProxyProvider(options: {
   readonly toolCatalog: Parameters<typeof ToolProxyProvider.create>[0];
-  readonly sanitizer: BoundarySanitizer;
   readonly server: WorkerRunIpcServer;
-  readonly ipcAuthToken: string;
-  readonly workerId: string;
-  readonly generation: number;
   readonly runId: string;
   readonly sessionId: string;
   readonly workspaceRoot?: string;
 }): ReturnType<typeof ToolProxyProvider.create> {
-  const { toolCatalog, server, ipcAuthToken, workerId, generation, runId, sessionId, sanitizer } =
-    options;
+  const { toolCatalog, server, runId, sessionId, workspaceRoot } = options;
   return ToolProxyProvider.create(toolCatalog, async (toolName, toolArgs, context) => {
     const callId = crypto.randomUUID();
     if (context?.signal?.aborted) {
@@ -203,11 +113,7 @@ export function createMcpProxyProvider(options: {
 
     const cancelToolCall = () => {
       void server
-        .call(
-          "worker.tool_call_cancel",
-          { authToken: ipcAuthToken, workerId, generation, runId, sessionId, callId },
-          5_000,
-        )
+        .call("worker.tool_call_cancel", { runId, sessionId, callId }, 5_000)
         .catch(() => undefined);
     };
 
@@ -217,33 +123,24 @@ export function createMcpProxyProvider(options: {
           server.call(
             "worker.tool_call",
             {
-              authToken: ipcAuthToken,
-              workerId,
-              generation,
               runId,
               sessionId,
               callId,
               tool: toolName,
               input: toolArgs,
+              ...(workspaceRoot ? { workspaceRoot } : {}),
             },
             WORKER_TOOL_CALL_IPC_TIMEOUT_MS,
           ),
         context?.signal,
         cancelToolCall,
       );
-      const result = Tool.Result.parse(raw);
-      if (result.isError !== true) return result;
-      return {
-        ...result,
-        id: sanitizeIpcFailure(sanitizer, "worker-tool-result-id", result.id),
-        toolCallId: sanitizeIpcFailure(sanitizer, "worker-tool-result-call-id", result.toolCallId),
-        output: sanitizeIpcFailure(sanitizer, "worker-tool-result", result.output),
-      };
+      return Tool.Result.parse(raw);
     } catch (error) {
       return {
         id: callId,
         toolCallId: callId,
-        output: sanitizeIpcFailure(sanitizer, "worker-tool-call", error),
+        output: error instanceof Error ? error.message : String(error),
         isError: true,
         settlement: "unknown",
       };

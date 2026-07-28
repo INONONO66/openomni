@@ -1,4 +1,9 @@
-import { WorkerDeliveryError, WorkerDriver, type Execution } from "@openomni/protocol";
+import {
+  WorkerDeliveryError,
+  WorkerDriver,
+  type Execution,
+  type WorkerBootstrap,
+} from "@openomni/protocol";
 import fs from "node:fs";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
 import {
@@ -22,11 +27,6 @@ import {
   type WorkerPorts,
   type WorkerSlot,
 } from "./worker-manager-types";
-
-type WorkerBootstrapConfig = Readonly<Record<string, unknown>> & {
-  readonly configEpoch: string;
-  readonly credentials?: never;
-};
 
 export type {
   DeliverTask,
@@ -61,9 +61,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   // Only the two lazily-read config values are stored (#480 review W-b);
   // holding the whole raw config object invited mutation-at-a-distance.
   private readonly workerScript: string;
-  private readonly workerBootstrap?: WorkerBootstrapConfig;
-  private readonly runtimeId?: string;
-  private readonly principalId?: string;
+  private readonly workerBootstrap?: WorkerBootstrap.Bootstrap;
   private readonly ports: WorkerPorts;
   private readonly socketDir: string;
   private readonly maxActiveWorkers: number;
@@ -80,8 +78,6 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   constructor(config: WorkerManagerConfig, ports: WorkerPorts) {
     this.workerScript = config.workerScript;
     this.workerBootstrap = config.bootstrap;
-    this.runtimeId = config.runtimeId;
-    this.principalId = config.principalId;
     this.ports = ports;
     this.socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp", ports.events);
     this.maxActiveWorkers = normalizeMaxActiveWorkers(config.maxActiveWorkers);
@@ -170,7 +166,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
           "completed",
           deliveredAt,
         );
-        return Object.freeze({ ...result, workerId: String(slot.id) });
+        return result;
       } catch (error) {
         const interrupted =
           error instanceof WorkerDeliveryError && error.data.code === "wall_time_exceeded";
@@ -356,18 +352,11 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     slot.supervisor = new WorkerSupervisor({
       id: slot.id,
       script: this.workerScript,
-      runtimeId: this.runtimeId,
-      principalId: this.principalId,
       events: this.ports.events,
       socketDir: this.socketDir,
       bootstrap: this.workerBootstrap,
       toolRelay: bindToolRelayTrace(this.ports.toolRelay, this.activeRuns, slot),
       inboundWait: this.ports.inboundWait,
-      kernelTransition: this.ports.kernelTransition,
-      kernelQuery: this.ports.kernelQuery,
-      observation: this.ports.observation,
-      provisionCredentials: this.ports.provisionCredentials,
-      runtimeDefinition: this.ports.runtimeDefinition,
     });
     return slot.supervisor;
   }

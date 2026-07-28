@@ -14,7 +14,7 @@ interface RawConfig {
   model?: {
     provider?: string;
     id?: string;
-    providerOptions?: unknown;
+    providerOptions?: Record<string, unknown>;
   };
   mcp?: {
     servers?: unknown;
@@ -45,7 +45,7 @@ interface RawConfig {
 
 export interface ServerConfig {
   workspace?: { root: string };
-  model?: { provider: string; id: string; providerOptions?: never };
+  model?: { provider: string; id: string; providerOptions?: Record<string, unknown> };
   mcp: { servers: McpServerConfig[] };
   server: { port: number; host: string; wsToken?: string };
   storage: { dbPath: string };
@@ -87,17 +87,12 @@ function resolve(raw: RawConfig, configPath: string): ServerConfig {
     });
   }
 
-  if (raw.model?.providerOptions !== undefined) {
-    throw new TypeError(
-      "model.providerOptions is not accepted by server configuration; provider behavior must be configured at the authenticated LLM boundary",
-    );
-  }
-
   const model =
     raw.model?.provider && raw.model?.id
       ? {
           provider: raw.model.provider,
           id: raw.model.id,
+          ...(raw.model.providerOptions ? { providerOptions: raw.model.providerOptions } : {}),
         }
       : undefined;
 

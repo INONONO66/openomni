@@ -36,11 +36,6 @@ export type InboundWaitResult = {
   accepted: boolean;
   output?: string;
   error?: string;
-  /** Host-only delivery settlement; supervisor strips this before writing the IPC response. */
-  deliverySettlement?: {
-    confirmed(): Promise<void>;
-    failed(): Promise<void>;
-  };
 };
 
 export type ActiveRequest = {

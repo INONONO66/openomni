@@ -1,163 +1,161 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { MaterializedCredential } from "../../src/auth";
-import { ModelsDev, Provider } from "../../src/provider";
-import { getLanguage, getSDK } from "../../src/provider/sdk";
+import { describe, expect, it } from "bun:test";
+import type { Auth } from "../../src/auth";
+import { getSDK, getLanguage } from "../../src/provider/sdk";
+import { Provider } from "../../src/provider";
 
-const environment = {
-  modelDigest: "b".repeat(64),
-  endpoint: {
-    version: "llm-endpoint-ref-v1" as const,
-    kind: "default" as const,
-    valueRef: "provider-default",
-    endpointDigest: "c".repeat(64),
-  },
-  credential: {
-    version: "credential-source-ref-v1" as const,
-    providerId: "openai",
-    authType: "api" as const,
-    credentialId: "owner-default",
-    rotationId: "rotation-1",
-    sourceKind: "default_file" as const,
-    sourcePathDigest: "d".repeat(64),
-    credentialDigest: "e".repeat(64),
-  },
-  sdkPackage: "@ai-sdk/openai",
-  adapterVersion: "1",
-};
+type ModelRef = { readonly modelId?: string };
+type ProviderRef = { readonly provider?: string };
 
-const catalog = {
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    env: ["ANTHROPIC_API_KEY"],
-    npm: "@ai-sdk/anthropic",
-    models: { claude: { id: "claude-api-id", name: "Claude" } },
-  },
-  openai: {
-    id: "openai",
-    name: "OpenAI",
-    env: ["OPENAI_API_KEY"],
-    npm: "@ai-sdk/openai",
-    models: { gpt: { id: "gpt-api-id", name: "GPT" } },
-  },
-};
-
-function credential(providerId: string): MaterializedCredential {
-  return Object.freeze({
-    providerId,
-    authType: "api" as const,
-    key: new TextEncoder().encode("test-key"),
-  });
+function makeAnthropicModel(id?: string): Provider.Model {
+  return {
+    id: id ?? "claude-sonnet-4-20250514",
+    providerID: "anthropic",
+    name: "Claude Sonnet 4",
+    api: { npm: "@ai-sdk/anthropic" },
+    capabilities: { reasoning: true },
+    cost: { input: 3, output: 15 },
+  };
 }
 
-function proxyCredential(apiKey?: string): MaterializedCredential {
-  return Object.freeze({
-    providerId: "openai",
-    authType: "proxy" as const,
-    baseURL: "http://localhost:8317/v1",
-    ...(apiKey === undefined ? {} : { apiKey: new TextEncoder().encode(apiKey) }),
-  });
+function makeOpenAIModel(id?: string): Provider.Model {
+  return {
+    id: id ?? "gpt-4o",
+    providerID: "openai",
+    name: "GPT-4o",
+    api: { npm: "@ai-sdk/openai" },
+    capabilities: { reasoning: false },
+    cost: { input: 2.5, output: 10 },
+  };
 }
 
-describe("Provider integration", () => {
-  let directory: string;
+describe("Provider Integration", () => {
+  it("full flow: getSDK → getLanguage (Anthropic API)", () => {
+    const auth: Auth.Info = { type: "api", key: "test-anthropic-key" };
+    const model = makeAnthropicModel();
 
-  beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), "openomni-provider-integration-"));
+    const sdk = getSDK(model, auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const sdkLm = sdk.languageModel(model.id) as ModelRef;
+    expect(sdkLm).toBeDefined();
+    expect(sdkLm.modelId).toBe(model.id);
+
+    const lm = getLanguage(model, auth) as ModelRef;
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe(model.id);
   });
 
-  afterEach(async () => {
-    await rm(directory, { recursive: true, force: true });
+  it("full flow: getSDK → getLanguage (Anthropic proxy)", () => {
+    const auth: Auth.Info = {
+      type: "proxy",
+      baseURL: "http://localhost:8317",
+    };
+    const model = makeAnthropicModel("claude-opus-4-20250514");
+
+    const sdk = getSDK(model, auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const sdkLm = sdk.languageModel(model.id) as ModelRef;
+    expect(sdkLm).toBeDefined();
+    expect(sdkLm.modelId).toBe(model.id);
+
+    const lm = getLanguage(model, auth) as ModelRef;
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe(model.id);
   });
 
-  function catalogService() {
-    return ModelsDev.createService({
-      cachePath: join(directory, "models.json"),
-      environment,
-      remoteURL: "https://models.test/catalog.json",
-      dependencies: { fetchRemote: async () => ({ catalog, version: "test-v1" }) },
+  it("full flow: getSDK returns valid OpenAI SDK (API)", () => {
+    const auth: Auth.Info = { type: "api", key: "test-openai-key" };
+    const model = makeOpenAIModel();
+
+    const sdk = getSDK(model, auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+
+    const lm = sdk.languageModel("gpt-4o") as ModelRef;
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("gpt-4o");
+  });
+
+  it("full flow: getSDK returns valid OpenAI SDK (proxy)", () => {
+    const auth: Auth.Info = {
+      type: "proxy",
+      baseURL: "http://localhost:8317/v1",
+      apiKey: "test-proxy-api-key",
+    };
+    const model = makeOpenAIModel("gpt-5.1-codex-max");
+
+    const sdk = getSDK(model, auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel(model.id);
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe(model.id);
+  });
+
+  it("should list all available providers", async () => {
+    const providers = await Provider.listProviders();
+    expect(Array.isArray(providers)).toBe(true);
+    expect(providers).toContain("anthropic");
+    expect(providers).toContain("openai");
+  });
+
+  it("should list models for each provider", async () => {
+    const anthropicModels = await Provider.listModels("anthropic");
+    expect(Array.isArray(anthropicModels)).toBe(true);
+    expect(anthropicModels.length).toBeGreaterThan(0);
+
+    const openaiModels = await Provider.listModels("openai");
+    expect(Array.isArray(openaiModels)).toBe(true);
+    expect(openaiModels.length).toBeGreaterThan(0);
+  });
+
+  it("should return all OpenAI models for both proxy and api auth types", async () => {
+    const proxyModels = await Provider.listModels("openai", "proxy");
+    expect(Array.isArray(proxyModels)).toBe(true);
+    expect(proxyModels.length).toBeGreaterThan(0);
+
+    const apiModels = await Provider.listModels("openai", "api");
+    expect(Array.isArray(apiModels)).toBe(true);
+    expect(apiModels.length).toBeGreaterThan(0);
+  });
+
+  it("snapshot fallback provides data when ModelsDev is loaded", async () => {
+    const providers = await Provider.listProviders();
+    expect(providers.length).toBeGreaterThan(0);
+  });
+
+  it("maps custom models without stale removed-provider npm metadata", () => {
+    const provider = {
+      id: "custom",
+      name: "Custom",
+      env: [],
+      api: "http://localhost:8317/v1",
+      models: {},
+    };
+    const model = Provider.fromModelsDevModel(provider, {
+      id: "custom-model",
+      name: "Custom Model",
     });
-  }
 
-  it("lists providers and models from the explicitly supplied catalog service", async () => {
-    const service = catalogService();
-
-    expect(await Provider.listProviders(service)).toEqual(["anthropic", "openai"]);
-    const anthropic = await Provider.listModels(service, "anthropic");
-    const openai = await Provider.listModels(service, "openai");
-
-    expect(anthropic.map((model) => model.id)).toEqual(["claude-api-id"]);
-    expect(openai.map((model) => model.id)).toEqual(["gpt-api-id"]);
-    expect(anthropic[0]?.api?.id).toBe("claude-api-id");
-    expect(openai[0]?.api?.id).toBe("gpt-api-id");
+    expect(model.api?.npm).toBe("@ai-sdk/openai");
+    expect(model.api?.url).toBe("http://localhost:8317/v1");
   });
 
-  it("materializes each provider with a provider-matching credential", async () => {
-    const service = catalogService();
-    const anthropic = (await Provider.listModels(service, "anthropic"))[0];
-    const openai = (await Provider.listModels(service, "openai"))[0];
-    if (!anthropic || !openai) throw new Error("expected provider models");
-
-    expect(getLanguage(anthropic, credential("anthropic")).modelId).toBe("claude-api-id");
-    expect(getLanguage(openai, credential("openai")).modelId).toBe("gpt-api-id");
-  });
-
-  it("rejects cross-provider credential use", async () => {
-    const model = (await Provider.listModels(catalogService(), "anthropic"))[0];
-    if (!model) throw new Error("expected anthropic model");
-
-    expect(() => getSDK(model, credential("openai"))).toThrow(
-      "Provider credential scope does not match the selected model",
-    );
-  });
-
-  it("resolves an explicit custom endpoint through the OpenAI-compatible SDK", () => {
+  it("resolves custom baseURL models through the OpenAI provider", () => {
+    const auth: Auth.Info = { type: "api", key: "custom-key" };
     const model: Provider.Model = {
-      id: "custom-display-id",
+      id: "custom-model",
       providerID: "custom",
       name: "Custom Model",
-      api: {
-        id: "custom-api-id",
-        npm: "@ai-sdk/openai",
-        url: "http://localhost:8317/v1",
-      },
+      api: { npm: "@ai-sdk/openai", url: "http://localhost:8317/v1" },
     };
 
-    const language = getLanguage(model, credential("custom")) as {
-      modelId: string;
-      provider: string;
-    };
+    const sdk = getSDK(model, auth);
+    expect(typeof sdk.languageModel).toBe("function");
 
-    expect(language.modelId).toBe("custom-api-id");
-    expect(language.provider).toBe("custom.responses");
-  });
-
-  it("selects openai.chat for an OpenAI proxy with an API key", async () => {
-    const model = (await Provider.listModels(catalogService(), "openai"))[0];
-    if (!model) throw new Error("expected OpenAI model");
-
-    const language = getLanguage(model, proxyCredential("proxy-key")) as {
-      modelId: string;
-      provider: string;
-    };
-
-    expect(language.modelId).toBe("gpt-api-id");
-    expect(language.provider).toBe("openai.chat");
-  });
-
-  it("selects openai.chat for an OpenAI proxy without an API key", async () => {
-    const model = (await Provider.listModels(catalogService(), "openai"))[0];
-    if (!model) throw new Error("expected OpenAI model");
-
-    const language = getLanguage(model, proxyCredential()) as {
-      modelId: string;
-      provider: string;
-    };
-
-    expect(language.modelId).toBe("gpt-api-id");
-    expect(language.provider).toBe("openai.chat");
+    const lm = getLanguage(model, auth) as ModelRef & ProviderRef;
+    expect(lm.modelId).toBe("custom-model");
+    expect(lm.provider).toBe("custom.responses");
   });
 });

@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
-import { Operational, PolicyDecision, SurfaceAddress } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Bus, SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordGateway } from "./gateway";
@@ -78,7 +78,7 @@ export class DiscordAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    const parsed = SurfaceAddress.parse(surfaceKey);
+    const parsed = SurfaceKey.parse(surfaceKey);
     if (!parsed.id) {
       throw new Error(`[discord] surface key missing id: ${surfaceKey}`);
     }
@@ -117,13 +117,13 @@ export class DiscordAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
-    this.handleIncoming(inbound, message.channel_id).catch(() => {
+    this.handleIncoming(inbound, message.channel_id).catch((err) => {
       Bus.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
         msg: "discord message handling failed",
-        context: { handlingFailed: true },
+        context: { err: String(err) },
       });
     });
   }
@@ -148,13 +148,13 @@ export class DiscordAdapter implements Adapter.Surface {
     try {
       const outbound = await handler(inbound);
       if (outbound) await sendDiscordMessage(this.client, channelId, outbound);
-    } catch {
+    } catch (err) {
       Bus.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
         msg: "discord message handler error",
-        context: { channelId, handlerFailed: true },
+        context: { channelId, err: String(err) },
       });
       await sendDiscordMessage(this.client, channelId, { text: "Sorry, an error occurred." });
     } finally {

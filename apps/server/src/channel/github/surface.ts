@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
-import { Operational, PolicyDecision, SurfaceAddress } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Bus, SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
@@ -60,7 +60,7 @@ export class GitHubAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    const parsed = SurfaceAddress.parse(surfaceKey);
+    const parsed = SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
     const [, issueId] = (parsed.id ?? "").split("-");
     const issueNumber = Number.parseInt(issueId ?? "", 10);
@@ -151,7 +151,7 @@ export class GitHubAdapter implements Adapter.Surface {
       if (outbound?.text) {
         await this.client.postComment(content.repo, content.issueNumber, outbound.text);
       }
-    } catch {
+    } catch (err) {
       Bus.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
@@ -160,7 +160,8 @@ export class GitHubAdapter implements Adapter.Surface {
         context: {
           repo: content.repo,
           issue: content.issueNumber,
-          handlerFailed: true,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
         },
       });
     }

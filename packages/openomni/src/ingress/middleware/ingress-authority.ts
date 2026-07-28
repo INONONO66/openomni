@@ -2,7 +2,6 @@ import { PolicyEngine } from "@openomni/policy";
 import type { PolicyRegistration } from "@openomni/agent";
 import { PolicyDecision } from "@openomni/protocol";
 import { resolveTarget } from "../target";
-import type { AuthorityProjectionQueryPort } from "../actor-resolver";
 import { targetRequiresCoordinator } from "./ingress-authority-actor";
 import { throwAbort } from "./ingress-authority-decisions";
 import { IngressAuthorityDefinitions } from "./ingress-authority-definitions";
@@ -25,18 +24,12 @@ export namespace IngressAuthorityMiddleware {
   export const AuthorityCheck = IngressAuthorityDefinitions.AuthorityCheck;
   export const ModeDispatch = IngressAuthorityDefinitions.ModeDispatch;
 
-  export function registrations(
-    state: PreRunState,
-    queries: AuthorityProjectionQueryPort,
-  ): PolicyRegistration[] {
-    return createRegistrations(state, queries);
+  export function registrations(state: PreRunState): PolicyRegistration[] {
+    return createRegistrations(state);
   }
 
-  export async function runPreRun(
-    ctx: PreRunContext,
-    queries: AuthorityProjectionQueryPort,
-  ): Promise<PreRunResult> {
-    return run(ctx, (state) => createRegistrations(state, queries));
+  export async function runPreRun(ctx: PreRunContext): Promise<PreRunResult> {
+    return run(ctx, createRegistrations);
   }
 
   export async function runRoutedPreRun(ctx: PreRunContext): Promise<PreRunResult> {

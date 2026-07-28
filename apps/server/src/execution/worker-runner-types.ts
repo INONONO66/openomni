@@ -1,11 +1,7 @@
-import type { ChatAgent, ChatAgentConfig } from "@openomni/agent";
-import type {
-  AgentToolProvider,
-  DispatchToolRuntime,
-  InjectionQueue,
-  WorkspaceIdentity,
-} from "@openomni/openomni";
-import type { WorkerRuntimeDefinition } from "../agents/runtime-definition";
+import type { ChatAgent } from "@openomni/agent";
+import type { Auth } from "@openomni/llm";
+import type { InjectionQueue } from "@openomni/openomni";
+import type { WorkerBootstrap } from "@openomni/protocol";
 import type { WorkerRunState } from "./worker-run-state";
 import type { WorkerRunIpcServer } from "./worker-runner-ipc";
 
@@ -17,18 +13,12 @@ interface WorkerRunnerEnvironment {
   readonly workerId: string;
   readonly server: WorkerRunIpcServer;
   readonly activeRuns: WorkerRunState.ActiveRunRegistry;
+  readonly bootstrapReady: Promise<void>;
   readonly injectionQueue: InjectionQueue.Instance;
-  readonly runtime: WorkerRuntimeDefinition;
-  readonly workspaceIdentity: WorkspaceIdentity;
-  readonly environment: ChatAgentConfig["environment"];
-  readonly modelCatalog: ChatAgentConfig["modelCatalog"];
-  readonly createAgentToolProvider: (options: {
-    readonly workspaceIdentity: WorkspaceIdentity;
-    readonly dispatchRuntime: DispatchToolRuntime;
-    readonly dispatchToolMode: "worker-resident-ask";
-  }) => AgentToolProvider;
+  readonly defaultWorkspaceRoot: string | undefined;
+  readonly getBootstrap: () => WorkerBootstrap.Bootstrap | null;
+  readonly resolveAuth: (provider: string) => Auth.Info | undefined;
   readonly createAgent?: (options: WorkerRunnerChatAgentOptions) => WorkerRunnerAgent;
-  readonly onSettled?: () => void;
 }
 
 export interface WorkerRunnerSpawnOptions extends WorkerRunnerEnvironment {

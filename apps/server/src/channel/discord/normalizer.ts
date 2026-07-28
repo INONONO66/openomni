@@ -1,4 +1,5 @@
-import { type Adapter, SurfaceAddress } from "@openomni/protocol";
+import type { Adapter } from "@openomni/protocol";
+import { SurfaceKey } from "@openomni/session";
 import { normalizeContent } from "../../shared/trigger";
 import type { InboundNormalizer } from "../types";
 import type { DiscordMessage } from "./types";
@@ -25,7 +26,7 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
     content = normalizeContent(content, this.ctx.triggers);
     if (!content) return null;
 
-    const surfaceKey = SurfaceAddress.fromChannel({
+    const surfaceKey = SurfaceKey.fromChannel({
       surface: "discord",
       namespace: this.ctx.botId,
       kind: isDM ? "dm" : "channel",

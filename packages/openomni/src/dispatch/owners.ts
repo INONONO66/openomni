@@ -1,15 +1,10 @@
-import type { AppConnector, Dispatch, Execution, Model } from "@openomni/protocol";
-import type {
-  ScheduleCreateV1,
-  ScheduleProjectionV1,
-} from "../execution-runtime/schedule-service.js";
+import type { AppConnector, CronJob, Dispatch, Execution, Model } from "@openomni/protocol";
 import type { CoordinatorLike } from "../ingress/coordinator-like.js";
 import type { ResidentRuntime } from "../resident/runtime.js";
 
 export interface DispatchSchedulerOwner {
-  create(schedule: ScheduleCreateV1): Promise<string>;
-  cancel(scheduleId: string): Promise<boolean>;
-  get(scheduleId: string): Promise<ScheduleProjectionV1 | null>;
+  register(job: CronJob.Info): string;
+  remove(jobId: string): boolean;
 }
 
 export interface OutboundDispatchOwnerInput {
@@ -53,5 +48,15 @@ export interface DispatchOwners {
   readonly device?: DeviceDispatchOwner;
   readonly outbound?: OutboundDispatchOwner;
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
+  readonly scheduler?: DispatchSchedulerOwner;
   readonly defaultModel?: Model.Ref;
 }
+
+// The single kernel-side model fallback. Every path that needs a model when
+// none was injected (dispatch handlers, ingress session resolution, the
+// server resident bridge) must consume this constant — a second literal is
+// definition drift (#453 bug 3).
+export const DEFAULT_DISPATCH_MODEL: Model.Ref = {
+  provider: "anthropic",
+  id: "claude-sonnet-4-5",
+};

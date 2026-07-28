@@ -1,114 +1,114 @@
-import { afterEach, expect, test } from "bun:test";
-import { IngressEngine } from "../../src/ingress/engine";
+import { beforeEach, describe, expect, it } from "bun:test";
+import type { Message } from "@openomni/protocol";
+import { Session, Storage } from "@openomni/session";
 import { SessionBridge } from "../../src/ingress/session-bridge";
-import type {
-  MessagingLedgerService,
-  MessagingLedgerTransition,
-} from "../../src/ingress/session-resolver";
 
-afterEach(() => {
-  IngressEngine.clearMessagingLedgerService();
-});
+const TEST_MODEL = { provider: "anthropic", id: "claude-3-haiku" };
 
-test("SessionBridge preserves authenticated transcript order and content", async () => {
-  const service: MessagingLedgerService = {
-    async execute() {
-      throw new Error("unexpected transition");
-    },
-    async query(request) {
-      expect(request).toEqual({ kind: "transcript", sessionId: "session-1" });
-      return {
-        kind: "transcript",
-        messages: [
-          { role: "user", parts: [{ type: "text", text: "Hello" }] },
-          { role: "assistant", parts: [{ type: "text", text: "Hi there!" }] },
-          {
-            role: "user",
-            parts: [
-              { type: "metadata", text: "not transcript content" },
-              { type: "text", text: "How are you?" },
-            ],
-          },
-          { role: "assistant", parts: [{ type: "text", text: "I'm good!" }] },
-        ],
-      };
+function createTestSession(): string {
+  return Session.create({
+    title: "Test Session",
+    model: { providerID: "anthropic", modelID: "claude-3-haiku" },
+  }).id;
+}
+
+function addUserMessage(sessionId: string, text: string): void {
+  const message: Message.UserMessage = {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "test",
+    model: { providerID: "anthropic", modelID: "claude-3-haiku" },
+  };
+  Session.addMessage(sessionId, message);
+
+  const part: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    messageID: message.id,
+    type: "text",
+    text,
+  };
+  Session.addPart(message.id, part);
+}
+
+function addAssistantMessage(sessionId: string, text: string): void {
+  const message: Message.AssistantMessage = {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    role: "assistant",
+    time: { created: Date.now() },
+    parentID: "",
+    modelID: "claude-3-haiku",
+    providerID: "anthropic",
+    agent: "test",
+    path: { cwd: "", root: "" },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
     },
   };
-  IngressEngine.setMessagingLedgerService(service);
+  Session.addMessage(sessionId, message);
 
-  await expect(SessionBridge.buildDirectMessages("session-1")).resolves.toEqual([
-    { role: "user", content: "Hello" },
-    { role: "assistant", content: "Hi there!" },
-    { role: "user", content: "How are you?" },
-    { role: "assistant", content: "I'm good!" },
-  ]);
-});
-
-test("SessionBridge returns an empty authenticated transcript unchanged", async () => {
-  const service: MessagingLedgerService = {
-    async execute() {
-      throw new Error("unexpected transition");
-    },
-    async query() {
-      return { kind: "transcript", messages: [] };
-    },
+  const part: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    messageID: message.id,
+    type: "text",
+    text,
   };
-  IngressEngine.setMessagingLedgerService(service);
+  Session.addPart(message.id, part);
+}
 
-  await expect(SessionBridge.buildDirectMessages("session-empty")).resolves.toEqual([]);
-});
+describe("SessionBridge", () => {
+  let sessionId: string;
 
-test("SessionBridge gives marker-looking user content no hidden semantics", async () => {
-  const service: MessagingLedgerService = {
-    async execute() {
-      throw new Error("unexpected transition");
-    },
-    async query() {
-      return {
-        kind: "transcript",
-        messages: [
-          {
-            role: "user",
-            parts: [{ type: "text", text: "__OPENOMNI_PLANID__: ordinary request" }],
-          },
-        ],
-      };
-    },
-  };
-  IngressEngine.setMessagingLedgerService(service);
-
-  await expect(SessionBridge.buildDirectMessages("session-marker")).resolves.toEqual([
-    { role: "user", content: "__OPENOMNI_PLANID__: ordinary request" },
-  ]);
-});
-
-test("SessionBridge commits direct results through the messaging ledger", async () => {
-  let captured: MessagingLedgerTransition | undefined;
-  const service: MessagingLedgerService = {
-    async execute(command) {
-      captured = command;
-      return { status: "committed" };
-    },
-    async query() {
-      throw new Error("unexpected query");
-    },
-  };
-  IngressEngine.setMessagingLedgerService(service);
-
-  await SessionBridge.storeDirectResult("session-result", "Here is the requested result.", {
-    provider: "anthropic",
-    id: "claude-3-haiku",
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+    sessionId = createTestSession();
   });
 
-  expect(captured).toEqual({
-    kind: "MS-06",
-    sessionId: "session-result",
-    messageId: expect.any(String),
-    partId: expect.any(String),
-    role: "assistant",
-    text: "Here is the requested result.",
-    model: { provider: "anthropic", id: "claude-3-haiku" },
-    agent: "session-bridge",
-    recordedAt: expect.any(Number),
+  describe("buildDirectMessages", () => {
+    it("should return messages in chronological order with correct roles", () => {
+      addUserMessage(sessionId, "Hello");
+      addAssistantMessage(sessionId, "Hi there!");
+      addUserMessage(sessionId, "How are you?");
+      addAssistantMessage(sessionId, "I'm good!");
+
+      const messages = SessionBridge.buildDirectMessages(sessionId);
+
+      expect(messages).toHaveLength(4);
+      expect(messages[0]).toEqual({ role: "user", content: "Hello" });
+      expect(messages[1]).toEqual({ role: "assistant", content: "Hi there!" });
+      expect(messages[2]).toEqual({ role: "user", content: "How are you?" });
+      expect(messages[3]).toEqual({ role: "assistant", content: "I'm good!" });
+    });
+
+    it("should return empty array for session with no messages", () => {
+      const messages = SessionBridge.buildDirectMessages(sessionId);
+      expect(messages).toHaveLength(0);
+    });
+  });
+
+  describe("storeDirectResult", () => {
+    it("should store output string as TextPart in session", () => {
+      const output = "Here is the API documentation you requested.";
+
+      SessionBridge.storeDirectResult(sessionId, output, TEST_MODEL);
+
+      const messages = Session.getMessages(sessionId);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe("assistant");
+
+      const parts = Session.getParts(messages[0].id);
+      expect(parts).toHaveLength(1);
+      expect(parts[0].type).toBe("text");
+      expect((parts[0] as Message.TextPart).text).toBe(output);
+    });
   });
 });

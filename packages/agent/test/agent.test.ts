@@ -1,12 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
-import type { RunInput } from "@openomni/llm";
-import {
-  BoundarySanitizer,
-  CredentialSource,
-  SecretRegistry,
-} from "@openomni/llm/credential-runtime";
-import type { AgentEvent, AgentStep, ModelCatalogService } from "../src/core/types";
+import type { AgentEvent, AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -21,65 +15,11 @@ let mockRunFn: MockLlmFn = async () => createStopOutcome();
 const mockModelsGet = mock(async () => mockProviderData);
 const mockProviderFromModelsDevModel = mock(() => mockProviderModel);
 
-const sanitizer = BoundarySanitizer.create();
-const secrets = SecretRegistry.create(sanitizer);
-const { handle: credential } = secrets.register(
-  CredentialSource.parseOwner({
-    providerId: "anthropic",
-    credentialId: "chat-agent-test",
-    rotationId: "rotation-1",
-    sourceKind: "injected_runtime",
-    auth: { type: "api", key: "deterministic-test-key" },
-  }),
-);
-const digest = "a".repeat(64);
-const environment: RunInput["environment"] = {
-  reference: {
-    version: "llm-environment-v1",
-    catalogSchemaVersion: 1,
-    catalogSource: "bundled",
-    catalogSourceVersion: "chat-agent-test-v1",
-    catalogDigest: digest,
-    modelDigest: digest,
-    endpoint: {
-      version: "llm-endpoint-ref-v1",
-      kind: "default",
-      valueRef: "anthropic-default",
-      endpointDigest: digest,
-    },
-    credential: secrets.describe(credential),
-    sdkPackage: "@ai-sdk/anthropic",
-    adapterVersion: "chat-agent-test-v1",
-    environmentDigest: digest,
-  },
-  credential,
-  secrets,
-  sanitizer,
-};
-const modelCatalog = {
-  async get() {
-    return mockModelsGet();
-  },
-  async load() {
-    return {
-      catalog: mockProviderData,
-      environment: environment.reference,
-      fallbackDiagnostics: [],
-    };
-  },
-} as ModelCatalogService;
-
 const mockLlm = createMockLlmConfig({
   getModels: mockModelsGet,
   fromModelsDevModel: mockProviderFromModelsDevModel,
   run: (input, sink: Sink) => mockRunFn(input, sink),
 });
-const explicitLlmConfig = {
-  model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-  environment,
-  modelCatalog,
-  llm: mockLlm,
-};
 
 let ChatAgent: typeof import("../src/core/chat-agent").ChatAgent;
 
@@ -128,7 +68,10 @@ function createAssistantMessage(text: string): Message.WithParts {
 }
 
 function createAgent() {
-  return ChatAgent.create(explicitLlmConfig);
+  return ChatAgent.create({
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
+  });
 }
 
 describe("ChatAgent", () => {
@@ -161,24 +104,6 @@ describe("ChatAgent", () => {
     expect(result.steps[0]?.type).toBe("text");
   });
 
-  it("uses only the configured catalog and forwards the explicit environment", async () => {
-    let receivedEnvironment: RunInput["environment"] | undefined;
-    const agent = ChatAgent.create({
-      ...explicitLlmConfig,
-      llm: {
-        run: async (input) => {
-          receivedEnvironment = input.environment;
-          return createStopOutcome();
-        },
-      },
-    });
-
-    await agent.run({ messages: [{ role: "user", content: "Hello" }] });
-
-    expect(mockModelsGet).toHaveBeenCalledTimes(1);
-    expect(receivedEnvironment).toBe(environment);
-  });
-
   it("stops with max-steps when maxTurns budget is exceeded", async () => {
     let callCount = 0;
     mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
@@ -188,7 +113,8 @@ describe("ChatAgent", () => {
     };
 
     const agent = ChatAgent.create({
-      ...explicitLlmConfig,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       budget: { maxTurns: 1, maxToolCalls: 10 },
       middleware: [
         {
@@ -217,7 +143,8 @@ describe("ChatAgent", () => {
     };
 
     const agent = ChatAgent.create({
-      ...explicitLlmConfig,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       budget: { maxTurns: 10, maxToolCalls: 7 },
     });
 
@@ -240,7 +167,8 @@ describe("ChatAgent", () => {
     };
 
     const agent = ChatAgent.create({
-      ...explicitLlmConfig,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       signal: controller.signal,
     });
 
@@ -268,7 +196,8 @@ describe("ChatAgent", () => {
 
     const stepFinishCalls: AgentStep[] = [];
     const agent = ChatAgent.create({
-      ...explicitLlmConfig,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       onStepFinish: (step) => {
         stepFinishCalls.push(step);
       },
@@ -342,7 +271,8 @@ it("uses toolExecutor when provided to execute tool calls", async () => {
   };
 
   const agent = ChatAgent.create({
-    ...explicitLlmConfig,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     toolExecutor: executor,
   });
 
@@ -379,7 +309,8 @@ it("passes the agent abort signal to toolExecutor calls", async () => {
   };
 
   const agent = ChatAgent.create({
-    ...explicitLlmConfig,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     signal: controller.signal,
     toolExecutor: executor,
   });
@@ -414,7 +345,8 @@ it("handles toolExecutor errors by setting isError: true", async () => {
   };
 
   const agent = ChatAgent.create({
-    ...explicitLlmConfig,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     toolExecutor: async () => {
       throw new Error("Tool execution failed: database connection lost");
     },
@@ -429,7 +361,8 @@ it("handles toolExecutor errors by setting isError: true", async () => {
 
 it("throws when tools are configured without toolExecutor", async () => {
   const agent = ChatAgent.create({
-    ...explicitLlmConfig,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     tools: [
       {
         name: "stub_tool",
@@ -449,7 +382,8 @@ it("throws when tools are configured without toolExecutor", async () => {
 
 it("does not retry missing toolExecutor configuration errors", async () => {
   const agent = ChatAgent.create({
-    ...explicitLlmConfig,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     tools: [
       {
         name: "stub_tool",

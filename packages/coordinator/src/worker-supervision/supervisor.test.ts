@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { type BusEvent, Ipc, Operational } from "@openomni/protocol";
+import { type BusEvent, Operational } from "@openomni/protocol";
 import type { IpcClient } from "../ipc/client";
 import { WorkerSupervisor } from "./supervisor";
 
@@ -12,93 +12,11 @@ afterEach(() => {
     process.env.OPENOMNI_WORKER_STOP_GRACE_MS = originalStopGraceMs;
   }
 });
-const TEST_DIGEST = "a".repeat(64);
-
-function runtimeDefinition() {
-  return Ipc.WorkerRuntimeDefinitionV1.parse({
-    runtimeId: "runtime-test",
-    workerId: "0",
-    generation: 0,
-    principalId: "principal-test",
-    attempt: {
-      version: "attempt-ref-v1",
-      workItemId: "work-test",
-      attemptId: "attempt-test",
-      attemptSeq: 1,
-    },
-    config: {
-      configEpoch: "test",
-      model: { provider: "anthropic", id: "test" },
-      environment: {
-        version: "llm-environment-v1",
-        catalogSchemaVersion: 1,
-        catalogSource: "bundled",
-        catalogSourceVersion: "test",
-        catalogDigest: TEST_DIGEST,
-        modelDigest: TEST_DIGEST,
-        endpoint: {
-          version: "llm-endpoint-ref-v1",
-          kind: "default",
-          valueRef: "provider-default",
-          endpointDigest: TEST_DIGEST,
-        },
-        credential: {
-          version: "credential-source-ref-v1",
-          providerId: "anthropic",
-          authType: "api",
-          credentialId: "test",
-          rotationId: "test",
-          sourceKind: "injected_runtime",
-          sourcePathDigest: TEST_DIGEST,
-          credentialDigest: TEST_DIGEST,
-        },
-        sdkPackage: "@ai-sdk/anthropic",
-        adapterVersion: "test",
-        environmentDigest: TEST_DIGEST,
-      },
-      workspace: {
-        canonicalizerVersion: "workspace-v1",
-        workspaceId: `w1:${TEST_DIGEST}`,
-        canonicalBytesDigest: TEST_DIGEST,
-      },
-      agents: [],
-      toolCatalog: [],
-    },
-  });
-}
-function deliveryTask<T extends Record<string, unknown>>(
-  value: T,
-): T & {
-  sessionId: string;
-  prompt: string;
-} {
-  return { sessionId: "session-test", prompt: "test", ...value };
-}
-function successfulDelivery(params: unknown) {
-  const request = Ipc.Methods["coordinator.spawn_run"].params.parse(params);
-  return {
-    runId: request.runId,
-    sessionId: request.sessionId,
-    status: "succeeded" as const,
-    output: "fixture complete",
-    finishReason: "stop",
-  };
-}
 
 describe("WorkerSupervisor deliver timeout ceiling", () => {
   function createTestSupervisor(mockClient: IpcClient): WorkerSupervisor {
     const supervisor = Object.create(WorkerSupervisor.prototype) as WorkerSupervisor;
     Reflect.set(supervisor, "client", mockClient);
-    Reflect.set(supervisor, "bootstrapped", true);
-    Reflect.set(supervisor, "authToken", "test-token");
-    Reflect.set(supervisor, "runtimeDefinition", async () => runtimeDefinition());
-    Reflect.set(supervisor, "runtimeId", "runtime-test");
-    Reflect.set(supervisor, "principalId", "principal-test");
-    Reflect.set(supervisor, "id", 0);
-    Reflect.set(supervisor, "generation", 0);
-    Reflect.set(supervisor, "proc", { pid: 1 });
-    Reflect.set(supervisor, "activeRuntimeDefinitions", new Map());
-    Reflect.set(supervisor, "running", true);
     return supervisor;
   }
 
@@ -106,9 +24,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
-      call: mock(async (_method: string, params: unknown, timeoutMs: number) => {
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
         capturedTimeoutMs = timeoutMs;
-        return successfulDelivery(params);
+        return { success: true };
       }),
       close: () => undefined,
     };
@@ -120,7 +38,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
       },
     };
 
-    await supervisor.deliver("test-run-id", deliveryTask(params));
+    await supervisor.deliver("test-run-id", params);
 
     expect(capturedTimeoutMs).toBe(600_000);
   });
@@ -129,9 +47,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
-      call: mock(async (_method: string, params: unknown, timeoutMs: number) => {
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
         capturedTimeoutMs = timeoutMs;
-        return successfulDelivery(params);
+        return { success: true };
       }),
       close: () => undefined,
     };
@@ -143,7 +61,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
       },
     };
 
-    await supervisor.deliver("test-run-id", deliveryTask(params));
+    await supervisor.deliver("test-run-id", params);
 
     // 100_000 + 30_000 margin = 130_000 — the driver kills at budget+margin,
     // it no longer floors small budgets at 300s (#462 §4 wall-time physics).
@@ -154,9 +72,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
-      call: mock(async (_method: string, params: unknown, timeoutMs: number) => {
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
         capturedTimeoutMs = timeoutMs;
-        return successfulDelivery(params);
+        return { success: true };
       }),
       close: () => undefined,
     };
@@ -168,7 +86,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
       },
     };
 
-    await supervisor.deliver("test-run-id", deliveryTask(params));
+    await supervisor.deliver("test-run-id", params);
 
     // 1_000_000 + 30_000 margin — a finite positive budget is honored above
     // the backstop so the driver never kills a run the loop still allows.
@@ -179,9 +97,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
-      call: mock(async (_method: string, params: unknown, timeoutMs: number) => {
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
         capturedTimeoutMs = timeoutMs;
-        return successfulDelivery(params);
+        return { success: true };
       }),
       close: () => undefined,
     };
@@ -193,7 +111,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
       },
     };
 
-    await supervisor.deliver("test-run-id", deliveryTask(params));
+    await supervisor.deliver("test-run-id", params);
 
     // -1 means unlimited (AgentBudget): the loop will never stop the run, so
     // the driver backstop must — and must NOT collapse to margin-only ~30s.
@@ -204,9 +122,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
-      call: mock(async (_method: string, params: unknown, timeoutMs: number) => {
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
         capturedTimeoutMs = timeoutMs;
-        return successfulDelivery(params);
+        return { success: true };
       }),
       close: () => undefined,
     };
@@ -214,7 +132,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     const supervisor = createTestSupervisor(mockClient);
     const params = {};
 
-    await supervisor.deliver("test-run-id", deliveryTask(params));
+    await supervisor.deliver("test-run-id", params);
 
     // No budget declared → nothing in the loop bounds the run → the driver
     // backstop is the only wall-time bound.
@@ -235,12 +153,6 @@ describe("WorkerSupervisor stop", () => {
     Reflect.set(supervisor, "proc", proc);
     Reflect.set(supervisor, "running", true);
     Reflect.set(supervisor, "events", events);
-    Reflect.set(supervisor, "bootstrapped", true);
-    Reflect.set(
-      supervisor,
-      "supervisorSocketDir",
-      `/tmp/openomni-supervisor-test-${crypto.randomUUID()}`,
-    );
     Reflect.set(supervisor, "client", {
       connected: true,
       call: mock(async () => ({})),

@@ -1,13 +1,19 @@
 import {
   createConnectorEndpointProcessDriver,
-  type ConnectorEndpointProcessDriverOptions,
+  type ConnectorEndpointCredentialMap,
   type ConnectorQuestionBridgeHandler,
 } from "./process-driver.js";
 
 export type { ConnectorQuestionBridgeHandler };
 
-export type ConnectorEndpointDriverOptions = ConnectorEndpointProcessDriverOptions;
+export interface ConnectorEndpointDriverOptions {
+  readonly credentials?: ConnectorEndpointCredentialMap;
+  readonly questionBridge?: ConnectorQuestionBridgeHandler;
+}
 
-export function createConnectorEndpointDriver(options: ConnectorEndpointDriverOptions) {
-  return createConnectorEndpointProcessDriver(options);
+export function createConnectorEndpointDriver(options: ConnectorEndpointDriverOptions = {}) {
+  return createConnectorEndpointProcessDriver({
+    credentials: options.credentials ?? {},
+    questionBridge: options.questionBridge,
+  });
 }

@@ -23,6 +23,11 @@ export namespace WorkerIpcHandlers {
     readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "size">;
   }
 
+  interface ToolCallSettledOptions extends Pick<SharedOptions, "ipcAuthToken"> {
+    readonly params: Record<string, unknown> | undefined;
+    readonly clearUnsafe: (workspaceRoot: string, callId: string) => void;
+  }
+
   type CancelRunResponse =
     | {
         readonly cancelled: true;
@@ -42,6 +47,13 @@ export namespace WorkerIpcHandlers {
       };
 
   type ShutdownIdleResponse =
+    | { readonly acknowledged: true }
+    | {
+        readonly acknowledged: false;
+        readonly error: string;
+      };
+
+  type ToolCallSettledResponse =
     | { readonly acknowledged: true }
     | {
         readonly acknowledged: false;
@@ -109,6 +121,32 @@ export namespace WorkerIpcHandlers {
       return { acknowledged: false, error: "worker is busy" };
     }
     return { acknowledged: true };
+  }
+
+  export function toolCallSettled(options: ToolCallSettledOptions): ToolCallSettledResponse {
+    const { params, ipcAuthToken, clearUnsafe } = options;
+    if (!isAuthorized(params, ipcAuthToken)) {
+      return { acknowledged: false, error: "unauthorized coordinator request" };
+    }
+
+    const workspaceRoot = readString(params, "workspaceRoot");
+    const callId = readString(params, "callId");
+    if (!workspaceRoot || !callId) {
+      return { acknowledged: false, error: "invalid worker.tool_call_settled params" };
+    }
+
+    try {
+      clearUnsafe(workspaceRoot, callId);
+      return { acknowledged: true };
+    } catch (error) {
+      return {
+        acknowledged: false,
+        error:
+          error instanceof Error
+            ? `failed to clear unsafe marker: ${error.message}`
+            : "failed to clear unsafe marker",
+      };
+    }
   }
 }
 

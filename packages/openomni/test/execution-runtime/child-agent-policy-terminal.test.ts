@@ -7,10 +7,8 @@ import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
 } from "../../src/execution-runtime";
-import { createTestLlmEnvironment } from "../helpers/llm-environment.ts";
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
-const { environment, modelCatalog } = createTestLlmEnvironment();
 const successfulResult: AgentResult = {
   text: "child done",
   steps: [],
@@ -47,7 +45,6 @@ describe("child agent delegation terminal policy", () => {
       composed.push(event),
     );
     const runtime = createChildAgentRuntime({
-      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -91,7 +88,6 @@ describe("child agent delegation terminal policy", () => {
   test("dispatches one post decision with the failed worker result", async () => {
     const contexts: Array<Record<string, unknown>> = [];
     const runtime = createChildAgentRuntime({
-      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -117,7 +113,6 @@ describe("child agent delegation terminal policy", () => {
   test("dispatches one post decision with the cancelled worker result", async () => {
     const contexts: Array<Record<string, unknown>> = [];
     const runtime = createChildAgentRuntime({
-      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -142,7 +137,6 @@ describe("child agent delegation terminal policy", () => {
     const contexts: Array<Record<string, unknown>> = [];
     const parentController = new AbortController();
     const runtime = createChildAgentRuntime({
-      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -182,7 +176,6 @@ describe("child agent delegation terminal policy", () => {
         cancelledRunIds.push(event.runId);
       });
       const runtime = createChildAgentRuntime({
-        ...{ environment, modelCatalog },
         model,
         parentMessages: [],
         parentTools:
@@ -234,7 +227,6 @@ describe("child agent delegation terminal policy", () => {
 
   test("fails open when delegation.worker.post policy throws", async () => {
     const runtime = createChildAgentRuntime({
-      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],

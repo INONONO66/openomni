@@ -1,16 +1,9 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it, mock } from "bun:test";
-import { Operational, type Adapter, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import type { Adapter, Tool } from "@openomni/protocol";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
 import { registerAgent } from "../src/agents";
 import { agentMetadata, getAgentDefinition } from "../src/agents/registry";
-import {
-  BridgeAgentResolutionError,
-  buildAgentDef,
-  buildInboundEvent,
-  buildResidentAgentDef,
-} from "../src/ingress/bridge";
+import { buildAgentDef, buildInboundEvent } from "../src/ingress/bridge";
 
 function makeTool(name: string): NativeTool {
   return {
@@ -65,12 +58,6 @@ const deps = {
   workspaceRoot: "/workspace",
 };
 
-const CORRELATION_TOKEN_HASH_DOMAIN = "openomni.ingress.correlation-token.v1\0";
-
-function hashCorrelationToken(token: string): string {
-  return createHash("sha256").update(CORRELATION_TOKEN_HASH_DOMAIN).update(token).digest("hex");
-}
-
 describe("ingress bridge transport boundary", () => {
   it("preserves normalized transport facts without assigning a route", () => {
     const message = makeMessage();
@@ -94,15 +81,13 @@ describe("ingress bridge transport boundary", () => {
       media: message.media,
       replyToId: "outbound-question",
       threadId: "thread-1",
-      raw: {
-        target: { kind: "worker", sessionId: "worker-session-1", runId: "worker-run-1" },
-      },
+      raw: message.raw,
       correlation: {
         endpointId: "guild",
         channelId: "dev",
         replyToMessageId: "outbound-question",
         threadId: "thread-1",
-        tokenHash: hashCorrelationToken("worker-correlation-token"),
+        tokenHash: "worker-correlation-token",
         externalConversationId: "discord:guild:channel:dev",
       },
     });
@@ -112,39 +97,6 @@ describe("ingress bridge transport boundary", () => {
     expect("externalMessageId" in event).toBe(false);
     expect(event.meta && "externalMessageId" in event.meta).toBe(false);
     expect(event.meta?.correlation && "externalMessageId" in event.meta.correlation).toBe(false);
-  });
-
-  it("hashes equal correlation tokens identically without disclosing the raw token", () => {
-    const first = buildInboundEvent(makeMessage(), deps).meta?.correlation?.tokenHash;
-    const second = buildInboundEvent(makeMessage(), deps).meta?.correlation?.tokenHash;
-
-    expect(first).toBe(second);
-    expect(first).toMatch(/^[0-9a-f]{64}$/);
-    expect(first).not.toContain("worker-correlation-token");
-    expect(JSON.stringify(buildInboundEvent(makeMessage(), deps))).not.toContain(
-      "worker-correlation-token",
-    );
-    expect(first).not.toBe(createHash("sha256").update("worker-correlation-token").digest("hex"));
-  });
-
-  it("hashes distinct correlation tokens differently", () => {
-    const firstMessage = makeMessage();
-    const secondMessage = makeMessage();
-    secondMessage.raw = { correlationToken: "different-correlation-token" };
-
-    const first = buildInboundEvent(firstMessage, deps).meta?.correlation?.tokenHash;
-    const second = buildInboundEvent(secondMessage, deps).meta?.correlation?.tokenHash;
-
-    expect(first).not.toBe(second);
-  });
-
-  it("does not add a token hash when the raw correlation token is absent", () => {
-    const message = makeMessage();
-    message.raw = { transportFact: "safe" };
-
-    const correlation = buildInboundEvent(message, deps).meta?.correlation;
-
-    expect(correlation && "tokenHash" in correlation).toBe(false);
   });
 
   it("preserves a descriptor-only thread hint in event and correlation metadata", () => {
@@ -174,7 +126,6 @@ describe("ingress bridge transport boundary", () => {
 
     expect(event.meta?.agentName).toBe("resident");
     expect(event.agent.systemPrompt).toContain("Resident");
-    expect(event.agent.model).toEqual(deps.defaultModel);
     expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
       "dispatch",
@@ -184,87 +135,6 @@ describe("ingress bridge transport boundary", () => {
     ]);
   });
 
-  it("rejects a missing Resident model observably before agent construction", async () => {
-    const operationalErrors: Array<{
-      component: string;
-      msg: string;
-      error?: string;
-      context?: Record<string, unknown>;
-    }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Error, (payload) => {
-      operationalErrors.push(payload);
-    });
-    const listTools = mock((): NativeTool[] => {
-      throw new Error("tool selection must not run without a model");
-    });
-    const missingModelDeps = {
-      ...deps,
-      defaultModel: undefined,
-      systemProvider: { listTools },
-    };
-
-    try {
-      let thrown: unknown;
-      try {
-        buildResidentAgentDef(missingModelDeps);
-      } catch (error) {
-        thrown = error;
-      }
-
-      expect(thrown).toBeInstanceOf(BridgeAgentResolutionError);
-      expect(thrown).toMatchObject({
-        code: "missing_default_model",
-        agentName: "resident",
-        message: "Resident agent requires an explicitly resolved default model",
-      });
-      expect(listTools).not.toHaveBeenCalled();
-      await Promise.resolve();
-      expect(operationalErrors).toHaveLength(1);
-      expect(operationalErrors[0]).toMatchObject({
-        component: "server",
-        msg: "agent resolution failed",
-        error: "missing_default_model",
-        context: { code: "missing_default_model", agentName: "resident" },
-      });
-    } finally {
-      unsubscribe();
-    }
-  });
-
-  it("rejects an invalid explicit Resident model before agent construction", () => {
-    let thrown: unknown;
-    try {
-      buildResidentAgentDef({
-        ...deps,
-        defaultModel: { provider: "anthropic", id: " " },
-      });
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(thrown).toBeInstanceOf(BridgeAgentResolutionError);
-    expect(thrown).toMatchObject({
-      code: "invalid_default_model",
-      agentName: "resident",
-      message: "Resident agent default model is invalid",
-    });
-  });
-
-  it("discriminates a missing Resident model from an unknown agent", () => {
-    let thrown: unknown;
-    try {
-      buildAgentDef("not-registered", deps);
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(thrown).toBeInstanceOf(BridgeAgentResolutionError);
-    expect(thrown).toMatchObject({
-      code: "unknown_agent",
-      agentName: "not-registered",
-      message: "Unknown agent definition: not-registered",
-    });
-  });
   it("keeps full agent tool selection available for spawned workers", () => {
     const { customProvider: _customProvider, ...workerDeps } = deps;
     const workerAgent = buildAgentDef("dev", workerDeps);

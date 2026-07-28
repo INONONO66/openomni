@@ -1,44 +1,34 @@
+import { Session, WorkerRun } from "@openomni/session";
+
 export type RecoveryResult = {
   recovered: number;
   sessions: string[];
 };
 
-export interface InterruptedRunProjection {
-  readonly sessionId: string;
-  readonly runId: string;
-}
+export async function recoverInterruptedRuns(): Promise<RecoveryResult> {
+  const recovered: string[] = [];
 
-export interface RunRecoveryService {
-  readonly queries: {
-    interruptedRuns(): Promise<readonly InterruptedRunProjection[]>;
-  };
-  readonly commands: {
-    interruptRun(input: {
-      readonly sessionId: string;
-      readonly runId: string;
-      readonly requestId: string;
-      readonly reason: string;
-    }): Promise<"recovered" | "unchanged">;
-  };
-}
+  for (const session of Session.list()) {
+    const runs = await WorkerRun.listBySession(session.id);
+    const incompleteRuns = runs.filter(
+      (r) => r.status === "running" || r.status === "starting" || r.status === "waiting_input",
+    );
 
-export async function recoverInterruptedRuns(service: RunRecoveryService): Promise<RecoveryResult> {
-  const interrupted = await service.queries.interruptedRuns();
-  const sessions = new Set<string>();
-  let recovered = 0;
+    for (const run of incompleteRuns) {
+      const interrupted = await WorkerRun.updateStatusIfCurrent(
+        session.id,
+        run.runId,
+        { status: run.status, timeUpdated: run.timeUpdated },
+        "interrupted",
+        {
+          endedAt: Date.now(),
+          error: "coordinator restarted: run interrupted",
+        },
+      );
 
-  for (const run of interrupted) {
-    const result = await service.commands.interruptRun({
-      sessionId: run.sessionId,
-      runId: run.runId,
-      requestId: `run-recovery:${run.runId}`,
-      reason: "coordinator restarted: run interrupted",
-    });
-    if (result === "recovered") {
-      recovered += 1;
-      sessions.add(run.sessionId);
+      if (interrupted) recovered.push(session.id);
     }
   }
 
-  return { recovered, sessions: [...sessions] };
+  return { recovered: recovered.length, sessions: [...new Set(recovered)] };
 }

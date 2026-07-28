@@ -65,7 +65,7 @@ export class McpClient {
         : undefined;
       const context: Record<string, unknown> = { serverName: this.config.name };
       if (cleanupError) {
-        context.cleanupFailed = true;
+        context.cleanupError = String(cleanupError);
       }
 
       Bus.publish(Operational.Error, {
@@ -73,7 +73,7 @@ export class McpClient {
         time: Date.now(),
         component: "agent.mcp",
         msg: "MCP connection failed",
-        error: "MCP connection failed",
+        error: String(err),
         context,
       });
       throw err;
@@ -99,7 +99,7 @@ export class McpClient {
           time: Date.now(),
           component: "agent.mcp",
           msg: "MCP disconnection failed",
-          error: "MCP disconnection failed",
+          error: String(err),
           context: { serverName: this.config.name },
         });
         throw err;
@@ -158,7 +158,7 @@ export class McpClient {
         serverName: this.config.name,
         toolName: strippedName,
         toolCallId,
-        error: "MCP tool call failed",
+        error: String(err),
         time: Date.now(),
       });
 

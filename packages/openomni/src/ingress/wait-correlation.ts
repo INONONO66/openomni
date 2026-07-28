@@ -1,176 +1,171 @@
-import type { Wait } from "@openomni/protocol";
+import type { Communication, Dispatch } from "@openomni/protocol";
+import { PendingAskStore, PendingInteractionStore } from "@openomni/session";
 
-export type WaitRouteV1 = Readonly<
-  | {
-      kind: "resident";
-      sessionId: string;
-      runId?: string;
-    }
-  | {
-      kind: "worker";
-      sessionId: string;
-      runId: string;
-    }
->;
-
-/** Kernel projection for one durable Wait. This is deliberately not a legacy store record. */
-export type DurableWaitV1 = Readonly<{
-  waitId: string;
-  revision: string;
-  opened: Wait.OpenedV1;
-  status: Wait.StatusV1;
-  route: WaitRouteV1;
-  resolvedAtDbMs?: number;
-  routingDeadlineDbMs?: number;
-  routedDispatchId?: string;
-  routedAction?: Wait.AllowedActionV1;
+type PendingInteractionCandidate = Readonly<{
+  kind: "pending_interaction";
+  key: `pending_interaction:${string}`;
+  record: PendingInteractionStore.Record;
 }>;
 
-export type WaitCorrelationCandidate = Readonly<{
-  key: `wait:${string}`;
-  wait: DurableWaitV1;
+type PendingAskCandidate = Readonly<{
+  kind: "pending_ask";
+  key: `pending_ask:${string}`;
+  record: Communication.PendingAsk.Record;
 }>;
 
-export type ResolveWaitCorrelationInput = Readonly<{
-  endpointId?: string;
-  channelId?: string;
-  correlation?: Wait.CorrelationV1;
-}>;
-
-export type WaitCorrelationResolution =
-  | Readonly<{ kind: "none"; candidates: readonly [] }>
-  | Readonly<{ kind: "match"; candidate: WaitCorrelationCandidate }>
-  | Readonly<{ kind: "ambiguous"; candidates: readonly WaitCorrelationCandidate[] }>;
+export type WaitCorrelationCandidate = PendingInteractionCandidate | PendingAskCandidate;
 
 export type WaitCorrelationEffect =
   | Readonly<{ kind: "none" }>
   | Readonly<{
-      kind: "stage_ambiguity";
-      candidates: readonly WaitCorrelationCandidate[];
+      kind: "mark_pending_asks_ambiguous";
+      pendingAskIds: readonly string[];
     }>;
 
-export type OpenWaitInputV1 = Readonly<{
-  waitId: string;
-  ownerRef: Wait.OwnerRefV1;
-  expectedResponders: readonly Wait.ResponderRefV1[];
-  route: WaitRouteV1;
-  correlation: Wait.CorrelationV1;
-  allowedActions: readonly Wait.AllowedActionV1[];
-  targetActorId?: string;
-  endpointId?: string;
-  channelId?: string;
+export type ResolveWaitCorrelationInput = Readonly<{
+  correlation?: Dispatch.Correlation;
+  externalMessageId?: string;
 }>;
 
-export type WaitResponseInputV1 = Readonly<{
-  waitId: string;
-  transportId: string;
-  responder: Wait.ResponderRefV1;
-  action: Wait.AllowedActionV1;
-  payload: unknown;
+export type WaitCorrelationResolution =
+  | Readonly<{
+      kind: "none";
+      candidates: readonly [];
+      effect: Readonly<{ kind: "none" }>;
+    }>
+  | Readonly<{
+      kind: "match";
+      candidate: WaitCorrelationCandidate;
+      effect: Readonly<{ kind: "none" }>;
+    }>
+  | Readonly<{
+      kind: "ambiguous";
+      candidates: readonly WaitCorrelationCandidate[];
+      effect: WaitCorrelationEffect;
+    }>;
+
+type WaitCorrelationQueryLevel = Readonly<{
+  pendingInteraction: readonly Dispatch.Correlation[];
+  pendingAsk: readonly Communication.PendingAsk.CorrelationQuery[];
 }>;
 
-export type PinnedWaitRevalidationInputV1 = Readonly<{
-  pinned: DurableWaitV1;
-  requestedAction: Wait.AllowedActionV1;
-  resolvedSinceDbMs?: number;
-}>;
+function correlationQueryLevels(input: ResolveWaitCorrelationInput): WaitCorrelationQueryLevel[] {
+  const levels: WaitCorrelationQueryLevel[] = [];
+  const correlation = input.correlation;
+  const scoped =
+    correlation === undefined
+      ? undefined
+      : { endpointId: correlation.endpointId, channelId: correlation.channelId };
 
-export type PinnedWaitRevalidationV1 =
-  | Readonly<{ kind: "valid"; wait: DurableWaitV1 }>
-  | Readonly<{ kind: "invalid"; reason: string }>;
+  if (correlation?.replyToMessageId) {
+    const query = {
+      endpointId: correlation.endpointId,
+      channelId: correlation.channelId,
+      replyToMessageId: correlation.replyToMessageId,
+    };
+    levels.push({ pendingInteraction: [query], pendingAsk: [query] });
+  }
+  if (correlation?.threadId) {
+    const query = {
+      endpointId: correlation.endpointId,
+      channelId: correlation.channelId,
+      threadId: correlation.threadId,
+    };
+    levels.push({ pendingInteraction: [query], pendingAsk: [query] });
+  }
+  if (correlation?.tokenHash) {
+    const query = {
+      endpointId: correlation.endpointId,
+      channelId: correlation.channelId,
+      tokenHash: correlation.tokenHash,
+    };
+    levels.push({ pendingInteraction: [query], pendingAsk: [query] });
+  }
 
-/**
- * Native Wait authority. Implementations translate these operations to the closed WT/DP command
- * families and projection queries; callers cannot inspect storage or choose correlation precedence.
- */
-export interface WaitKernelService {
-  correlate(input: ResolveWaitCorrelationInput): Promise<WaitCorrelationResolution>;
-  revalidatePinned(input: PinnedWaitRevalidationInputV1): Promise<PinnedWaitRevalidationV1>;
-  acceptResponse(input: WaitResponseInputV1): Promise<DurableWaitV1>;
-  settle(input: WaitResponseInputV1): Promise<DurableWaitV1>;
-  cancel(input: { readonly waitId: string; readonly reason: string }): Promise<void>;
-  stageAmbiguity(input: {
-    readonly candidates: readonly WaitCorrelationCandidate[];
-    readonly transportId: string;
-  }): Promise<void>;
-  markRouted(input: {
-    readonly waitId: string;
-    readonly dispatchId: string;
-    readonly action: Wait.AllowedActionV1;
-  }): Promise<void>;
+  const pendingInteractionFallback: Dispatch.Correlation[] = [];
+  const pendingAskFallback: Communication.PendingAsk.CorrelationQuery[] = [];
+  if (correlation?.externalConversationId) {
+    const query = {
+      endpointId: correlation.endpointId,
+      channelId: correlation.channelId,
+      externalConversationId: correlation.externalConversationId,
+    };
+    pendingInteractionFallback.push(query);
+    pendingAskFallback.push(query);
+  } else if (scoped !== undefined) {
+    pendingInteractionFallback.push(scoped);
+    pendingAskFallback.push(scoped);
+  }
+  if (input.externalMessageId) {
+    pendingAskFallback.push(
+      scoped === undefined
+        ? { externalMessageId: input.externalMessageId }
+        : { ...scoped, externalMessageId: input.externalMessageId },
+    );
+  }
+  if (pendingInteractionFallback.length > 0 || pendingAskFallback.length > 0) {
+    levels.push({
+      pendingInteraction: pendingInteractionFallback,
+      pendingAsk: pendingAskFallback,
+    });
+  }
+
+  return levels;
 }
 
-export interface WaitKernelQueryService {
-  correlate(input: ResolveWaitCorrelationInput): Promise<WaitCorrelationResolution>;
-  revalidatePinned(input: PinnedWaitRevalidationInputV1): Promise<PinnedWaitRevalidationV1>;
-}
+function resolveCandidates(
+  candidates: readonly WaitCorrelationCandidate[],
+): WaitCorrelationResolution {
+  if (candidates.length === 1) {
+    const candidate = candidates[0];
+    if (candidate === undefined) throw new TypeError("single wait candidate is missing");
+    return { kind: "match", candidate, effect: { kind: "none" } };
+  }
 
-export interface WaitKernelTransitionService {
-  acceptResponse(input: WaitResponseInputV1): Promise<DurableWaitV1>;
-  settle(input: WaitResponseInputV1): Promise<DurableWaitV1>;
-  cancel(input: { readonly waitId: string; readonly reason: string }): Promise<void>;
-  stageAmbiguity(input: {
-    readonly candidates: readonly WaitCorrelationCandidate[];
-    readonly transportId: string;
-  }): Promise<void>;
-  markRouted(input: {
-    readonly waitId: string;
-    readonly dispatchId: string;
-    readonly action: Wait.AllowedActionV1;
-  }): Promise<void>;
-}
-
-export function createWaitKernelService(
-  queries: WaitKernelQueryService,
-  transitions: WaitKernelTransitionService,
-): WaitKernelService {
-  const service: WaitKernelService = {
-    correlate(input: ResolveWaitCorrelationInput) {
-      return queries.correlate(input);
-    },
-    revalidatePinned(input: PinnedWaitRevalidationInputV1) {
-      return queries.revalidatePinned(input);
-    },
-    acceptResponse(input: WaitResponseInputV1) {
-      return transitions.acceptResponse(input);
-    },
-    settle(input: WaitResponseInputV1) {
-      return transitions.settle(input);
-    },
-    cancel(input: { readonly waitId: string; readonly reason: string }) {
-      return transitions.cancel(input);
-    },
-    stageAmbiguity(input) {
-      return transitions.stageAmbiguity(input);
-    },
-    markRouted(input) {
-      return transitions.markRouted(input);
-    },
+  const pendingAskIds = candidates
+    .filter((candidate): candidate is PendingAskCandidate => candidate.kind === "pending_ask")
+    .map((candidate) => candidate.record.id)
+    .sort();
+  return {
+    kind: "ambiguous",
+    candidates,
+    effect:
+      pendingAskIds.length === 0
+        ? { kind: "none" }
+        : { kind: "mark_pending_asks_ambiguous", pendingAskIds },
   };
-  return Object.freeze(service);
 }
 
 export function resolveWaitCorrelation(
-  service: WaitKernelService,
   input: ResolveWaitCorrelationInput,
-): Promise<WaitCorrelationResolution> {
-  return service.correlate(input);
+): WaitCorrelationResolution {
+  for (const level of correlationQueryLevels(input)) {
+    const rawCandidates: WaitCorrelationCandidate[] = [];
+    for (const query of level.pendingInteraction) {
+      for (const record of PendingInteractionStore.findByCorrelation(query)) {
+        rawCandidates.push({
+          kind: "pending_interaction",
+          key: `pending_interaction:${record.id}`,
+          record,
+        });
+      }
+    }
+    for (const query of level.pendingAsk) {
+      for (const record of PendingAskStore.findByCorrelation(query)) {
+        rawCandidates.push({ kind: "pending_ask", key: `pending_ask:${record.id}`, record });
+      }
+    }
+
+    const candidates = [
+      ...new Map(rawCandidates.map((candidate) => [candidate.key, candidate])).values(),
+    ].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+    if (candidates.length > 0) return resolveCandidates(candidates);
+  }
+
+  return { kind: "none", candidates: [], effect: { kind: "none" } };
 }
 
-export async function applyWaitCorrelationEffect(
-  service: WaitKernelService,
-  effect: WaitCorrelationEffect,
-  transportId: string,
-): Promise<void> {
-  switch (effect.kind) {
-    case "none":
-      return;
-    case "stage_ambiguity":
-      await service.stageAmbiguity({ candidates: effect.candidates, transportId });
-      return;
-    default: {
-      const unreachable: never = effect;
-      throw new TypeError(`Unreachable wait correlation effect: ${String(unreachable)}`);
-    }
-  }
+export function applyWaitCorrelationEffect(effect: WaitCorrelationEffect): void {
+  if (effect.kind === "none") return;
+  for (const id of new Set(effect.pendingAskIds)) PendingAskStore.markAmbiguous(id);
 }

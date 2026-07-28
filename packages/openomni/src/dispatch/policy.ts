@@ -1,9 +1,6 @@
 import { Dispatch, PolicyDecision, type Policy } from "@openomni/protocol";
 import type { GenericPolicyContext } from "@openomni/policy";
-import {
-  authoritySourceFacts,
-  type AuthorityProjectionQueryPort,
-} from "../ingress/actor-resolver.js";
+import { BlacklistStore, PendingInteractionStore, WorkerGrantStore } from "@openomni/session";
 import { EffectiveAuthority } from "./effective-authority.js";
 import type { DispatchPolicyRegistration } from "./policy-registration.js";
 
@@ -38,12 +35,10 @@ function allow(reason: string, factsUsed: readonly string[] = []): Policy.Policy
   });
 }
 
-function decide(
-  result: EffectiveAuthority.Result,
-  authorityFacts: readonly string[] = [],
-): Policy.PolicyDecision {
-  const factsUsed = [...result.factsUsed, ...authorityFacts];
-  return result.allowed ? allow(result.reason, factsUsed) : deny(result.reason, factsUsed);
+function decide(result: EffectiveAuthority.Result): Policy.PolicyDecision {
+  return result.allowed
+    ? allow(result.reason, result.factsUsed)
+    : deny(result.reason, result.factsUsed);
 }
 
 function blacklistMatchInput(
@@ -52,16 +47,14 @@ function blacklistMatchInput(
   correlation: Dispatch.Command["correlation"] | undefined,
 ) {
   const correlationHints = typeof correlation === "object" ? correlation : undefined;
-  const endpointId =
-    correlationHints?.endpointId ??
-    (target?.kind === "external_actor" ? (target.id ?? target.name) : undefined);
-  const channel =
-    correlationHints?.channelId ??
-    (target?.kind === "surface" ? (target.id ?? target.name) : undefined);
   return {
-    ...(actor?.actorId === undefined ? {} : { actorId: actor.actorId }),
-    ...(endpointId === undefined ? {} : { endpointId }),
-    ...(channel === undefined ? {} : { channel }),
+    actorId: actor?.actorId,
+    endpointId:
+      correlationHints?.endpointId ??
+      (target?.kind === "external_actor" ? (target.id ?? target.name) : undefined),
+    channel:
+      correlationHints?.channelId ??
+      (target?.kind === "surface" ? (target.id ?? target.name) : undefined),
     candidates: [
       ...(target?.id ? [target.id] : []),
       ...(target?.name ? [target.name] : []),
@@ -72,48 +65,7 @@ function blacklistMatchInput(
   };
 }
 
-function matchedWaitId(actor: Dispatch.ActorContext): string | undefined {
-  if (
-    actor.kind !== "worker" ||
-    actor.trustTier !== "assigned_worker" ||
-    actor.reason !== "wait.match" ||
-    !actor.sessionId ||
-    !actor.runId ||
-    actor.workerRunId !== actor.runId
-  ) {
-    return undefined;
-  }
-  const labels = actor.labels ?? [];
-  if (!labels.includes("actor.worker") || !labels.includes("actor.assigned_worker")) {
-    return undefined;
-  }
-  const waitLabels = labels.filter((label) => label.startsWith("wait.") && label.length > 5);
-  return waitLabels.length === 1 ? waitLabels[0]?.slice(5) : undefined;
-}
-
-function isExactMatchedWaitTarget(
-  action: string,
-  actor: Dispatch.ActorContext,
-  target: Dispatch.Target | undefined,
-  sessionId: string | undefined,
-  runId: string | undefined,
-): boolean {
-  if (
-    sessionId !== actor.sessionId ||
-    runId !== actor.runId ||
-    target?.sessionId !== actor.sessionId
-  ) {
-    return false;
-  }
-  if (action === Dispatch.Actions.WorkerComplete) {
-    return target?.kind === "worker" && target.runId === actor.runId && target.id === actor.runId;
-  }
-  return action === Dispatch.Actions.ResidentAsk && target?.kind === "resident";
-}
-
-export function createDefaultDispatchPolicy(
-  queries: AuthorityProjectionQueryPort,
-): DispatchPolicyRegistration {
+export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
   return {
     kind: "point",
     name: "dispatch.default-authority",
@@ -123,31 +75,22 @@ export function createDefaultDispatchPolicy(
     },
     priority: 0,
     failPolicy: "fail-closed",
-    async fn(ctx) {
+    fn(ctx) {
       const action = ctx.action ?? "";
       const actor = ctx.actor;
       const target = ctx.target;
-      const blacklistResult = await queries.query({
-        kind: "authority.blacklist_match",
-        ...blacklistMatchInput(actor, target, ctx.correlation),
-      });
-      if (blacklistResult.kind !== "authority.blacklist_match") {
-        throw new TypeError("authority blacklist query returned the wrong projection kind");
-      }
-      const blacklistFacts = authoritySourceFacts(blacklistResult);
-      if (blacklistResult.entry !== null) {
+      const blacklisted = BlacklistStore.match(blacklistMatchInput(actor, target, ctx.correlation));
+      if (blacklisted) {
         return decide(
           EffectiveAuthority.blockedByBlacklist(
-            blacklistResult.entry.reason ??
-              `dispatch.blacklist.${blacklistResult.entry.kind}.${blacklistResult.entry.value}`,
-            blacklistResult.entry.kind,
+            blacklisted.reason ?? `dispatch.blacklist.${blacklisted.kind}.${blacklisted.value}`,
+            blacklisted.kind,
           ),
-          blacklistFacts,
         );
       }
 
       if (!actor || actor.kind === "unknown") {
-        return decide(EffectiveAuthority.missingActor(), blacklistFacts);
+        return decide(EffectiveAuthority.missingActor());
       }
 
       if (action === "worker.spawn" && actor.kind !== "resident") {
@@ -155,66 +98,128 @@ export function createDefaultDispatchPolicy(
           actor.kind === "worker"
             ? EffectiveAuthority.workerDenied("dispatch.worker.spawn.denied")
             : EffectiveAuthority.actorDenied("dispatch.worker.spawn.resident_required"),
-          blacklistFacts,
         );
       }
 
-      const waitId = actor.kind === "worker" ? matchedWaitId(actor) : undefined;
-      if (
-        waitId !== undefined &&
-        isExactMatchedWaitTarget(action, actor, target, ctx.sessionId, ctx.runId)
-      ) {
-        return decide(
-          EffectiveAuthority.pendingInteraction("dispatch.wait_response.allowed", waitId),
-          blacklistFacts,
-        );
+      if (actor.kind === "worker" && action.startsWith("schedule.")) {
+        const granted = evaluateWorkerGrant(actor, action, target);
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.schedule.denied"));
       }
+
       if (actor.kind === "worker" && action === "resident.ask") {
         if (target?.kind !== "resident") {
           return decide(
             EffectiveAuthority.workerDenied("dispatch.worker.resident_ask.target.denied"),
-            blacklistFacts,
           );
         }
-        if (
-          actor.trustTier !== "assigned_worker" ||
-          !actor.workerRunId ||
-          !actor.sessionId ||
-          !actor.runId
-        ) {
-          return decide(
-            EffectiveAuthority.workerDenied("dispatch.worker.resident_ask.authentication.denied"),
-            blacklistFacts,
-          );
-        }
-        return decide(
-          EffectiveAuthority.workerNotRequired("dispatch.worker.resident_ask.allowed"),
-          blacklistFacts,
-        );
+        return decide(EffectiveAuthority.workerNotRequired("dispatch.worker.resident_ask.allowed"));
       }
 
       if (action === Dispatch.Actions.ActorMessage) {
         return decide(
           EffectiveAuthority.pendingInteractionDenied("dispatch.pending_interaction.required"),
-          blacklistFacts,
         );
+      }
+
+      if (
+        actor.kind === "worker" &&
+        (action === Dispatch.Actions.ActorReply || action === Dispatch.Actions.WorkerComplete) &&
+        actor.trustTier === "assigned_worker"
+      ) {
+        const pendingInteraction = evaluatePendingInteractionScope(actor, action, target);
+        if (pendingInteraction.allowed) {
+          return decide(
+            EffectiveAuthority.pendingInteraction(
+              "dispatch.pending_interaction.allowed",
+              pendingInteraction.id,
+            ),
+          );
+        }
+        return decide(EffectiveAuthority.pendingInteractionDenied(pendingInteraction.reason));
+      }
+
+      if (actor.kind === "worker" && isWorkerScopedEgress(action)) {
+        const granted = evaluateWorkerGrant(actor, action, target);
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.scope.denied"));
+      }
+
+      if (actor.kind === "worker" && isExternalEgress(action)) {
+        const granted = evaluateWorkerGrant(actor, action, target);
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.external.denied"));
       }
 
       if (actor.kind === "system" && action.startsWith("schedule.")) {
-        return decide(
-          EffectiveAuthority.nonWorker("dispatch.system.schedule.allowed"),
-          blacklistFacts,
-        );
+        return decide(EffectiveAuthority.nonWorker("dispatch.system.schedule.allowed"));
       }
 
       if (actor.kind === "worker") {
-        return decide(
-          EffectiveAuthority.workerDenied("dispatch.worker.action.denied"),
-          blacklistFacts,
-        );
+        return decide(EffectiveAuthority.workerDenied("dispatch.worker.action.denied"));
       }
 
-      return decide(EffectiveAuthority.nonWorker("dispatch.default.allowed"), blacklistFacts);
+      return decide(EffectiveAuthority.nonWorker("dispatch.default.allowed"));
     },
   };
+}
+
+function evaluatePendingInteractionScope(
+  actor: Dispatch.ActorContext,
+  action: string,
+  target: Dispatch.Target | undefined,
+): { allowed: true; id: string } | { allowed: false; reason: string } {
+  if (actor.reason !== "pending_interaction.match") {
+    return { allowed: false, reason: "dispatch.pending_interaction.match.required" };
+  }
+  const pendingInteractionId = actor.labels
+    ?.find((label) => label.startsWith("pending_interaction."))
+    ?.slice("pending_interaction.".length);
+  if (!pendingInteractionId) {
+    return { allowed: false, reason: "dispatch.pending_interaction.required" };
+  }
+  const record = PendingInteractionStore.get(pendingInteractionId);
+  if (!record) {
+    return { allowed: false, reason: "dispatch.pending_interaction.not_found" };
+  }
+  const requiredAction =
+    action === Dispatch.Actions.WorkerComplete ? "report_result" : "attach_artifact";
+  if (!record.allowedActions.includes(requiredAction)) {
+    return { allowed: false, reason: "dispatch.pending_interaction.action.denied" };
+  }
+  if (target?.kind !== "worker") {
+    return { allowed: false, reason: "dispatch.pending_interaction.target.denied" };
+  }
+  if (record.workerRunId !== target.runId || record.workerRunId !== actor.workerRunId) {
+    return { allowed: false, reason: "dispatch.pending_interaction.run_mismatch" };
+  }
+  if (record.sessionId !== target.sessionId || record.sessionId !== actor.sessionId) {
+    return { allowed: false, reason: "dispatch.pending_interaction.session_mismatch" };
+  }
+  return { allowed: true, id: record.id };
+}
+
+function isExternalCreate(action: string): boolean {
+  return action === "external.ask" || action === "a2a.ask" || action === "api.ask";
+}
+
+function isExternalEgress(action: string): boolean {
+  return action.startsWith("external.") || action.startsWith("a2a.") || action.startsWith("api.");
+}
+
+function isWorkerScopedEgress(action: string): boolean {
+  return action === "worker.send" || action === "worker.resume" || action === "worker.cancel";
+}
+
+function evaluateWorkerGrant(
+  actor: Dispatch.ActorContext,
+  action: string,
+  target: Dispatch.Target | undefined,
+): { allowed: boolean; reason: string } {
+  if (!actor.workerRunId) return { allowed: false, reason: "worker_grant.worker_run.required" };
+  return WorkerGrantStore.evaluate({
+    workerRunId: actor.workerRunId,
+    action,
+    sessionId: target?.sessionId ?? target?.parentSessionId ?? actor.sessionId,
+    actorId: target?.id ?? target?.name ?? actor.actorId,
+    endpointId: target?.id ?? target?.name,
+    createsExternalTask: isExternalCreate(action),
+  });
 }

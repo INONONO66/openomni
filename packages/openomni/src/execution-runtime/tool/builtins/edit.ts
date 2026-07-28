@@ -1,4 +1,3 @@
-import { createWorkspaceIdentity, type WorkspaceIdentity } from "../../workspace-identity.js";
 import { defineTool } from "../define.js";
 import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
@@ -25,8 +24,7 @@ function replaceMany(
   return { text: parts.join(replacement), count: parts.length - 1 };
 }
 
-export function createEditTool(workspace: WorkspaceIdentity | string) {
-  const identity = typeof workspace === "string" ? createWorkspaceIdentity(workspace) : workspace;
+export function createEditTool(workspaceRoot: string) {
   return defineTool<{
     path: string;
     oldString: string;
@@ -67,7 +65,7 @@ export function createEditTool(workspace: WorkspaceIdentity | string) {
           return errorResult(call, "Invalid input: oldString and newString must be different");
         }
 
-        const resolved = resolveContainedPath(identity, filePath);
+        const resolved = resolveContainedPath(workspaceRoot, filePath);
         const file = Bun.file(resolved);
 
         if (!(await file.exists())) {
@@ -100,9 +98,7 @@ export function createEditTool(workspace: WorkspaceIdentity | string) {
           ? replaceMany(original, oldString, newString)
           : replaceOnce(original, oldString, newString);
 
-        const revalidated = resolveContainedPath(identity, filePath);
-        if (revalidated !== resolved) throw new Error("workspace target changed before edit");
-        await Bun.write(revalidated, text);
+        await Bun.write(resolved, text);
 
         return successResult(
           call,
