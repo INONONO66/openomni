@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784797786028,
+  "lastUpdate": 1785204301158,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -35089,6 +35089,110 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 423710,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ed55c102ce9e1191243ff7f5600b58de171953a",
+          "message": "feat: cut over to the P2 clean ledger (#455)\n\nAtomic P2-04 clean-baseline cutover. Independent frozen-SHA architect and QA/red-team reviews passed; GitHub CI and benchmark gates passed. Follow-up delivery is split one-to-one across issues #492-#506.",
+          "timestamp": "2026-07-28T11:03:51+09:00",
+          "tree_id": "fe478fd1c685f910c741ec854f0833ff2eb8c148",
+          "url": "https://github.com/INONONO66/openomni/commit/0ed55c102ce9e1191243ff7f5600b58de171953a"
+        },
+        "date": 1785204300888,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6028,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 854,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1398,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "effect-scope/10-bash/resolve-tool-effect",
+            "value": 640444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "effect-scope/10-writes/resolve-tool-effect",
+            "value": 3055738,
+            "unit": "ns/op"
+          },
+          {
+            "name": "effect-scope/100-bash/resolve-tool-effect",
+            "value": 6232311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "effect-scope/100-writes/resolve-tool-effect",
+            "value": 30167101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "effect-scope/50-bash/resolve-tool-effect",
+            "value": 3174713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "effect-scope/50-writes/resolve-tool-effect",
+            "value": 15043145,
+            "unit": "ns/op"
+          },
+          {
+            "name": "injection-queue/10-responses/enqueue-drain-single-run",
+            "value": 1051,
+            "unit": "ns/op"
+          },
+          {
+            "name": "injection-queue/100-responses/enqueue-drain-single-run",
+            "value": 7799,
+            "unit": "ns/op"
+          },
+          {
+            "name": "injection-queue/50-responses/enqueue-drain-single-run",
+            "value": 4110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "ledger-runtime/append-session-with-projections",
+            "value": 1676260,
+            "unit": "ns/op"
+          },
+          {
+            "name": "ledger-runtime/query-tail-window-64-of-128",
+            "value": 923945,
             "unit": "ns/op"
           }
         ]
