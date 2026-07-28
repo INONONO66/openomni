@@ -1,13 +1,13 @@
-import { type ModelsDev, Provider } from "@openomni/llm";
+import { ModelsDev, Provider } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import type { ChatAgentInput, ModelCatalogService } from "../types";
+import type { ChatAgentInput } from "../types";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
-export async function resolveProviderModel(
-  model: { provider: string; id: string },
-  catalog: ModelCatalogService,
-): Promise<Provider.Model> {
-  const data = await catalog.get();
+export async function resolveProviderModel(model: {
+  provider: string;
+  id: string;
+}): Promise<Provider.Model> {
+  const data = await ModelsDev.get();
   const providerData = data[model.provider];
 
   if (!providerData) {
@@ -15,11 +15,15 @@ export async function resolveProviderModel(
   }
 
   const rawModel = providerData.models?.[model.id];
-  if (!rawModel) {
-    throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
+  if (rawModel) {
+    return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
   }
 
-  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
+  const proxyModels = await Provider.listModels(model.provider, "proxy").catch(() => []);
+  const match = proxyModels.find((m) => m.id === model.id);
+  if (match) return match;
+
+  throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
 export function toMessagesWithParts(

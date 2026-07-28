@@ -1,4 +1,3 @@
-import type { ChatAgentConfig } from "@openomni/agent";
 import { IngressEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { SessionBridge } from "../ingress/session-bridge";
@@ -20,9 +19,6 @@ export type {
   ResidentRuntimeOptions,
 } from "./runtime-types";
 
-export type ResidentRuntimeCompositionOptions = ResidentRuntimeOptions &
-  Pick<ChatAgentConfig, "environment" | "modelCatalog">;
-
 export class ResidentRuntime {
   private readonly activations = new Map<string, ActivationRecord>();
   private readonly waiters: SlotWaiter[] = [];
@@ -31,23 +27,12 @@ export class ResidentRuntime {
   private readonly slotWaitTimeoutMs: number;
   private activeRuns = 0;
   private readonly runAgent: NonNullable<ResidentRuntimeOptions["runAgent"]>;
-  private readonly agentDependencies: Pick<ChatAgentConfig, "environment" | "modelCatalog">;
 
-  constructor(options: ResidentRuntimeCompositionOptions) {
-    if (options?.environment === undefined) {
-      throw new TypeError("Resident LLM environment is required");
-    }
-    if (options?.modelCatalog === undefined) {
-      throw new TypeError("Resident model catalog is required");
-    }
+  constructor(options: ResidentRuntimeOptions = {}) {
     this.maxActive = options.maxActive ?? 10;
     this.idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
     this.slotWaitTimeoutMs = options.slotWaitTimeoutMs ?? 30_000;
     this.runAgent = options.runAgent ?? defaultRunAgent;
-    this.agentDependencies = {
-      environment: options.environment,
-      modelCatalog: options.modelCatalog,
-    };
   }
 
   stats(): { activations: number; activeRuns: number; idle: number; maxActive: number } {
@@ -193,14 +178,14 @@ export class ResidentRuntime {
       const activation = this.ensureActivation(ctx.sessionId);
       if (activation.idleTimer) clearTimeout(activation.idleTimer);
       activation.lifecycle = "hydrating";
-      const messages = (await SessionBridge.buildDirectMessages(ctx.sessionId)).filter(
+      const messages = SessionBridge.buildDirectMessages(ctx.sessionId).filter(
         (
           message,
         ): message is { role: "user"; content: string } | { role: "assistant"; content: string } =>
           message.role === "user" || message.role === "assistant",
       );
       activation.lifecycle = "active";
-      const agentConfig = buildResidentAgentConfig(ctx, runId, this.agentDependencies);
+      const agentConfig = buildResidentAgentConfig(ctx, runId);
       const result = await this.runAgent(agentConfig, {
         messages,
         traceContext,
@@ -232,7 +217,7 @@ export class ResidentRuntime {
         mode: ctx.event.mode,
         target: "resident",
         durationMs: Date.now() - start,
-        error: "resident execution failed",
+        error: error instanceof Error ? error.message : String(error),
         time: Date.now(),
       });
       throw error;
@@ -243,7 +228,7 @@ export class ResidentRuntime {
 }
 
 export namespace ResidentRuntime {
-  export function create(options: ResidentRuntimeCompositionOptions): ResidentRuntime {
+  export function create(options: ResidentRuntimeOptions = {}): ResidentRuntime {
     return new ResidentRuntime(options);
   }
 }

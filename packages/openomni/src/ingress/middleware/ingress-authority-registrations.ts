@@ -1,27 +1,19 @@
 import type { PolicyRegistration } from "@openomni/agent";
 import { Ingress, PolicyDecision } from "@openomni/protocol";
-import type { AuthorityProjectionQueryPort } from "../actor-resolver";
-import { authoritySourceFacts } from "../actor-resolver";
+import { BlacklistStore, ChannelGrantStore } from "@openomni/session";
 import { resolveTarget } from "../target";
 import { getActor, targetRequiresCoordinator } from "./ingress-authority-actor";
-import {
-  applyChannelGrantTreatment,
-  channelGrantReason,
-  resolveInboundTreatment,
-} from "./ingress-authority-channel-grant";
+import { applyChannelGrantTreatment, channelGrantReason } from "./ingress-authority-channel-grant";
 import { abortDecision, allowDecision, requireParsedEvent } from "./ingress-authority-decisions";
 import { IngressAuthorityDefinitions } from "./ingress-authority-definitions";
 import { evaluateIngressAuthority } from "./ingress-authority-evaluation";
 import type { PreRunState } from "./ingress-authority-types";
 
-export function registrations(
-  state: PreRunState,
-  queries: AuthorityProjectionQueryPort,
-): PolicyRegistration[] {
+export function registrations(state: PreRunState): PolicyRegistration[] {
   return [
     createSchemaValidation(state),
-    createBlacklistCheck(state, queries),
-    createChannelGrantCheck(state, queries),
+    createBlacklistCheck(state),
+    createChannelGrantCheck(state),
     createCoordinatorPresence(state),
     createAuthorityCheck(state),
     createModeDispatch(state),
@@ -37,20 +29,16 @@ export function routedRegistrations(state: PreRunState): PolicyRegistration[] {
   ];
 }
 
-function createBlacklistCheck(
-  state: PreRunState,
-  queries: AuthorityProjectionQueryPort,
-): PolicyRegistration {
+function createBlacklistCheck(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityDefinitions.BlacklistCheck,
     failPolicy: "fail-closed",
-    fn: async () => {
+    fn: () => {
       const event = requireParsedEvent(state);
       const actor = getActor(event);
-      const result = await queries.query({
-        kind: "authority.blacklist_match",
-        ...(typeof actor?.actorId === "string" ? { actorId: actor.actorId } : {}),
-        ...(typeof actor?.endpointId === "string" ? { endpointId: actor.endpointId } : {}),
+      const entry = BlacklistStore.match({
+        actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
+        endpointId: typeof actor?.endpointId === "string" ? actor.endpointId : undefined,
         channel: event.surface,
         candidates: [
           event.surface,
@@ -58,75 +46,49 @@ function createBlacklistCheck(
           `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
         ],
       });
-      if (result.kind !== "authority.blacklist_match") {
-        throw new TypeError("authority blacklist query returned the wrong projection kind");
-      }
-      const factsUsed = authoritySourceFacts(result);
-      if (result.entry === null) {
-        return PolicyDecision.allow({
-          policyId: "ingress.blacklist",
-          reasonCodes: ["blacklist.clear"],
-          factsUsed,
-        });
-      }
-      const reason = blacklistReason(result.entry.kind, result.entry.value, result.entry.reason);
-      return PolicyDecision.deny({
-        policyId: "ingress.blacklist",
-        reasonCodes: [reason],
-        factsUsed,
-        effects: [{ type: "run.abort", reason }],
-      });
+      if (!entry) return allowDecision("ingress.blacklist", "blacklist.clear");
+      return abortDecision(
+        "ingress.blacklist",
+        blacklistReason(entry.kind, entry.value, entry.reason),
+      );
     },
   };
 }
 
-function createChannelGrantCheck(
-  state: PreRunState,
-  queries: AuthorityProjectionQueryPort,
-): PolicyRegistration {
+function createChannelGrantCheck(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityDefinitions.ChannelGrantCheck,
     failPolicy: "fail-closed",
-    fn: async () => {
+    fn: () => {
       const event = requireParsedEvent(state);
-      const result = await queries.query({
-        kind: "authority.channel_grant",
+      const resolution = ChannelGrantStore.resolve({
         surface: event.surface,
-        ...(event.workspace === undefined ? {} : { workspace: event.workspace }),
-        ...(event.channel === undefined ? {} : { channel: event.channel }),
+        workspace: event.workspace,
+        channel: event.channel,
       });
-      if (result.kind !== "authority.channel_grant") {
-        throw new TypeError("authority channel query returned the wrong projection kind");
+
+      if (!resolution) {
+        return abortDecision("ingress.channel_grant", channelGrantReason(undefined, undefined));
       }
-      const sourceFacts = authoritySourceFacts(result);
-      if (result.grant === null) {
-        const reason = channelGrantReason(undefined, undefined);
-        return PolicyDecision.deny({
-          policyId: "ingress.channel_grant",
-          reasonCodes: [reason],
-          factsUsed: sourceFacts,
-          effects: [{ type: "run.abort", reason }],
-        });
-      }
-      const inboundTreatment = resolveInboundTreatment(result.grant);
-      if (inboundTreatment === "drop") {
-        const reason = channelGrantReason(result.grant, inboundTreatment);
-        return PolicyDecision.deny({
-          policyId: "ingress.channel_grant",
-          reasonCodes: [reason],
-          factsUsed: sourceFacts,
-          effects: [{ type: "run.abort", reason }],
-        });
+      if (resolution.inboundTreatment === "drop") {
+        return abortDecision(
+          "ingress.channel_grant",
+          channelGrantReason(resolution.grant, resolution.inboundTreatment),
+        );
       }
 
-      state.parsedEvent = applyChannelGrantTreatment(event, result.grant, inboundTreatment);
+      state.parsedEvent = applyChannelGrantTreatment(
+        event,
+        resolution.grant,
+        resolution.inboundTreatment,
+      );
+
       return PolicyDecision.allow({
         policyId: "ingress.channel_grant",
-        reasonCodes: [channelGrantReason(result.grant, inboundTreatment)],
+        reasonCodes: [channelGrantReason(resolution.grant, resolution.inboundTreatment)],
         factsUsed: [
-          `channel_grant.${result.grant.kind}`,
-          `inbound.${inboundTreatment}`,
-          ...sourceFacts,
+          `channel_grant.${resolution.grant.kind}`,
+          `inbound.${resolution.inboundTreatment}`,
         ],
       });
     },

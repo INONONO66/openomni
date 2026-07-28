@@ -101,13 +101,16 @@ function handleDispatch(
   }
   try {
     actions.callbacks.onDispatch(event, data);
-  } catch {
+  } catch (err) {
     Bus.publish(Operational.Error, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
       msg: "discord dispatch error",
-      context: { dispatchFailed: true },
+      context: {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
     });
   }
   return false;

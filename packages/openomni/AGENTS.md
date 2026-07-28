@@ -9,36 +9,23 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 | `src/agents/` | Built-in agent definitions and model-specific prompt variants | `ResidentAgent` |
 | `src/resident/` | Resident runtime lifecycle (in-process execution, direct mode) | `ResidentRuntime` |
 | `src/ingress/` | Current inbound stage: single kernel route resolution, authority facts, projection, resident/direct execution | `IngressEngine`, `resolveRoute`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
-| `src/dispatch/` | Current egress/cross-boundary stage: command authorization, Wait routing, gate-side policy stamping | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` (+ `BuiltInDispatchOptions.policyResolver`) |
+| `src/dispatch/` | Current egress/cross-boundary stage: command authorization, handler routing, PendingInteraction routing, gate-side policy stamping (#479) | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` (+ `BuiltInDispatchOptions.policyResolver`), `DEFAULT_DISPATCH_MODEL` |
 | `src/policy/` | Gate-side policy resolution: actor/target labels → stamped `policyPlan` on spawn requests (production-wired by #479) | `PolicyResolver` |
-| `src/evidence/` | Read-back executors plus unconsumed verifier/stakes foundations | `ReadBackExecutor`; unconsumed `VerifierRegistry`, `Stakes` |
-| `src/execution-runtime/` | Tool/workspace/worker runtime, ledger-backed scheduling, workspace identity, and effect-scope resolution | Runtime exports, `ScheduleService`, `createWorkspaceIdentity`, `EffectScopeRegistry` |
-| `src/ledger/` | Production native transition catalog, reducers, typed ports, and semantic services | `NATIVE_TRANSITION_CATALOG_R9`, transition/reducer modules, production services under `src/ledger/production/` |
-
-## P2-04 PRODUCTION CUTOVER
-
-- P2-04 is production-wired against the strict fresh `p2-clean-v1` baseline. OpenOmni owns native transition meaning and exposes bounded semantic services over the sole session-owned structural writer/query/projection runtime.
-- Production services are split by domain under `src/ledger/production/`. They own Work/Attempt/Wait, route/dispatch, authority/configuration, schedule/effect, connector/artifact, completion, messaging/access, and recovery meaning. Consumers never receive generic append or database authority.
-- The native catalog and projection catalog are closed. The checked manifest covers 143 operations and 97 native event payload schemas.
-- Worker requests are authenticated and bound to their active runtime, principal, session, run, and Attempt before semantic transition/query access. Credential provisioning is private, provider-scoped, and requires a post-provisioning acknowledgement before execution.
-- Resident and Worker execution use an explicit validated LLM environment and credential binding. No ambient model selection or unknown-agent substitution is permitted.
-- `VerifierRegistry` and `Stakes` remain unconsumed foundations; their later consumers are not implied by the P2-04 cutover.
-- **P2-05–P2-07, C1, P3, and P4 remain unshipped.** P3 still owns package moves: kernel ingress/dispatch/policy/evidence/ledger meaning stays in OpenOmni while `resident/` and `agents/` move to the server host.
+| `src/evidence/` | Read-back executors: URL re-fetch, API re-query, citation matching for completion gating | `ReadBackExecutor` |
+| `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
 
 - `src/agents/` contains built-in agent definitions. `src/agents/resident/prompt/` holds the Resident system prompt with model-specific variants (Claude, GPT) and a shared builder. `ResidentAgent.getPrompt({ model })` selects the right variant by provider.
 - `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
 - `src/ingress/` uses the shipped single kernel `resolveRoute` pipeline (#464, PR #485) for inbound precedence and decision ownership. Separately, the future P3 package plan (#456) keeps `ingress/`, `dispatch/`, `policy/`, `evidence/`, and the cron/injection parts of `execution-runtime/` in the kernel while moving `resident/` and `agents/` to `apps/server`. OpenOmni currently owns principal-resolution handoff, access checks, correlation, session/target resolution, projection, writeback, and response routing; #456 changes package placement, not that product ownership.
-- `src/ingress/` resolves identity, access, native Wait correlation, session, target, and execution path, then commits route/message facts through production semantic services before selected execution. Internal schedule fire enters through the same kernel surface.
-- `src/dispatch/` is the cross-boundary command stage. It authorizes commands, routes Wait replies, invokes handlers, and commits audit/lifecycle facts through semantic services. Treat dispatch as a kernel stage, not a standalone product layer.
+- `src/ingress/` is the current inbound stage. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the resident/direct handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job)` creates internal events with `surface="cron"`.
+- `src/dispatch/` is the current cross-boundary command stage. `DispatchRuntime.submit()` authorizes commands, routes PendingInteraction replies, invokes registered handlers, and emits audit events. Treat dispatch as a kernel stage, not as a standalone product layer.
 - `src/execution-runtime/tool/agent/tools/dispatch.ts` is the `dispatch` tool — the runtime-to-runtime/system egress gate. Worker-to-Resident awaited requests use `resident.ask`; scheduling uses `schedule.create`; cron fire remains internal ingress. `Dispatch.submit()` enforces PolicyEngine authorization and emits Bus audit events. See `src/dispatch/` for the runtime, handlers, and policy.
 - `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
-- `src/execution-runtime/schedule-service.ts` provides the ledger-backed semantic schedule seam. `CronJobRunner` scans projected schedules; create, cancel, fire, generation advance, and effect settlement commit through native transitions. There is no process-local schedule authority or storage-adapter fallback.
-- Dispatch Worker allocation and ingress session creation require the explicit validated model environment and credential binding before state creation. The LLM catalog cache is derived and never authorizes model selection.
+- `src/execution-runtime/cron-job-registry.ts` (`CronJobRegistry`) stores scheduled jobs through the session storage adapter and keeps a process-local fallback map when durable storage is absent. `src/execution-runtime/cron-job-runner.ts` (`CronJobRunner`) polls the registry and accepts an injected fire implementation; server boot wires that to `CronAdapter.fire(job)`.
 - Do not create aspirational domain folders. Future package moves and renames are owned by #456 (P3 disposition map); the #464 `resolveRoute` consolidation is already shipped and is not a prerequisite for those moves.
 - Resident/Worker orchestration seams, controlled inbound access, self-loop session creation, Worker delegation, durable external waits, ledger/evidence gates, and distilled writeback all belong in this package.
-- P2-04 production services are the only durable lifecycle convention. Do not bypass them with direct storage, generic append, or Bus-observer state.
 
 WHY: each domain stays small and focused so the domain docs can stay source-of-truth instead of repeating.
 
@@ -46,14 +33,14 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 
 - Messaging/access semantics live here. If a change decides target, session, run, principal, trust, grant, pending correlation, writeback, or response routing, implement it in `openomni`.
 - `ingress/` and `dispatch/` are implementation stages. New cross-boundary routing must not add another server-side or tool-side special case — use the shipped kernel `resolveRoute` pipeline (#464) and the existing dispatch stage.
-- Do not let `apps/server` inspect durable routing/configuration state directly. Server passes normalized facts and injected host dependencies; OpenOmni decides.
+- Do not let `apps/server` inspect `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing. Server passes normalized facts; OpenOmni decides.
 - Do not let `packages/session` decide authority or match precedence. It may store and query records; OpenOmni owns lifecycle transitions that have product meaning.
 - Do not let `packages/coordinator` decide actor/session authority. It executes primitive worker-process operations requested by this package.
 - Do not let `packages/agent` grow OpenOmni-specific durable lifecycle. Session-backed worker/background orchestration stays here.
 - The Resident never receives `child_agent`. Only Worker processes may use same-domain, context-sharing subagents.
 - A Worker never commissions or spawns another Worker, even when a stale/misconfigured WorkerGrant names `worker.spawn`. Cross-domain work goes through an existing-agent message or `resident.ask`; the Resident allocates new Worker work.
 - Policy is a system-wide interception plane, not a Worker subsystem. Resident and every other actor profile may select registrations across the shared run/prompt/tool/LLM/writeback points.
-- Existing-agent messages target an already allocated actor/session and never allocate Work, a Worker, executor, or budget. Awaited `resident.ask` uses the native durable Wait lifecycle; generic existing-agent messaging and partial/N-of-M response semantics remain unshipped under #215.
+- Existing-agent messages target an already allocated actor/session and never allocate a WorkItem, Worker, executor, or budget. Today Worker-to-Resident awaiting uses `resident.ask`; the target granted existing-agent path and its durable awaited `Wait` semantics belong to this kernel under #215. See [`../../docs/kernel-contract.md`](../../docs/kernel-contract.md) rather than defining Wait states here.
 - Jester output has no authority. The kernel-owned host records the silence-or-challenge result and independently decides whether authorized egress may proceed through policy, stakes/budget, Voice, and `dispatch.submit`; `bus.publish` remains observation-only. The canonical role and lifecycle boundaries live in [`../../docs/core-model.md`](../../docs/core-model.md) and [`../../docs/kernel-contract.md`](../../docs/kernel-contract.md), while [`../../docs/implementation-status.md`](../../docs/implementation-status.md) says what is wired.
 
 ## Internal Ownership Split
@@ -63,11 +50,11 @@ Use these ownership boundaries when adding or moving code:
 | Area | Owns | Does not own |
 | --- | --- | --- |
 | Messaging | Canonical inbound/internal/outbound envelope entry, correlation, target/session resolution, response/writeback routing | Raw channel adapters, provider SDKs, worker process mechanics |
-| Access | Principal facts, blocklist/channel access/trust tier/delegation grant/effective access, Wait scope | Structural persistence, raw webhook verification |
-| Orchestration | Resident runtime, Worker orchestration, async run scheduling over semantic Work/Attempt services | Generic ChatAgent loop internals, process supervision |
-| Ledger | Native transition meaning, production semantic services, completion/read-back admission | SQLite append/query/projection mechanics |
+| Access | Principal facts, blocklist/channel access/trust tier/delegation grant/effective access, PendingInteraction scope | Storage adapter implementation, raw webhook verification |
+| Orchestration | Resident runtime, Worker orchestration, session-backed worker runtime, async run scheduling | Generic ChatAgent loop internals, provider transforms |
+| Ledger | WorkItem orchestration, completion reports, read-back/verification gate execution | Low-level record storage only |
 | Tools | Tool providers, tool executor, workspace lock, injection queue, schedule bridge | Actor/session routing policy |
-| Projection | Interpretation and distilled writeback over structural projections | Transport delivery or projection persistence mechanics |
+| Projection | Session message projection, Bus audit envelopes, distilled writeback | Transport delivery |
 
 ## Dependency Shape
 
@@ -75,9 +62,9 @@ Use these ownership boundaries when adding or moving code:
 agents/             → @openomni/protocol (Model.Ref only)
 resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 policy/             → @openomni/protocol (pure label→plan resolution; consumed by dispatch)
-ledger/production/  → session structural ports + protocol contracts; domain semantic services never expose generic append
+evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence)
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
-ingress/            → resident/ (type-only)
+ingress/            → dispatch/ (DEFAULT_DISPATCH_MODEL), resident/ (type-only)
 dispatch/           → policy/ (resolver), ingress/ (type-only) — the gate stays the sole author of stamped plans
 ```
 
@@ -105,13 +92,13 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 ## What This Package Is Not
 
 - It is not the LLM provider layer. Use `@openomni/llm` for model access.
-- It is not the structural ledger package. Use `@openomni/session` for the single writer, bounded queries, closed synchronous projections, blobs, and observation Bus. Keep product transition and access meaning here.
+- It is not the session package. Use `@openomni/session` for session CRUD, event log, worker runs, artifact storage, and indexed record stores. Keep access semantics here, not in session.
 - It is not the pure agent runtime. Use `@openomni/agent` when you only need the `ChatAgent` core or generic agent-loop primitives.
-- It is not the owner of provider-specific connector installation UX. The server hosts provider-neutral process/credential transport; installation discovery and UX remain unshipped.
+- It is not the owner of provider-specific connector definitions, discovery, or installation UX. The current server connector surface under `apps/server/src/connector/` hosts provider-neutral process-driver and persisted-installation plumbing; first-party definitions and the unused discovery/registry modules were deleted, and the full installation lifecycle remains planned.
 
 ## Domain Docs
 
-- `src/ledger/production/` contains production semantic service modules; keep the server composition thin and add lifecycle meaning here.
+- `src/resident/AGENTS.md` does not exist yet; it is an intentionally small module.
 - `src/ingress/AGENTS.md` — inbound event handling and mode dispatch
 - `src/execution-runtime/AGENTS.md` — tool system, workspace lock, and worker middleware
 

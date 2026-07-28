@@ -70,8 +70,8 @@ export type ChildAgentRuntimeOptions = {
   readonly maxChildren?: number;
   readonly awaitTimeoutMs?: number;
   readonly maxOutputChars?: number;
-  readonly environment: ChatAgentConfig["environment"];
-  readonly modelCatalog: ChatAgentConfig["modelCatalog"];
+  readonly auth?: ChatAgentConfig["auth"];
+  readonly allowAuthFallback?: ChatAgentConfig["allowAuthFallback"];
   readonly budget?: ChatAgentConfig["budget"];
   readonly providerOptions?: ChatAgentConfig["providerOptions"];
   readonly middleware?: ChatAgentConfig["middleware"];

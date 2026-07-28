@@ -1,49 +1,40 @@
 import type { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 export namespace Migration {
-  export const BASELINE_NAME = "0001_p2_clean_baseline/migration.sql" as const;
-  export const BASELINE_ID = "p2-clean-v1" as const;
-  export const SCHEMA_VERSION = 1 as const;
+  export const Definition = z.object({
+    name: z.string(),
+  });
 
-  export interface Definition {
-    readonly name: typeof BASELINE_NAME;
-  }
+  export type Definition = z.infer<typeof Definition>;
 
-  /** Applies the one clean baseline atomically. The caller must first prove the schema is empty. */
-  export function applyBaseline(db: Database, migrationDir: string, migration: Definition): void {
-    if (migration.name !== BASELINE_NAME) {
-      throw new TypeError(`Unsupported migration marker: ${migration.name}`);
-    }
+  export function applyOrdered(db: Database, migrationDir: string, migrations: Definition[]): void {
+    db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
 
-    const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
-    db.exec("BEGIN IMMEDIATE TRANSACTION");
-    try {
-      db.exec(sql);
-      db.query("INSERT INTO _migrations (name, applied_at_db_ms) VALUES (?, ?)").run(
-        migration.name,
-        databaseTimeMs(db),
-      );
-      db.query("INSERT INTO schema_meta (baseline_id, schema_version) VALUES (?, ?)").run(
-        BASELINE_ID,
-        SCHEMA_VERSION,
-      );
-      db.exec("COMMIT");
-    } catch (error) {
-      try {
-        db.exec("ROLLBACK");
-      } catch {
-        // Preserve the baseline failure; SQLite may already have rolled back the transaction.
-      }
-      throw error;
+    for (const migration of migrations.map((item) => Definition.parse(item))) {
+      applyMigration(db, migrationDir, migration);
     }
   }
 }
 
-function databaseTimeMs(db: Database): number {
-  const row = db.query("SELECT CAST(unixepoch('subsec') * 1000 AS INTEGER) AS now_ms").get() as {
-    readonly now_ms: number;
-  };
-  return row.now_ms;
+function applyMigration(db: Database, migrationDir: string, migration: Migration.Definition): void {
+  db.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration.name);
+    if (!applied) {
+      const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
+      db.exec(sql);
+      db.query("INSERT INTO _migrations (name) VALUES (?)").run(migration.name);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch (_rollbackErr) {
+      void _rollbackErr;
+    }
+    throw err;
+  }
 }

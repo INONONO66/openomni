@@ -6,32 +6,31 @@ This document carries the normative contract detail behind [Core Model](core-mod
 
 Every behavioral claim in this project is classified as exactly one of:
 
-- **Kernel (structural guarantee)** — a deliberately narrow behavior enforced by a non-bypassable mechanism. Only entries marked ✅ in [Implementation Status](implementation-status.md#structural-guarantees-kernel-surface-adr-010-1) are currently in this class.
-- **Userland (convention or validation)** — prompt/profile guidance or a code check that is not part of the structural-guarantee set. A validation may reject inputs on its wired call paths, but bypasses or unwired paths can exist; violations and check results become evidence only when durably recorded.
+- **Kernel (structural guarantee)** — enforced by code; cannot be bypassed by any prompt. Violations are impossible, not discouraged.
+- **Userland (convention)** — guided by prompts, skills, and actor profiles. May be violated; violations are observable in the ledger and become Governor evidence.
 
-Documentation may use "guaranteed", "cannot", or "never" for current behavior only for entries marked ✅ in Implementation Status. A wired validation is still Userland unless that status table promotes it into the structural set.
+Documentation may use "guaranteed", "cannot", or "never" only for rows marked ✅. `Implemented check` means code enforcement exists but the behavior is not promoted into the narrow structural-guarantee set. Rows marked 🚧 are partially wired and rows marked 📋 are target contracts; none of those categories is a structural guarantee today.
 
-The normative target invariants are:
-
-- every boundary-crossing Worker delivery or shared/external effect passes dispatch authorization, route selection, audit, and record-before-act;
-- inbound meaning is decided once by kernel `resolveRoute`, before choosing in-process Resident execution, Worker dispatch, drop, or an ambiguity effect;
-- Workers never allocate Workers; existing-agent messaging and `child_agent` transfer no allocation authority;
-- authority evaluates blacklist, wait correlation, channel ceiling, verified identity/tier, and session/grant scope in fixed order and fails closed on missing dimensions;
-- budgets hard-stop execution, tool permission fails closed, and sessions remain owner/purpose isolated;
-- the P2 ledger is the sole append-only authority for durable transition/effect intent, and evidence claims resolve only to authoritative ledger records.
-
-These are target contracts, not blanket claims about current code. [`Implementation Status`](implementation-status.md#structural-guarantees-kernel-surface-adr-010-1) alone identifies which mechanisms are presently structural guarantees, Userland validations, partial, dormant, or planned.
-
-### P2 clean-break invariant
-
-Revision 9 approves a complete clean break because OpenOmni is undeployed. The target boots from a fresh database with one ledger, one authoritative writer, and projections for all durable product state. It does not import or translate legacy rows and permits no compatibility reader, upcast bridge, dual/shadow writer, or mixed old/new runtime. This is a target contract, not a claim that production has switched; [Implementation Status](implementation-status.md) alone records wiring.
-
-The target ownership split is normative: the kernel decides meaning, route, and native transitions; session supplies storage structure and the sole append/query/projection primitives; server composes ports and owns durable boot-reconciliation orchestration; coordinator owns Worker process supervision/restart and IPC only; LLM exclusively owns credentials, provider behavior, and model-catalog caching. Resident conversation may execute in-process; only Worker delivery or another boundary-crossing effect uses dispatch. A server or kernel consumer may receive a credential handle or redacted reference, never raw secret-storage authority.
+| Contract item | Current status | Current enforcement or remaining target |
+|---|---|---|
+| Boundary-crossing effects use the dispatch gate | 🚧 | Registered dispatch actions are authorized and audited, but direct bash network access and directly attached mutating MCP/custom tools remain outside the target chokepoint. |
+| Authority evaluation (blacklist → wait correlation → channel ceiling → tier → session) | 🚧 | The shipped `resolveRoute` pipeline and dispatch authorization enforce the current checks; final `Wait` backing and durable record-before-act remain target work. |
+| Budget hard-stops (turns, tool calls, wall time) | ✅ | Agent budget policy and coordinator wall-time enforcement. Money and social-budget ceilings remain target contracts. |
+| Tool permission is fail-closed | ✅ | Tool pipeline. |
+| Workers cannot originate new Workers | ✅ | Dispatch policy and the Worker tool surface. |
+| Session ownership and isolation | 🚧 | Current session separation is wired; the target owner/origin/purpose model and WorkItem-attempt absorption are not. |
+| Append-only, record-before-act decisions through `Ledger.append(event, expectedHead)` | 📋 | P2 #455 target; current Bus persistence is not the serialized/CAS write gate. |
+| WorkItem creation requires ≥1 acceptance criterion | Implemented check | WorkItem schema and `worker.spawn` handling; not promoted to the structural-guarantee set. |
+| Completion claims require resolvable evidence | Implemented check | Current `WorkItemStore.complete()` / worker-completion gate; the future `work.complete.pre` point is not the source of this check. |
+| Retry exhaustion adds a blocker and reaches the current Owner-visible task surface | Implemented check | WorkItem retry enforcement and the authenticated local `show open tasks` surface; broader push notification remains target work. |
+| Worker memory recall is task-scoped | 📋 | Target `memory.recall.pre`; no memory engine or recall consumer is wired. |
+| Memory snapshot character budgets | 📋 | Target memory built-in layer; curated-memory snapshot injection is not wired. |
+| Full boot contract (below) | 🚧 | Cron reload and interrupted-run marking are wired; final Wait restoration and resume-offer integration are incomplete. |
 
 ### Lanes and the effect-radius rule
 
-Lane contract: the Resident may use built-ins, actions, or the Worker-allocation lane and never receives `child_agent`; a Worker may use sandbox-local built-ins/actions or Worker-local `child_agent` and never receives Worker-allocation authority. Lane choice follows reasoning independence and effect radius, not size or difficulty. Current tool catalogs and checks are recorded only in [Implementation Status](implementation-status.md).
-The target communication contract routes Owner delegation requests through Resident judgment and keeps Worker messages, Wait, `child_agent`, `resident.ask`, and policy grants from transferring allocation authority. The vocabulary is fixed: `ingress.submit` enters the kernel, `resolveRoute` chooses semantics and execution path, `dispatch.submit` crosses a Worker/effect boundary, and `bus.publish` projects best-effort observations but is neither delivery nor durable ledger write. Current spawn-policy enforcement is recorded only in [Implementation Status](implementation-status.md).
+Current lane availability: the Resident may use `built-in`, `action`, or `worker` and is not given `subagent`; a Worker may use sandbox-local built-ins/actions or a Worker-local `subagent` and is not given the `worker` lane. Lane choice follows how much reasoning and independence execution requires, not size or difficulty.
+The shipped Worker-spawn policy accepts only Resident-origin `worker.spawn`. The target communication contract additionally routes Owner delegation requests through Resident judgment and keeps Worker messages, Wait, `child_agent`, `resident.ask`, and policy grants from transferring allocation authority. The communication vocabulary is fixed: `ingress.submit` enters, `dispatch.submit` crosses a boundary, and `bus.publish` projects observations but is not a command-delivery or durable-ledger-write surface.
 
 What separates a plain tool from dispatch is the **radius of the effect**:
 
@@ -57,7 +56,11 @@ Target coordination contract: a subagent is a same-domain, context-sharing `chil
 
 ### Target boot contract
 
-Target: promises survive power loss. Server bootstrap, not coordinator, owns durable boot reconciliation through injected ports. It reloads schedules, folds open Waits, restores resumable attempts without replacement allocation, reconciles uncertain external-effect intents idempotently, and exposes interrupted work to the Owner. No process-local fallback, Bus observation, or coordinator process restart satisfies this contract. Current mechanism-by-mechanism coverage lives only in [Implementation Status](implementation-status.md).
+Target: promises survive power loss. Current status is explicit per mechanism:
+
+1. 🚧 Scheduled jobs are persisted and server boot reloads due schedules from the durable cron store. The current runner fires through `CronAdapter` internal ingress; convergence on the target unified ingress entry remains design work.
+2. 📋 Final `Wait` restoration: a reply arriving after restart wakes exactly the work or session that was waiting without allocating a replacement Worker. Transitional PendingInteraction rows are durable and boot cleanup is wired, but the final Wait/resume contract is not.
+3. 🚧 Interrupted attempts are marked during boot recovery; the Owner resume-offer surface and combined boot integration proof remain incomplete.
 
 ### Installed applications — the connector contract
 
@@ -65,11 +68,11 @@ CLI coding agents (Claude Code, Codex, OpenCode) are installed applications: the
 
 **Don't manage the inside; observe the boundary.** An installed app runs inside the Owner's local trust boundary; its own permission system, configured by the Owner, governs its internals. Control lives at three wires:
 
-- **In** — kernel route resolution selects the Worker/effect path, dispatch authorizes the boundary-crossing task, the credentials layer decides what secrets materialize, and the worktree decides where it works.
+- **In** — dispatch decides what task enters; the credentials layer decides what secrets materialize; the worktree decides where it works.
 - **Side (question bridge)** — a headless app needing a decision (permission prompt, clarification) emits a normalized PendingInteraction event; the attempt suspends and resumes instead of dying.
 - **Out** — terminal result events route to work completion, where logs, artifacts, token usage, and tool calls are recorded before the evidence gate decides what claims count.
 
-**Native log ingestion.** The connector tails the app's own transcripts (JSONL logs, stream-json), stores the raw log as a WorkItem artifact, and projects key events (tool calls, errors, token usage) into the ledger. One mechanism yields: hard evidence for app claims ("tests ran" = the tool-call record exists), autopsy material for Governor RCA, real cost numbers, and a liveness signal for stall detection (5 minutes without log activity → nudge; 10 minutes → kill and mark interrupted). Raw logs never enter sessions — artifact plus ledger projection only.
+**Native log ingestion.** The connector tails the app's own transcripts (JSONL logs, stream-json), stores the raw log as a WorkItem artifact, and projects key events (tool calls, errors, token usage) into the ledger. One mechanism yields: hard evidence for app claims ("tests ran" = the tool-call record exists), autopsy material for Governor RCA, real cost numbers, and a liveness signal for stall detection (no log activity for N minutes → nudge, or kill and mark interrupted). Raw logs never enter sessions — artifact plus ledger projection only.
 
 **The connector definition is the public ABI.** The kernel is not a package manager: binaries are installed by the Owner's tooling. Installing an app means installing its connector — a declarative, Zod-validated definition (data, not code): how to detect the binary and its version (`testedVersions` range), how to spawn headless, where its logs live and how to parse them, how the question bridge is materialized, what evidence it can emit, what credentials and capabilities it requires, and its initial routing profile. A third party integrates their agent by writing one file, never touching the kernel.
 
@@ -81,7 +84,7 @@ Each installation carries an endpoint profile: task types, default timeout/retry
 
 ### Identity
 
-Identity resolution is `(channel, externalId) → ActorIdentity?`. One `ActorIdentity` is a canonical subject with one or more `Endpoint` rows; the same person on Telegram and Discord is two endpoint rows linked to one identity, merged only after explicit verification. Classification is orthogonal axes on the profile, never a single role string:
+Identity resolution is `(channel, externalId) → ActorIdentity?`. One `ActorIdentity` is a canonical subject with N `Endpoint`s; the same person on Telegram and Discord is two endpoint rows linked to one identity, merged only after explicit verification. Classification is orthogonal axes on the profile, never a single role string:
 
 | Axis | Values |
 |---|---|
@@ -98,7 +101,7 @@ An external agent claiming to act "on behalf of" someone is ignored without sign
 The profile's Grant carries two fields evaluated together (formerly two separate types, now one merged axis):
 
 - **Channel ceiling** — per-surface policy: what any actor may do through this surface. The ceiling has a kind — `trusted_channel` (full access for registered actors, default tier for unregistered), `broadcast_channel` (inbound allowed but treated as evidence-only: data, never instructions), `blocked_channel` (inbound dropped silently except PendingInteraction matches) — refined by an `inboundTreatment` override (`normal | evidence_only | owner_review | block`). **The channel is a ceiling**: even a registered owner in a public channel may be restricted from sensitive operations; personal grant beats channel default but never exceeds the ceiling.
-- **Worker egress** — target contract for what an executor may do outbound: which existing actors/channels it may contact, whether it may ask the Resident, and any explicitly granted lifecycle action on existing work. Worker egress excludes new Worker creation. The target limits an external-contact tool surface to result reporting, clarification, and artifact attachment; treats external responses as data rather than instructions; isolates its session from user sessions; and applies task-scoped memory recall through the planned `memory.recall.pre`. The memory point and recall consumer are not wired today.
+- **Worker egress** — what an executor may do outbound: which existing actors/channels it may contact, whether it may ask the Resident, and any explicitly granted lifecycle action on existing work. Worker egress never includes new Worker creation. A Worker contacting an external actor gets tools limited to result reporting, clarification, and artifact attachment; external responses are data, never instructions; its session is fully isolated from user sessions; its memory recall is task-scoped (enforced at `memory.recall.pre`, per §5).
 
 **Blacklist is absolute** and checked before all other evaluation, inbound and outbound — a Worker cannot contact a blacklisted target; the outbound attempt fails with reason. Entries: `{ kind: actor | endpoint | channel | pattern, value, reason?, expiresAt?, createdBy }`.
 
@@ -126,9 +129,8 @@ Fixed evaluation order for every inbound message:
 2. **PendingInteraction** — correlation match → route to the owning work session (precedence over surface routing; a task reply is never misrouted into a personal conversation on the same channel).
 3. **Channel allowed?** — not allowed → block.
 4. **Actor identification** — registered → personal grant; unregistered → channel default tier; neither → block.
-5. **Surface default/session selection** — when no Wait pins the route, resolve the authorized endpoint's default conversation/session and target; missing or ambiguous defaults deny rather than guessing.
 
-Ingress submits a canonical actor message to kernel `resolveRoute`, which applies the fixed precedence and selects a Resident route, Worker route, drop, or ambiguity effect. A PendingInteraction match changes the semantic route and pins target, session, sender, and permitted action before execution. Resident conversation runs without dispatch; only a selected Worker delivery or other boundary-crossing effect proceeds through dispatch. Surface routing remains distinct from Wait correlation: the surface supplies the endpoint's default conversation, while the Wait answers whether this message resolves specific outstanding work.
+Ingress always submits a unified `actor.message`; **dispatch decides**. On a PendingInteraction match, dispatch elevates the semantics to a reply and overrides target, session, and tier (transient `assigned_worker`). Ingress stays channel-agnostic and stateless about lifecycle; the ingress-resolved session is only a default candidate that dispatch may override. Surface routing and the PendingInteraction registry remain separate: the surface answers "what is this endpoint's default conversation?", the registry answers "is this a reply to a specific outstanding request?" — merging them would break concurrent task replies on one channel.
 
 ### Session ownership
 
@@ -147,7 +149,7 @@ Existing-agent messaging requires an explicit grant and targets an already alloc
 - **Suspend and restart**: the Wait is appended before suspension; process exit releases compute while the attempt, session, and Wait remain durable. Boot folds the Wait, and a correlated response resumes execution in a fresh process without creating a replacement Worker.
 - **Deterministic correlation**: explicit reply/message, thread, and nonce-bound token identities take precedence over any single-open fallback. Duplicate response IDs are idempotent. Multiple matches are never guessed: the response is staged and disambiguation is dispatched to the Resident, or to the Owner for an Owner-initiated Wait.
 - **Time and cancellation**: deadline expiry, cancellation, follow-up window, and policy-bounded reminders produce audit records. A late response inside the follow-up window attaches as supplementary information; after it, registered senders return to normal routing and unregistered senders remain blocked. Cancellation or expiry never silently reopens work.
-- **Partial response**: a resolution policy may declare a numeric `quorum` over `expectedResponders`. Responses attach as they arrive; reaching `quorum` resolves the Wait. A deadline with fewer responses than `quorum` resolves with `partial: true`, and dependencies evaluate the responses that arrived rather than imposing an all-or-nothing join.
+- **Partial response**: a resolution policy may declare quorum N-of-M over expected responders. Responses attach as they arrive; quorum resolves the Wait. Deadline with fewer than N resolves with `partial: true`, and dependencies evaluate the responses that arrived rather than imposing an all-or-nothing join.
 
 Contract fields: `{ id, ownerRef: { kind: workItem | session, id }, expectedResponders[], targetActorId?, endpointId?, channelId?, correlation: { tokenHash?, threadId?, replyToMessageId?, externalConversationId? }, allowedActions: (report_result | ask_clarification | attach_artifact | decline_task)[], resolutionPolicy, quorum?, status, deadline, cancelledAt?, partial, followUpWindow }`. Lifecycle is `open → resolved | follow_up | expired | cancelled`; every transition, timeout, cancellation, late or ambiguous response, duplicate, and partial continuation is recorded.
 
@@ -189,19 +191,19 @@ For installed apps the coarse kind is recorded for retry and reporting metadata;
 
 ### Scenario traces
 
-Five target decision traces, centered on the kernel route decision rather than treating dispatch as the universal inbound router:
+Five decision-relevant traces; every one passes server adapter → ingress → dispatch.
 
-1. **Owner DM (baseline).** Telegram adapter normalizes `(telegram, tg_kim)` → ingress submits canonical facts → `resolveRoute`: blacklist clear, no Wait match, trusted channel, Owner identity → Resident route on the Owner's surface session → in-process Resident execution; no dispatch boundary is crossed.
-2. **Task outreach.** The Resident requests a `human_channel` Worker → dispatch authorizes the allocation and external effect → a work-item-owned interaction session and attempt are recorded → a Wait opens with a nonce-bound correlation token and allowed actions → the outbound boundary effect sends the message. The Owner's conversation stays clean.
-3. **External reply, matched.** Seller reply → adapter normalization → `resolveRoute`: blacklist clear, Wait correlation wins before surface default, sender/action/session/run are pinned → Worker route → dispatch delivers across the Worker boundary; Wait resolution and reply projection remain attached to the work session. The seller need not become a registered identity.
-4. **Public channel, unsolicited.** Slack adapter normalization → `resolveRoute`: no Wait match, broadcast ceiling and observer/evidence-only treatment → Resident route as data, or explicit drop/Owner-review effect according to policy. In-process Resident handling itself does not pass dispatch; any later outward/shared effect does.
-5. **External AI API call.** The Resident requests an `external_api` Worker → dispatch authorizes allocation and the external boundary effect → response is attached to the attempt and the distilled result returns to the Resident. No Wait is required for a synchronous response.
+1. **Owner DM (baseline).** Telegram DM → ingress resolves `(telegram, tg_kim)` → owner identity → dispatch: no blacklist, no PendingInteraction, trusted channel, owner tier → allow → Resident delivery on the Owner's surface session.
+2. **Task outreach.** The Resident spawns a `human_channel` executor targeting an unknown seller: blacklist checked on the target, resident tier may spawn → child session (work-item-owned, `worker_interaction`), attempt enters `waiting_input`, a PendingInteraction opens (`tokenHash`, allowedActions `[report_result, ask_clarification, decline_task]`, 24h follow-up window) → outbound message carries the token. The Owner's session stays clean.
+3. **External reply, matched.** Seller replies hours later; identity resolution returns null (unregistered) → dispatch: blacklist no, correlation matches the open interaction → semantics elevated to reply, target/session overridden to the work session, transient `assigned_worker` tier, action within `allowedActions` → allow; interaction `open → resolved`; the reply is projected into the work session, the attempt resumes, completes, and the distilled result returns to the Resident. The seller never becomes a registered identity.
+4. **Public channel, unsolicited.** Unknown Slack member mentions the bot: no interaction match; channel ceiling is `broadcast_channel` / default tier `observer` / `evidence_only` → message accepted as data, never instruction; the Resident may reply, ignore, or notify the Owner — no worker spawn allowed. (`inboundTreatment: block` → silent drop with audit record; `owner_review` → queued for approval.)
+5. **External AI API call.** The Resident spawns an `external_api` executor (provider/model target): blacklist no, tier allows → child work session; execution is a raw HTTP client, not a channel adapter; synchronous, so no PendingInteraction; response completes the attempt and the distilled result returns to the Resident.
 
 ## 3. Work Items and the Evidence Gate
 
 Every Worker-lane task is a `WorkItem` — the process table. Dispatch actions do not get tickets (atomic operations are already audited by the dispatch record); subagent output is exempt end-to-end (intermediate reasoning the parent digests). Tickets are for work that requires reasoning.
 
-**Creation contract.** Current Userland validation rejects WorkItem creation without at least one acceptance criterion (`min(1)`) on the wired schema and `worker.spawn` paths; this implemented check is not a Kernel guarantee. Defining "done" is part of delegating — a short "done means" list (≤3 bullets) at delegation time; per-task-type templates accumulate as Skills.
+**Creation contract.** A WorkItem cannot be created without at least one acceptance criterion (schema-enforced `min(1)`). Defining "done" is part of delegating — a short "done means" list (≤3 bullets) at delegation time; per-task-type templates accumulate as Skills.
 
 **Fields.** `originSessionId` (who instructed) / `workSessionId` (where it runs); `executorKind` and attempt records (formerly a separate WorkerRun — absorbed into `WorkItem.attempts`); acceptance criteria; blockers; dependencies with cycle detection; derived status; deadlines; `maxAttempts`; `completionReport`; `outcome`. The ledger doubles as `ps`: "show open tasks" is a ledger query — chat command first, web view later.
 
@@ -222,15 +224,15 @@ One artifact, three jobs: evaluation input (judgment without transcript), distil
 
 | Question | Answered by | Cost | Mechanism |
 |---|---|---|---|
-| Did it happen? | code (the evidence gate, `work.complete.pre`) | ~0 | target: every claim's `evidenceIds` resolves to real ledger records. Current Userland completion validation rejects core claims without resolvable evidence on its wired paths; it is not a structural guarantee, and the future point is not yet its production source. |
+| Did it happen? | code (the evidence gate, `work.complete.pre`) | ~0 | every claim's `evidenceIds` must resolve to real ledger records. A claim without evidence is void; a report whose core claims lack evidence is **treated as work not done** and bounced before any LLM evaluation. |
 | Is it good? | Resident | 1 LLM evaluation | judges report + deliverable + verified evidence only — never the worker transcript. On failure, names the issue and re-dispatches with it attached. |
 | Was it useful? | Owner's behavior (`outcome`) | 0, delayed | adopted / corrected / redone / ignored — harvested retroactively by the Governor as ground truth; also calibrates the Resident's evaluation leniency. |
 
-Current completion validation runs first for cost shape on its wired paths: an evidence-less bluff is rejected without spending an LLM call, but this remains Userland validation rather than a structural guarantee. The Resident-as-evaluator is consistent with "the entity that did the work doesn't grade it"; its residual selection bias is checked by the third question, where time is the evaluator.
+The structural gate runs first for cost shape: an evidence-less bluff is rejected without spending an LLM call. The Resident-as-evaluator is consistent with "the entity that did the work doesn't grade it"; its residual selection bias is checked by the third question, where time is the evaluator.
 
-**Read-back verification.** Current supported paths re-observe the world rather than trusting the claim: published content is re-fetched by URL; calendar/email writes are re-queried; research citations are checked by fetching sources and matching quoted passages; human work is evidenced by PendingInteraction resolution records. This is predicate-scoped Userland validation, not a general or structural truth guarantee.
+**Read-back verification.** The gate re-observes the world rather than trusting the claim: published content is re-fetched by URL; calendar/email writes are re-queried; research citations are checked by fetching sources and matching quoted passages (structurally blocking hallucinated citations); human work is evidenced by PendingInteraction resolution records.
 
-**Retry policy.** Defaults live on the executor profile (internal workers: 3; installed apps: per connector definition; humans: not retries but a reminder policy under the social budget), overridable per item via `maxAttempts`. Current Userland retry validation adds a `waiting_input` blocker at exhaustion and exposes it on the authenticated local open-task surface; this is not a Kernel guarantee, and broader Owner push escalation remains target work. The target behavior reports the recorded attempt count and asks the Owner to change approach, providing a backstop against cost-burning retry loops.
+**Retry policy.** Defaults live on the executor profile (internal workers: 3; installed apps: per connector definition; humans: not retries but a reminder policy under the social budget), overridable per item via `maxAttempts`. Exhaustion is kernel-enforced: the item gains a `waiting_input` blocker and escalates to the Owner ("attempted N times, still failing — change approach?"). This is the structural backstop against cost-burning retry loops.
 
 ## 4. Governor Contract
 
@@ -253,7 +255,7 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 | Immediate | Owner unplanned intervention; `outcome = redone`; fabricated evidence caught by the gate; canary breach / rollback; 3rd recurrence of a fingerprint |
 | Daily batch | attempt failures; `outcome = corrected` (after triage); PendingInteraction expired unanswered; budget hard-stops; cost anomalies |
 
-**Storm collapse**: 5 or more similar incidents in one hour collapse into one storm RCA. `environmental` causes (expired credentials, API outage) route to an ops alert, never a policy change — twenty workers failing on one dead API key is one infrastructure incident. **Triage before RCA** for soft signals: a single `corrected` with no fingerprint match is recorded only; preference-shaped corrections (tone, style) become memory candidates (§5), not policy fixes — taste is memory, defects are structure. Two or more occurrences, or any hard signal, get a full RCA.
+**Storm collapse**: more than N similar incidents per hour collapse into one storm RCA. `environmental` causes (expired credentials, API outage) route to an ops alert, never a policy change — twenty workers failing on one dead API key is one infrastructure incident. **Triage before RCA** for soft signals: a single `corrected` with no fingerprint match is recorded only; preference-shaped corrections (tone, style) become memory candidates (§5), not policy fixes — taste is memory, defects are structure. Two or more occurrences, or any hard signal, get a full RCA.
 
 **Cause taxonomy → fix mapping:**
 
@@ -273,9 +275,9 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 - Autonomous: routing hints; numeric tightening (lower retry caps, lower budgets, narrower tool sets); recording and alerting.
 - Approval required: numeric loosening; skill/prompt/template changes; new verification checks; anything expanding any actor's autonomy.
 - Never (kernel-enforced floor): blacklist, social-budget ceilings, approval-tier definitions, safety constraints, kernel code, its own write permissions. Proposable, never self-applicable.
-- Rate limits: at most one active change per fingerprint and at most 2 autonomous changes per UTC day; every applied change is journaled with a scope tag.
+- Rate limits: at most one active change per fingerprint; at most M autonomous changes per day; every applied change is journaled with a scope tag.
 
-**Regression ratchet.** Every applied change opens a canary window over the next 10 tasks of the affected type. Two consecutive same-type failures inside the window → automatic rollback plus an immediate-lane RCA on the change itself — a bad fix is just another incident whose root cause is a recent change, visible because changes are journaled. No separate regression machinery; rollback triggers are simple counting rules, not statistics (a personal system's samples are too small for significance, and a false rollback costs only a restore).
+**Regression ratchet.** Every applied change opens a canary window (the next N tasks of the affected type). Two consecutive same-type failures inside the window → automatic rollback plus an immediate-lane RCA on the change itself — a bad fix is just another incident whose root cause is a recent change, visible because changes are journaled. No separate regression machinery; rollback triggers are simple counting rules, not statistics (a personal system's samples are too small for significance, and a false rollback costs only a restore).
 
 **Fingerprints are an index, never a taxonomy that constrains diagnosis.** `IncidentFingerprint` = cause category × task type × failure mode. Matching against open fingerprints is mandatory before creating a new one. Recurrence ladder: (1) first occurrence → fix proposed/applied; (2) recurrence after the fix → the fix failed: reopen with the prior RCA as input, escalate priority; (3) third occurrence → Owner escalation ("structure is not catching this").
 
@@ -283,13 +285,11 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 
 **Fabricated evidence is a first-class offense.** A claim whose `evidenceIds` do not resolve — or that read-back contradicts — is not a quality miss but a false report: immediate-lane RCA, permanently recorded on that executor's reliability track record, directly feeding promotion/trust decisions.
 
-**Owner surface.** Proposals arrive as a weekly digest; immediate pings only for rollbacks, fabricated evidence, and third recurrences. Unreviewed proposals expire after 14 days (state preserved on the fingerprint). Governor spend is capped at 5% of total system spend per rolling 30 days.
+**Owner surface.** Proposals arrive as a weekly digest; immediate pings only for rollbacks, fabricated evidence, and third recurrences. Unreviewed proposals expire after N days (state preserved on the fingerprint). Governor spend is capped as a percentage of total system spend.
 
-## 5. Memory Port (Target; Not Wired)
+## 5. Memory Port
 
-Everything in this section is a planned contract. The current runtime has no memory engine, candidate-ingest consumer, recall consumer, curated snapshot consumer, or session-search memory tool; none of the behavior below is a current fallback.
-
-### Target built-in layer (planned; zero engines required)
+### Built-in layer (zero engines required, ships first)
 
 - **Two bounded curated stores**, injected into the Resident's system prompt as a frozen snapshot at session start: system notes (environment facts, conventions, lessons; ~800-token budget) and the Owner profile (identity, preferences, communication style; ~500-token budget). The memory tool has `add` / `replace` / `remove` and deliberately no `read` — content is always already in context. Mid-session writes persist to disk but render only from the next session, preserving the prefix cache.
 - **Hard character budgets are kernel-grade**: memory cannot bloat context; growth forces curation — replace and remove are first-class.
@@ -307,7 +307,7 @@ profile(actorId, question?)  // actor modeling ("what does the Owner prefer for 
 feedback(memoryId, outcome)  // recalled memory was useful / wrong — engines learn from outcomes too
 ```
 
-Target behavior is transport-agnostic (in-process, HTTP, or MCP). With zero engines configured, the planned built-in layer remains the only memory facility. Multiple engines may coexist (one for semantic search, one for actor modeling), all fed from the same candidate stream. External engines augment — never replace — the built-in layer.
+Transport-agnostic (in-process, HTTP, or MCP). Zero engines configured = built-in layer only, fully functional. Multiple engines may coexist (one for semantic search, one for actor modeling), all fed from the same candidate stream. External engines augment — never replace — the built-in layer.
 
 ### Kernel-side scope filter
 
@@ -329,7 +329,7 @@ Three sources: WorkItem completion (high-value outcomes, §3), Governor preferen
 
 ### Wiring and precedence
 
-Target snapshot injection and persistence nudges ride existing policy points (`prompt.context.pre`, `run.turn.post`; the original pre-v2 timing names are superseded); target candidate emission rides work-completion ledger events. Once wired, memory degradation must be typed and observable, and no queued candidate, recall result, or curated snapshot may count as durable evidence, prove recall completeness, or satisfy replay or completion verification. Ordinary execution may remain non-blocking only according to that explicit target policy; there is no current memory fallback path.
+Snapshot injection and persistence nudges ride existing policy points (`prompt.context.pre`, `run.turn.post`; the original pre-v2 timing names are superseded); candidate emission rides work-completion ledger events. The memory engine never blocks execution: ingest failure degrades to "candidate stays queued"; recall failure degrades to "built-in snapshot only".
 
 **Originals win.** Memory is a compressed view of the ledger; on conflict the original record wins, and when memory is load-bearing the Resident re-checks the source before acting on it.
 
@@ -341,34 +341,25 @@ Normative promotion of the 2026-07-09 determinism/verification round (machine-lo
 
 - Internal state is a fold: `S = fold(apply, S₀, L)` over the append-only ledger, partitioned per owner key. `apply` is pure — no clock, no randomness, no live reads, no external calls. Nondeterministic values are captured **as events at write time** and never re-derived on replay.
 - **Determinism contract = command-sequence identity**: same inputs must produce the same command sequence, not byte-identical outputs. A replay that attempts a step absent from the ledger fails **loudly** as a nondeterminism error — never silent fold corruption. A static replay-fidelity 1.0 on one golden trace is not accepted as determinism evidence.
-- **The gate uses the durable ledger write for record-before-act:** target `Ledger.append(event, expectedHead)` is the sole per-owner-key serialized compare-and-append, with conflict surfaced for a caller-owned retry. The gate evaluates against exactly the state it commits on and awaits that commit before acting, closing check-then-act TOCTOU. CAS conflict, unavailable storage, or required-projection failure denies the transition/effect with a typed error. The current Bus persistence journal is only best-effort observer persistence: neither a Bus emission nor a `bus_event` row is authoritative, restart-durable evidence, or an acceptable fallback. P2-04 replaces that persistence path rather than wrapping or promoting it. Failures cross the single sanitizer into the required error sink, metrics/alerts, and an Owner-visible incident without secret payload. Production cutover status lives only in [Implementation Status](implementation-status.md).
+- **The gate uses the durable ledger write for record-before-act**: target `Ledger.append(event, expectedHead)` is a per-owner-key serialized compare-and-append with retry on conflict. The gate evaluates against exactly the state it commits on and awaits that commit before acting, closing the check-then-act TOCTOU (two workers passing one budget gate). `bus.publish` is downstream observation/projection, not the append enforcement point. This split is planned rather than currently wired; [Implementation Status](implementation-status.md) remains authoritative for shipped behavior.
 - **Attempt identity is execution-instance identity, not content identity.** `attemptId` is opaque, immutable, and globally unique; `attemptSeq` is monotonically allocated per WorkItem by serialized append and never reused; nullable `retryOf` points to a prior `attemptId` as lineage, not equivalence. Identical retries coexist as separate rows with different IDs/sequences.
 - **Equivalence is separate.** `contentFingerprint` covers canonical task input, handler/reducer code, model/config, upstream fingerprints, and dependency-lock identity. `environmentFingerprint` covers relevant runtime/OS/architecture, dependency/tool/policy/verifier/schema versions, provider/model parameters, and redacted configuration identity; secrets contribute only non-reversible version/reference IDs. Both fingerprints may repeat across attempts.
 - **Cache identity is lookup-only.** `cacheKey` is an explicit equivalence lookup derived from the content fingerprint plus a declared deterministic environment subset, never a row key. A hit still creates a new attempt and records `reusedFromAttemptId`.
-- **Replay identity is replay-of-record only.** `replayKey` binds an immutable archived range/cassette, environment fingerprint, schema version, reducer version, and nondeterminism-manifest hash. It is never a cache key.
-- **Nondeterminism is manifest data.** `nondeterminismManifest` captures consumed clocks/time zones, random seeds/bytes, model sampling/output/provider request ID, network/tool/device responses, ordering/concurrency choices, generated IDs, environment reads, and human/source inputs. Secrets remain redacted with provenance/version. Missing inputs, unexpected commands, or an incompatible recorded environment fail loudly.
+- **Replay identity is replay-of-record only.** `replayKey` binds an immutable archived range/cassette, environment fingerprint, schema/upcast versions, and the nondeterminism-manifest hash. It is never a cache key.
+- **Nondeterminism is manifest data.** `nondeterminismManifest` captures consumed clocks/time zones, random seeds/bytes, model sampling/output/provider request ID, network/tool/device responses, ordering/concurrency choices, generated IDs, environment reads, and human/source inputs. Secrets remain redacted with provenance/version. Missing inputs, unexpected commands, or incompatible environment/upcast fail loudly.
 - **Replay has zero live effects.** Recorded outputs substitute for LLM, network, tool, and device calls. A what-if or fork is a separately labeled new attempt, never replay.
-- **Event schema evolution after the fresh baseline:** field renames and semantic re-meanings are forbidden; changed meaning requires a new event type/version. This future-version rule does not authorize importing or upcasting pre-P2 storage during the approved clean break.
+- **Event schema evolution**: field renames and semantic re-meanings are forbidden (content-addressing cannot detect them) — a changed meaning is a new event type; shape evolution is upcast-on-read. Enforced as a lint in #467.
 - **External effects are not fold state**: they follow intent → idempotent effect (keyed by event id) → confirmed/failed → boot reconciliation. The ledger is authoritative for internal state and eventually-consistent, via reconciliation, for the world.
 - **Hash chain stance (2026-07-09 reconciliation)**: the chain stays on the write path; boot verifies the tail only — a broken tail becomes a `chain-break` event plus a Governor incident, never a boot refusal; full-chain verification runs only as the offline restore-drill gate (#226).
-
-### Workspace, effect, credential, and model environment
-
-- **Workspace identity:** `workspace-v1` derives a stable reference from the platform-native realpath plus stable filesystem object identity. POSIX and Win32 use explicit adapters; missing identity capability, replaced/moved roots, or escaping targets deny before act. Paths are evidence inputs, not identity by themselves.
-- **Effect scope:** every mutating or unknown operation must have one versioned resolver that binds the provisioned workspace and any required endpoint/resource. Missing registration, missing context, mismatched identity, or invalid output denies. Scope resolution states affected resources; it does not authorize the operation or replace dispatch policy.
-- **Credential boundary:** LLM-owned `SecretRegistry` turns an Owner-controlled, read-only Auth source into a non-serializable, provider-scoped handle and a redacted rotation/provenance reference. One boundary sanitizer covers strings, bytes, nested values, errors, and handles before durable, process, or observability transfer. Auth has no target write API; installation and rotation remain Owner operations outside the runtime.
-- **Model catalog:** the runtime cache is a derived convenience, never authority. Remote or bundled catalog input is allowlisted, sanitized, canonicalized, digest-checked, and persisted atomically with restricted permissions. Cache corruption or staleness cannot silently redefine replay: replay consumes an immutable catalog artifact whose source/version/digest must match the recorded environment.
-
-These contracts are dormant foundations until native consumers append scoped intents, completion admission consumes verifier/stakes results, and server production composition selects the new ports. No illustrative operation list expands their scope.
 
 ### Verification typing
 
 `judge(claim, evidence, S) → { verified | asserted | refuted } × checked_predicate`.
 
 - `verified` always stores **which predicate was checked** ("URL returned 200 and contains the quoted string" — not "the claim is true"). `guaranteed` remains reserved for code-enforced kernel behavior.
-- Admission: a completion report is admitted iff no claim is `refuted`, and either its stakes are below threshold or every claim is `verified`. Stakes are computed from **kernel-observed windowed ledger state**, never actor self-report (#469) — repeated small actions in the configured window accumulate to the stakes of the large action they compose.
+- Admission: a completion report is admitted iff no claim is `refuted`, and either its stakes are below threshold or every claim is `verified`. Stakes are computed from **kernel-observed windowed ledger state**, never actor self-report (#469) — N small actions in a window accumulate to the stakes of the large action they compose.
 - A claim with no deterministic verifier is typed `asserted` — a first-class trust signal, not a silent pass. A **high-stakes `asserted` raises to the Owner**.
-- **Verifiers are trusted, compile-time kernel-owned deterministic code** with a capability-free input surface (no injected network, clock, subprocess, mutation, time, or random capability), not a hostile-code security sandbox. **No LLM-in-verifier.** Four families, strongest first: executable re-check > citation/quote match > frozen-NLI support > constrained-decoding validity (validity only, never promoted to truth). Every verifier's bench must demonstrate discrimination (returns `refuted` on a known-bad input). The catalog is dormant and synchronous nontermination remains an availability risk. A synchronous verifier may enter production completion admission only after it runs in a separate isolated host with a hard 2-second per-invocation deadline: timeout terminates that host, yields typed `verifier_unavailable`/`asserted` rather than `verified`, emits sanitized duration/timeout/error telemetry plus an Owner-visible incident, and cannot block the server admission loop.
+- **Verifiers are deterministic code, sandboxed** (no network, no clock, no subprocess; deny-by-default) — purity by capability, not by naming convention. **No LLM-in-verifier.** Four families, strongest first: executable re-check > citation/quote match > frozen-NLI support > constrained-decoding validity (validity only, never promoted to truth). Every verifier's bench must demonstrate discrimination (returns `refuted` on a known-bad input).
 - Language discipline: `replay-of-record` (reconstructing what happened — what this system provides) is never conflated with `deterministic regeneration` (re-running the model to identical outputs — not provided).
 
 ### Observability surface

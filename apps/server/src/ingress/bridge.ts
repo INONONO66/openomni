@@ -1,16 +1,10 @@
-import { createHash } from "node:crypto";
-import {
-  Operational,
-  type Adapter,
-  type Dispatch,
-  type Ingress,
-  SurfaceAddress,
-} from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import type { Adapter, Dispatch, Ingress } from "@openomni/protocol";
+import { SurfaceKey } from "@openomni/session";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
   createToolExecutor,
+  DEFAULT_DISPATCH_MODEL,
   ResidentAgent,
   resolveToolSelection,
 } from "@openomni/openomni";
@@ -23,73 +17,12 @@ export interface BridgeDeps {
   agentProvider: ToolListProvider;
   mcpProvider: ToolListProvider;
   customProvider?: { listTools(): NativeTool[] };
-  defaultModel: { provider: string; id: string } | undefined;
+  defaultModel?: { provider: string; id: string };
   providerOptions?: Record<string, unknown>;
   workspaceRoot: string;
 }
 
 type ToolListProvider = Pick<McpToolProvider, "listTools">;
-
-export type BridgeAgentResolutionErrorCode =
-  | "missing_default_model"
-  | "invalid_default_model"
-  | "unknown_agent";
-
-export class BridgeAgentResolutionError extends Error {
-  readonly code: BridgeAgentResolutionErrorCode;
-  readonly agentName: string;
-
-  constructor(code: BridgeAgentResolutionErrorCode, agentName: string, message: string) {
-    super(message);
-    this.name = "BridgeAgentResolutionError";
-    this.code = code;
-    this.agentName = agentName;
-  }
-}
-
-function failAgentResolution(
-  code: BridgeAgentResolutionErrorCode,
-  agentName: string,
-  message: string,
-): never {
-  Bus.publish(Operational.Error, {
-    traceId: crypto.randomUUID(),
-    time: Date.now(),
-    component: "server",
-    msg: "agent resolution failed",
-    error: code,
-    context: { code, agentName },
-  });
-  throw new BridgeAgentResolutionError(code, agentName, message);
-}
-
-function requireDefaultModel(deps: BridgeDeps): { provider: string; id: string } {
-  const model = deps.defaultModel;
-  if (model === undefined) {
-    return failAgentResolution(
-      "missing_default_model",
-      "resident",
-      "Resident agent requires an explicitly resolved default model",
-    );
-  }
-  if (
-    model === null ||
-    typeof model !== "object" ||
-    typeof model.provider !== "string" ||
-    model.provider.length === 0 ||
-    model.provider.trim() !== model.provider ||
-    typeof model.id !== "string" ||
-    model.id.length === 0 ||
-    model.id.trim() !== model.id
-  ) {
-    return failAgentResolution(
-      "invalid_default_model",
-      "resident",
-      "Resident agent default model is invalid",
-    );
-  }
-  return model;
-}
 
 function sanitizeToolName(name: string): string {
   return name.replace(/\./g, "_");
@@ -143,18 +76,12 @@ function buildAgentDefFromEntries(
 
 export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
   const definition = getAgentDefinition(agentName);
-  if (!definition) {
-    return failAgentResolution(
-      "unknown_agent",
-      agentName,
-      `Unknown agent definition: ${agentName}`,
-    );
-  }
+  if (!definition) throw new Error(`Unknown agent definition: ${agentName}`);
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
 export function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
-  const model = requireDefaultModel(deps);
+  const model = deps.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const definition: AgentDefinition = {
     name: "resident",
     description: "Resident user-facing assistant",
@@ -165,26 +92,15 @@ export function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
-const CORRELATION_TOKEN_HASH_DOMAIN = "openomni.ingress.correlation-token.v1\0";
-
-function correlationTokenHash(raw: unknown): string | undefined {
+function rawCorrelationToken(raw: unknown): string | undefined {
   if (!raw || typeof raw !== "object" || !("correlationToken" in raw)) return undefined;
   const token = (raw as { correlationToken?: unknown }).correlationToken;
-  if (typeof token !== "string" || token.length === 0) return undefined;
-  return createHash("sha256").update(CORRELATION_TOKEN_HASH_DOMAIN).update(token).digest("hex");
-}
-
-function withoutCorrelationToken(raw: unknown): unknown {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !("correlationToken" in raw)) {
-    return raw;
-  }
-  const { correlationToken: _correlationToken, ...safeRaw } = raw as Record<string, unknown>;
-  return safeRaw;
+  return typeof token === "string" && token.length > 0 ? token : undefined;
 }
 
 function scopedCorrelation(
   message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof SurfaceAddress.parse>,
+  descriptor: ReturnType<typeof SurfaceKey.parse>,
 ) {
   return {
     endpointId: descriptor.namespace || descriptor.surface,
@@ -194,22 +110,22 @@ function scopedCorrelation(
 
 function actorMessageCorrelation(
   message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof SurfaceAddress.parse>,
+  descriptor: ReturnType<typeof SurfaceKey.parse>,
   threadId: string | undefined,
 ): Dispatch.Correlation {
-  const tokenHash = correlationTokenHash(message.raw);
+  const token = rawCorrelationToken(message.raw);
   return {
     ...scopedCorrelation(message, descriptor),
     ...(message.replyToId ? { replyToMessageId: message.replyToId } : {}),
     ...(threadId ? { threadId } : {}),
-    ...(tokenHash ? { tokenHash } : {}),
+    ...(token ? { tokenHash: token } : {}),
     externalConversationId: message.surfaceKey,
   };
 }
 
 function createBaseEvent(
   message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof SurfaceAddress.parse>,
+  descriptor: ReturnType<typeof SurfaceKey.parse>,
   threadId: string | undefined,
 ): Omit<Ingress.DirectEvent, "mode" | "agent"> {
   return {
@@ -230,7 +146,7 @@ function createBaseEvent(
       media: message.media,
       replyToId: message.replyToId,
       threadId,
-      raw: withoutCorrelationToken(message.raw),
+      raw: message.raw,
     },
   };
 }
@@ -239,7 +155,7 @@ export function buildInboundEvent(
   message: Adapter.InboundMessage,
   deps: BridgeDeps,
 ): Ingress.DirectEvent {
-  const descriptor = SurfaceAddress.parse(message.surfaceKey);
+  const descriptor = SurfaceKey.parse(message.surfaceKey);
   const threadId = message.threadId ?? descriptor.threadId;
   const base = createBaseEvent(message, descriptor, threadId);
   const agent = buildResidentAgentDef(deps);

@@ -40,11 +40,11 @@ A system qualifies only by passing all five. This turns "is it an Agent OS?" fro
 
 | # | Test | Question |
 |---|---|---|
-| <a id="t1"></a>**T1** | Third-party | Can I *install* an agent I did not write and have it run under enforced limits? |
-| <a id="t2"></a>**T2** | Hostile program | If that agent is malicious, is the damage bounded by mechanism — not by prompt? |
-| <a id="t3"></a>**T3** | Power loss | Do commitments (schedules, pending replies, in-flight work) survive a reboot? |
-| <a id="t4"></a>**T4** | Liar | Are completion claims evidence-linked, and can supported false predicates be deterministically refuted without treating unchecked claims as true? |
-| <a id="t5"></a>**T5** | Multiplexing | Do multiple agents share budgets, authority, and channels without trampling each other? |
+| **T1** | Third-party | Can I *install* an agent I did not write and have it run under enforced limits? |
+| **T2** | Hostile program | If that agent is malicious, is the damage bounded by mechanism — not by prompt? |
+| **T3** | Power loss | Do commitments (schedules, pending replies, in-flight work) survive a reboot? |
+| **T4** | Liar | Are completion claims evidence-linked, and can supported false predicates be deterministically refuted without treating unchecked claims as true? |
+| **T5** | Multiplexing | Do multiple agents share budgets, authority, and channels without trampling each other? |
 
 ## 5. The landscape, scored
 
@@ -64,14 +64,14 @@ A note on trust direction, since it is the deepest split in the landscape: compa
 
 ## 6. OpenOmni scorecard
 
-Honest as of 2026-07-25. Current wiring truth: [implementation-status.md](implementation-status.md).
+Honest as of 2026-07-20. Current wiring truth: [implementation-status.md](implementation-status.md).
 
 | Test | Shipped today | Target path |
 |---|---|---|
 | T1 third-party | ❌ Not passed. The `AppConnector` ABI, installation/consent storage, endpoint dispatch, process driver, log capture, stall detection, and evidence projection exist; first-party definitions and unused discovery/registry modules were deleted, and there is no complete install lifecycle. | #216 — discover → register → consent → wire → smoke-verify, then run a third-party agent under enforced limits |
 | T2 hostile program | ⚠️ Partial. Worker-spawn denial, budget hard-stop, tool guard, blacklist, grants, and authority evaluation are mechanisms; kernel/userland still share one process and the Resident retains direct mutating tools. | #218/#221; process-isolation-grade T2 remains long-term for this single-Owner boundary |
-| T3 power loss | ⚠️ Partial. Cron normally uses durable storage and server boot starts its runner, but the current registry can fall back to process-local memory; fallback schedules are lost on exit and are not T3 evidence. PendingInteraction rows remain storage-backed and boot expiry cleanup runs. Server owns durable boot reconciliation; coordinator owns worker process supervision/restart only. Unified durable `Wait`, interrupted-attempt continuation, and effect reconciliation are not shipped. | #215 + #217 + P2 C1 restart proof |
-| T4 liar | ⚠️ Partial. Userland completion validation requires resolving evidence on its wired paths, and supported URL/API/citation read-back checks run there; these implemented checks are not structural guarantees. A trusted, not security-sandboxed, compile-time deterministic verifier catalog exists only as a dormant foundation. Before any synchronous verifier enters production completion admission, it must run in a separate isolated host with a hard 2-second deadline; timeout terminates the host, returns `verifier_unavailable`/`asserted` rather than `verified`, and emits sanitized telemetry plus an Owner-visible incident. No general truth guarantee, production consumer, or replay-conformance proof is shipped. | #467 — isolate and bound verifier execution, store `checkedPredicate` verdicts, type unchecked claims as asserted, and refute supported bad evidence deterministically |
+| T3 power loss | ⚠️ Partial. Cron jobs persist and boot starts their runner; PendingInteraction rows remain storage-backed and boot expiry cleanup runs. Unified durable `Wait`, interrupted-attempt continuation, and effect reconciliation are not shipped. | #215 + #217 + P2 C1 restart proof |
+| T4 liar | ⚠️ Partial. Completion reports require resolving evidence, and supported URL/API/citation read-back checks run before completion. There is no general truth guarantee, sandboxed verifier registry, or replay-conformance proof. | #467 — store `checkedPredicate` verdicts, type unchecked claims as asserted, and refute supported bad evidence deterministically |
 | T5 multiplexing | ⚠️ Partial. Multiple workers, budgets, blacklist, ChannelGrant, TrustTier, WorkerGrant, and effective-authority evaluation exist; broader shared-resource accounting and the target authority boundary remain incomplete. | #219/#221 and the P2/P4 boundary work |
 
 **Qualification: 0 / 5 tests fully pass today; all five have target paths, with substantial partial substrate in T2–T5.** Formal qualification still requires all five tests. Passing T1, T3, and T4 is the project's narrower product-branding milestone for using “Agent OS”; it is not five-test qualification. Until that milestone, the honest description is *"an evidence-gated personal workflow engine building toward an Agent OS."*

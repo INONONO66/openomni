@@ -1,43 +1,60 @@
-type AttemptProcessObservationBase = {
-  readonly runId: string;
+import { WorkerRun } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
+
+export function publishWorkerRunStarted(input: {
+  readonly traceId: string;
   readonly sessionId: string;
-  readonly workItemId: string;
-  readonly attemptId: string;
-  readonly attemptSeq: number;
-  readonly workerId: string;
-  readonly generation: number;
-  readonly time: number;
-};
-
-export type AttemptProcessObservation =
-  | {
-      readonly name: "attempt.started";
-      readonly data: AttemptProcessObservationBase;
-    }
-  | {
-      readonly name: "attempt.succeeded";
-      readonly data: AttemptProcessObservationBase & { readonly resultRef: string };
-    }
-  | {
-      readonly name: "attempt.failed" | "attempt.cancelled";
-      readonly data: AttemptProcessObservationBase & { readonly reason: string };
-    };
-
-export interface AttemptObservationIpcServer {
-  notify(method: string, params?: Record<string, unknown>): void;
+  readonly runId: string;
+  readonly prompt: string;
+}): void {
+  Bus.publish(WorkerRun.Events.Started, {
+    traceId: input.traceId,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    time: Date.now(),
+    payload: { sessionId: input.sessionId, runId: input.runId, title: input.prompt.slice(0, 80) },
+  });
 }
 
-export function publishAttemptProcessObservation(input: {
-  readonly server: AttemptObservationIpcServer;
-  readonly authToken: string;
-  readonly observation: AttemptProcessObservation;
+export function publishWorkerRunSucceeded(input: {
+  readonly traceId: string;
+  readonly sessionId: string;
+  readonly runId: string;
 }): void {
-  input.server.notify("worker.observation", {
-    authToken: input.authToken,
-    workerId: input.observation.data.workerId,
-    generation: input.observation.data.generation,
-    sessionId: input.observation.data.sessionId,
-    runId: input.observation.data.runId,
-    observation: input.observation,
+  Bus.publish(WorkerRun.Events.Completed, {
+    traceId: input.traceId,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    time: Date.now(),
+    payload: { sessionId: input.sessionId, runId: input.runId, status: "succeeded" },
+  });
+}
+
+export function publishWorkerRunCancelled(input: {
+  readonly traceId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+}): void {
+  Bus.publish(WorkerRun.Events.Cancelled, {
+    traceId: input.traceId,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    time: Date.now(),
+    payload: { sessionId: input.sessionId, runId: input.runId },
+  });
+}
+
+export function publishWorkerRunFailed(input: {
+  readonly traceId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly errorMessage: string;
+}): void {
+  Bus.publish(WorkerRun.Events.Failed, {
+    traceId: input.traceId,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    time: Date.now(),
+    payload: { sessionId: input.sessionId, runId: input.runId, error: input.errorMessage },
   });
 }

@@ -1,32 +1,53 @@
-import { createHash } from "node:crypto";
-import { Dispatch, Execution, type Wait } from "@openomni/protocol";
-import type { DurableWaitV1, WaitKernelService } from "../ingress/wait-correlation.js";
+import { Dispatch, Execution } from "@openomni/protocol";
+import { PendingInteractionStore } from "@openomni/session";
 
-export async function findPendingInteractions(
-  service: WaitKernelService,
-  correlation: Dispatch.Correlation,
-): Promise<readonly DurableWaitV1[]> {
-  const resolution = await service.correlate({
+function correlationQueries(correlation: Dispatch.Correlation): Dispatch.Correlation[] {
+  const base = {
     endpointId: correlation.endpointId,
     channelId: correlation.channelId,
-    correlation: {
-      version: "wait-correlation-v1",
-      ...(correlation.threadId === undefined ? {} : { threadId: correlation.threadId }),
-      ...(correlation.replyToMessageId === undefined
-        ? {}
-        : { replyToMessageId: correlation.replyToMessageId }),
-      ...(correlation.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
-      ...(correlation.externalConversationId === undefined
-        ? {}
-        : { externalConversationId: correlation.externalConversationId }),
-    },
-  });
-  if (resolution.kind === "none") return [];
-  if (resolution.kind === "match") return [resolution.candidate.wait];
-  return resolution.candidates.map((candidate) => candidate.wait);
+  };
+  const queries: Dispatch.Correlation[] = [];
+  if (correlation.replyToMessageId) {
+    queries.push({ ...base, replyToMessageId: correlation.replyToMessageId });
+  }
+  if (correlation.threadId) {
+    queries.push({ ...base, threadId: correlation.threadId });
+  }
+  if (correlation.tokenHash) {
+    queries.push({ ...base, tokenHash: correlation.tokenHash });
+  }
+  if (correlation.externalConversationId) {
+    queries.push({ ...base, externalConversationId: correlation.externalConversationId });
+  }
+  if (queries.length === 0) queries.push(base);
+  return queries;
 }
 
-export function requestedPendingInteractionAction(payload: unknown): Wait.AllowedActionV1 {
+export function findPendingInteractions(
+  correlation: Dispatch.Correlation,
+): readonly PendingInteractionStore.Record[] {
+  const seen = new Set<string>();
+  const matches: PendingInteractionStore.Record[] = [];
+  for (const query of correlationQueries(correlation)) {
+    for (const match of PendingInteractionStore.findByCorrelation(query)) {
+      if (seen.has(match.id)) continue;
+      seen.add(match.id);
+      matches.push(match);
+    }
+    if (matches.length > 0) break;
+  }
+  return matches;
+}
+
+function markMatched(record: PendingInteractionStore.Record): PendingInteractionStore.Record {
+  if (record.status === "open") return PendingInteractionStore.resolve(record.id);
+  if (record.status === "resolved") return PendingInteractionStore.markFollowUp(record.id);
+  return record;
+}
+
+export function requestedPendingInteractionAction(
+  payload: unknown,
+): PendingInteractionStore.Record["allowedActions"][number] {
   if (payload && typeof payload === "object" && "action" in payload) {
     const action = payload.action;
     if (
@@ -47,14 +68,13 @@ type CanonicalWorkerCompletePayload = Readonly<{
 
 function canonicalWorkerCompletePayload(
   payload: unknown,
-  wait: DurableWaitV1,
+  match: PendingInteractionStore.Record,
 ): CanonicalWorkerCompletePayload | undefined {
-  if (wait.route.kind !== "worker") return undefined;
   if (typeof payload === "string") {
     return {
       result: {
-        runId: wait.route.runId,
-        sessionId: wait.route.sessionId,
+        runId: match.workerRunId,
+        sessionId: match.sessionId,
         status: "succeeded",
         output: payload,
         finishReason: "stop",
@@ -69,8 +89,8 @@ function canonicalWorkerCompletePayload(
   if (typeof value === "string") {
     return {
       result: {
-        runId: wait.route.runId,
-        sessionId: wait.route.sessionId,
+        runId: match.workerRunId,
+        sessionId: match.sessionId,
         status: "succeeded",
         output: value,
         finishReason: "stop",
@@ -81,179 +101,109 @@ function canonicalWorkerCompletePayload(
   const result = Execution.Result.safeParse(value);
   if (
     !result.success ||
-    result.data.runId !== wait.route.runId ||
-    result.data.sessionId !== wait.route.sessionId
+    result.data.runId !== match.workerRunId ||
+    result.data.sessionId !== match.sessionId
   ) {
     return undefined;
   }
   return { result: result.data };
 }
 
-function waitCorrelation(command: Dispatch.Command): Wait.CorrelationV1 | undefined {
-  const correlation = command.correlation;
-  if (correlation === undefined || typeof correlation === "string") return undefined;
-  return {
-    version: "wait-correlation-v1",
-    ...(correlation.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
-    ...(correlation.threadId === undefined ? {} : { threadId: correlation.threadId }),
-    ...(correlation.replyToMessageId === undefined
-      ? {}
-      : { replyToMessageId: correlation.replyToMessageId }),
-    ...(correlation.externalConversationId === undefined
-      ? {}
-      : { externalConversationId: correlation.externalConversationId }),
-  };
-}
-
-function correlationsMatch(left: Wait.CorrelationV1, right: Wait.CorrelationV1): boolean {
-  return (
-    left.tokenHash === right.tokenHash &&
-    left.threadId === right.threadId &&
-    left.replyToMessageId === right.replyToMessageId &&
-    left.externalConversationId === right.externalConversationId
-  );
-}
-
-function expectedResponder(
+function pendingInteractionSenderMatches(
   command: Dispatch.Command,
-  wait: DurableWaitV1,
-): Wait.ResponderRefV1 | undefined {
+  match: PendingInteractionStore.Record,
+): boolean {
   const correlation = command.correlation;
-  const nativeCorrelation = waitCorrelation(command);
-  if (
-    correlation === undefined ||
-    typeof correlation === "string" ||
-    nativeCorrelation === undefined
-  ) {
-    return undefined;
+  if (correlation !== undefined && typeof correlation !== "string") {
+    const bearerTokenMatches =
+      match.targetActorId === undefined &&
+      match.correlation.tokenHash !== undefined &&
+      correlation.tokenHash === match.correlation.tokenHash;
+    if (bearerTokenMatches) return true;
+    if (correlation.endpointId !== match.endpointId) return false;
   }
-  if (
-    correlation.endpointId !== wait.opened.endpointId ||
-    correlation.channelId !== wait.opened.channelId ||
-    !correlationsMatch(nativeCorrelation, wait.opened.correlation) ||
-    (wait.opened.targetActorId !== undefined && command.actor.actorId !== wait.opened.targetActorId)
-  ) {
-    return undefined;
+  if (command.actor.kind === "unknown") {
+    return match.targetActorId === undefined && command.actor.actorId === match.endpointId;
   }
-  return wait.opened.expectedResponders.find(
-    (candidate) =>
-      candidate.actorId === command.actor.actorId &&
-      (candidate.endpointId === undefined || candidate.endpointId === correlation.endpointId),
-  );
+  return match.targetActorId === undefined || command.actor.actorId === match.targetActorId;
 }
 
-function responseTransportId(command: Dispatch.Command, action: Wait.AllowedActionV1): string {
-  if (command.idempotencyKey !== undefined) return command.idempotencyKey;
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        action,
-        actorId: command.actor.actorId,
-        correlation: command.correlation,
-      }),
-    )
-    .digest("hex");
-}
-
-export async function routePendingInteraction(
-  service: WaitKernelService,
+export function routePendingInteraction(
   command: Dispatch.Command,
-  pinned?: DurableWaitV1,
-): Promise<Dispatch.Command> {
+  pinned?: PendingInteractionStore.Record,
+): Dispatch.Command {
   if (command.action !== Dispatch.Actions.ActorMessage) return command;
   const matches =
     pinned === undefined && command.correlation && typeof command.correlation !== "string"
-      ? await findPendingInteractions(service, command.correlation)
+      ? findPendingInteractions(command.correlation)
       : [];
-  const matchedWait = pinned ?? (matches.length === 1 ? matches[0] : undefined);
-  if (matchedWait?.route.kind !== "worker") return command;
-  const responder = expectedResponder(command, matchedWait);
-  if (responder === undefined) return command;
+  const match = pinned ?? (matches.length === 1 ? matches[0] : undefined);
+  if (!match) return command;
+  if (!pendingInteractionSenderMatches(command, match)) return command;
   const action = requestedPendingInteractionAction(command.payload);
-  if (!matchedWait.opened.allowedActions.includes(action)) return command;
-  const payload =
-    action === "report_result"
-      ? canonicalWorkerCompletePayload(command.payload, matchedWait)
-      : undefined;
-  if (action === "report_result" && payload === undefined) return command;
-  if (action !== "report_result" && action !== "ask_clarification") return command;
-  const wait = await service.acceptResponse({
-    waitId: matchedWait.waitId,
-    transportId: responseTransportId(command, action),
-    responder,
-    action,
-    payload: command.payload,
-  });
-  if (
-    wait.status !== "resolved" ||
-    wait.route.kind !== "worker" ||
-    wait.routedDispatchId === undefined ||
-    wait.routedAction !== action
-  ) {
-    return command;
-  }
+  if (!match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
     return Dispatch.Command.parse({
       ...command,
-      dispatchId: wait.routedDispatchId,
       action: Dispatch.Actions.ResidentAsk,
-      target: { kind: "resident", sessionId: wait.route.sessionId },
-      sessionId: wait.route.sessionId,
-      runId: wait.route.runId,
+      target: {
+        kind: "resident",
+        sessionId: match.sessionId,
+      },
+      sessionId: match.sessionId,
+      runId: match.workerRunId,
       wait: true,
       actor: {
         kind: "worker",
-        actorId: wait.opened.targetActorId ?? wait.opened.endpointId ?? "wait-responder",
-        sessionId: wait.route.sessionId,
-        runId: wait.route.runId,
-        workerRunId: wait.route.runId,
+        actorId: match.targetActorId ?? match.endpointId,
+        sessionId: match.sessionId,
+        runId: match.workerRunId,
+        workerRunId: match.workerRunId,
         trustTier: "assigned_worker",
         labels: [
           "actor.worker",
           "actor.assigned_worker",
-          `wait.${wait.waitId}`,
-          ...(wait.opened.endpointId === undefined ? [] : [`endpoint.${wait.opened.endpointId}`]),
+          `pending_interaction.${match.id}`,
+          `endpoint.${match.endpointId}`,
         ],
-        reason: "wait.match",
+        reason: "pending_interaction.match",
       },
     });
   }
-  if (action !== "report_result" || payload === undefined) return command;
+  if (action !== "report_result") return command;
+  const payload = canonicalWorkerCompletePayload(command.payload, match);
+  if (payload === undefined) return command;
   return Dispatch.Command.parse({
     ...command,
-    dispatchId: wait.routedDispatchId,
     payload,
     action: Dispatch.Actions.WorkerComplete,
     target: {
       kind: "worker",
-      id: wait.route.runId,
-      runId: wait.route.runId,
-      sessionId: wait.route.sessionId,
+      id: match.workerRunId,
+      runId: match.workerRunId,
+      sessionId: match.sessionId,
     },
-    sessionId: wait.route.sessionId,
-    runId: wait.route.runId,
+    sessionId: match.sessionId,
+    runId: match.workerRunId,
     actor: {
       kind: "worker",
-      actorId: wait.opened.targetActorId ?? wait.opened.endpointId ?? "wait-responder",
-      sessionId: wait.route.sessionId,
-      runId: wait.route.runId,
-      workerRunId: wait.route.runId,
+      actorId: match.targetActorId ?? match.endpointId,
+      sessionId: match.sessionId,
+      runId: match.workerRunId,
+      workerRunId: match.workerRunId,
       trustTier: "assigned_worker",
       labels: [
         "actor.worker",
         "actor.assigned_worker",
-        `wait.${wait.waitId}`,
-        ...(wait.opened.endpointId === undefined ? [] : [`endpoint.${wait.opened.endpointId}`]),
+        `pending_interaction.${match.id}`,
+        `endpoint.${match.endpointId}`,
       ],
-      reason: "wait.match",
+      reason: "pending_interaction.match",
     },
   });
 }
 
-export async function markRoutedPendingInteraction(
-  service: WaitKernelService,
-  command: Dispatch.Command,
-): Promise<void> {
+export function markRoutedPendingInteraction(command: Dispatch.Command): void {
   if (
     command.action !== Dispatch.Actions.ActorReply &&
     command.action !== Dispatch.Actions.WorkerComplete &&
@@ -261,12 +211,12 @@ export async function markRoutedPendingInteraction(
   ) {
     return;
   }
-  if (command.actor.reason !== "wait.match") return;
-  const waitId = command.actor.labels?.find((label) => label.startsWith("wait."))?.slice(5);
-  if (!waitId) return;
-  await service.markRouted({
-    waitId,
-    dispatchId: command.dispatchId,
-    action: requestedPendingInteractionAction(command.payload),
-  });
+  if (command.actor.reason !== "pending_interaction.match") return;
+  const pendingInteractionId = command.actor.labels
+    ?.find((label) => label.startsWith("pending_interaction."))
+    ?.slice("pending_interaction.".length);
+  if (!pendingInteractionId) return;
+  const record = PendingInteractionStore.get(pendingInteractionId);
+  if (!record) return;
+  markMatched(record);
 }

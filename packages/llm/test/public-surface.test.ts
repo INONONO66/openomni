@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelCatalogService, OwnerCredentialSource, Provider, RunInput } from "../src";
+import type { Auth, Provider, RunInput } from "../src";
 
 describe("@openomni/llm root public surface", () => {
   test("exposes the package contract", async () => {
@@ -12,10 +12,9 @@ describe("@openomni/llm root public surface", () => {
     // Then: only package-level namespaces and entry points are exposed.
     expect(publicKeys).toEqual([
       "APIError",
+      "Auth",
       "ModelsDev",
       "NamedError",
-      "OwnerCredentialSource",
-      "OwnerCredentialSourceError",
       "Provider",
       "ProviderError",
       "TokenTracker",
@@ -33,7 +32,6 @@ describe("@openomni/llm root public surface", () => {
       "fetchProxyModels",
       "enrichWithCatalog",
       "Message",
-      "ModelCatalogService",
       "Retry",
       "Processor",
       "Tool",
@@ -46,7 +44,7 @@ describe("@openomni/llm root public surface", () => {
     }
   });
 
-  test("keeps RunInput usable as the root input contract", async () => {
+  test("keeps RunInput usable as the root input contract", () => {
     // Given: a consumer writes against root-level RunInput.
     const model: Provider.Model = {
       id: "claude-3-haiku",
@@ -54,36 +52,17 @@ describe("@openomni/llm root public surface", () => {
       name: "Claude 3 Haiku",
       api: { npm: "@ai-sdk/anthropic" },
     };
-    const credentialSource: OwnerCredentialSource = {
-      providerId: "anthropic",
-      credentialId: "owner-anthropic",
-      rotationId: "rotation-1",
-      sourceKind: "injected_runtime",
-      auth: { type: "api", key: "test-key" },
-    };
-    const catalog: ModelCatalogService = {
-      async load() {
-        throw new Error("not used");
-      },
-      async get() {
-        return {};
-      },
-    };
-    const input: RunInput = {
+    const input: RunInput & { readonly auth?: Auth.Info } = {
       messages: [],
       tools: [],
       model,
-      environment: {} as RunInput["environment"],
+      auth: { type: "api", key: "test-key" },
     };
 
     // When: the typed input is constructed.
     const messageCount = input.messages.length;
-    const providerCount = Object.keys(await catalog.get()).length;
-    const credentialProvider = credentialSource.providerId;
 
     // Then: the root type preserves run() input shape.
     expect(messageCount).toBe(0);
-    expect(providerCount).toBe(0);
-    expect(credentialProvider).toBe("anthropic");
   });
 });

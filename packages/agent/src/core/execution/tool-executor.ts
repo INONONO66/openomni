@@ -57,14 +57,14 @@ export function createToolExecutor(
     activeTraceContext: TraceContext.Type,
     timing: Policy.Timing,
     decision: Policy.PolicyDecision,
-    _err: unknown,
+    err: unknown,
   ): void {
     Bus.publish(Operational.Warn, {
       traceId: activeTraceContext.traceId,
       time: Date.now(),
       component: "agent.tool-executor",
       msg: "onDecision observer error",
-      context: { timing, policyId: decision.policyId, observerFailed: true },
+      context: { timing, policyId: decision.policyId, error: String(err) },
     });
   }
 

@@ -1,18 +1,16 @@
 import type { ChatAgentConfig } from "@openomni/agent";
-import type { Policy, ToolSelection } from "@openomni/protocol";
+import type { WorkerBootstrap } from "@openomni/protocol";
 
-export interface AgentDefinition {
-  readonly name: string;
-  readonly description: string;
+type RuntimeAgentModel = NonNullable<WorkerBootstrap.RuntimeAgentDefinition["model"]>;
+type AssertRuntimeModelCompatible<T extends RuntimeAgentModel> = T;
+type _AgentDefinitionModelCompatibility = AssertRuntimeModelCompatible<ChatAgentConfig["model"]>;
+
+export type AgentDefinition = WorkerBootstrap.RuntimeAgentDefinition & {
   // Agent definitions may use an alias/latest model ID. The server resolves it
-  // to a concrete provider model ID before execution.
-  readonly model: ChatAgentConfig["model"];
-  readonly systemPrompt: string;
-  readonly tools: ToolSelection.Selection;
-  readonly permissions?: Policy.Permission;
-  readonly policyPlan?: Policy.PolicyPlan;
-  readonly budget?: ChatAgentConfig["budget"];
-}
+  // to a concrete provider model ID from models.dev before execution.
+  model: ChatAgentConfig["model"];
+  systemPrompt: string;
+};
 
 export type AgentFactory = () => AgentDefinition;
 

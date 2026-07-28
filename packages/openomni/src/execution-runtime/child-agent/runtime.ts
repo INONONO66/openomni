@@ -98,13 +98,6 @@ async function waitForCompletion(
 }
 
 export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): ChildAgentRuntime {
-  if (options?.environment === undefined) {
-    throw new TypeError("Child agent LLM environment is required");
-  }
-  if (options?.modelCatalog === undefined) {
-    throw new TypeError("Child agent model catalog is required");
-  }
-
   const records = new Map<string, ChildRecord>();
   const policy = createDelegationPolicyRuntime(options);
   const maxChildren = options.maxChildren ?? DEFAULT_MAX_CHILDREN;
@@ -192,10 +185,10 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
                 : undefined;
             agent = options.createAgent({
               model: options.model,
-              environment: options.environment,
-              modelCatalog: options.modelCatalog,
               systemPrompt: options.systemPrompt,
               signal: controller.signal,
+              auth: options.auth,
+              allowAuthFallback: options.allowAuthFallback,
               ...(options.budget ? { budget: options.budget } : {}),
               ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
               ...(options.middleware ? { middleware: options.middleware } : {}),

@@ -1,40 +1,24 @@
 import type { Ingress } from "@openomni/protocol";
 import { z } from "zod";
-import type { SecretRegistry } from "@openomni/llm/credential-runtime";
-
 import {
   DispatchRuntime,
   createResidentDispatchHandlers,
   type DispatchOwners,
-  type ToolEffectLedgerPortV1,
-  type WorkspaceIdentity,
 } from "@openomni/openomni";
 import {
-  createConnectorEndpointProcessDriver,
-  type ConnectorEndpointCredentialMap,
-  type ConnectorEndpointKernelQueries,
-  type ConnectorEndpointKernelTransitions,
+  createConnectorEndpointDriver,
   type ConnectorQuestionBridgeHandler,
-} from "../connector/process-driver.js";
-import type { ConnectorArtifactWriter } from "../connector/log.js";
+} from "../connector/index";
 
 export interface ServerDispatchOwnersConfig {
   readonly coordinator: NonNullable<DispatchOwners["coordinator"]>;
   readonly residentRuntime: NonNullable<DispatchOwners["residentRuntime"]>;
-  readonly credentials: ConnectorEndpointCredentialMap;
-  readonly secretRegistry: SecretRegistry;
-  readonly ledgerQueries: ConnectorEndpointKernelQueries;
-  readonly ledgerTransitions: ConnectorEndpointKernelTransitions;
-  readonly artifactWriter: ConnectorArtifactWriter;
-  readonly connectorEffects: ToolEffectLedgerPortV1;
-  readonly workspaceIdentity: WorkspaceIdentity;
-  readonly waitKernel: Parameters<typeof createResidentDispatchHandlers>[0]["waitKernel"];
-  readonly authorityQueries: ConstructorParameters<typeof DispatchRuntime>[0]["authorityQueries"];
-  readonly model: {
+  readonly credentials?: Readonly<Record<string, string>>;
+  readonly model?: {
     readonly providerID: string;
     readonly id: string;
   };
-  readonly residentAgentResolver: {
+  readonly residentAgentResolver?: {
     resolve(agentName: string, event: Ingress.InternalEvent): Promise<Ingress.AgentDef>;
   };
 }
@@ -52,17 +36,16 @@ const residentAskHandlerOutput = z
 
 function createQuestionBridgeHandler(
   config: ServerDispatchOwnersConfig,
-): ConnectorQuestionBridgeHandler {
+): ConnectorQuestionBridgeHandler | undefined {
+  const model = config.model;
+  if (model === undefined) return undefined;
+
   const handlers = createResidentDispatchHandlers({
     residentRuntime: config.residentRuntime,
-    defaultModel: { provider: config.model.providerID, id: config.model.id },
-    agentResolver: config.residentAgentResolver,
-    waitKernel: config.waitKernel,
+    defaultModel: { provider: model.providerID, id: model.id },
+    ...(config.residentAgentResolver ? { agentResolver: config.residentAgentResolver } : {}),
   });
-  const dispatchRuntime = new DispatchRuntime({
-    waitKernel: config.waitKernel,
-    authorityQueries: config.authorityQueries,
-  });
+  const dispatchRuntime = new DispatchRuntime();
   dispatchRuntime.register("resident.ask", handlers["resident.ask"]);
 
   return async (request) => {
@@ -96,16 +79,12 @@ export function createServerDispatchOwners(config: ServerDispatchOwnersConfig): 
   return {
     coordinator: config.coordinator,
     residentRuntime: config.residentRuntime,
-    connectorEndpointDriver: createConnectorEndpointProcessDriver({
-      credentials: config.credentials,
-      secretRegistry: config.secretRegistry,
+    connectorEndpointDriver: createConnectorEndpointDriver({
+      credentials: config.credentials ?? {},
       questionBridge: createQuestionBridgeHandler(config),
-      kernelQueries: config.ledgerQueries,
-      kernelTransitions: config.ledgerTransitions,
-      artifactWriter: config.artifactWriter,
-      effects: config.connectorEffects,
-      workspaceIdentity: config.workspaceIdentity,
     }),
-    defaultModel: { provider: config.model.providerID, id: config.model.id },
+    ...(config.model
+      ? { defaultModel: { provider: config.model.providerID, id: config.model.id } }
+      : {}),
   };
 }

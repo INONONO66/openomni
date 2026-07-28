@@ -1,28 +1,10 @@
-import type { RuntimeResource, Tool, ToolSelection } from "@openomni/protocol";
+import { Auth } from "@openomni/llm";
+import type { WorkerBootstrap } from "@openomni/protocol";
 import { resolveCategory, type NativeTool } from "@openomni/openomni";
 import { createAllAgents } from "../agents";
 import { RuntimeAgentDefinition } from "../agents/runtime-definition";
 import type { CustomToolProvider } from "../tool/custom";
 import type { McpToolProvider } from "../tool/mcp";
-
-export interface RuntimeToolCatalogEntryV1 {
-  readonly canonicalName: string;
-  readonly exposedName: string;
-  readonly source: Tool.Source;
-  readonly category: ToolSelection.Category;
-  readonly riskTier: Tool.RiskTier;
-  readonly spec: Tool.Spec;
-  readonly descriptor?: RuntimeResource.Descriptor;
-  readonly mcpServer?: string;
-}
-
-export interface WorkerBootstrapV1 {
-  readonly [key: string]: unknown;
-  readonly configEpoch: string;
-  readonly agents: readonly RuntimeAgentDefinition[];
-  readonly toolCatalog: readonly RuntimeToolCatalogEntryV1[];
-  readonly credentials?: never;
-}
 
 function djb2Hash(s: string): string {
   let h = 5381;
@@ -34,30 +16,44 @@ function djb2Hash(s: string): string {
 
 export async function assembleBootstrap(
   mcpProvider: Pick<McpToolProvider, "listTools">,
+  authEntries?: Awaited<ReturnType<typeof Auth.all>>,
   customProvider?: Pick<CustomToolProvider, "listTools">,
-): Promise<WorkerBootstrapV1> {
-  const agents = Object.freeze([...createAllAgents().values()].map(RuntimeAgentDefinition.create));
+): Promise<WorkerBootstrap.Bootstrap> {
+  const agents = [...createAllAgents().values()].map(RuntimeAgentDefinition.create);
 
-  const toolCatalog = Object.freeze([
+  const toolCatalog = [
     ...mcpProvider.listTools().map((tool) => createToolCatalogEntry(tool, "mcp")),
     ...(customProvider?.listTools().map((tool) => createToolCatalogEntry(tool, "server")) ?? []),
-  ]);
+  ];
+
+  const resolvedAuthEntries = authEntries ?? (await Auth.all());
+  const credentials: Record<string, string> = {};
+  for (const [provider, entry] of Object.entries(resolvedAuthEntries)) {
+    const prefix = provider.toUpperCase();
+    if (entry.type === "api") {
+      credentials[`${prefix}_API_KEY`] = entry.key;
+    } else if (entry.type === "proxy") {
+      credentials[`${prefix}_BASE_URL`] = entry.baseURL;
+      if (entry.apiKey) credentials[`${prefix}_API_KEY`] = entry.apiKey;
+    }
+  }
+
   const epochInput = [
     ...agents.map((a) => a.name).sort(),
     ...toolCatalog.map((t) => t.canonicalName).sort(),
   ].join(",");
   const configEpoch = djb2Hash(epochInput);
 
-  return Object.freeze({ configEpoch, agents, toolCatalog });
+  return { configEpoch, agents, toolCatalog, credentials };
 }
 
 function createToolCatalogEntry(
   tool: NativeTool,
-  source: RuntimeToolCatalogEntryV1["source"],
-): RuntimeToolCatalogEntryV1 {
+  source: WorkerBootstrap.RuntimeToolCatalogEntry["source"],
+): WorkerBootstrap.RuntimeToolCatalogEntry {
   const mcpServer = source === "mcp" ? getMcpServerName(tool.spec.name) : undefined;
 
-  return Object.freeze({
+  return {
     canonicalName: tool.spec.name,
     exposedName: tool.spec.name,
     source,
@@ -66,7 +62,7 @@ function createToolCatalogEntry(
     spec: tool.spec,
     ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
     ...(mcpServer !== undefined && { mcpServer }),
-  });
+  };
 }
 
 function getMcpServerName(toolName: string): string | undefined {

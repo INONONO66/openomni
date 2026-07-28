@@ -1,46 +1,86 @@
+import { Operational } from "@openomni/protocol";
+import { Storage, Bus, BusPersistence } from "@openomni/session";
 import type { McpToolProvider } from "../tool/mcp";
-import type { IncidentSink } from "../server/incidents";
 
-export interface ShutdownDeps {
-  readonly ingress: { stop(): void | Promise<void> };
-  readonly channels: ReadonlyArray<{ stop(): void | Promise<void> }>;
-  readonly server: { stop(force: boolean): void };
-  readonly mcpProvider: Pick<McpToolProvider, "disconnectAll">;
-  readonly coordinator: { shutdown(): Promise<void> };
-  readonly cronRunner: { stop(): void };
-  readonly runtime: { close(): Promise<void> };
-  readonly incidents: IncidentSink;
-  readonly exit: (code: number) => void;
+interface ClosableStorage {
+  transaction(fn: () => void): void;
+  close(): void;
+  sqlite: { exec(sql: string): void };
 }
 
-/** Testable ordered shutdown. Runtime.close owns FIFO drain, DB close, and credential disposal. */
-export async function shutdownP2Runtime(deps: ShutdownDeps, reason: string): Promise<void> {
-  try {
-    await deps.ingress.stop();
-    for (const channel of deps.channels) await channel.stop();
-    deps.server.stop(true);
-    deps.cronRunner.stop();
-    await deps.coordinator.shutdown();
-    await deps.mcpProvider.disconnectAll();
-    await deps.runtime.close();
-    deps.incidents.dispose();
-    deps.exit(0);
-  } catch (error) {
-    deps.incidents.report({
-      component: "server",
-      summary: "server error during shutdown",
-      data: { reason, error },
-    });
-    deps.incidents.dispose();
-    deps.exit(1);
-  }
+function isClosableStorage(storage: unknown): storage is ClosableStorage {
+  if (storage == null || typeof storage !== "object") return false;
+  const s = storage as Record<string, unknown>;
+  return typeof s.close === "function" && typeof s.transaction === "function" && s.sqlite != null;
+}
+
+interface ShutdownDeps {
+  channels: Array<{ stop(): void }>;
+  server: { stop(force: boolean): void };
+  mcpProvider: McpToolProvider;
+  coordinator?: { shutdown(): Promise<void> };
+  cronRunner?: { stop(): void };
+  traceId?: string;
 }
 
 export function installShutdownHandlers(deps: ShutdownDeps): void {
-  let _shutdown: Promise<void> | undefined;
-  const begin = (reason: string): void => {
-    _shutdown ??= shutdownP2Runtime(deps, reason);
+  let shuttingDown = false;
+
+  const shutdown = async (reason: string): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    const traceId = deps.traceId ?? crypto.randomUUID();
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server shutting down",
+    });
+
+    Bus.publish(Operational.ShutdownInitiated, {
+      traceId,
+      reason,
+      time: Date.now(),
+    });
+
+    try {
+      deps.cronRunner?.stop();
+      await deps.coordinator?.shutdown();
+
+      for (const channel of deps.channels) {
+        channel.stop();
+      }
+
+      deps.server.stop(true);
+      await deps.mcpProvider.disconnectAll();
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      BusPersistence.stop();
+
+      const storage = Storage.get();
+      if (isClosableStorage(storage)) {
+        storage.transaction(() => {
+          storage.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        });
+        storage.close();
+      }
+    } catch (err) {
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "server error during shutdown",
+        context: { err: String(err) },
+      });
+    }
+
+    process.exit(0);
   };
-  process.on("SIGTERM", () => begin("SIGTERM"));
-  process.on("SIGINT", () => begin("SIGINT"));
+
+  process.on("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+  process.on("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
 }

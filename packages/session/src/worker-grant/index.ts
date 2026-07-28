@@ -1,0 +1,165 @@
+import { Communication } from "@openomni/protocol";
+import { Bus } from "../bus";
+import { Storage } from "../storage/storage";
+import { requireSubAdapter, withCreateTimestamps } from "../storage/timestamped-store";
+
+const riskRank = { low: 1, medium: 2, high: 3 } as const;
+
+function requireAdapter() {
+  return requireSubAdapter(
+    Storage.get().workerGrant,
+    "Storage adapter does not implement workerGrant",
+  );
+}
+
+function eventBase(record: Communication.WorkerGrant.Record) {
+  return {
+    id: record.id,
+    workerRunId: record.workerRunId,
+    status: record.status,
+    version: record.version,
+    time: Date.now(),
+  };
+}
+
+function createRecord(input: Communication.WorkerGrant.Create): Communication.WorkerGrant.Record {
+  return Communication.WorkerGrant.Record.parse(
+    withCreateTimestamps({
+      ...input,
+      status: input.status ?? "active",
+      version: input.version ?? 1,
+      canCreateExternalTasks: input.canCreateExternalTasks ?? false,
+    }),
+  );
+}
+
+function matchesList(list: readonly string[] | undefined, value: string | undefined): boolean {
+  if (list === undefined) return true;
+  if (list.length === 0) return false;
+  return value !== undefined && list.includes(value);
+}
+
+function isActive(record: Communication.WorkerGrant.Record, now = Date.now()): boolean {
+  return record.status === "active" && (record.expiresAt === undefined || record.expiresAt > now);
+}
+
+function isPastExpiry(record: Communication.WorkerGrant.Record, now = Date.now()): boolean {
+  return record.status === "active" && record.expiresAt !== undefined && record.expiresAt <= now;
+}
+
+function evaluateRecord(
+  record: Communication.WorkerGrant.Record,
+  input: Communication.WorkerGrant.Evaluation,
+): Communication.WorkerGrant.EvaluationResult {
+  if (!isActive(record)) return { allowed: false, reason: "worker_grant.inactive" };
+  if (!record.allowedActions.includes(input.action)) {
+    return { allowed: false, reason: "worker_grant.action.denied" };
+  }
+  if (!matchesList(record.allowedSessionIds, input.sessionId)) {
+    return { allowed: false, reason: "worker_grant.session.denied" };
+  }
+  if (!matchesList(record.allowedActorIds, input.actorId)) {
+    return { allowed: false, reason: "worker_grant.actor.denied" };
+  }
+  if (!matchesList(record.allowedEndpointIds, input.endpointId)) {
+    return { allowed: false, reason: "worker_grant.endpoint.denied" };
+  }
+  if (input.createsExternalTask && !record.canCreateExternalTasks) {
+    return { allowed: false, reason: "worker_grant.external_create.denied" };
+  }
+  if (
+    record.managerGrant?.allowedActorGroups !== undefined &&
+    !matchesList(record.managerGrant.allowedActorGroups, input.actorGroup)
+  ) {
+    return { allowed: false, reason: "worker_grant.actor_group.denied" };
+  }
+  if (record.managerGrant?.riskCeiling !== undefined) {
+    const inputRank = input.risk ? riskRank[input.risk] : undefined;
+    const ceilingRank = riskRank[record.managerGrant.riskCeiling];
+    if (inputRank === undefined || inputRank > ceilingRank) {
+      return { allowed: false, reason: "worker_grant.risk.denied" };
+    }
+  }
+  return { allowed: true, reason: "worker_grant.allowed", grantId: record.id };
+}
+
+export namespace WorkerGrantStore {
+  export function create(
+    input: Communication.WorkerGrant.Create,
+  ): Communication.WorkerGrant.Record {
+    const adapter = requireAdapter();
+    const record = createRecord(input);
+    if (adapter.get(record.id)) throw new Error(`WorkerGrant already exists: ${record.id}`);
+    adapter.create(record);
+    Bus.publish(Communication.WorkerGrant.Events.Created, eventBase(record));
+    return record;
+  }
+
+  export function get(id: string): Communication.WorkerGrant.Record | undefined {
+    return requireAdapter().get(id);
+  }
+
+  function persistUpdate(
+    id: string,
+    patch: Partial<Omit<Communication.WorkerGrant.Record, "id" | "workerRunId">>,
+    event: "updated" | "revoked" | "expired",
+  ): Communication.WorkerGrant.Record {
+    const adapter = requireAdapter();
+    const current = adapter.get(id);
+    if (!current) throw new Error(`WorkerGrant not found: ${id}`);
+    const updated = Communication.WorkerGrant.Record.parse({
+      ...current,
+      ...patch,
+      version: current.version + 1,
+      updatedAt: Date.now(),
+    });
+    adapter.set(updated);
+    const descriptor =
+      event === "updated"
+        ? Communication.WorkerGrant.Events.Updated
+        : event === "revoked"
+          ? Communication.WorkerGrant.Events.Revoked
+          : Communication.WorkerGrant.Events.Expired;
+    Bus.publish(descriptor, eventBase(updated));
+    return updated;
+  }
+
+  export function revoke(id: string): Communication.WorkerGrant.Record {
+    return persistUpdate(id, { status: "revoked", revokedAt: Date.now() }, "revoked");
+  }
+
+  function expire(id: string): Communication.WorkerGrant.Record {
+    return persistUpdate(id, { status: "expired" }, "expired");
+  }
+
+  export function cleanupExpired(workerRunId?: string): Communication.WorkerGrant.Record[] {
+    return requireAdapter()
+      .list(workerRunId)
+      .filter((grant) => isPastExpiry(grant))
+      .map((grant) => expire(grant.id));
+  }
+
+  export function evaluate(
+    input: Communication.WorkerGrant.Evaluation,
+  ): Communication.WorkerGrant.EvaluationResult {
+    const parsedInput = Communication.WorkerGrant.Evaluation.safeParse(input);
+    if (!parsedInput.success) {
+      return { allowed: false, reason: "worker_grant.evaluation.invalid" };
+    }
+    const parsed = parsedInput.data;
+    const grants = requireAdapter().list(parsed.workerRunId);
+    let firstDenial: Communication.WorkerGrant.EvaluationResult | undefined;
+    for (const grant of grants) {
+      const result = evaluateRecord(grant, parsed);
+      Bus.publish(Communication.WorkerGrant.Events.Evaluated, {
+        ...eventBase(grant),
+        allowed: result.allowed,
+        reason: result.reason,
+        action: parsed.action,
+      });
+      if (result.allowed) return result;
+      firstDenial ??= result;
+    }
+    return firstDenial ?? { allowed: false, reason: "worker_grant.no_matching_grant" };
+  }
+}

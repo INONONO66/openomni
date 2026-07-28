@@ -136,383 +136,116 @@ describe("Ipc helpers", () => {
   });
 });
 
-const digest = "a".repeat(64);
-const attempt = {
-  version: "attempt-ref-v1" as const,
-  workItemId: "work-1",
-  attemptId: "attempt-1",
-  attemptSeq: 1,
-};
-const authenticatedWorker = {
-  authToken: "token",
-  workerId: "worker-1",
-  generation: 2,
-  sessionId: "session-1",
-  runId: "run-1",
-};
-const workerIdentity = {
-  version: "authenticated-worker-identity-v1" as const,
-  runtimeId: "runtime-1",
-  workerId: authenticatedWorker.workerId,
-  generation: authenticatedWorker.generation,
-  principalId: "principal-1",
-  sessionId: authenticatedWorker.sessionId,
-  runId: authenticatedWorker.runId,
-  attemptId: attempt.attemptId,
-};
-const credentialRef = {
-  version: "credential-source-ref-v1" as const,
-  providerId: "anthropic",
-  authType: "api" as const,
-  credentialId: "credential-1",
-  rotationId: "rotation-1",
-  sourceKind: "injected_runtime" as const,
-  sourcePathDigest: digest,
-  credentialDigest: digest,
-};
-const runtime = {
-  runtimeId: workerIdentity.runtimeId,
-  workerId: workerIdentity.workerId,
-  generation: workerIdentity.generation,
-  principalId: workerIdentity.principalId,
-  attempt,
-  config: {
-    configEpoch: "config-1",
-    model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-    environment: {
-      version: "llm-environment-v1" as const,
-      catalogSchemaVersion: 1,
-      catalogSource: "bundled" as const,
-      catalogSourceVersion: "2026-07-26",
-      catalogDigest: digest,
-      modelDigest: digest,
-      endpoint: {
-        version: "llm-endpoint-ref-v1" as const,
-        kind: "default" as const,
-        valueRef: "provider-default",
-        endpointDigest: digest,
-      },
-      credential: credentialRef,
-      sdkPackage: "@ai-sdk/anthropic",
-      adapterVersion: "1",
-      environmentDigest: digest,
-    },
-    workspace: {
-      canonicalizerVersion: "workspace-v1" as const,
-      workspaceId: `w1:${digest}`,
-      canonicalBytesDigest: digest,
-    },
-    agents: [],
-    toolCatalog: [],
-  },
-};
-const transitionCommand = {
-  version: "kernel-transition-command-v1" as const,
-  transitionId: "WT-01",
-  command: "kernel.wait.open.v1",
-  requestId: "request-1",
-  requestHash: digest,
-  expectedHead: {
-    version: "ledger-head-v1" as const,
-    owner: { version: "ledger-owner-v1" as const, ownerKey: "work:work-1" },
-    ownerSeq: 0,
-    eventHash: "GENESIS_V1" as const,
-  },
-  payload: {
-    version: "native-transition-payload-v1" as const,
-    transitionId: "WT-01",
-    command: "kernel.wait.open.v1",
-    owner: { version: "ledger-owner-v1" as const, ownerKey: "work:work-1" },
-    subjectId: "wait-1",
-  },
-};
-const credentialFrame = {
-  request: {
-    version: "credential-provisioning-request-v1" as const,
-    runtimeId: workerIdentity.runtimeId,
-    workerId: workerIdentity.workerId,
-    generation: workerIdentity.generation,
-    principalId: workerIdentity.principalId,
-    attempt,
-    providerIds: [credentialRef.providerId],
-    nonceRef: digest,
-    expiresAt: 1_000,
-    credentialRefs: [credentialRef],
-  },
-  channelIdentity: {
-    runtimeId: workerIdentity.runtimeId,
-    workerId: workerIdentity.workerId,
-    generation: workerIdentity.generation,
-    principalId: workerIdentity.principalId,
-    attempt,
-    processId: 42,
-    runId: authenticatedWorker.runId,
-    sessionId: authenticatedWorker.sessionId,
-  },
-} satisfies Ipc.CredentialProvisioningFrameV1;
-const credentialReceipt = {
-  version: "credential-provisioning-receipt-v1" as const,
-  runtimeId: workerIdentity.runtimeId,
-  workerId: workerIdentity.workerId,
-  generation: workerIdentity.generation,
-  principalId: workerIdentity.principalId,
-  attempt,
-  nonceRef: digest,
-  acceptedCredentialDigests: [credentialRef.credentialDigest],
-  acceptedAtDbMs: 1_001,
-};
-
 describe("Ipc.Methods param schemas", () => {
-  test("coordinator.spawn_run accepts the final credential-free runtime definition", () => {
+  test("coordinator.spawn_run params valid", () => {
+    expect(
+      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
+        authToken: "token",
+        runId: "run-1",
+        sessionId: "sess-1",
+        prompt: "do work",
+        model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+        credentials: { ANTHROPIC_API_KEY: "sk-test" },
+        permissions: {
+          action: "tool.call",
+          allowlist: ["read_file"],
+          denyLabels: ["risk.tier-3"],
+          inputRules: [
+            {
+              toolPattern: "write_file",
+              field: "path",
+              pattern: "^/workspace/",
+              action: "allow",
+            },
+          ],
+        },
+        policyPlan: {
+          policies: [{ id: "builtin:tool-permission", required: true }],
+          labels: ["ipc"],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  test("coordinator.spawn_run preserves policy plans", () => {
     const parsed = Ipc.Methods["coordinator.spawn_run"].params.parse({
       authToken: "token",
       runId: "run-1",
-      sessionId: "session-1",
+      sessionId: "sess-1",
       prompt: "do work",
-      runtime,
+      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+      policyPlan: {
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["ipc"],
+      },
     });
 
-    expect(parsed.runtime.attempt).toEqual(attempt);
-    expect(parsed.runtime.generation).toBe(2);
+    expect(parsed.policyPlan?.labels).toEqual(["ipc"]);
+    expect(parsed.policyPlan?.policies[0]?.id).toBe("builtin:tool-permission");
   });
 
-  test("coordinator.spawn_run rejects provider options and credential-shaped runtime config", () => {
-    for (const providerOptions of [
-      { Authorization: "Bearer secret" },
-      { authorization: "Bearer secret" },
-      { apiKey: "sk-secret" },
-      { token: "secret" },
-      { password: "secret" },
-      { proxySecret: "secret" },
-      { "proxy-secret": "secret" },
-      { baseURL: "https://user:secret@example.com" },
-      { headers: { Authorization: "Bearer secret" } },
-    ]) {
-      const candidate = {
+  test("coordinator.spawn_run rejects permission payloads without canonical action", () => {
+    expect(
+      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
         authToken: "token",
         runId: "run-1",
+        sessionId: "sess-1",
+        prompt: "do work",
+        model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+        permissions: {
+          allowlist: ["read_file"],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("coordinator.spawn_run rejects missing required fields", () => {
+    expect(
+      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
+        runId: "run-1",
+        prompt: "do work",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("worker.inbound_wait params valid", () => {
+    expect(
+      Ipc.Methods["worker.inbound_wait"].params.safeParse({
+        authToken: "token",
+        workerId: "worker-1",
         sessionId: "session-1",
-        prompt: "hello",
-        runtime: {
-          ...runtime,
-          config: { ...runtime.config, providerOptions },
-        },
-      };
-
-      expect(Ipc.Methods["coordinator.spawn_run"].params.safeParse(candidate).success).toBe(false);
-      expect(
-        Ipc.Methods["coordinator.spawn_run"].params.safeParse(JSON.parse(JSON.stringify(candidate)))
-          .success,
-      ).toBe(false);
-    }
-  });
-
-  test("coordinator.spawn_run rejects raw credentials and incomplete attempt identity", () => {
-    const spawn = {
-      authToken: "token",
-      runId: "run-1",
-      sessionId: "session-1",
-      prompt: "do work",
-      runtime,
-    };
-
-    expect(
-      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
-        ...spawn,
-        runtime: { ...runtime, credentials: { ANTHROPIC_API_KEY: "sk-raw" } },
-      }).success,
-    ).toBe(false);
-    expect(
-      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
-        ...spawn,
-        runtime: { ...runtime, attempt: { attemptId: "attempt-1" } },
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.kernel_transition accepts generation-bound commands without caller identity", () => {
-    expect(
-      Ipc.Methods["worker.kernel_transition"].params.safeParse({
-        ...authenticatedWorker,
-        command: transitionCommand,
+        runId: "run-1",
+        callId: "call-1",
+        payload: "Need approval",
+        workspaceRoot: "/workspace/openomni",
       }).success,
     ).toBe(true);
   });
 
-  test("worker.kernel_transition rejects missing generation and caller-supplied identity", () => {
-    const { generation: _generation, ...withoutGeneration } = authenticatedWorker;
+  test("worker.inbound_wait_cancel params valid", () => {
     expect(
-      Ipc.Methods["worker.kernel_transition"].params.safeParse({
-        ...withoutGeneration,
-        command: transitionCommand,
-      }).success,
-    ).toBe(false);
-    expect(
-      Ipc.Methods["worker.kernel_transition"].params.safeParse({
-        ...authenticatedWorker,
-        command: { ...transitionCommand, identity: workerIdentity },
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.kernel_query accepts a generation-bound identity-free query", () => {
-    expect(
-      Ipc.Methods["worker.kernel_query"].params.safeParse({
-        ...authenticatedWorker,
-        request: { version: "kernel-query-v1", kind: "authenticated_attempt", attempt },
+      Ipc.Methods["worker.inbound_wait_cancel"].params.safeParse({
+        sessionId: "session-1",
+        runId: "run-1",
+        callId: "call-1",
       }).success,
     ).toBe(true);
   });
 
-  test("worker.kernel_query rejects missing generation and caller-supplied identity", () => {
-    const { generation: _generation, ...withoutGeneration } = authenticatedWorker;
-    const request = { version: "kernel-query-v1", kind: "authenticated_attempt", attempt };
+  test("worker.tool_call_settled accepts optional auth token for version-skew tolerance", () => {
     expect(
-      Ipc.Methods["worker.kernel_query"].params.safeParse({ ...withoutGeneration, request })
-        .success,
-    ).toBe(false);
-    expect(
-      Ipc.Methods["worker.kernel_query"].params.safeParse({
-        ...authenticatedWorker,
-        request: { ...request, identity: workerIdentity },
+      Ipc.Methods["worker.tool_call_settled"].params.safeParse({
+        authToken: "token",
+        callId: "call-1",
+        workspaceRoot: "/workspace",
       }).success,
-    ).toBe(false);
-  });
+    ).toBe(true);
 
-  test("worker.observation requires generation and rejects caller-supplied identity", () => {
-    const params = {
-      ...authenticatedWorker,
-      observation: { name: "worker.run.started", data: { attemptId: attempt.attemptId } },
-    };
-    expect(Ipc.Methods["worker.observation"].params.safeParse(params).success).toBe(true);
-
-    const { generation: _generation, ...withoutGeneration } = params;
-    expect(Ipc.Methods["worker.observation"].params.safeParse(withoutGeneration).success).toBe(
-      false,
-    );
     expect(
-      Ipc.Methods["worker.observation"].params.safeParse({ ...params, identity: workerIdentity })
-        .success,
-    ).toBe(false);
-  });
-
-  test("worker.credential_provision carries only a secret-free bound request", () => {
-    const parsed = Ipc.Methods["worker.credential_provision"].params.parse({
-      workerId: authenticatedWorker.workerId,
-      generation: authenticatedWorker.generation,
-      runId: authenticatedWorker.runId,
-      sessionId: authenticatedWorker.sessionId,
-      request: credentialFrame.request,
-    });
-    expect(parsed.request).toEqual(credentialFrame.request);
-    expect(JSON.stringify(parsed)).not.toContain("authenticationTag");
-  });
-
-  test("worker.credential_provision rejects missing run/session or mismatched generation", () => {
-    const params = {
-      workerId: authenticatedWorker.workerId,
-      generation: authenticatedWorker.generation,
-      runId: authenticatedWorker.runId,
-      sessionId: authenticatedWorker.sessionId,
-      request: credentialFrame.request,
-    };
-    const { runId: _runId, ...withoutRun } = params;
-    const { sessionId: _sessionId, ...withoutSession } = params;
-    const { generation: _generation, ...withoutGeneration } = params;
-
-    for (const invalid of [
-      withoutRun,
-      withoutSession,
-      withoutGeneration,
-      { ...params, request: { ...credentialFrame.request, generation: 3 } },
-      {
-        ...params,
-        request: {
-          ...credentialFrame.request,
-          attempt: { version: "attempt-ref-v1", attemptId: "attempt-1" },
-        },
-      },
-    ]) {
-      expect(Ipc.Methods["worker.credential_provision"].params.safeParse(invalid).success).toBe(
-        false,
-      );
-    }
-  });
-
-  test("worker.credential_provision rejects raw credential material", () => {
-    const channel = {
-      workerId: authenticatedWorker.workerId,
-      generation: authenticatedWorker.generation,
-      runId: authenticatedWorker.runId,
-      sessionId: authenticatedWorker.sessionId,
-    };
-    expect(
-      Ipc.Methods["worker.credential_provision"].params.safeParse({
-        ...channel,
-        request: credentialFrame.request,
-        credentials: { anthropic: "sk-raw" },
+      Ipc.Methods["worker.tool_call_settled"].params.safeParse({
+        callId: "call-1",
+        workspaceRoot: "/workspace",
       }).success,
-    ).toBe(false);
-    expect(
-      Ipc.Methods["worker.credential_provision"].params.safeParse({
-        ...channel,
-        request: { ...credentialFrame.request, apiKey: "sk-raw" },
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.credential_provision_ack is strict, secret-free, and fully bound", () => {
-    const acknowledgement = {
-      workerId: authenticatedWorker.workerId,
-      generation: authenticatedWorker.generation,
-      processId: 42,
-      runId: authenticatedWorker.runId,
-      sessionId: authenticatedWorker.sessionId,
-      receipt: credentialReceipt,
-    };
-    const parsed = Ipc.Methods["worker.credential_provision_ack"].params.parse(acknowledgement);
-
-    expect(parsed).toEqual(acknowledgement);
-    expect(parsed.receipt.attempt).toEqual(attempt);
-    expect(parsed.receipt.nonceRef).toBe(digest);
-    expect(parsed.receipt.acceptedCredentialDigests).toEqual([digest]);
-    expect(JSON.stringify(parsed)).not.toContain("authToken");
-    expect(
-      Ipc.Methods["worker.credential_provision_ack"].params.safeParse({
-        ...acknowledgement,
-        authenticationTag: "forbidden",
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.credential_provision_ack rejects missing or mismatched bindings", () => {
-    const acknowledgement = {
-      workerId: authenticatedWorker.workerId,
-      generation: authenticatedWorker.generation,
-      processId: 42,
-      runId: authenticatedWorker.runId,
-      sessionId: authenticatedWorker.sessionId,
-      receipt: credentialReceipt,
-    };
-    const { runId: _runId, ...withoutRun } = acknowledgement;
-    const { sessionId: _sessionId, ...withoutSession } = acknowledgement;
-
-    for (const invalid of [
-      withoutRun,
-      withoutSession,
-      { ...acknowledgement, workerId: "worker-forged" },
-      { ...acknowledgement, generation: 3 },
-      {
-        ...acknowledgement,
-        receipt: {
-          ...credentialReceipt,
-          attempt: { version: "attempt-ref-v1", attemptId: "attempt-1" },
-        },
-      },
-    ]) {
-      expect(Ipc.Methods["worker.credential_provision_ack"].params.safeParse(invalid).success).toBe(
-        false,
-      );
-    }
+    ).toBe(true);
   });
 });

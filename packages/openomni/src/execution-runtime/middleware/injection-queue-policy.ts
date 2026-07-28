@@ -1,11 +1,7 @@
-import type { Policy } from "@openomni/protocol";
+import type { Message, Policy } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
+import { Session } from "@openomni/session";
 import type { CanonicalPolicyRegistration, PolicyContext } from "@openomni/agent";
-import {
-  type MessagingLedgerService,
-  requireCommittedMessagingTransition,
-  requireMessagingLedgerService,
-} from "../../ingress/session-resolver.js";
 import type { InjectionQueue } from "../injection-queue.js";
 
 const POLICY_ID = "builtin:injection-queue-drain";
@@ -17,7 +13,6 @@ type InjectionQueuePolicyContext = PolicyContext & {
 
 export function createInjectionQueueDrainPolicy(
   queue: InjectionQueue.Instance,
-  messaging?: MessagingLedgerService,
 ): CanonicalPolicyRegistration {
   return {
     name: POLICY_ID,
@@ -25,7 +20,7 @@ export function createInjectionQueueDrainPolicy(
     pointIds: ["run.turn.post"],
     effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
     priority: 150,
-    fn: async (ctx) => {
+    fn: (ctx) => {
       const runId = contextString(ctx, "runId");
       if (runId === undefined || !queue.hasPending(runId)) {
         return PolicyDecision.allow({ policyId: POLICY_ID });
@@ -37,12 +32,11 @@ export function createInjectionQueueDrainPolicy(
 
       for (const response of pending) {
         if (response.injectToHistory === true && sessionId !== undefined) {
-          await persistResponse(
-            messaging ?? requireMessagingLedgerService(),
-            sessionId,
-            agentName ?? "injection-queue",
-            response,
-          );
+          try {
+            persistResponse(sessionId, agentName ?? "injection-queue", response);
+          } catch {
+            // storage failure must not abort the drain — effects still need to be emitted
+          }
         }
       }
 
@@ -69,23 +63,30 @@ function contextString(
   return typeof value === "string" ? value : undefined;
 }
 
-async function persistResponse(
-  messaging: MessagingLedgerService,
+function persistResponse(
   sessionId: string,
   agentName: string,
   response: InjectionQueue.PendingResponse,
-): Promise<void> {
-  requireCommittedMessagingTransition(
-    await messaging.execute({
-      kind: "MS-06",
-      sessionId,
-      messageId: response.messageId,
-      partId: crypto.randomUUID(),
-      role: "assistant",
-      text: response.output,
-      model: { provider: "injection-queue", id: "injection-queue" },
-      agent: agentName,
-      recordedAt: response.timestamp,
-    }),
-  );
+): void {
+  const message: Message.AssistantMessage = {
+    id: response.messageId,
+    sessionID: sessionId,
+    role: "assistant",
+    time: { created: response.timestamp, completed: response.timestamp },
+    parentID: "",
+    modelID: "",
+    providerID: "",
+    agent: agentName,
+    path: { cwd: process.cwd(), root: process.cwd() },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  };
+  Session.addMessage(sessionId, message);
+  Session.addPart(response.messageId, {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    messageID: response.messageId,
+    type: "text",
+    text: response.output,
+  });
 }

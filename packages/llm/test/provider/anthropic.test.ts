@@ -1,14 +1,16 @@
-import { describe, expect, test } from "bun:test";
-import type { MaterializedCredential } from "../../src/auth";
+import { describe, test, expect, afterEach } from "bun:test";
+import { getSDK, getLanguage } from "../../src/provider/sdk";
 import type { Provider } from "../../src/provider";
-import { getLanguage, getSDK } from "../../src/provider/sdk";
+import type { Auth } from "../../src/auth";
+
+const originalFetch = globalThis.fetch;
 
 function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
   return {
     id: "claude-sonnet-4-20250514",
     providerID: "anthropic",
     name: "Claude Sonnet 4",
-    api: { id: "claude-sonnet-4-20250514", npm: "@ai-sdk/anthropic" },
+    api: { npm: "@ai-sdk/anthropic" },
     capabilities: { reasoning: true },
     cost: { input: 3, output: 15 },
     limit: { context: 200000, output: 16384 },
@@ -16,53 +18,60 @@ function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
   };
 }
 
-const apiCredential: MaterializedCredential = Object.freeze({
-  providerId: "anthropic",
-  authType: "api",
-  key: new TextEncoder().encode("sk-test"),
+describe("getSDK (Anthropic)", () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("api key auth returns SDK with languageModel", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
+    const sdk = getSDK(makeModel(), auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("claude-sonnet-4-20250514");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("claude-sonnet-4-20250514");
+  });
+
+  test("proxy auth returns SDK with languageModel", () => {
+    const auth: Auth.Info = {
+      type: "proxy",
+      baseURL: "http://localhost:8317",
+    };
+    const sdk = getSDK(makeModel(), auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("claude-sonnet-4-20250514");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("claude-sonnet-4-20250514");
+  });
 });
 
-const proxyCredential: MaterializedCredential = Object.freeze({
-  providerId: "anthropic",
-  authType: "proxy",
-  baseURL: "http://localhost:8317",
-});
-
-describe("Anthropic provider materialization", () => {
-  test("creates a callback-scoped SDK from a matching API credential", () => {
-    const sdk = getSDK(makeModel(), apiCredential);
-    const language = sdk.languageModel("claude-sonnet-4-20250514");
-
-    expect(language.modelId).toBe("claude-sonnet-4-20250514");
+describe("getLanguage (Anthropic)", () => {
+  test("returns a language model for anthropic model with api auth", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
+    const model = getLanguage(makeModel(), auth);
+    expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-sonnet-4-20250514");
   });
 
-  test("creates a language model from a matching proxy credential", () => {
-    const language = getLanguage(makeModel(), proxyCredential);
-
-    expect(language.modelId).toBe("claude-sonnet-4-20250514");
+  test("returns a language model for proxy auth", () => {
+    const auth: Auth.Info = {
+      type: "proxy",
+      baseURL: "http://localhost:8317",
+    };
+    const model = getLanguage(makeModel(), auth);
+    expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-sonnet-4-20250514");
   });
 
-  test("selects the explicit api.id instead of the catalog display id", () => {
-    const language = getLanguage(
-      makeModel({
-        id: "friendly-catalog-name",
-        api: { id: "claude-3-haiku", npm: "@ai-sdk/anthropic" },
-      }),
-      apiCredential,
+  test("uses api.id when provided", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
+    const model = getLanguage(
+      makeModel({ api: { npm: "@ai-sdk/anthropic", id: "claude-3-haiku" } }),
+      auth,
     );
-
-    expect(language.modelId).toBe("claude-3-haiku");
-  });
-
-  test("rejects a credential materialized for another provider", () => {
-    const credential: MaterializedCredential = Object.freeze({
-      providerId: "openai",
-      authType: "api",
-      key: new TextEncoder().encode("sk-test"),
-    });
-
-    expect(() => getLanguage(makeModel(), credential)).toThrow(
-      "Provider credential scope does not match the selected model",
-    );
+    expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-3-haiku");
   });
 });

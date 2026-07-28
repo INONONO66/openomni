@@ -22,7 +22,6 @@
   },
   "devDependencies": {
     "@openomni/coordinator": "workspace:*",
-    "@openomni/llm": "workspace:*",
     "@types/bun": "latest"
   }
 }

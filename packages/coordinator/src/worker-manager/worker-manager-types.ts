@@ -1,4 +1,4 @@
-import type { BusEvent, TraceContext } from "@openomni/protocol";
+import type { BusEvent, TraceContext, WorkerBootstrap } from "@openomni/protocol";
 import type {
   InboundWaitParams,
   InboundWaitResult,
@@ -6,18 +6,8 @@ import type {
   ToolCallContext as SupervisorToolCallContext,
   ToolCallParams,
   ToolCallResult,
-  WorkerCredentialProvisioningPort,
-  WorkerKernelQueryPort,
-  WorkerKernelTransitionPort,
-  WorkerObservationPort,
-  WorkerRuntimeDefinitionPort,
   WorkerSupervisor,
 } from "../worker-supervision/supervisor";
-
-type WorkerBootstrapConfig = Readonly<Record<string, unknown>> & {
-  readonly configEpoch: string;
-  readonly credentials?: never;
-};
 
 export const DEFAULT_MAX_ACTIVE_WORKERS = 10;
 export const HARD_MAX_ACTIVE_WORKERS = 10;
@@ -34,14 +24,12 @@ export type ToolCallContext = SupervisorToolCallContext & {
 
 export type WorkerManagerConfig = {
   workerScript: string;
-  runtimeId: string;
-  principalId: string;
   socketDir?: string;
   maxActiveWorkers?: number;
   idleShutdownMs?: number;
   slotWaitTimeoutMs?: number;
   maxQueuedDeliveries?: number;
-  bootstrap: WorkerBootstrapConfig;
+  bootstrap?: WorkerBootstrap.Bootstrap;
 };
 
 /**
@@ -53,13 +41,8 @@ export type WorkerManagerConfig = {
  */
 export type WorkerPorts = {
   events: BusEvent.Sink;
-  runtimeDefinition: WorkerRuntimeDefinitionPort;
   toolRelay?: (params: ToolCallParams, context?: ToolCallContext) => Promise<ToolCallResult>;
   inboundWait?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
-  kernelTransition?: WorkerKernelTransitionPort;
-  kernelQuery?: WorkerKernelQueryPort;
-  observation?: WorkerObservationPort;
-  provisionCredentials?: WorkerCredentialProvisioningPort;
 };
 
 export type WorkerManagerStats = {

@@ -13,16 +13,6 @@ export namespace Bus {
 
   type Observer = (event: PublishedDescriptor, data: unknown) => void;
 
-  export type ErrorPhase = "observer" | "subscriber";
-
-  export interface ErrorFact {
-    readonly eventName: string;
-    readonly phase: ErrorPhase;
-    readonly error: string;
-  }
-
-  export type ErrorSink = (fact: ErrorFact) => void;
-
   interface Subscription {
     handler: Handler;
     match?: Record<string, unknown>;
@@ -30,9 +20,6 @@ export namespace Bus {
 
   const subscribers = new Map<string, Set<Subscription>>();
   const observers = new Set<Observer>();
-  let errorSink: ErrorSink | undefined;
-  let observerFailureCount = 0;
-  let subscriberFailureCount = 0;
 
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
     const subs = subscribers.get(event.name);
@@ -44,7 +31,7 @@ export namespace Bus {
           try {
             observer(event, data);
           } catch (err) {
-            reportFailure(event.name, "observer", err);
+            console.warn("Bus observer error", { event: event.name, error: String(err) });
           }
         });
       }
@@ -60,7 +47,7 @@ export namespace Bus {
           if (sub.match && !matches(data, sub.match)) return;
           sub.handler(data);
         } catch (err) {
-          reportFailure(event.name, "subscriber", err);
+          console.warn("Bus handler error", { event: event.name, error: String(err) });
         }
       });
     }
@@ -98,17 +85,9 @@ export namespace Bus {
     };
   }
 
-  /** Installs the process-local diagnostic sink used for subsequent dispatch failures. */
-  export function setErrorSink(sink: ErrorSink | undefined): void {
-    errorSink = sink;
-  }
-
   export function reset(): void {
     subscribers.clear();
     observers.clear();
-    errorSink = undefined;
-    observerFailureCount = 0;
-    subscriberFailureCount = 0;
   }
 
   /** Diagnostic counters for tests and runtime observability; not control-flow state. */
@@ -127,45 +106,6 @@ export namespace Bus {
       subscriberCount,
       observerCount: observers.size,
     };
-  }
-
-  /** Monotonic dispatch-failure counters; reset() starts a new diagnostic epoch. */
-  export function failureStats(): {
-    readonly observerFailureCount: number;
-    readonly subscriberFailureCount: number;
-  } {
-    return { observerFailureCount, subscriberFailureCount };
-  }
-
-  function reportFailure(eventName: string, phase: ErrorPhase, error: unknown): void {
-    if (phase === "observer") {
-      observerFailureCount += 1;
-    } else {
-      subscriberFailureCount += 1;
-    }
-
-    const fact: ErrorFact = { eventName, phase, error: stringifyError(error) };
-    if (!errorSink) {
-      console.warn("Bus dispatch error", fact);
-      return;
-    }
-
-    try {
-      errorSink(fact);
-    } catch (sinkError) {
-      console.error("Bus error sink failure", {
-        ...fact,
-        sinkError: stringifyError(sinkError),
-      });
-    }
-  }
-
-  function stringifyError(error: unknown): string {
-    try {
-      return String(error);
-    } catch {
-      return "Unstringifiable error";
-    }
   }
 
   function matches(data: unknown, match: Record<string, unknown>): boolean {

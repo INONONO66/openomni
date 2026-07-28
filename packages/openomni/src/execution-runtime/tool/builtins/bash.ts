@@ -1,10 +1,10 @@
-import { createWorkspaceIdentity, type WorkspaceIdentity } from "../../workspace-identity.js";
-import { resolveContainedDirectory } from "../../filesystem/workspace-path.js";
+import { resolve } from "node:path";
 import { defineTool } from "../define.js";
 import { optionalPositiveNumber, optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
 import type { NativeTool, ToolExecutionContext } from "../types.js";
 import { BASH_PROMPT } from "./bash-prompt.js";
+import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./bash-classify.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -18,8 +18,22 @@ interface BashInput {
   timeoutMs?: number;
 }
 
-function resolveWorkingDirectory(workspace: WorkspaceIdentity, requestedWorkdir?: string): string {
-  return resolveContainedDirectory(workspace, requestedWorkdir ?? ".");
+function resolveWorkingDirectory(
+  workspaceRoot: string | undefined,
+  requestedWorkdir?: string,
+): string {
+  const root = workspaceRoot ? resolve(workspaceRoot) : undefined;
+  const cwd = requestedWorkdir
+    ? resolve(root ?? process.cwd(), requestedWorkdir)
+    : (root ?? process.cwd());
+
+  if (!root) return cwd;
+
+  if (cwd !== root && !cwd.startsWith(`${root}/`)) {
+    throw new Error(`Working directory must stay within workspace root: ${root}`);
+  }
+
+  return cwd;
 }
 
 function resolveTimeout(input: Record<string, unknown>): number {
@@ -47,19 +61,17 @@ function terminateProcessGroup(proc: { readonly pid: number; kill(): void }): vo
   proc.kill();
 }
 
-function buildBashEnv(homeRoot: string): Record<string, string> {
+function buildBashEnv(workspaceRoot: string | undefined): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of bashEnvKeys) {
     const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }
-  env.HOME = homeRoot;
+  env.HOME = workspaceRoot ? resolve(workspaceRoot) : process.cwd();
   return env;
 }
 
-export function bashTool(workspace: WorkspaceIdentity | string): NativeTool {
-  const identity = typeof workspace === "string" ? createWorkspaceIdentity(workspace) : workspace;
-  const homeRoot = typeof workspace === "string" ? workspace : workspace.canonicalRoot;
+export function bashTool(workspaceRoot?: string): NativeTool {
   return defineTool<BashInput>({
     name: "bash",
     description: "Execute a bash command inside the workspace and return combined output",
@@ -80,8 +92,8 @@ export function bashTool(workspace: WorkspaceIdentity | string): NativeTool {
     },
     prompt: BASH_PROMPT,
     riskTier: 2,
-    isReadOnly: false,
-    isDestructive: true,
+    isReadOnly: (input) => isReadOnlyCommand(readCommandFromMeta(input)),
+    isDestructive: (input) => isDestructiveCommand(readCommandFromMeta(input)),
     isConcurrencySafe: false,
     source: "system",
     async execute(call, context?: ToolExecutionContext) {
@@ -90,7 +102,7 @@ export function bashTool(workspace: WorkspaceIdentity | string): NativeTool {
 
       try {
         const command = requireString(call.input, "command");
-        const cwd = resolveWorkingDirectory(identity, optionalString(call.input, "workdir"));
+        const cwd = resolveWorkingDirectory(workspaceRoot, optionalString(call.input, "workdir"));
         const timeoutMs = resolveTimeout(call.input);
 
         if (context?.signal?.aborted) {
@@ -100,15 +112,14 @@ export function bashTool(workspace: WorkspaceIdentity | string): NativeTool {
         const proc = Bun.spawn(["bash", "-lc", command], {
           cwd,
           detached: true,
-          env: buildBashEnv(homeRoot),
+          env: buildBashEnv(workspaceRoot),
           stdout: "pipe",
           stderr: "pipe",
         });
 
         const abortCommand = () => {
           aborted = true;
-          // Give the freshly spawned shell one event-loop turn to install cleanup traps.
-          setTimeout(() => terminateProcessGroup(proc), 20).unref();
+          terminateProcessGroup(proc);
         };
         context?.signal?.addEventListener("abort", abortCommand, { once: true });
 

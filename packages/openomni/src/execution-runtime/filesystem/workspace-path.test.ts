@@ -1,15 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveContainedPath, resolveContainedPathForCreate } from "./workspace-path.js";
 
 let workspaceRoot: string;
-let canonicalWorkspaceRoot: string;
 
 beforeAll(() => {
   workspaceRoot = mkdtempSync(join(tmpdir(), "workspace-path-test-"));
-  canonicalWorkspaceRoot = realpathSync(workspaceRoot);
 });
 
 afterAll(() => {
@@ -19,36 +17,36 @@ afterAll(() => {
 describe("resolveContainedPath", () => {
   it("resolves a non-existent file whose parent dir exists inside root", () => {
     const result = resolveContainedPath(workspaceRoot, "file.txt");
-    expect(result).toBe(join(canonicalWorkspaceRoot, "file.txt"));
+    expect(result).toBe(join(workspaceRoot, "file.txt"));
   });
 
   it("accepts the root path itself", () => {
     const result = resolveContainedPath(workspaceRoot, ".");
-    expect(result).toBe(canonicalWorkspaceRoot);
+    expect(result).toBe(workspaceRoot);
   });
 
   it("rejects path traversal via ..", () => {
     expect(() => resolveContainedPath(workspaceRoot, "../../etc/passwd")).toThrow(
-      "workspace target escapes root: ../../etc/passwd",
+      "Path must stay within workspace root",
     );
   });
 
   it("rejects a single level traversal", () => {
     expect(() => resolveContainedPath(workspaceRoot, "../sibling")).toThrow(
-      "workspace target escapes root: ../sibling",
+      "Path must stay within workspace root",
     );
   });
 
   it("rejects an absolute path outside root", () => {
     expect(() => resolveContainedPath(workspaceRoot, "/etc/passwd")).toThrow(
-      "workspace target escapes root: /etc/passwd",
+      "Path must stay within workspace root",
     );
   });
 
   it("rejects an absolute path that is the root's sibling", () => {
     const sibling = join(workspaceRoot, "..", "other-dir");
     expect(() => resolveContainedPath(workspaceRoot, sibling)).toThrow(
-      `workspace target escapes root: ${sibling}`,
+      "Path must stay within workspace root",
     );
   });
 
@@ -58,7 +56,7 @@ describe("resolveContainedPath", () => {
     symlinkSync(escapeTarget, symlinkPath);
     try {
       expect(() => resolveContainedPath(workspaceRoot, "escape-link/secret.txt")).toThrow(
-        "workspace target escapes through a symlink: escape-link/secret.txt",
+        "Path escapes workspace root via symlink",
       );
     } finally {
       rmSync(symlinkPath);
@@ -71,7 +69,7 @@ describe("resolveContainedPath", () => {
     symlinkSync(workspaceRoot, symlinkPath);
     try {
       const result = resolveContainedPath(workspaceRoot, "internal-link");
-      expect(result).toBe(canonicalWorkspaceRoot);
+      expect(result).toBe(symlinkPath);
     } finally {
       rmSync(symlinkPath);
     }
@@ -81,23 +79,23 @@ describe("resolveContainedPath", () => {
 describe("resolveContainedPathForCreate", () => {
   it("resolves a new file path when parent exists", () => {
     const result = resolveContainedPathForCreate(workspaceRoot, "newfile.txt");
-    expect(result).toBe(join(canonicalWorkspaceRoot, "newfile.txt"));
+    expect(result).toBe(join(workspaceRoot, "newfile.txt"));
   });
 
   it("resolves a deeply nested new path (no intermediate dirs exist)", () => {
     const result = resolveContainedPathForCreate(workspaceRoot, "a/b/c/deep.txt");
-    expect(result).toBe(join(canonicalWorkspaceRoot, "a/b/c/deep.txt"));
+    expect(result).toBe(join(workspaceRoot, "a/b/c/deep.txt"));
   });
 
   it("rejects path traversal via ..", () => {
     expect(() => resolveContainedPathForCreate(workspaceRoot, "../../etc/new")).toThrow(
-      "workspace target escapes root: ../../etc/new",
+      "Path must stay within workspace root",
     );
   });
 
   it("rejects an absolute path outside root", () => {
     expect(() => resolveContainedPathForCreate(workspaceRoot, "/tmp/malicious")).toThrow(
-      "workspace target escapes root: /tmp/malicious",
+      "Path must stay within workspace root",
     );
   });
 
@@ -108,7 +106,7 @@ describe("resolveContainedPathForCreate", () => {
     try {
       expect(() =>
         resolveContainedPathForCreate(workspaceRoot, "create-escape-link/new.txt"),
-      ).toThrow("workspace target escapes through a symlink: create-escape-link/new.txt");
+      ).toThrow("Path escapes workspace root via symlink");
     } finally {
       rmSync(symlinkPath);
       rmSync(escapeTarget, { recursive: true });

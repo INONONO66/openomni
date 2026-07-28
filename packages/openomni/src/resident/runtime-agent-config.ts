@@ -11,11 +11,7 @@ export function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) 
   return ChatAgent.create(config).run(input);
 }
 
-export function buildResidentAgentConfig(
-  ctx: ResidentRunContext,
-  runId: string,
-  dependencies: Pick<ChatAgentConfig, "environment" | "modelCatalog">,
-): ChatAgentConfig {
+export function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatAgentConfig {
   const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot ?? ctx.event.workspace;
   const toolExecutor = ctx.event.agent.toolExecutorFactory
     ? ctx.event.agent.toolExecutorFactory({
@@ -29,8 +25,6 @@ export function buildResidentAgentConfig(
 
   return {
     model: ctx.event.agent.model,
-    environment: dependencies.environment,
-    modelCatalog: dependencies.modelCatalog,
     systemPrompt: ctx.event.agent.systemPrompt,
     budget: ctx.event.agent.budget,
     tools: ctx.event.agent.tools,
