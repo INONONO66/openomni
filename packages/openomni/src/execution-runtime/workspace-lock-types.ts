@@ -19,13 +19,6 @@ export type LockOwnerMeta = {
   readonly acquiredAt: number;
 };
 
-export type UnsafeWorkspace = {
-  readonly reason: string;
-  readonly markedAt: number;
-  readonly token?: string;
-};
-
 export const LOCK_ROOT = join(tmpdir(), "openomni-workspace-locks");
 export const OWNER_FILE = "owner.json";
 export const STALE_GRACE_MS = 1_000;
-export const SETTLED_TOKEN_TTL_MS = 5 * 60_000;

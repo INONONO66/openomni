@@ -7,6 +7,7 @@ import {
 } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { WorkspaceLock } from "../../workspace-lock.js";
+import type { WorkspaceIdentity } from "../../workspace-identity.js";
 import type { ToolExecutorConfig, ToolRiskTier } from "../types.js";
 
 const policyId = "tool.runtime-policy";
@@ -76,7 +77,7 @@ interface PreToolContext {
   readonly riskTier: ToolRiskTier;
   readonly descriptor?: RuntimeResource.Descriptor;
   readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
-  readonly workspaceRoot?: string;
+  readonly workspaceIdentity?: WorkspaceIdentity;
   readonly lockOwnerId: string;
   readonly signal?: AbortSignal;
   readonly traceContext?: TraceContext.Type;
@@ -107,7 +108,7 @@ export namespace ToolRuntimePolicyMiddleware {
   export interface RuntimePolicyHandle {
     readonly timeoutMs: number;
     readonly lockOwnerId: string;
-    readonly workspaceRoot?: string;
+    readonly workspaceIdentity?: WorkspaceIdentity;
     lockAcquired: boolean;
   }
 
@@ -122,7 +123,7 @@ export namespace ToolRuntimePolicyMiddleware {
     const handle: RuntimePolicyHandle = {
       timeoutMs,
       lockOwnerId: ctx.lockOwnerId,
-      ...(ctx.workspaceRoot !== undefined && { workspaceRoot: ctx.workspaceRoot }),
+      ...(ctx.workspaceIdentity !== undefined && { workspaceIdentity: ctx.workspaceIdentity }),
       lockAcquired: false,
     };
 
@@ -143,13 +144,13 @@ export namespace ToolRuntimePolicyMiddleware {
       ctx.onDecision,
     );
 
-    if (riskTier < 1 || !ctx.workspaceRoot) {
+    if (!ctx.workspaceIdentity) {
       recordDecision(allowDecision("workspace lock not required"), ctx.onDecision);
       return { decision: allowDecision("runtime policy evaluated"), handle };
     }
 
     try {
-      await WorkspaceLock.acquire(ctx.workspaceRoot, ctx.lockOwnerId, 30_000, ctx.signal);
+      await WorkspaceLock.acquire(ctx.workspaceIdentity, ctx.lockOwnerId, 30_000, ctx.signal);
       handle.lockAcquired = true;
       recordDecision(
         allowDecision("workspace lock acquired", [
@@ -167,12 +168,12 @@ export namespace ToolRuntimePolicyMiddleware {
   }
 
   export function evaluatePostTool(ctx: PostToolContext): Policy.PolicyDecision {
-    if (!ctx.handle.lockAcquired || !ctx.handle.workspaceRoot) {
+    if (!ctx.handle.lockAcquired || !ctx.handle.workspaceIdentity) {
       recordDecision(allowDecision("workspace lock release not required"), ctx.onDecision);
       return allowDecision("runtime policy post-tool evaluated");
     }
 
-    WorkspaceLock.release(ctx.handle.workspaceRoot, ctx.handle.lockOwnerId);
+    WorkspaceLock.release(ctx.handle.workspaceIdentity, ctx.handle.lockOwnerId);
     ctx.handle.lockAcquired = false;
     recordDecision(allowDecision("workspace lock released"), ctx.onDecision);
     return allowDecision("runtime policy post-tool evaluated");

@@ -1,9 +1,13 @@
 import { type Actor, Dispatch } from "@openomni/protocol";
-import { WorkerRunStateStore } from "@openomni/session";
 
 export interface DispatchRuntimeContext {
   readonly sessionId?: string;
   readonly runId?: string;
+  readonly attempt?: {
+    readonly workItemId: string;
+    readonly attemptId: string;
+    readonly attemptSeq: number;
+  };
   readonly agentName?: string;
   readonly workspaceRoot?: string;
   readonly traceId?: string;
@@ -21,27 +25,14 @@ function actorKindFromAgent(agentName: string | undefined): Dispatch.ActorKind {
   return "worker";
 }
 
-function lookupWorkerRun(sessionId: string | undefined, runId: string | undefined) {
-  if (!sessionId || !runId) return undefined;
-  try {
-    return WorkerRunStateStore.get(sessionId, runId);
-  } catch {
-    return undefined;
-  }
-}
-
-function deriveTrustTier(
-  context: DispatchRuntimeContext,
-  hasWorkerRun: boolean,
-): Actor.TrustTier | undefined {
+function deriveTrustTier(context: DispatchRuntimeContext): Actor.TrustTier | undefined {
   if (context.trustTier) return context.trustTier;
-  return hasWorkerRun ? "assigned_worker" : undefined;
+  return context.attempt ? "assigned_worker" : undefined;
 }
 
 export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispatch.ActorContext {
-  const workerRun = lookupWorkerRun(context.sessionId, context.runId);
-  const kind = context.actorKind ?? (workerRun ? "worker" : actorKindFromAgent(context.agentName));
-  const trustTier = deriveTrustTier(context, Boolean(workerRun));
+  const kind = context.actorKind ?? actorKindFromAgent(context.agentName);
+  const trustTier = deriveTrustTier(context);
   const actorId =
     context.actorId ??
     (context.sessionId && context.runId
@@ -56,7 +47,7 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispat
     ...(context.agentName ? { agentName: context.agentName } : {}),
     ...(context.sessionId ? { sessionId: context.sessionId } : {}),
     ...(context.runId ? { runId: context.runId } : {}),
-    ...(context.runId && kind === "worker" ? { workerRunId: context.runId } : {}),
+    ...(context.attempt && kind === "worker" ? { workerRunId: context.attempt.attemptId } : {}),
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
     ...(trustTier ? { trustTier } : {}),
     labels: [...(context.labels ?? []), `actor.${kind}`],

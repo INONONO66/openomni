@@ -1,169 +1,193 @@
-import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-
+import { createHmac } from "node:crypto";
+import { describe, expect, test } from "bun:test";
 import { WorkerBootstrapHandler } from "../../src/execution/worker-bootstrap-handler";
 
-const NotificationRecord = z.object({
-  method: z.string(),
-  params: z.record(z.string(), z.unknown()).optional(),
-});
-type NotificationRecord = z.infer<typeof NotificationRecord>;
 type BootstrapServer = Parameters<typeof WorkerBootstrapHandler.handleBootstrap>[0]["server"];
 
-function createServer() {
-  const usedConnections: string[] = [];
-  const notifications: NotificationRecord[] = [];
+const ipcAuthToken = "supervisor-secret";
+const bootstrapIdentity = {
+  runtimeId: "runtime-1",
+  workerId: "worker-1",
+  generation: 3,
+};
 
+function proof(challenge: string, phase: "request" | "ready"): string {
+  return createHmac("sha256", ipcAuthToken)
+    .update("openomni.worker-bootstrap-proof.v1\0")
+    .update(phase)
+    .update("\0")
+    .update(challenge)
+    .update("\0")
+    .update(bootstrapIdentity.runtimeId)
+    .update("\0")
+    .update(bootstrapIdentity.workerId)
+    .update("\0")
+    .update(String(bootstrapIdentity.generation))
+    .digest("base64url");
+}
+
+function validParams(challenge = "challenge-1") {
   return {
-    usedConnections,
-    notifications,
-    server: {
-      useConnection(id: string) {
-        usedConnections.push(id);
-      },
-      notify(method: string, params?: Record<string, unknown>) {
-        notifications.push({ method, params });
-      },
-    } satisfies BootstrapServer,
+    authToken: `${challenge}.${proof(challenge, "request")}`,
+    ...bootstrapIdentity,
+    configEpoch: "epoch-1",
   };
 }
 
-describe("worker bootstrap handler", () => {
-  it("rejects unauthorized bootstrap requests without mutating state", () => {
+function fixture() {
+  const usedConnections: string[] = [];
+  const closedConnections: string[] = [];
+  const notifications: Array<{ method: string; params?: Record<string, unknown> }> = [];
+  const responses: unknown[] = [];
+  const server: BootstrapServer = {
+    useConnection: (id) => usedConnections.push(id),
+    notify: (method, params) => notifications.push({ method, params }),
+    closeConnection: (id) => closedConnections.push(id),
+  };
+  return { server, usedConnections, closedConnections, notifications, responses };
+}
+
+async function flushClose(): Promise<void> {
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+}
+
+describe("WorkerBootstrapHandler", () => {
+  test("binds the authenticated connection and emits exactly one challenge-bound ready notification", async () => {
     const state = WorkerBootstrapHandler.createState();
-    const { server, usedConnections, notifications } = createServer();
-    const responses: unknown[] = [];
+    const f = fixture();
 
     WorkerBootstrapHandler.handleBootstrap({
-      params: { authToken: "wrong", bootstrap: {} },
-      ipcAuthToken: "token",
+      params: validParams(),
+      ipcAuthToken,
       workerId: "worker-1",
-      server,
-      connectionId: "conn-1",
-      respond: (result) => responses.push(result),
+      server: f.server,
+      connectionId: "connection-authorized",
+      respond: (response) => f.responses.push(response),
       state,
     });
-
-    expect(responses).toEqual([{ ok: false, error: "unauthorized" }]);
-    expect(state.getBootstrap()).toBeNull();
-    expect(state.resolveAuth("openai")).toBeUndefined();
-    expect(usedConnections).toEqual([]);
-    expect(notifications).toEqual([]);
-  });
-
-  it("stores valid bootstrap data, marks readiness, and exposes scoped auth", async () => {
-    let mirroredEpoch: string | undefined;
-    const state = WorkerBootstrapHandler.createState({
-      onBootstrap: (bootstrap) => {
-        mirroredEpoch = bootstrap.configEpoch;
-      },
-    });
-    const { server, usedConnections, notifications } = createServer();
-    const responses: unknown[] = [];
-
-    WorkerBootstrapHandler.handleBootstrap({
-      params: {
-        authToken: "token",
-        bootstrap: {
-          configEpoch: "epoch-1",
-          agents: [
-            {
-              name: "planner",
-              description: "Plans work",
-              systemPrompt: "Plan carefully",
-              tools: { allow: ["read"] },
-              policyPlan: {
-                policies: [{ id: "builtin:tool-permission", required: true }],
-                labels: ["planner"],
-              },
-            },
-          ],
-          toolCatalog: [],
-          credentials: {
-            OPENAI_API_KEY: "openai-key",
-            ANTHROPIC_BASE_URL: "https://anthropic.example",
-            ANTHROPIC_API_KEY: "anthropic-key",
-          },
-        },
-      },
-      ipcAuthToken: "token",
-      workerId: "worker-1",
-      server,
-      connectionId: "conn-1",
-      respond: (result) => responses.push(result),
-      state,
-    });
-
     await state.ready;
 
-    expect(responses).toEqual([{ ok: true }]);
-    expect(state.getBootstrap()?.configEpoch).toBe("epoch-1");
-    expect(mirroredEpoch).toBe("epoch-1");
-    expect(state.resolveAuth("openai")).toEqual({ type: "api", key: "openai-key" });
-    expect(state.resolveAuth("anthropic")).toEqual({
-      type: "proxy",
-      baseURL: "https://anthropic.example",
-      apiKey: "anthropic-key",
-    });
-    expect(usedConnections).toEqual(["conn-1"]);
-    expect(notifications).toEqual([
+    expect(f.usedConnections).toEqual(["connection-authorized"]);
+    expect(f.closedConnections).toEqual([]);
+    expect(f.responses).toEqual([{ ok: true }]);
+    expect(state.getBootstrap()).toEqual(validParams());
+    expect(f.notifications).toEqual([
       {
         method: "worker.bootstrap_ready",
-        params: { workerId: "worker-1", authToken: "token" },
+        params: {
+          authToken: proof("challenge-1", "ready"),
+          ...bootstrapIdentity,
+        },
       },
     ]);
   });
 
-  it("reports parse failures and rejects readiness", async () => {
+  test("refuses malformed bootstrap, rejects readiness, and closes its connection", async () => {
     const state = WorkerBootstrapHandler.createState();
-    const { server } = createServer();
-    const responses: unknown[] = [];
+    const f = fixture();
 
     WorkerBootstrapHandler.handleBootstrap({
-      params: {
-        authToken: "token",
-        bootstrap: { configEpoch: "epoch-1", agents: "not-an-array", toolCatalog: [] },
-      },
-      ipcAuthToken: "token",
+      params: { ...validParams(), generation: "invalid" },
+      ipcAuthToken,
       workerId: "worker-1",
-      server,
-      connectionId: "conn-1",
-      respond: (result) => responses.push(result),
+      server: f.server,
+      connectionId: "connection-malformed",
+      respond: (response) => f.responses.push(response),
       state,
     });
+    await state.ready.then(
+      () => {
+        throw new Error("malformed bootstrap unexpectedly became ready");
+      },
+      (error) => expect(error).toBeInstanceOf(Error),
+    );
+    await flushClose();
 
-    await expect(state.ready).rejects.toThrow();
-    expect(responses).toHaveLength(1);
-    expect(responses[0]).toMatchObject({ ok: false });
+    expect(f.responses).toHaveLength(1);
+    expect(f.responses[0]).toMatchObject({ ok: false });
+    expect(f.usedConnections).toEqual([]);
+    expect(f.notifications).toEqual([]);
+    expect(f.closedConnections).toEqual(["connection-malformed"]);
     expect(state.getBootstrap()).toBeNull();
   });
 
-  it("does not mark readiness when connection activation fails", async () => {
+  test("refuses a wrong worker proof without binding or notifying and closes the connection", async () => {
     const state = WorkerBootstrapHandler.createState();
-    const responses: unknown[] = [];
+    const f = fixture();
 
     WorkerBootstrapHandler.handleBootstrap({
-      params: {
-        authToken: "token",
-        bootstrap: { configEpoch: "epoch-1", agents: [], toolCatalog: [] },
-      },
-      ipcAuthToken: "token",
-      workerId: "worker-1",
-      server: {
-        useConnection() {
-          throw new Error("connection closed");
-        },
-        notify() {
-          expect.unreachable("bootstrap_ready should not be sent after activation fails");
-        },
-      },
-      connectionId: "conn-1",
-      respond: (result) => responses.push(result),
+      params: validParams(),
+      ipcAuthToken,
+      workerId: "different-worker",
+      server: f.server,
+      connectionId: "connection-wrong-worker",
+      respond: (response) => f.responses.push(response),
       state,
     });
+    await flushClose();
 
-    await expect(state.ready).rejects.toThrow("connection closed");
-    expect(responses).toHaveLength(1);
-    expect(responses[0]).toMatchObject({ ok: false, error: "connection closed" });
+    expect(f.responses).toEqual([{ ok: false, error: "unauthorized coordinator bootstrap" }]);
+    expect(f.usedConnections).toEqual([]);
+    expect(f.notifications).toEqual([]);
+    expect(f.closedConnections).toEqual(["connection-wrong-worker"]);
+    expect(state.getBootstrap()).toBeNull();
+  });
+
+  test("refuses replay on a second connection and never emits a second ready notification", async () => {
+    const state = WorkerBootstrapHandler.createState();
+    const f = fixture();
+    const invoke = (connectionId: string) =>
+      WorkerBootstrapHandler.handleBootstrap({
+        params: validParams(),
+        ipcAuthToken,
+        workerId: "worker-1",
+        server: f.server,
+        connectionId,
+        respond: (response) => f.responses.push(response),
+        state,
+      });
+
+    invoke("connection-original");
+    await state.ready;
+    invoke("connection-replay");
+    await flushClose();
+
+    expect(f.responses).toEqual([
+      { ok: true },
+      { ok: false, error: "unauthorized coordinator bootstrap" },
+    ]);
+    expect(f.usedConnections).toEqual(["connection-original"]);
+    expect(f.notifications).toHaveLength(1);
+    expect(f.closedConnections).toEqual(["connection-replay"]);
+  });
+
+  test("closes and rejects readiness when connection binding fails", async () => {
+    const state = WorkerBootstrapHandler.createState();
+    const f = fixture();
+    f.server.useConnection = () => {
+      throw new Error("connection closed");
+    };
+
+    WorkerBootstrapHandler.handleBootstrap({
+      params: validParams(),
+      ipcAuthToken,
+      workerId: "worker-1",
+      server: f.server,
+      connectionId: "connection-closed",
+      respond: (response) => f.responses.push(response),
+      state,
+    });
+    await state.ready.then(
+      () => {
+        throw new Error("closed connection unexpectedly became ready");
+      },
+      (error) => expect(error).toMatchObject({ message: "connection closed" }),
+    );
+    await flushClose();
+
+    expect(f.responses).toEqual([{ ok: false, error: "connection closed" }]);
+    expect(f.notifications).toEqual([]);
+    expect(f.closedConnections).toEqual(["connection-closed"]);
+    expect(state.getBootstrap()).toBeNull();
   });
 });

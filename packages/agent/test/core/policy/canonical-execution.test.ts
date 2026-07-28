@@ -147,7 +147,7 @@ describe("canonical tool policy execution", () => {
       startedEvents.push(event);
     });
     const unsubscribeWarnings = Bus.subscribe(Operational.Warn, (event) => {
-      warningErrors.push(event.context?.error);
+      warningErrors.push(event.context?.observerFailed);
     });
     const engine = buildPolicyEngine(
       {
@@ -191,7 +191,7 @@ describe("canonical tool policy execution", () => {
       expect(startedEvents).toHaveLength(1);
       expect(typeof startedEvents[0]?.sessionId).toBe("string");
       expect(typeof startedEvents[0]?.runId).toBe("string");
-      expect(warningErrors).toEqual(["observer-failure", "observer-failure"]);
+      expect(warningErrors).toEqual([true, true]);
     } finally {
       unsubscribeStarted();
       unsubscribeWarnings();

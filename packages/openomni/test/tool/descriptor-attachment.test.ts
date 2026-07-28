@@ -92,10 +92,12 @@ describe("native tool runtime descriptors", () => {
     };
     const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "ok" }));
 
-    const provider = ToolProxyProvider.create([entry], callTool);
+    const provider = ToolProxyProvider.create([entry.spec], callTool);
     const [tool] = provider.listTools();
 
-    expect(tool?.descriptor).toBe(descriptor);
+    expect(tool?.descriptor).toBeUndefined();
+    expect(tool?.labels).toEqual(entry.spec.labels);
+    expect(tool?.riskTier).toBe(2);
   });
 
   it("resolves runtime policy risk from descriptor before legacy riskTier", async () => {

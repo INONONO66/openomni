@@ -5,6 +5,15 @@ import { createWorkerManager, type WorkerManager } from "../../src/worker-manage
 import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
+const TEST_IDENTITY = {
+  runtimeId: "runtime-manager",
+  principalId: "principal-manager",
+  bootstrap: { configEpoch: "test" },
+} as const;
+
+function fixturePrompt(fixture: Record<string, unknown> = {}): string {
+  return JSON.stringify({ fixture, prompt: "test" });
+}
 
 let manager: WorkerManager | undefined;
 
@@ -37,6 +46,7 @@ describe("on-demand WorkerManager", () => {
   test("does not spawn workers before first dispatch and caps active processes", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("cap"),
         maxActiveWorkers: 2,
@@ -51,8 +61,7 @@ describe("on-demand WorkerManager", () => {
       Array.from({ length: 5 }, (_, index) =>
         manager?.deliver(`run-${index}`, {
           sessionId: `session-${index}`,
-          delayMs: 40,
-          prompt: "test",
+          prompt: fixturePrompt({ delayMs: 40 }),
         }),
       ),
     );
@@ -65,6 +74,7 @@ describe("on-demand WorkerManager", () => {
   test("reuses IPC worker affinity before idle shutdown", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("reuse"),
         maxActiveWorkers: 2,
@@ -93,6 +103,7 @@ describe("on-demand WorkerManager", () => {
   test("creates a new worker under cap instead of stealing another session's idle slot", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("no-steal"),
         maxActiveWorkers: 2,
@@ -115,6 +126,7 @@ describe("on-demand WorkerManager", () => {
   test("shuts idle workers down, then recreates the session worker on demand", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("idle"),
         maxActiveWorkers: 1,
@@ -146,6 +158,7 @@ describe("on-demand WorkerManager", () => {
   test("cancels a run before or during worker delivery", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("cancel"),
         maxActiveWorkers: 1,
@@ -156,8 +169,7 @@ describe("on-demand WorkerManager", () => {
 
     const dispatch = manager.deliver("run-cancel", {
       sessionId: "cancel-session",
-      delayMs: 200,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 200 }),
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
     await waitFor(() => manager?.stats().ready === 1);
@@ -171,6 +183,7 @@ describe("on-demand WorkerManager", () => {
     process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("startup-cancel"),
         maxActiveWorkers: 1,
@@ -198,6 +211,7 @@ describe("on-demand WorkerManager", () => {
   test("rejects duplicate run ids across concurrent sessions before worker delivery", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("dup-diff"),
         maxActiveWorkers: 2,
@@ -208,26 +222,22 @@ describe("on-demand WorkerManager", () => {
 
     const first = manager.deliver("run-duplicate", {
       sessionId: "duplicate-session-a",
-      delayMs: 100,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 100 }),
     });
     await expect(
       manager.deliver("run-duplicate", {
         sessionId: "duplicate-session-b",
-        delayMs: 100,
-        prompt: "test",
+        prompt: fixturePrompt({ delayMs: 100 }),
       }),
     ).rejects.toThrow("run already active: run-duplicate");
 
-    await expect(first).resolves.toMatchObject({
-      runId: "run-duplicate",
-      sessionId: "duplicate-session-a",
-    });
+    await expect(first).resolves.toMatchObject({ status: "succeeded", workerId: "0" });
   });
 
   test("rejects duplicate run ids for the same session while the original is active", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("dup-same"),
         maxActiveWorkers: 1,
@@ -238,8 +248,7 @@ describe("on-demand WorkerManager", () => {
 
     const first = manager.deliver("run-duplicate-same-session", {
       sessionId: "duplicate-session",
-      delayMs: 100,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 100 }),
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
 
@@ -258,6 +267,7 @@ describe("on-demand WorkerManager", () => {
     process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("dup-cancel"),
         maxActiveWorkers: 1,
@@ -290,6 +300,7 @@ describe("on-demand WorkerManager", () => {
   test("times out queued dispatches when all workers stay busy", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("queue-timeout"),
         maxActiveWorkers: 1,
@@ -301,8 +312,7 @@ describe("on-demand WorkerManager", () => {
 
     const first = manager.deliver("run-busy", {
       sessionId: "busy-session",
-      delayMs: 200,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 200 }),
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
 
@@ -315,6 +325,7 @@ describe("on-demand WorkerManager", () => {
   test("serializes concurrent idle-slot reassignment at worker cap", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("reassign-race"),
         maxActiveWorkers: 1,
@@ -326,8 +337,8 @@ describe("on-demand WorkerManager", () => {
     await manager.deliver("run-a", { sessionId: "session-a", prompt: "test" });
 
     const results = await Promise.allSettled([
-      manager.deliver("run-b", { sessionId: "session-b", delayMs: 40, prompt: "test" }),
-      manager.deliver("run-c", { sessionId: "session-c", delayMs: 40, prompt: "test" }),
+      manager.deliver("run-b", { sessionId: "session-b", prompt: fixturePrompt({ delayMs: 40 }) }),
+      manager.deliver("run-c", { sessionId: "session-c", prompt: fixturePrompt({ delayMs: 40 }) }),
     ]);
 
     expect(results.every((result) => result.status === "fulfilled")).toBe(true);
@@ -337,6 +348,7 @@ describe("on-demand WorkerManager", () => {
   test("cancels queued dispatch before worker delivery", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("queued-cancel"),
         maxActiveWorkers: 1,
@@ -347,8 +359,7 @@ describe("on-demand WorkerManager", () => {
 
     const first = manager.deliver("run-busy-cancel", {
       sessionId: "busy-session",
-      delayMs: 200,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 200 }),
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
 
@@ -372,6 +383,7 @@ describe("on-demand WorkerManager", () => {
   test("delivers live worker messages to an active run mailbox", async () => {
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("deliver"),
         maxActiveWorkers: 1,
@@ -382,8 +394,7 @@ describe("on-demand WorkerManager", () => {
 
     const dispatch = manager.deliver("run-deliver", {
       sessionId: "deliver-session",
-      delayMs: 500,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 500 }),
     });
     await waitFor(() => manager?.stats().ready === 1);
 

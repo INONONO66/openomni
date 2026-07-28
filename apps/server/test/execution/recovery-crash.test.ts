@@ -1,215 +1,138 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Bus, Storage, WorkerRun, WorkerRunStateStore } from "@openomni/session";
-import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
-import { recoverInterruptedRuns } from "../../src/execution/recovery";
+import { describe, expect, test } from "bun:test";
+import { runRecovery } from "../../src/bootstrap/recovery";
+import {
+  recoverInterruptedRuns,
+  type InterruptedRunProjection,
+  type RunRecoveryService,
+} from "../../src/execution/recovery";
 
-function seedSession(id: string): void {
-  Storage.getAdapter().session.set(id, {
-    id,
-    title: "test",
-    model: { providerID: "test", modelID: "test" },
-    time: { created: Date.now(), updated: Date.now() },
-    spawnDepth: 0,
-  });
+type RunStatus =
+  | "queued"
+  | "starting"
+  | "running"
+  | "waiting_input"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+
+type Row = InterruptedRunProjection & { status: RunStatus };
+type RecoveryCall = {
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly requestId: string;
+  readonly reason: string;
+};
+
+function recoveryService(
+  rows: readonly Row[],
+  options: { unchanged?: ReadonlySet<string>; calls?: RecoveryCall[] } = {},
+): RunRecoveryService {
+  return {
+    queries: {
+      interruptedRuns: async () =>
+        rows.filter((row) => ["starting", "running", "waiting_input"].includes(row.status)),
+    },
+    commands: {
+      interruptRun: async (input) => {
+        options.calls?.push(input);
+        return options.unchanged?.has(input.runId) ? "unchanged" : "recovered";
+      },
+    },
+  };
 }
-
-async function seedRunAtStatus(
-  sessionId: string,
-  runId: string,
-  targetStatus:
-    | "queued"
-    | "starting"
-    | "running"
-    | "waiting_input"
-    | "succeeded"
-    | "failed"
-    | "cancelled"
-    | "interrupted",
-): Promise<void> {
-  await WorkerRun.create(sessionId, { runId, title: "task", prompt: "do it" });
-  if (targetStatus === "queued") return;
-  await WorkerRun.updateStatus(sessionId, runId, "starting");
-  if (targetStatus === "starting") return;
-  await WorkerRun.updateStatus(sessionId, runId, "running");
-  if (targetStatus === "running") return;
-  if (targetStatus === "waiting_input") {
-    await WorkerRun.updateStatus(sessionId, runId, "waiting_input");
-    return;
-  }
-  await WorkerRun.updateStatus(sessionId, runId, targetStatus, { endedAt: Date.now() });
-}
-
-beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-});
-
-afterEach(() => {
-  Storage.reset();
-});
 
 describe("recoverInterruptedRuns", () => {
-  test("marks running runs as interrupted", async () => {
-    seedSession("s1");
-    await seedRunAtStatus("s1", "r1", "running");
-
-    const result = await recoverInterruptedRuns();
-
-    const run = await WorkerRun.get("s1", "r1");
-    expect(run?.status).toBe("interrupted");
-    expect(run?.endedAt).toBeGreaterThan(0);
-    expect(result.recovered).toBe(1);
-    expect(result.sessions).toEqual(["s1"]);
-  });
-
-  test("marks starting runs as interrupted", async () => {
-    seedSession("s2");
-    await seedRunAtStatus("s2", "r2", "starting");
-
-    const result = await recoverInterruptedRuns();
-
-    const run = await WorkerRun.get("s2", "r2");
-    expect(run?.status).toBe("interrupted");
-    expect(result.recovered).toBe(1);
-  });
-
-  test("marks waiting_input runs as interrupted", async () => {
-    seedSession("s-waiting");
-    await seedRunAtStatus("s-waiting", "r-waiting", "waiting_input");
-
-    const result = await recoverInterruptedRuns();
-
-    const run = await WorkerRun.get("s-waiting", "r-waiting");
-    expect(run?.status).toBe("interrupted");
-    expect(result.recovered).toBe(1);
-  });
-
-  test("publishes WorkerRunFailed event for each interrupted run", async () => {
-    seedSession("s3");
-    await seedRunAtStatus("s3", "r3a", "running");
-    await seedRunAtStatus("s3", "r3b", "running");
-
-    const events: Array<{ sessionId: string; runId: string; error?: string }> = [];
-    const unsub = Bus.subscribe(WorkerRunProtocol.Events.Failed, (data) => {
-      events.push(data.payload);
-    });
-
-    await recoverInterruptedRuns();
-    unsub();
-
-    expect(events).toHaveLength(2);
-    expect(events.every((e) => e.sessionId === "s3")).toBe(true);
-    expect(events.map((e) => e.runId).sort()).toEqual(["r3a", "r3b"].sort());
-    expect(events.every((e) => e.error === "coordinator restarted: run interrupted")).toBe(true);
-  });
-
-  test("terminal runs are not affected", async () => {
-    seedSession("s4");
-    await seedRunAtStatus("s4", "r-succeeded", "succeeded");
-    await seedRunAtStatus("s4", "r-failed", "failed");
-    await seedRunAtStatus("s4", "r-cancelled", "cancelled");
-    await seedRunAtStatus("s4", "r-interrupted", "interrupted");
-
-    const result = await recoverInterruptedRuns();
-
-    expect(result.recovered).toBe(0);
-    expect(result.sessions).toHaveLength(0);
-
-    const statuses = await Promise.all([
-      WorkerRun.get("s4", "r-succeeded"),
-      WorkerRun.get("s4", "r-failed"),
-      WorkerRun.get("s4", "r-cancelled"),
-      WorkerRun.get("s4", "r-interrupted"),
-    ]);
-    expect(statuses.map((r) => r?.status)).toEqual([
-      "succeeded",
-      "failed",
-      "cancelled",
-      "interrupted",
-    ]);
-  });
-
-  test("queued runs are not affected", async () => {
-    seedSession("s5");
-    await seedRunAtStatus("s5", "r5", "queued");
-
-    const result = await recoverInterruptedRuns();
-
-    expect(result.recovered).toBe(0);
-    const run = await WorkerRun.get("s5", "r5");
-    expect(run?.status).toBe("queued");
-  });
-
-  test("skips runs changed by an active writer after the recovery scan", async () => {
-    seedSession("s-active");
-    await seedRunAtStatus("s-active", "r-active", "running");
-
-    const workerRunState = Storage.get().workerRunState;
-    if (!workerRunState) throw new Error("workerRunState adapter missing");
-
-    const listBySession = workerRunState.listBySession.bind(workerRunState);
-    let changedAfterScan = false;
-    workerRunState.listBySession = (sessionId) => {
-      const rows = listBySession(sessionId);
-      if (sessionId === "s-active" && !changedAfterScan) {
-        changedAfterScan = true;
-        WorkerRunStateStore.updateStatus(sessionId, "r-active", "succeeded");
-      }
-      return rows;
-    };
-
-    const result = await recoverInterruptedRuns();
-
-    const run = await WorkerRun.get("s-active", "r-active");
-    expect(run?.status).toBe("succeeded");
-    expect(result.recovered).toBe(0);
-    expect(result.sessions).toEqual([]);
-  });
-
-  test("status precondition rejects runs touched without a status change", async () => {
-    seedSession("s-touch");
-    await seedRunAtStatus("s-touch", "r-touch", "running");
-
-    const scanned = WorkerRunStateStore.get("s-touch", "r-touch");
-    expect(scanned?.status).toBe("running");
-    if (!scanned) throw new Error("r-touch not found before active write");
-    WorkerRunStateStore.updateStatus("s-touch", "r-touch", "running");
-
-    const interrupted = await WorkerRun.updateStatusIfCurrent(
-      "s-touch",
-      "r-touch",
-      { status: scanned.status, timeUpdated: scanned.timeUpdated },
-      "interrupted",
-      { endedAt: Date.now(), error: "stale recovery update" },
+  test.each([
+    "starting",
+    "running",
+    "waiting_input",
+  ] as const)("recovers a %s attempt through the authoritative recovery command", async (status) => {
+    const calls: RecoveryCall[] = [];
+    const result = await recoverInterruptedRuns(
+      recoveryService([{ sessionId: `session-${status}`, runId: `run-${status}`, status }], {
+        calls,
+      }),
     );
 
-    const run = await WorkerRun.get("s-touch", "r-touch");
-    expect(run?.status).toBe("running");
-    expect(run?.timeUpdated).toBeGreaterThan(scanned.timeUpdated);
-    expect(interrupted).toBe(false);
+    expect(result).toEqual({ recovered: 1, sessions: [`session-${status}`] });
+    expect(calls).toEqual([
+      {
+        sessionId: `session-${status}`,
+        runId: `run-${status}`,
+        requestId: `run-recovery:run-${status}`,
+        reason: "coordinator restarted: run interrupted",
+      },
+    ]);
   });
 
-  test("deduplicates sessions in result when multiple runs recovered from same session", async () => {
-    seedSession("s6");
-    await seedRunAtStatus("s6", "r6a", "running");
-    await seedRunAtStatus("s6", "r6b", "running");
+  test("the authoritative projection excludes queued and terminal attempts", async () => {
+    const calls: RecoveryCall[] = [];
+    const statuses = ["queued", "succeeded", "failed", "cancelled", "interrupted"] as const;
+    const result = await recoverInterruptedRuns(
+      recoveryService(
+        statuses.map((status) => ({
+          sessionId: `session-${status}`,
+          runId: `run-${status}`,
+          status,
+        })),
+        { calls },
+      ),
+    );
 
-    const result = await recoverInterruptedRuns();
-
-    expect(result.recovered).toBe(2);
-    expect(result.sessions).toEqual(["s6"]);
+    expect(result).toEqual({ recovered: 0, sessions: [] });
+    expect(calls).toEqual([]);
   });
 
-  test("recovery completes in under 10 seconds", async () => {
-    for (let i = 0; i < 20; i++) {
-      seedSession(`perf-s${i}`);
-      await seedRunAtStatus(`perf-s${i}`, `perf-r${i}`, "running");
-    }
+  test("does not count a run changed by a concurrent writer", async () => {
+    const calls: RecoveryCall[] = [];
+    const result = await recoverInterruptedRuns(
+      recoveryService([{ sessionId: "session-race", runId: "run-race", status: "running" }], {
+        calls,
+        unchanged: new Set(["run-race"]),
+      }),
+    );
 
-    const start = Date.now();
-    await recoverInterruptedRuns();
-    const elapsed = Date.now() - start;
+    expect(calls).toHaveLength(1);
+    expect(result).toEqual({ recovered: 0, sessions: [] });
+  });
 
-    expect(elapsed).toBeLessThan(10_000);
+  test("deduplicates sessions while preserving authoritative projection order", async () => {
+    const result = await recoverInterruptedRuns(
+      recoveryService([
+        { sessionId: "session-b", runId: "run-b1", status: "starting" },
+        { sessionId: "session-a", runId: "run-a", status: "running" },
+        { sessionId: "session-b", runId: "run-b2", status: "waiting_input" },
+      ]),
+    );
+
+    expect(result).toEqual({ recovered: 3, sessions: ["session-b", "session-a"] });
+  });
+
+  test("runRecovery propagates an authoritative run recovery failure before message recovery", async () => {
+    let messagesQueried = false;
+    const failure = new Error("run recovery unavailable");
+
+    await expect(
+      runRecovery(
+        {
+          runs: {
+            queries: { interruptedRuns: async () => [{ sessionId: "session-1", runId: "run-1" }] },
+            commands: { interruptRun: async () => Promise.reject(failure) },
+          },
+          messages: {
+            queries: {
+              interruptedMessages: async () => {
+                messagesQueried = true;
+                return [];
+              },
+            },
+            commands: { reconcileInterruptedMessage: async () => undefined },
+          },
+        },
+        "trace-recovery",
+      ),
+    ).rejects.toBe(failure);
+    expect(messagesQueried).toBe(false);
   });
 });

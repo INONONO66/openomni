@@ -34,7 +34,7 @@ export async function refreshMcpTools(
           },
         });
       }
-    } catch (err) {
+    } catch {
       Bus.publish(Operational.Warn, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
@@ -42,7 +42,7 @@ export async function refreshMcpTools(
         msg: "failed to list tools from mcp server",
         context: {
           serverName,
-          err: err instanceof Error ? err.message : String(err),
+          listingFailed: true,
         },
       });
     }

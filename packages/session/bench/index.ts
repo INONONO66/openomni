@@ -1,197 +1,167 @@
 // Run with: bun run bench/index.ts
-import { mkdirSync } from "node:fs";
+// Benchmark identity note: `ledger-runtime/query-recent-events` was a moving fixture because it
+// shared a mutating runtime with the append benchmark. The fixed-tail query now uses its own
+// seeded runtime and publishes a new metric name instead of faking continuity.
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { BusEvent, Ledger } from "@openomni/protocol";
 import { Bench } from "tinybench";
-import type { Message } from "@openomni/protocol";
 import { Bus } from "../src/bus/index.ts";
-import { Session } from "../src/session/index.ts";
-import { Storage } from "../src/storage/storage.ts";
+import { openLedgerRuntime, type LedgerRuntime } from "../src/ledger/runtime.ts";
 
 type BenchmarkResult = {
-  name: string;
-  unit: "ns/op";
-  value: number;
+  readonly name: string;
+  readonly unit: "ns/op";
+  readonly value: number;
 };
 
-const MODEL = { providerID: "bench", modelID: "bench" };
 const results: BenchmarkResult[] = [];
-
-function userMessage(sessionID: string, index: number): Message.Info {
+function sessionSnapshot(sessionId: string) {
+  const bytes = new TextEncoder().encode(
+    JSON.stringify({ version: "session-projection-state-v1", state: { id: sessionId } }),
+  );
+  const digest = createHash("sha256").update(bytes).digest("hex");
   return {
-    id: `message-${sessionID}-${index}`,
-    sessionID,
-    role: "user",
-    time: { created: 1_700_000_000_000 + index },
-    agent: "bench-agent",
-    model: MODEL,
-    system: "You are benchmarking OpenOmni session storage hotpaths.",
-    tools: {
-      session_read: true,
-      session_write: true,
-      bus_publish: true,
+    bytes,
+    expectedHash: `sha256:${digest}` as const,
+    ref: {
+      version: "content-blob-ref-v1" as const,
+      digest,
+      byteLength: bytes.byteLength,
+      mediaType: "application/json",
     },
-    variant: "benchmark",
-  };
-}
-
-function assistantMessage(sessionID: string, index: number): Message.Info {
-  return {
-    id: `assistant-${sessionID}-${index}`,
-    sessionID,
-    role: "assistant",
-    time: {
-      created: 1_700_000_000_000 + index,
-      completed: 1_700_000_000_050 + index,
-    },
-    parentID: `message-${sessionID}-${index}`,
-    modelID: MODEL.modelID,
-    providerID: MODEL.providerID,
-    agent: "bench-agent",
-    path: {
-      cwd: "/tmp/openomni",
-      root: "/tmp/openomni",
-    },
-    cost: 0.00042,
-    tokens: {
-      input: 512,
-      output: 128,
-      reasoning: 64,
-      cache: { read: 32, write: 16 },
-    },
-    finish: "stop",
   };
 }
 
 function recordResults(suite: string, bench: Bench): void {
   console.log(`\n${suite}`);
   console.table(bench.table());
-
   for (const task of bench.tasks) {
     const result = task.result;
     if (!result || !("latency" in result)) continue;
-    const meanMs = result.latency.mean;
     results.push({
       name: `${suite}/${task.name}`,
       unit: "ns/op",
-      value: Math.round(meanMs * 1_000_000),
+      value: Math.round(result.latency.mean * 1_000_000),
     });
   }
 }
 
-async function runSessionHydration(): Promise<void> {
-  Storage.reset();
-  Bus.reset();
-
-  const sessions = Array.from({ length: 100 }, (_, sessionIndex) => {
-    const session = Session.create({ title: `bench-session-${sessionIndex}`, model: MODEL });
-    for (let messageIndex = 0; messageIndex < 10; messageIndex += 1) {
-      Session.addMessage(session.id, userMessage(session.id, messageIndex));
-    }
-    return session;
+function sessionAppend(sequence: number) {
+  const sessionId = `bench-session-${sequence}`;
+  const requestId = `bench-request-${sequence}`;
+  const owner = Ledger.OwnerV1.parse({ version: "ledger-owner-v1", ownerKey: sessionId });
+  const snapshot = sessionSnapshot(sessionId);
+  const event = Ledger.EventV1.parse({
+    version: "ledger-event-v1",
+    eventId: `bench-event-${sequence}`,
+    eventType: "session.opened.v1",
+    eventVersion: 1,
+    owner,
+    payload: {
+      version: "native-event-payload-v1",
+      eventType: "session.opened.v1",
+      subjectId: sessionId,
+      occurredAtDbMs: sequence,
+      sessionId,
+      parentSessionId: "bench-root",
+      model: { provider: "bench", id: "bench-model" },
+      sessionSnapshotRef: snapshot.ref,
+    },
+    provenance: {
+      version: "native-event-provenance-v1",
+      principalId: "bench-principal",
+      requestId,
+    },
   });
+  return {
+    request: Ledger.AppendBatch.parse({
+      version: "ledger-append-batch-request-v1",
+      requestId,
+      requestHash: createHash("sha256").update(requestId).digest("hex"),
+      principalId: "bench-principal",
+      expectedHead: {
+        version: "ledger-head-v1",
+        owner,
+        ownerSeq: 0,
+        eventHash: Ledger.GENESIS_V1,
+      },
+      batch: {
+        version: "ledger-batch-v1",
+        batchId: `bench-batch-${sequence}`,
+        owner,
+        events: [event],
+      },
+    }),
+    artifactBlobs: [{ bytes: snapshot.bytes, expectedHash: snapshot.expectedHash }],
+  };
+}
 
-  const bench = new Bench({ time: 100 });
-  let cursor = 0;
+async function seedSessions(runtime: LedgerRuntime, count: number): Promise<void> {
+  for (let sequence = 1; sequence <= count; sequence += 1) {
+    const append = sessionAppend(sequence);
+    await runtime.append(append.request, { artifactBlobs: append.artifactBlobs });
+  }
+}
 
-  bench.add("get-session", () => {
-    const session = sessions[cursor % sessions.length];
-    cursor += 1;
-    Session.get(session.id);
-  });
+async function runLedgerBenchmarks(root: string): Promise<void> {
+  const seededSessions = 128;
+  const queryWindow = {
+    afterLedgerSeq: seededSessions - 64,
+    throughLedgerSeq: seededSessions,
+    limit: 64,
+  } as const;
+  const appendRuntime = openLedgerRuntime({ dbPath: join(root, "ledger-append.db") });
+  const queryRuntime = openLedgerRuntime({ dbPath: join(root, "ledger-query.db") });
 
-  bench.add("get-messages", () => {
-    const session = sessions[cursor % sessions.length];
-    cursor += 1;
-    Session.getMessages(session.id);
-  });
+  try {
+    await seedSessions(appendRuntime, seededSessions);
+    await seedSessions(queryRuntime, seededSessions);
 
-  await bench.run();
-  recordResults("session-hydration", bench);
-  Storage.reset();
+    let sequence = seededSessions + 1;
+    const bench = new Bench({ time: 100 });
+    bench.add("append-session-with-projections", async () => {
+      const append = sessionAppend(sequence);
+      await appendRuntime.append(append.request, { artifactBlobs: append.artifactBlobs });
+      sequence += 1;
+    });
+    bench.add("query-tail-window-64-of-128", async () => {
+      await queryRuntime.query((query) => query.eventsByLedgerSequence(queryWindow));
+    });
+    await bench.run();
+    recordResults("ledger-runtime", bench);
+  } finally {
+    await appendRuntime.close();
+    await queryRuntime.close();
+  }
 }
 
 async function runBusFanout(): Promise<void> {
-  Storage.reset();
   Bus.reset();
-
-  const subscriberCounts = [10, 50, 100];
-
-  for (const count of subscriberCounts) {
-    const bench = new Bench({ time: 100 });
-    let handled = 0;
-    for (let index = 0; index < count; index += 1) {
-      Bus.subscribe(Session.Event.Created, () => {
-        handled += 1;
-      });
-    }
-
-    bench.add(`${count}-subscribers`, async () => {
-      Bus.publish(Session.Event.Created, {
-        info: {
-          id: `fanout-${count}`,
-          title: "bench fanout",
-          model: MODEL,
-          time: { created: Date.now(), updated: Date.now() },
-          spawnDepth: 0,
-        },
-      });
-      await Promise.resolve();
-      if (handled < 0) throw new Error("unreachable");
-    });
-
-    await bench.run();
-    recordResults("bus-fanout", bench);
-    Bus.reset();
+  const event = BusEvent.define("bench:bus-fanout", Ledger.OwnerV1);
+  for (let index = 0; index < 50; index += 1) {
+    Bus.subscribe(event, () => undefined);
   }
-}
-
-async function runMessageSerialization(): Promise<void> {
-  Storage.reset();
+  const bench = new Bench({ time: 100 });
+  bench.add("50-subscribers", async () => {
+    Bus.publish(event, { version: "ledger-owner-v1", ownerKey: "bench-owner" });
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+  });
+  await bench.run();
+  recordResults("bus-fanout", bench);
   Bus.reset();
-
-  const message = assistantMessage("serialization-session", 1);
-  const payload = JSON.stringify(message);
-  const bench = new Bench({ time: 100 });
-
-  bench.add("stringify-message", () => {
-    JSON.stringify(message);
-  });
-
-  bench.add("parse-message", () => {
-    JSON.parse(payload) satisfies unknown;
-  });
-
-  await bench.run();
-  recordResults("message-serialization", bench);
-  Storage.reset();
 }
 
-async function runStorageSessionList(): Promise<void> {
-  const bench = new Bench({ time: 100 });
-  const sessionCounts = [10, 100, 500];
-
-  for (const count of sessionCounts) {
-    Storage.reset();
-    Bus.reset();
-    for (let index = 0; index < count; index += 1) {
-      Session.create({ title: `list-session-${count}-${index}`, model: MODEL });
-    }
-
-    const adapter = Storage.getAdapter();
-    bench.add(`${count}-sessions`, () => {
-      adapter.session.list();
-    });
-  }
-
-  await bench.run();
-  recordResults("storage-session-list", bench);
-  Storage.reset();
+const root = join(tmpdir(), `openomni-session-bench-${randomUUID()}`);
+mkdirSync(root, { recursive: true });
+try {
+  await runLedgerBenchmarks(root);
+  await runBusFanout();
+} finally {
+  rmSync(root, { recursive: true, force: true });
 }
-
-await runSessionHydration();
-await runBusFanout();
-await runMessageSerialization();
-await runStorageSessionList();
 
 mkdirSync("bench-results", { recursive: true });
 await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);

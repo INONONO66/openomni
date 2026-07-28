@@ -10,6 +10,15 @@ import {
 import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
+const TEST_IDENTITY = {
+  runtimeId: "runtime-tool-relay-trace",
+  principalId: "principal-tool-relay-trace",
+  bootstrap: { configEpoch: "test" },
+} as const;
+
+function fixturePrompt(fixture: Record<string, unknown> = {}): string {
+  return JSON.stringify({ fixture, prompt: "test" });
+}
 
 let manager: WorkerManager | undefined;
 
@@ -24,6 +33,7 @@ describe("worker tool relay trace context", () => {
     let relayedContext: ToolCallContext | undefined;
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir(),
         maxActiveWorkers: 1,
@@ -47,13 +57,21 @@ describe("worker tool relay trace context", () => {
     const result = await manager.deliver("trusted-run", {
       sessionId: "trusted-session",
       traceId: "trusted-trace",
-      prompt: "test",
-      relayTool: true,
+      prompt: fixturePrompt({
+        toolRelay: {},
+        traceSpoof: {
+          traceId: "spoofed-trace",
+          sessionId: "spoofed-session",
+          runId: "spoofed-run",
+        },
+      }),
     });
+
+    expect(result).toMatchObject({ status: "succeeded" });
 
     expect(relayedParams).toMatchObject({
       runId: "trusted-run",
-      sessionId: "spoofed-session",
+      sessionId: "trusted-session",
       input: {
         traceId: "spoofed-trace",
         sessionId: "spoofed-session",
@@ -68,13 +86,13 @@ describe("worker tool relay trace context", () => {
       },
     });
     expect(relayedContext?.signal).toBeInstanceOf(AbortSignal);
-    expect(result).toMatchObject({ toolRelayResult: { output: "relayed", isError: false } });
   });
 
   test("does not attach another worker slot's active run context", async () => {
     let relayedContext: ToolCallContext | undefined;
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir(),
         maxActiveWorkers: 2,
@@ -98,20 +116,23 @@ describe("worker tool relay trace context", () => {
       manager.deliver("target-run", {
         sessionId: "target-session",
         traceId: "target-trace",
-        prompt: "test",
-        delayMs: 250,
+        prompt: fixturePrompt({ delayMs: 250 }),
       }),
       manager.deliver("attacker-run", {
         sessionId: "attacker-session",
         traceId: "attacker-trace",
-        prompt: "test",
-        relayTool: true,
-        relayRunId: "target-run",
+        prompt: fixturePrompt({
+          toolRelay: { runId: "target-run" },
+          traceSpoof: {
+            traceId: "spoofed-trace",
+            sessionId: "spoofed-session",
+            runId: "spoofed-run",
+          },
+        }),
       }),
     ]);
 
-    expect(relayedContext?.signal).toBeInstanceOf(AbortSignal);
-    expect(relayedContext?.traceContext).toBeUndefined();
+    expect(relayedContext).toBeUndefined();
   });
 });
 

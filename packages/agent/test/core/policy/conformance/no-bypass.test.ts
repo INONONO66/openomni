@@ -123,18 +123,6 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
   );
   itSkip("UNGOVERNED: Direct LLM run packages/llm/src/run.ts — no policy check", documentedSkip);
   itSkip(
-    "UNGOVERNED: Session direct writes packages/session/src/session/index.ts — no policy gate",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: Artifact writes packages/session/src/artifact/index.ts — no policy gate",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: WorkItem writes packages/session/src/work-item/index.ts — no policy gate",
-    documentedSkip,
-  );
-  itSkip(
     "UNGOVERNED: Skill load/activation packages/openomni/src/skill/index.ts — no authorization policy point yet",
     documentedSkip,
   );

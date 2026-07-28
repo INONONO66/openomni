@@ -1,291 +1,280 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { PolicyDecision, type Ingress } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore } from "@openomni/session";
+import { afterEach, describe, expect, it } from "bun:test";
+import type { Actor, Ingress } from "@openomni/protocol";
 import { IngressEngine } from "../../src/ingress/engine";
-import {
-  ownerEvent,
-  resetKernelRoutingState,
-  residentExecutions,
-  routingDecisions,
-} from "./_kernel-routing-fixture";
+import type { AuthorityProjectionQueryPort } from "../../src/ingress/actor-resolver";
+import { IngressRoutingError } from "../../src/ingress/routing-execution";
+import { resolveKernelRoute } from "../../src/ingress/routing-runtime";
+import type { WaitKernelService } from "../../src/ingress/wait-correlation";
+
+const refs = {
+  sourceEventId: "authority-event-access",
+  sourceOwnerSeq: 2,
+  sourceLedgerSeq: 3,
+  sourceOwnerHash: "c".repeat(64),
+  asOfLedgerSeq: 3,
+} as const;
+
+const identity: Actor.Identity = {
+  id: "actor-owner",
+  kind: "human",
+  trustTier: "owner",
+  relationship: "owner",
+};
+const endpoint: Actor.Endpoint = {
+  id: "endpoint-owner",
+  actorId: identity.id,
+  channel: "discord",
+  externalId: "owner-external",
+};
+const ownerEvent = {
+  id: "inbound-owner",
+  surface: "discord",
+  workspace: "workspace-owner",
+  channel: "owner-dm",
+  userId: endpoint.externalId,
+  mode: "direct" as const,
+  payload: "hello",
+  agent: { model: { provider: "test", id: "fixture" } },
+} satisfies Ingress.DirectEvent;
+
+const noWait: WaitKernelService = {
+  async correlate() {
+    return { kind: "none", candidates: [] };
+  },
+  async revalidatePinned() {
+    return { kind: "invalid", reason: "not used" };
+  },
+  async acceptResponse() {
+    throw new Error("not used");
+  },
+  async settle() {
+    throw new Error("not used");
+  },
+  async cancel() {
+    return undefined;
+  },
+  async stageAmbiguity() {
+    return undefined;
+  },
+  async markRouted() {
+    return undefined;
+  },
+};
+
+function authority(options: {
+  identity?: Actor.Identity | null;
+  endpoint?: Actor.Endpoint | null;
+  grant?: Actor.ChannelGrant | null;
+  blacklist?: Actor.BlacklistEntry | null;
+}): AuthorityProjectionQueryPort {
+  return {
+    async query(request) {
+      switch (request.kind) {
+        case "authority.actor_by_endpoint":
+          return {
+            ...refs,
+            kind: request.kind,
+            endpointSourceRefs: options.endpoint === null ? null : refs,
+            identitySourceRefs: options.identity === null ? null : refs,
+            identity: options.identity === undefined ? identity : options.identity,
+            endpoint: options.endpoint === undefined ? endpoint : options.endpoint,
+          };
+        case "authority.blacklist_match":
+          return { ...refs, kind: request.kind, entry: options.blacklist ?? null };
+        case "authority.channel_grant":
+          return { ...refs, kind: request.kind, grant: options.grant ?? null };
+        case "authority.worker_grant":
+          return { ...refs, kind: request.kind, grant: null };
+      }
+    },
+  };
+}
+
+function trustedGrant(defaultTier?: Actor.TrustTier): Actor.ChannelGrant {
+  return {
+    id: "grant-owner",
+    surface: ownerEvent.surface,
+    workspace: ownerEvent.workspace,
+    channel: ownerEvent.channel,
+    kind: "trusted_channel",
+    ...(defaultTier === undefined ? {} : { defaultTier }),
+    createdBy: "actor-owner",
+  };
+}
 
 async function captureError(action: Promise<unknown>): Promise<Error | undefined> {
   try {
     await action;
-    return undefined;
   } catch (error) {
-    if (!(error instanceof Error)) throw error;
-    return error;
+    if (error instanceof Error) return error;
+    throw error;
   }
+  return undefined;
 }
 
-function strangerEvent(id: string): Ingress.DirectEvent {
-  const { meta: _meta, ...event } = ownerEvent;
-  return { ...event, id, userId: `${id}-external` };
-}
+describe("native ingress authority routing", () => {
+  afterEach(() => IngressEngine.reset());
 
-function captureRoutedFacts(captured: { actor?: unknown; treatment?: unknown }): void {
-  IngressEngine.registerIngressPolicy({
-    name: "test:capture-routed-facts",
-    timing: "inbound.receive",
-    priority: 0,
-    fn: (context) => {
-      captured.actor = context.toolInput?.actor;
-      captured.treatment = context.toolInput?.inboundTreatment;
-      return PolicyDecision.allow({ policyId: "test.capture-routed-facts" });
-    },
-  });
-}
-
-describe("IngressEngine access routing", () => {
-  beforeEach(resetKernelRoutingState);
-
-  test("blocks a missing channel grant before Resident execution", async () => {
-    // Given
-    const observed = routingDecisions();
-
-    // When
-    let error: Error | undefined;
-    try {
-      error = await captureError(IngressEngine.ingest(ownerEvent));
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(error).toBeDefined();
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({
-      stage: "channel_ceiling",
-      outcome: "block",
+  it.each([
+    ["missing channel grant", {}, "channel_ceiling"],
+    [
+      "blocked channel",
+      {
+        grant: {
+          id: "grant-blocked",
+          surface: ownerEvent.surface,
+          workspace: ownerEvent.workspace,
+          channel: ownerEvent.channel,
+          kind: "blocked_channel",
+          createdBy: "actor-owner",
+        } satisfies Actor.ChannelGrant,
+      },
+      "channel_ceiling",
+    ],
+    [
+      "unknown actor without a channel default",
+      { identity: null, endpoint: null, grant: trustedGrant() },
+      "actor_identity",
+    ],
+  ] as const)("blocks %s before Resident work", async (_name, options, stage) => {
+    let residentRuns = 0;
+    IngressEngine.setResidentRuntime({
+      async run() {
+        residentRuns += 1;
+        throw new Error("blocked input executed Resident work");
+      },
+    } as never);
+    IngressEngine.setKernelPorts({
+      authorityQueries: authority(options),
+      waitQueries: noWait,
+      waitTransitions: noWait,
+      workerAttempts: {} as never,
     });
-    expect(residentExecutions).toHaveLength(0);
-  });
 
-  test("blocks an unknown actor on a trusted channel without a default tier", async () => {
-    // Given
-    ChannelGrantStore.put({
-      id: "grant-unknown",
-      surface: ownerEvent.surface,
-      workspace: ownerEvent.workspace,
-      channel: ownerEvent.channel,
-      kind: "trusted_channel",
-      createdBy: "actor-owner",
-    });
-    const observed = routingDecisions();
+    const error = await captureError(IngressEngine.ingest(ownerEvent));
 
-    // When
-    let error: Error | undefined;
-    try {
-      error = await captureError(IngressEngine.ingest(ownerEvent));
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(error).toBeDefined();
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({ stage: "actor_identity", outcome: "block" });
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect((error as IngressRoutingError).decision).toMatchObject({ stage, outcome: "block" });
+    expect(residentRuns).toBe(0);
   });
 
-  test("does not promote a role-only legacy user to Owner", async () => {
-    // Given
-    ChannelGrantStore.put({
-      id: "grant-role-only",
-      surface: ownerEvent.surface,
-      workspace: ownerEvent.workspace,
-      channel: ownerEvent.channel,
-      kind: "trusted_channel",
-      createdBy: "actor-owner",
+  it("routes a registered actor with authoritative actor and channel evidence", async () => {
+    const queries = authority({ grant: trustedGrant() });
+    const event = {
+      ...ownerEvent,
+      meta: {
+        authorityEvidence: refs,
+        actor: {
+          actorId: identity.id,
+          trustTier: identity.trustTier,
+          endpointId: endpoint.id,
+          endpoint,
+        },
+      },
+      runtime: { durableSessionId: "session-authoritative" },
+    };
+    const resolution = await resolveKernelRoute(event, "trace-authoritative", {
+      authorityQueries: queries,
+      waits: noWait,
     });
-    const { userId: _userId, ...roleOnlyEvent } = ownerEvent;
-    const observed = routingDecisions();
 
-    // When
-    let error: Error | undefined;
-    try {
-      error = await captureError(IngressEngine.ingest(roleOnlyEvent));
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(error).toBeDefined();
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({ stage: "actor_identity", outcome: "block" });
-    expect(residentExecutions).toHaveLength(0);
-  });
-
-  test("materializes a default-tier stranger without registering an Actor endpoint", async () => {
-    // Given
-    const event = strangerEvent("inbound-stranger-default");
-    ChannelGrantStore.put({
-      id: "grant-stranger-default",
-      surface: event.surface,
-      workspace: event.workspace,
-      channel: event.channel,
-      kind: "trusted_channel",
-      defaultTier: "owner",
-      createdBy: "actor-owner",
-    });
-    const captured: { actor?: unknown; treatment?: unknown } = {};
-    captureRoutedFacts(captured);
-    const observed = routingDecisions();
-
-    // When
-    try {
-      await IngressEngine.ingest(event);
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({
+    expect(resolution.decision).toMatchObject({
       stage: "surface_default",
       outcome: "route",
+      actorId: identity.id,
       trustTier: "owner",
+      inboundTreatment: "full_access",
+      sessionId: "session-authoritative",
     });
-    expect(captured.actor).toMatchObject({ role: "user", trustTier: "owner" });
-    expect(captured.treatment).toBe("full_access");
-    expect(
-      ActorRegistry.resolveEndpoint(event.surface, event.userId, event.workspace),
-    ).toBeUndefined();
-    expect(residentExecutions).toHaveLength(1);
+    expect(resolution.decision.factsUsed).toContain(`authority.source_event:${refs.sourceEventId}`);
+    expect(resolution.event.meta).toMatchObject({
+      channelGrantId: "grant-owner",
+      channelGrantKind: "trusted_channel",
+      inboundTreatment: "full_access",
+      actor: { actorId: identity.id, trustTier: "owner" },
+    });
   });
 
-  test("uses normalized evidence-only treatment for a broadcast override", async () => {
-    // Given
-    const event = strangerEvent("inbound-broadcast-override");
-    ChannelGrantStore.put({
-      id: "grant-broadcast-override",
-      surface: event.surface,
-      workspace: event.workspace,
-      channel: event.channel,
-      kind: "broadcast_channel",
-      inboundTreatment: "full_access",
-      defaultTier: "observer",
-      createdBy: "actor-owner",
+  it("applies the channel default tier without manufacturing a durable actor identity", async () => {
+    const event = { ...ownerEvent, userId: "unknown-external", meta: {} };
+    const resolution = await resolveKernelRoute(event, "trace-channel-default", {
+      authorityQueries: authority({
+        identity: null,
+        endpoint: null,
+        grant: trustedGrant("observer"),
+      }),
+      waits: noWait,
     });
-    const captured: { actor?: unknown; treatment?: unknown } = {};
-    captureRoutedFacts(captured);
-    const observed = routingDecisions();
 
-    // When
-    let result: Ingress.IngressResult;
-    try {
-      result = await IngressEngine.ingest(event);
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(result.result.output).toBe("resident response");
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({
+    expect(resolution.decision).toMatchObject({
       stage: "surface_default",
       outcome: "route",
       trustTier: "observer",
-      inboundTreatment: "evidence_only",
+      inboundTreatment: "full_access",
     });
-    expect(captured.actor).toMatchObject({ role: "user", trustTier: "observer" });
-    expect(captured.treatment).toBe("evidence_only");
-    expect(residentExecutions).toHaveLength(1);
+    expect(resolution.decision.actorId).toBeUndefined();
+    expect(resolution.event.meta?.actor).toEqual({ role: "user", trustTier: "observer" });
   });
 
-  test("routes a broadcast channel as evidence-only", async () => {
-    // Given
-    ChannelGrantStore.put({
+  it("normalizes broadcast access to evidence-only even when the projection asks for full access", async () => {
+    const grant = {
       id: "grant-broadcast",
       surface: ownerEvent.surface,
       workspace: ownerEvent.workspace,
       channel: ownerEvent.channel,
       kind: "broadcast_channel",
+      inboundTreatment: "full_access",
       defaultTier: "observer",
       createdBy: "actor-owner",
+    } satisfies Actor.ChannelGrant;
+    const resolution = await resolveKernelRoute({ ...ownerEvent, meta: {} }, "trace-broadcast", {
+      authorityQueries: authority({ identity: null, endpoint: null, grant }),
+      waits: noWait,
     });
-    const observed = routingDecisions();
 
-    // When
-    let result: Ingress.IngressResult;
-    try {
-      result = await IngressEngine.ingest(ownerEvent);
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(result.result.output).toBe("resident response");
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({
+    expect(resolution.decision).toMatchObject({
       stage: "surface_default",
       outcome: "route",
       trustTier: "observer",
       inboundTreatment: "evidence_only",
     });
-    expect(residentExecutions).toHaveLength(1);
+    expect(resolution.event.meta).toMatchObject({
+      channelGrantKind: "broadcast_channel",
+      inboundTreatment: "evidence_only",
+    });
   });
 
-  test("blocks a blocked channel before Resident execution", async () => {
-    // Given
-    ChannelGrantStore.put({
-      id: "grant-blocked",
-      surface: ownerEvent.surface,
-      workspace: ownerEvent.workspace,
-      channel: ownerEvent.channel,
-      kind: "blocked_channel",
-      createdBy: "actor-owner",
+  it("drops a blacklisted actor before channel and actor authority can create work", async () => {
+    const resolution = await resolveKernelRoute(
+      {
+        ...ownerEvent,
+        meta: {
+          actor: { actorId: identity.id, trustTier: identity.trustTier, endpointId: endpoint.id },
+        },
+      },
+      "trace-blacklisted",
+      {
+        authorityQueries: authority({
+          grant: trustedGrant(),
+          blacklist: {
+            id: "blacklist-owner",
+            kind: "actor",
+            value: identity.id,
+            createdBy: "security-owner",
+            reason: "revoked",
+          },
+        }),
+        waits: noWait,
+      },
+    );
+
+    expect(resolution.decision).toMatchObject({
+      stage: "blacklist",
+      outcome: "drop",
+      reason: "Inbound principal matched the blacklist",
     });
-    const observed = routingDecisions();
-
-    // When
-    let error: Error | undefined;
-    try {
-      error = await captureError(IngressEngine.ingest(ownerEvent));
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(error).toBeDefined();
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({
-      stage: "channel_ceiling",
-      outcome: "block",
-      inboundTreatment: "drop",
-    });
-    expect(residentExecutions).toHaveLength(0);
-  });
-
-  test("publishes one route decision and continues for internal Resident input", async () => {
-    // Given
-    IngressEngine.setAgentResolver({
-      resolve: async () => ({ model: { provider: "test", id: "test-model" } }),
-    });
-    const observed = routingDecisions();
-
-    // When
-    let result: Ingress.IngressResult;
-    try {
-      result = await IngressEngine.ingestInternal({
-        id: "inbound-cron",
-        surface: "cron",
-        mode: "internal",
-        agentName: "resident",
-        payload: "run scheduled review",
-      });
-    } finally {
-      observed.unsubscribe();
-    }
-
-    // Then
-    expect(result.result.output).toBe("resident response");
-    expect(observed.decisions).toHaveLength(1);
-    expect(observed.decisions[0]).toMatchObject({
-      inboundId: "inbound-cron",
-      stage: "surface_default",
-      outcome: "route",
-      actorId: "system:cron",
-    });
+    expect(resolution.decision.sessionId).toBeUndefined();
+    expect(resolution.decision.target).toBeUndefined();
   });
 });

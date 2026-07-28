@@ -1,5 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
-import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Operational, PolicyDecision, SurfaceAddress } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { splitText } from "../../shared/chunk-text";
@@ -69,13 +69,13 @@ export class TelegramAdapter implements Adapter.Surface {
     this.poller = new TelegramPoller(this.client, {
       onMessage: (message) => {
         if (this.dedupe.isDuplicate(String(message.message_id))) return;
-        this.handleMessage(message).catch((err) => {
+        this.handleMessage(message).catch(() => {
           Bus.publish(Operational.Error, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
             component: "server",
             msg: "telegram message handling failed",
-            context: { err: String(err) },
+            context: { handlingFailed: true },
           });
         });
       },
@@ -95,8 +95,7 @@ export class TelegramAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    const { SurfaceKey } = await import("@openomni/session");
-    const parsed = SurfaceKey.parse(surfaceKey);
+    const parsed = SurfaceAddress.parse(surfaceKey);
     const chatId = parsed.id ?? "";
     await this.sendOutbound(chatId, message);
   }
@@ -143,13 +142,13 @@ export class TelegramAdapter implements Adapter.Surface {
     try {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound);
-    } catch (err) {
+    } catch {
       Bus.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
         msg: "telegram message handler error",
-        context: { chatId, err: String(err) },
+        context: { chatId, handlerFailed: true },
       });
       await this.sendOutbound(chatId, { text: "Sorry, an error occurred." });
     } finally {

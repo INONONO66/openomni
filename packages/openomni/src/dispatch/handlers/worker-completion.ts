@@ -1,7 +1,12 @@
 import { WorkItem, type Execution } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
+import {
+  commitWorkerLedgerTransition,
+  digest,
+  type WorkerLedgerBinding,
+  type WorkerLedgerService,
+} from "./worker-work-item.js";
 
 const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
@@ -67,12 +72,13 @@ const CompletionEnvelope = z
 
 type CompletionEnvelope = z.infer<typeof CompletionEnvelope>;
 type CompletionReportDraft = z.infer<typeof CompletionReportDraft>;
-type WorkItemStatus = ReturnType<typeof WorkItem.deriveStatus>;
+type WorkItemStatus = WorkerLedgerBinding["status"];
 type ParsedCompletionEnvelope =
   | { readonly ok: true; readonly envelope: CompletionEnvelope }
   | { readonly ok: false; readonly reason: string };
 
 export interface WorkerCompletionOptions {
+  readonly ledger?: WorkerLedgerService;
   readonly readBack?: ReadBackExecutor.Options;
   readonly readBackEnvelopeTimeoutMs?: number;
   readonly readBackRecorder?: typeof ReadBackExecutor.record;
@@ -86,47 +92,68 @@ export type CompletionReflection = {
 };
 
 export async function reflectCoordinatorResult(
-  workItemHash: string,
+  binding: WorkerLedgerBinding,
   result: Execution.Result,
   options: WorkerCompletionOptions = {},
 ): Promise<CompletionReflection> {
+  const ledger = requireWorkerLedger(options.ledger);
   if (result.status === "succeeded") {
     const parsed = parseCompletionEnvelope(result);
-    if (!parsed.ok) {
-      return blockCompletion(workItemHash, parsed.reason);
-    }
+    if (!parsed.ok) return blockCompletion(ledger, binding, parsed.reason);
     try {
       const completionReport = await prepareCompletionReport(
-        workItemHash,
+        ledger,
+        binding,
         parsed.envelope,
         options,
       );
-      await WorkItemStore.complete(workItemHash, completionReport);
-      return completionReflection(workItemHash, false);
+      const current = (await ledger.resolveWorkByRunId(binding.runId)) ?? binding;
+      assertEvidenceCoverage(current, completionReport);
+      await commitWorkerLedgerTransition(ledger, current, {
+        transitionId: "DP-07",
+        command: "kernel.dispatch.submit_completion.v1",
+        requestKey: `${binding.runId}:completion-candidate`,
+        evidenceRef: digest(completionReport),
+        facts: completionReport,
+      });
+      return completionReflection(
+        ledger,
+        binding.runId,
+        true,
+        "completion candidate awaits kernel verifier verdicts and admission",
+      );
     } catch (err) {
-      return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
+      return blockCompletion(ledger, binding, err instanceof Error ? err.message : String(err));
     }
   }
   if (result.status === "cancelled") {
-    await ignoreWorkItemReflectionFailure(() => WorkItemStore.cancel(workItemHash));
-    return completionReflection(workItemHash, false);
+    await commitWorkerLedgerTransition(ledger, binding, {
+      transitionId: "DP-09",
+      command: "kernel.dispatch.cancel_work.v1",
+      requestKey: `${binding.runId}:cancelled`,
+      facts: { status: result.status },
+    });
+  } else if (result.status === "failed") {
+    await commitWorkerLedgerTransition(ledger, binding, {
+      transitionId: "DP-10",
+      command: "kernel.dispatch.fail_work.v1",
+      requestKey: `${binding.runId}:failed`,
+      facts: { reason: result.error ?? result.status },
+    });
+  } else if (result.status === "interrupted") {
+    await commitWorkerLedgerTransition(ledger, binding, {
+      transitionId: "DP-11",
+      command: "kernel.dispatch.interrupt_attempt.v1",
+      requestKey: `${binding.runId}:interrupted`,
+      facts: { reason: result.error ?? result.status },
+    });
   }
-  if (result.status === "failed" || result.status === "interrupted") {
-    await ignoreWorkItemReflectionFailure(() =>
-      WorkItemStore.fail(workItemHash, result.error ?? result.status),
-    );
-  }
-  return completionReflection(workItemHash, false);
+  return completionReflection(ledger, binding.runId, false);
 }
 
-export async function ignoreWorkItemReflectionFailure(
-  reflect: () => Promise<unknown>,
-): Promise<void> {
-  try {
-    await reflect();
-  } catch {
-    return;
-  }
+export function requireWorkerLedger(ledger: WorkerLedgerService | undefined): WorkerLedgerService {
+  if (!ledger) throw new Error("worker ledger transition/query service is required");
+  return ledger;
 }
 
 function parseCompletionEnvelope(result: Execution.Result): ParsedCompletionEnvelope {
@@ -147,7 +174,8 @@ function parseJson(input: string): { ok: true; value: unknown } | { ok: false } 
 }
 
 async function prepareCompletionReport(
-  workItemHash: string,
+  ledger: WorkerLedgerService,
+  binding: WorkerLedgerBinding,
   envelope: CompletionEnvelope,
   options: WorkerCompletionOptions,
 ): Promise<WorkItem.CompletionReport> {
@@ -162,14 +190,13 @@ async function prepareCompletionReport(
   for (const readBack of envelope.readBackRequests) {
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
-    const updated = await recordReadBack(
-      workItemHash,
+    const evidenceId = await recordReadBack(
+      ledger,
+      binding,
       applySharedDeadline(readBack.request, remainingMs),
       options.readBack,
     );
     if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
-    const evidenceId = updated?.evidence.at(-1)?.id;
-    if (!evidenceId) throw new Error("read-back evidence was not recorded");
     const existing = evidenceIdsByClaim.get(readBack.claimIndex) ?? [];
     evidenceIdsByClaim.set(readBack.claimIndex, [...existing, evidenceId]);
   }
@@ -180,6 +207,18 @@ async function prepareCompletionReport(
   });
 }
 
+function assertEvidenceCoverage(
+  work: WorkerLedgerBinding,
+  report: WorkItem.CompletionReport,
+): void {
+  const committed = new Set([...work.evidenceRefs, ...work.readbackRefs]);
+  for (const claim of report.claims) {
+    if (claim.evidenceIds.length === 0) throw new Error("completion claim has no evidence");
+    const missing = claim.evidenceIds.find((evidenceId) => !committed.has(evidenceId));
+    if (missing) throw new Error(`completion claim references uncommitted evidence ${missing}`);
+  }
+}
+
 function attachReadBackEvidence(
   report: CompletionReportDraft,
   evidenceIdsByClaim: ReadonlyMap<number, readonly string[]>,
@@ -187,10 +226,7 @@ function attachReadBackEvidence(
   return report.claims.map((claim, index) => {
     const readBackEvidenceIds = evidenceIdsByClaim.get(index);
     if (!readBackEvidenceIds) return claim;
-    return {
-      ...claim,
-      evidenceIds: [...claim.evidenceIds, ...readBackEvidenceIds],
-    };
+    return { ...claim, evidenceIds: [...claim.evidenceIds, ...readBackEvidenceIds] };
   });
 }
 
@@ -218,26 +254,30 @@ function applySharedDeadline(request: ReadBackRequest, remainingMs: number): Rea
 }
 
 async function blockCompletion(
-  workItemHash: string,
+  ledger: WorkerLedgerService,
+  binding: WorkerLedgerBinding,
   description: string,
 ): Promise<CompletionReflection> {
-  await ignoreWorkItemReflectionFailure(() =>
-    WorkItemStore.addBlocker(workItemHash, {
-      kind: "error",
-      description,
-    }),
-  );
-  return completionReflection(workItemHash, true, description);
+  const blockerRef = digest({ description });
+  await commitWorkerLedgerTransition(ledger, binding, {
+    transitionId: "WI-08",
+    command: "kernel.work.add_blocker.v1",
+    requestKey: `${binding.runId}:completion-blocker:${blockerRef}`,
+    evidenceRef: blockerRef,
+    facts: { description },
+  });
+  return completionReflection(ledger, binding.runId, true, description);
 }
 
-function completionReflection(
-  workItemHash: string,
+async function completionReflection(
+  ledger: WorkerLedgerService,
+  runId: string,
   completionBlocked: boolean,
   completionBlocker?: string,
-): CompletionReflection {
-  const workItem = WorkItemStore.get(workItemHash);
+): Promise<CompletionReflection> {
+  const work = await ledger.resolveWorkByRunId(runId);
   return {
-    ...(workItem ? { workItemStatus: WorkItem.deriveStatus(workItem) } : {}),
+    ...(work ? { workItemStatus: work.status } : {}),
     completionBlocked,
     ...(completionBlocker ? { completionBlocker } : {}),
   };

@@ -5,8 +5,10 @@ import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
 } from "../../src/execution-runtime";
+import { createTestLlmEnvironment } from "../helpers/llm-environment.ts";
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
+const { environment, modelCatalog } = createTestLlmEnvironment();
 const successfulResult: AgentResult = {
   text: "child done",
   steps: [],
@@ -60,6 +62,7 @@ describe("child agent delegation construction settlement", () => {
     test(`dispatches one failed post when ${failure.name} fails after pre approval`, async () => {
       const contexts: Array<Record<string, unknown>> = [];
       const runtime = createChildAgentRuntime({
+        ...{ environment, modelCatalog },
         model,
         parentMessages: [],
         parentTools: failure.parentTools,
@@ -83,6 +86,7 @@ describe("child agent delegation construction settlement", () => {
   test("dispatches one failed post when the child limit rejects after pre approval", async () => {
     const contexts: Array<Record<string, unknown>> = [];
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],

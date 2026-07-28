@@ -581,7 +581,7 @@ describe("createToolExecutor effect application", () => {
           context: {
             timing: "invoke.prepare",
             policyId: "agent.policy.composed",
-            error: "Error: observer failed",
+            observerFailed: true,
           },
         });
         expect(warnings[1]).toMatchObject({
@@ -590,7 +590,7 @@ describe("createToolExecutor effect application", () => {
           context: {
             timing: "invoke.result",
             policyId: "agent.policy.composed",
-            error: "Error: observer failed",
+            observerFailed: true,
           },
         });
       } finally {
@@ -635,7 +635,7 @@ describe("createToolExecutor effect application", () => {
           context: {
             timing: "invoke.prepare",
             policyId: "agent.policy.composed",
-            error: "Error: async observer failed",
+            observerFailed: true,
           },
         });
         expect(warnings[1]).toMatchObject({
@@ -644,7 +644,7 @@ describe("createToolExecutor effect application", () => {
           context: {
             timing: "invoke.result",
             policyId: "agent.policy.composed",
-            error: "Error: async observer failed",
+            observerFailed: true,
           },
         });
       } finally {

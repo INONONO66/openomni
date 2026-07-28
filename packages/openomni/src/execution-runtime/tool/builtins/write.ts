@@ -1,10 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { createWorkspaceIdentity, type WorkspaceIdentity } from "../../workspace-identity.js";
 import { defineTool } from "../define.js";
 import { requireString } from "../shared/input.js";
 import { fromError, successResult } from "../shared/result.js";
 import { resolveContainedPathForCreate } from "../../filesystem/workspace-path.js";
-export function createWriteTool(workspaceRoot: string) {
+export function createWriteTool(workspace: WorkspaceIdentity | string) {
+  const identity = typeof workspace === "string" ? createWorkspaceIdentity(workspace) : workspace;
   return defineTool<{ path: string; content: string }>({
     name: "write",
     description: "Write a file within the workspace",
@@ -25,10 +27,12 @@ export function createWriteTool(workspaceRoot: string) {
       try {
         const targetPath = requireString(call.input, "path");
         const content = requireString(call.input, "content");
-        const resolved = resolveContainedPathForCreate(workspaceRoot, targetPath);
+        const resolved = resolveContainedPathForCreate(identity, targetPath);
 
         mkdirSync(dirname(resolved), { recursive: true });
-        const bytes = await Bun.write(resolved, content);
+        const revalidated = resolveContainedPathForCreate(identity, targetPath);
+        if (revalidated !== resolved) throw new Error("workspace target changed before write");
+        const bytes = await Bun.write(revalidated, content);
 
         return successResult(call, `Wrote ${bytes} bytes to ${resolved}`);
       } catch (err) {
