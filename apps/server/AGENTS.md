@@ -102,7 +102,7 @@ Adapter.InboundMessage
 
 Errors bubble up as `Error: {message}` strings back to the channel so operators can see failures instead of silent drops.
 
-The current `conversation.ts` / `ingress/bridge.ts` path still contains transitional routing, model, and tool-selection logic. Do not add new product semantics there. Move new logic into `packages/openomni` and shrink the server bridge over time.
+The current `conversation.ts` / `ingress/bridge.ts` path still contains transitional model and tool-selection logic; per-message routing back doors were deleted when the kernel's unified `resolveRoute` shipped (#464, PR #485). Do not add new product semantics there. Move new logic into `packages/openomni` and shrink the server bridge over time.
 
 ## TOOL SYSTEM
 
@@ -153,10 +153,10 @@ Channel adapters must not:
 
 - `apps/server/src/agents/registry.ts` is the **server-local** agent registry (keyed by name); the former `AgentRegistry` in `@openomni/agent` was removed in the P0 dead-code sweep (#453).
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
-- `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
+- `getAgentDefinition(name)` returns `undefined` when the agent is unknown; `ingress/bridge.ts`'s `buildAgentDef` then throws. Direct inbound never consults the registry — `buildResidentAgentDef` builds the Resident definition with the configured default model.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
 
-This registry is transitional runtime configuration. Product routing should move toward OpenOmni-owned agent/runtime resolution rather than server-side per-message routing.
+This registry is transitional runtime configuration. Product routing is OpenOmni-owned since the unified kernel `resolveRoute` shipped (#464, PR #485); the registry only feeds the bootstrap-wired agent resolver (internal events such as cron). Do not reintroduce server-side per-message routing.
 
 ## RESIDENT PROFILE
 

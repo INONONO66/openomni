@@ -1,6 +1,6 @@
 # What Is an Agent OS — Definition and Qualification Tests
 
-OpenOmni's root claim is "a single-Owner Agent OS" ([Design Philosophy](design-philosophy.md)). This document defines the term functionally — metaphor stripped — so the claim is checkable rather than rhetorical. The project's own scorecard is at the bottom; it is not flattering, by design.
+OpenOmni's root claim is "a single-Owner Agent OS" ([Design Philosophy](design-philosophy.md)). This document defines the term functionally — metaphor stripped — so the claim is checkable rather than rhetorical. The project's own scorecard is at the bottom; it is not flattering, by design. Current wiring is authoritative only in [Implementation Status](implementation-status.md); live delivery tracking is [GitHub #459](https://github.com/INONONO66/openomni/issues/459).
 
 ## 1. What an OS functionally is
 
@@ -26,6 +26,8 @@ The classical OS protected memory and CPU. The agent world's scarce resources ar
 
 The last row is the category's genuinely new duty. **A classical OS could generally trust a CPU's exit status; an agent's "done" can be false.** An Agent OS therefore needs accountability: preserve what happened, require evidence, and deterministically check the specific predicates it knows how to check. It cannot mechanically turn an arbitrary claim into truth; unsupported claims remain assertions.
 
+OpenOmni sharpens that duty because every unit of work is a WorkItem contract. Progress completion, one execution's exit status, one criterion's result, and terminal contract completion are different facts. The target #490 completion authority closes a WorkItem only after a durable admission bound to the current contract revision and evidence basis; no coding, connector, human, or future executor receives a separate `completed` path.
+
 ## 3. Definition
 
 > **An Agent OS is the privileged layer that lets agents it did not write share one principal's authority, money, channels, and memory — meterable and revocable (multiplexing); that bounds a malicious agent's blast radius by mechanism (protection); that exposes a stable command interface (ABI); that keeps commitments alive on real-world timescales (lifecycle); and that records claimed effects and deterministically checks supported predicates (accountability).**
@@ -43,7 +45,7 @@ A system qualifies only by passing all five. This turns "is it an Agent OS?" fro
 | **T1** | Third-party | Can I *install* an agent I did not write and have it run under enforced limits? |
 | **T2** | Hostile program | If that agent is malicious, is the damage bounded by mechanism — not by prompt? |
 | **T3** | Power loss | Do commitments (schedules, pending replies, in-flight work) survive a reboot? |
-| **T4** | Liar | Are completion claims evidence-linked, and can supported false predicates be deterministically refuted without treating unchecked claims as true? |
+| **T4** | Liar | Are completion claims separated from observations and scoped criterion results, and can the current WorkItem contract close only through one durable admission without treating unchecked claims as true? |
 | **T5** | Multiplexing | Do multiple agents share budgets, authority, and channels without trampling each other? |
 
 ## 5. The landscape, scored
@@ -64,15 +66,15 @@ A note on trust direction, since it is the deepest split in the landscape: compa
 
 ## 6. OpenOmni scorecard
 
-Honest as of 2026-07-20. Current wiring truth: [implementation-status.md](implementation-status.md).
+Honest as of 2026-08-03. Current wiring truth: [implementation-status.md](implementation-status.md).
 
 | Test | Shipped today | Target path |
 |---|---|---|
-| T1 third-party | ❌ Not passed. The `AppConnector` ABI, installation/consent storage, endpoint dispatch, process driver, log capture, stall detection, and evidence projection exist; first-party definitions and unused discovery/registry modules were deleted, and there is no complete install lifecycle. | #216 — discover → register → consent → wire → smoke-verify, then run a third-party agent under enforced limits |
-| T2 hostile program | ⚠️ Partial. Worker-spawn denial, budget hard-stop, tool guard, blacklist, grants, and authority evaluation are mechanisms; kernel/userland still share one process and the Resident retains direct mutating tools. | #218/#221; process-isolation-grade T2 remains long-term for this single-Owner boundary |
-| T3 power loss | ⚠️ Partial. Cron jobs persist and boot starts their runner; PendingInteraction rows remain storage-backed and boot expiry cleanup runs. Unified durable `Wait`, interrupted-attempt continuation, and effect reconciliation are not shipped. | #215 + #217 + P2 C1 restart proof |
-| T4 liar | ⚠️ Partial. Completion reports require resolving evidence, and supported URL/API/citation read-back checks run before completion. There is no general truth guarantee, sandboxed verifier registry, or replay-conformance proof. | #467 — store `checkedPredicate` verdicts, type unchecked claims as asserted, and refute supported bad evidence deterministically |
-| T5 multiplexing | ⚠️ Partial. Multiple workers, budgets, blacklist, ChannelGrant, TrustTier, WorkerGrant, and effective-authority evaluation exist; broader shared-resource accounting and the target authority boundary remain incomplete. | #219/#221 and the P2/P4 boundary work |
+| T1 third-party | ❌ Not passed. The `AppConnector` ABI, installation/consent storage, endpoint dispatch, process driver, log capture, stall detection, and evidence projection exist; first-party definitions and unused discovery/registry modules were deleted, and there is no complete install lifecycle. | Discover → register → consent → wire → smoke-verify, then run a third-party agent under enforced limits |
+| T2 hostile program | ⚠️ Partial. Worker-spawn denial, budget hard-stop, tool guard, blacklist, grants, and authority evaluation are mechanisms; kernel/userland still share one process and the Resident retains direct mutating tools. | Resident-only allocation and process-isolation-grade protection for this single-Owner boundary |
+| T3 power loss | ⚠️ Partial. Cron jobs persist and boot starts their runner; PendingInteraction rows remain storage-backed and boot expiry cleanup runs. Unified durable `Wait`, interrupted-attempt continuation, and effect reconciliation are not shipped. | Unified durable Wait, interrupted-attempt continuation, effect reconciliation, and restart proof |
+| T4 liar | ⚠️ Partial. Completion reports require resolving passing WorkItem-local evidence, and supported URL/API/citation read-back checks run before completion. Claims, observations, criterion results, invalidations, durable admission, and terminal lifecycle are not yet distinct facts; current completion origins do not yet converge on a contract-revision/basis-bound authority. | One domain-neutral WorkItem contract-closing admission; scoped `checkedPredicate` results with unchecked claims typed as asserted and supported bad evidence deterministically refuted; a durable ledger/CAS and replay substrate |
+| T5 multiplexing | ⚠️ Partial. Multiple workers, budgets, blacklist, ChannelGrant, TrustTier, WorkerGrant, and effective-authority evaluation exist; broader shared-resource accounting and the target authority boundary remain incomplete. | Shared-resource accounting and the target authority boundary |
 
 **Qualification: 0 / 5 tests fully pass today; all five have target paths, with substantial partial substrate in T2–T5.** Formal qualification still requires all five tests. Passing T1, T3, and T4 is the project's narrower product-branding milestone for using “Agent OS”; it is not five-test qualification. Until that milestone, the honest description is *"an evidence-gated personal workflow engine building toward an Agent OS."*
 

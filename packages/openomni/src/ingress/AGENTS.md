@@ -1,6 +1,6 @@
 # Ingress Module
 
-Current inbound stage for the OpenOmni communication kernel. Ingress bridges resolved inbound events to session projection and execution. It is not the long-term owner of all communication semantics; inbound routing converges on the single kernel `resolveRoute` pipeline (#464: blacklist → wait correlation → ceiling → actor → surface), and this module's scattered decision sites are consolidation targets, not extension points.
+Current inbound stage for the OpenOmni communication kernel. Ingress bridges resolved inbound events to session projection and execution. It is not the long-term owner of all communication semantics; inbound routing converged on the shipped single kernel `resolveRoute` pipeline (#464 / PR #485: blacklist → wait correlation → ceiling → actor → surface), and this module's remaining scattered decision sites are consolidation targets, not extension points.
 
 ## Pipeline
 
