@@ -197,6 +197,58 @@ describe("verifier replay identity and schema conformance", () => {
       expect(() => schema.parse(proxy)).toThrow();
       expect(trapCalls).toBe(0);
     }
+
+    let inheritedCalls = 0;
+    const hostilePrototype: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries({
+      eventType: "event",
+      meaning: "stable",
+      fromVersion: 1,
+      toVersion: 2,
+      upcast: (event: unknown) => event,
+    })) {
+      Object.defineProperty(hostilePrototype, key, {
+        enumerable: true,
+        get() {
+          inheritedCalls += 1;
+          return value;
+        },
+      });
+    }
+    const prototypeAlias = {};
+    Object.defineProperty(prototypeAlias, "__proto__", {
+      enumerable: true,
+      value: hostilePrototype,
+    });
+    expect(UpcasterSchema.safeParse(prototypeAlias).success).toBe(false);
+    expect((await UpcasterSchema.safeParseAsync(prototypeAlias)).success).toBe(false);
+    expect(() => UpcasterSchema.parse(prototypeAlias)).toThrow();
+    expect(inheritedCalls).toBe(0);
+
+    const hostileList = [
+      {
+        eventType: "event",
+        meaning: "stable",
+        fromVersion: 1,
+        toVersion: 2,
+        upcast: (event: unknown) => event,
+      },
+    ];
+    let listCalls = 0;
+    Object.defineProperty(hostileList, "extra", {
+      get() {
+        listCalls += 1;
+        return "must not run";
+      },
+    });
+    expect(() =>
+      upcastOnRead(
+        { eventType: "event", meaning: "stable", schemaVersion: 1, payload: null },
+        2,
+        hostileList,
+      ),
+    ).toThrow();
+    expect(listCalls).toBe(0);
   });
 
   test("creates order-independent runtime, dependency, and environment fingerprints", () => {

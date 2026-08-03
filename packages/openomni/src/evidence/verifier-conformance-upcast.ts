@@ -8,6 +8,8 @@ import {
   type JsonValue,
 } from "./verifier-conformance-canonical.js";
 
+const forbiddenUpcasterKeys = new Set(["__proto__", "constructor", "prototype"]);
+
 const VersionedEventContract = z
   .object({
     eventType: z.string().min(1).max(256),
@@ -82,6 +84,18 @@ function snapshotUpcasterList(input: unknown): readonly unknown[] {
     throw new Error("expected plain upcaster list");
   }
   if (input.length > 128) throw new Error("too many upcasters");
+  const keys = Reflect.ownKeys(input);
+  if (
+    keys.length !== input.length + 1 ||
+    keys.some(
+      (key) =>
+        typeof key !== "string" ||
+        (key !== "length" && !/^(?:0|[1-9][0-9]*)$/u.test(key)) ||
+        (key !== "length" && Number(key) >= input.length),
+    )
+  ) {
+    throw new Error("invalid upcaster list shape");
+  }
   const output: unknown[] = [];
   for (let index = 0; index < input.length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
@@ -99,28 +113,40 @@ function snapshotUpcasterList(input: unknown): readonly unknown[] {
 }
 
 function snapshotUpcaster(input: unknown): Readonly<Record<string, unknown>> {
+  const prototype =
+    input === null || typeof input !== "object" || isProxy(input)
+      ? undefined
+      : Object.getPrototypeOf(input);
   if (
     isProxy(input) ||
     input === null ||
     typeof input !== "object" ||
-    Object.getPrototypeOf(input) !== Object.prototype
+    (prototype !== Object.prototype && prototype !== null)
   ) {
     throw new Error("expected plain upcaster");
   }
   const keys = Reflect.ownKeys(input);
-  if (keys.some((key) => typeof key !== "string")) throw new Error("invalid upcaster key");
-  const output: Record<string, unknown> = {};
+  if (keys.some((key) => typeof key !== "string" || forbiddenUpcasterKeys.has(key))) {
+    throw new Error("invalid upcaster key");
+  }
+  const output: Record<string, unknown> = Object.create(null);
   for (const key of keys as string[]) {
     const descriptor = Object.getOwnPropertyDescriptor(input, key);
     if (
       descriptor === undefined ||
       !("value" in descriptor) ||
+      descriptor.enumerable !== true ||
       descriptor.get !== undefined ||
       descriptor.set !== undefined
     ) {
       throw new Error("expected data-only upcaster fields");
     }
-    output[key] = descriptor.value;
+    Object.defineProperty(output, key, {
+      configurable: false,
+      enumerable: true,
+      value: descriptor.value,
+      writable: false,
+    });
   }
   return Object.freeze(output);
 }
