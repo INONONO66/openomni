@@ -7,7 +7,7 @@ const contradictionPairs = Object.freeze([
   Object.freeze(["allow", "deny"]),
 ]);
 
-export const FrozenSymbolicNliModel = Object.freeze({
+const FrozenSymbolicNliModel = Object.freeze({
   version: "openomni-frozen-symbolic-nli-v1",
   lexicalThreshold: 0.6,
   negators: Object.freeze(["no", "not", "never", "without"]),
