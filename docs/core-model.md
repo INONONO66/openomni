@@ -1,6 +1,6 @@
 # Core Model — The OS Specification
 
-This document specifies the system that [Design Philosophy](design-philosophy.md) states in one page. Philosophy owns ten nouns; this document owns their fields, formats, and states. Implementation truth lives in [Implementation Status](implementation-status.md); package-level structure in [Architecture](architecture.md).
+This document specifies the system that [Design Philosophy](design-philosophy.md) states in one page. Philosophy owns ten nouns; this document owns their fields, formats, and states. Implementation truth lives in [Implementation Status](implementation-status.md); package-level structure in [Architecture](architecture.md). Live delivery order, issue state, and checkpoints belong to [GitHub #459](https://github.com/INONONO66/openomni/issues/459), not this contract.
 
 ## The System in One Paragraph
 

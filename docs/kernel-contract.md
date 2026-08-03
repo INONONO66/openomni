@@ -1,6 +1,6 @@
 # Kernel Contract
 
-This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, the authority evaluation, the work-item and evidence contracts, the Governor's operating rules, and the memory port. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md).
+This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, the authority evaluation, the work-item and evidence contracts, the Governor's operating rules, and the memory port. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md). It does not sequence delivery or report live issue state; [GitHub #459](https://github.com/INONONO66/openomni/issues/459) is authoritative for that.
 
 ## 1. Kernel and Userland
 
@@ -19,9 +19,10 @@ Documentation may use "guaranteed", "cannot", or "never" only for rows marked �
 | Tool permission is fail-closed | ✅ | Tool pipeline. |
 | Workers cannot originate new Workers | ✅ | Dispatch policy and the Worker tool surface. |
 | Session ownership and isolation | 🚧 | Current session separation is wired; the target owner/origin/purpose model and WorkItem-attempt absorption are not. |
-| Append-only, record-before-act decisions through `Ledger.append(event, expectedHead)` | 📋 | P2 #455 target; current Bus persistence is not the serialized/CAS write gate. |
+| Append-only, record-before-act decisions through `Ledger.append(event, expectedHead)` | 📋 | Target contract; current Bus persistence is not the serialized/CAS write gate. |
 | WorkItem creation requires ≥1 acceptance criterion | Implemented check | WorkItem schema and `worker.spawn` handling; not promoted to the structural-guarantee set. |
 | Completion claims require resolvable evidence | Implemented check | Current `WorkItemStore.complete()` / worker-completion gate; the future `work.complete.pre` point is not the source of this check. |
+| WorkItem terminal completion has one contract-closing admission authority | 📋 | P2 #490 target. Current callers may still reach `WorkItemStore.complete()` after the narrower evidence-reference gate; there is no durable `CompletionAdmission`, contract-revision/basis CAS, or origin-convergence guarantee yet. |
 | Retry exhaustion adds a blocker and reaches the current Owner-visible task surface | Implemented check | WorkItem retry enforcement and the authenticated local `show open tasks` surface; broader push notification remains target work. |
 | Worker memory recall is task-scoped | 📋 | Target `memory.recall.pre`; no memory engine or recall consumer is wired. |
 | Memory snapshot character budgets | 📋 | Target memory built-in layer; curated-memory snapshot injection is not wired. |
@@ -220,11 +221,56 @@ completionReport {
 
 One artifact, three jobs: evaluation input (judgment without transcript), distillation unit (raw worker output never enters user-facing context), evidence index (claims bound to ledger records). For humans, the reply itself is the writing — the system assembles the report from ask + reply + receipts. For installed apps, the final message is the report and the diff/exit-code/test-output are the evidence.
 
+**Target contract-closing authority (#490).** Because every unit of OpenOmni work is a WorkItem contract, `completed` is not a Worker exit status, Todo/Goal projection, criterion verdict, or generic `passed` bit. It is the kernel's durable declaration that the obligation represented by the **current contract revision and basis** may be closed. Four layers remain distinct:
+
+| Layer | Meaning | May write `WorkItemCompleted`? |
+|---|---|---|
+| Progress projection | Plan/Todo state such as pending, in-progress, or done | No |
+| Attempt outcome | One execution settled as succeeded, failed, interrupted, or cancelled | No |
+| Criterion result | Current evidence yields `verified`, `refuted`, `inconclusive`, or `asserted` for one stable criterion ID | No |
+| WorkItem lifecycle | The durable obligation remains open, blocked, failed, cancelled, or completed | Only through completion admission |
+
+Owner outcome (`adopted | corrected | redone | ignored`) is a later calibration signal and never rewrites the historical admission.
+
+The target fact flow is domain-neutral:
+
+```text
+WorkItem contract revision + stable acceptance criteria
+  -> ClaimSubmitted
+  -> ObservationRecorded
+  -> CriterionResult
+  -> CriterionResultInvalidated?
+  -> work.complete.requested
+  -> work.complete.pre
+  -> CompletionAdmission
+  -> WorkItemCompleted(admissionId)
+```
+
+- A **claim** is claimant testimony bound to one criterion, never a verdict.
+- An **observation** records producer, subject, basis, provenance/artifacts, parents, and observation time; it carries no generic truth bit.
+- A **criterion result** records one scoped verdict, the exact checked predicate when applicable, observation and verifier references, assumptions, basis, scope, and residual risk.
+- Invalidation is a separate append-only fact. A historical result remains true of its recorded basis but is excluded from the current effective-result fold after contract, subject, assumption, verifier, artifact, or basis drift.
+- **CompletionAdmission** records contract revision, current basis, effective result IDs, unresolved criterion IDs, policy/stakes references, residual risks, reason codes, and exactly one decision: `admit | block | escalate | owner_override`. Owner override carries a receipt and never promotes an underlying result to `verified`.
+
+The completion decision performs no evidence acquisition: no command, network, clock, subprocess, LLM, sensor, or connector call. Those producers may be added later without creating domain profiles or alternate completion authorities in the kernel. The admission fold sees only stable criteria, current results and invalidations, blockers, basis/revision, policy, stakes, and Owner authority. An effect intent recorded in the WorkItem's current attempt scope that is outcome-less or `unknown` folds as an unresolved blocker: admission cannot admit until reconciliation records its terminal `confirmed` or `failed` outcome or Owner overrides with a receipt.
+
+Terminal ordering is record-before-act:
+
+```text
+fold current contract/evidence state
+  -> dispatch work.complete.pre
+  -> append CompletionAdmission(expectedHead)
+  -> confirm contractRevision/basis by CAS
+  -> append WorkItemCompleted(admissionId)
+```
+
+Every origin — internal Worker, connector endpoint, external API/A2A, human channel, SDK/internal caller, and future executor — converges on that path. No direct `WorkItemStore.complete()` bypass survives the target migration. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
+
 **Verification — three questions, three parties:**
 
 | Question | Answered by | Cost | Mechanism |
 |---|---|---|---|
-| Did it happen? | code (the evidence gate, `work.complete.pre`) | ~0 | every claim's `evidenceIds` must resolve to real ledger records. A claim without evidence is void; a report whose core claims lack evidence is **treated as work not done** and bounced before any LLM evaluation. |
+| Did it happen? | code | ~0 | **Current:** every claim's `evidenceIds` must resolve to passing WorkItem-local evidence. **Target #490/#467:** observations and scoped criterion results are distinct facts; `work.complete.pre` consumes their current fold and cannot infer truth from claimant self-report. |
 | Is it good? | Resident | 1 LLM evaluation | judges report + deliverable + verified evidence only — never the worker transcript. On failure, names the issue and re-dispatches with it attached. |
 | Was it useful? | Owner's behavior (`outcome`) | 0, delayed | adopted / corrected / redone / ignored — harvested retroactively by the Governor as ground truth; also calibrates the Resident's evaluation leniency. |
 
@@ -335,7 +381,7 @@ Snapshot injection and persistence nudges ride existing policy points (`prompt.c
 
 ## 6. Determinism, Replay, and Verification
 
-Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). Mechanized by the #467 conformance gate. Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
+Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). Partially mechanized today: the shipped #467 lint slice covers the vocabulary/tool/schema checks; this section's verifier-registry and replay contracts are target work owned by the open #467 (primitives) and #493 (archived replay integration). Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
 
 ### State and the ledger fold
 
@@ -354,11 +400,12 @@ Normative promotion of the 2026-07-09 determinism/verification round (machine-lo
 
 ### Verification typing
 
-`judge(claim, evidence, S) → { verified | asserted | refuted } × checked_predicate`.
+`judge(claim, evidence, S) → { verified | asserted | refuted | inconclusive } × checked_predicate`.
 
 - `verified` always stores **which predicate was checked** ("URL returned 200 and contains the quoted string" — not "the claim is true"). `guaranteed` remains reserved for code-enforced kernel behavior.
-- Admission: a completion report is admitted iff no claim is `refuted`, and either its stakes are below threshold or every claim is `verified`. Stakes are computed from **kernel-observed windowed ledger state**, never actor self-report (#469) — N small actions in a window accumulate to the stakes of the large action they compose.
+- `inconclusive` means an applicable proof attempt could not decide the criterion from the current information; it does not silently pass at low stakes. Verifier crash, malformed output, or capability violation is a separate verification-error fact and also blocks the affected required criterion.
 - A claim with no deterministic verifier is typed `asserted` — a first-class trust signal, not a silent pass. A **high-stakes `asserted` raises to the Owner**.
+- Admission (#490): missing, `refuted`, `inconclusive`, invalidated, basis-mismatched, or verification-error required criteria block. An explicit policy may admit a low-stakes `asserted` criterion while recording residual risk; high-stakes unresolved assertions escalate to the Owner. Owner override is a separate admission receipt and never changes the underlying verdict. Stakes are computed from **kernel-observed windowed ledger state**, never actor self-report (#469) — N small actions in a window accumulate to the stakes of the large action they compose.
 - **Verifiers are deterministic code, sandboxed** (no network, no clock, no subprocess; deny-by-default) — purity by capability, not by naming convention. **No LLM-in-verifier.** Four families, strongest first: executable re-check > citation/quote match > frozen-NLI support > constrained-decoding validity (validity only, never promoted to truth). Every verifier's bench must demonstrate discrimination (returns `refuted` on a known-bad input).
 - Language discipline: `replay-of-record` (reconstructing what happened — what this system provides) is never conflated with `deterministic regeneration` (re-running the model to identical outputs — not provided).
 

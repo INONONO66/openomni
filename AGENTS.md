@@ -8,7 +8,9 @@ OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not
 
 The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 7 packages and 1 app (Server).
 
-The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs, package rings, migration phases). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+
+Live delivery state, ordering, and checkpoints belong only in [GitHub #459](https://github.com/INONONO66/openomni/issues/459). Its milestones group work, dependency links define order, and leaf issues are the executable work; do not copy that inventory into this guide.
 
 ## STRUCTURE
 
@@ -167,7 +169,7 @@ These rules are model-independent and non-negotiable; they exist because each on
 4. **Reconcile-first.** Issue bodies and audit findings decay as `main` moves. Before deleting or changing anything an issue claims is true, re-verify the claim on the current tree (zero-consumer grep proof for deletions) and record deltas in the PR body. A claim that turned out false gets corrected in the issue, not silently ignored.
 5. **Conformance gate rules of engagement** (`bun run lint:tools`, pre-push + CI): shrinking a baseline in `script/conformance/` is autonomous and encouraged; **growing one requires Owner sign-off in review**. Schema evolution: field renames/re-meanings are forbidden — a changed meaning is a new event type, shapes evolve by upcast-on-read; removals go through `lint-tools --update`, whose diff is the sign-off surface.
 6. **Fresh clone/worktree**: run `bun install` and `turbo run build` (protocol `dist/`) before `lint-tools` or tests — otherwise they fail on missing build artifacts, which is not a code defect.
-7. **Doc-state sync law**: `docs/implementation-status.md` and the phase issue move in the same PR as the change. An engine without a consumer does not count as shipped; a shipped change that docs still call planned is a defect.
+7. **Doc-state sync law**: `docs/implementation-status.md` and the applicable leaf issue under [#459](https://github.com/INONONO66/openomni/issues/459) move in the same PR as the change. An engine without a consumer does not count as shipped; a shipped change that docs still call planned is a defect.
 
 ## MODES
 
@@ -185,7 +187,7 @@ Target direction: only the Resident originates a new Worker allocation. The Owne
 | --- | --- | --- |
 | Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
 | Resident | Always-on user-facing judgment shell; no subagent lane | Ingress target agent + future Resident-selected policy plan and judgment-only tool catalog |
-| Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` records plus the legacy `WorkerRun` store and `executorKind`; distinct `WorkItem` attempt records are a P2 target |
+| Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` records plus the legacy `WorkerRun` store and `executorKind`; distinct `WorkItem` attempt records are a target contract |
 | Actor | Any external entity that interacts with the system | `ActorIdentity` / `ActorEndpoint` schemas, SQLite `ActorRegistry`, ingress `ActorResolver`, and canonical `trustTier` projection are wired |
 | Jester | Silence-first, seven-lens semantic cross-check with no dispatch authority | Target lifecycle is not wired; see `docs/implementation-status.md` |
 | System Governor | Read-omniscient/write-minimal post-hoc structural improvement; raw reads stay scoped, audited, and outside user-facing sessions | Policy engine and Bus observers exist; the Governor loop is not wired |
