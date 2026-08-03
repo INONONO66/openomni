@@ -109,6 +109,22 @@ export function compareCoverage(
       );
       continue;
     }
+    // Fail closed when instrumentation collapses: an empty or mass-filtered
+    // report scores 100% and would otherwise pass as an "improvement" with no
+    // baseline diff (no sign-off surface). A silently disabled gate is the
+    // worst regression this script exists to prevent.
+    if (coverage.linesFound === 0 && base.linesFound > 0) {
+      violations.push(
+        `${packageDir}: coverage report contains zero src/ line records while the baseline has ${base.linesFound} — instrumentation was disabled or filtered away; the gate fails closed`,
+      );
+      continue;
+    }
+    if (coverage.linesFound < base.linesFound * 0.5) {
+      violations.push(
+        `${packageDir}: instrumented line count collapsed from ${base.linesFound} to ${coverage.linesFound} (more than half) — coverage filtering or package scope changed; re-baseline via --update (sign-off diff)`,
+      );
+      continue;
+    }
     const deltaPp = coverage.pct - base.pct;
     if (deltaPp < -tolerancePp) {
       violations.push(
@@ -240,6 +256,26 @@ function selfTest(): void {
     failures.push("a baselined package with no coverage report was not flagged");
   }
 
+  const zeroRecords = compareCoverage(
+    syntheticBaseline,
+    { "packages/fixture": { linesFound: 0, linesHit: 0, pct: 100 } },
+    TOLERANCE_PP,
+  );
+  if (zeroRecords.violations.length !== 1) {
+    failures.push(
+      "a zero-record report (disabled/filtered instrumentation scoring 100%) was not flagged",
+    );
+  }
+
+  const collapsed = compareCoverage(
+    syntheticBaseline,
+    { "packages/fixture": { linesFound: 40, linesHit: 40, pct: 100 } },
+    TOLERANCE_PP,
+  );
+  if (collapsed.violations.length !== 1) {
+    failures.push("an instrumented-line collapse below half the baseline was not flagged");
+  }
+
   if (failures.length > 0) {
     for (const failure of failures) {
       process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
@@ -247,7 +283,7 @@ function selfTest(): void {
     process.exit(1);
   }
   process.stdout.write(
-    "OK: coverage-ratchet self-test — regression/growth/missing-report discriminate, equal-or-better passes\n",
+    "OK: coverage-ratchet self-test — regression/growth/missing-report/zero-record/line-collapse discriminate, equal-or-better passes\n",
   );
 }
 
