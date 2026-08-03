@@ -49,6 +49,7 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
   const successCount = first.filter(
     (receipt, index) => receipt.ok && second[index]?.ok === true,
   ).length;
+  const runSuccessCount = [...first, ...second].filter((receipt) => receipt.ok).length;
   const action =
     measured.exposedActions.length === 0 &&
     measured.exposedCapabilities.length === 0 &&
@@ -87,7 +88,7 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
         fixtureCount: first.length,
         passToKSuccesses: successCount,
         passToKRate: successCount / first.length,
-        successRate: successCount / first.length,
+        successRate: runSuccessCount / (first.length + second.length),
       },
       taxonomy: measured.taxonomy,
       accuracy: measured.accuracy,

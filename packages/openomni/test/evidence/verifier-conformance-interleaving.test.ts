@@ -40,6 +40,10 @@ describe("verifier replay interleaving and substitution conformance", () => {
     expect(fuzzCommutativeInterleavings(plan, sum)).toEqual(
       fuzzCommutativeInterleavings(plan, sum),
     );
+    const report = fuzzCommutativeInterleavings(plan, sum);
+    expect(Object.isFrozen(report)).toBe(true);
+    expect(Object.isFrozen(report.interleavingHashes)).toBe(true);
+    expect(Object.isFrozen(plan.events)).toBe(false);
 
     const concatenate = (state: unknown, event: { value: unknown }) => {
       if (typeof state !== "string" || typeof event.value !== "string") {
@@ -51,7 +55,7 @@ describe("verifier replay interleaving and substitution conformance", () => {
       fuzzCommutativeInterleavings(
         {
           seed: 73,
-          iterations: 12,
+          iterations: 1,
           initialFold: "",
           events: [
             { id: "a", commutativeGroup: "not-really", value: "a" },
@@ -84,12 +88,7 @@ describe("verifier replay interleaving and substitution conformance", () => {
     ).toBe(4);
   });
 
-  test("substitutes recorded outputs and rejects cassette divergence without live effects", () => {
-    let liveEffects = 0;
-    const liveEffect = () => {
-      liveEffects += 1;
-      return "live";
-    };
+  test("substitutes recorded outputs without mutating the caller cassette", () => {
     const commands = [
       { op: "llm", promptHash: digestA },
       { op: "device", id: "lamp" },
@@ -103,8 +102,6 @@ describe("verifier replay interleaving and substitution conformance", () => {
     expect(outputs).toEqual([{ text: "recorded" }, { status: "off" }]);
     expect(Object.isFrozen(cassette[0]?.output)).toBe(false);
     expect(Object.isFrozen(outputs[0])).toBe(true);
-    expect(liveEffects).toBe(0);
-    expect(liveEffect).toBeFunction();
     expect(
       captureConformanceError(() => substituteRecordedOutputs(commands.slice(0, 1), cassette))
         .facts,

@@ -65,8 +65,8 @@ export function driverExecution(
   ok: boolean,
   receipt: Readonly<Record<string, unknown>>,
 ): VerifierRegistryDriverExecution {
-  return {
+  return Object.freeze({
     exitCode: ok ? 0 : 1,
     stdout: JSON.stringify(receipt),
-  };
+  });
 }

@@ -27,7 +27,11 @@ const CodeInputs = z
     operands: z.tuple([z.number().finite(), z.number().finite()]),
     expected: z.number().finite(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (input) => input.operation !== "divide" || input.operands[1] !== 0,
+    "division by zero is not a replayable code predicate",
+  );
 const ArchivedInputs = z
   .object({
     target: z.string().url(),

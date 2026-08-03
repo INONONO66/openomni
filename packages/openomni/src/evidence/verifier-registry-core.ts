@@ -95,23 +95,34 @@ export function createRegistry(): Registry {
 }
 
 function result(obligation: Obligation, value: ResultValue): VerificationFact {
+  let basisHash: string;
+  try {
+    basisHash = hashCanonicalJson({
+      version: "verification-basis-v1",
+      obligation,
+      verifierId: value.verifierId,
+      ...(value.modelFingerprint === undefined ? {} : { modelFingerprint: value.modelFingerprint }),
+    });
+  } catch {
+    return error(
+      "malformed_output",
+      "verification basis exceeded the canonical output contract",
+      obligation,
+      value.verifierId,
+    );
+  }
   const parsed = VerificationResultSchema.safeParse({
     type: "verification_result",
     obligationId: obligation.obligationId,
     kind: obligation.kind,
     verifierId: value.verifierId,
     status: value.status,
-    basisHash: hashCanonicalJson({
-      version: "verification-basis-v1",
-      obligation,
-      verifierId: value.verifierId,
-      ...(value.modelFingerprint === undefined ? {} : { modelFingerprint: value.modelFingerprint }),
-    }),
+    basisHash,
     checkedPredicate: value.checkedPredicate,
     modelFingerprint: value.modelFingerprint,
   });
   return parsed.success
-    ? parsed.data
+    ? Object.freeze(parsed.data)
     : error(
         "malformed_output",
         "built-in verifier result failed the output contract",
@@ -127,15 +138,17 @@ function error(
   verifierId?: string,
   violation?: SandboxCapability | VerifierProgram["actions"][number],
 ): VerificationError {
-  return VerificationErrorSchema.parse({
-    type: "verification_error",
-    code,
-    detail,
-    obligationId: obligation?.obligationId,
-    kind: obligation?.kind,
-    verifierId,
-    violation,
-  });
+  return Object.freeze(
+    VerificationErrorSchema.parse({
+      type: "verification_error",
+      code,
+      detail,
+      obligationId: obligation?.obligationId,
+      kind: obligation?.kind,
+      verifierId,
+      violation,
+    }),
+  );
 }
 
 function asciiCompare(left: string, right: string): number {

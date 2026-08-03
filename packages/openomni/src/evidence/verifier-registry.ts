@@ -20,9 +20,11 @@ export namespace VerifierRegistry {
   export const VerifierProgram = Contract.VerifierProgram;
   export type VerifierProgram = Contract.VerifierProgram;
   export const VerificationRequest = Contract.VerificationRequest;
+  export type VerificationRequest = Contract.VerificationRequest;
   export const VerificationResult = Contract.VerificationResult;
   export type VerificationResult = Contract.VerificationResult;
   export const VerificationErrorCode = Contract.VerificationErrorCode;
+  export type VerificationErrorCode = Contract.VerificationErrorCode;
   export const VerificationError = Contract.VerificationError;
   export type VerificationError = Contract.VerificationError;
   export const VerificationFact = Contract.VerificationFact;

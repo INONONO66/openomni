@@ -10,8 +10,8 @@ import { failReplayConformance } from "./verifier-conformance-replay.js";
 
 export const CommutativeEventSchema = z
   .object({
-    id: z.string().min(1),
-    commutativeGroup: z.string().min(1).optional(),
+    id: z.string().min(1).max(256),
+    commutativeGroup: z.string().min(1).max(256).optional(),
     value: JsonValueSchema,
   })
   .strict();
@@ -20,18 +20,19 @@ export type CommutativeEvent = Readonly<Omit<CommutativeEventShape, "value">> & 
   readonly value: JsonValue;
 };
 
-export const InterleavingPlanSchema = z
-  .object({
-    seed: z.number().int(),
-    iterations: z.number().int().min(1).max(1_000),
-    initialFold: JsonValueSchema,
-    events: z.array(CommutativeEventSchema).max(256),
-  })
-  .strict()
-  .refine(
-    (plan) => new Set(plan.events.map((event) => event.id)).size === plan.events.length,
-    "duplicate event id",
-  );
+export const InterleavingPlanSchema = JsonValueSchema.pipe(
+  z
+    .object({
+      seed: z.number().int(),
+      iterations: z.number().int().min(1).max(1_000),
+      initialFold: JsonValueSchema,
+      events: z.array(CommutativeEventSchema).max(256),
+    })
+    .strict(),
+).refine(
+  (plan) => new Set(plan.events.map((event) => event.id)).size === plan.events.length,
+  "duplicate event id",
+);
 export const InterleavingReportSchema = z
   .object({
     seed: z.number().int(),
@@ -62,7 +63,11 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-function shuffled(events: readonly CommutativeEvent[], random: () => number): CommutativeEvent[] {
+function shuffled(
+  events: readonly CommutativeEvent[],
+  random: () => number,
+  iteration: number,
+): CommutativeEvent[] {
   const result = [...events];
   for (let start = 0; start < result.length; ) {
     const group = result[start]?.commutativeGroup;
@@ -72,13 +77,18 @@ function shuffled(events: readonly CommutativeEvent[], random: () => number): Co
     }
     let end = start + 1;
     while (result[end]?.commutativeGroup === group) end += 1;
-    for (let index = end - 1; index > start; index -= 1) {
-      const swapIndex = start + Math.floor(random() * (index - start + 1));
-      const left = result[index];
-      const right = result[swapIndex];
-      if (left === undefined || right === undefined) throw new Error("invalid shuffle index");
-      result[index] = right;
-      result[swapIndex] = left;
+    if (iteration === 0 && end - start > 1) {
+      const reversed = result.slice(start, end).reverse();
+      result.splice(start, reversed.length, ...reversed);
+    } else {
+      for (let index = end - 1; index > start; index -= 1) {
+        const swapIndex = start + Math.floor(random() * (index - start + 1));
+        const left = result[index];
+        const right = result[swapIndex];
+        if (left === undefined || right === undefined) throw new Error("invalid shuffle index");
+        result[index] = right;
+        result[swapIndex] = left;
+      }
     }
     start = end;
   }
@@ -108,7 +118,7 @@ export function fuzzCommutativeInterleavings(
   const interleavingHashes: string[] = [];
   for (let iteration = 0; iteration < plan.iterations; iteration += 1) {
     const actualHash = hashCanonicalJson(
-      fold(plan.initialFold, shuffled(plan.events, random), reducer),
+      fold(plan.initialFold, shuffled(plan.events, random, iteration), reducer),
     );
     interleavingHashes.push(actualHash);
     if (actualHash !== baselineHash) {
@@ -122,12 +132,12 @@ export function fuzzCommutativeInterleavings(
       });
     }
   }
-  return Object.freeze(
-    InterleavingReportSchema.parse({
-      seed: plan.seed,
-      iterations: plan.iterations,
-      baselineHash,
-      interleavingHashes: Object.freeze(interleavingHashes),
-    }),
-  );
+  const report = InterleavingReportSchema.parse({
+    seed: plan.seed,
+    iterations: plan.iterations,
+    baselineHash,
+    interleavingHashes,
+  });
+  Object.freeze(report.interleavingHashes);
+  return Object.freeze(report);
 }

@@ -79,4 +79,18 @@ describe("verifier registry scoped result semantics", () => {
       modelFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
     });
   });
+
+  test("does not verify unsupported one-token lexical substitutions", () => {
+    const fact = VerifierRegistry.create().verify(
+      obligation("citation_support", {
+        archivedText: "The system is currently safe for all users.",
+        claimText: "The system is currently unsafe for all users.",
+      }),
+    );
+    expect(fact).toMatchObject({
+      type: "verification_result",
+      status: "inconclusive",
+      checkedPredicate: expect.any(String),
+    });
+  });
 });

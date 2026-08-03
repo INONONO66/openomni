@@ -31,8 +31,8 @@ export const ReplayBindingSchema = z
     version: z.literal("replay-key-v1"),
     source: z.union([ArchivedRangeSchema, ArchivedCassetteSchema]),
     environmentFingerprint: Sha256DigestSchema,
-    schemaVersion: z.string().min(1),
-    upcastVersion: z.string().min(1),
+    schemaVersion: z.string().min(1).max(256),
+    upcastVersion: z.string().min(1).max(256),
     nondeterminismManifestHash: Sha256DigestSchema,
   })
   .strict();
@@ -51,9 +51,9 @@ export function createReplayKey(input: unknown): ReplayKey {
   return Object.freeze(key);
 }
 
-export const ReplayTraceSchema = z
-  .object({ commands: z.array(JsonValueSchema), finalFold: JsonValueSchema })
-  .strict();
+export const ReplayTraceSchema = JsonValueSchema.pipe(
+  z.object({ commands: z.array(JsonValueSchema).max(1_024), finalFold: JsonValueSchema }).strict(),
+);
 export const ReplayDivergenceSchema = z
   .object({
     version: z.literal("replay-divergence-v1"),
@@ -138,6 +138,8 @@ export function assertReplayConformance(expectedInput: unknown, actualInput: unk
 export const RecordedCommandSchema = z
   .object({ command: JsonValueSchema, output: JsonValueSchema })
   .strict();
+const ReplayCommandsSchema = JsonValueSchema.pipe(z.array(JsonValueSchema).max(1_024));
+const RecordedCommandsSchema = JsonValueSchema.pipe(z.array(RecordedCommandSchema).max(1_024));
 type RecordedCommandShape = z.infer<typeof RecordedCommandSchema>;
 export type RecordedCommand = Readonly<RecordedCommandShape>;
 
@@ -145,8 +147,8 @@ export function substituteRecordedOutputs(
   commandInputs: readonly JsonValue[],
   cassetteInputs: readonly RecordedCommand[],
 ): readonly JsonValue[] {
-  const commands = z.array(JsonValueSchema).parse(commandInputs);
-  const cassette = z.array(RecordedCommandSchema).parse(cassetteInputs);
+  const commands = ReplayCommandsSchema.parse(commandInputs);
+  const cassette = RecordedCommandsSchema.parse(cassetteInputs);
   const shared = Math.min(commands.length, cassette.length);
   const outputs: JsonValue[] = [];
   for (let index = 0; index < shared; index += 1) {

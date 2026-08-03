@@ -40,6 +40,18 @@ describe("verifier registry security boundaries", () => {
     let nested: unknown = null;
     for (let depth = 0; depth < 70; depth += 1) nested = { nested };
     expect(() => canonicalJson(nested)).toThrow();
+    expect(() => canonicalJson(-0)).toThrow();
+
+    expect(() => canonicalJson(new Array(1))).toThrow();
+    const extended = [1];
+    Object.defineProperty(extended, "extra", { value: 2, enumerable: true });
+    expect(() => canonicalJson(extended)).toThrow();
+    const accessor = [1];
+    Object.defineProperty(accessor, "0", { get: () => 1, enumerable: true });
+    expect(() => canonicalJson(accessor)).toThrow();
+    const symbol = [1];
+    Object.defineProperty(symbol, Symbol("hidden"), { value: 2 });
+    expect(() => canonicalJson(symbol)).toThrow();
   });
 
   test("refutes native calls whose schema parse would drop fields", () => {
@@ -89,6 +101,54 @@ describe("verifier registry security boundaries", () => {
         verifierId: "builtin.numeric-v1",
       }),
     );
+  });
+
+  test("evaluates and hashes one immutable snapshot of exotic inputs", () => {
+    let descriptorReads = 0;
+    const switching = new Proxy(
+      { operator: "eq", left: 1, right: 1 },
+      {
+        getOwnPropertyDescriptor(target, property) {
+          const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
+          if (property !== "left" || descriptor === undefined || !("value" in descriptor)) {
+            return descriptor;
+          }
+          descriptorReads += 1;
+          return { ...descriptor, value: descriptorReads % 2 === 1 ? 1 : 2 };
+        },
+      },
+    );
+    const registry = VerifierRegistry.create();
+    const switched = registry.verify(obligation("numeric_recheck", switching));
+    const verified = registry.verify(
+      obligation("numeric_recheck", { operator: "eq", left: 1, right: 1 }),
+    );
+    const refuted = registry.verify(
+      obligation("numeric_recheck", { operator: "eq", left: 2, right: 1 }),
+    );
+    if (
+      switched.type !== "verification_result" ||
+      verified.type !== "verification_result" ||
+      refuted.type !== "verification_result"
+    ) {
+      throw new Error("expected verification results");
+    }
+    expect(
+      switched.status === "verified"
+        ? switched.basisHash === verified.basisHash
+        : switched.basisHash === refuted.basisHash,
+    ).toBe(true);
+    expect(Object.isFrozen(switched)).toBe(true);
+  });
+
+  test("returns typed malformed input for oversized registry boundaries", () => {
+    const fact = VerifierRegistry.create().verify({
+      obligationId: "oversized",
+      kind: "numeric_recheck",
+      claim: "x".repeat(65_537),
+      recordedInputs: { operator: "eq", left: 1, right: 1 },
+    });
+    expect(fact).toMatchObject({ type: "verification_error", code: "malformed_input" });
   });
 
   test("rejects impossible result taxonomy and status combinations", () => {

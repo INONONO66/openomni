@@ -56,9 +56,9 @@ export const JsonValue = JsonValueSchema;
 
 export const Obligation = z
   .object({
-    obligationId: z.string().min(1),
+    obligationId: z.string().min(1).max(512),
     kind: ObligationKind,
-    claim: z.string().min(1),
+    claim: z.string().min(1).max(65_536),
     recordedInputs: JsonObjectSchema,
   })
   .strict();
@@ -67,26 +67,27 @@ export type Obligation = z.infer<typeof Obligation>;
 export const VerifierProgram = z
   .object({
     version: z.literal("verifier-program-v1"),
-    outputVersion: z.string().min(1),
-    capabilities: z.array(SandboxCapability),
-    actions: z.array(ForbiddenAction),
+    outputVersion: z.string().min(1).max(256),
+    capabilities: z.array(SandboxCapability).max(SandboxCapability.options.length),
+    actions: z.array(ForbiddenAction).max(ForbiddenAction.options.length),
   })
   .strict();
 export type VerifierProgram = z.infer<typeof VerifierProgram>;
 export const VerificationRequest = z
   .object({ obligation: Obligation, program: VerifierProgram })
   .strict();
+export type VerificationRequest = z.infer<typeof VerificationRequest>;
 
 export const VerificationResult = z
   .object({
     type: z.literal("verification_result"),
-    obligationId: z.string().min(1),
+    obligationId: z.string().min(1).max(512),
     kind: ObligationKind,
-    verifierId: z.string().min(1),
+    verifierId: z.string().min(1).max(256),
     status: ResultStatus,
     basisHash: Sha256DigestSchema,
-    checkedPredicate: z.string().min(1).optional(),
-    modelFingerprint: z.string().min(1).optional(),
+    checkedPredicate: z.string().min(1).max(2_048).optional(),
+    modelFingerprint: z.string().min(1).max(256).optional(),
   })
   .strict()
   .superRefine((result, context) => {
@@ -133,10 +134,10 @@ export const VerificationError = z
   .object({
     type: z.literal("verification_error"),
     code: VerificationErrorCode,
-    detail: z.string().min(1),
-    obligationId: z.string().min(1).optional(),
+    detail: z.string().min(1).max(2_048),
+    obligationId: z.string().min(1).max(512).optional(),
     kind: ObligationKind.optional(),
-    verifierId: z.string().min(1).optional(),
+    verifierId: z.string().min(1).max(256).optional(),
     violation: z.union([SandboxCapability, ForbiddenAction]).optional(),
   })
   .strict();

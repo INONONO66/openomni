@@ -5,7 +5,7 @@ export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 const FrozenSymbolicNliModel = Object.freeze({
   version: "openomni-frozen-symbolic-nli-v2",
   tokenizationVersion: "unicode-word-v1",
-  claimCoverageThreshold: 0.75,
+  claimCoverageThreshold: 1,
   negators: Object.freeze(["no", "not", "never", "without"]),
   contradictionGroups: Object.freeze([
     pair(
@@ -30,9 +30,14 @@ const FrozenSymbolicNliModel = Object.freeze({
 
 const modelBytes = JSON.stringify({
   asset: FrozenSymbolicNliModel,
-  executable: [frozenSymbolicNliInfer, tokens, numbers, claimCoverage, containsOpposition].map(
-    (value) => value.toString(),
-  ),
+  executable: [
+    frozenSymbolicNliInfer,
+    tokens,
+    numbers,
+    wordTokens,
+    claimCoverage,
+    containsOpposition,
+  ].map((value) => value.toString()),
 });
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
 
@@ -40,9 +45,9 @@ export function frozenSymbolicNliInfer(premise: string, hypothesis: string): Fro
   const sourceTokens = tokens(premise);
   const claimTokens = tokens(hypothesis);
   if (claimTokens.size === 0) return "unknown";
-  const coverage = claimCoverage(sourceTokens, claimTokens);
   if (containsOpposition(sourceTokens, claimTokens)) return "contradicts";
-  if (coverage < FrozenSymbolicNliModel.claimCoverageThreshold) return "unknown";
+  const lexicalCoverage = claimCoverage(wordTokens(premise), wordTokens(hypothesis));
+  if (lexicalCoverage < FrozenSymbolicNliModel.claimCoverageThreshold) return "unknown";
   if (!numbers(hypothesis).every((number) => numbers(premise).includes(number))) {
     return "contradicts";
   }
@@ -64,6 +69,10 @@ function tokens(value: string): Set<string> {
 
 function numbers(value: string): string[] {
   return value.match(/-?\d+(?:\.\d+)?/g) ?? [];
+}
+
+function wordTokens(value: string): Set<string> {
+  return new Set([...tokens(value)].filter((token) => !/^\d+(?:\.\d+)?$/.test(token)));
 }
 
 function claimCoverage(source: ReadonlySet<string>, claim: ReadonlySet<string>): number {

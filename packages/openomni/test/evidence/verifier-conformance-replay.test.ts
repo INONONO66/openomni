@@ -51,6 +51,14 @@ describe("verifier replay identity and schema conformance", () => {
 
     expect(first).toEqual(second);
     expect(Object.isFrozen(first)).toBe(true);
+    expect(first.fingerprint).toBe(
+      hashCanonicalJson({
+        version: first.version,
+        runtimeFingerprint: first.runtimeFingerprint,
+        dependencyFingerprint: first.dependencyFingerprint,
+        environmentFingerprint: first.environmentFingerprint,
+      }),
+    );
     expect(first).toMatchObject({
       version: "environment-fingerprint-v1",
       runtimeFingerprint: expect.stringMatching(/^sha256:/),
@@ -206,5 +214,12 @@ describe("verifier replay identity and schema conformance", () => {
         },
       ]),
     ).toThrow("re-meaning");
+  });
+
+  test("bounds aggregate replay traces before comparison", () => {
+    const commands = Array.from({ length: 1_025 }, (_, index) => ({ op: "read", index }));
+    expect(() =>
+      assertReplayConformance({ commands, finalFold: null }, { commands, finalFold: null }),
+    ).toThrow();
   });
 });

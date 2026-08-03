@@ -4,17 +4,34 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 
-const forbiddenImports = new Set([
-  "node:child_process",
-  "node:cluster",
-  "node:dgram",
-  "node:dns",
-  "node:http",
-  "node:https",
-  "node:net",
-  "node:tls",
-  "node:worker_threads",
-]);
+const allowedImports: Readonly<Record<string, ReadonlySet<string>>> = {
+  "verifier-conformance-canonical.ts": new Set(["node:crypto", "zod"]),
+  "verifier-registry-contract.ts": new Set(["zod", "./verifier-conformance-canonical.js"]),
+  "verifier-registry-core.ts": new Set([
+    "./verifier-registry-contract.js",
+    "./verifier-conformance-canonical.js",
+    "./verifier-registry-evaluators.js",
+  ]),
+  "verifier-registry-evaluators.ts": new Set([
+    "zod",
+    "./verifier-registry-contract.js",
+    "./verifier-frozen-nli-model.js",
+    "./verifier-sandbox.js",
+  ]),
+  "verifier-sandbox.ts": new Set([
+    "node:crypto",
+    "@openomni/protocol",
+    "zod",
+    "./verifier-conformance-canonical.js",
+    "./verifier-frozen-nli-model.js",
+  ]),
+  "verifier-frozen-nli-model.ts": new Set(["node:crypto"]),
+  "verifier-registry.ts": new Set([
+    "./verifier-registry-contract.js",
+    "./verifier-registry-core.js",
+    "./verifier-frozen-nli-model.js",
+  ]),
+};
 const forbiddenGlobals = new Set([
   "Bun",
   "Date",
@@ -24,6 +41,9 @@ const forbiddenGlobals = new Set([
   "Worker",
   "eval",
   "fetch",
+  "globalThis",
+  "Math",
+  "navigator",
   "performance",
   "process",
   "setImmediate",
@@ -31,9 +51,13 @@ const forbiddenGlobals = new Set([
   "setTimeout",
 ]);
 const boundaryFiles = [
+  "verifier-conformance-canonical.ts",
+  "verifier-registry-contract.ts",
+  "verifier-registry-core.ts",
   "verifier-registry-evaluators.ts",
   "verifier-sandbox.ts",
   "verifier-frozen-nli-model.ts",
+  "verifier-registry.ts",
 ];
 
 describe("verifier sandbox structural boundary", () => {
@@ -45,6 +69,19 @@ describe("verifier sandbox structural boundary", () => {
       visit(parsed, file, violations);
     }
     expect(violations).toEqual([]);
+
+    const hostile = ts.createSourceFile(
+      "hostile.ts",
+      'globalThis["fetch"]("https://example.test"); import("node:https");',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const hostileViolations: string[] = [];
+    visit(hostile, "hostile.ts", hostileViolations);
+    expect(hostileViolations).toEqual([
+      "hostile.ts: forbidden global globalThis",
+      "hostile.ts: dynamic import",
+    ]);
   });
 });
 
@@ -52,9 +89,12 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
   if (
     ts.isImportDeclaration(node) &&
     ts.isStringLiteral(node.moduleSpecifier) &&
-    forbiddenImports.has(node.moduleSpecifier.text)
+    !allowedImports[file]?.has(node.moduleSpecifier.text)
   ) {
-    violations.push(`${file}: forbidden import ${node.moduleSpecifier.text}`);
+    violations.push(`${file}: unapproved import ${node.moduleSpecifier.text}`);
+  }
+  if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+    violations.push(`${file}: dynamic import`);
   }
   if (
     ts.isIdentifier(node) &&

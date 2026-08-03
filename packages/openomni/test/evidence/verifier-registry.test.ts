@@ -194,7 +194,7 @@ describe("VerifierRegistry", () => {
     expect(invoked).toBe(0);
   });
 
-  test("returns typed malformed input, output-contract, and evaluator crash facts", () => {
+  test("returns typed malformed input and output-contract facts", () => {
     const registry = VerifierRegistry.create();
     expect(registry.verify({ kind: "numeric_recheck" })).toMatchObject({
       type: "verification_error",
@@ -218,7 +218,7 @@ describe("VerifierRegistry", () => {
           expected: 0,
         }),
       ),
-    ).toMatchObject({ type: "verification_error", code: "verifier_crash" });
+    ).toMatchObject({ type: "verification_error", code: "malformed_input" });
   });
 
   test("rejects all capability and live-action requests before evaluation", () => {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type VerifierRegistryDriverScenario,
   runVerifierRegistryDriver,
-} from "../../src/evidence/verifier-registry-driver";
+} from "../../src/evidence/verifier-registry-driver-api";
 
 describe("VerifierRegistry driver", () => {
   test("publishes strict machine-readable CLI scenario and self-test receipts", () => {
@@ -89,6 +89,21 @@ describe("VerifierRegistry driver", () => {
       mode: "argument_error",
       ok: false,
       resultCode: "invalid_arguments",
+    });
+  });
+
+  test("returns a machine-readable failure when the driver boundary throws", () => {
+    const argumentsProxy = new Proxy<readonly string[]>([], {
+      get() {
+        throw new Error("hostile argument list");
+      },
+    });
+    const execution = runVerifierRegistryDriver(argumentsProxy);
+    expect(execution.exitCode).toBe(1);
+    expect(JSON.parse(execution.stdout)).toMatchObject({
+      mode: "driver_error",
+      ok: false,
+      resultCode: "driver_threw",
     });
   });
 });
