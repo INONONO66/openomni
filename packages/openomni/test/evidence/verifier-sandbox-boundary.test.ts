@@ -63,13 +63,15 @@ describe("verifier sandbox structural boundary", () => {
 
     const hostile = ts.createSourceFile(
       "hostile.ts",
-      'globalThis["fetch"]("https://example.test"); import("node:https"); require("node:net");',
+      'export { request } from "node:https"; export * from "node:child_process"; globalThis["fetch"]("https://example.test"); import("node:https"); require("node:net");',
       ts.ScriptTarget.Latest,
       true,
     );
     const hostileViolations: string[] = [];
     visit(hostile, "hostile.ts", hostileViolations);
     expect(hostileViolations).toEqual([
+      "hostile.ts: unapproved module node:https",
+      "hostile.ts: unapproved module node:child_process",
       "hostile.ts: forbidden global globalThis",
       "hostile.ts: dynamic import",
       "hostile.ts: forbidden global require",
@@ -122,11 +124,12 @@ function collectStaticSpecifiers(node: ts.Node, specifiers: string[]): void {
 
 function visit(node: ts.Node, file: string, violations: string[]): void {
   if (
-    ts.isImportDeclaration(node) &&
+    (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+    node.moduleSpecifier !== undefined &&
     ts.isStringLiteral(node.moduleSpecifier) &&
     !allowedImports[file]?.has(node.moduleSpecifier.text)
   ) {
-    violations.push(`${file}: unapproved import ${node.moduleSpecifier.text}`);
+    violations.push(`${file}: unapproved module ${node.moduleSpecifier.text}`);
   }
   if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
     violations.push(`${file}: dynamic import`);

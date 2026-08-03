@@ -119,7 +119,17 @@ describe("verifier registry scoped result semantics", () => {
       "The measured value is 42 units.",
       "verified",
     ],
+    [
+      "The release did not regress and passed all checks.",
+      "The release passed all checks.",
+      "verified",
+    ],
     ["The measured value is not 42 units.", "The measured value is 42 units.", "refuted"],
+    [
+      "The release passed all checks. The release failed all checks.",
+      "The release passed all checks.",
+      "inconclusive",
+    ],
     [
       "Alice entered the election. Carol won the election.",
       "Alice won the election.",
@@ -130,6 +140,17 @@ describe("verifier registry scoped result semantics", () => {
       obligation("citation_support", { archivedText }, claim),
     );
     expect(fact).toMatchObject({ type: "verification_result", status });
+  });
+
+  test("returns inconclusive when archived sentence count exceeds the frozen ceiling", () => {
+    const fact = VerifierRegistry.create().verify(
+      obligation(
+        "citation_support",
+        { archivedText: `${"Noise. ".repeat(4097)}The measured value is 42 units.` },
+        "The measured value is 42 units.",
+      ),
+    );
+    expect(fact).toMatchObject({ type: "verification_result", status: "inconclusive" });
   });
 
   test("rejects a second caller-controlled citation claim", () => {

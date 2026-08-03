@@ -56,11 +56,13 @@ export function scenarioReceipt(
     observation = { fact };
     ok = isError(fact, "prohibited_capability") && fact.violation === "network";
     resultCode = ok ? "prohibited_capability" : "capability_not_prohibited";
-  } else {
+  } else if (scenario === "forbidden-action") {
     const fact = registry.verify(request([], ["persist"]));
     observation = { fact };
     ok = isError(fact, "forbidden_action") && fact.violation === "persist";
     resultCode = ok ? "forbidden_action" : "action_not_forbidden";
+  } else {
+    return assertNever(scenario);
   }
 
   return {
@@ -71,6 +73,10 @@ export function scenarioReceipt(
     resultCode,
     observation,
   };
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unhandled verifier driver scenario: ${String(value)}`);
 }
 
 function obligation(

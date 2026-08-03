@@ -3,6 +3,7 @@ import {
   type VerifierRegistryDriverScenario,
   runVerifierRegistryDriver,
 } from "../../src/evidence/verifier-registry-driver-api";
+import { VerifierRegistryDriverScenarios } from "../../src/evidence/verifier-registry-driver-contract";
 
 describe("VerifierRegistry driver", () => {
   test("publishes strict machine-readable CLI scenario and self-test receipts", () => {
@@ -16,7 +17,8 @@ describe("VerifierRegistry driver", () => {
         "prohibited_capability",
       ],
       "forbidden-action": ["forbidden_action", "verification_error", "forbidden_action"],
-    } as const;
+    } as const satisfies Record<VerifierRegistryDriverScenario, readonly [string, string, string]>;
+    expect(Object.keys(expected)).toEqual([...VerifierRegistryDriverScenarios]);
     for (const scenario of Object.keys(expected) as VerifierRegistryDriverScenario[]) {
       const execution = runVerifierRegistryDriver(["--scenario", scenario, "--json"]);
       expect(execution.exitCode).toBe(0);
