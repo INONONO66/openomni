@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785767891771,
+  "lastUpdate": 1785771635729,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -35565,6 +35565,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 543640,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "29bcdff3eb2496a0d0fee33f70ff2da8fa2709d8",
+          "message": "chore(ci): add coverage/dead-export ratchets and test timeouts (#513)\n\n* chore(ci): add coverage/dead-export ratchets and test timeouts\n\nExtends the vibing guardrails with ratchet-style quality gates, following the\nrepo's grandfather-plus-ratchet pattern (shrink is autonomous, growth is the\nsign-off diff):\n\n- Coverage ratchet: every CI test step now emits lcov\n  (bun test --timeout 15000 --coverage); script/check-coverage-ratchet.ts\n  fails the Test job when any package drops >0.25pp below\n  script/conformance/coverage-baseline.json (7 packages, 79.6-98.2%\n  grandfathered); --update rewrites the baseline; --self-test proves\n  discrimination. A baselined package emitting no report also fails\n  (the gate cannot be silently disabled).\n- Dead-export ratchet: knip 6.31.0 pinned at the workspace root;\n  script/check-dead-exports.ts fails on any issue key not in\n  script/conformance/knip-baseline.json (42 grandfathered: 2 files,\n  24 exports, 16 types); keys are line-number-free for stability.\n- Source metrics: script/report-source-metrics.ts emits per-package file/LOC\n  JSON as a CI artifact (no gate; feeds #494's tracked source metrics).\n- Per-test timeouts land in CI (execution-discipline rule 2): a silent\n  infinite spin now fails in 15s instead of consuming the 10-minute job\n  timeout.\n- New non-required Quality job (dead-exports + metrics) reuses only the four\n  already-pinned action SHAs; the six required job names are unchanged and\n  codeql.yml is untouched.\n\nKnown risk (documented): the coverage baseline was generated on macOS/bun\n1.3.14 while CI runs ubuntu/bun 1.3.6; if platform-conditional code shifts a\npackage beyond tolerance on the first CI run, the one-time --update from CI\nnumbers is the sign-off diff.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ci): widen coverage tolerance to the pre-declared 0.5pp fallback\n\nThe first ubuntu CI run confirmed the documented first-run risk: coordinator\nmeasures a stable 0.45pp macOS<->ubuntu platform offset (79.56% local vs\n79.11% CI; process-physics code has platform-conditional branches). Run-to-run\nvariance on one platform remains zero, so 0.5pp still catches real\nregressions while letting the same baseline serve both the enforcing CI\nenvironment and local runs. No baseline numbers were altered.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(ci): fail coverage ratchet closed on empty or collapsed reports\n\nThe adversarial review of this PR demonstrated a fail-open: filtering all\nsrc/ files out of instrumentation (e.g., a two-line bunfig.toml\ncoveragePathIgnorePatterns) produced an empty lcov that scored 100% and\npassed as an improvement with no baseline diff — a silently disabled gate.\ncompareCoverage now fails closed when a baselined package reports zero src/\nline records or when its instrumented line count collapses below half the\nbaseline (legitimate large deletions go through --update, which is the\nsign-off diff). The self-test gains both discrimination cases, and CI's\nQuality job now runs both ratchet self-tests (parity with lint:tools\n--self-test). The demonstrated exploit was reproduced locally and is now\nrejected.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-04T00:39:12+09:00",
+          "tree_id": "39b2aaab9638e5fd2c397331fbc66d0d879a553f",
+          "url": "https://github.com/INONONO66/openomni/commit/29bcdff3eb2496a0d0fee33f70ff2da8fa2709d8"
+        },
+        "date": 1785771635469,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 626,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5918,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10023,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2513,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2962,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2492,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15269,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8148,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 847,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1586,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 738,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20398,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2293,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11150,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103329,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 526076,
             "unit": "ns/op"
           }
         ]
