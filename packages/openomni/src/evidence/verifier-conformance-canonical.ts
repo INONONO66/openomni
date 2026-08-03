@@ -46,7 +46,7 @@ export const RedactedIdentifierSchema = z
   .regex(/^(?:sha256:[a-f0-9]{64}|(?:ref|version):[A-Za-z0-9._+/@-]+)$/);
 
 export function canonicalJson(input: unknown): string {
-  return renderCanonical(JsonValueSchema.parse(input));
+  return renderCanonical(snapshotJsonValue(input));
 }
 
 export function hashCanonicalJson(input: unknown): string {
@@ -76,7 +76,7 @@ function renderCanonical(value: JsonValue): string {
 }
 
 export function freezeJson(value: JsonValue): JsonValue {
-  return JsonValueSchema.parse(value);
+  return snapshotJsonValue(value);
 }
 
 export const EnvironmentFingerprintInputSchema = JsonValueSchema.pipe(
@@ -283,11 +283,7 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
 
 function snapshotJsonInput(value: unknown, context: z.RefinementCtx): JsonValue | typeof z.NEVER {
   try {
-    return snapshotJson(value, 0, {
-      active: new WeakSet<object>(),
-      codeUnits: 0,
-      nodes: 0,
-    });
+    return snapshotJsonValue(value);
   } catch {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -295,4 +291,12 @@ function snapshotJsonInput(value: unknown, context: z.RefinementCtx): JsonValue 
     });
     return z.NEVER;
   }
+}
+
+export function snapshotJsonValue(value: unknown): JsonValue {
+  return snapshotJson(value, 0, {
+    active: new WeakSet<object>(),
+    codeUnits: 0,
+    nodes: 0,
+  });
 }

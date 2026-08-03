@@ -112,6 +112,14 @@ describe("verifier registry security boundaries", () => {
     const hostile = new Proxy(
       { operator: "eq", left: 1, right: 1 },
       {
+        get(target, property, receiver) {
+          trapInvocations += 1;
+          return Reflect.get(target, property, receiver);
+        },
+        getPrototypeOf(target) {
+          trapInvocations += 1;
+          return Reflect.getPrototypeOf(target);
+        },
         ownKeys(target) {
           trapInvocations += 1;
           return Reflect.ownKeys(target);
@@ -122,6 +130,17 @@ describe("verifier registry security boundaries", () => {
     expect(result).toMatchObject({ type: "verification_error", code: "malformed_input" });
     expect(trapInvocations).toBe(0);
     expect(Object.isFrozen(result)).toBe(true);
+
+    const valid = obligation("numeric_recheck", { operator: "eq", left: 1, right: 1 });
+    const outer = new Proxy(valid, {
+      get(target, property, receiver) {
+        trapInvocations += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const outerResult = VerifierRegistry.create().verify(outer);
+    expect(outerResult).toMatchObject({ type: "verification_error", code: "malformed_input" });
+    expect(trapInvocations).toBe(0);
   });
 
   test("returns typed malformed input for oversized registry boundaries", () => {

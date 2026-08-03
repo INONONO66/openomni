@@ -135,7 +135,7 @@ describe("verifier sandbox structural boundary", () => {
     ]);
     const hostileEscapes = ts.createSourceFile(
       "verifier-frozen-nli-model.ts",
-      'import c = require("node:crypto"); (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")();',
+      'import c = require("node:crypto"); (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")(); const { constructor: C } = (() => {}); const { ["con" + "structor"]: D } = (() => {});',
       ts.ScriptTarget.Latest,
       true,
     );
@@ -143,6 +143,8 @@ describe("verifier sandbox structural boundary", () => {
     visit(hostileEscapes, "verifier-frozen-nli-model.ts", escapeViolations);
     expect(escapeViolations).toEqual([
       "verifier-frozen-nli-model.ts: import equals",
+      "verifier-frozen-nli-model.ts: forbidden property constructor",
+      "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
     ]);
@@ -236,12 +238,30 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
 
 function isForbiddenPropertyEscape(node: ts.Node): boolean {
   if (ts.isPropertyAccessExpression(node)) return node.name.text === "constructor";
+  if (ts.isBindingElement(node)) {
+    return staticPropertyName(node.propertyName ?? node.name) === "constructor";
+  }
   return (
     ts.isElementAccessExpression(node) &&
     node.argumentExpression !== undefined &&
-    ts.isStringLiteral(node.argumentExpression) &&
-    node.argumentExpression.text === "constructor"
+    staticExpressionString(node.argumentExpression) === "constructor"
   );
+}
+
+function staticPropertyName(node: ts.PropertyName | ts.BindingName): string | undefined {
+  if (ts.isIdentifier(node) || ts.isStringLiteral(node)) return node.text;
+  return ts.isComputedPropertyName(node) ? staticExpressionString(node.expression) : undefined;
+}
+
+function staticExpressionString(node: ts.Expression): string | undefined {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isParenthesizedExpression(node)) return staticExpressionString(node.expression);
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = staticExpressionString(node.left);
+    const right = staticExpressionString(node.right);
+    return left === undefined || right === undefined ? undefined : `${left}${right}`;
+  }
+  return undefined;
 }
 
 function staticBindings(node: ts.ImportDeclaration | ts.ExportDeclaration): readonly string[] {

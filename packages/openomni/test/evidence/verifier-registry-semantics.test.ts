@@ -126,6 +126,7 @@ describe("verifier registry scoped result semantics", () => {
     ],
     ["The measured value is not 42 units.", "The measured value is 42 units.", "refuted"],
     ["The measured value is not 42 units.", "The measured value is 99 units.", "inconclusive"],
+    ["The measured value is not 42 units.", "The measured value is not 99 units.", "inconclusive"],
     [
       "The release passed all checks; or the release failed all checks.",
       "The release passed all checks.",
@@ -134,6 +135,11 @@ describe("verifier registry scoped result semantics", () => {
     [
       "The release passed all checks; or the release failed all checks.",
       "The release failed all checks.",
+      "inconclusive",
+    ],
+    [
+      "The release passed all checks; the release failed all checks.",
+      "The release passed all checks.",
       "inconclusive",
     ],
     [
@@ -167,6 +173,7 @@ describe("verifier registry scoped result semantics", () => {
     ["Alice or Bob won.", "Bob won.", "inconclusive"],
     ["It is false that the system is safe.", "The system is safe.", "inconclusive"],
     ["According to Bob, Alice won the election.", "Alice won the election.", "inconclusive"],
+    ["According to a report,\nBob won the election.", "Bob won the election.", "inconclusive"],
     ["Maybe, Bob won the election.", "Bob won the election.", "inconclusive"],
     ["The system is safe or unsafe.", "The system is safe.", "inconclusive"],
     ["The report denies that the value is 42 units.", "The value is 42 units.", "inconclusive"],

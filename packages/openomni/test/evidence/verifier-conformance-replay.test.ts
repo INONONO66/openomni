@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   EnvironmentFingerprintSchema,
+  ReplayBindingSchema,
   ReplayConformanceError,
   ReplayKeySchema,
   assertReplayConformance,
@@ -127,6 +128,16 @@ describe("verifier replay identity and schema conformance", () => {
       }).replayKey,
     ).not.toBe(key.replayKey);
     expect(ReplayKeySchema.safeParse({ ...key, replayKey: digestB }).success).toBe(false);
+    expect(
+      ReplayBindingSchema.safeParse({
+        ...binding,
+        source: {
+          ...binding.source,
+          fromSequence: Number.MAX_SAFE_INTEGER + 1,
+          toSequence: Number.MAX_SAFE_INTEGER + 1,
+        },
+      }).success,
+    ).toBe(false);
   });
 
   test("compares exact commands and final fold with first-divergence facts", () => {

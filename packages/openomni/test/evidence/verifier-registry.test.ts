@@ -151,7 +151,7 @@ describe("VerifierRegistry", () => {
   test("uses the shipped fingerprinted symbolic NLI model with lexical and numeric support", () => {
     const registry = VerifierRegistry.create();
     expect(VerifierRegistry.FrozenNliModelFingerprint).toBe(
-      "sha256:0c3e933ba7837149370fdbbcbd352da73941f42cec9e0b4719a40047c2cc23d5",
+      "sha256:2f0f804952b93c6266342fdd20b5b150332ca462220a4d0c751db7f194357563",
     );
     const modelSource = readFileSync(
       new URL("../../src/evidence/verifier-frozen-nli-model.ts", import.meta.url),

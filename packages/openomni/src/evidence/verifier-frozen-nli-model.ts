@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 
 export const FrozenNliSourceDigest =
-  "sha256:857c1834cea506dfa91cdf49da401360fd2dec150293757ae39496a8667d66f6";
+  "sha256:6d5626992203a7c55c47bd06683de1fd317317b9a43cb357a8e37314209a7b28";
 
 const FrozenSymbolicNliModel = Object.freeze({
-  version: "openomni-frozen-symbolic-nli-v8",
+  version: "openomni-frozen-symbolic-nli-v10",
   tokenizationVersion: "unicode-word-v1",
-  inferenceVersion: "sentence-context-polarity-v5",
+  inferenceVersion: "punctuated-sentence-polarity-v7",
   sourceDigest: FrozenNliSourceDigest,
   claimCoverageThreshold: 1,
   maxSegments: 4096,
@@ -104,6 +104,18 @@ const FrozenNliBehaviorProbes = Object.freeze([
     premise: "The measured value is not 42 units.",
     hypothesis: "The measured value is 99 units.",
   }),
+  Object.freeze({
+    premise: "According to a report,\nBob won the election.",
+    hypothesis: "Bob won the election.",
+  }),
+  Object.freeze({
+    premise: "The measured value is not 42 units.",
+    hypothesis: "The measured value is not 99 units.",
+  }),
+  Object.freeze({
+    premise: "The release passed all checks; the release failed all checks.",
+    hypothesis: "The release passed all checks.",
+  }),
 ]);
 const modelBytes = JSON.stringify({
   asset: FrozenSymbolicNliModel,
@@ -156,6 +168,7 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
   if (claim.anchors.size > source.tokens.size) return "unknown";
   if (claimCoverage(source.tokens, claim.anchors) < 1) return "unknown";
   if (hasUnsupportedSourceContext(source, claim)) return "unknown";
+  if (hasInternalOpposition(source.tokens)) return "unknown";
   const sourcePolarity = negationParity(source.sequence, claim.tokens);
   const claimPolarity = negationParity(claim.sequence, source.tokens);
   if (containsOpposition(source.tokens, claim.tokens)) {
@@ -164,7 +177,7 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
   const lexicalCoverage = claimCoverage(source.words, claim.words);
   if (lexicalCoverage < FrozenSymbolicNliModel.claimCoverageThreshold) return "unknown";
   if (![...claim.numbers].every((number) => source.numbers.has(number))) {
-    return source.numbers.size === 0 || sourcePolarity !== claimPolarity
+    return source.numbers.size === 0 || sourcePolarity === 1 || claimPolarity === 1
       ? "unknown"
       : "contradicts";
   }
@@ -174,7 +187,7 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
 
 function segments(value: string): readonly string[] {
   const split = value
-    .split(/(?:[!?]\s+|\.\s+|\n+)/u)
+    .split(/(?:[!?]\s+|\.\s+)/u)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
   return split.length === 0 ? [value] : split;
@@ -254,6 +267,13 @@ function containsOpposition(source: ReadonlySet<string>, claim: ReadonlySet<stri
     if ((sourceLeft && claimRight) || (sourceRight && claimLeft)) return true;
   }
   return false;
+}
+
+function hasInternalOpposition(source: ReadonlySet<string>): boolean {
+  return FrozenSymbolicNliModel.contradictionGroups.some(
+    ([left, right]) =>
+      left.some((word) => source.has(word)) && right.some((word) => source.has(word)),
+  );
 }
 
 function isContradictionToken(token: string): boolean {

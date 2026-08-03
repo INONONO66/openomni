@@ -12,7 +12,7 @@ import {
   VerificationRequest,
   VerificationResult as VerificationResultSchema,
 } from "./verifier-registry-contract.js";
-import { hashCanonicalJson } from "./verifier-conformance-canonical.js";
+import { hashCanonicalJson, snapshotJsonValue } from "./verifier-conformance-canonical.js";
 import { type Evaluation, evaluateObligation } from "./verifier-registry-evaluators.js";
 
 type ResultValue =
@@ -34,14 +34,20 @@ const defaultProgram: VerifierProgram = Object.freeze({
 export function createRegistry(): Registry {
   return Object.freeze({
     verify(input: unknown): VerificationFact {
-      const direct = ObligationSchema.safeParse(input);
+      let snapshot: ReturnType<typeof snapshotJsonValue>;
+      try {
+        snapshot = snapshotJsonValue(input);
+      } catch {
+        return error("malformed_input", "verification request failed schema validation");
+      }
+      const direct = ObligationSchema.safeParse(snapshot);
       let obligation: Obligation;
       let program: VerifierProgram;
       if (direct.success) {
         obligation = direct.data;
         program = defaultProgram;
       } else {
-        const wrapped = VerificationRequest.safeParse(input);
+        const wrapped = VerificationRequest.safeParse(snapshot);
         if (!wrapped.success) {
           return error("malformed_input", "verification request failed schema validation");
         }

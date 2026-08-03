@@ -13,8 +13,8 @@ const ArchivedRangeSchema = z
   .object({
     kind: z.literal("range"),
     archiveIdentifier: RedactedIdentifierSchema,
-    fromSequence: z.number().int().nonnegative(),
-    toSequence: z.number().int().nonnegative(),
+    fromSequence: z.number().int().safe().nonnegative(),
+    toSequence: z.number().int().safe().nonnegative(),
     digest: Sha256DigestSchema,
   })
   .strict()
