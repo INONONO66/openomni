@@ -131,7 +131,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing — wire method names are frozen (Greg Young rule) |
 | Boot recovery | `apps/server/src/execution/recovery.ts` | Marks interrupted worker runs after restart (moved out of coordinator in #477; invoked from bootstrap) |
 | Gate-side policy stamping | `packages/openomni/src/policy/resolver.ts` + `dispatch/handlers/worker.ts` | `worker.spawn` stamps a `policyPlan` (default: required `builtin:tool-permission` + `builtin:idle-nudge`) resolved from actor/target labels; custom rules injected at the composition root |
-| Conformance gate | `script/lint-tools.ts` + `script/conformance/` | Vocab ratchet, tool lint, naming rules, earned check, Greg Young schema snapshot; runs pre-push + CI. `--self-test` proves discrimination; `--update` regenerates the schema snapshot (the diff is the Owner sign-off surface) |
+| Conformance gate | `script/lint-tools.ts` + `script/conformance/` | Vocab ratchet, tool lint, naming rules, earned check, Greg Young schema snapshot; runs pre-push + CI. `--self-test` proves discrimination; `--update` regenerates the schema snapshot (the diff is the Owner sign-off surface). The coverage and dead-export ratchets (`script/check-coverage-ratchet.ts`, `script/check-dead-exports.ts`) keep their baselines beside the schema snapshot under the same rule: shrinking is autonomous, growing needs Owner sign-off |
 | Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |
 | Connector host seams | `apps/server/src/connector/` | Current process driver, persisted-installation resolution, question bridge, and read-back; first-party definitions/discovery/registry are absent, while discover/register/consent/smoke-verify remains planned. See `docs/implementation-status.md`. |
 | `dispatch` tool | `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` | Runtime-to-runtime/system egress command authority and audit boundary |
@@ -227,6 +227,12 @@ bun run check-types    # or: turbo run check-types
 bun run lint:tools
 bun run lint:tools --self-test   # discrimination bench
 bun run script/check-deps.ts     # dependency direction + source-import scan
+
+# Quality ratchets + metrics (baselines in script/conformance/; --update rewrites a
+# baseline from current state — the diff is the sign-off surface)
+bun run script/check-coverage-ratchet.ts   # per-package line-coverage ratchet (reads coverage/lcov.info from prior `bun test --coverage` runs; --update, --self-test)
+bun run script/check-dead-exports.ts       # knip dead-export ratchet (--update, --self-test)
+bun run script/report-source-metrics.ts    # writes source-metrics.json (no gate; CI artifact)
 
 # Format
 bun run format         # biome

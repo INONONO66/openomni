@@ -15,6 +15,7 @@ node_modules
 # Testing
 coverage
 bench-results
+source-metrics.json
 
 # Turbo
 .turbo

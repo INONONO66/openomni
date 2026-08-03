@@ -23,6 +23,7 @@
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@types/bun": "latest",
+    "knip": "6.31.0",
     "lefthook": "^2.1.4",
     "tinybench": "^6.0.2",
     "turbo": "^2.8.1",
