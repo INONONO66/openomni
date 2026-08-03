@@ -54,7 +54,7 @@ Agent capability is no longer the bottleneck — reliability is. OpenOmni reduce
 
 ## Current Status
 
-The core execution runtime is working. Inbound routing, session management, the ChatAgent loop, tool execution, the on-demand worker runtime, and the in-process Resident all function. Completion-report evidence linkage and automatic read-back checks for supported URL, API, and citation claims are wired. The general sandboxed verifier registry, broader `checkedPredicate` verdict coverage, and replay conformance remain targets, as do the single-Resident operational model and System Governor feedback loop.
+The core execution runtime is working. Inbound routing, session management, the ChatAgent loop, tool execution, the on-demand worker runtime, and the in-process Resident all function. Completion-report evidence linkage and automatic read-back checks for supported URL, API, and citation claims are wired. The sandboxed verifier registry and replay-conformance primitives are built and exercised through a public driver but have no production admission or archived-replay consumer yet; those integrations remain targets, as do the single-Resident operational model and System Governor feedback loop.
 
 Component-level truth lives in [Implementation Status](docs/implementation-status.md) — design docs describe targets; that file says what actually runs.
 
