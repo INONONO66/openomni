@@ -2,10 +2,14 @@ import { createHash } from "node:crypto";
 
 export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 
+export const FrozenNliSourceDigest =
+  "sha256:857c1834cea506dfa91cdf49da401360fd2dec150293757ae39496a8667d66f6";
+
 const FrozenSymbolicNliModel = Object.freeze({
-  version: "openomni-frozen-symbolic-nli-v7",
+  version: "openomni-frozen-symbolic-nli-v8",
   tokenizationVersion: "unicode-word-v1",
-  inferenceVersion: "sentence-context-v4",
+  inferenceVersion: "sentence-context-polarity-v5",
+  sourceDigest: FrozenNliSourceDigest,
   claimCoverageThreshold: 1,
   maxSegments: 4096,
   negators: Object.freeze(["no", "not", "never", "without"]),
@@ -92,6 +96,14 @@ const FrozenNliBehaviorProbes = Object.freeze([
     premise: "Maybe, Bob won the election.",
     hypothesis: "Bob won the election.",
   }),
+  Object.freeze({
+    premise: "The release passed all checks; or the release failed all checks.",
+    hypothesis: "The release passed all checks.",
+  }),
+  Object.freeze({
+    premise: "The measured value is not 42 units.",
+    hypothesis: "The measured value is 99 units.",
+  }),
 ]);
 const modelBytes = JSON.stringify({
   asset: FrozenSymbolicNliModel,
@@ -152,7 +164,9 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
   const lexicalCoverage = claimCoverage(source.words, claim.words);
   if (lexicalCoverage < FrozenSymbolicNliModel.claimCoverageThreshold) return "unknown";
   if (![...claim.numbers].every((number) => source.numbers.has(number))) {
-    return source.numbers.size === 0 ? "unknown" : "contradicts";
+    return source.numbers.size === 0 || sourcePolarity !== claimPolarity
+      ? "unknown"
+      : "contradicts";
   }
   if (sourcePolarity !== claimPolarity) return "contradicts";
   return isOrderedSubsequence(source.sequence, claim.sequence) ? "entails" : "unknown";
@@ -160,7 +174,7 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
 
 function segments(value: string): readonly string[] {
   const split = value
-    .split(/(?:[!?;]\s+|\.\s+|\n+)/u)
+    .split(/(?:[!?]\s+|\.\s+|\n+)/u)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
   return split.length === 0 ? [value] : split;

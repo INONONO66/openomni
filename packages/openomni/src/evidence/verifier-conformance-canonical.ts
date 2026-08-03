@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isProxy } from "node:util/types";
 import { z } from "zod";
 
 export type JsonValue =
@@ -212,7 +213,13 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
     return value;
   }
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || Object.is(value, -0)) failSnapshot();
+    if (
+      !Number.isFinite(value) ||
+      Object.is(value, -0) ||
+      (Number.isInteger(value) && !Number.isSafeInteger(value))
+    ) {
+      failSnapshot();
+    }
     accountSnapshot(state, String(value).length);
     return value;
   }
@@ -221,7 +228,7 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
     accountSnapshot(state, value.length);
     return value;
   }
-  if (typeof value !== "object" || state.active.has(value)) failSnapshot();
+  if (typeof value !== "object" || isProxy(value) || state.active.has(value)) failSnapshot();
   state.active.add(value);
   accountSnapshot(state);
   try {

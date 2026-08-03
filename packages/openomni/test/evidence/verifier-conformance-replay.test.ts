@@ -41,6 +41,7 @@ describe("verifier replay identity and schema conformance", () => {
     expect(hashCanonicalJson({ a: 1 })).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(() => hashCanonicalJson({ absent: undefined })).toThrow();
     expect(() => hashCanonicalJson(Number.POSITIVE_INFINITY)).toThrow();
+    expect(() => hashCanonicalJson(Number.MAX_SAFE_INTEGER + 1)).toThrow();
   });
 
   test("creates order-independent runtime, dependency, and environment fingerprints", () => {

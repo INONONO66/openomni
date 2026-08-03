@@ -125,6 +125,17 @@ describe("verifier registry scoped result semantics", () => {
       "inconclusive",
     ],
     ["The measured value is not 42 units.", "The measured value is 42 units.", "refuted"],
+    ["The measured value is not 42 units.", "The measured value is 99 units.", "inconclusive"],
+    [
+      "The release passed all checks; or the release failed all checks.",
+      "The release passed all checks.",
+      "inconclusive",
+    ],
+    [
+      "The release passed all checks; or the release failed all checks.",
+      "The release failed all checks.",
+      "inconclusive",
+    ],
     [
       "The release passed all checks. The release failed all checks.",
       "The release passed all checks.",

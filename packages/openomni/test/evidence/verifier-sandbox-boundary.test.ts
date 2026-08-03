@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 
 const allowedImports: Readonly<Record<string, ReadonlySet<string>>> = {
-  "verifier-conformance-canonical.ts": new Set(["node:crypto", "zod"]),
+  "verifier-conformance-canonical.ts": new Set(["node:crypto", "node:util/types", "zod"]),
   "verifier-registry-contract.ts": new Set(["zod", "./verifier-conformance-canonical.js"]),
   "verifier-registry-core.ts": new Set([
     "./verifier-registry-contract.js",
@@ -58,6 +58,7 @@ const forbiddenGlobals = new Set([
 const boundaryRoots = ["verifier-registry.ts"];
 const allowedExternalBindings: Readonly<Record<string, ReadonlySet<string>>> = {
   "node:crypto": new Set(["createHash"]),
+  "node:util/types": new Set(["isProxy"]),
   "@openomni/protocol": new Set(["Tool"]),
   zod: new Set(["z"]),
 };
@@ -132,6 +133,19 @@ describe("verifier sandbox structural boundary", () => {
       "verifier-frozen-nli-model.ts: forbidden global self",
       "verifier-frozen-nli-model.ts: forbidden global window",
     ]);
+    const hostileEscapes = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      'import c = require("node:crypto"); (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")();',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const escapeViolations: string[] = [];
+    visit(hostileEscapes, "verifier-frozen-nli-model.ts", escapeViolations);
+    expect(escapeViolations).toEqual([
+      "verifier-frozen-nli-model.ts: import equals",
+      "verifier-frozen-nli-model.ts: forbidden property constructor",
+      "verifier-frozen-nli-model.ts: forbidden property constructor",
+    ]);
   });
 });
 
@@ -179,6 +193,9 @@ function collectStaticSpecifiers(node: ts.Node, specifiers: string[]): void {
 }
 
 function visit(node: ts.Node, file: string, violations: string[]): void {
+  if (ts.isImportEqualsDeclaration(node)) {
+    violations.push(`${file}: import equals`);
+  }
   if (
     (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
     node.moduleSpecifier !== undefined &&
@@ -203,6 +220,9 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
   if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
     violations.push(`${file}: dynamic import`);
   }
+  if (isForbiddenPropertyEscape(node)) {
+    violations.push(`${file}: forbidden property constructor`);
+  }
   if (
     ts.isIdentifier(node) &&
     forbiddenGlobals.has(node.text) &&
@@ -212,6 +232,16 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
     violations.push(`${file}: forbidden global ${node.text}`);
   }
   ts.forEachChild(node, (child) => visit(child, file, violations));
+}
+
+function isForbiddenPropertyEscape(node: ts.Node): boolean {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text === "constructor";
+  return (
+    ts.isElementAccessExpression(node) &&
+    node.argumentExpression !== undefined &&
+    ts.isStringLiteral(node.argumentExpression) &&
+    node.argumentExpression.text === "constructor"
+  );
 }
 
 function staticBindings(node: ts.ImportDeclaration | ts.ExportDeclaration): readonly string[] {

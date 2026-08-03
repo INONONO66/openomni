@@ -107,42 +107,21 @@ describe("verifier registry security boundaries", () => {
     );
   });
 
-  test("evaluates and hashes one immutable snapshot of exotic inputs", () => {
-    let descriptorReads = 0;
-    const switching = new Proxy(
+  test("rejects proxies before invoking traps and freezes the typed error", () => {
+    let trapInvocations = 0;
+    const hostile = new Proxy(
       { operator: "eq", left: 1, right: 1 },
       {
-        getOwnPropertyDescriptor(target, property) {
-          const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
-          if (property !== "left" || descriptor === undefined || !("value" in descriptor)) {
-            return descriptor;
-          }
-          descriptorReads += 1;
-          return { ...descriptor, value: descriptorReads % 2 === 1 ? 1 : 2 };
+        ownKeys(target) {
+          trapInvocations += 1;
+          return Reflect.ownKeys(target);
         },
       },
     );
-    const registry = VerifierRegistry.create();
-    const switched = registry.verify(obligation("numeric_recheck", switching));
-    const verified = registry.verify(
-      obligation("numeric_recheck", { operator: "eq", left: 1, right: 1 }),
-    );
-    const refuted = registry.verify(
-      obligation("numeric_recheck", { operator: "eq", left: 2, right: 1 }),
-    );
-    if (
-      switched.type !== "verification_result" ||
-      verified.type !== "verification_result" ||
-      refuted.type !== "verification_result"
-    ) {
-      throw new Error("expected verification results");
-    }
-    expect(
-      switched.status === "verified"
-        ? switched.basisHash === verified.basisHash
-        : switched.basisHash === refuted.basisHash,
-    ).toBe(true);
-    expect(Object.isFrozen(switched)).toBe(true);
+    const result = VerifierRegistry.create().verify(obligation("numeric_recheck", hostile));
+    expect(result).toMatchObject({ type: "verification_error", code: "malformed_input" });
+    expect(trapInvocations).toBe(0);
+    expect(Object.isFrozen(result)).toBe(true);
   });
 
   test("returns typed malformed input for oversized registry boundaries", () => {

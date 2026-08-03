@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { FrozenNliSourceDigest } from "../../src/evidence/verifier-frozen-nli-model";
 import { VerifierRegistry } from "../../src/evidence/verifier-registry";
 
 const obligation = (
@@ -149,7 +151,18 @@ describe("VerifierRegistry", () => {
   test("uses the shipped fingerprinted symbolic NLI model with lexical and numeric support", () => {
     const registry = VerifierRegistry.create();
     expect(VerifierRegistry.FrozenNliModelFingerprint).toBe(
-      "sha256:fa628e1cc1c0e97828c35b3dc9696a5bf5331356a47eebf74115fe54f0866218",
+      "sha256:0c3e933ba7837149370fdbbcbd352da73941f42cec9e0b4719a40047c2cc23d5",
+    );
+    const modelSource = readFileSync(
+      new URL("../../src/evidence/verifier-frozen-nli-model.ts", import.meta.url),
+      "utf8",
+    );
+    const normalizedSource = modelSource.replace(
+      FrozenNliSourceDigest,
+      "sha256:<normalized-source-digest>",
+    );
+    expect(`sha256:${createHash("sha256").update(normalizedSource).digest("hex")}`).toBe(
+      FrozenNliSourceDigest,
     );
     const supported = obligation(
       "citation_support",
