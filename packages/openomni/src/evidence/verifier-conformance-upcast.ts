@@ -1,8 +1,10 @@
+import { isProxy } from "node:util/types";
 import { z } from "zod";
 import {
   JsonValueSchema,
   freezeJson,
   snapshotFirstJsonSchema,
+  snapshotFirstSchema,
   type JsonValue,
 } from "./verifier-conformance-canonical.js";
 
@@ -22,15 +24,18 @@ export type VersionedEvent = Readonly<Omit<VersionedEventShape, "payload">> & {
   readonly payload: JsonValue;
 };
 
-export const UpcasterSchema = z
-  .object({
-    eventType: z.string().min(1).max(256),
-    meaning: z.string().min(1).max(1_024),
-    fromVersion: z.number().int().safe().positive(),
-    toVersion: z.number().int().safe().positive(),
-    upcast: z.function().args(VersionedEventContract).returns(z.unknown()),
-  })
-  .strict();
+export const UpcasterSchema = snapshotFirstSchema(
+  z
+    .object({
+      eventType: z.string().min(1).max(256),
+      meaning: z.string().min(1).max(1_024),
+      fromVersion: z.number().int().safe().positive(),
+      toVersion: z.number().int().safe().positive(),
+      upcast: z.function().args(VersionedEventContract).returns(z.unknown()),
+    })
+    .strict(),
+  snapshotUpcaster,
+);
 type UpcasterShape = z.infer<typeof UpcasterSchema>;
 export type Upcaster = Readonly<UpcasterShape>;
 
@@ -46,7 +51,7 @@ export function upcastOnRead(
 ): VersionedEvent {
   let current = freezeEvent(VersionedEventSchema.parse(eventInput));
   const target = z.number().int().safe().positive().parse(targetInput);
-  const steps = z.array(UpcasterSchema).max(128).parse(stepInputs);
+  const steps = z.array(UpcasterSchema).max(128).parse(snapshotUpcasterList(stepInputs));
   if (target < current.schemaVersion) throw new Error("upcast target precedes stored version");
   while (current.schemaVersion < target) {
     const candidates = steps.filter(
@@ -70,4 +75,52 @@ export function upcastOnRead(
     current = freezeEvent(next);
   }
   return current;
+}
+
+function snapshotUpcasterList(input: unknown): readonly unknown[] {
+  if (isProxy(input) || !Array.isArray(input) || Object.getPrototypeOf(input) !== Array.prototype) {
+    throw new Error("expected plain upcaster list");
+  }
+  if (input.length > 128) throw new Error("too many upcasters");
+  const output: unknown[] = [];
+  for (let index = 0; index < input.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
+    if (
+      descriptor === undefined ||
+      !("value" in descriptor) ||
+      descriptor.get !== undefined ||
+      descriptor.set !== undefined
+    ) {
+      throw new Error("expected dense data-only upcaster list");
+    }
+    output.push(snapshotUpcaster(descriptor.value));
+  }
+  return Object.freeze(output);
+}
+
+function snapshotUpcaster(input: unknown): Readonly<Record<string, unknown>> {
+  if (
+    isProxy(input) ||
+    input === null ||
+    typeof input !== "object" ||
+    Object.getPrototypeOf(input) !== Object.prototype
+  ) {
+    throw new Error("expected plain upcaster");
+  }
+  const keys = Reflect.ownKeys(input);
+  if (keys.some((key) => typeof key !== "string")) throw new Error("invalid upcaster key");
+  const output: Record<string, unknown> = {};
+  for (const key of keys as string[]) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (
+      descriptor === undefined ||
+      !("value" in descriptor) ||
+      descriptor.get !== undefined ||
+      descriptor.set !== undefined
+    ) {
+      throw new Error("expected data-only upcaster fields");
+    }
+    output[key] = descriptor.value;
+  }
+  return Object.freeze(output);
 }

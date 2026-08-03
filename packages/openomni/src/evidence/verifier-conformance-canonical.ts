@@ -19,12 +19,15 @@ const MAX_JSON_STRING_LENGTH = 1_048_576;
 const MAX_JSON_CODE_UNITS = 7_340_032;
 const forbiddenJsonKeys = new Set(["__proto__", "constructor", "prototype"]);
 
-export function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Schema): Schema {
+export function snapshotFirstSchema<Schema extends z.ZodTypeAny>(
+  schema: Schema,
+  snapshot: (input: unknown) => unknown,
+): Schema {
   const originalSafeParse = schema.safeParse.bind(schema);
   const originalSafeParseAsync = schema.safeParseAsync.bind(schema);
   const safeParse = (input: unknown, params?: Parameters<typeof originalSafeParse>[1]) => {
     try {
-      return originalSafeParse(snapshotJsonValue(input), params);
+      return originalSafeParse(snapshot(input), params);
     } catch {
       return { success: false as const, error: invalidJsonError() };
     }
@@ -34,7 +37,7 @@ export function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Sch
     params?: Parameters<typeof originalSafeParseAsync>[1],
   ) => {
     try {
-      return originalSafeParseAsync(snapshotJsonValue(input), params);
+      return originalSafeParseAsync(snapshot(input), params);
     } catch {
       return { success: false as const, error: invalidJsonError() };
     }
@@ -59,6 +62,10 @@ export function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Sch
     spa: { value: safeParseAsync },
   });
   return schema;
+}
+
+export function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Schema): Schema {
+  return snapshotFirstSchema(schema, snapshotJsonValue);
 }
 
 function invalidJsonError(): z.ZodError {
@@ -93,11 +100,15 @@ export const JsonObjectSchema = snapshotFirstJsonSchema(
     }
   }),
 );
-export const Sha256DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-export const RedactedIdentifierSchema = z
-  .string()
-  .max(512)
-  .regex(/^(?:sha256:[a-f0-9]{64}|(?:ref|version):[A-Za-z0-9._+/@-]+)$/);
+export const Sha256DigestSchema = snapshotFirstJsonSchema(
+  z.string().regex(/^sha256:[a-f0-9]{64}$/),
+);
+export const RedactedIdentifierSchema = snapshotFirstJsonSchema(
+  z
+    .string()
+    .max(512)
+    .regex(/^(?:sha256:[a-f0-9]{64}|(?:ref|version):[A-Za-z0-9._+/@-]+)$/),
+);
 
 export function canonicalJson(input: unknown): string {
   return renderCanonical(snapshotJsonValue(input));

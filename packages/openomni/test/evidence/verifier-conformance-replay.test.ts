@@ -2,13 +2,21 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  CommutativeEventSchema,
+  EnvironmentFingerprintInputSchema,
   EnvironmentFingerprintSchema,
   InterleavingPlanSchema,
   InterleavingReportSchema,
+  JsonValueSchema,
+  NondeterminismManifestSchema,
+  RecordedCommandSchema,
+  RedactedIdentifierSchema,
   ReplayBindingSchema,
   ReplayConformanceError,
   ReplayDivergenceSchema,
   ReplayKeySchema,
+  ReplayTraceSchema,
+  Sha256DigestSchema,
   UpcasterSchema,
   VersionedEventSchema,
   assertReplayConformance,
@@ -134,13 +142,36 @@ describe("verifier replay identity and schema conformance", () => {
     expect(() => createReplayKey(accessorBinding)).toThrow();
     expect(getterCalls).toBe(0);
 
+    const replayKey = createReplayKey(binding);
+    const environmentFingerprint = createEnvironmentFingerprint(identifiers);
     for (const [schema, input] of [
+      [JsonValueSchema, { value: 1 }],
+      [Sha256DigestSchema, {}],
+      [RedactedIdentifierSchema, {}],
+      [EnvironmentFingerprintInputSchema, identifiers],
+      [EnvironmentFingerprintSchema, environmentFingerprint],
+      [NondeterminismManifestSchema, { version: "nondeterminism-manifest-v1", entries: [] }],
       [ReplayBindingSchema, binding],
+      [ReplayKeySchema, replayKey],
+      [ReplayTraceSchema, { commands: [], finalFold: null }],
       [ReplayDivergenceSchema, { version: "replay-divergence-v1", kind: "missing_command" }],
+      [RecordedCommandSchema, { command: null, output: null }],
       [
         VersionedEventSchema,
         { eventType: "event", meaning: "stable", schemaVersion: 1, payload: null },
       ],
+      [
+        UpcasterSchema,
+        {
+          eventType: "event",
+          meaning: "stable",
+          fromVersion: 1,
+          toVersion: 2,
+          upcast: (event: unknown) => event,
+        },
+      ],
+      [CommutativeEventSchema, { id: "event", value: null }],
+      [InterleavingPlanSchema, { seed: 1, iterations: 1, initialFold: null, events: [] }],
       [
         InterleavingReportSchema,
         { seed: 1, iterations: 1, baselineHash: digestA, interleavingHashes: [] },
