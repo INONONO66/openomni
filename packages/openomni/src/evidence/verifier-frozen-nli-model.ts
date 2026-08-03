@@ -3,24 +3,13 @@ import { createHash } from "node:crypto";
 export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 
 const FrozenSymbolicNliModel = Object.freeze({
-  version: "openomni-frozen-symbolic-nli-v5",
+  version: "openomni-frozen-symbolic-nli-v7",
   tokenizationVersion: "unicode-word-v1",
-  inferenceVersion: "clause-polarity-context-v2",
+  inferenceVersion: "sentence-context-v4",
   claimCoverageThreshold: 1,
   maxSegments: 4096,
   negators: Object.freeze(["no", "not", "never", "without"]),
   allowedSourceModifiers: Object.freeze(["exactly"]),
-  clauseBoundaries: Object.freeze([
-    "although",
-    "and",
-    "because",
-    "but",
-    "however",
-    "nor",
-    "or",
-    "whereas",
-    "while",
-  ]),
   contradictionGroups: Object.freeze([
     pair(
       ["increase", "increases", "increased", "increasing"],
@@ -42,11 +31,6 @@ const FrozenSymbolicNliModel = Object.freeze({
     pair(["safe"], ["unsafe"]),
   ]),
 });
-const clauseBoundaryPattern = new RegExp(
-  `(?:,\\s*|\\s(?:${FrozenSymbolicNliModel.clauseBoundaries.join("|")})\\s)`,
-  "iu",
-);
-
 const FrozenNliBehaviorProbes = Object.freeze([
   Object.freeze({
     premise: "The measured value is exactly 42 units.",
@@ -92,6 +76,22 @@ const FrozenNliBehaviorProbes = Object.freeze([
     premise: "It is false that the system is safe.",
     hypothesis: "The system is safe.",
   }),
+  Object.freeze({
+    premise: "Neither Alice nor Bob won the election.",
+    hypothesis: "Bob won the election.",
+  }),
+  Object.freeze({
+    premise: "Alice or Bob won the election.",
+    hypothesis: "Bob won the election.",
+  }),
+  Object.freeze({
+    premise: "According to Bob, Alice won the election.",
+    hypothesis: "Alice won the election.",
+  }),
+  Object.freeze({
+    premise: "Maybe, Bob won the election.",
+    hypothesis: "Bob won the election.",
+  }),
 ]);
 const modelBytes = JSON.stringify({
   asset: FrozenSymbolicNliModel,
@@ -103,8 +103,8 @@ const modelBytes = JSON.stringify({
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
 
 export function frozenSymbolicNliInfer(premise: string, hypothesis: string): FrozenNliRelation {
-  const sourceSegments = segments(premise).flatMap(clauses);
-  const claimSegments = segments(hypothesis).flatMap(clauses);
+  const sourceSegments = segments(premise);
+  const claimSegments = segments(hypothesis);
   if (sourceSegments.length > FrozenSymbolicNliModel.maxSegments || claimSegments.length !== 1) {
     return "unknown";
   }
@@ -163,14 +163,6 @@ function segments(value: string): readonly string[] {
     .split(/(?:[!?;]\s+|\.\s+|\n+)/u)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
-  return split.length === 0 ? [value] : split;
-}
-
-function clauses(value: string): readonly string[] {
-  const split = value
-    .split(clauseBoundaryPattern)
-    .map((clause) => clause.trim())
-    .filter((clause) => clause.length > 0);
   return split.length === 0 ? [value] : split;
 }
 

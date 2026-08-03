@@ -95,7 +95,15 @@ export const EnvironmentFingerprintSchema = z
     environmentFingerprint: Sha256DigestSchema,
     fingerprint: Sha256DigestSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.fingerprint !== environmentAggregateFingerprint(value)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "environment aggregate fingerprint does not match its components",
+      });
+    }
+  });
 export type EnvironmentFingerprint = Readonly<z.infer<typeof EnvironmentFingerprintSchema>>;
 
 export function createEnvironmentFingerprint(input: unknown): EnvironmentFingerprint {
@@ -109,7 +117,7 @@ export function createEnvironmentFingerprint(input: unknown): EnvironmentFingerp
       runtimeFingerprint,
       dependencyFingerprint,
       environmentFingerprint,
-      fingerprint: hashCanonicalJson({
+      fingerprint: environmentAggregateFingerprint({
         version: "environment-fingerprint-v1",
         runtimeFingerprint,
         dependencyFingerprint,
@@ -117,6 +125,22 @@ export function createEnvironmentFingerprint(input: unknown): EnvironmentFingerp
       }),
     }),
   );
+}
+
+function environmentAggregateFingerprint(
+  value: Readonly<{
+    version: "environment-fingerprint-v1";
+    runtimeFingerprint: string;
+    dependencyFingerprint: string;
+    environmentFingerprint: string;
+  }>,
+): string {
+  return hashCanonicalJson({
+    version: value.version,
+    runtimeFingerprint: value.runtimeFingerprint,
+    dependencyFingerprint: value.dependencyFingerprint,
+    environmentFingerprint: value.environmentFingerprint,
+  });
 }
 
 export const NondeterminismManifestSchema = JsonValueSchema.pipe(

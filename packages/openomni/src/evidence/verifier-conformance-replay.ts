@@ -39,7 +39,16 @@ export const ReplayBindingSchema = z
   .strict();
 export const ReplayKeySchema = ReplayBindingSchema.extend({
   replayKey: Sha256DigestSchema,
-}).strict();
+})
+  .strict()
+  .superRefine((value, context) => {
+    if (value.replayKey !== replayBindingHash(value)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "replay key does not match its binding",
+      });
+    }
+  });
 type ReplayKeyShape = z.infer<typeof ReplayKeySchema>;
 export type ReplayKey = Readonly<Omit<ReplayKeyShape, "source">> & {
   readonly source: Readonly<ReplayKeyShape["source"]>;
@@ -47,9 +56,20 @@ export type ReplayKey = Readonly<Omit<ReplayKeyShape, "source">> & {
 
 export function createReplayKey(input: unknown): ReplayKey {
   const binding = ReplayBindingSchema.parse(input);
-  const key = ReplayKeySchema.parse({ ...binding, replayKey: hashCanonicalJson(binding) });
+  const key = ReplayKeySchema.parse({ ...binding, replayKey: replayBindingHash(binding) });
   Object.freeze(key.source);
   return Object.freeze(key);
+}
+
+function replayBindingHash(binding: z.infer<typeof ReplayBindingSchema>): string {
+  return hashCanonicalJson({
+    version: binding.version,
+    source: binding.source,
+    environmentFingerprint: binding.environmentFingerprint,
+    schemaVersion: binding.schemaVersion,
+    upcastVersion: binding.upcastVersion,
+    nondeterminismManifestHash: binding.nondeterminismManifestHash,
+  });
 }
 
 export const ReplayTraceSchema = JsonValueSchema.pipe(

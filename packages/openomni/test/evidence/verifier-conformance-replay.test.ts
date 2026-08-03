@@ -2,7 +2,9 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  EnvironmentFingerprintSchema,
   ReplayConformanceError,
+  ReplayKeySchema,
   assertReplayConformance,
   canonicalJson,
   createEnvironmentFingerprint,
@@ -66,6 +68,9 @@ describe("verifier replay identity and schema conformance", () => {
       environmentFingerprint: expect.stringMatching(/^sha256:/),
       fingerprint: expect.stringMatching(/^sha256:/),
     });
+    expect(EnvironmentFingerprintSchema.safeParse({ ...first, fingerprint: digestB }).success).toBe(
+      false,
+    );
     expect(() =>
       createEnvironmentFingerprint({
         ...identifiers,
@@ -120,6 +125,7 @@ describe("verifier replay identity and schema conformance", () => {
         source: { ...binding.source, digest: digestB },
       }).replayKey,
     ).not.toBe(key.replayKey);
+    expect(ReplayKeySchema.safeParse({ ...key, replayKey: digestB }).success).toBe(false);
   });
 
   test("compares exact commands and final fold with first-divergence facts", () => {

@@ -38,6 +38,7 @@ const forbiddenGlobals = new Set([
   "Date",
   "EventSource",
   "Function",
+  "global",
   "WebSocket",
   "Worker",
   "eval",
@@ -51,6 +52,8 @@ const forbiddenGlobals = new Set([
   "setImmediate",
   "setInterval",
   "setTimeout",
+  "self",
+  "window",
 ]);
 const boundaryRoots = ["verifier-registry.ts"];
 const allowedExternalBindings: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -115,6 +118,19 @@ describe("verifier sandbox structural boundary", () => {
     expect(ambientCryptoViolations).toEqual([
       "verifier-frozen-nli-model.ts: forbidden global crypto",
       "verifier-frozen-nli-model.ts: forbidden global crypto",
+    ]);
+    const hostileGlobalAliases = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      "global.crypto.randomUUID(); self.crypto.randomUUID(); window.crypto.randomUUID();",
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const globalAliasViolations: string[] = [];
+    visit(hostileGlobalAliases, "verifier-frozen-nli-model.ts", globalAliasViolations);
+    expect(globalAliasViolations).toEqual([
+      "verifier-frozen-nli-model.ts: forbidden global global",
+      "verifier-frozen-nli-model.ts: forbidden global self",
+      "verifier-frozen-nli-model.ts: forbidden global window",
     ]);
   });
 });

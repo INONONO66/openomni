@@ -149,7 +149,7 @@ describe("VerifierRegistry", () => {
   test("uses the shipped fingerprinted symbolic NLI model with lexical and numeric support", () => {
     const registry = VerifierRegistry.create();
     expect(VerifierRegistry.FrozenNliModelFingerprint).toBe(
-      "sha256:b51f9b70c8e6f344556aaf6781326115ab21c1ff0eb7b1ea8219b85c11972a0f",
+      "sha256:fa628e1cc1c0e97828c35b3dc9696a5bf5331356a47eebf74115fe54f0866218",
     );
     const supported = obligation(
       "citation_support",
