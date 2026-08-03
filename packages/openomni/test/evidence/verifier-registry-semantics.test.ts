@@ -115,6 +115,12 @@ describe("verifier registry scoped result semantics", () => {
       "verified",
     ],
     [
+      "No incidents occurred and the measured value is exactly 42 units.",
+      "The measured value is 42 units.",
+      "verified",
+    ],
+    ["The measured value is not 42 units.", "The measured value is 42 units.", "refuted"],
+    [
       "Alice entered the election. Carol won the election.",
       "Alice won the election.",
       "inconclusive",

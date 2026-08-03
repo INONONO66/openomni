@@ -42,6 +42,7 @@ const modelBytes = JSON.stringify({
     containsOpposition,
     isContradictionToken,
     isOrderedSubsequence,
+    hasScopedNegation,
   ].map((value) => value.toString()),
 });
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
@@ -75,8 +76,8 @@ function inferSegment(premise: string, hypothesis: string): FrozenNliRelation {
   if (!claimNumbers.every((number) => sourceNumbers.includes(number))) {
     return sourceNumbers.length === 0 ? "unknown" : "contradicts";
   }
-  const sourceNegated = FrozenSymbolicNliModel.negators.some((word) => sourceTokens.has(word));
-  const claimNegated = FrozenSymbolicNliModel.negators.some((word) => claimTokens.has(word));
+  const sourceNegated = hasScopedNegation(tokenSequence(premise), claimTokens);
+  const claimNegated = hasScopedNegation(tokenSequence(hypothesis), sourceTokens);
   if (sourceNegated !== claimNegated) return "contradicts";
   return isOrderedSubsequence(tokenSequence(premise), tokenSequence(hypothesis))
     ? "entails"
@@ -113,6 +114,16 @@ function isOrderedSubsequence(source: readonly string[], claim: readonly string[
     if (claimIndex === claim.length) return true;
   }
   return claim.length === 0;
+}
+
+function hasScopedNegation(source: readonly string[], comparedClaim: ReadonlySet<string>): boolean {
+  for (const [index, token] of source.entries()) {
+    if (!FrozenSymbolicNliModel.negators.includes(token)) continue;
+    for (const scopedToken of source.slice(index + 1, index + 4)) {
+      if (comparedClaim.has(scopedToken)) return true;
+    }
+  }
+  return false;
 }
 
 function numbers(value: string): string[] {
