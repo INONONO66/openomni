@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 
 import { describe, expect, test } from "bun:test";
-import { runVerifierRegistryDriver } from "../../src/evidence/verifier-registry-driver-api";
+import { runVerifierRegistryDriver } from "../../src/evidence/verifier-registry-driver";
 
 describe("verifier registry benchmark evidence", () => {
   test("derives every benchmark axis from executable fixtures", () => {
