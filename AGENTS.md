@@ -1,5 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
+Last verified against `origin/main`: 2026-08-03 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
 
 ## OVERVIEW
 
@@ -115,8 +116,8 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
-| Messaging kernel | `packages/openomni/src/{ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection (a unified `resolveRoute` pipeline is #464; a `messaging/` facade is target direction, not yet a directory) |
-| Ingress engine | `packages/openomni/src/ingress/` | Current inbound stage: authority middleware → session resolution → projection → resident/direct handler |
+| Messaging kernel | `packages/openomni/src/{ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection (the unified `resolveRoute` pipeline shipped with #464 / PR #485; a `messaging/` facade remains target direction, not yet a directory) |
+| Ingress engine | `packages/openomni/src/ingress/` | Shipped inbound stage: kernel `resolveRoute` five-stage pipeline (blacklist → wait correlation → channel ceiling → actor identity → surface default) publishes exactly one `RoutingDecision`, then session resolution/projection → resident/direct handler |
 | Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
@@ -135,7 +136,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Injection queue | `packages/openomni/src/execution-runtime/injection-queue.ts` | Async response delivery at turn.finish; keyed by runId |
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
-| Server inbound bridge | `apps/server/src/ingress/` | Transitional adapter bridge; target direction is raw channel message → OpenOmni `MessageEnvelope` only |
+| Server inbound bridge | `apps/server/src/ingress/` | Adapter bridge supplying normalized transport facts only (server-side routing back doors were deleted by #485) |
 | Product model | `docs/core-model.md` + `docs/kernel-contract.md` | Resident, Workers, System Governor, controlled inbound authority |
 | Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
 
@@ -153,6 +154,8 @@ Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
 - Do not add provider behavior outside `packages/llm`.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
+- Driver-band packages (approved target: `naru` channels, `chasa` remote execution, `masil` browser use, `dokkaebi` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Korean package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English, and each band package's AGENTS.md opens with its one-line English gloss. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
+- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/gantaek` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) stays in the kernel.
 
 ## EXECUTION DISCIPLINE
 
@@ -197,16 +200,6 @@ Target direction: only the Resident originates a new Worker allocation. The Owne
 | PendingInteraction | Durable registry correlating outbound requests with external responses | `PendingInteractionStore`; `PendingAskStore` remains a transitional resident.ask legacy surface. Both collapse into the single `Wait { ownerRef }` primitive under #215 — see kernel-contract §2 |
 | ChannelAccessRule (legacy ChannelGrant) | Per-channel access policy and ceiling | `Actor.ChannelGrant` schema + `ChannelGrantStore`; OpenOmni access owns evaluation |
 | Blocklist (legacy Blacklist) | Absolute block list checked before all other access evaluation | `Actor.BlacklistEntry` schema + `BlacklistStore`; OpenOmni access owns evaluation |
-
-### Kernel-Centered Message Flow
-
-Inbound and outbound messaging should converge on the OpenOmni kernel. Adding a new channel should touch `apps/server/` only for raw transport and normalization, then route through `packages/openomni` for all messaging semantics.
-
-| Layer | Path | Responsibility |
-| --- | --- | --- |
-| Server channel adapter | `apps/server/src/channel/` | Channel-specific transport; raw → canonical inbound facts/envelope. No durable routing decisions. |
-| OpenOmni messaging kernel | `packages/openomni/src/{ingress,dispatch}/` | Principal resolution, blocklist/channel access/trust, wait correlation, session/target resolution, dispatch/ingress stage selection, projection/writeback. |
-| Execution primitives | `packages/agent`, `packages/coordinator`, `packages/llm`, `packages/session` | Loop execution, process execution, model I/O, and durable state. These primitives do not decide communication meaning. |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
