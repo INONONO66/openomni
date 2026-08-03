@@ -20,23 +20,23 @@ export type CommutativeEvent = Readonly<Omit<CommutativeEventShape, "value">> & 
   readonly value: JsonValue;
 };
 
-export const InterleavingPlanSchema = JsonValueSchema.pipe(
-  z
-    .object({
-      seed: z.number().int(),
-      iterations: z.number().int().min(1).max(1_000),
-      initialFold: JsonValueSchema,
-      events: z.array(CommutativeEventSchema).max(256),
-    })
-    .strict(),
-).refine(
-  (plan) => new Set(plan.events.map((event) => event.id)).size === plan.events.length,
-  "duplicate event id",
-);
+const InterleavingPlanContract = z
+  .object({
+    seed: z.number().int().safe(),
+    iterations: z.number().int().safe().min(1).max(1_000),
+    initialFold: JsonValueSchema,
+    events: z.array(CommutativeEventSchema).max(256),
+  })
+  .strict()
+  .refine(
+    (plan) => new Set(plan.events.map((event) => event.id)).size === plan.events.length,
+    "duplicate event id",
+  );
+export const InterleavingPlanSchema = JsonValueSchema.pipe(InterleavingPlanContract);
 export const InterleavingReportSchema = z
   .object({
-    seed: z.number().int(),
-    iterations: z.number().int().positive(),
+    seed: z.number().int().safe(),
+    iterations: z.number().int().safe().positive().max(1_000),
     baselineHash: Sha256DigestSchema,
     interleavingHashes: z.array(Sha256DigestSchema).max(1_000),
   })

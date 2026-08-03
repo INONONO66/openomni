@@ -3,9 +3,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   EnvironmentFingerprintSchema,
+  InterleavingPlanSchema,
+  InterleavingReportSchema,
   ReplayBindingSchema,
   ReplayConformanceError,
+  ReplayDivergenceSchema,
   ReplayKeySchema,
+  UpcasterSchema,
+  VersionedEventSchema,
   assertReplayConformance,
   canonicalJson,
   createEnvironmentFingerprint,
@@ -43,6 +48,65 @@ describe("verifier replay identity and schema conformance", () => {
     expect(() => hashCanonicalJson({ absent: undefined })).toThrow();
     expect(() => hashCanonicalJson(Number.POSITIVE_INFINITY)).toThrow();
     expect(() => hashCanonicalJson(Number.MAX_SAFE_INTEGER + 1)).toThrow();
+    expect(() => canonicalJson(["\u0000".repeat(1_048_576), "\u0000".repeat(1_048_576)])).toThrow();
+  });
+
+  test("rejects unsafe integer aliases in every public conformance schema", () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 1;
+    const divergenceBase = {
+      version: "replay-divergence-v1",
+      kind: "command_mismatch",
+    };
+    expect(ReplayDivergenceSchema.safeParse({ ...divergenceBase, index: unsafe }).success).toBe(
+      false,
+    );
+    expect(ReplayDivergenceSchema.safeParse({ ...divergenceBase, seed: unsafe }).success).toBe(
+      false,
+    );
+    expect(ReplayDivergenceSchema.safeParse({ ...divergenceBase, iteration: unsafe }).success).toBe(
+      false,
+    );
+    expect(
+      VersionedEventSchema.safeParse({
+        eventType: "event",
+        meaning: "stable",
+        schemaVersion: unsafe,
+        payload: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpcasterSchema.safeParse({
+        eventType: "event",
+        meaning: "stable",
+        fromVersion: unsafe,
+        toVersion: unsafe,
+        upcast: (event: unknown) => event,
+      }).success,
+    ).toBe(false);
+    expect(
+      InterleavingReportSchema.safeParse({
+        seed: unsafe,
+        iterations: unsafe,
+        baselineHash: digestA,
+        interleavingHashes: [],
+      }).success,
+    ).toBe(false);
+    expect(() =>
+      InterleavingPlanSchema.safeParse({
+        seed: unsafe,
+        iterations: 1,
+        initialFold: null,
+        events: [],
+      }),
+    ).not.toThrow();
+    expect(
+      InterleavingPlanSchema.safeParse({
+        seed: unsafe,
+        iterations: 1,
+        initialFold: null,
+        events: [],
+      }).success,
+    ).toBe(false);
   });
 
   test("creates order-independent runtime, dependency, and environment fingerprints", () => {

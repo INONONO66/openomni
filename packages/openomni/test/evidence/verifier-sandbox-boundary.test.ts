@@ -135,7 +135,7 @@ describe("verifier sandbox structural boundary", () => {
     ]);
     const hostileEscapes = ts.createSourceFile(
       "verifier-frozen-nli-model.ts",
-      'import c = require("node:crypto"); (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")(); const { constructor: C } = (() => {}); const { ["con" + "structor"]: D } = (() => {});',
+      'import c = require("node:crypto"); export { c }; (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")(); const { constructor: C } = (() => {}); const { ["con" + "structor"]: D } = (() => {}); Reflect.get(() => {}, "constructor")("return globalThis")();',
       ts.ScriptTarget.Latest,
       true,
     );
@@ -143,6 +143,7 @@ describe("verifier sandbox structural boundary", () => {
     visit(hostileEscapes, "verifier-frozen-nli-model.ts", escapeViolations);
     expect(escapeViolations).toEqual([
       "verifier-frozen-nli-model.ts: import equals",
+      "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
@@ -208,6 +209,7 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
   }
   if (
     (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+    node.moduleSpecifier !== undefined &&
     ts.isStringLiteral(node.moduleSpecifier) &&
     !node.moduleSpecifier.text.startsWith(".") &&
     allowedImports[file]?.has(node.moduleSpecifier.text)
@@ -237,6 +239,7 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
 }
 
 function isForbiddenPropertyEscape(node: ts.Node): boolean {
+  if (ts.isCallExpression(node) && isReflectiveConstructorLookup(node)) return true;
   if (ts.isPropertyAccessExpression(node)) return node.name.text === "constructor";
   if (ts.isBindingElement(node)) {
     return staticPropertyName(node.propertyName ?? node.name) === "constructor";
@@ -246,6 +249,20 @@ function isForbiddenPropertyEscape(node: ts.Node): boolean {
     node.argumentExpression !== undefined &&
     staticExpressionString(node.argumentExpression) === "constructor"
   );
+}
+
+function isReflectiveConstructorLookup(node: ts.CallExpression): boolean {
+  if (!ts.isPropertyAccessExpression(node.expression)) return false;
+  const target = node.expression.expression;
+  if (
+    !ts.isIdentifier(target) ||
+    (target.text !== "Reflect" && target.text !== "Object") ||
+    (node.expression.name.text !== "get" &&
+      node.expression.name.text !== "getOwnPropertyDescriptor")
+  ) {
+    return false;
+  }
+  return node.arguments.some((argument) => staticExpressionString(argument) === "constructor");
 }
 
 function staticPropertyName(node: ts.PropertyName | ts.BindingName): string | undefined {

@@ -5,7 +5,7 @@ export const VersionedEventSchema = z
   .object({
     eventType: z.string().min(1).max(256),
     meaning: z.string().min(1).max(1_024),
-    schemaVersion: z.number().int().positive(),
+    schemaVersion: z.number().int().safe().positive(),
     payload: JsonValueSchema,
   })
   .strict();
@@ -18,8 +18,8 @@ export const UpcasterSchema = z
   .object({
     eventType: z.string().min(1).max(256),
     meaning: z.string().min(1).max(1_024),
-    fromVersion: z.number().int().positive(),
-    toVersion: z.number().int().positive(),
+    fromVersion: z.number().int().safe().positive(),
+    toVersion: z.number().int().safe().positive(),
     upcast: z.function().args(VersionedEventSchema).returns(z.unknown()),
   })
   .strict();
@@ -37,7 +37,7 @@ export function upcastOnRead(
   stepInputs: readonly Upcaster[],
 ): VersionedEvent {
   let current = freezeEvent(VersionedEventSchema.parse(eventInput));
-  const target = z.number().int().positive().parse(targetInput);
+  const target = z.number().int().safe().positive().parse(targetInput);
   const steps = z.array(UpcasterSchema).max(128).parse(stepInputs);
   if (target < current.schemaVersion) throw new Error("upcast target precedes stored version");
   while (current.schemaVersion < target) {

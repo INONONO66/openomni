@@ -225,16 +225,18 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
   }
   if (typeof value === "string") {
     if (value.length > MAX_JSON_STRING_LENGTH) failSnapshot();
-    accountSnapshot(state, value.length);
+    const rendered = JSON.stringify(value);
+    if (rendered === undefined) failSnapshot();
+    accountSnapshot(state, rendered.length);
     return value;
   }
   if (typeof value !== "object" || isProxy(value) || state.active.has(value)) failSnapshot();
   state.active.add(value);
-  accountSnapshot(state);
   try {
     if (Array.isArray(value)) {
       if (Object.getPrototypeOf(value) !== Array.prototype) failSnapshot();
       if (value.length > MAX_JSON_COLLECTION_ENTRIES) failSnapshot();
+      accountSnapshot(state, 2 + (value.length === 0 ? 0 : value.length - 1));
       const keys = Reflect.ownKeys(value);
       if (
         keys.length !== value.length + 1 ||
@@ -260,10 +262,13 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
     if (keys.length > MAX_JSON_COLLECTION_ENTRIES || keys.some((key) => typeof key !== "string")) {
       failSnapshot();
     }
+    accountSnapshot(state, 2 + keys.length + (keys.length === 0 ? 0 : keys.length - 1));
     const output: Record<string, JsonValue> = Object.create(null);
     for (const key of keys as string[]) {
       if (forbiddenJsonKeys.has(key) || key.length > MAX_JSON_STRING_LENGTH) failSnapshot();
-      accountSnapshot(state, key.length);
+      const renderedKey = JSON.stringify(key);
+      if (renderedKey === undefined) failSnapshot();
+      accountSnapshot(state, renderedKey.length);
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
         failSnapshot();

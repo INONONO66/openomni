@@ -85,11 +85,11 @@ export const ReplayDivergenceSchema = z
       "final_fold_mismatch",
       "interleaving_mismatch",
     ]),
-    index: z.number().int().nonnegative().optional(),
+    index: z.number().int().safe().nonnegative().optional(),
     expectedHash: Sha256DigestSchema.optional(),
     actualHash: Sha256DigestSchema.optional(),
-    seed: z.number().int().optional(),
-    iteration: z.number().int().nonnegative().optional(),
+    seed: z.number().int().safe().optional(),
+    iteration: z.number().int().safe().nonnegative().optional(),
   })
   .strict();
 export type ReplayDivergence = Readonly<z.infer<typeof ReplayDivergenceSchema>>;
