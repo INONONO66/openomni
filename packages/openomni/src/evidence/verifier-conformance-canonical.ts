@@ -19,26 +19,80 @@ const MAX_JSON_STRING_LENGTH = 1_048_576;
 const MAX_JSON_CODE_UNITS = 7_340_032;
 const forbiddenJsonKeys = new Set(["__proto__", "constructor", "prototype"]);
 
-export const JsonValueSchema = z
-  .unknown()
-  .transform<JsonValue>((value, context) => snapshotJsonInput(value, context));
-export const JsonObjectSchema = z.unknown().transform<JsonObject>((value, context) => {
-  try {
-    const snapshot = snapshotJson(value, 0, {
-      active: new WeakSet<object>(),
-      codeUnits: 0,
-      nodes: 0,
-    });
-    if (!isJsonRecord(snapshot)) failSnapshot();
-    return snapshot;
-  } catch {
-    context.addIssue({
+export function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Schema): Schema {
+  const originalSafeParse = schema.safeParse.bind(schema);
+  const originalSafeParseAsync = schema.safeParseAsync.bind(schema);
+  const safeParse = (input: unknown, params?: Parameters<typeof originalSafeParse>[1]) => {
+    try {
+      return originalSafeParse(snapshotJsonValue(input), params);
+    } catch {
+      return { success: false as const, error: invalidJsonError() };
+    }
+  };
+  const safeParseAsync = async (
+    input: unknown,
+    params?: Parameters<typeof originalSafeParseAsync>[1],
+  ) => {
+    try {
+      return originalSafeParseAsync(snapshotJsonValue(input), params);
+    } catch {
+      return { success: false as const, error: invalidJsonError() };
+    }
+  };
+  Object.defineProperties(schema, {
+    parse: {
+      value: (input: unknown, params?: Parameters<typeof originalSafeParse>[1]) => {
+        const result = safeParse(input, params);
+        if (result.success) return result.data;
+        throw result.error;
+      },
+    },
+    safeParse: { value: safeParse },
+    parseAsync: {
+      value: async (input: unknown, params?: Parameters<typeof originalSafeParseAsync>[1]) => {
+        const result = await safeParseAsync(input, params);
+        if (result.success) return result.data;
+        throw result.error;
+      },
+    },
+    safeParseAsync: { value: safeParseAsync },
+    spa: { value: safeParseAsync },
+  });
+  return schema;
+}
+
+function invalidJsonError(): z.ZodError {
+  return new z.ZodError([
+    {
       code: z.ZodIssueCode.custom,
-      message: "expected bounded plain JSON object",
-    });
-    return z.NEVER;
-  }
-});
+      path: [],
+      message: "expected bounded plain JSON value",
+    },
+  ]);
+}
+
+export const JsonValueSchema = snapshotFirstJsonSchema(
+  z.unknown().transform<JsonValue>((value, context) => snapshotJsonInput(value, context)),
+);
+export const JsonObjectSchema = snapshotFirstJsonSchema(
+  z.unknown().transform<JsonObject>((value, context) => {
+    try {
+      const snapshot = snapshotJson(value, 0, {
+        active: new WeakSet<object>(),
+        codeUnits: 0,
+        nodes: 0,
+      });
+      if (!isJsonRecord(snapshot)) failSnapshot();
+      return snapshot;
+    } catch {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "expected bounded plain JSON object",
+      });
+      return z.NEVER;
+    }
+  }),
+);
 export const Sha256DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const RedactedIdentifierSchema = z
   .string()
@@ -79,16 +133,18 @@ export function freezeJson(value: JsonValue): JsonValue {
   return snapshotJsonValue(value);
 }
 
-export const EnvironmentFingerprintInputSchema = JsonValueSchema.pipe(
-  z
-    .object({
-      runtimeIdentifiers: z.array(RedactedIdentifierSchema).min(1).max(256),
-      dependencyIdentifiers: z.array(RedactedIdentifierSchema).max(256),
-      environmentIdentifiers: z.array(RedactedIdentifierSchema).max(256),
-    })
-    .strict(),
+export const EnvironmentFingerprintInputSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(
+    z
+      .object({
+        runtimeIdentifiers: z.array(RedactedIdentifierSchema).min(1).max(256),
+        dependencyIdentifiers: z.array(RedactedIdentifierSchema).max(256),
+        environmentIdentifiers: z.array(RedactedIdentifierSchema).max(256),
+      })
+      .strict(),
+  ),
 );
-export const EnvironmentFingerprintSchema = z
+const EnvironmentFingerprintContract = z
   .object({
     version: z.literal("environment-fingerprint-v1"),
     runtimeFingerprint: Sha256DigestSchema,
@@ -96,15 +152,17 @@ export const EnvironmentFingerprintSchema = z
     environmentFingerprint: Sha256DigestSchema,
     fingerprint: Sha256DigestSchema,
   })
-  .strict()
-  .superRefine((value, context) => {
+  .strict();
+export const EnvironmentFingerprintSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(EnvironmentFingerprintContract).superRefine((value, context) => {
     if (value.fingerprint !== environmentAggregateFingerprint(value)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "environment aggregate fingerprint does not match its components",
       });
     }
-  });
+  }),
+);
 export type EnvironmentFingerprint = Readonly<z.infer<typeof EnvironmentFingerprintSchema>>;
 
 export function createEnvironmentFingerprint(input: unknown): EnvironmentFingerprint {
@@ -144,36 +202,38 @@ function environmentAggregateFingerprint(
   });
 }
 
-export const NondeterminismManifestSchema = JsonValueSchema.pipe(
-  z
-    .object({
-      version: z.literal("nondeterminism-manifest-v1"),
-      entries: z
-        .array(
-          z
-            .object({
-              kind: z.enum([
-                "clock",
-                "time_zone",
-                "random",
-                "model",
-                "network",
-                "tool",
-                "device",
-                "ordering",
-                "generated_id",
-                "environment",
-                "human",
-                "source",
-              ]),
-              identifier: RedactedIdentifierSchema,
-              value: JsonValueSchema,
-            })
-            .strict(),
-        )
-        .max(1_024),
-    })
-    .strict(),
+export const NondeterminismManifestSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(
+    z
+      .object({
+        version: z.literal("nondeterminism-manifest-v1"),
+        entries: z
+          .array(
+            z
+              .object({
+                kind: z.enum([
+                  "clock",
+                  "time_zone",
+                  "random",
+                  "model",
+                  "network",
+                  "tool",
+                  "device",
+                  "ordering",
+                  "generated_id",
+                  "environment",
+                  "human",
+                  "source",
+                ]),
+                identifier: RedactedIdentifierSchema,
+                value: JsonValueSchema,
+              })
+              .strict(),
+          )
+          .max(1_024),
+      })
+      .strict(),
+  ),
 );
 
 export function hashNondeterminismManifest(input: unknown): string {

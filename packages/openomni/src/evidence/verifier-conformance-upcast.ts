@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { JsonValueSchema, freezeJson, type JsonValue } from "./verifier-conformance-canonical.js";
+import {
+  JsonValueSchema,
+  freezeJson,
+  snapshotFirstJsonSchema,
+  type JsonValue,
+} from "./verifier-conformance-canonical.js";
 
-export const VersionedEventSchema = z
+const VersionedEventContract = z
   .object({
     eventType: z.string().min(1).max(256),
     meaning: z.string().min(1).max(1_024),
@@ -9,6 +14,9 @@ export const VersionedEventSchema = z
     payload: JsonValueSchema,
   })
   .strict();
+export const VersionedEventSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(VersionedEventContract),
+);
 type VersionedEventShape = z.infer<typeof VersionedEventSchema>;
 export type VersionedEvent = Readonly<Omit<VersionedEventShape, "payload">> & {
   readonly payload: JsonValue;
@@ -20,7 +28,7 @@ export const UpcasterSchema = z
     meaning: z.string().min(1).max(1_024),
     fromVersion: z.number().int().safe().positive(),
     toVersion: z.number().int().safe().positive(),
-    upcast: z.function().args(VersionedEventSchema).returns(z.unknown()),
+    upcast: z.function().args(VersionedEventContract).returns(z.unknown()),
   })
   .strict();
 type UpcasterShape = z.infer<typeof UpcasterSchema>;

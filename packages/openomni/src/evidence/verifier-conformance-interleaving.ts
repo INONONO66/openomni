@@ -4,17 +4,21 @@ import {
   Sha256DigestSchema,
   freezeJson,
   hashCanonicalJson,
+  snapshotFirstJsonSchema,
   type JsonValue,
 } from "./verifier-conformance-canonical.js";
 import { failReplayConformance } from "./verifier-conformance-replay.js";
 
-export const CommutativeEventSchema = z
+const CommutativeEventContract = z
   .object({
     id: z.string().min(1).max(256),
     commutativeGroup: z.string().min(1).max(256).optional(),
     value: JsonValueSchema,
   })
   .strict();
+export const CommutativeEventSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(CommutativeEventContract),
+);
 type CommutativeEventShape = z.infer<typeof CommutativeEventSchema>;
 export type CommutativeEvent = Readonly<Omit<CommutativeEventShape, "value">> & {
   readonly value: JsonValue;
@@ -32,8 +36,10 @@ const InterleavingPlanContract = z
     (plan) => new Set(plan.events.map((event) => event.id)).size === plan.events.length,
     "duplicate event id",
   );
-export const InterleavingPlanSchema = JsonValueSchema.pipe(InterleavingPlanContract);
-export const InterleavingReportSchema = z
+export const InterleavingPlanSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(InterleavingPlanContract),
+);
+const InterleavingReportContract = z
   .object({
     seed: z.number().int().safe(),
     iterations: z.number().int().safe().positive().max(1_000),
@@ -41,6 +47,9 @@ export const InterleavingReportSchema = z
     interleavingHashes: z.array(Sha256DigestSchema).max(1_000),
   })
   .strict();
+export const InterleavingReportSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(InterleavingReportContract),
+);
 type InterleavingPlanShape = z.infer<typeof InterleavingPlanSchema>;
 type InterleavingReportShape = z.infer<typeof InterleavingReportSchema>;
 export type InterleavingPlan = Readonly<Omit<InterleavingPlanShape, "initialFold" | "events">> & {

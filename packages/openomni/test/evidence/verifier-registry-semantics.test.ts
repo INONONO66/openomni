@@ -17,6 +17,20 @@ function obligation(
 }
 
 describe("verifier registry scoped result semantics", () => {
+  test("accepts URI schemes case-insensitively", () => {
+    const fact = VerifierRegistry.create().verify(
+      obligation("archived_url_recheck", {
+        target: "HTTPS://archive.test/page",
+        observedStatus: 200,
+        expectedStatus: 200,
+      }),
+    );
+    expect(fact).toMatchObject({
+      type: "verification_result",
+      status: "verified",
+    });
+  });
+
   test("returns inconclusive when an expected archive digest was not observed", () => {
     const fact = VerifierRegistry.create().verify(
       obligation("archived_url_recheck", {

@@ -6,6 +6,7 @@ import {
   canonicalJson,
   freezeJson,
   hashCanonicalJson,
+  snapshotFirstJsonSchema,
   type JsonValue,
 } from "./verifier-conformance-canonical.js";
 
@@ -27,7 +28,7 @@ const ArchivedCassetteSchema = z
   })
   .strict();
 
-export const ReplayBindingSchema = z
+const ReplayBindingContract = z
   .object({
     version: z.literal("replay-key-v1"),
     source: z.union([ArchivedRangeSchema, ArchivedCassetteSchema]),
@@ -37,18 +38,22 @@ export const ReplayBindingSchema = z
     nondeterminismManifestHash: Sha256DigestSchema,
   })
   .strict();
-export const ReplayKeySchema = ReplayBindingSchema.extend({
+export const ReplayBindingSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(ReplayBindingContract),
+);
+const ReplayKeyContract = ReplayBindingContract.extend({
   replayKey: Sha256DigestSchema,
-})
-  .strict()
-  .superRefine((value, context) => {
+}).strict();
+export const ReplayKeySchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(ReplayKeyContract).superRefine((value, context) => {
     if (value.replayKey !== replayBindingHash(value)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "replay key does not match its binding",
       });
     }
-  });
+  }),
+);
 type ReplayKeyShape = z.infer<typeof ReplayKeySchema>;
 export type ReplayKey = Readonly<Omit<ReplayKeyShape, "source">> & {
   readonly source: Readonly<ReplayKeyShape["source"]>;
@@ -72,10 +77,14 @@ function replayBindingHash(binding: z.infer<typeof ReplayBindingSchema>): string
   });
 }
 
-export const ReplayTraceSchema = JsonValueSchema.pipe(
-  z.object({ commands: z.array(JsonValueSchema).max(1_024), finalFold: JsonValueSchema }).strict(),
+export const ReplayTraceSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(
+    z
+      .object({ commands: z.array(JsonValueSchema).max(1_024), finalFold: JsonValueSchema })
+      .strict(),
+  ),
 );
-export const ReplayDivergenceSchema = z
+const ReplayDivergenceContract = z
   .object({
     version: z.literal("replay-divergence-v1"),
     kind: z.enum([
@@ -92,6 +101,9 @@ export const ReplayDivergenceSchema = z
     iteration: z.number().int().safe().nonnegative().optional(),
   })
   .strict();
+export const ReplayDivergenceSchema = snapshotFirstJsonSchema(
+  JsonValueSchema.pipe(ReplayDivergenceContract),
+);
 export type ReplayDivergence = Readonly<z.infer<typeof ReplayDivergenceSchema>>;
 
 export class ReplayConformanceError extends Error {
@@ -156,9 +168,9 @@ export function assertReplayConformance(expectedInput: unknown, actualInput: unk
   }
 }
 
-export const RecordedCommandSchema = z
-  .object({ command: JsonValueSchema, output: JsonValueSchema })
-  .strict();
+export const RecordedCommandSchema = snapshotFirstJsonSchema(
+  z.object({ command: JsonValueSchema, output: JsonValueSchema }).strict(),
+);
 const ReplayCommandsSchema = JsonValueSchema.pipe(z.array(JsonValueSchema).max(1_024));
 const RecordedCommandsSchema = JsonValueSchema.pipe(z.array(RecordedCommandSchema).max(1_024));
 type RecordedCommandShape = z.infer<typeof RecordedCommandSchema>;

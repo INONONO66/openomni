@@ -109,6 +109,65 @@ describe("verifier replay identity and schema conformance", () => {
     ).toBe(false);
   });
 
+  test("rejects callback-bearing inputs before every JSON-only public schema reads them", async () => {
+    const binding = {
+      version: "replay-key-v1",
+      source: {
+        kind: "cassette",
+        cassetteIdentifier: "ref:cassette",
+        digest: digestA,
+      },
+      environmentFingerprint: digestA,
+      schemaVersion: "version:1",
+      upcastVersion: "version:1",
+      nondeterminismManifestHash: digestA,
+    };
+    let getterCalls = 0;
+    const accessorBinding = {
+      ...binding,
+      get version() {
+        getterCalls += 1;
+        return "replay-key-v1";
+      },
+    };
+    expect(ReplayBindingSchema.safeParse(accessorBinding).success).toBe(false);
+    expect(() => createReplayKey(accessorBinding)).toThrow();
+    expect(getterCalls).toBe(0);
+
+    for (const [schema, input] of [
+      [ReplayBindingSchema, binding],
+      [ReplayDivergenceSchema, { version: "replay-divergence-v1", kind: "missing_command" }],
+      [
+        VersionedEventSchema,
+        { eventType: "event", meaning: "stable", schemaVersion: 1, payload: null },
+      ],
+      [
+        InterleavingReportSchema,
+        { seed: 1, iterations: 1, baselineHash: digestA, interleavingHashes: [] },
+      ],
+    ] as const) {
+      let trapCalls = 0;
+      const proxy = new Proxy(input, {
+        get() {
+          trapCalls += 1;
+          throw new Error("must not run");
+        },
+        getPrototypeOf() {
+          trapCalls += 1;
+          throw new Error("must not run");
+        },
+        ownKeys() {
+          trapCalls += 1;
+          throw new Error("must not run");
+        },
+      });
+      expect(schema.safeParse(proxy).success).toBe(false);
+      expect((await schema.safeParseAsync(proxy)).success).toBe(false);
+      expect(() => schema.parse(proxy)).toThrow();
+      expect(trapCalls).toBe(0);
+    }
+  });
+
   test("creates order-independent runtime, dependency, and environment fingerprints", () => {
     const first = createEnvironmentFingerprint(identifiers);
     const second = createEnvironmentFingerprint({

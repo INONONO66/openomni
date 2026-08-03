@@ -16,7 +16,7 @@ const Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const HttpUrl = z
   .string()
   .url()
-  .regex(/^https?:\/\//u);
+  .regex(/^https?:\/\//iu);
 const SchemaInputs = z.object({ schema: z.literal("native_tool_call"), value: JsonValue }).strict();
 const NumericInputs = z
   .object({

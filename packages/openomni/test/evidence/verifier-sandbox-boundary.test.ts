@@ -135,7 +135,7 @@ describe("verifier sandbox structural boundary", () => {
     ]);
     const hostileEscapes = ts.createSourceFile(
       "verifier-frozen-nli-model.ts",
-      'import c = require("node:crypto"); export { c }; (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")(); const { constructor: C } = (() => {}); const { ["con" + "structor"]: D } = (() => {}); Reflect.get(() => {}, "constructor")("return globalThis")();',
+      'import c = require("node:crypto"); export { c }; (() => {}).constructor("return globalThis")(); (() => {})["constructor"]("return globalThis")(); const { constructor: C } = (() => {}); const { ["con" + "structor"]: D } = (() => {}); Reflect.get(() => {}, "constructor")("return globalThis")(); const { get } = Reflect; const property = "constructor"; get(() => {}, property)("return globalThis")();',
       ts.ScriptTarget.Latest,
       true,
     );
@@ -148,6 +148,8 @@ describe("verifier sandbox structural boundary", () => {
       "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
       "verifier-frozen-nli-model.ts: forbidden property constructor",
+      "verifier-frozen-nli-model.ts: forbidden global Reflect",
+      "verifier-frozen-nli-model.ts: forbidden global Reflect",
     ]);
   });
 });
@@ -229,7 +231,8 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
   }
   if (
     ts.isIdentifier(node) &&
-    forbiddenGlobals.has(node.text) &&
+    (forbiddenGlobals.has(node.text) ||
+      (file === "verifier-frozen-nli-model.ts" && node.text === "Reflect")) &&
     !isPropertyName(node) &&
     !isImportBinding(node)
   ) {
