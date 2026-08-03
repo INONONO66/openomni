@@ -4,7 +4,10 @@ import {
   driverExecution,
 } from "./verifier-registry-driver-contract.js";
 import { scenarioReceipt } from "./verifier-registry-driver-scenarios.js";
-import { executeVerifierRegistrySelfTest } from "./verifier-registry-driver-self-test.js";
+import {
+  executeVerifierRegistryBenchmark,
+  executeVerifierRegistrySelfTest,
+} from "./verifier-registry-driver-self-test.js";
 
 export type {
   VerifierRegistryDriverExecution,
@@ -18,11 +21,15 @@ export function runVerifierRegistryDriver(
     if (args.length === 1 && args[0] === "--help") {
       return Object.freeze({
         exitCode: 0,
-        stdout: "Usage: verifier-registry-driver --self-test | --scenario <name> --json",
+        stdout:
+          "Usage: verifier-registry-driver --self-test | --benchmark | --scenario <name> --json",
       });
     }
     if (args.length === 1 && args[0] === "--self-test") {
       return executeVerifierRegistrySelfTest();
+    }
+    if (args.length === 1 && args[0] === "--benchmark") {
+      return executeVerifierRegistryBenchmark();
     }
     if (args.length === 3 && args[0] === "--scenario" && args[2] === "--json") {
       const scenario = VerifierRegistryDriverScenarios.find((value) => value === args[1]);

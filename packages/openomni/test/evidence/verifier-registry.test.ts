@@ -5,10 +5,11 @@ import { VerifierRegistry } from "../../src/evidence/verifier-registry";
 const obligation = (
   kind: VerifierRegistry.ObligationKind,
   recordedInputs: VerifierRegistry.JsonValue,
+  claim = "recorded predicate",
 ) => ({
   obligationId: `obligation:${kind}`,
   kind,
-  claim: "recorded predicate",
+  claim,
   recordedInputs,
 });
 
@@ -147,14 +148,16 @@ describe("VerifierRegistry", () => {
 
   test("uses the shipped fingerprinted symbolic NLI model with lexical and numeric support", () => {
     const registry = VerifierRegistry.create();
-    const supported = obligation("citation_support", {
-      archivedText: "The measured value is exactly 42 units.",
-      claimText: "The measured value is 42 units.",
-    });
-    const knownBad = obligation("citation_support", {
-      archivedText: "The measured value is exactly 42 units.",
-      claimText: "The measured value is 99 units.",
-    });
+    const supported = obligation(
+      "citation_support",
+      { archivedText: "The measured value is exactly 42 units." },
+      "The measured value is 42 units.",
+    );
+    const knownBad = obligation(
+      "citation_support",
+      { archivedText: "The measured value is exactly 99 units." },
+      "The measured value is 42 units.",
+    );
     expect(registry.verify(supported)).toMatchObject({
       status: "verified",
       checkedPredicate: expect.stringContaining("frozen symbolic NLI relation"),

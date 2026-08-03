@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 
@@ -46,33 +46,24 @@ const forbiddenGlobals = new Set([
   "navigator",
   "performance",
   "process",
+  "require",
   "setImmediate",
   "setInterval",
   "setTimeout",
 ]);
-const boundaryFiles = [
-  "verifier-conformance-canonical.ts",
-  "verifier-registry-contract.ts",
-  "verifier-registry-core.ts",
-  "verifier-registry-evaluators.ts",
-  "verifier-sandbox.ts",
-  "verifier-frozen-nli-model.ts",
-  "verifier-registry.ts",
-];
+const boundaryRoots = ["verifier-registry.ts"];
 
 describe("verifier sandbox structural boundary", () => {
   test("forbids ambient effect imports and globals in the verifier path", () => {
     const violations: string[] = [];
-    for (const file of boundaryFiles) {
-      const source = readFileSync(new URL(`../../src/evidence/${file}`, import.meta.url), "utf8");
-      const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+    for (const [file, parsed] of collectBoundaryGraph(violations)) {
       visit(parsed, file, violations);
     }
     expect(violations).toEqual([]);
 
     const hostile = ts.createSourceFile(
       "hostile.ts",
-      'globalThis["fetch"]("https://example.test"); import("node:https");',
+      'globalThis["fetch"]("https://example.test"); import("node:https"); require("node:net");',
       ts.ScriptTarget.Latest,
       true,
     );
@@ -81,9 +72,53 @@ describe("verifier sandbox structural boundary", () => {
     expect(hostileViolations).toEqual([
       "hostile.ts: forbidden global globalThis",
       "hostile.ts: dynamic import",
+      "hostile.ts: forbidden global require",
     ]);
   });
 });
+
+function collectBoundaryGraph(violations: string[]): ReadonlyMap<string, ts.SourceFile> {
+  const files = new Map<string, ts.SourceFile>();
+  const pending = [...boundaryRoots];
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (file === undefined || files.has(file)) continue;
+    const url = new URL(`../../src/evidence/${file}`, import.meta.url);
+    if (!existsSync(url)) {
+      violations.push(`${file}: missing transitive module`);
+      continue;
+    }
+    const parsed = ts.createSourceFile(
+      file,
+      readFileSync(url, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    files.set(file, parsed);
+    const specifiers: string[] = [];
+    collectStaticSpecifiers(parsed, specifiers);
+    for (const specifier of specifiers) {
+      if (!specifier.startsWith("./")) continue;
+      const resolved = specifier.slice(2).replace(/\.js$/u, ".ts");
+      if (!(resolved in allowedImports)) {
+        violations.push(`${file}: transitive module lacks allowlist ${resolved}`);
+      }
+      pending.push(resolved);
+    }
+  }
+  return files;
+}
+
+function collectStaticSpecifiers(node: ts.Node, specifiers: string[]): void {
+  if (
+    (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+    node.moduleSpecifier !== undefined &&
+    ts.isStringLiteral(node.moduleSpecifier)
+  ) {
+    specifiers.push(node.moduleSpecifier.text);
+  }
+  ts.forEachChild(node, (child) => collectStaticSpecifiers(child, specifiers));
+}
 
 function visit(node: ts.Node, file: string, violations: string[]): void {
   if (

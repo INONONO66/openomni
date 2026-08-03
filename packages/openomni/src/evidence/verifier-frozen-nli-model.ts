@@ -32,28 +32,63 @@ const modelBytes = JSON.stringify({
   asset: FrozenSymbolicNliModel,
   executable: [
     frozenSymbolicNliInfer,
+    inferSegment,
+    segments,
+    tokenSequence,
     tokens,
     numbers,
     wordTokens,
     claimCoverage,
     containsOpposition,
+    isContradictionToken,
+    isOrderedSubsequence,
   ].map((value) => value.toString()),
 });
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
 
 export function frozenSymbolicNliInfer(premise: string, hypothesis: string): FrozenNliRelation {
+  let contradicted = false;
+  for (const segment of segments(premise)) {
+    const relation = inferSegment(segment, hypothesis);
+    if (relation === "entails") return "entails";
+    if (relation === "contradicts") contradicted = true;
+  }
+  return contradicted ? "contradicts" : "unknown";
+}
+
+function inferSegment(premise: string, hypothesis: string): FrozenNliRelation {
   const sourceTokens = tokens(premise);
   const claimTokens = tokens(hypothesis);
   if (claimTokens.size === 0) return "unknown";
+  const claimAnchors = new Set(
+    [...wordTokens(hypothesis)].filter(
+      (token) => !FrozenSymbolicNliModel.negators.includes(token) && !isContradictionToken(token),
+    ),
+  );
+  if (claimAnchors.size === 0) return "unknown";
+  if (claimCoverage(sourceTokens, claimAnchors) < 1) return "unknown";
   if (containsOpposition(sourceTokens, claimTokens)) return "contradicts";
   const lexicalCoverage = claimCoverage(wordTokens(premise), wordTokens(hypothesis));
   if (lexicalCoverage < FrozenSymbolicNliModel.claimCoverageThreshold) return "unknown";
-  if (!numbers(hypothesis).every((number) => numbers(premise).includes(number))) {
-    return "contradicts";
+  const sourceNumbers = numbers(premise);
+  const claimNumbers = numbers(hypothesis);
+  if (!claimNumbers.every((number) => sourceNumbers.includes(number))) {
+    return sourceNumbers.length === 0 ? "unknown" : "contradicts";
   }
   const sourceNegated = FrozenSymbolicNliModel.negators.some((word) => sourceTokens.has(word));
   const claimNegated = FrozenSymbolicNliModel.negators.some((word) => claimTokens.has(word));
-  return sourceNegated === claimNegated ? "entails" : "contradicts";
+  if (sourceNegated !== claimNegated) return "contradicts";
+  return isOrderedSubsequence(tokenSequence(premise), tokenSequence(hypothesis))
+    ? "entails"
+    : "unknown";
+}
+
+function segments(value: string): readonly string[] {
+  const split = value
+    .split(/(?:[!?;]\s+|\.\s+|\n+)/u)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+  return split.length === 0 ? [value] : split;
 }
 
 function pair(
@@ -64,7 +99,20 @@ function pair(
 }
 
 function tokens(value: string): Set<string> {
-  return new Set(value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+  return new Set(tokenSequence(value));
+}
+
+function tokenSequence(value: string): readonly string[] {
+  return value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function isOrderedSubsequence(source: readonly string[], claim: readonly string[]): boolean {
+  let claimIndex = 0;
+  for (const token of source) {
+    if (token === claim[claimIndex]) claimIndex += 1;
+    if (claimIndex === claim.length) return true;
+  }
+  return claim.length === 0;
 }
 
 function numbers(value: string): string[] {
@@ -90,4 +138,10 @@ function containsOpposition(source: ReadonlySet<string>, claim: ReadonlySet<stri
     if ((sourceLeft && claimRight) || (sourceRight && claimLeft)) return true;
   }
   return false;
+}
+
+function isContradictionToken(token: string): boolean {
+  return FrozenSymbolicNliModel.contradictionGroups.some(([left, right]) =>
+    [...left, ...right].includes(token),
+  );
 }

@@ -26,12 +26,20 @@ const digestA = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
 
 export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecution {
+  return executeVerifierRegistryCheck(false);
+}
+
+export function executeVerifierRegistryBenchmark(): VerifierRegistryDriverExecution {
+  return executeVerifierRegistryCheck(true);
+}
+
+function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistryDriverExecution {
   const durations: number[] = [];
   const run = (): VerifierRegistryScenarioReceipt[] =>
     VerifierRegistryDriverScenarios.map((scenario) => {
-      const started = performance.now();
+      const started = includeLatency ? performance.now() : 0;
       const receipt = scenarioReceipt(scenario);
-      durations.push(performance.now() - started);
+      if (includeLatency) durations.push(performance.now() - started);
       return receipt;
     });
   const first = run();
@@ -70,7 +78,7 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
 
   return driverExecution(ok, {
     version: "verifier-registry-driver-v1",
-    mode: "self_test",
+    mode: includeLatency ? "benchmark" : "self_test",
     ok,
     scenarioRuns: first.length + second.length,
     scenarioResultCodes: first.map((receipt) => receipt.resultCode),
@@ -94,12 +102,16 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
       accuracy: measured.accuracy,
       trust: measured.trust,
       toolValidity: measured.toolValidity,
-      latencyMs: {
-        measuredBy: "outer_driver_harness",
-        samples: durations.length,
-        p50: percentile(sortedDurations, 0.5),
-        p95: percentile(sortedDurations, 0.95),
-      },
+      ...(includeLatency
+        ? {
+            latencyMs: {
+              measuredBy: "outer_driver_harness",
+              samples: durations.length,
+              p50: percentile(sortedDurations, 0.5),
+              p95: percentile(sortedDurations, 0.95),
+            },
+          }
+        : {}),
       surface: measured.surface,
     },
     exposedActions: measured.exposedActions,
@@ -196,10 +208,9 @@ function contractSmoke() {
   const citation = registry.verify({
     obligationId: "driver:citation_support",
     kind: "citation_support",
-    claim: "driver fixture",
+    claim: "The measured value is 42 units.",
     recordedInputs: {
       archivedText: "The measured value is exactly 42 units.",
-      claimText: "The measured value is 42 units.",
     },
   });
   return {

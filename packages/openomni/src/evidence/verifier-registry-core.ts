@@ -97,12 +97,7 @@ export function createRegistry(): Registry {
 function result(obligation: Obligation, value: ResultValue): VerificationFact {
   let basisHash: string;
   try {
-    basisHash = hashCanonicalJson({
-      version: "verification-basis-v1",
-      obligation,
-      verifierId: value.verifierId,
-      ...(value.modelFingerprint === undefined ? {} : { modelFingerprint: value.modelFingerprint }),
-    });
+    basisHash = verificationBasisHash(obligation, value.verifierId, value.modelFingerprint);
   } catch {
     return error(
       "malformed_output",
@@ -129,6 +124,19 @@ function result(obligation: Obligation, value: ResultValue): VerificationFact {
         obligation,
         value.verifierId,
       );
+}
+
+export function verificationBasisHash(
+  obligation: Obligation,
+  verifierId: string,
+  modelFingerprint?: string,
+): string {
+  return hashCanonicalJson({
+    version: "verification-basis-v1",
+    obligation,
+    verifierId,
+    ...(modelFingerprint === undefined ? {} : { modelFingerprint }),
+  });
 }
 
 function error(

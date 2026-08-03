@@ -52,6 +52,7 @@ describe("verifier registry security boundaries", () => {
     const symbol = [1];
     Object.defineProperty(symbol, Symbol("hidden"), { value: 2 });
     expect(() => canonicalJson(symbol)).toThrow();
+    expect(() => canonicalJson({ ["x".repeat(1_048_577)]: true })).toThrow();
   });
 
   test("refutes native calls whose schema parse would drop fields", () => {
@@ -149,6 +150,19 @@ describe("verifier registry security boundaries", () => {
       recordedInputs: { operator: "eq", left: 1, right: 1 },
     });
     expect(fact).toMatchObject({ type: "verification_error", code: "malformed_input" });
+    expect(Object.isFrozen(fact)).toBe(true);
+    const divideByZero = VerifierRegistry.create().verify(
+      obligation("code_recheck", {
+        operation: "divide",
+        operands: [1, 0],
+        expected: 0,
+      }),
+    );
+    expect(divideByZero).toMatchObject({
+      type: "verification_error",
+      code: "malformed_input",
+    });
+    expect(Object.isFrozen(divideByZero)).toBe(true);
   });
 
   test("rejects impossible result taxonomy and status combinations", () => {
@@ -164,6 +178,14 @@ describe("verifier registry security boundaries", () => {
         kind: "reasoning",
         status: "verified",
         checkedPredicate: "forbidden decisive result",
+      }),
+    ).toThrow();
+    expect(() =>
+      VerifierRegistry.VerificationResult.parse({
+        ...base,
+        kind: "reasoning",
+        status: "asserted",
+        checkedPredicate: "forbidden checked predicate",
       }),
     ).toThrow();
     expect(() =>

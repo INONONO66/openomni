@@ -231,7 +231,7 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
     }
     const output: Record<string, JsonValue> = Object.create(null);
     for (const key of keys as string[]) {
-      if (forbiddenJsonKeys.has(key)) failSnapshot();
+      if (forbiddenJsonKeys.has(key) || key.length > MAX_JSON_STRING_LENGTH) failSnapshot();
       accountSnapshot(state, key.length);
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {

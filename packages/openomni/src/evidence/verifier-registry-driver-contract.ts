@@ -54,6 +54,7 @@ export const VerifierRegistryDriverSurface = Object.freeze({
   fieldNames: Object.freeze(["version", "mode", "scenario", "ok", "resultCode", "observation"]),
   tokens: Object.freeze([
     "--self-test",
+    "--benchmark",
     "--scenario",
     "--json",
     "--help",

@@ -6,6 +6,7 @@ import {
   VerifierRegistryScenarioReceiptSchema,
 } from "./verifier-registry-driver-contract.js";
 import { VerifierRegistry } from "./verifier-registry.js";
+import { verificationBasisHash } from "./verifier-registry-core.js";
 
 type ExpectedStatus = "verified" | "refuted" | "asserted";
 type Fixture = Readonly<{
@@ -24,7 +25,9 @@ export function measureVerifierRegistryBenchmark(
       expected: fixture.expected,
       actual: fact.type === "verification_result" ? fact.status : "verification_error",
       basisBound:
-        fact.type === "verification_result" && /^sha256:[a-f0-9]{64}$/.test(fact.basisHash),
+        fact.type === "verification_result" &&
+        fact.basisHash ===
+          verificationBasisHash(fixture.input, fact.verifierId, fact.modelFingerprint),
       predicateBound:
         fact.type === "verification_result" &&
         (fact.status === "asserted" || fact.checkedPredicate !== undefined),
@@ -108,7 +111,13 @@ export function measureVerifierRegistryBenchmark(
 
 function taxonomyFixtures(): readonly Fixture[] {
   const digest = hashCanonicalJson("hello");
-  const executable: readonly [VerifierRegistry.ObligationKind, unknown, unknown][] = [
+  const executable: readonly [
+    VerifierRegistry.ObligationKind,
+    unknown,
+    unknown,
+    string?,
+    string?,
+  ][] = [
     [
       "schema_validity",
       { schema: "native_tool_call", value: { id: "call", tool: "read", input: {} } },
@@ -156,15 +165,17 @@ function taxonomyFixtures(): readonly Fixture[] {
     ],
     [
       "citation_support",
-      { archivedText: "The value is 42 units.", claimText: "The value is 42 units." },
-      { archivedText: "The value is 42 units.", claimText: "The value is 99 units." },
+      { archivedText: "The value is 42 units." },
+      { archivedText: "The value is 99 units." },
+      "The value is 42 units.",
+      "The value is 42 units.",
     ],
   ];
   const fixtures: Fixture[] = [];
-  for (const [kind, good, bad] of executable) {
+  for (const [kind, good, bad, goodClaim, badClaim] of executable) {
     fixtures.push(
-      { input: obligation(kind, good), expected: "verified" },
-      { input: obligation(kind, bad), expected: "refuted" },
+      { input: obligation(kind, good, goodClaim), expected: "verified" },
+      { input: obligation(kind, bad, badClaim), expected: "refuted" },
     );
   }
   for (const kind of VerifierRegistry.AssertedOnlyKind.options) {
@@ -176,11 +187,12 @@ function taxonomyFixtures(): readonly Fixture[] {
 function obligation(
   kind: VerifierRegistry.ObligationKind,
   recordedInputs: unknown,
+  claim = "labeled benchmark fixture",
 ): VerifierRegistry.Obligation {
   return VerifierRegistry.Obligation.parse({
     obligationId: `benchmark:${kind}`,
     kind,
-    claim: "labeled benchmark fixture",
+    claim,
     recordedInputs,
   });
 }

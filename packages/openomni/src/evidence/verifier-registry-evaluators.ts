@@ -54,7 +54,6 @@ const QuoteInputs = z
 const CitationInputs = z
   .object({
     archivedText: z.string().min(1).max(1_048_576),
-    claimText: z.string().min(1).max(65_536),
   })
   .strict();
 
@@ -130,7 +129,11 @@ export function compileObligation(obligation: Obligation): CompiledObligation | 
       return input.success
         ? compiled(
             "builtin.frozen-symbolic-nli-v1",
-            { op: "citation_support", ...input.data },
+            {
+              op: "citation_support",
+              archivedText: input.data.archivedText,
+              claimText: obligation.claim,
+            },
             FrozenNliModelFingerprint,
           )
         : invalidInputs(obligation, "builtin.frozen-symbolic-nli-v1");
@@ -179,12 +182,14 @@ function compiled(
 }
 
 function invalidInputs(obligation: Obligation, verifierId: string): VerificationError {
-  return VerificationErrorSchema.parse({
-    type: "verification_error",
-    code: "malformed_input",
-    detail: "recorded inputs failed built-in verifier schema",
-    obligationId: obligation.obligationId,
-    kind: obligation.kind,
-    verifierId,
-  });
+  return Object.freeze(
+    VerificationErrorSchema.parse({
+      type: "verification_error",
+      code: "malformed_input",
+      detail: "recorded inputs failed built-in verifier schema",
+      obligationId: obligation.obligationId,
+      kind: obligation.kind,
+      verifierId,
+    }),
+  );
 }

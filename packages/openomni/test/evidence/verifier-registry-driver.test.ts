@@ -57,6 +57,7 @@ describe("VerifierRegistry driver", () => {
 
     const selfTest = runVerifierRegistryDriver(["--self-test"]);
     expect(selfTest.exitCode).toBe(0);
+    expect(runVerifierRegistryDriver(["--self-test"]).stdout).toBe(selfTest.stdout);
     const receipt = parseObject(selfTest.stdout);
     expect(receipt).toMatchObject({ mode: "self_test", ok: true, scenarioRuns: 10 });
     const benchmark = parseObject(receipt.benchmark);
@@ -78,6 +79,18 @@ describe("VerifierRegistry driver", () => {
       recordedOutput: true,
     });
     expect(receipt.exposedActions).toEqual([]);
+    expect(benchmark.latencyMs).toBeUndefined();
+
+    const timed = runVerifierRegistryDriver(["--benchmark"]);
+    expect(timed.exitCode).toBe(0);
+    const timedReceipt = parseObject(timed.stdout);
+    expect(timedReceipt.mode).toBe("benchmark");
+    expect(parseObject(parseObject(timedReceipt.benchmark).latencyMs)).toMatchObject({
+      measuredBy: "outer_driver_harness",
+      samples: 10,
+      p50: expect.any(Number),
+      p95: expect.any(Number),
+    });
 
     const help = runVerifierRegistryDriver(["--help"]);
     expect(help.exitCode).toBe(0);
