@@ -99,10 +99,10 @@ describe("verifier replay interleaving and substitution conformance", () => {
       { command: commands[1], output: { status: "off" } },
     ];
 
-    expect(substituteRecordedOutputs(commands, cassette)).toEqual([
-      { text: "recorded" },
-      { status: "off" },
-    ]);
+    const outputs = substituteRecordedOutputs(commands, cassette);
+    expect(outputs).toEqual([{ text: "recorded" }, { status: "off" }]);
+    expect(Object.isFrozen(cassette[0]?.output)).toBe(false);
+    expect(Object.isFrozen(outputs[0])).toBe(true);
     expect(liveEffects).toBe(0);
     expect(liveEffect).toBeFunction();
     expect(

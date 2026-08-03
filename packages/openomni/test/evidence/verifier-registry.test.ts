@@ -43,12 +43,13 @@ describe("VerifierRegistry", () => {
     ]);
     const registry = VerifierRegistry.create();
     for (const kind of VerifierRegistry.AssertedOnlyKind.options) {
-      expect(registry.verify(obligation(kind, {}))).toEqual({
+      expect(registry.verify(obligation(kind, {}))).toMatchObject({
         type: "verification_result",
         obligationId: `obligation:${kind}`,
         kind,
         verifierId: "asserted-only",
         status: "asserted",
+        basisHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       });
     }
   });
@@ -156,12 +157,12 @@ describe("VerifierRegistry", () => {
     });
     expect(registry.verify(supported)).toMatchObject({
       status: "verified",
-      checkedPredicate: expect.stringContaining("frozen symbolic NLI and lexical"),
+      checkedPredicate: expect.stringContaining("frozen symbolic NLI relation"),
       modelFingerprint: VerifierRegistry.FrozenNliModelFingerprint,
     });
     expect(registry.verify(knownBad)).toMatchObject({
       status: "refuted",
-      checkedPredicate: expect.stringContaining("frozen symbolic NLI and lexical"),
+      checkedPredicate: expect.stringContaining("frozen symbolic NLI relation"),
       modelFingerprint: VerifierRegistry.FrozenNliModelFingerprint,
     });
     expect(registry.verify(supported)).toEqual(registry.verify(supported));
@@ -208,7 +209,7 @@ describe("VerifierRegistry", () => {
           "unknown-v0",
         ),
       ),
-    ).toMatchObject({ type: "verification_error", code: "malformed_output" });
+    ).toMatchObject({ type: "verification_error", code: "malformed_input" });
     expect(
       registry.verify(
         obligation("code_recheck", {

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  type JsonValue as CanonicalJsonValue,
+  JsonObjectSchema,
+  JsonValueSchema,
+  Sha256DigestSchema,
+} from "./verifier-conformance-canonical.js";
 
 export const ObligationKind = z.enum([
   "schema_validity",
@@ -45,30 +51,15 @@ export const ForbiddenAction = z.enum([
 ]);
 export type ForbiddenAction = z.infer<typeof ForbiddenAction>;
 
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
-export const JsonValue: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(JsonValue),
-    z.record(JsonValue),
-  ]),
-);
+export type JsonValue = CanonicalJsonValue;
+export const JsonValue = JsonValueSchema;
 
 export const Obligation = z
   .object({
     obligationId: z.string().min(1),
     kind: ObligationKind,
     claim: z.string().min(1),
-    recordedInputs: z.record(JsonValue),
+    recordedInputs: JsonObjectSchema,
   })
   .strict();
 export type Obligation = z.infer<typeof Obligation>;
@@ -93,22 +84,39 @@ export const VerificationResult = z
     kind: ObligationKind,
     verifierId: z.string().min(1),
     status: ResultStatus,
+    basisHash: Sha256DigestSchema,
     checkedPredicate: z.string().min(1).optional(),
     modelFingerprint: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((result, context) => {
-    if (
-      (result.status === "verified" || result.status === "refuted") &&
-      result.checkedPredicate === undefined
-    ) {
+    const assertedOnly = AssertedOnlyKind.safeParse(result.kind).success;
+    if (assertedOnly && result.status !== "asserted") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "decisive results need a predicate",
+        message: "asserted-only kinds must remain asserted",
+      });
+    }
+    if (!assertedOnly && result.status === "asserted") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "executable kinds cannot be asserted",
+      });
+    }
+    if (!assertedOnly && result.checkedPredicate === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "executable results need a checked predicate",
       });
     }
     if (result.kind === "citation_support" && result.modelFingerprint === undefined) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: "citation support needs a model" });
+    }
+    if (result.kind !== "citation_support" && result.modelFingerprint !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "only citation support carries a model fingerprint",
+      });
     }
   });
 export type VerificationResult = z.infer<typeof VerificationResult>;

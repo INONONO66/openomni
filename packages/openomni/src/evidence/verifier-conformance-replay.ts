@@ -162,7 +162,8 @@ export function substituteRecordedOutputs(
         actualHash: hashCanonicalJson(command),
       });
     }
-    outputs.push(freezeJson(recorded.output));
+    const cloned = JsonValueSchema.parse(JSON.parse(canonicalJson(recorded.output)));
+    outputs.push(freezeJson(cloned));
   }
   if (cassette.length > shared) {
     const recorded = cassette[shared];

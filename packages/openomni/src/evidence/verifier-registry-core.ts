@@ -6,14 +6,23 @@ import {
   type VerificationError,
   type VerificationErrorCode,
   type VerificationFact,
-  type VerificationResult,
   AssertedOnlyKind,
   Obligation as ObligationSchema,
   VerificationError as VerificationErrorSchema,
   VerificationRequest,
   VerificationResult as VerificationResultSchema,
 } from "./verifier-registry-contract.js";
+import { hashCanonicalJson } from "./verifier-conformance-canonical.js";
 import { type Evaluation, evaluateObligation } from "./verifier-registry-evaluators.js";
+
+type ResultValue =
+  | Evaluation
+  | Readonly<{
+      verifierId: "asserted-only";
+      status: "asserted";
+      checkedPredicate?: undefined;
+      modelFingerprint?: undefined;
+    }>;
 
 const defaultProgram: VerifierProgram = Object.freeze({
   version: "verifier-program-v1" as const,
@@ -61,7 +70,7 @@ export function createRegistry(): Registry {
         );
       }
       if (program.outputVersion !== "verification-fact-v1") {
-        return error("malformed_output", "requested output contract is not supported", obligation);
+        return error("malformed_input", "requested output contract is not supported", obligation);
       }
       if (AssertedOnlyKind.safeParse(obligation.kind).success) {
         return result(obligation, {
@@ -70,9 +79,9 @@ export function createRegistry(): Registry {
         });
       }
 
+      let evaluated: Evaluation | VerificationError;
       try {
-        const evaluated = evaluateObligation(obligation);
-        return "type" in evaluated ? evaluated : result(obligation, evaluated);
+        evaluated = evaluateObligation(obligation);
       } catch {
         return error(
           "verifier_crash",
@@ -80,20 +89,35 @@ export function createRegistry(): Registry {
           obligation,
         );
       }
+      return "type" in evaluated ? evaluated : result(obligation, evaluated);
     },
   });
 }
 
-function result(obligation: Obligation, value: Evaluation): VerificationResult {
-  return VerificationResultSchema.parse({
+function result(obligation: Obligation, value: ResultValue): VerificationFact {
+  const parsed = VerificationResultSchema.safeParse({
     type: "verification_result",
     obligationId: obligation.obligationId,
     kind: obligation.kind,
     verifierId: value.verifierId,
     status: value.status,
+    basisHash: hashCanonicalJson({
+      version: "verification-basis-v1",
+      obligation,
+      verifierId: value.verifierId,
+      ...(value.modelFingerprint === undefined ? {} : { modelFingerprint: value.modelFingerprint }),
+    }),
     checkedPredicate: value.checkedPredicate,
     modelFingerprint: value.modelFingerprint,
   });
+  return parsed.success
+    ? parsed.data
+    : error(
+        "malformed_output",
+        "built-in verifier result failed the output contract",
+        obligation,
+        value.verifierId,
+      );
 }
 
 function error(

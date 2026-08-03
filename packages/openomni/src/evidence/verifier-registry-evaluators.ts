@@ -1,18 +1,16 @@
-import { createHash } from "node:crypto";
-import { Tool } from "@openomni/protocol";
 import { z } from "zod";
-import { canonicalJson } from "./verifier-conformance-canonical.js";
 import {
   type Obligation,
-  type ResultStatus,
   type VerificationError,
   JsonValue,
   VerificationError as VerificationErrorSchema,
 } from "./verifier-registry-contract.js";
+import { FrozenNliModelFingerprint } from "./verifier-frozen-nli-model.js";
 import {
-  FrozenNliModelFingerprint,
-  frozenSymbolicNliSupports,
-} from "./verifier-frozen-nli-model.js";
+  type SandboxInstruction,
+  type SandboxOutcome,
+  executeSandboxInstruction,
+} from "./verifier-sandbox.js";
 
 const Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const SchemaInputs = z.object({ schema: z.literal("native_tool_call"), value: JsonValue }).strict();
@@ -44,145 +42,136 @@ const HashInputs = z
   .object({ algorithm: z.literal("sha256"), value: JsonValue, expectedDigest: Digest })
   .strict();
 const QuoteInputs = z
-  .object({ archivedText: z.string().min(1), quotedText: z.string().min(1) })
+  .object({
+    archivedText: z.string().min(1).max(1_048_576),
+    quotedText: z.string().min(1).max(1_048_576),
+  })
   .strict();
 const CitationInputs = z
-  .object({ archivedText: z.string().min(1), claimText: z.string().min(1) })
+  .object({
+    archivedText: z.string().min(1).max(1_048_576),
+    claimText: z.string().min(1).max(65_536),
+  })
   .strict();
 
-export type Evaluation = Readonly<{
+export type Evaluation = SandboxOutcome &
+  Readonly<{
+    verifierId: string;
+    modelFingerprint?: string;
+  }>;
+
+export type CompiledObligation = Readonly<{
   verifierId: string;
-  status: ResultStatus;
-  checkedPredicate?: string;
+  instruction: SandboxInstruction;
   modelFingerprint?: string;
 }>;
 
 export function evaluateObligation(obligation: Obligation): Evaluation | VerificationError {
+  const compiled = compileObligation(obligation);
+  if ("type" in compiled) return compiled;
+  return {
+    verifierId: compiled.verifierId,
+    ...executeSandboxInstruction(compiled.instruction),
+    modelFingerprint: compiled.modelFingerprint,
+  };
+}
+
+export function compileObligation(obligation: Obligation): CompiledObligation | VerificationError {
   switch (obligation.kind) {
-    case "schema_validity":
-      return schemaValidity(obligation);
-    case "numeric_recheck":
-      return numeric(obligation);
-    case "code_recheck":
-      return code(obligation);
+    case "schema_validity": {
+      const input = SchemaInputs.safeParse(obligation.recordedInputs);
+      return input.success
+        ? compiled("builtin.schema-v1", { op: "native_schema", value: input.data.value })
+        : invalidInputs(obligation, "builtin.schema-v1");
+    }
+    case "numeric_recheck": {
+      const input = NumericInputs.safeParse(obligation.recordedInputs);
+      return input.success
+        ? compiled("builtin.numeric-v1", { op: "numeric_compare", ...input.data })
+        : invalidInputs(obligation, "builtin.numeric-v1");
+    }
+    case "code_recheck": {
+      const input = CodeInputs.safeParse(obligation.recordedInputs);
+      if (!input.success) return invalidInputs(obligation, "builtin.code-v1");
+      return compiled("builtin.code-v1", {
+        op: "code_arithmetic",
+        operation: input.data.operation,
+        left: input.data.operands[0],
+        right: input.data.operands[1],
+        expected: input.data.expected,
+      });
+    }
     case "archived_url_recheck":
-      return archived(obligation, false);
+      return compileArchive(obligation, false);
     case "archived_api_recheck":
-      return archived(obligation, true);
-    case "hash_recheck":
-      return hash(obligation);
-    case "archived_quote_match":
-      return quote(obligation);
-    case "citation_support":
-      return citation(obligation);
+      return compileArchive(obligation, true);
+    case "hash_recheck": {
+      const input = HashInputs.safeParse(obligation.recordedInputs);
+      return input.success
+        ? compiled("builtin.hash-v1", {
+            op: "hash_compare",
+            value: input.data.value,
+            expectedDigest: input.data.expectedDigest,
+          })
+        : invalidInputs(obligation, "builtin.hash-v1");
+    }
+    case "archived_quote_match": {
+      const input = QuoteInputs.safeParse(obligation.recordedInputs);
+      return input.success
+        ? compiled("builtin.archived-quote-v1", { op: "quote_match", ...input.data })
+        : invalidInputs(obligation, "builtin.archived-quote-v1");
+    }
+    case "citation_support": {
+      const input = CitationInputs.safeParse(obligation.recordedInputs);
+      return input.success
+        ? compiled(
+            "builtin.frozen-symbolic-nli-v1",
+            { op: "citation_support", ...input.data },
+            FrozenNliModelFingerprint,
+          )
+        : invalidInputs(obligation, "builtin.frozen-symbolic-nli-v1");
+    }
     default:
       return invalidInputs(obligation, "builtin.unreachable");
   }
 }
 
-function schemaValidity(obligation: Obligation): Evaluation | VerificationError {
-  const input = SchemaInputs.safeParse(obligation.recordedInputs);
-  if (!input.success) return invalidInputs(obligation, "builtin.schema-v1");
-  return evaluation(
-    "builtin.schema-v1",
-    Tool.Call.safeParse(input.data.value).success,
-    "recorded value satisfies the native Tool.Call schema",
-  );
-}
-
-function numeric(obligation: Obligation): Evaluation | VerificationError {
-  const input = NumericInputs.safeParse(obligation.recordedInputs);
-  if (!input.success) return invalidInputs(obligation, "builtin.numeric-v1");
-  const { left, operator, right } = input.data;
-  const passed =
-    operator === "eq"
-      ? left === right
-      : operator === "neq"
-        ? left !== right
-        : operator === "lt"
-          ? left < right
-          : operator === "lte"
-            ? left <= right
-            : operator === "gt"
-              ? left > right
-              : left >= right;
-  return evaluation("builtin.numeric-v1", passed, `recorded numeric operands satisfy ${operator}`);
-}
-
-function code(obligation: Obligation): Evaluation | VerificationError {
-  const input = CodeInputs.safeParse(obligation.recordedInputs);
-  if (!input.success) return invalidInputs(obligation, "builtin.code-v1");
-  const [left, right] = input.data.operands;
-  if (input.data.operation === "divide" && right === 0) throw new Error("division by zero");
-  const actual =
-    input.data.operation === "add"
-      ? left + right
-      : input.data.operation === "subtract"
-        ? left - right
-        : input.data.operation === "multiply"
-          ? left * right
-          : left / right;
-  return evaluation(
-    "builtin.code-v1",
-    actual === input.data.expected,
-    `recorded ${input.data.operation} program yields expected output`,
-  );
-}
-
-function archived(obligation: Obligation, api: boolean): Evaluation | VerificationError {
-  const input = (api ? ApiInputs : ArchivedInputs).safeParse(obligation.recordedInputs);
+function compileArchive(
+  obligation: Obligation,
+  api: boolean,
+): CompiledObligation | VerificationError {
   const verifierId = api ? "builtin.archived-api-v1" : "builtin.archived-url-v1";
+  if (api) {
+    const input = ApiInputs.safeParse(obligation.recordedInputs);
+    if (!input.success) return invalidInputs(obligation, verifierId);
+    return compiled(verifierId, {
+      op: "archive_compare",
+      target: input.data.target,
+      method: input.data.method,
+      observedStatus: input.data.observedStatus,
+      expectedStatus: input.data.expectedStatus,
+      observedDigest: input.data.observedDigest,
+      expectedDigest: input.data.expectedDigest,
+    });
+  }
+  const input = ArchivedInputs.safeParse(obligation.recordedInputs);
   if (!input.success) return invalidInputs(obligation, verifierId);
-  const digestMatches =
-    input.data.expectedDigest === undefined ||
-    input.data.observedDigest === input.data.expectedDigest;
-  return evaluation(
-    verifierId,
-    input.data.observedStatus === input.data.expectedStatus && digestMatches,
-    "recorded archive status and optional digest equal the expected read-back predicate",
-  );
+  return compiled(verifierId, {
+    op: "archive_compare",
+    target: input.data.target,
+    observedStatus: input.data.observedStatus,
+    expectedStatus: input.data.expectedStatus,
+    observedDigest: input.data.observedDigest,
+    expectedDigest: input.data.expectedDigest,
+  });
 }
 
-function hash(obligation: Obligation): Evaluation | VerificationError {
-  const input = HashInputs.safeParse(obligation.recordedInputs);
-  if (!input.success) return invalidInputs(obligation, "builtin.hash-v1");
-  const actual = `sha256:${createHash("sha256").update(canonicalJson(input.data.value)).digest("hex")}`;
-  return evaluation(
-    "builtin.hash-v1",
-    actual === input.data.expectedDigest,
-    "SHA-256 over canonical recorded input equals the expected digest",
-  );
-}
-
-function quote(obligation: Obligation): Evaluation | VerificationError {
-  const input = QuoteInputs.safeParse(obligation.recordedInputs);
-  if (!input.success) return invalidInputs(obligation, "builtin.archived-quote-v1");
-  return evaluation(
-    "builtin.archived-quote-v1",
-    input.data.archivedText.includes(input.data.quotedText),
-    "archived source contains the recorded quote exactly",
-  );
-}
-
-function citation(obligation: Obligation): Evaluation | VerificationError {
-  const input = CitationInputs.safeParse(obligation.recordedInputs);
-  if (!input.success) return invalidInputs(obligation, "builtin.frozen-symbolic-nli-v1");
-  return {
-    ...evaluation(
-      "builtin.frozen-symbolic-nli-v1",
-      frozenSymbolicNliSupports(input.data.archivedText, input.data.claimText),
-      "frozen symbolic NLI and lexical overlap with exact numeric agreement support the citation",
-    ),
-    modelFingerprint: FrozenNliModelFingerprint,
-  };
-}
-
-function evaluation(verifierId: string, passed: boolean, checkedPredicate: string): Evaluation {
-  return {
-    verifierId,
-    status: passed ? "verified" : "refuted",
-    checkedPredicate,
-  };
+function compiled(
+  verifierId: string,
+  instruction: SandboxInstruction,
+  modelFingerprint?: string,
+): CompiledObligation {
+  return { verifierId, instruction, modelFingerprint };
 }
 
 function invalidInputs(obligation: Obligation, verifierId: string): VerificationError {

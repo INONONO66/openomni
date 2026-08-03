@@ -67,11 +67,12 @@ describe("VerifierRegistry driver", () => {
       divergence: true,
     });
     expect(parseObject(benchmark.toolValidity).nativeRoundTripValid).toBe(true);
-    expect(parseObject(receipt.conformance)).toEqual({
+    expect(parseObject(receipt.conformance)).toMatchObject({
       replayKey: true,
       fingerprint: true,
       manifest: true,
       command: true,
+      commandDivergenceKind: "command_mismatch",
       interleaving: true,
       upcast: true,
       recordedOutput: true,

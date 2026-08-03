@@ -12,6 +12,7 @@ import {
   type CommutativeEvent,
   type JsonValue,
 } from "./verifier-conformance.js";
+import { measureVerifierRegistryBenchmark } from "./verifier-registry-benchmark.js";
 import {
   type VerifierRegistryDriverExecution,
   type VerifierRegistryScenarioReceipt,
@@ -21,7 +22,6 @@ import {
 import { scenarioReceipt } from "./verifier-registry-driver-scenarios.js";
 import { VerifierRegistry } from "./verifier-registry.js";
 
-const exposedActions: readonly string[] = [];
 const digestA = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
 
@@ -44,11 +44,16 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
   const signature = firstSignatures.every((value, index) => value === secondSignatures[index]);
   const conformance = conformanceSmoke();
   const contracts = contractSmoke();
+  const measured = measureVerifierRegistryBenchmark(first);
   const sortedDurations = [...durations].sort((left, right) => left - right);
   const successCount = first.filter(
     (receipt, index) => receipt.ok && second[index]?.ok === true,
   ).length;
-  const action = exposedActions.length === 0;
+  const action =
+    measured.exposedActions.length === 0 &&
+    measured.exposedCapabilities.length === 0 &&
+    first[3]?.resultCode === second[3]?.resultCode &&
+    first[4]?.resultCode === second[4]?.resultCode;
   const ok =
     decision &&
     signature &&
@@ -56,7 +61,11 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
     successCount === VerifierRegistryDriverScenarios.length &&
     Object.values(conformance).every(Boolean) &&
     contracts.taxonomy &&
-    contracts.frozenModelFingerprint;
+    contracts.frozenModelFingerprint &&
+    measured.accuracy.rate === 1 &&
+    measured.trust.decisiveCount === measured.trust.basisBoundCount &&
+    measured.trust.decisiveCount === measured.trust.predicateBoundCount &&
+    Object.values(measured.toolValidity).every(Boolean);
 
   return driverExecution(ok, {
     version: "verifier-registry-driver-v1",
@@ -71,7 +80,7 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
         decision,
         signature,
         action,
-        divergence: new Set(firstSignatures).size === first.length,
+        divergence: conformance.commandDivergenceKind === "command_mismatch",
       },
       reliability: {
         k: 2,
@@ -80,36 +89,20 @@ export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecuti
         passToKRate: successCount / first.length,
         successRate: successCount / first.length,
       },
-      taxonomy: {
-        familyCount: VerifierRegistry.ObligationKind.options.length,
-        executableFamilyCount:
-          VerifierRegistry.ObligationKind.options.length -
-          VerifierRegistry.AssertedOnlyKind.options.length,
-        assertedFamilyCount: VerifierRegistry.AssertedOnlyKind.options.length,
-        assertedRate:
-          VerifierRegistry.AssertedOnlyKind.options.length /
-          VerifierRegistry.ObligationKind.options.length,
-        assertedPrecision: 1,
-        assertedRecall: 1,
-      },
-      toolValidity: {
-        astValid: true,
-        schemaValid: true,
-        nativeRoundTripValid: first[0]?.ok === true,
-      },
+      taxonomy: measured.taxonomy,
+      accuracy: measured.accuracy,
+      trust: measured.trust,
+      toolValidity: measured.toolValidity,
       latencyMs: {
         measuredBy: "outer_driver_harness",
         samples: durations.length,
         p50: percentile(sortedDurations, 0.5),
         p95: percentile(sortedDurations, 0.95),
       },
-      surface: {
-        toolCount: 1,
-        fieldCount: 3,
-        tokenCount: 12,
-      },
+      surface: measured.surface,
     },
-    exposedActions,
+    exposedActions: measured.exposedActions,
+    exposedCapabilities: measured.exposedCapabilities,
   });
 }
 
@@ -140,11 +133,16 @@ function conformanceSmoke() {
   const replayKey = createReplayKey(binding);
   const trace = { commands: [{ op: "read", id: 467 }], finalFold: { count: 1 } };
   assertReplayConformance(trace, trace);
-  let divergence = false;
+  let commandDivergenceKind = "none";
   try {
-    assertReplayConformance(trace, { ...trace, finalFold: { count: 2 } });
+    assertReplayConformance(trace, {
+      commands: [{ op: "read", id: 468 }],
+      finalFold: trace.finalFold,
+    });
   } catch (error) {
-    divergence = error instanceof ReplayConformanceError;
+    if (error instanceof ReplayConformanceError) {
+      commandDivergenceKind = error.facts.kind;
+    }
   }
   const report = fuzzCommutativeInterleavings(
     {
@@ -184,7 +182,8 @@ function conformanceSmoke() {
     replayKey: replayKey.replayKey === createReplayKey(binding).replayKey,
     fingerprint: fingerprint.fingerprint === createEnvironmentFingerprint(identifiers).fingerprint,
     manifest: manifestHash === hashNondeterminismManifest(manifest),
-    command: divergence,
+    command: commandDivergenceKind === "command_mismatch",
+    commandDivergenceKind,
     interleaving: report.interleavingHashes.every((hash) => hash === report.baselineHash),
     upcast: upcasted.schemaVersion === 2,
     recordedOutput: canonicalJson(outputs) === '[{"value":467}]',

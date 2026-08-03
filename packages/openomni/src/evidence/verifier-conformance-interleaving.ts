@@ -25,7 +25,7 @@ export const InterleavingPlanSchema = z
     seed: z.number().int(),
     iterations: z.number().int().min(1).max(1_000),
     initialFold: JsonValueSchema,
-    events: z.array(CommutativeEventSchema),
+    events: z.array(CommutativeEventSchema).max(256),
   })
   .strict()
   .refine(
@@ -37,7 +37,7 @@ export const InterleavingReportSchema = z
     seed: z.number().int(),
     iterations: z.number().int().positive(),
     baselineHash: Sha256DigestSchema,
-    interleavingHashes: z.array(Sha256DigestSchema),
+    interleavingHashes: z.array(Sha256DigestSchema).max(1_000),
   })
   .strict();
 type InterleavingPlanShape = z.infer<typeof InterleavingPlanSchema>;
