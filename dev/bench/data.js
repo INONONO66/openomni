@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785208935541,
+  "lastUpdate": 1785760947287,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -35317,6 +35317,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 541191,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c86071c616c61f699b1331ac9f8a14f414dcfec",
+          "message": "docs: unify SSOT cleanup, completion-contract round, and target-state refresh (#511)\n\n* docs: record execution-target, driver-band, and naru/gantaek architecture decisions\n\nAdds the approved target sections to docs/architecture.md (driver band with\n{protocol, ipc} whitelist and extraction test, naru mailroom boundary, gantaek\nring-1 target selection, package naming/code conventions) and the matching\nboundary rules to AGENTS.md. Also refreshes stale AGENTS.md claims: #464\nresolveRoute is shipped (PR #485), the ingress-engine row now describes the\nfive-stage pipeline, the duplicated Kernel-Centered Message Flow section is\nfolded into the Messaging Kernel Rule, and a last-verified stamp is added.\nDecision text anchors: #459 receipt v6 (issues #495/#496/#499/#500/#216/#219/#458).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: unify SSOT cleanup, completion-contract round, and target-state refresh\n\nMerges three documentation lines into one delivery:\n\n1. Roadmap-SSOT salvage: #459 + leaf issues become the only delivery/order\n   authority; retired trackers #455/#456/#465 are rerouted to their live owners\n   (#510/#490/#493/#495-#506) and survive only as shipped history; the\n   architecture Migration Phases mermaid is replaced by contract boundaries.\n2. The 2026-07-27 WorkItem completion-contract round (previously uncommitted):\n   CompletionAdmission four-layer facts and record-before-act flow in\n   kernel-contract, the domain-neutral admission row in implementation-status,\n   and the sharpened T4 definition/scorecard in agent-os-definition — rebased\n   by meaning onto the salvage base, plus the live #490 effect-intent blocker\n   rule (outcome-less/unknown intents block admission).\n3. Approved execution-target architecture decisions (anchored to #459 receipt\n   v6): driver band with {protocol, ipc} whitelist and extraction test, naru\n   mailroom boundary, gantaek ring-1 target selection (network path = target\n   capability tag), package naming and code conventions.\n\nAlso refreshes stale claims across AGENTS.md files (shipped #464/#485\nresolveRoute tense, session module map, server bridge routing), adds\nlast-verified stamps, and records the two known wiring nuances (two-process\nBusPersistence writer topology; write-only VerificationGate slot).\n\nVerification: zero live-authority references to #455/#456/#465/#213/#221\nacross AGENTS.md and docs/; git diff --check clean; copied salvage files\nbyte-verified; paths and dependency graph re-checked at HEAD.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(review): trim unrecorded text from target-state sections per adversarial review\n\nThe adversarial review of PR #511 found that several passages under the\n'recorded in #459 receipt v6' banner were not actually recorded contract text:\nthe network-path sentence silently extended #510's closed environmentFingerprint\nenumeration, chasa wrongly included local-process (which #500 assigns to the\nshipped coordinator path behind the same contract), and the dokkaebi API sketch,\ndrivers folder layout, provenance field list, src/schemas.ts skeleton claim, and\n'health/budget facts' phrasing existed in no leaf. Fixes: preamble now separates\nnormative (receipt-anchored) text from *illustration* sketches; chasa list\ncorrected to ssh/reverse/attach; recording of the effective network path is\nexplicitly deferred to the #510/#492 contracts; provenance field set deferred to\nthe #499 Channel contract; skeleton bullet no longer claims an existing-layout\nconvention. Also fixes the pre-existing present-tense #464 line in\npackages/openomni/src/ingress/AGENTS.md.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-03T21:41:27+09:00",
+          "tree_id": "c7b8b415d2c3f1031fead5b8bce4152769761bd5",
+          "url": "https://github.com/INONONO66/openomni/commit/1c86071c616c61f699b1331ac9f8a14f414dcfec"
+        },
+        "date": 1785760946881,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 352,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4856,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 7727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2380,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6517,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 570,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1196,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1186,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 596,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 15250,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1782,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 80945,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 406235,
             "unit": "ns/op"
           }
         ]
