@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 
 const FrozenSymbolicNliModel = Object.freeze({
-  version: "openomni-frozen-symbolic-nli-v3",
+  version: "openomni-frozen-symbolic-nli-v4",
   tokenizationVersion: "unicode-word-v1",
+  inferenceVersion: "clause-polarity-v1",
   claimCoverageThreshold: 1,
   maxSegments: 4096,
   negators: Object.freeze(["no", "not", "never", "without"]),
-  clauseBoundaries: Object.freeze(["although", "and", "but", "however", "while"]),
   contradictionGroups: Object.freeze([
     pair(
       ["increase", "increases", "increased", "increasing"],
@@ -27,30 +27,19 @@ const FrozenSymbolicNliModel = Object.freeze({
     ),
     pair(["true"], ["false"]),
     pair(["before"], ["after"]),
+    pair(["safe"], ["unsafe"]),
   ]),
 });
 
-const modelBytes = JSON.stringify({
-  asset: FrozenSymbolicNliModel,
-  executable: [
-    frozenSymbolicNliInfer,
-    inferSegment,
-    segments,
-    textFeatures,
-    tokenSequence,
-    numbers,
-    claimCoverage,
-    containsOpposition,
-    isContradictionToken,
-    isOrderedSubsequence,
-    hasScopedNegation,
-  ].map((value) => value.toString()),
-});
+const modelBytes = JSON.stringify(FrozenSymbolicNliModel);
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
 
 export function frozenSymbolicNliInfer(premise: string, hypothesis: string): FrozenNliRelation {
-  const sourceSegments = segments(premise);
-  if (sourceSegments.length > FrozenSymbolicNliModel.maxSegments) return "unknown";
+  const sourceSegments = segments(premise).flatMap(clauses);
+  const claimSegments = segments(hypothesis).flatMap(clauses);
+  if (sourceSegments.length > FrozenSymbolicNliModel.maxSegments || claimSegments.length !== 1) {
+    return "unknown";
+  }
   const claim = textFeatures(hypothesis);
   if (claim.tokens.size === 0) return "unknown";
   const claimAnchors = new Set(
@@ -76,7 +65,7 @@ type TextFeatures = Readonly<{
   sequence: readonly string[];
   tokens: ReadonlySet<string>;
   words: ReadonlySet<string>;
-  numbers: readonly string[];
+  numbers: ReadonlySet<string>;
 }>;
 
 type ClaimFeatures = TextFeatures & Readonly<{ anchors: ReadonlySet<string> }>;
@@ -86,15 +75,17 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
   if (claim.sequence.length > source.sequence.length) return "unknown";
   if (claim.anchors.size > source.tokens.size) return "unknown";
   if (claimCoverage(source.tokens, claim.anchors) < 1) return "unknown";
-  if (containsOpposition(source.tokens, claim.tokens)) return "contradicts";
+  const sourcePolarity = negationParity(source.sequence, claim.tokens);
+  const claimPolarity = negationParity(claim.sequence, source.tokens);
+  if (containsOpposition(source.tokens, claim.tokens)) {
+    return sourcePolarity === claimPolarity ? "contradicts" : "unknown";
+  }
   const lexicalCoverage = claimCoverage(source.words, claim.words);
   if (lexicalCoverage < FrozenSymbolicNliModel.claimCoverageThreshold) return "unknown";
-  if (!claim.numbers.every((number) => source.numbers.includes(number))) {
-    return source.numbers.length === 0 ? "unknown" : "contradicts";
+  if (![...claim.numbers].every((number) => source.numbers.has(number))) {
+    return source.numbers.size === 0 ? "unknown" : "contradicts";
   }
-  const sourceNegated = hasScopedNegation(source.sequence, claim.tokens);
-  const claimNegated = hasScopedNegation(claim.sequence, source.tokens);
-  if (sourceNegated !== claimNegated) return "contradicts";
+  if (sourcePolarity !== claimPolarity) return "contradicts";
   return isOrderedSubsequence(source.sequence, claim.sequence) ? "entails" : "unknown";
 }
 
@@ -103,6 +94,14 @@ function segments(value: string): readonly string[] {
     .split(/(?:[!?;]\s+|\.\s+|\n+)/u)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
+  return split.length === 0 ? [value] : split;
+}
+
+function clauses(value: string): readonly string[] {
+  const split = value
+    .split(/(?:,\s*|\s+(?:although|and|but|however|while)\s+)/iu)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause.length > 0);
   return split.length === 0 ? [value] : split;
 }
 
@@ -119,7 +118,7 @@ function textFeatures(value: string): TextFeatures {
     sequence,
     tokens: new Set(sequence),
     words: new Set(sequence.filter((token) => !/^\d+(?:\.\d+)?$/.test(token))),
-    numbers: numbers(value),
+    numbers: new Set(numbers(value)),
   };
 }
 
@@ -136,20 +135,14 @@ function isOrderedSubsequence(source: readonly string[], claim: readonly string[
   return claim.length === 0;
 }
 
-function hasScopedNegation(source: readonly string[], comparedClaim: ReadonlySet<string>): boolean {
-  let negated = false;
-  for (const [index, token] of source.entries()) {
-    if (FrozenSymbolicNliModel.clauseBoundaries.includes(token) && index > 0) {
-      negated = false;
-      continue;
-    }
-    if (FrozenSymbolicNliModel.negators.includes(token)) {
-      negated = true;
-      continue;
-    }
-    if (negated && comparedClaim.has(token)) return true;
+function negationParity(source: readonly string[], comparedClaim: ReadonlySet<string>): 0 | 1 {
+  let negators = 0;
+  let relevant = false;
+  for (const token of source) {
+    if (FrozenSymbolicNliModel.negators.includes(token)) negators += 1;
+    else if (comparedClaim.has(token)) relevant = true;
   }
-  return false;
+  return relevant && negators % 2 === 1 ? 1 : 0;
 }
 
 function numbers(value: string): string[] {

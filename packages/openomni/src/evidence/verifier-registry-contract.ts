@@ -104,12 +104,6 @@ export const VerificationResult = z
         message: "asserted-only results cannot carry a checked predicate",
       });
     }
-    if (assertedOnly && result.checkedPredicate !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "asserted-only results cannot carry a checked predicate",
-      });
-    }
     if (!assertedOnly && result.status === "asserted") {
       context.addIssue({
         code: z.ZodIssueCode.custom,

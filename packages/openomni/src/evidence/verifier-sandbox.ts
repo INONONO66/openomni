@@ -31,7 +31,10 @@ const CodeInstruction = z
 const ArchiveInstruction = z
   .object({
     op: z.literal("archive_compare"),
-    target: z.string().url(),
+    target: z
+      .string()
+      .url()
+      .regex(/^https?:\/\//u),
     method: z.enum(["GET", "HEAD"]).optional(),
     observedStatus: z.number().int().min(100).max(599),
     expectedStatus: z.number().int().min(100).max(599),

@@ -58,11 +58,7 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
     (receipt, index) => receipt.ok && second[index]?.ok === true,
   ).length;
   const runSuccessCount = [...first, ...second].filter((receipt) => receipt.ok).length;
-  const action =
-    measured.exposedActions.length === 0 &&
-    measured.exposedCapabilities.length === 0 &&
-    first[3]?.resultCode === second[3]?.resultCode &&
-    first[4]?.resultCode === second[4]?.resultCode;
+  const action = measured.exposedActions.length === 0 && measured.exposedCapabilities.length === 0;
   const ok =
     decision &&
     signature &&

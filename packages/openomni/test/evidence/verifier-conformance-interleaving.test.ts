@@ -116,4 +116,18 @@ describe("verifier replay interleaving and substitution conformance", () => {
       ).facts,
     ).toMatchObject({ kind: "command_mismatch", index: 0 });
   });
+
+  test("rejects plans whose cumulative fold work exceeds the frozen budget", () => {
+    expect(() =>
+      fuzzCommutativeInterleavings(
+        {
+          seed: 1,
+          iterations: 1_000,
+          initialFold: Array.from({ length: 1_000 }, () => 0),
+          events: [{ id: "identity", value: null }],
+        },
+        (state) => state,
+      ),
+    ).toThrow("interleaving fold work budget exceeded");
+  });
 });

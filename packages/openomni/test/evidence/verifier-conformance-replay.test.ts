@@ -98,6 +98,7 @@ describe("verifier replay identity and schema conformance", () => {
         archiveIdentifier: "ref:archive/work-1",
         fromSequence: 10,
         toSequence: 20,
+        digest: digestA,
       },
       environmentFingerprint: environment.fingerprint,
       schemaVersion: "ledger-schema-v3",
@@ -113,6 +114,12 @@ describe("verifier replay identity and schema conformance", () => {
     expect(createReplayKey({ ...binding, upcastVersion: "ledger-upcast-v3" }).replayKey).not.toBe(
       key.replayKey,
     );
+    expect(
+      createReplayKey({
+        ...binding,
+        source: { ...binding.source, digest: digestB },
+      }).replayKey,
+    ).not.toBe(key.replayKey);
   });
 
   test("compares exact commands and final fold with first-divergence facts", () => {

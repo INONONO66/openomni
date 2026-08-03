@@ -13,6 +13,10 @@ import {
 } from "./verifier-sandbox.js";
 
 const Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const HttpUrl = z
+  .string()
+  .url()
+  .regex(/^https?:\/\//u);
 const SchemaInputs = z.object({ schema: z.literal("native_tool_call"), value: JsonValue }).strict();
 const NumericInputs = z
   .object({
@@ -34,7 +38,7 @@ const CodeInputs = z
   );
 const ArchivedInputs = z
   .object({
-    target: z.string().url(),
+    target: HttpUrl,
     observedStatus: z.number().int().min(100).max(599),
     expectedStatus: z.number().int().min(100).max(599),
     observedDigest: Digest.optional(),

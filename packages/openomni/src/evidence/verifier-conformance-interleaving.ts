@@ -51,6 +51,8 @@ export type InterleavingReport = Readonly<Omit<InterleavingReportShape, "interle
   readonly interleavingHashes: readonly string[];
 };
 export type FoldReducer = (state: JsonValue, event: CommutativeEvent) => JsonValue;
+const MAX_INTERLEAVING_FOLD_NODES = 1_000_000;
+type FoldBudget = { remainingNodes: number };
 
 function seededRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -99,13 +101,23 @@ function fold(
   initial: JsonValue,
   events: readonly CommutativeEvent[],
   reducer: FoldReducer,
+  budget: FoldBudget,
 ): JsonValue {
-  let state = freezeJson(JsonValueSchema.parse(initial));
+  let state = initial;
   for (const event of events) {
-    freezeJson(event.value);
-    state = freezeJson(JsonValueSchema.parse(reducer(state, Object.freeze(event))));
+    state = freezeJson(reducer(state, Object.freeze(event)));
+    chargeFoldNodes(state, budget);
   }
   return state;
+}
+
+function chargeFoldNodes(value: JsonValue, budget: FoldBudget): void {
+  budget.remainingNodes -= 1;
+  if (budget.remainingNodes < 0) throw new Error("interleaving fold work budget exceeded");
+  if (value === null || typeof value !== "object") return;
+  for (const nested of Array.isArray(value) ? value : Object.values(value)) {
+    chargeFoldNodes(nested, budget);
+  }
 }
 
 export function fuzzCommutativeInterleavings(
@@ -113,12 +125,13 @@ export function fuzzCommutativeInterleavings(
   reducer: FoldReducer,
 ): InterleavingReport {
   const plan = InterleavingPlanSchema.parse(planInput);
-  const baselineHash = hashCanonicalJson(fold(plan.initialFold, plan.events, reducer));
+  const budget = { remainingNodes: MAX_INTERLEAVING_FOLD_NODES };
+  const baselineHash = hashCanonicalJson(fold(plan.initialFold, plan.events, reducer, budget));
   const random = seededRandom(plan.seed);
   const interleavingHashes: string[] = [];
   for (let iteration = 0; iteration < plan.iterations; iteration += 1) {
     const actualHash = hashCanonicalJson(
-      fold(plan.initialFold, shuffled(plan.events, random, iteration), reducer),
+      fold(plan.initialFold, shuffled(plan.events, random, iteration), reducer, budget),
     );
     interleavingHashes.push(actualHash);
     if (actualHash !== baselineHash) {

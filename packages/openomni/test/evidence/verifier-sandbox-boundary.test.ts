@@ -52,6 +52,11 @@ const forbiddenGlobals = new Set([
   "setTimeout",
 ]);
 const boundaryRoots = ["verifier-registry.ts"];
+const allowedExternalBindings: Readonly<Record<string, ReadonlySet<string>>> = {
+  "node:crypto": new Set(["createHash"]),
+  "@openomni/protocol": new Set(["Tool"]),
+  zod: new Set(["z"]),
+};
 
 describe("verifier sandbox structural boundary", () => {
   test("forbids ambient effect imports and globals in the verifier path", () => {
@@ -75,6 +80,28 @@ describe("verifier sandbox structural boundary", () => {
       "hostile.ts: forbidden global globalThis",
       "hostile.ts: dynamic import",
       "hostile.ts: forbidden global require",
+    ]);
+    const hostileBinding = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      'import { randomBytes } from "node:crypto";',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const bindingViolations: string[] = [];
+    visit(hostileBinding, "verifier-frozen-nli-model.ts", bindingViolations);
+    expect(bindingViolations).toEqual([
+      "verifier-frozen-nli-model.ts: unapproved binding randomBytes from node:crypto",
+    ]);
+    const hostileReexport = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      'export { randomBytes } from "node:crypto";',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const reexportViolations: string[] = [];
+    visit(hostileReexport, "verifier-frozen-nli-model.ts", reexportViolations);
+    expect(reexportViolations).toEqual([
+      "verifier-frozen-nli-model.ts: unapproved binding randomBytes from node:crypto",
     ]);
   });
 });
@@ -131,6 +158,19 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
   ) {
     violations.push(`${file}: unapproved module ${node.moduleSpecifier.text}`);
   }
+  if (
+    (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+    ts.isStringLiteral(node.moduleSpecifier) &&
+    !node.moduleSpecifier.text.startsWith(".") &&
+    allowedImports[file]?.has(node.moduleSpecifier.text)
+  ) {
+    const allowed = allowedExternalBindings[node.moduleSpecifier.text];
+    for (const binding of staticBindings(node)) {
+      if (!allowed?.has(binding)) {
+        violations.push(`${file}: unapproved binding ${binding} from ${node.moduleSpecifier.text}`);
+      }
+    }
+  }
   if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
     violations.push(`${file}: dynamic import`);
   }
@@ -143,6 +183,26 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
     violations.push(`${file}: forbidden global ${node.text}`);
   }
   ts.forEachChild(node, (child) => visit(child, file, violations));
+}
+
+function staticBindings(node: ts.ImportDeclaration | ts.ExportDeclaration): readonly string[] {
+  if (ts.isExportDeclaration(node)) {
+    if (node.exportClause === undefined) return ["wildcard"];
+    if (!ts.isNamedExports(node.exportClause)) return ["namespace"];
+    return node.exportClause.elements.map(
+      (element) => element.propertyName?.text ?? element.name.text,
+    );
+  }
+  const clause = node.importClause;
+  if (clause === undefined) return ["side-effect"];
+  const bindings: string[] = [];
+  if (clause.name !== undefined) bindings.push("default");
+  if (clause.namedBindings === undefined) return bindings;
+  if (ts.isNamespaceImport(clause.namedBindings)) return [...bindings, "namespace"];
+  for (const element of clause.namedBindings.elements) {
+    bindings.push(element.propertyName?.text ?? element.name.text);
+  }
+  return bindings;
 }
 
 function isPropertyName(node: ts.Identifier): boolean {

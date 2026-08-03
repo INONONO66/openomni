@@ -15,6 +15,7 @@ const ArchivedRangeSchema = z
     archiveIdentifier: RedactedIdentifierSchema,
     fromSequence: z.number().int().nonnegative(),
     toSequence: z.number().int().nonnegative(),
+    digest: Sha256DigestSchema,
   })
   .strict()
   .refine((range) => range.toSequence >= range.fromSequence, "archive range is reversed");

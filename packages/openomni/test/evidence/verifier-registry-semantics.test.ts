@@ -87,7 +87,7 @@ describe("verifier registry scoped result semantics", () => {
     });
   });
 
-  test("does not verify unsupported one-token lexical substitutions", () => {
+  test("refutes a frozen one-token opposition pair", () => {
     const fact = VerifierRegistry.create().verify(
       obligation(
         "citation_support",
@@ -99,7 +99,7 @@ describe("verifier registry scoped result semantics", () => {
     );
     expect(fact).toMatchObject({
       type: "verification_result",
-      status: "inconclusive",
+      status: "refuted",
       checkedPredicate: expect.any(String),
     });
   });
@@ -122,7 +122,7 @@ describe("verifier registry scoped result semantics", () => {
     [
       "The release did not regress and passed all checks.",
       "The release passed all checks.",
-      "verified",
+      "inconclusive",
     ],
     ["The measured value is not 42 units.", "The measured value is 42 units.", "refuted"],
     [
@@ -135,6 +135,16 @@ describe("verifier registry scoped result semantics", () => {
       "Alice won the election.",
       "inconclusive",
     ],
+    [
+      "Alice entered the election and Carol won the election.",
+      "Alice won the election.",
+      "inconclusive",
+    ],
+    ["Alice passed all checks, but Bob failed all checks.", "Alice passed all checks.", "verified"],
+    ["The release did not fail all checks.", "The release passed all checks.", "inconclusive"],
+    ["The release did not not pass checks.", "The release did not pass checks.", "refuted"],
+    ["The system is safe. The system is unsafe.", "The system is safe.", "inconclusive"],
+    ["Alice scored 5 and Bob scored 10.", "Alice scored 10.", "refuted"],
   ])("evaluates citation propositions locally: %s / %s", (archivedText, claim, status) => {
     const fact = VerifierRegistry.create().verify(
       obligation("citation_support", { archivedText }, claim),
@@ -148,6 +158,18 @@ describe("verifier registry scoped result semantics", () => {
         "citation_support",
         { archivedText: `${"Noise. ".repeat(4097)}The measured value is 42 units.` },
         "The measured value is 42 units.",
+      ),
+    );
+    expect(fact).toMatchObject({ type: "verification_result", status: "inconclusive" });
+  });
+
+  test("handles maximal reversed numeric evidence within the bounded test timeout", () => {
+    const ascending = Array.from({ length: 10_000 }, (_, index) => String(index));
+    const fact = VerifierRegistry.create().verify(
+      obligation(
+        "citation_support",
+        { archivedText: `x ${[...ascending].reverse().join(" ")}` },
+        `x ${ascending.join(" ")}`,
       ),
     );
     expect(fact).toMatchObject({ type: "verification_result", status: "inconclusive" });

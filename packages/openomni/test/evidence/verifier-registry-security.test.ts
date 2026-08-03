@@ -53,6 +53,9 @@ describe("verifier registry security boundaries", () => {
     Object.defineProperty(symbol, Symbol("hidden"), { value: 2 });
     expect(() => canonicalJson(symbol)).toThrow();
     expect(() => canonicalJson({ ["x".repeat(1_048_577)]: true })).toThrow();
+    expect(canonicalJson(Array.from({ length: 10_000 }, (_, index) => index))).toStartWith(
+      "[0,1,2",
+    );
   });
 
   test("refutes native calls whose schema parse would drop fields", () => {
@@ -163,6 +166,17 @@ describe("verifier registry security boundaries", () => {
       code: "malformed_input",
     });
     expect(Object.isFrozen(divideByZero)).toBe(true);
+    const nonHttpArchive = VerifierRegistry.create().verify(
+      obligation("archived_url_recheck", {
+        target: "file:///tmp/archive",
+        observedStatus: 200,
+        expectedStatus: 200,
+      }),
+    );
+    expect(nonHttpArchive).toMatchObject({
+      type: "verification_error",
+      code: "malformed_input",
+    });
   });
 
   test("rejects impossible result taxonomy and status combinations", () => {

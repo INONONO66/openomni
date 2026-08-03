@@ -208,14 +208,14 @@ function snapshotJson(value: unknown, depth: number, state: SnapshotState): Json
       if (
         keys.length !== value.length + 1 ||
         keys.some((key) => typeof key !== "string") ||
-        !keys.includes("length")
+        keys[value.length] !== "length"
       ) {
         failSnapshot();
       }
       const output: JsonValue[] = [];
       for (let index = 0; index < value.length; index += 1) {
         const key = String(index);
-        if (!keys.includes(key)) failSnapshot();
+        if (keys[index] !== key) failSnapshot();
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
           failSnapshot();
