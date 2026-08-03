@@ -80,7 +80,16 @@ export type {
   DispatchToolRuntime,
 } from "./execution-runtime";
 
-export { ReadBackExecutor } from "./evidence";
+export {
+  ReadBackExecutor,
+  VerifierConformance,
+  VerifierRegistry,
+  runVerifierRegistryDriver,
+} from "./evidence";
+export type {
+  VerifierRegistryDriverExecution,
+  VerifierRegistryDriverScenario,
+} from "./evidence";
 
 // Dispatch runtime
 export {
