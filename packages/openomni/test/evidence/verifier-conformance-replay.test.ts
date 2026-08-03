@@ -225,6 +225,38 @@ describe("verifier replay identity and schema conformance", () => {
     expect(() => UpcasterSchema.parse(prototypeAlias)).toThrow();
     expect(inheritedCalls).toBe(0);
 
+    for (const key of ["eventType", "meaning", "fromVersion", "toVersion", "upcast"] as const) {
+      let nestedCalls = 0;
+      const nested =
+        key === "upcast"
+          ? new Proxy(() => undefined, {
+              get() {
+                nestedCalls += 1;
+                throw new Error("must not run");
+              },
+            })
+          : new Proxy(
+              {},
+              {
+                get() {
+                  nestedCalls += 1;
+                  throw new Error("must not run");
+                },
+              },
+            );
+      expect(
+        UpcasterSchema.safeParse({
+          eventType: "event",
+          meaning: "stable",
+          fromVersion: 1,
+          toVersion: 2,
+          upcast: (event: unknown) => event,
+          [key]: nested,
+        }).success,
+      ).toBe(false);
+      expect(nestedCalls).toBe(0);
+    }
+
     const hostileList = [
       {
         eventType: "event",

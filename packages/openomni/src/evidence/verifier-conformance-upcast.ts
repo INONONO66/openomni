@@ -9,6 +9,13 @@ import {
 } from "./verifier-conformance-canonical.js";
 
 const forbiddenUpcasterKeys = new Set(["__proto__", "constructor", "prototype"]);
+const requiredUpcasterKeys = new Set([
+  "eventType",
+  "meaning",
+  "fromVersion",
+  "toVersion",
+  "upcast",
+]);
 
 const VersionedEventContract = z
   .object({
@@ -129,6 +136,12 @@ function snapshotUpcaster(input: unknown): Readonly<Record<string, unknown>> {
   if (keys.some((key) => typeof key !== "string" || forbiddenUpcasterKeys.has(key))) {
     throw new Error("invalid upcaster key");
   }
+  if (
+    keys.length !== requiredUpcasterKeys.size ||
+    keys.some((key) => typeof key !== "string" || !requiredUpcasterKeys.has(key))
+  ) {
+    throw new Error("invalid upcaster shape");
+  }
   const output: Record<string, unknown> = Object.create(null);
   for (const key of keys as string[]) {
     const descriptor = Object.getOwnPropertyDescriptor(input, key);
@@ -147,6 +160,16 @@ function snapshotUpcaster(input: unknown): Readonly<Record<string, unknown>> {
       value: descriptor.value,
       writable: false,
     });
+  }
+  if (
+    typeof output.eventType !== "string" ||
+    typeof output.meaning !== "string" ||
+    typeof output.fromVersion !== "number" ||
+    typeof output.toVersion !== "number" ||
+    typeof output.upcast !== "function" ||
+    isProxy(output.upcast)
+  ) {
+    throw new Error("invalid upcaster field type");
   }
   return Object.freeze(output);
 }
