@@ -35,7 +35,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const BASELINE_PATH = "script/conformance/coverage-baseline.json";
 const REPORT_GLOB = "{packages,apps}/*/coverage/lcov.info";
-const TOLERANCE_PP = 0.25;
+// 0.5pp absorbs the measured stable macOS<->ubuntu platform offset (coordinator
+// showed 0.45pp on the first CI run) while still catching real regressions.
+const TOLERANCE_PP = 0.5;
 
 export interface PackageCoverage {
   readonly linesFound: number;
