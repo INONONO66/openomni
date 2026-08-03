@@ -34,6 +34,7 @@ const allowedImports: Readonly<Record<string, ReadonlySet<string>>> = {
 };
 const forbiddenGlobals = new Set([
   "Bun",
+  "crypto",
   "Date",
   "EventSource",
   "Function",
@@ -102,6 +103,18 @@ describe("verifier sandbox structural boundary", () => {
     visit(hostileReexport, "verifier-frozen-nli-model.ts", reexportViolations);
     expect(reexportViolations).toEqual([
       "verifier-frozen-nli-model.ts: unapproved binding randomBytes from node:crypto",
+    ]);
+    const hostileAmbientCrypto = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      "crypto.randomUUID(); crypto.getRandomValues(new Uint8Array(8));",
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const ambientCryptoViolations: string[] = [];
+    visit(hostileAmbientCrypto, "verifier-frozen-nli-model.ts", ambientCryptoViolations);
+    expect(ambientCryptoViolations).toEqual([
+      "verifier-frozen-nli-model.ts: forbidden global crypto",
+      "verifier-frozen-nli-model.ts: forbidden global crypto",
     ]);
   });
 });

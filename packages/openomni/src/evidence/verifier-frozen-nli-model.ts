@@ -3,12 +3,24 @@ import { createHash } from "node:crypto";
 export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 
 const FrozenSymbolicNliModel = Object.freeze({
-  version: "openomni-frozen-symbolic-nli-v4",
+  version: "openomni-frozen-symbolic-nli-v5",
   tokenizationVersion: "unicode-word-v1",
-  inferenceVersion: "clause-polarity-v1",
+  inferenceVersion: "clause-polarity-context-v2",
   claimCoverageThreshold: 1,
   maxSegments: 4096,
   negators: Object.freeze(["no", "not", "never", "without"]),
+  allowedSourceModifiers: Object.freeze(["exactly"]),
+  clauseBoundaries: Object.freeze([
+    "although",
+    "and",
+    "because",
+    "but",
+    "however",
+    "nor",
+    "or",
+    "whereas",
+    "while",
+  ]),
   contradictionGroups: Object.freeze([
     pair(
       ["increase", "increases", "increased", "increasing"],
@@ -30,8 +42,64 @@ const FrozenSymbolicNliModel = Object.freeze({
     pair(["safe"], ["unsafe"]),
   ]),
 });
+const clauseBoundaryPattern = new RegExp(
+  `(?:,\\s*|\\s(?:${FrozenSymbolicNliModel.clauseBoundaries.join("|")})\\s)`,
+  "iu",
+);
 
-const modelBytes = JSON.stringify(FrozenSymbolicNliModel);
+const FrozenNliBehaviorProbes = Object.freeze([
+  Object.freeze({
+    premise: "The measured value is exactly 42 units.",
+    hypothesis: "The measured value is 42 units.",
+  }),
+  Object.freeze({
+    premise: "The measured value is exactly 99 units.",
+    hypothesis: "The measured value is 42 units.",
+  }),
+  Object.freeze({
+    premise: "Alice won the election.",
+    hypothesis: "Alice lost the election.",
+  }),
+  Object.freeze({
+    premise: "Alice told Bob that Carol won the election.",
+    hypothesis: "Bob won the election.",
+  }),
+  Object.freeze({
+    premise: "Alice did not say that Bob won the election.",
+    hypothesis: "Bob won the election.",
+  }),
+  Object.freeze({
+    premise: "The release passed all checks. The release failed all checks.",
+    hypothesis: "The release passed all checks.",
+  }),
+  Object.freeze({
+    premise: "The release did not not pass checks.",
+    hypothesis: "The release did not pass checks.",
+  }),
+  Object.freeze({
+    premise: "The dog bit the man.",
+    hypothesis: "The man bit the dog.",
+  }),
+  Object.freeze({
+    premise: "Neither Alice nor Bob won the election.",
+    hypothesis: "Alice won the election.",
+  }),
+  Object.freeze({
+    premise: "Alice or Bob won the election.",
+    hypothesis: "Alice won the election.",
+  }),
+  Object.freeze({
+    premise: "It is false that the system is safe.",
+    hypothesis: "The system is safe.",
+  }),
+]);
+const modelBytes = JSON.stringify({
+  asset: FrozenSymbolicNliModel,
+  behavior: FrozenNliBehaviorProbes.map((probe) => ({
+    ...probe,
+    relation: frozenSymbolicNliInfer(probe.premise, probe.hypothesis),
+  })),
+});
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
 
 export function frozenSymbolicNliInfer(premise: string, hypothesis: string): FrozenNliRelation {
@@ -75,6 +143,7 @@ function inferSegment(premise: string, claim: ClaimFeatures): FrozenNliRelation 
   if (claim.sequence.length > source.sequence.length) return "unknown";
   if (claim.anchors.size > source.tokens.size) return "unknown";
   if (claimCoverage(source.tokens, claim.anchors) < 1) return "unknown";
+  if (hasUnsupportedSourceContext(source, claim)) return "unknown";
   const sourcePolarity = negationParity(source.sequence, claim.tokens);
   const claimPolarity = negationParity(claim.sequence, source.tokens);
   if (containsOpposition(source.tokens, claim.tokens)) {
@@ -99,7 +168,7 @@ function segments(value: string): readonly string[] {
 
 function clauses(value: string): readonly string[] {
   const split = value
-    .split(/(?:,\s*|\s+(?:although|and|but|however|while)\s+)/iu)
+    .split(clauseBoundaryPattern)
     .map((clause) => clause.trim())
     .filter((clause) => clause.length > 0);
   return split.length === 0 ? [value] : split;
@@ -153,6 +222,21 @@ function claimCoverage(source: ReadonlySet<string>, claim: ReadonlySet<string>):
   let intersection = 0;
   for (const token of claim) if (source.has(token)) intersection += 1;
   return intersection / claim.size;
+}
+
+function hasUnsupportedSourceContext(source: TextFeatures, claim: TextFeatures): boolean {
+  for (const word of source.words) {
+    if (
+      claim.words.has(word) ||
+      FrozenSymbolicNliModel.allowedSourceModifiers.includes(word) ||
+      FrozenSymbolicNliModel.negators.includes(word) ||
+      isContradictionToken(word)
+    ) {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 function containsOpposition(source: ReadonlySet<string>, claim: ReadonlySet<string>): boolean {

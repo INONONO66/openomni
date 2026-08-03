@@ -20,8 +20,9 @@
  *   bun run script/lint-tools.ts --self-test   discrimination bench: every check
  *                                              must flag its known-bad fixture
  *
- * The verifier registry (check 4) and replay conformance (check 5) are P2 — they
- * co-land with #455 (fold(L), golden logs). Do not add them here without that.
+ * The verifier registry and replay-conformance primitives land independently
+ * under #467 while this P0 gate remains active. #493 owns archived
+ * projection/replay integration.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

@@ -148,6 +148,9 @@ describe("VerifierRegistry", () => {
 
   test("uses the shipped fingerprinted symbolic NLI model with lexical and numeric support", () => {
     const registry = VerifierRegistry.create();
+    expect(VerifierRegistry.FrozenNliModelFingerprint).toBe(
+      "sha256:b51f9b70c8e6f344556aaf6781326115ab21c1ff0eb7b1ea8219b85c11972a0f",
+    );
     const supported = obligation(
       "citation_support",
       { archivedText: "The measured value is exactly 42 units." },

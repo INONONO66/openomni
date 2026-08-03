@@ -145,6 +145,12 @@ describe("verifier registry scoped result semantics", () => {
     ["The release did not not pass checks.", "The release did not pass checks.", "refuted"],
     ["The system is safe. The system is unsafe.", "The system is safe.", "inconclusive"],
     ["Alice scored 5 and Bob scored 10.", "Alice scored 10.", "refuted"],
+    ["Alice told Bob that Carol won the election.", "Bob won the election.", "inconclusive"],
+    ["Alice did not say that Bob won the election.", "Bob won the election.", "inconclusive"],
+    ["Neither Alice nor Bob won.", "Alice won.", "inconclusive"],
+    ["It is false that the system is safe.", "The system is safe.", "inconclusive"],
+    ["The report denies that the value is 42 units.", "The value is 42 units.", "inconclusive"],
+    ["We failed to show that the value is 42 units.", "The value is 42 units.", "inconclusive"],
   ])("evaluates citation propositions locally: %s / %s", (archivedText, claim, status) => {
     const fact = VerifierRegistry.create().verify(
       obligation("citation_support", { archivedText }, claim),
@@ -157,6 +163,17 @@ describe("verifier registry scoped result semantics", () => {
       obligation(
         "citation_support",
         { archivedText: `${"Noise. ".repeat(4097)}The measured value is 42 units.` },
+        "The measured value is 42 units.",
+      ),
+    );
+    expect(fact).toMatchObject({ type: "verification_result", status: "inconclusive" });
+  });
+
+  test("handles a maximal whitespace run without regex amplification", () => {
+    const fact = VerifierRegistry.create().verify(
+      obligation(
+        "citation_support",
+        { archivedText: " ".repeat(65_536) },
         "The measured value is 42 units.",
       ),
     );
