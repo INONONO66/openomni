@@ -151,7 +151,7 @@ describe("VerifierRegistry", () => {
   test("uses the shipped fingerprinted symbolic NLI model with lexical and numeric support", () => {
     const registry = VerifierRegistry.create();
     expect(VerifierRegistry.FrozenNliModelFingerprint).toBe(
-      "sha256:2f0f804952b93c6266342fdd20b5b150332ca462220a4d0c751db7f194357563",
+      "sha256:b3938358e595722ae90265086642caccc2cc67e01e81b4553323a5a4f21d77bb",
     );
     const modelSource = readFileSync(
       new URL("../../src/evidence/verifier-frozen-nli-model.ts", import.meta.url),
@@ -210,6 +210,19 @@ describe("VerifierRegistry", () => {
     expect(
       registry.verify(obligation("numeric_recheck", { operator: "eq", left: 1, right: 2 })),
     ).toMatchObject({ status: "refuted", verifierId: "builtin.numeric-v1" });
+    expect(
+      registry.verify(
+        obligation(
+          "citation_support",
+          { archivedText: "The measured value is exactly 42 units." },
+          "The measured value is 42 units.",
+        ),
+      ),
+    ).toMatchObject({
+      status: "verified",
+      verifierId: "builtin.frozen-symbolic-nli-v1",
+      modelFingerprint: VerifierRegistry.FrozenNliModelFingerprint,
+    });
     expect(invoked).toBe(0);
   });
 

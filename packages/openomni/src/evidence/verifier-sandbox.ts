@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import { Tool } from "@openomni/protocol";
 import { z } from "zod";
 import {
   JsonValueSchema,
   Sha256DigestSchema,
   canonicalJson,
+  hashCanonicalJson,
 } from "./verifier-conformance-canonical.js";
 import { frozenSymbolicNliInfer } from "./verifier-frozen-nli-model.js";
 
@@ -93,7 +93,7 @@ export function executeSandboxInstruction(input: unknown): SandboxOutcome {
       return archiveCompare(instruction);
     case "hash_compare":
       return outcome(
-        hashCanonical(instruction.value) === instruction.expectedDigest,
+        hashCanonicalJson(instruction.value) === instruction.expectedDigest,
         "SHA-256 over canonical recorded input equals the expected digest",
       );
     case "quote_match":
@@ -177,10 +177,6 @@ function archiveCompare(instruction: z.infer<typeof ArchiveInstruction>): Sandbo
     instruction.observedDigest === instruction.expectedDigest,
     "recorded archive status and digest equal the expected read-back predicate",
   );
-}
-
-function hashCanonical(value: z.infer<typeof JsonValueSchema>): string {
-  return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 }
 
 function outcome(passed: boolean, checkedPredicate: string): SandboxOutcome {

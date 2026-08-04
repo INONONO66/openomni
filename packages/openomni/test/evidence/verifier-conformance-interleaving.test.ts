@@ -43,6 +43,15 @@ describe("verifier replay interleaving and substitution conformance", () => {
     const report = fuzzCommutativeInterleavings(plan, sum);
     expect(Object.isFrozen(report)).toBe(true);
     expect(Object.isFrozen(report.interleavingHashes)).toBe(true);
+    expect(report).toMatchObject({
+      seed: 73,
+      iterations: 12,
+      baselineHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(report.interleavingHashes).toHaveLength(12);
+    expect(report.interleavingHashes).toEqual(
+      Array.from({ length: 12 }, () => report.baselineHash),
+    );
     expect(Object.isFrozen(plan.events)).toBe(false);
 
     const concatenate = (state: unknown, event: { value: unknown }) => {
@@ -86,6 +95,39 @@ describe("verifier replay interleaving and substitution conformance", () => {
         concatenate,
       ).iterations,
     ).toBe(4);
+  });
+
+  test("isolates every fold from the caller and prior iterations", () => {
+    const initialFold = { total: 0 };
+    let allStatesFrozen = true;
+    const report = fuzzCommutativeInterleavings(
+      {
+        seed: 73,
+        iterations: 4,
+        initialFold,
+        events: [
+          { id: "a", commutativeGroup: "sum", value: 1 },
+          { id: "b", commutativeGroup: "sum", value: 2 },
+        ],
+      },
+      (state, event) => {
+        allStatesFrozen &&= Object.isFrozen(state);
+        if (
+          state === null ||
+          Array.isArray(state) ||
+          typeof state !== "object" ||
+          typeof state.total !== "number" ||
+          typeof event.value !== "number"
+        ) {
+          throw new Error("numeric object fold required");
+        }
+        return { total: state.total + event.value };
+      },
+    );
+    expect(allStatesFrozen).toBe(true);
+    expect(report.interleavingHashes).toHaveLength(4);
+    expect(initialFold).toEqual({ total: 0 });
+    expect(Object.isFrozen(initialFold)).toBe(false);
   });
 
   test("substitutes recorded outputs without mutating the caller cassette", () => {

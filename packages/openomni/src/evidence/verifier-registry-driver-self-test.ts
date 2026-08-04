@@ -15,6 +15,7 @@ import {
 import { measureVerifierRegistryBenchmark } from "./verifier-registry-benchmark.js";
 import {
   type VerifierRegistryDriverExecution,
+  type VerifierRegistryDriverScenario,
   type VerifierRegistryScenarioReceipt,
   VerifierRegistryDriverScenarios,
   driverExecution,
@@ -58,7 +59,13 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
     (receipt, index) => receipt.ok && second[index]?.ok === true,
   ).length;
   const runSuccessCount = [...first, ...second].filter((receipt) => receipt.ok).length;
-  const action = measured.exposedActions.length === 0 && measured.exposedCapabilities.length === 0;
+  const action =
+    measured.exposedActions.length === 0 &&
+    measured.exposedCapabilities.length === 0 &&
+    VerifierRegistryDriverScenarios.every((scenario) => {
+      const firstCode = resultCodeOf(first, scenario);
+      return firstCode !== undefined && firstCode === resultCodeOf(second, scenario);
+    });
   const ok =
     decision &&
     signature &&
@@ -141,7 +148,12 @@ function conformanceSmoke() {
   };
   const replayKey = createReplayKey(binding);
   const trace = { commands: [{ op: "read", id: 467 }], finalFold: { count: 1 } };
-  assertReplayConformance(trace, trace);
+  let commandConverged = true;
+  try {
+    assertReplayConformance(trace, trace);
+  } catch {
+    commandConverged = false;
+  }
   let commandDivergenceKind = "none";
   try {
     assertReplayConformance(trace, {
@@ -191,12 +203,19 @@ function conformanceSmoke() {
     replayKey: replayKey.replayKey === createReplayKey(binding).replayKey,
     fingerprint: fingerprint.fingerprint === createEnvironmentFingerprint(identifiers).fingerprint,
     manifest: manifestHash === hashNondeterminismManifest(manifest),
-    command: commandDivergenceKind === "command_mismatch",
+    command: commandConverged && commandDivergenceKind === "command_mismatch",
     commandDivergenceKind,
     interleaving: report.interleavingHashes.every((hash) => hash === report.baselineHash),
     upcast: upcasted.schemaVersion === 2,
     recordedOutput: canonicalJson(outputs) === '[{"value":467}]',
   };
+}
+
+function resultCodeOf(
+  receipts: readonly VerifierRegistryScenarioReceipt[],
+  scenario: VerifierRegistryDriverScenario,
+): string | undefined {
+  return receipts.find((receipt) => receipt.scenario === scenario)?.resultCode;
 }
 
 function contractSmoke() {

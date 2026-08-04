@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
 import {
   CommutativeEventSchema,
   EnvironmentFingerprintInputSchema,
@@ -27,6 +28,7 @@ import {
   hashNondeterminismManifest,
   upcastOnRead,
 } from "../../src/evidence/verifier-conformance";
+import { snapshotFirstJsonSchema } from "../../src/evidence/verifier-conformance-canonical";
 
 const digestA = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
@@ -47,6 +49,28 @@ function captureConformanceError(action: () => unknown): ReplayConformanceError 
 }
 
 describe("verifier replay identity and schema conformance", () => {
+  test("does not misclassify schema implementation defects as invalid JSON", () => {
+    const broken = snapshotFirstJsonSchema(
+      z.unknown().superRefine(() => {
+        throw new Error("schema implementation defect");
+      }),
+    );
+    expect(() => broken.safeParse(null)).toThrow("schema implementation defect");
+
+    let trapCalls = 0;
+    const proxy = new Proxy(
+      {},
+      {
+        get() {
+          trapCalls += 1;
+          throw new Error("must not run");
+        },
+      },
+    );
+    expect(broken.safeParse(proxy).success).toBe(false);
+    expect(trapCalls).toBe(0);
+  });
+
   test("canonicalizes JSON deterministically and rejects non-JSON values", () => {
     expect(canonicalJson({ z: [3, { b: true, a: null }], a: "value" })).toBe(
       '{"a":"value","z":[3,{"a":null,"b":true}]}',
@@ -483,6 +507,6 @@ describe("verifier replay identity and schema conformance", () => {
     const commands = Array.from({ length: 1_025 }, (_, index) => ({ op: "read", index }));
     expect(() =>
       assertReplayConformance({ commands, finalFold: null }, { commands, finalFold: null }),
-    ).toThrow();
+    ).toThrow("Array must contain at most 1024 element(s)");
   });
 });

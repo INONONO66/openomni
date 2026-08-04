@@ -115,6 +115,22 @@ describe("verifier registry scoped result semantics", () => {
       type: "verification_result",
       status: "refuted",
       checkedPredicate: expect.any(String),
+      modelFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+  });
+
+  test("returns inconclusive when newline-delimited input exceeds the segment admission cap", () => {
+    const fact = VerifierRegistry.create().verify(
+      obligation(
+        "citation_support",
+        { archivedText: `${"context\n".repeat(4_097)}Bob won the election.` },
+        "Bob won the election.",
+      ),
+    );
+    expect(fact).toMatchObject({
+      type: "verification_result",
+      status: "inconclusive",
+      modelFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
     });
   });
 

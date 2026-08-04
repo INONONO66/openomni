@@ -14,9 +14,38 @@ type Fixture = Readonly<{
   expected: ExpectedStatus;
 }>;
 
+export type VerifierRegistryBenchmark = Readonly<{
+  taxonomy: Readonly<{
+    familyCount: number;
+    executableFamilyCount: number;
+    assertedFamilyCount: number;
+    fixtureCount: number;
+    assertedRate: number;
+    assertedTruePositive: number;
+    assertedFalsePositive: number;
+    assertedFalseNegative: number;
+    assertedPrecision: number | null;
+    assertedRecall: number | null;
+  }>;
+  accuracy: Readonly<{ fixtureCount: number; correctCount: number; rate: number }>;
+  trust: Readonly<{
+    decisiveCount: number;
+    basisBoundCount: number;
+    predicateBoundCount: number;
+  }>;
+  toolValidity: Readonly<{
+    astValid: boolean;
+    schemaValid: boolean;
+    nativeRoundTripValid: boolean;
+  }>;
+  surface: Readonly<{ toolCount: number; fieldCount: number; tokenCount: number }>;
+  exposedActions: readonly VerifierRegistry.ForbiddenAction[];
+  exposedCapabilities: readonly VerifierRegistry.SandboxCapability[];
+}>;
+
 export function measureVerifierRegistryBenchmark(
   receipts: readonly VerifierRegistryScenarioReceipt[],
-) {
+): VerifierRegistryBenchmark {
   const registry = VerifierRegistry.create();
   const fixtures = taxonomyFixtures();
   const observations = fixtures.map((fixture) => {
@@ -212,6 +241,6 @@ function programRequest(
   };
 }
 
-function ratio(numerator: number, denominator: number): number {
-  return denominator === 0 ? 1 : numerator / denominator;
+function ratio(numerator: number, denominator: number): number | null {
+  return denominator === 0 ? null : numerator / denominator;
 }

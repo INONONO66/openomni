@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 export type FrozenNliRelation = "entails" | "contradicts" | "unknown";
 
 export const FrozenNliSourceDigest =
-  "sha256:6d5626992203a7c55c47bd06683de1fd317317b9a43cb357a8e37314209a7b28";
+  "sha256:277d8d0693bd5f019a23600796a312fa524af30e9dd2f5604fee81c29cf6a38b";
 
 const FrozenSymbolicNliModel = Object.freeze({
   version: "openomni-frozen-symbolic-nli-v10",
@@ -127,6 +127,7 @@ const modelBytes = JSON.stringify({
 export const FrozenNliModelFingerprint = `sha256:${createHash("sha256").update(modelBytes).digest("hex")}`;
 
 export function frozenSymbolicNliInfer(premise: string, hypothesis: string): FrozenNliRelation {
+  if (exceedsLineSegmentLimit(premise) || exceedsLineSegmentLimit(hypothesis)) return "unknown";
   const sourceSegments = segments(premise);
   const claimSegments = segments(hypothesis);
   if (sourceSegments.length > FrozenSymbolicNliModel.maxSegments || claimSegments.length !== 1) {
@@ -193,6 +194,15 @@ function segments(value: string): readonly string[] {
   return split.length === 0 ? [value] : split;
 }
 
+function exceedsLineSegmentLimit(value: string): boolean {
+  let lineSegments = 1;
+  for (const character of value) {
+    if (character === "\n") lineSegments += 1;
+    if (lineSegments > FrozenSymbolicNliModel.maxSegments) return true;
+  }
+  return false;
+}
+
 function pair(
   left: readonly string[],
   right: readonly string[],
@@ -238,6 +248,7 @@ function numbers(value: string): string[] {
 }
 
 function claimCoverage(source: ReadonlySet<string>, claim: ReadonlySet<string>): number {
+  if (claim.size === 0) return 0;
   let intersection = 0;
   for (const token of claim) if (source.has(token)) intersection += 1;
   return intersection / claim.size;

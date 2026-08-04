@@ -26,21 +26,25 @@ export function snapshotFirstSchema<Schema extends z.ZodTypeAny>(
   const originalSafeParse = schema.safeParse.bind(schema);
   const originalSafeParseAsync = schema.safeParseAsync.bind(schema);
   const safeParse = (input: unknown, params?: Parameters<typeof originalSafeParse>[1]) => {
+    let prepared: unknown;
     try {
-      return originalSafeParse(snapshot(input), params);
+      prepared = snapshot(input);
     } catch {
       return { success: false as const, error: invalidJsonError() };
     }
+    return originalSafeParse(prepared, params);
   };
   const safeParseAsync = async (
     input: unknown,
     params?: Parameters<typeof originalSafeParseAsync>[1],
   ) => {
+    let prepared: unknown;
     try {
-      return originalSafeParseAsync(snapshot(input), params);
+      prepared = snapshot(input);
     } catch {
       return { success: false as const, error: invalidJsonError() };
     }
+    return originalSafeParseAsync(prepared, params);
   };
   Object.defineProperties(schema, {
     parse: {

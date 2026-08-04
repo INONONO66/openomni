@@ -51,7 +51,7 @@ export const VerifierRegistryScenarioReceiptSchema = z
 
 export const VerifierRegistryDriverSurface = Object.freeze({
   toolNames: Object.freeze(["verifier_registry_driver"]),
-  fieldNames: Object.freeze(["version", "mode", "scenario", "ok", "resultCode", "observation"]),
+  fieldNames: Object.freeze(Object.keys(VerifierRegistryScenarioReceiptSchema.shape)),
   tokens: Object.freeze([
     "--self-test",
     "--benchmark",

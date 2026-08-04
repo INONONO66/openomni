@@ -66,15 +66,11 @@ export function createReplayKey(input: unknown): ReplayKey {
   return Object.freeze(key);
 }
 
-function replayBindingHash(binding: z.infer<typeof ReplayBindingSchema>): string {
-  return hashCanonicalJson({
-    version: binding.version,
-    source: binding.source,
-    environmentFingerprint: binding.environmentFingerprint,
-    schemaVersion: binding.schemaVersion,
-    upcastVersion: binding.upcastVersion,
-    nondeterminismManifestHash: binding.nondeterminismManifestHash,
-  });
+function replayBindingHash(
+  binding: z.infer<typeof ReplayBindingSchema> & Readonly<{ replayKey?: string }>,
+): string {
+  const { replayKey: _replayKey, ...bindingWithoutReplayKey } = binding;
+  return hashCanonicalJson(bindingWithoutReplayKey);
 }
 
 export const ReplayTraceSchema = snapshotFirstJsonSchema(

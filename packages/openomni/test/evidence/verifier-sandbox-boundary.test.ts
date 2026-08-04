@@ -108,6 +108,20 @@ describe("verifier sandbox structural boundary", () => {
     expect(reexportViolations).toEqual([
       "verifier-frozen-nli-model.ts: unapproved binding randomBytes from node:crypto",
     ]);
+    const hostileImportForms = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      'import cryptoDefault from "node:crypto"; import * as cryptoNamespace from "node:crypto"; import "node:crypto"; export * from "node:crypto";',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const importFormViolations: string[] = [];
+    visit(hostileImportForms, "verifier-frozen-nli-model.ts", importFormViolations);
+    expect(importFormViolations).toEqual([
+      "verifier-frozen-nli-model.ts: unapproved import form default from node:crypto",
+      "verifier-frozen-nli-model.ts: unapproved import form namespace from node:crypto",
+      "verifier-frozen-nli-model.ts: unapproved import form side-effect from node:crypto",
+      "verifier-frozen-nli-model.ts: unapproved import form wildcard from node:crypto",
+    ]);
     const hostileAmbientCrypto = ts.createSourceFile(
       "verifier-frozen-nli-model.ts",
       "crypto.randomUUID(); crypto.getRandomValues(new Uint8Array(8));",
@@ -122,7 +136,7 @@ describe("verifier sandbox structural boundary", () => {
     ]);
     const hostileGlobalAliases = ts.createSourceFile(
       "verifier-frozen-nli-model.ts",
-      "global.crypto.randomUUID(); self.crypto.randomUUID(); window.crypto.randomUUID();",
+      "global.crypto.randomUUID(); self.crypto.randomUUID(); window.crypto.randomUUID(); Math.random();",
       ts.ScriptTarget.Latest,
       true,
     );
@@ -132,6 +146,19 @@ describe("verifier sandbox structural boundary", () => {
       "verifier-frozen-nli-model.ts: forbidden global global",
       "verifier-frozen-nli-model.ts: forbidden global self",
       "verifier-frozen-nli-model.ts: forbidden global window",
+      "verifier-frozen-nli-model.ts: forbidden global Math",
+    ]);
+    const hostileObjectAliases = ts.createSourceFile(
+      "verifier-frozen-nli-model.ts",
+      'const descriptor = Object.getOwnPropertyDescriptor; descriptor(() => {}, "constructor"); const { getOwnPropertyDescriptor: getOwn } = Object; getOwn(() => {}, "constructor");',
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const objectAliasViolations: string[] = [];
+    visit(hostileObjectAliases, "verifier-frozen-nli-model.ts", objectAliasViolations);
+    expect(objectAliasViolations).toEqual([
+      "verifier-frozen-nli-model.ts: forbidden global Object",
+      "verifier-frozen-nli-model.ts: forbidden global Object",
     ]);
     const hostileEscapes = ts.createSourceFile(
       "verifier-frozen-nli-model.ts",
@@ -219,7 +246,10 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
     const allowed = allowedExternalBindings[node.moduleSpecifier.text];
     for (const binding of staticBindings(node)) {
       if (!allowed?.has(binding)) {
-        violations.push(`${file}: unapproved binding ${binding} from ${node.moduleSpecifier.text}`);
+        const category = importFormTokens.has(binding) ? "import form" : "binding";
+        violations.push(
+          `${file}: unapproved ${category} ${binding} from ${node.moduleSpecifier.text}`,
+        );
       }
     }
   }
@@ -232,13 +262,26 @@ function visit(node: ts.Node, file: string, violations: string[]): void {
   if (
     ts.isIdentifier(node) &&
     (forbiddenGlobals.has(node.text) ||
-      (file === "verifier-frozen-nli-model.ts" && node.text === "Reflect")) &&
+      (file === "verifier-frozen-nli-model.ts" &&
+        (node.text === "Reflect" ||
+          (node.text === "Object" && !isAllowedFrozenObjectUse(node))))) &&
     !isPropertyName(node) &&
     !isImportBinding(node)
   ) {
     violations.push(`${file}: forbidden global ${node.text}`);
   }
   ts.forEachChild(node, (child) => visit(child, file, violations));
+}
+
+const importFormTokens = new Set(["default", "namespace", "side-effect", "wildcard"]);
+
+function isAllowedFrozenObjectUse(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  return (
+    ts.isPropertyAccessExpression(parent) &&
+    parent.expression === node &&
+    parent.name.text === "freeze"
+  );
 }
 
 function isForbiddenPropertyEscape(node: ts.Node): boolean {
