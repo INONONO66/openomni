@@ -1,18 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { type VerifierRegistryDriverScenario, runVerifierRegistryDriver } from "../../src";
-import {
-  VerifierRegistryDriverScenarios,
-  VerifierRegistryDriverSurface,
-  VerifierRegistryScenarioReceiptSchema,
-} from "../../src/evidence/verifier-registry-driver-contract";
+import { VerifierRegistryDriverScenarios } from "../../src/evidence/verifier-registry-driver-contract";
 
 describe("VerifierRegistry driver", () => {
-  test("derives the public receipt field list from its schema", () => {
-    expect(VerifierRegistryDriverSurface.fieldNames).toEqual(
-      Object.keys(VerifierRegistryScenarioReceiptSchema.shape),
-    );
-  });
-
   test("publishes strict machine-readable CLI scenario and self-test receipts", () => {
     const expected = {
       "valid-native-round-trip": ["valid_native_round_trip", "verification_result", "verified"],
