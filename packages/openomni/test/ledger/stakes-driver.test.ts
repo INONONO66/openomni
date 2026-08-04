@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Stakes, runStakesDriver } from "@openomni/openomni/ledger";
+import { stakesDriverStatus } from "../../src/ledger/stakes-driver-scenarios.js";
 import { registerStakesBoundaryCases } from "./stakes-boundary-cases.js";
 import { registerStakesContractCases } from "./stakes-contract-cases.js";
 import { registerStakesIdentityCases } from "./stakes-identity-cases.js";
@@ -17,6 +18,19 @@ registerStakesIdentityCases();
 registerStakesTreatmentCases();
 
 describe("Stakes driver", () => {
+  test("correlates scenario failure status and result codes", () => {
+    expect(stakesDriverStatus("threshold-and-split", false)).toEqual({
+      scenario: "threshold-and-split",
+      ok: false,
+      resultCode: "threshold_and_split_failed",
+    });
+    expect(stakesDriverStatus("forged-local-value", false)).toEqual({
+      scenario: "forged-local-value",
+      ok: false,
+      resultCode: "forged_local_value_reached_seam",
+    });
+  });
+
   test("publishes complete machine-readable happy and hostile receipts", () => {
     const happy = runStakesDriver(["--scenario", "threshold-and-split", "--json"]);
     const hostile = runStakesDriver(["--scenario", "forged-local-value", "--json"]);

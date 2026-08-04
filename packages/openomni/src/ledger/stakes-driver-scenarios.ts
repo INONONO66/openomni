@@ -7,6 +7,11 @@ import {
 import { computeStakes, serializeStakes } from "./stakes-compute.js";
 import { hashStakesValue } from "./stakes-digest.js";
 import {
+  stakesDriverStatus,
+  type StakesDriverReceipt,
+  type StakesDriverScenario,
+} from "./stakes-driver-status.js";
+import {
   createDriverBroker,
   driverAction,
   driverBoundaryAction,
@@ -17,15 +22,8 @@ import {
 } from "./stakes-driver-fixture.js";
 import type { CompletionStakesInjection, VoiceStakesInjection } from "./stakes-seams.js";
 
-export type StakesDriverScenario = "threshold-and-split" | "forged-local-value";
-export type StakesDriverReceipt = Readonly<{
-  version: "stakes-driver-v1";
-  mode: "scenario";
-  scenario: StakesDriverScenario;
-  ok: boolean;
-  resultCode: "threshold_and_split_verified" | "forged_local_value_denied";
-}> &
-  Readonly<Record<string, unknown>>;
+export { stakesDriverStatus };
+export type { StakesDriverReceipt, StakesDriverScenario };
 
 export function runStakesScenario(scenario: StakesDriverScenario): StakesDriverReceipt {
   switch (scenario) {
@@ -86,23 +84,23 @@ function thresholdAndSplitScenario(): StakesDriverReceipt {
   return {
     version: "stakes-driver-v1",
     mode: "scenario",
-    scenario: "threshold-and-split",
-    ok:
+    ...stakesDriverStatus(
+      "threshold-and-split",
       minus.replayEqual &&
-      equal.replayEqual &&
-      plus.replayEqual &&
-      minus.computed.value === STAKES_THETA - STAKES_EPSILON &&
-      minus.computed.comparison === "below" &&
-      equal.computed.value === STAKES_THETA &&
-      equal.computed.comparison === "at" &&
-      plus.computed.value === STAKES_THETA + STAKES_EPSILON &&
-      plus.computed.comparison === "above" &&
-      serializeStakes(split) !== serializeStakes(whole) &&
-      sameAxes(split, whole) &&
-      split.value === whole.value &&
-      completionReference === equal.computed.reference &&
-      voiceReference === equal.computed.reference,
-    resultCode: "threshold_and_split_verified",
+        equal.replayEqual &&
+        plus.replayEqual &&
+        minus.computed.value === STAKES_THETA - STAKES_EPSILON &&
+        minus.computed.comparison === "below" &&
+        equal.computed.value === STAKES_THETA &&
+        equal.computed.comparison === "at" &&
+        plus.computed.value === STAKES_THETA + STAKES_EPSILON &&
+        plus.computed.comparison === "above" &&
+        serializeStakes(split) !== serializeStakes(whole) &&
+        sameAxes(split, whole) &&
+        split.value === whole.value &&
+        completionReference === equal.computed.reference &&
+        voiceReference === equal.computed.reference,
+    ),
     archivedInputDigest,
     amountDenomination: STAKES_AMOUNT_DENOMINATION,
     theta: STAKES_THETA,
@@ -156,19 +154,19 @@ function forgedLocalValueScenario(): StakesDriverReceipt {
   return {
     version: "stakes-driver-v1",
     mode: "scenario",
-    scenario: "forged-local-value",
-    ok:
+    ...stakesDriverStatus(
+      "forged-local-value",
       !forgedCompletion.ok &&
-      !forgedVoice.ok &&
-      !localCompletion.ok &&
-      !localVoice.ok &&
-      !foreignCompletion.ok &&
-      kernelReferenceBefore === kernelReferenceAfter &&
-      completionReferenceBefore === kernelReferenceBefore &&
-      completionReferenceAfter === kernelReferenceBefore &&
-      voiceReferenceBefore === kernelReferenceBefore &&
-      voiceReferenceAfter === kernelReferenceBefore,
-    resultCode: "forged_local_value_denied",
+        !forgedVoice.ok &&
+        !localCompletion.ok &&
+        !localVoice.ok &&
+        !foreignCompletion.ok &&
+        kernelReferenceBefore === kernelReferenceAfter &&
+        completionReferenceBefore === kernelReferenceBefore &&
+        completionReferenceAfter === kernelReferenceBefore &&
+        voiceReferenceBefore === kernelReferenceBefore &&
+        voiceReferenceAfter === kernelReferenceBefore,
+    ),
     archivedInputDigest: kernelValue.inputDigest,
     amountDenomination: STAKES_AMOUNT_DENOMINATION,
     completionDenial: forgedCompletion.ok ? null : forgedCompletion.denial,
