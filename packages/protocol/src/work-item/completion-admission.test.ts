@@ -342,11 +342,10 @@ describe("WorkItem completion admission contracts", () => {
     expect(item.completionFacts.results.map(({ value }) => value)).toEqual([
       "asserted",
       "asserted",
-      "refuted",
     ]);
   });
 
-  test("refutes a legacy claim when any linked evidence failed", () => {
+  test("preserves failed legacy evidence without synthesizing a decisive result", () => {
     const item = WorkItem.Info.parse(
       WorkItem.upcastLegacyCompletion({
         ...baseItem,
@@ -380,8 +379,8 @@ describe("WorkItem completion admission contracts", () => {
       }),
     );
 
-    expect(item.completionFacts.results.map(({ value }) => value)).toEqual(["refuted"]);
-    expect(item.completionFacts.results.some(({ value }) => value === "verified")).toBe(false);
+    expect(item.completionFacts.results).toEqual([]);
+    expect(item.evidence.map(({ passed }) => passed)).toEqual([true, false]);
   });
 
   test("enforces terminal receipt linkage to its completion head and admission", () => {

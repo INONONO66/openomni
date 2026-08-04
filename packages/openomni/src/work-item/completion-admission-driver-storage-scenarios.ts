@@ -115,12 +115,17 @@ export async function runRestartRecoveryCompletionAdmissionScenario() {
       }),
       now: () => CompletionAdmissionDriverNow,
     });
+    const compareAndSet = activeAdapter.workItem.compareAndSet.bind(activeAdapter.workItem);
+    let writeCount = 0;
+    class SimulatedRestartError extends Error {}
+    activeAdapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
+      writeCount += 1;
+      if (writeCount === 2) throw new SimulatedRestartError("simulated restart after admission");
+      return compareAndSet(hash, expectedHead, candidate);
+    };
     await captureCompletionAdmissionDriverMessage(
-      service.requestCompletion(request, {
-        ...completionAdmissionDriverReport(item),
-        claims: [{ statement: criterion.statement, evidenceIds: ["evidence:missing"] }],
-      }),
-      "completion report references missing evidence",
+      service.requestCompletion(request, completionAdmissionDriverReport(item)),
+      "simulated restart after admission",
     );
     const recorded = requiredCompletionAdmissionDriverItem(item.hash);
     const admission = recorded.completionFacts.admissions[0];

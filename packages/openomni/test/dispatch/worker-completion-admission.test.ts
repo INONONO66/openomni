@@ -14,6 +14,8 @@ import {
 
 const NOW = 1_000;
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
+const WORKER_RUN_ID = "run:completion-admission";
+const WORKER_SESSION_ID = "session:completion-admission";
 
 function reflectCoordinatorResult(
   workItemHash: string,
@@ -53,6 +55,8 @@ async function startedItem(
     intent: "worker.spawn",
     goal: "prove completion admission convergence",
     executorKind,
+    workSessionId: WORKER_SESSION_ID,
+    workerRunId: WORKER_RUN_ID,
     acceptanceCriteria: [criterionStatement],
   });
   const started = await WorkItemStore.start(created.hash);
@@ -106,8 +110,8 @@ async function evidenceBackedEnvelope(
 
 function succeeded(output: string): Execution.Result {
   return {
-    runId: "run:completion-admission",
-    sessionId: "session:completion-admission",
+    runId: WORKER_RUN_ID,
+    sessionId: WORKER_SESSION_ID,
     status: "succeeded",
     output,
   };
@@ -152,6 +156,83 @@ describe("worker completion admission convergence", () => {
       contractRevision: stored?.completionContract.revision,
       basisRef: stored?.completionContract.basisRef,
     });
+  });
+
+  test.each([
+    ["run", { runId: "run:other" }],
+    ["session", { sessionId: "session:other" }],
+  ] as const)("rejects a mismatched Worker %s identity before admission", async (_name, mismatch) => {
+    const item = await startedItem("internal_chat_agent");
+    const result = { ...succeeded(await evidenceBackedEnvelope(item.hash)), ...mismatch };
+
+    const reflection = await reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin: { source: "internal_worker" },
+      now: () => NOW,
+    });
+
+    expect(reflection.completionBlocked).toBe(true);
+    expect(reflection.completionBlocker).toContain("identity mismatch");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
+  test("reuses one immutable Worker admission before repeating read-back", async () => {
+    const predicate = "archived source contains the recorded quote exactly";
+    const item = await startedItem("internal_chat_agent", predicate);
+    const output = JSON.stringify({
+      completionReport: {
+        summary: "Read-back replay remains bound to one admission.",
+        claims: [{ statement: predicate }],
+      },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
+      readBackRequests: [
+        {
+          claimIndex: 0,
+          criterionIndex: 0,
+          request: {
+            kind: "citation_match",
+            target: "http://example.com/read-back",
+            quotedText: "stable replay marker",
+          },
+        },
+      ],
+    });
+    let readBackCalls = 0;
+    const options = {
+      sourceOrigin: { source: "internal_worker" } as const,
+      now: () => NOW,
+      async readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+        readBackCalls += 1;
+        if (readBackCalls > 1) throw new Error("duplicate delivery repeated read-back");
+        if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+        return WorkItemStore.addReadBackEvidence(hash, {
+          kind: "citation_match",
+          target: request.target,
+          quotedText: request.quotedText,
+          matchedText: request.quotedText,
+          passed: true,
+          observedAt: NOW,
+          statusCode: 200,
+        });
+      },
+    };
+
+    const first = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+    const replay = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+
+    const stored = WorkItemStore.get(item.hash);
+    expect(first.completionBlocked).toBe(false);
+    expect(replay.completionBlocked).toBe(false);
+    expect(readBackCalls).toBe(1);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.completionTerminalReceipt?.requestId).toBe(
+      `completion-request:${item.hash}:${WORKER_RUN_ID}:${WORKER_SESSION_ID}`,
+    );
   });
 
   test("rejects an unrelated claimant statement for an indexed criterion", async () => {
@@ -346,6 +427,8 @@ describe("worker completion admission convergence", () => {
       intent: "worker.spawn",
       goal: "prove criterion-local read-back binding",
       executorKind: "internal_chat_agent",
+      workSessionId: WORKER_SESSION_ID,
+      workerRunId: WORKER_RUN_ID,
       acceptanceCriteria: [predicate, predicate],
     });
     const item = await WorkItemStore.start(created.hash);
@@ -657,11 +740,11 @@ describe("worker completion admission convergence", () => {
         windowRef: window.windowRef,
         ledgerObservedAt: 2,
         facts: {
-          irreversibleChangeCount: 1,
-          externalSurfaceCount: 0,
-          spendMicros: 0,
-          budgetReservedMicros: 0,
-          outreachRecipientCount: 0,
+          irreversibleChangeCount: 10,
+          externalSurfaceCount: 10,
+          spendMicros: 100_000_000,
+          budgetReservedMicros: 100_000_000,
+          outreachRecipientCount: 10,
           contentFingerprints: [
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           ],

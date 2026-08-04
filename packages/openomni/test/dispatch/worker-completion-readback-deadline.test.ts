@@ -52,6 +52,8 @@ async function createStartedWorkItem(): Promise<WorkItem.Info> {
     intent: "worker.spawn",
     goal: "publish it",
     executorKind: "internal_chat_agent",
+    workSessionId: "session_1",
+    workerRunId: "run_1",
     acceptanceCriteria: ["archived source contains the recorded quote exactly"],
   });
   const started = await WorkItemStore.start(workItem.hash);

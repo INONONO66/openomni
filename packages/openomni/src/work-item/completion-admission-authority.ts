@@ -411,6 +411,7 @@ async function resolveStakes(
   return {
     ref: injection.context.stakes.reference,
     valueMilli: injection.context.stakes.value,
+    comparison: injection.context.stakes.comparison,
   };
 }
 

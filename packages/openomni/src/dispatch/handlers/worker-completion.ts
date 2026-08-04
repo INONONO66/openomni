@@ -3,10 +3,12 @@ import { WorkItem, type Execution } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
-import type { CompletionStakesResolver } from "../../work-item/index.js";
+import type { CompletionStakesResolver } from "../../work-item/completion-admission-authority.js";
+import type { CompletionBoundaryOutcome } from "../../work-item/completion-admission-boundary.js";
 import type { CompletionSourceOrigin } from "../../work-item/completion-origin.js";
 import {
   admitWorkerCompletion,
+  replayWorkerCompletion,
   WorkerCriterionFactInput,
   type WorkerReadBackEvidenceBinding,
 } from "./worker-completion-admission.js";
@@ -123,6 +125,14 @@ export async function reflectCoordinatorResult(
       return blockCompletion(workItemHash, parsed.reason);
     }
     try {
+      const replay = await replayWorkerCompletion({
+        workItemHash,
+        result,
+        policyEngine: options.completionPolicyEngine,
+        ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
+        now: options.now ?? Date.now,
+      });
+      if (replay) return completionOutcomeReflection(workItemHash, replay);
       const prepared = await prepareCompletionReport(workItemHash, parsed.envelope, options);
       const outcome = await admitWorkerCompletion({
         workItemHash,
@@ -135,13 +145,7 @@ export async function reflectCoordinatorResult(
         ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
         now: options.now ?? Date.now,
       });
-      if (!outcome.completed) {
-        return blockCompletion(
-          workItemHash,
-          `completion admission ${outcome.admission.decision}: ${outcome.admission.reasonCodes.join(", ")}`,
-        );
-      }
-      return completionReflection(workItemHash, false);
+      return completionOutcomeReflection(workItemHash, outcome);
     } catch (err) {
       return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
     }
@@ -154,6 +158,17 @@ export async function reflectCoordinatorResult(
     await WorkItemStore.fail(workItemHash, result.error ?? result.status);
   }
   return completionReflection(workItemHash, false);
+}
+
+async function completionOutcomeReflection(
+  workItemHash: string,
+  outcome: CompletionBoundaryOutcome,
+): Promise<CompletionReflection> {
+  if (outcome.completed) return completionReflection(workItemHash, false);
+  return blockCompletion(
+    workItemHash,
+    `completion admission ${outcome.admission.decision}: ${outcome.admission.reasonCodes.join(", ")}`,
+  );
 }
 
 function parseCompletionEnvelope(result: Execution.Result): ParsedCompletionEnvelope {

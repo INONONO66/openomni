@@ -63,15 +63,17 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     );
   const failedEvidencePreserved =
     first.evidence.some(({ id, passed }) => id === "evidence:legacy-driver-fail" && !passed) &&
-    first.completionFacts.results.some(({ value, observationIds }) => {
-      if (value !== "refuted") return false;
-      return observationIds.some((observationId) =>
+    first.completionFacts.observations.some(({ artifactRefs }) =>
+      artifactRefs.includes("evidence:legacy-driver-fail"),
+    ) &&
+    !first.completionFacts.results.some(({ observationIds }) =>
+      observationIds.some((observationId) =>
         first.completionFacts.observations.some(
           ({ id, artifactRefs }) =>
             id === observationId && artifactRefs.includes("evidence:legacy-driver-fail"),
         ),
-      );
-    });
+      ),
+    );
   const resultValues = first.completionFacts.results.map(({ value }) => value);
   const verifiedResultCount = resultValues.filter((value) => value === "verified").length;
   const ok =
@@ -82,7 +84,6 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     allClaimsPreserved &&
     failedEvidencePreserved &&
     resultValues.includes("asserted") &&
-    resultValues.includes("refuted") &&
     verifiedResultCount === 0;
 
   return completionAdmissionScenarioReceipt(

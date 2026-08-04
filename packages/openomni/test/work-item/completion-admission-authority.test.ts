@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import * as Ledger from "../../src/ledger/index.js";
+import {
+  CompletionAdmissionError,
+  createCompletionAuthorityResolver,
+} from "../../src/work-item/completion-admission-authority.js";
 import * as CompletionFold from "../../src/work-item/completion-admission-fold.js";
-import * as CompletionAdmission from "../../src/work-item/index.js";
+import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const criterion = {
   id: WorkItem.criterionId("wi_authority", 0, "Verify it"),
@@ -293,14 +297,7 @@ type ResolverDependencies = Readonly<{
 }>;
 
 function guardedResolver(dependencies: ResolverDependencies) {
-  const factory = Reflect.get(CompletionAdmission, "createCompletionAuthorityResolver");
-  expect(
-    typeof factory,
-    "work-item public module must export createCompletionAuthorityResolver",
-  ).toBe("function");
-  if (typeof factory !== "function") return undefined;
-
-  const resolver = Reflect.apply(factory, undefined, [dependencies]);
+  const resolver = Reflect.apply(createCompletionAuthorityResolver, undefined, [dependencies]);
   expect(typeof resolver, "factory must return a resolver object").toBe("object");
   if (typeof resolver !== "object" || resolver === null) return undefined;
   const resolve = Reflect.get(resolver, "resolve");
@@ -338,7 +335,7 @@ async function resolveErrorCode(
   try {
     await resolve(currentItem, candidate);
   } catch (error) {
-    if (error instanceof CompletionAdmission.CompletionAdmissionError) return error.code;
+    if (error instanceof CompletionAdmissionError) return error.code;
     throw error;
   }
   return undefined;
@@ -613,10 +610,11 @@ describe("completion admission authority resolver", () => {
         stakes: {
           ref: injection.ok ? injection.context.stakes.reference : "unreachable",
           valueMilli: injection.ok ? injection.context.stakes.value : -1,
+          comparison: injection.ok ? injection.context.stakes.comparison : "below",
         },
       },
     });
-    expect(admission?.decision).toBe("admit");
+    expect(admission?.decision).toBe("escalate");
   });
 
   test("does not acquire Stakes when the pre-fold has no asserted result", async () => {
@@ -981,8 +979,9 @@ describe("completion admission authority resolver", () => {
     expect(await resolveErrorCode(item(), candidate)).toBe("duplicate_fact_id");
   });
 
-  test("re-exports the public pure evaluator directly from the fold", () => {
-    expect(CompletionAdmission.evaluateCompletion).toBe(CompletionFold.evaluateCompletion);
+  test("keeps completion authority and fold exports kernel internal", () => {
+    expect(Reflect.get(WorkItemPublic, "createCompletionAuthorityResolver")).toBeUndefined();
+    expect(Reflect.get(WorkItemPublic, "evaluateCompletion")).toBeUndefined();
   });
 
   test("keeps authority acquisition outside the pure fold", () => {
@@ -1025,7 +1024,7 @@ describe("completion admission authority resolver", () => {
     };
 
     expect(
-      () => Reflect.apply(CompletionAdmission.evaluateCompletion, undefined, [inputWithResolver]),
+      () => Reflect.apply(CompletionFold.evaluateCompletion, undefined, [inputWithResolver]),
       "the pure fold must return a schema-valid admission without acquiring authority",
     ).not.toThrow();
     expect(resolverCalls).toBe(0);

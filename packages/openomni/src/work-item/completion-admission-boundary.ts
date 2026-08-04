@@ -2,6 +2,8 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import type { CompletionAuthorityResolver } from "./completion-admission-authority.js";
 import {
+  completionReportReference,
+  completionReportsMatch,
   canonicalCompletionRequest,
   completionRequestsMatch,
 } from "./completion-request-identity.js";
@@ -72,6 +74,7 @@ export function createCompletionAdmissionService(
 
       const admission = canonicalAdmission(
         await options.authorityResolver.resolve(initial, request),
+        completionReport,
       );
       assertAdmissionMatches(admission, initial, request);
       assertUnchangedAfterAuthority(adapter, initial);
@@ -88,12 +91,13 @@ export function createCompletionAdmissionService(
       const adapter = requiredAdapter(workItemHash);
       const item = requiredItem(adapter.get(workItemHash), workItemHash);
       assertNotFailedOrCancelled(item);
-      if (WorkItem.deriveStatus(item) === "completed") {
-        if (item.completionTerminalReceipt?.admissionId === admissionId) return item;
-        throw admissionRequired(workItemHash, admissionId);
-      }
       const admission = item.completionFacts.admissions.find(({ id }) => id === admissionId);
       if (!admission || !isAdmitted(admission)) {
+        throw admissionRequired(workItemHash, admissionId);
+      }
+      assertAdmissionReportMatches(admission, completionReport);
+      if (WorkItem.deriveStatus(item) === "completed") {
+        if (item.completionTerminalReceipt?.admissionId === admissionId) return item;
         throw admissionRequired(workItemHash, admissionId);
       }
       if (
@@ -112,6 +116,7 @@ export function createCompletionAdmissionService(
       const request = requestFromAdmission(item, admission);
       const nextAdmission = canonicalAdmission(
         await options.authorityResolver.resolve(item, request),
+        completionReport,
       );
       assertAdmissionMatches(nextAdmission, item, request);
       assertUnchangedAfterAuthority(adapter, item);
@@ -130,6 +135,9 @@ async function replayRequest(
   options: CompletionAdmissionServiceOptions,
 ): Promise<CompletionBoundaryOutcome> {
   assertReplayMatches(request, admissions);
+  const original = admissions[0];
+  if (!original) throw requestConflict(request.id);
+  assertAdmissionReportMatches(original, completionReport);
   const receipt = item.completionTerminalReceipt;
   if (WorkItem.deriveStatus(item) === "completed") {
     if (JSON.stringify(item.completionReport) !== JSON.stringify(completionReport)) {
@@ -181,6 +189,7 @@ async function completeOrReevaluate(
   const recheck = requestAtHead(request, latest.revision);
   const nextAdmission = canonicalAdmission(
     await options.authorityResolver.resolve(latest, recheck),
+    completionReport,
   );
   assertAdmissionMatches(nextAdmission, latest, recheck);
   assertUnchangedAfterAuthority(adapter, latest);
@@ -297,6 +306,7 @@ function commitTerminal(
     admissionId: admission.id,
     contractRevision: admission.contractRevision,
     basisRef: admission.basisRef,
+    completionReportRef: requiredCompletionReportRef(admission),
     recordedHead: existing.revision + 1,
   };
   const completed = WorkItem.Info.parse({
@@ -545,13 +555,50 @@ function assertSameBasis(item: WorkItem.Info, admission: WorkItem.CompletionAdmi
   }
 }
 
-function canonicalAdmission(input: WorkItem.CompletionAdmission): WorkItem.CompletionAdmission {
+function canonicalAdmission(
+  input: WorkItem.CompletionAdmission,
+  completionReport: WorkItem.CompletionReport,
+): WorkItem.CompletionAdmission {
   assertTerminalEligibleAdmission(input);
   const admission = WorkItem.CompletionAdmission.parse(input);
+  const completionReportSnapshot = WorkItem.CompletionReport.parse(completionReport);
+  const completionReportRef = completionReportReference(completionReportSnapshot);
+  if (
+    (admission.completionReportSnapshot !== undefined &&
+      !completionReportsMatch(admission.completionReportSnapshot, completionReportSnapshot)) ||
+    (admission.completionReportRef !== undefined &&
+      admission.completionReportRef !== completionReportRef)
+  ) {
+    throw requestConflict(admission.requestId);
+  }
   return WorkItem.CompletionAdmission.parse({
     ...admission,
     requestSnapshot: canonicalCompletionRequest(admission.requestSnapshot),
+    completionReportSnapshot,
+    completionReportRef,
   });
+}
+
+function assertAdmissionReportMatches(
+  admission: WorkItem.CompletionAdmission,
+  completionReport: WorkItem.CompletionReport,
+): void {
+  const snapshot = admission.completionReportSnapshot;
+  const reference = admission.completionReportRef;
+  if (
+    snapshot === undefined ||
+    reference === undefined ||
+    reference !== completionReportReference(snapshot) ||
+    !completionReportsMatch(snapshot, completionReport)
+  ) {
+    throw requestConflict(admission.requestId);
+  }
+}
+
+function requiredCompletionReportRef(admission: WorkItem.CompletionAdmission): string {
+  const reference = admission.completionReportRef;
+  if (reference === undefined) throw requestConflict(admission.requestId);
+  return reference;
 }
 
 function assertRequesterFactsSupported(request: WorkItem.CompletionRequest): void {

@@ -94,7 +94,6 @@ export type {
 export {
   CompletionAdmissionDriverScenarios,
   CompletionSourceOrigin,
-  createCompletionAdmissionService,
   projectCompletionOrigin,
   runCompletionAdmissionDriver,
 } from "./work-item";

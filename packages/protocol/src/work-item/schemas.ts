@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   CompletionContract,
   CompletionFacts,
+  CompletionReport,
   CompletionTerminalReceipt,
 } from "./completion-admission.js";
 import { criterionId } from "./hash.js";
@@ -130,21 +131,6 @@ export type ExecutorKind = z.infer<typeof ExecutorKind>;
 
 export const Outcome = z.enum(["adopted", "corrected", "redone", "ignored"]);
 export type Outcome = z.infer<typeof Outcome>;
-
-export const CompletionReport = z.object({
-  summary: z.string().min(1),
-  claims: z
-    .array(
-      z.object({
-        statement: z.string().min(1),
-        evidenceIds: z.array(z.string().min(1)).min(1),
-      }),
-    )
-    .min(1),
-  caveats: z.array(z.string().min(1)).default([]),
-  followUps: z.array(z.string().min(1)).default([]),
-});
-export type CompletionReport = z.infer<typeof CompletionReport>;
 
 export const VerificationGate = z.object({
   automated: z

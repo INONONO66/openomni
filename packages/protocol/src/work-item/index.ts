@@ -30,8 +30,8 @@ export namespace WorkItem {
   export const Outcome = Schema.Outcome;
   export type Outcome = Schema.Outcome;
 
-  export const CompletionReport = Schema.CompletionReport;
-  export type CompletionReport = Schema.CompletionReport;
+  export const CompletionReport = Completion.CompletionReport;
+  export type CompletionReport = Completion.CompletionReport;
 
   export const Criterion = Completion.Criterion;
   export type Criterion = Completion.Criterion;

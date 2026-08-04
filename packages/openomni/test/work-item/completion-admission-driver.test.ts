@@ -115,11 +115,25 @@ describe("WorkItem completion admission driver", () => {
   test("projects every source to its exact canonical origin", async () => {
     const receipt = await scenarioReceipt("all-origins");
     expect(receipt).toMatchObject({
-      resultCode: "all_origins_projected",
+      resultCode: "all_origins_admitted",
       canonicalOrigins: ["resident", "worker", "external_actor", "replay", "recovery"],
       sourceMappingsExact: true,
+      allTraversedAdmissionBoundary: true,
     });
-    expect(parseArray(receipt.sourceReceipts).map(parseObject)).toEqual([
+    expect(receipt.sourceReceipts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          boundaryTraversed: true,
+          terminalReceiptLinked: true,
+        }),
+      ]),
+    );
+    expect(
+      parseArray(receipt.sourceReceipts).map((entry) => {
+        const parsed = parseObject(entry);
+        return { source: parsed.source, origin: parsed.origin };
+      }),
+    ).toEqual([
       { source: "resident", origin: "resident" },
       { source: "internal_worker", origin: "worker" },
       { source: "connector_worker", origin: "worker" },
@@ -137,15 +151,15 @@ describe("WorkItem completion admission driver", () => {
     ]);
   });
 
-  test("fails the origin scenario when one source is misprojected", () => {
-    const receipt = runAllOriginsCompletionAdmissionScenario((source) => {
+  test("fails the origin scenario when one source is misprojected", async () => {
+    const receipt = await runAllOriginsCompletionAdmissionScenario((source) => {
       const parsed = WorkItemPublic.CompletionSourceOrigin.parse(source);
       return parsed.source === "api" ? "worker" : WorkItemPublic.projectCompletionOrigin(parsed);
     });
 
     expect(receipt).toMatchObject({
       ok: false,
-      resultCode: "origin_projection_incomplete",
+      resultCode: "origin_admission_incomplete",
       sourceMappingsExact: false,
     });
   });
@@ -196,7 +210,7 @@ describe("WorkItem completion admission driver", () => {
       allClaimsPreserved: true,
       failedEvidencePreserved: true,
       verifiedResultCount: 0,
-      resultValues: expect.arrayContaining(["asserted", "refuted"]),
+      resultValues: ["asserted"],
     });
   });
 

@@ -2,6 +2,7 @@ import type { RefinementCtx } from "zod";
 import type {
   CompletionAdmission,
   CompletionContract,
+  CompletionReport,
   CompletionTerminalReceipt,
 } from "./completion-admission.js";
 
@@ -11,6 +12,7 @@ type TerminalLinkageItem = Readonly<{
   timestamps: Readonly<{ completed?: number }>;
   completionContract: CompletionContract;
   completionFacts: Readonly<{ admissions: readonly CompletionAdmission[] }>;
+  completionReport?: CompletionReport;
   completionTerminalReceipt?: CompletionTerminalReceipt;
 }>;
 
@@ -64,6 +66,13 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   }
   if (admission.requestId !== receipt.requestId) {
     addIssue(ctx, ["completionTerminalReceipt", "requestId"]);
+  }
+  if (
+    admission.completionReportRef !== receipt.completionReportRef ||
+    (admission.completionReportSnapshot !== undefined &&
+      JSON.stringify(admission.completionReportSnapshot) !== JSON.stringify(item.completionReport))
+  ) {
+    addIssue(ctx, ["completionTerminalReceipt", "completionReportRef"]);
   }
   if (
     admission.contractRevision !== receipt.contractRevision ||

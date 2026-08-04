@@ -37,7 +37,11 @@ export type CompletionEvaluationInput = Readonly<{
   blockers: readonly WorkItem.Blocker[];
   currentAttempt: number;
   policy: CompletionPolicy;
-  stakes?: Readonly<{ ref: string; valueMilli: number }>;
+  stakes?: Readonly<{
+    ref: string;
+    valueMilli: number;
+    comparison: "below" | "at" | "above";
+  }>;
   ownerOverride?: OwnerOverride;
 }>;
 
@@ -260,7 +264,7 @@ function foldRequiredCriteria(input: CompletionEvaluationInput, facts: FoldFacts
     ) {
       addUnique(state.reasonCodes, "result_invalidated");
     }
-    const selected = selectLatest(currentResults);
+    const selected = selectResult(currentResults);
     const latestError = selectLatest(
       facts.verificationErrors.filter(
         (error) => error.criterionId === criterion.id && error.basisRef === input.basisRef,
@@ -305,11 +309,22 @@ function foldSelectedResult(
       return;
     case "asserted":
       state.residualRisks.push(...result.residualRisks);
+      if (input.stakes?.comparison === "at" || input.stakes?.comparison === "above") {
+        addUnique(state.unresolvedCriterionIds, criterion.id);
+        state.highRiskAsserted = true;
+        addUnique(state.reasonCodes, "high_risk_asserted");
+        return;
+      }
       if (input.policy.allowedAssertedCriterionIds.includes(criterion.id)) {
         addUnique(state.reasonCodes, "low_risk_asserted_allowed");
         return;
       }
       addUnique(state.unresolvedCriterionIds, criterion.id);
+      if (input.stakes?.comparison === "below") {
+        addUnique(state.reasonCodes, "low_risk_asserted_not_allowed");
+        state.hasBlockingResult = true;
+        return;
+      }
       state.highRiskAsserted = true;
       addUnique(state.reasonCodes, "high_risk_asserted");
       if (!input.stakes) {
@@ -348,6 +363,13 @@ function resolveDecision(
   if (state.highRiskAsserted) return "escalate";
   if (state.unresolvedCriterionIds.length > 0) return "block";
   return "admit";
+}
+
+function selectResult(
+  results: readonly WorkItem.CriterionResult[],
+): WorkItem.CriterionResult | undefined {
+  const authoritative = results.filter(({ value }) => value !== "asserted");
+  return selectLatest(authoritative.length > 0 ? authoritative : results);
 }
 
 function selectLatest<T extends Readonly<{ id: string; createdAt: number }>>(

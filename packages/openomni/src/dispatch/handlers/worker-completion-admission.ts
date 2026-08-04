@@ -4,13 +4,15 @@ import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
 import {
-  createCompletionAdmissionService,
   createCompletionAuthorityResolver,
-  type CompletionBoundaryOutcome,
   type CompletionResultAuthorityCandidate,
   type CompletionResultAuthorityPort,
   type CompletionStakesResolver,
-} from "../../work-item/index.js";
+} from "../../work-item/completion-admission-authority.js";
+import {
+  createCompletionAdmissionService,
+  type CompletionBoundaryOutcome,
+} from "../../work-item/completion-admission-boundary.js";
 import {
   type CompletionSourceOrigin,
   projectCompletionOrigin,
@@ -94,8 +96,9 @@ export async function admitWorkerCompletion(
 ): Promise<CompletionBoundaryOutcome> {
   const item = WorkItemStore.get(input.workItemHash);
   if (!item) throw new Error(`WorkItem not found: ${input.workItemHash}`);
+  assertWorkerCompletionIdentity(item, input.result);
   const createdAt = input.now();
-  const requestId = `completion-request:${item.hash}:${input.result.runId}:${item.revision}`;
+  const requestId = workerCompletionRequestId(item, input.result);
   const projected = projectCriterionFacts(
     item,
     requestId,
@@ -126,6 +129,42 @@ export async function admitWorkerCompletion(
   });
   const service = createCompletionAdmissionService({ authorityResolver, now: input.now });
   return service.requestCompletion(request, input.completionReport);
+}
+
+export async function replayWorkerCompletion(
+  input: Pick<
+    WorkerCompletionAdmissionInput,
+    "workItemHash" | "result" | "policyEngine" | "stakesResolver" | "now"
+  >,
+): Promise<CompletionBoundaryOutcome | undefined> {
+  const item = WorkItemStore.get(input.workItemHash);
+  if (!item) throw new Error(`WorkItem not found: ${input.workItemHash}`);
+  assertWorkerCompletionIdentity(item, input.result);
+  const requestId = workerCompletionRequestId(item, input.result);
+  const admission = item.completionFacts.admissions.find(
+    (candidate) => candidate.requestId === requestId,
+  );
+  if (!admission) return undefined;
+  const report = admission.completionReportSnapshot;
+  if (!report) throw new Error(`completion admission report is missing: ${admission.id}`);
+  const authorityResolver = createCompletionAuthorityResolver({
+    policyEngine: input.policyEngine,
+    ...(input.stakesResolver === undefined ? {} : { stakesResolver: input.stakesResolver }),
+    now: input.now,
+  });
+  const service = createCompletionAdmissionService({ authorityResolver, now: input.now });
+  return service.requestCompletion(admission.requestSnapshot, report);
+}
+
+function workerCompletionRequestId(item: WorkItem.Info, result: Execution.Result): string {
+  return `completion-request:${item.hash}:${result.runId}:${result.sessionId}`;
+}
+
+function assertWorkerCompletionIdentity(item: WorkItem.Info, result: Execution.Result): void {
+  if (item.workerRunId === result.runId && item.workSessionId === result.sessionId) return;
+  throw new Error(
+    `Worker completion identity mismatch: expected ${item.workerRunId ?? "missing"}/${item.workSessionId ?? "missing"}, received ${result.runId}/${result.sessionId}`,
+  );
 }
 
 function projectCriterionFacts(

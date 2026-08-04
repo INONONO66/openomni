@@ -4,6 +4,21 @@ const Reference = z.string().min(1);
 const Timestamp = z.number().finite();
 const CurrentVersion = z.literal(1);
 
+export const CompletionReport = z.object({
+  summary: z.string().min(1),
+  claims: z
+    .array(
+      z.object({
+        statement: z.string().min(1),
+        evidenceIds: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(1),
+  caveats: z.array(z.string().min(1)).default([]),
+  followUps: z.array(z.string().min(1)).default([]),
+});
+export type CompletionReport = z.infer<typeof CompletionReport>;
+
 export const Criterion = z
   .object({
     id: Reference,
@@ -179,6 +194,8 @@ const CompletionAdmissionShape = z
     policyRef: Reference,
     stakesRef: Reference.optional(),
     ownerOverrideReceiptRef: Reference.optional(),
+    completionReportSnapshot: CompletionReport.optional(),
+    completionReportRef: Reference.optional(),
     expectedHead: z.number().int().nonnegative(),
     recordedHead: z.number().int().positive(),
     createdAt: Timestamp,
@@ -197,6 +214,16 @@ export const CompletionAdmission = CompletionAdmissionShape.superRefine((admissi
       code: "custom",
       message: "requestSnapshot must match the admission subject",
       path: ["requestSnapshot"],
+    });
+  }
+  if (
+    (admission.completionReportSnapshot === undefined) !==
+    (admission.completionReportRef === undefined)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "completion report snapshot and reference must be recorded together",
+      path: ["completionReportSnapshot"],
     });
   }
   if (admission.recordedHead !== admission.expectedHead + 1) {
@@ -266,6 +293,7 @@ export const CompletionTerminalReceipt = z
     admissionId: Reference,
     contractRevision: Reference,
     basisRef: Reference,
+    completionReportRef: Reference.optional(),
     recordedHead: z.number().int().positive(),
   })
   .strict();

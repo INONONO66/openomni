@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
+import { createCompletionAdmissionService } from "../../src/work-item/completion-admission-boundary.js";
+import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const NOW = 1_000;
 const adapters: SqliteStorageAdapter[] = [];
@@ -104,14 +106,9 @@ function blockingAuthority() {
 }
 
 function guardedService(authorityResolver: unknown) {
-  const factory = Reflect.get(OpenOmni, "createCompletionAdmissionService");
-  expect(
-    typeof factory,
-    "@openomni/openomni must publicly export createCompletionAdmissionService",
-  ).toBe("function");
-  if (typeof factory !== "function") return undefined;
-
-  const service = Reflect.apply(factory, undefined, [{ authorityResolver, now: () => NOW }]);
+  const service = Reflect.apply(createCompletionAdmissionService, undefined, [
+    { authorityResolver, now: () => NOW },
+  ]);
   expect(typeof service, "completion admission factory must return a service").toBe("object");
   if (typeof service !== "object" || service === null) return undefined;
   const requestCompletion = Reflect.get(service, "requestCompletion");
@@ -278,6 +275,11 @@ afterEach(() => {
 });
 
 describe("WorkItem completion admission service", () => {
+  test("keeps the terminal service factory off public package barrels", () => {
+    expect(Reflect.get(OpenOmni, "createCompletionAdmissionService")).toBeUndefined();
+    expect(Reflect.get(WorkItemPublic, "createCompletionAdmissionService")).toBeUndefined();
+  });
+
   test("exposes one public record-before-act service for every completion origin", async () => {
     configure();
     const origins = ["resident", "worker", "external_actor", "replay", "recovery"] as const;
@@ -343,6 +345,7 @@ describe("WorkItem completion admission service", () => {
       admissionId: admission?.id,
       contractRevision: item.completionContract.revision,
       basisRef: item.completionContract.basisRef,
+      completionReportRef: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       recordedHead: stored?.revision,
     });
   });
@@ -595,6 +598,29 @@ describe("WorkItem completion admission service", () => {
     expect(stored?.completionFacts.admissions[0]?.id).toBe(originalAdmissionId);
     expect(stored?.completionTerminalReceipt?.admissionId).toBe(originalAdmissionId);
     expect(completionEvent.order).toEqual(["CompletedV2"]);
+  });
+
+  test("rejects a changed report when resuming an admitted request", async () => {
+    configure();
+    const { item, request, report } = await fixture("recovery");
+    const service = guardedService(authority().resolver);
+    if (!service) return;
+    const reportWithMissingEvidence: WorkItem.CompletionReport = {
+      ...report,
+      claims: [{ statement: "criterion one", evidenceIds: ["evidence:missing"] }],
+    };
+    await expect(service.requestCompletion(request, reportWithMissingEvidence)).rejects.toThrow(
+      "completion report references missing evidence",
+    );
+    const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    if (!admissionId) throw new Error("missing admitted completion");
+    const beforeResume = WorkItemStore.get(item.hash);
+
+    const code = await errorCode(service.resumeCompletion(item.hash, admissionId, report));
+
+    expect(code).toBe("request_conflict");
+    expect(WorkItemStore.get(item.hash)).toEqual(beforeResume);
+    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test.each([

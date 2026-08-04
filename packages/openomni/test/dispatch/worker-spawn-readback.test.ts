@@ -271,6 +271,7 @@ describe("worker.spawn read-back completion gate", () => {
       intent: "worker.complete",
       goal: "prove connector read-back composition",
       executorKind: "connector_endpoint",
+      workSessionId: "session:connector-read-back",
       workerRunId: "run:connector-read-back",
       acceptanceCriteria: ["archived source contains the recorded quote exactly"],
     });

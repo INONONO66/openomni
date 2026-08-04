@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import * as OpenOmni from "@openomni/openomni";
 import { IngressEngine, type NativeTool, type ToolProvider } from "@openomni/openomni";
 import type { Adapter, Ingress, Tool } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage, WorkItemStore } from "@openomni/session";
+import { createCompletionAdmissionService } from "../../../../packages/openomni/src/work-item/completion-admission-boundary";
 import { createMessageHandler } from "../../src/handler/conversation";
 import type { BridgeDeps } from "../../src/ingress/bridge";
 
@@ -104,12 +104,6 @@ async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined
     caveats: [],
     followUps: [],
   };
-  const factory = Reflect.get(OpenOmni, "createCompletionAdmissionService");
-  expect(
-    typeof factory,
-    "server completion fixtures must close through the public OpenOmni service",
-  ).toBe("function");
-  if (typeof factory !== "function") return undefined;
   const authorityResolver = {
     resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
       const item = WorkItem.Info.parse(itemInput);
@@ -134,15 +128,11 @@ async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined
       });
     },
   };
-  const service = Reflect.apply(factory, undefined, [
-    { authorityResolver, now: () => current.timestamps.updated + 2 },
-  ]);
-  expect(typeof service).toBe("object");
-  if (typeof service !== "object" || service === null) return undefined;
-  const requestCompletion = Reflect.get(service, "requestCompletion");
-  expect(typeof requestCompletion).toBe("function");
-  if (typeof requestCompletion !== "function") return undefined;
-  await Reflect.apply(requestCompletion, service, [request, report]);
+  const service = createCompletionAdmissionService({
+    authorityResolver,
+    now: () => current.timestamps.updated + 2,
+  });
+  await service.requestCompletion(request, report);
   return WorkItemStore.get(hash);
 }
 

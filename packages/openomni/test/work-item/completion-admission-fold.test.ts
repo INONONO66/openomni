@@ -322,6 +322,20 @@ describe("completion admission pure fold", () => {
     expect(admission.effectiveResultIds).toEqual([eligible.id]);
   });
 
+  test("keeps an authoritative result above a later claimant assertion", () => {
+    const verified = result("result:verified", lowCriterion.id, "verified", "basis:current", 5);
+    const asserted = result("result:asserted", lowCriterion.id, "asserted", "basis:current", 9);
+    const proposedFacts = proposed({
+      observations: [verified, asserted].map(observationFor),
+      results: [verified, asserted],
+    });
+
+    const admission = evaluate(input({ criteria: [lowCriterion], proposedFacts }));
+
+    expect(admission.decision).toBe("admit");
+    expect(admission.effectiveResultIds).toEqual([verified.id]);
+  });
+
   test("breaks same-time result ties by locale-independent code-unit order", () => {
     const earlierId = result("z-result", lowCriterion.id, "verified", "basis:current", 5);
     const laterId = result("ä-result", lowCriterion.id, "refuted", "basis:current", 5);
@@ -522,7 +536,11 @@ describe("completion admission pure fold", () => {
 
   const stakesCases = [
     ["without trusted Stakes", undefined, "block"],
-    ["with trusted Stakes", { ref: "stakes:trusted", valueMilli: 1_001 }, "escalate"],
+    [
+      "with trusted Stakes",
+      { ref: "stakes:trusted", valueMilli: 1_001, comparison: "above" },
+      "escalate",
+    ],
   ] as const;
   for (const [name, stakes, decision] of stakesCases) {
     test(`high-risk asserted result ${name}`, () => {
@@ -538,6 +556,35 @@ describe("completion admission pure fold", () => {
       expect(evaluate(foldInput).decision).toBe(decision);
     });
   }
+
+  test("high Stakes escalates an asserted result even when policy allows that criterion", () => {
+    const highResult = result("result:high:policy-allowed", highCriterion.id, "asserted");
+    const proposedFacts = proposed({
+      observations: [observationFor(highResult)],
+      results: [highResult],
+    });
+    const policy = {
+      ...defaultPolicy,
+      allowedAssertedCriterionIds: [highCriterion.id],
+    } satisfies ResolvedPolicy;
+
+    const admission = evaluate(
+      input({
+        criteria: [highCriterion],
+        proposedFacts,
+        policy,
+        stakes: {
+          ref: "stakes:trusted-high",
+          valueMilli: 1_001,
+          comparison: "above",
+        },
+      }),
+    );
+
+    expect(admission.decision).toBe("escalate");
+    expect(admission.reasonCodes).toContain("high_risk_asserted");
+    expect(admission.reasonCodes).not.toContain("low_risk_asserted_allowed");
+  });
 
   const blockerCases = [
     ["active", undefined, "block"],

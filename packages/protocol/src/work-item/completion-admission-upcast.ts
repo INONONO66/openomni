@@ -238,7 +238,7 @@ function legacyResults(
       return entry ? [entry] : [];
     });
     if (linked.length === 0) return [];
-    const passed = linked.every((entry) => entry.passed);
+    if (!linked.every((entry) => entry.passed)) return [];
     const common = {
       id: `result:${hash}:${index}:${stableToken(claim.id)}`,
       criterionId: claim.criterionId,
@@ -247,21 +247,11 @@ function legacyResults(
       basisRef,
       createdAt: Math.max(...linked.map((entry) => entry.createdAt)),
     };
-    if (passed) {
-      return [
-        {
-          ...common,
-          value: "asserted" as const,
-          residualRisks: ["legacy evidence was not re-verified"],
-        },
-      ];
-    }
     return [
       {
         ...common,
-        value: "refuted" as const,
-        checkedPredicate: claim.statement,
-        residualRisks: [],
+        value: "asserted" as const,
+        residualRisks: ["legacy evidence was not re-verified"],
       },
     ];
   });

@@ -1,7 +1,7 @@
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
 import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
 import type { PolicyResolverInstance } from "../policy/index.js";
-import type { CompletionStakesResolver } from "../work-item/index.js";
+import type { CompletionStakesResolver } from "../work-item/completion-admission-authority.js";
 import type { DispatchRegistry } from "./registry.js";
 import { DispatchRuntime, type DispatchRuntimeOptions } from "./runtime.js";
 import type { DispatchOwners } from "./owners.js";

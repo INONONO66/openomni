@@ -1,10 +1,32 @@
-import type { WorkItem } from "@openomni/protocol";
+import { PolicyEngine } from "@openomni/policy";
+import { WorkItem } from "@openomni/protocol";
+import { createCompletionAuthorityResolver } from "./completion-admission-authority.js";
+import { createCompletionAdmissionService } from "./completion-admission-boundary.js";
 import { completionAdmissionScenarioReceipt } from "./completion-admission-driver-contract.js";
+import {
+  CompletionAdmissionDriverNow,
+  completionAdmissionDriverCriterion,
+  completionAdmissionDriverReport,
+  completionAdmissionDriverRequest,
+  completionAdmissionDriverVerifierPort,
+  completionAdmissionDriverWorkItem,
+  insertCompletionAdmissionDriverItem,
+  requiredCompletionAdmissionDriverItem,
+  withCompletionAdmissionDriverStorage,
+} from "./completion-admission-driver-fixtures.js";
 import { type CompletionSourceOrigin, projectCompletionOrigin } from "./completion-origin.js";
 
 type OriginExpectation = Readonly<{
   source: CompletionSourceOrigin;
   origin: WorkItem.CompletionOrigin;
+}>;
+
+type OriginAdmissionReceipt = Readonly<{
+  source: string;
+  origin: WorkItem.CompletionOrigin;
+  admissionOrigin: WorkItem.CompletionOrigin;
+  boundaryTraversed: boolean;
+  terminalReceiptLinked: boolean;
 }>;
 
 const OriginExpectations = [
@@ -47,24 +69,92 @@ const OriginExpectations = [
 
 const CanonicalOrigins = ["resident", "worker", "external_actor", "replay", "recovery"] as const;
 
-export function runAllOriginsCompletionAdmissionScenario(
+export async function runAllOriginsCompletionAdmissionScenario(
   project: typeof projectCompletionOrigin = projectCompletionOrigin,
 ) {
-  const sourceReceipts = OriginExpectations.map(({ source }) => ({
-    source: sourceLabel(source),
-    origin: project(source),
-  }));
-  const sourceMappingsExact = sourceReceipts.every(
-    ({ origin }, index) => origin === OriginExpectations[index]?.origin,
-  );
+  return withCompletionAdmissionDriverStorage(async (adapter) => {
+    const sourceReceipts: OriginAdmissionReceipt[] = [];
+    for (const [index, expectation] of OriginExpectations.entries()) {
+      const origin = project(expectation.source);
+      const item = completionAdmissionDriverWorkItem(`wi_driver_origin_${index}`, [
+        `Origin ${index} traverses admission`,
+      ]);
+      insertCompletionAdmissionDriverItem(adapter, item);
+      const criterion = completionAdmissionDriverCriterion(item, 0);
+      const observation: WorkItem.Observation = {
+        id: `observation:driver-origin:${index}`,
+        producer: "verifier:driver-origin",
+        subjectRef: item.hash,
+        basisRef: item.completionContract.basisRef,
+        artifactRefs: [],
+        ancestryRefs: [],
+        observedAt: CompletionAdmissionDriverNow,
+      };
+      const result = WorkItem.CriterionResult.parse({
+        id: `result:driver-origin:${index}`,
+        criterionId: criterion.id,
+        value: "verified",
+        checkedPredicate: criterion.statement,
+        observationIds: [observation.id],
+        verifierRef: "verifier:driver-origin",
+        assumptions: [],
+        basisRef: item.completionContract.basisRef,
+        residualRisks: [],
+        createdAt: CompletionAdmissionDriverNow,
+      });
+      const request = WorkItem.CompletionRequest.parse({
+        ...completionAdmissionDriverRequest(item, `request:driver-origin:${index}`, {
+          observations: [observation],
+          results: [result],
+        }),
+        origin,
+      });
+      const service = createCompletionAdmissionService({
+        authorityResolver: createCompletionAuthorityResolver({
+          policyEngine: PolicyEngine.create(),
+          resultAuthorityPort: completionAdmissionDriverVerifierPort(criterion, result, [
+            observation,
+          ]),
+          now: () => CompletionAdmissionDriverNow,
+        }),
+        now: () => CompletionAdmissionDriverNow,
+      });
+      const outcome = await service.requestCompletion(
+        request,
+        completionAdmissionDriverReport(item),
+      );
+      const stored = requiredCompletionAdmissionDriverItem(item.hash);
+      sourceReceipts.push({
+        source: sourceLabel(expectation.source),
+        origin,
+        admissionOrigin: outcome.admission.origin,
+        boundaryTraversed: outcome.completed && outcome.admission.decision === "admit",
+        terminalReceiptLinked:
+          stored.completionTerminalReceipt?.admissionId === outcome.admission.id,
+      });
+    }
+    const sourceMappingsExact = sourceReceipts.every(
+      ({ origin, admissionOrigin }, index) =>
+        origin === OriginExpectations[index]?.origin && admissionOrigin === origin,
+    );
+    const allTraversedAdmissionBoundary = sourceReceipts.every(
+      ({ boundaryTraversed, terminalReceiptLinked }) => boundaryTraversed && terminalReceiptLinked,
+    );
+    const ok = sourceMappingsExact && allTraversedAdmissionBoundary;
 
-  return completionAdmissionScenarioReceipt(
-    "all-origins",
-    sourceMappingsExact,
-    "all_origins_projected",
-    "origin_projection_incomplete",
-    { canonicalOrigins: CanonicalOrigins, sourceMappingsExact, sourceReceipts },
-  );
+    return completionAdmissionScenarioReceipt(
+      "all-origins",
+      ok,
+      "all_origins_admitted",
+      "origin_admission_incomplete",
+      {
+        canonicalOrigins: CanonicalOrigins,
+        sourceMappingsExact,
+        allTraversedAdmissionBoundary,
+        sourceReceipts,
+      },
+    );
+  });
 }
 
 function sourceLabel(source: CompletionSourceOrigin): string {

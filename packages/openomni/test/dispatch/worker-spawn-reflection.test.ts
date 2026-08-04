@@ -367,6 +367,7 @@ describe("worker.spawn result reflection", () => {
       intent: "worker.complete",
       goal: "prove connector completion policy composition",
       executorKind: "connector_endpoint",
+      workSessionId: "session:connector-policy",
       workerRunId: "run:connector-policy",
       acceptanceCriteria: ["recorded numeric operands satisfy eq"],
     });
