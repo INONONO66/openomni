@@ -226,6 +226,59 @@ describe("VerifierRegistry", () => {
     expect(invoked).toBe(0);
   });
 
+  test("keeps authority validators private from every public schema", () => {
+    const registry = VerifierRegistry.create();
+    const forged = obligation("numeric_recheck", { operator: "eq", left: 1, right: 1 });
+    const publicSchemas = [
+      VerifierRegistry.ObligationKind,
+      VerifierRegistry.AssertedOnlyKind,
+      VerifierRegistry.ResultStatus,
+      VerifierRegistry.SandboxCapability,
+      VerifierRegistry.ForbiddenAction,
+      VerifierRegistry.JsonValue,
+      VerifierRegistry.Obligation,
+      VerifierRegistry.VerifierProgram,
+      VerifierRegistry.VerificationRequest,
+      VerifierRegistry.VerificationResult,
+      VerifierRegistry.VerificationErrorCode,
+      VerifierRegistry.VerificationError,
+      VerifierRegistry.VerificationFact,
+    ];
+    const mutations: Array<{
+      schema: (typeof publicSchemas)[number];
+      method: "parse" | "safeParse";
+      descriptor: PropertyDescriptor | undefined;
+    }> = [];
+    try {
+      for (const schema of publicSchemas) {
+        for (const method of ["parse", "safeParse"] as const) {
+          const descriptor = Object.getOwnPropertyDescriptor(schema, method);
+          if (descriptor?.configurable === false) continue;
+          mutations.push({ schema, method, descriptor });
+          Object.defineProperty(schema, method, {
+            configurable: true,
+            value: () => (method === "parse" ? forged : { success: true, data: forged }),
+          });
+        }
+      }
+      expect(registry.verify({})).toMatchObject({
+        type: "verification_error",
+        code: "malformed_input",
+      });
+      expect(
+        registry.verify(obligation("numeric_recheck", { operator: "eq", left: 1, right: 2 })),
+      ).toMatchObject({ type: "verification_result", status: "refuted" });
+    } finally {
+      for (const { schema, method, descriptor } of mutations.reverse()) {
+        if (descriptor === undefined) {
+          Reflect.deleteProperty(schema, method);
+        } else {
+          Object.defineProperty(schema, method, descriptor);
+        }
+      }
+    }
+  });
+
   test("returns typed malformed input and output-contract facts", () => {
     const registry = VerifierRegistry.create();
     expect(registry.verify({ kind: "numeric_recheck" })).toMatchObject({
