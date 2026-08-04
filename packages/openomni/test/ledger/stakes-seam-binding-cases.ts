@@ -194,6 +194,7 @@ function snapshotMutations() {
     })),
     mutation("state", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
+      action: { ...snapshot.action, windowRef: otherWindow.windowRef },
       state: { ...snapshot.state, window: otherWindow },
     })),
     mutation("basisRef", (snapshot: StakesAuthoritySnapshot) => ({

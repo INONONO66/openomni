@@ -64,7 +64,7 @@ agents/             → @openomni/protocol (Model.Ref only)
 resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 policy/             → @openomni/protocol (pure label→plan resolution; consumed by dispatch)
 evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence)
-ledger/             → no orchestration deps (pure Stakes contracts, computation, seams, replay driver)
+ledger/             → evidence/ (canonical JSON snapshot boundary only); no orchestration deps
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → dispatch/ (DEFAULT_DISPATCH_MODEL), resident/ (type-only)
 dispatch/           → policy/ (resolver), ingress/ (type-only) — the gate stays the sole author of stamped plans
