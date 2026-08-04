@@ -293,12 +293,19 @@ describe("VerifierRegistry", () => {
     if (jsonEffect.type !== "transform") throw new Error("expected JSON transform schema");
     const originalTransform = jsonEffect.transform;
     const digestChecks = VerifierConformance.Sha256DigestSchema._def.checks;
+    const transitiveDigestChecks = findSha256CheckArrays(
+      VerifierConformance.EnvironmentFingerprintSchema._def,
+    );
+    expect(transitiveDigestChecks.length).toBeGreaterThan(0);
     try {
       jsonEffect.transform = (value: unknown) =>
         typeof value === "object" && value !== null && "invalid" in value && value.invalid === true
           ? { id: "forged", tool: "read", input: {} }
           : value;
       digestChecks.push({ kind: "regex", regex: /^never$/u });
+      for (const checks of transitiveDigestChecks) {
+        checks.push({ kind: "regex", regex: /^never$/u });
+      }
       expect(registry.verify(invalidNative)).toMatchObject({
         type: "verification_result",
         status: "refuted",
@@ -309,6 +316,9 @@ describe("VerifierRegistry", () => {
     } finally {
       jsonEffect.transform = originalTransform;
       digestChecks.pop();
+      for (const checks of transitiveDigestChecks) {
+        checks.pop();
+      }
     }
   });
 
@@ -367,3 +377,41 @@ describe("VerifierRegistry", () => {
     }
   });
 });
+
+type RegexCheck = Readonly<{ kind: string; regex?: RegExp }>;
+
+function findSha256CheckArrays(root: unknown): RegexCheck[][] {
+  const matches: RegexCheck[][] = [];
+  const seen = new WeakSet<object>();
+  const visit = (value: unknown): void => {
+    if (typeof value !== "object" || value === null || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      if (
+        value.some(
+          (entry) =>
+            typeof entry === "object" &&
+            entry !== null &&
+            Reflect.get(entry, "kind") === "regex" &&
+            Reflect.get(entry, "regex") instanceof RegExp &&
+            Reflect.get(entry, "regex").source === "^sha256:[a-f0-9]{64}$",
+        )
+      ) {
+        matches.push(value as RegexCheck[]);
+      }
+      for (const entry of value) visit(entry);
+      return;
+    }
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor)) continue;
+      if (key === "shape" && typeof descriptor.value === "function") {
+        visit(Reflect.apply(descriptor.value, undefined, []));
+      } else {
+        visit(descriptor.value);
+      }
+    }
+  };
+  visit(root);
+  return matches;
+}
