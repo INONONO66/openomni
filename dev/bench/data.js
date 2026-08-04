@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785771635729,
+  "lastUpdate": 1785817194142,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -35689,6 +35689,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 526076,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "425166d01d1a1edb10174ea8822c4d37d0890d38",
+          "message": "feat(openomni): add deterministic verifier registry (#514)\n\n* feat(openomni): add deterministic verifier registry\n\n* docs: record verifier registry implementation status\n\n* fix(openomni): keep frozen NLI model internal\n\n* fix(openomni): harden verifier trust boundaries\n\n* fix(openomni): close verifier review gaps\n\n* test(openomni): use pure verifier driver API\n\n* fix(openomni): retain verifier CLI entry point\n\n* fix(openomni): bind verifier claims to evidence\n\n* fix(openomni): scope citation negation\n\n* fix(openomni): bound verifier inference\n\n* fix(openomni): close verifier trust gaps\n\n* fix(openomni): fail closed on citation context\n\n* fix(openomni): validate verifier identity boundaries\n\n* fix(openomni): close verifier callback escapes\n\n* fix(openomni): harden verifier input boundary\n\n* fix(openomni): close conformance boundary gaps\n\n* fix(openomni): snapshot public conformance schemas\n\n* fix(openomni): harden all conformance schema entries\n\n* fix(openomni): reject upcaster prototype aliases\n\n* fix(openomni): reject nested upcaster proxies\n\n* fix(openomni): resolve automated verifier reviews\n\n* test(openomni): strengthen verifier conformance gates\n\n* test(openomni): remove tautological driver assertion\n\n* fix(openomni): isolate registry authority schemas\n\n* fix(openomni): isolate canonical verifier schemas\n\n* refactor(openomni): keep schema factories private\n\n* fix(openomni): sever deep verifier schema aliases\n\n* test(openomni): lock transitive verifier isolation",
+          "timestamp": "2026-08-04T13:18:40+09:00",
+          "tree_id": "7aff52de55eb5835820febd6b9b7fc7e6a3048d9",
+          "url": "https://github.com/INONONO66/openomni/commit/425166d01d1a1edb10174ea8822c4d37d0890d38"
+        },
+        "date": 1785817193485,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 699,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10565,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2629,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3222,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8393,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 857,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 764,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19587,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2273,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102788,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524590,
             "unit": "ns/op"
           }
         ]
