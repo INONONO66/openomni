@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-03 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
+Last verified against `origin/main`: 2026-08-04 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
 
 ## OVERVIEW
 
@@ -106,6 +106,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `VerificationGate`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade |
 | WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/set/list/remove) |
 | WorkItemStore engine | `packages/session/src/work-item/index.ts` | CRUD + lifecycle (start/complete/fail/cancel/retry) + blockers + evidence + dependency readiness + cycle detection |
+| Windowed Stakes primitive | `packages/openomni/src/ledger/` | Dormant deterministic consequence calculator, replay driver, criterion-treatment fixture, and per-host completion/authorized-Voice capability seams; no production consumer is wired yet |
 | Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
 | WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
 | Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
