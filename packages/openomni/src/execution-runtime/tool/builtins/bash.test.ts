@@ -105,6 +105,7 @@ describe("bashTool", () => {
       expect(result.isError).toBe(true);
       expect(existsSync(marker)).toBe(true);
     } finally {
+      controller.abort();
       readyWatcher.close();
       rmSync(workspace, { recursive: true, force: true });
     }
