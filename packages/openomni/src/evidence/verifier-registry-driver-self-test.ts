@@ -71,7 +71,13 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
     signature &&
     action &&
     successCount === VerifierRegistryDriverScenarios.length &&
-    Object.values(conformance).every(Boolean) &&
+    conformance.replayKey &&
+    conformance.fingerprint &&
+    conformance.manifest &&
+    conformance.command &&
+    conformance.interleaving &&
+    conformance.upcast &&
+    conformance.recordedOutput &&
     contracts.taxonomy &&
     contracts.frozenModelFingerprint &&
     measured.accuracy.rate === 1 &&

@@ -505,8 +505,14 @@ describe("verifier replay identity and schema conformance", () => {
 
   test("bounds aggregate replay traces before comparison", () => {
     const commands = Array.from({ length: 1_025 }, (_, index) => ({ op: "read", index }));
-    expect(() =>
-      assertReplayConformance({ commands, finalFold: null }, { commands, finalFold: null }),
-    ).toThrow("Array must contain at most 1024 element(s)");
+    try {
+      assertReplayConformance({ commands, finalFold: null }, { commands, finalFold: null });
+      throw new Error("expected replay trace bound rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(z.ZodError);
+      const issue = (error as z.ZodError).issues[0];
+      expect(issue?.code).toBe("too_big");
+      expect(issue?.path).toEqual(["commands"]);
+    }
   });
 });
