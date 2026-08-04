@@ -123,7 +123,6 @@ export function createCanonicalSchemas() {
 const schemas = createCanonicalSchemas();
 
 export const JsonValueSchema = schemas.JsonValueSchema;
-export const JsonObjectSchema = schemas.JsonObjectSchema;
 export const Sha256DigestSchema = schemas.Sha256DigestSchema;
 export const RedactedIdentifierSchema = schemas.RedactedIdentifierSchema;
 

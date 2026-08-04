@@ -1,9 +1,6 @@
 import { z } from "zod";
 import {
   type JsonValue as CanonicalJsonValue,
-  JsonObjectSchema,
-  JsonValueSchema,
-  Sha256DigestSchema,
   createCanonicalSchemas,
 } from "./verifier-conformance-canonical.js";
 
@@ -43,8 +40,8 @@ type CanonicalSchemas = Pick<
 export function createVerifierRegistrySchemas(
   canonicalSchemas: CanonicalSchemas = createCanonicalSchemas(),
 ) {
-  const ObligationKind = z.enum(obligationKinds);
-  const AssertedOnlyKind = z.enum(assertedOnlyKinds);
+  const ObligationKind = z.enum([...obligationKinds]);
+  const AssertedOnlyKind = z.enum([...assertedOnlyKinds]);
   const ResultStatus = z.enum(["verified", "refuted", "inconclusive", "asserted"]);
   const SandboxCapability = z.enum(["network", "clock", "subprocess", "live_llm", "device"]);
   const ForbiddenAction = z.enum([
@@ -168,11 +165,7 @@ export function createVerifierRegistrySchemas(
   };
 }
 
-const schemas = createVerifierRegistrySchemas({
-  JsonValueSchema,
-  JsonObjectSchema,
-  Sha256DigestSchema,
-});
+const schemas = createVerifierRegistrySchemas();
 
 export const ObligationKind = schemas.ObligationKind;
 export type ObligationKind = z.infer<typeof ObligationKind>;

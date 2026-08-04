@@ -250,7 +250,9 @@ describe("VerifierRegistry", () => {
       method: "parse" | "safeParse";
       descriptor: PropertyDescriptor | undefined;
     }> = [];
+    const assertedOptions = VerifierRegistry.AssertedOnlyKind.options as unknown as string[];
     try {
+      assertedOptions.push("numeric_recheck");
       for (const schema of publicSchemas) {
         for (const method of ["parse", "safeParse"] as const) {
           const descriptor = Object.getOwnPropertyDescriptor(schema, method);
@@ -270,6 +272,7 @@ describe("VerifierRegistry", () => {
         registry.verify(obligation("numeric_recheck", { operator: "eq", left: 1, right: 2 })),
       ).toMatchObject({ type: "verification_result", status: "refuted" });
     } finally {
+      assertedOptions.pop();
       for (const { schema, method, descriptor } of mutations.reverse()) {
         if (descriptor === undefined) {
           Reflect.deleteProperty(schema, method);
