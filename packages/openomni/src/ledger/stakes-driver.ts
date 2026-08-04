@@ -61,6 +61,6 @@ function argumentError(): StakesDriverExecution {
 
 if (import.meta.main) {
   const result = runStakesDriver(Bun.argv.slice(2));
-  await Bun.stdout.write(`${result.stdout}\n`);
+  process.stdout.write(`${result.stdout}\n`);
   process.exitCode = result.exitCode;
 }

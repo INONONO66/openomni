@@ -45,7 +45,9 @@ export type StakesCriterionAssessment =
 export function assessStakesCriterion(input: unknown): StakesCriterionAssessment {
   const parsed = assessmentInput.parse(input);
   const stakes = AssessmentSchemas.StakesValue.parse(parsed.stakes);
-  return assessIssuedCriterion(parsed.result, stakes, parsed.policyAllowsLowAsserted);
+  return Object.freeze(
+    assessIssuedCriterion(parsed.result, stakes, parsed.policyAllowsLowAsserted),
+  );
 }
 
 function assessIssuedCriterion(

@@ -6,6 +6,7 @@ import {
   expectedWindowRef,
 } from "./stakes-reference.js";
 import { STAKES_POLICY_VERSION, STAKES_THETA } from "./stakes-policy.js";
+import { createStakesSchemaPrimitives } from "./stakes-schema-primitives.js";
 
 export {
   STAKES_AMOUNT_DENOMINATION,
@@ -15,12 +16,11 @@ export {
 } from "./stakes-policy.js";
 
 export function createStakesSchemas() {
-  const identifier = z.string().min(1).max(256);
-  const safeTime = z.number().int().safe().nonnegative();
+  const { digest, identifier, sequence } = createStakesSchemaPrimitives();
+  const safeTime = sequence;
   const boundedCount = z.number().int().safe().nonnegative().max(1_000);
   const boundedMicros = z.number().int().safe().nonnegative().max(1_000_000_000_000);
   const safeScore = z.number().int().safe().nonnegative();
-  const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
   const windowFields = {
     ownerKey: identifier,
     windowId: identifier,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Stakes } from "@openomni/openomni/ledger";
 import {
   boundaryAction,
+  captureComputationError,
   knownFingerprint,
   stakesAction,
   stakesDigest,
@@ -53,11 +54,14 @@ export function registerStakesTreatmentCases(): void {
         knownFingerprints: [],
       });
 
-      expect(Stakes.assessCriterion({ result: "verified", stakes: low })).toEqual({
+      const verified = Stakes.assessCriterion({ result: "verified", stakes: low });
+      expect(verified).toEqual({
         treatment: "eligible_input",
         reason: "verified_input",
         authorizes: false,
       });
+      expect(Object.isFrozen(verified)).toBe(true);
+      expect(() => Object.assign(verified, { authorizes: true })).toThrow();
       expect(
         Stakes.assessCriterion({
           result: "asserted",
@@ -118,6 +122,15 @@ export function registerStakesTreatmentCases(): void {
           knownFingerprints: [],
         }).success,
       ).toBe(false);
+      expect(
+        captureComputationError(() =>
+          Stakes.compute(action, {
+            window: stakesWindow,
+            actions: [{ ...action, ownerKey: "owner:other" }],
+            knownFingerprints: [],
+          }),
+        ),
+      ).toEqual({ code: "duplicate_action", actionId: action.actionId });
       expect(
         Stakes.Action.safeParse({
           ...action,

@@ -2,12 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { Stakes, runStakesDriver } from "@openomni/openomni/ledger";
 import { registerStakesBoundaryCases } from "./stakes-boundary-cases.js";
 import { registerStakesContractCases } from "./stakes-contract-cases.js";
+import { registerStakesIdentityCases } from "./stakes-identity-cases.js";
+import { registerStakesSeamBindingCases } from "./stakes-seam-binding-cases.js";
 import { registerStakesSeamCases } from "./stakes-seam-cases.js";
 import { registerStakesTreatmentCases } from "./stakes-treatment-cases.js";
 
 registerStakesContractCases();
 registerStakesBoundaryCases();
 registerStakesSeamCases();
+registerStakesSeamBindingCases();
+registerStakesIdentityCases();
 registerStakesTreatmentCases();
 
 describe("Stakes driver", () => {
@@ -97,7 +101,9 @@ describe("Stakes driver", () => {
     const failure = runStakesDriver(hostileArguments);
 
     expect(help.exitCode).toBe(0);
-    expect(help.stdout.length).toBeGreaterThan(0);
+    expect(help.stdout).toBe(
+      "Usage: stakes-driver --scenario <threshold-and-split|forged-local-value> --json",
+    );
     expect(failure.exitCode).toBe(1);
     expect(JSON.parse(failure.stdout)).toMatchObject({
       mode: "driver_error",

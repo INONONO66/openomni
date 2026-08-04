@@ -70,23 +70,24 @@ export function registerStakesBoundaryCases(): void {
     });
 
     test("keeps kernel validation isolated from public schema mutation", () => {
-      const checks =
-        Stakes.Action._def.innerType.shape.facts._def.innerType.shape.spendMicros._def.checks;
-      const saved = [...checks];
-      expect(checks.length).toBeGreaterThan(0);
+      const original = Object.getOwnPropertyDescriptor(Stakes.Action, "safeParse");
+      if (original === undefined) throw new Error("expected public Stakes.Action.safeParse method");
+      const oversized = {
+        ...boundaryAction("oversized", 1),
+        facts: {
+          ...boundaryAction("oversized", 1).facts,
+          spendMicros: 1_000_000_000_001,
+        },
+      };
       try {
-        checks.length = 0;
-        const oversized = {
-          ...boundaryAction("oversized", 1),
-          facts: {
-            ...boundaryAction("oversized", 1).facts,
-            spendMicros: 1_000_000_000_001,
-          },
-        };
+        Object.defineProperty(Stakes.Action, "safeParse", {
+          ...original,
+          value: () => ({ success: true, data: oversized }),
+        });
         expect(Stakes.Action.safeParse(oversized).success).toBe(true);
         expect(() => Stakes.compute(oversized, state())).toThrow();
       } finally {
-        checks.splice(0, checks.length, ...saved);
+        Object.defineProperty(Stakes.Action, "safeParse", original);
       }
     });
   });

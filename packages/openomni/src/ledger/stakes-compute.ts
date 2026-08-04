@@ -8,6 +8,7 @@ import {
   type StakesValue as StakesValueType,
 } from "./stakes-contract.js";
 import { compareStakesValue, hashStakesValue, stakesWindowRef } from "./stakes-hash.js";
+import { expectedStakesReference } from "./stakes-reference.js";
 
 const IRREVERSIBILITY_WEIGHT = 400;
 const EXTERNAL_SURFACE_WEIGHT = 250;
@@ -31,6 +32,7 @@ export function computeStakes(actionInput: unknown, stateInput: unknown): Stakes
   const action = InternalSchemas.StakesAction.parse(actionInput);
   const state = InternalSchemas.StakesWindowedLedgerState.parse(stateInput);
   assertCandidateInWindow(action, state.window);
+  assertUniqueCandidate(action.actionId, [...state.actions, action]);
   const actions = [
     ...state.actions.filter(
       (recorded) =>
@@ -41,7 +43,6 @@ export function computeStakes(actionInput: unknown, stateInput: unknown): Stakes
     ),
     action,
   ].sort((left, right) => compareIdentifiers(left.actionId, right.actionId));
-  assertUniqueCandidate(action.actionId, actions);
   const knownFingerprints = state.knownFingerprints
     .filter(
       (known) =>
@@ -58,22 +59,16 @@ export function computeStakes(actionInput: unknown, stateInput: unknown): Stakes
   const windowRef = stakesWindowRef(state.window);
   const inputDigest = hashInputs(state.window, actions, knownFingerprints);
   const includedActionIds = actions.map((recorded) => recorded.actionId);
-  const reference = hashStakesValue([
-    "stakes-reference-v1",
-    STAKES_POLICY_VERSION,
+  const reference = expectedStakesReference({
+    policyVersion: STAKES_POLICY_VERSION,
     inputDigest,
     windowRef,
-    axes.irreversibility,
-    axes.externalSurface,
-    axes.spend,
-    axes.budget,
-    axes.outreach,
-    axes.novelty,
+    axes,
     value,
-    STAKES_THETA,
+    theta: STAKES_THETA,
     comparison,
     includedActionIds,
-  ]);
+  });
   return InternalSchemas.StakesValue.parse({
     version: "stakes-v1",
     policyVersion: STAKES_POLICY_VERSION,

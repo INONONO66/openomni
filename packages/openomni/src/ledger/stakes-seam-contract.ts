@@ -6,10 +6,9 @@ import {
   type StakesValue,
   type StakesWindowedLedgerState,
 } from "./stakes-contract.js";
+import { createStakesSchemaPrimitives } from "./stakes-schema-primitives.js";
 
-const identifier = z.string().min(1).max(256);
-const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-const sequence = z.number().int().safe().nonnegative();
+const { digest, identifier, sequence } = createStakesSchemaPrimitives();
 const bindingFields = {
   ownerKey: identifier,
   actionRef: identifier,

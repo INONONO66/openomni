@@ -18,10 +18,16 @@ import {
 import type { CompletionStakesInjection, VoiceStakesInjection } from "./stakes-seams.js";
 
 export type StakesDriverScenario = "threshold-and-split" | "forged-local-value";
+export type StakesDriverReceipt = Readonly<{
+  version: "stakes-driver-v1";
+  mode: "scenario";
+  scenario: StakesDriverScenario;
+  ok: boolean;
+  resultCode: "threshold_and_split_verified" | "forged_local_value_denied";
+}> &
+  Readonly<Record<string, unknown>>;
 
-export function runStakesScenario(
-  scenario: StakesDriverScenario,
-): Readonly<Record<string, unknown>> {
+export function runStakesScenario(scenario: StakesDriverScenario): StakesDriverReceipt {
   switch (scenario) {
     case "threshold-and-split":
       return thresholdAndSplitScenario();
@@ -30,7 +36,7 @@ export function runStakesScenario(
   }
 }
 
-function thresholdAndSplitScenario(): Readonly<Record<string, unknown>> {
+function thresholdAndSplitScenario(): StakesDriverReceipt {
   const minus = boundaryRun("minus", 49_000_000);
   const equal = boundaryRun("equal", 50_000_000);
   const plus = boundaryRun("plus", 51_000_000);
@@ -85,6 +91,12 @@ function thresholdAndSplitScenario(): Readonly<Record<string, unknown>> {
       minus.replayEqual &&
       equal.replayEqual &&
       plus.replayEqual &&
+      minus.computed.value === STAKES_THETA - STAKES_EPSILON &&
+      minus.computed.comparison === "below" &&
+      equal.computed.value === STAKES_THETA &&
+      equal.computed.comparison === "at" &&
+      plus.computed.value === STAKES_THETA + STAKES_EPSILON &&
+      plus.computed.comparison === "above" &&
       serializeStakes(split) !== serializeStakes(whole) &&
       sameAxes(split, whole) &&
       split.value === whole.value &&
@@ -113,7 +125,7 @@ function thresholdAndSplitScenario(): Readonly<Record<string, unknown>> {
   };
 }
 
-function forgedLocalValueScenario(): Readonly<Record<string, unknown>> {
+function forgedLocalValueScenario(): StakesDriverReceipt {
   const action = driverBoundaryAction("trusted", 50_000_000);
   const ledgerState = driverState([]);
   const kernelValue = computeStakes(action, ledgerState);

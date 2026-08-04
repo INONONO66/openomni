@@ -72,6 +72,7 @@ export function driverVoiceBinding(actionRef: string) {
 }
 
 export function createDriverBroker(action: StakesAction, state: ReturnType<typeof driverState>) {
+  const authorizedVoice = driverVoiceBinding(action.actionId);
   return createStakesBroker({
     read(request) {
       return {
@@ -83,8 +84,15 @@ export function createDriverBroker(action: StakesAction, state: ReturnType<typeo
         noveltyBasisDigest: request.noveltyBasisDigest,
       };
     },
-    readVoiceAuthorization(request) {
-      return request;
+    readVoiceAuthorization() {
+      return {
+        ownerKey: authorizedVoice.ownerKey,
+        evaluationId: authorizedVoice.evaluationId,
+        authorizationReceiptRef: authorizedVoice.authorizationReceiptRef,
+        actionRef: authorizedVoice.actionRef,
+        windowRef: authorizedVoice.windowRef,
+        asOfOwnerSeq: authorizedVoice.asOfOwnerSeq,
+      };
     },
   });
 }

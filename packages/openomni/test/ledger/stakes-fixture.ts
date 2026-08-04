@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { Stakes, type StakesAction } from "@openomni/openomni/ledger";
+import {
+  Stakes,
+  type CompletionStakesBinding,
+  type StakesAction,
+  type VoiceStakesBinding,
+} from "@openomni/openomni/ledger";
 
 export const stakesWindow = Stakes.createWindow({
   ownerKey: "owner:469",
@@ -58,7 +63,7 @@ export function stakesDigest(seed: string): string {
   return `sha256:${createHash("sha256").update(seed).digest("hex")}`;
 }
 
-export function completionBinding(actionRef: string) {
+export function completionBinding(actionRef: string): CompletionStakesBinding {
   return {
     surface: "work.complete.pre" as const,
     ownerKey: stakesWindow.ownerKey,
@@ -68,13 +73,13 @@ export function completionBinding(actionRef: string) {
     actionRef,
     windowRef: stakesWindow.windowRef,
     asOfOwnerSeq: 469,
-    calculatorVersion: "stakes-policy-v1" as const,
+    calculatorVersion: Stakes.PolicyVersion,
     ledgerRangeDigest: stakesDigest("ledger-range"),
     noveltyBasisDigest: stakesDigest("novelty-basis"),
   };
 }
 
-export function voiceBinding(actionRef: string) {
+export function voiceBinding(actionRef: string): VoiceStakesBinding {
   return {
     surface: "authorized_voice" as const,
     ownerKey: stakesWindow.ownerKey,
@@ -84,14 +89,14 @@ export function voiceBinding(actionRef: string) {
     actionRef,
     windowRef: stakesWindow.windowRef,
     asOfOwnerSeq: 469,
-    calculatorVersion: "stakes-policy-v1" as const,
+    calculatorVersion: Stakes.PolicyVersion,
     ledgerRangeDigest: stakesDigest("ledger-range"),
     noveltyBasisDigest: stakesDigest("novelty-basis"),
   };
 }
 
 export function captureComputationError(run: () => unknown): {
-  readonly code: string;
+  readonly code: InstanceType<typeof Stakes.ComputationError>["code"];
   readonly actionId: string;
 } {
   try {
