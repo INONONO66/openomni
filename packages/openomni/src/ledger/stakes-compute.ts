@@ -57,7 +57,7 @@ export function computeStakes(actionInput: unknown, stateInput: unknown): Stakes
   const value = Object.values(axes).reduce((total, axis) => total + axis, 0);
   const comparison = compareStakesValue(value);
   const windowRef = stakesWindowRef(state.window);
-  const inputDigest = hashInputs(state.window, actions, knownFingerprints);
+  const inputDigest = hashStakesInputs(state.window, actions, knownFingerprints);
   const includedActionIds = actions.map((recorded) => recorded.actionId);
   const reference = expectedStakesReference({
     policyVersion: STAKES_POLICY_VERSION,
@@ -122,7 +122,7 @@ function calculateAxes(
   };
 }
 
-function hashInputs(
+export function hashStakesInputs(
   window: StakesValueType["window"],
   actions: readonly StakesAction[],
   knownFingerprints: readonly StakesKnownFingerprint[],

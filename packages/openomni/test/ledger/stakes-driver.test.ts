@@ -5,12 +5,14 @@ import { registerStakesContractCases } from "./stakes-contract-cases.js";
 import { registerStakesIdentityCases } from "./stakes-identity-cases.js";
 import { registerStakesSeamBindingCases } from "./stakes-seam-binding-cases.js";
 import { registerStakesSeamCases } from "./stakes-seam-cases.js";
+import { registerStakesSeamRequestCases } from "./stakes-seam-request-cases.js";
 import { registerStakesTreatmentCases } from "./stakes-treatment-cases.js";
 
 registerStakesContractCases();
 registerStakesBoundaryCases();
 registerStakesSeamCases();
 registerStakesSeamBindingCases();
+registerStakesSeamRequestCases();
 registerStakesIdentityCases();
 registerStakesTreatmentCases();
 

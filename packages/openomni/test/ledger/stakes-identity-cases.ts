@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Stakes, runStakesDriver } from "@openomni/openomni/ledger";
+import { hashStakesInputs } from "../../src/ledger/stakes-compute.js";
 import {
   boundaryAction,
   stakesAction,
@@ -12,6 +13,10 @@ export function registerStakesIdentityCases(): void {
   describe("Stakes replay identities", () => {
     test("freezes representative machine-consumed identities", () => {
       const value = Stakes.compute(boundaryAction("at", 50_000_000), emptyState());
+      const knownValue = Stakes.compute(boundaryAction("at", 50_000_000), {
+        ...emptyState(),
+        knownFingerprints: [knownIdentityFingerprint()],
+      });
       const receipt = JSON.parse(
         runStakesDriver(["--scenario", "threshold-and-split", "--json"]).stdout,
       ) as Record<string, unknown>;
@@ -24,6 +29,12 @@ export function registerStakesIdentityCases(): void {
       );
       expect(value.reference).toBe(
         "sha256:e3c1e7f9525f35c9a9e8ec622a61545ac6f4c5e3fc5adbc4d8317652296b8124",
+      );
+      expect(knownValue.inputDigest).toBe(
+        "sha256:80bf10388753511ae6246fb611dabc8fe069b32ec05a10c7bc0405f1ba984aad",
+      );
+      expect(knownValue.reference).toBe(
+        "sha256:e8bf00908d7c7d695bca54b72865c3725b3d0a6f2bc3a691d50344f53055599d",
       );
       expect(receipt.archivedInputDigest).toBe(
         "sha256:1d9d26fe9b1b3d69d4efdabacce0cda7cbd4d4545326cb2886655666de9f78d6",
@@ -84,11 +95,34 @@ export function registerStakesIdentityCases(): void {
         }).inputDigest,
       ).not.toBe(baseline);
     });
+
+    test("discriminates every known-fingerprint tuple field", () => {
+      const action = boundaryAction("identity-known", 50_000_000);
+      const known = knownIdentityFingerprint();
+      const baseline = hashStakesInputs(stakesWindow, [action], [known]);
+      const variants = [
+        { ...known, ownerKey: "owner:other" },
+        { ...known, fingerprint: stakesDigest("known-other") },
+        { ...known, firstObservedAt: known.firstObservedAt - 1 },
+      ];
+
+      for (const variant of variants) {
+        expect(hashStakesInputs(stakesWindow, [action], [variant])).not.toBe(baseline);
+      }
+    });
   });
 }
 
 function emptyState() {
   return { window: stakesWindow, actions: [], knownFingerprints: [] };
+}
+
+function knownIdentityFingerprint() {
+  return {
+    ownerKey: stakesWindow.ownerKey,
+    fingerprint: stakesDigest("known-golden"),
+    firstObservedAt: stakesWindow.openedAt - 1,
+  };
 }
 
 function withFacts(
