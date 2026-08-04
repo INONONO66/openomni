@@ -1,9 +1,28 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
-import { reflectCoordinatorResult } from "../../src/dispatch/handlers/worker-completion";
+import {
+  reflectCoordinatorResult as reflectCoordinatorResultWithPolicy,
+  type WorkerCompletionOptions,
+} from "../../src/dispatch/handlers/worker-completion";
 
-function completionResult(readBackRequests: unknown[]) {
+const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
+
+function reflectCoordinatorResult(
+  workItemHash: string,
+  result: Parameters<typeof reflectCoordinatorResultWithPolicy>[1],
+  options: Omit<WorkerCompletionOptions, "completionPolicyEngine">,
+) {
+  return reflectCoordinatorResultWithPolicy(workItemHash, result, {
+    ...options,
+    completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+  });
+}
+
+function completionResult(item: WorkItem.Info, readBackRequests: unknown[]) {
+  const criterion = item.completionFacts.criteria[0];
+  if (!criterion) throw new Error("missing completion criterion");
   return {
     runId: "run_1",
     sessionId: "session_1",
@@ -13,6 +32,13 @@ function completionResult(readBackRequests: unknown[]) {
         summary: "Published the requested update.",
         claims: [{ statement: "The deployed page includes the expected marker." }],
       },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
       readBackRequests,
     }),
   } as const;
@@ -26,7 +52,7 @@ async function createStartedWorkItem(): Promise<WorkItem.Info> {
     intent: "worker.spawn",
     goal: "publish it",
     executorKind: "internal_chat_agent",
-    acceptanceCriteria: ["publish the marker"],
+    acceptanceCriteria: ["archived source contains the recorded quote exactly"],
   });
   const started = await WorkItemStore.start(workItem.hash);
   if (!started) throw new Error("missing started work item");
@@ -36,6 +62,7 @@ async function createStartedWorkItem(): Promise<WorkItem.Info> {
 function citationRequest(target: string) {
   return {
     claimIndex: 0,
+    criterionIndex: 0,
     request: {
       kind: "citation_match",
       target,
@@ -57,11 +84,12 @@ describe("worker completion read-back deadline", () => {
 
     const reflection = await reflectCoordinatorResult(
       workItem.hash,
-      completionResult([
+      completionResult(workItem, [
         citationRequest("http://example.com/first"),
         citationRequest("http://example.com/second"),
       ]),
       {
+        sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 10,
         now: () => clock.shift() ?? 11,
         async readBackRecorder(hash, request) {
@@ -97,8 +125,9 @@ describe("worker completion read-back deadline", () => {
 
     const reflection = await reflectCoordinatorResult(
       workItem.hash,
-      completionResult([citationRequest("http://example.com/source")]),
+      completionResult(workItem, [citationRequest("http://example.com/source")]),
       {
+        sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 0.25,
         now: () => 0,
         async readBackRecorder(hash, request) {
@@ -120,6 +149,11 @@ describe("worker completion read-back deadline", () => {
 
     const completed = WorkItemStore.get(workItem.hash);
     expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
+    expect(completed?.completionFacts.admissions).toHaveLength(1);
+    expect(completed?.completionFacts.admissions[0]).toMatchObject({
+      origin: "worker",
+      decision: "admit",
+    });
     expect(reflection).toMatchObject({
       workItemStatus: "completed",
       completionBlocked: false,

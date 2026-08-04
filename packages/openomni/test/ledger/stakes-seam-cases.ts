@@ -25,7 +25,23 @@ export function registerStakesSeamCases(): void {
       expect(completion).toMatchObject({ ok: true, context: { surface: "work.complete.pre" } });
       expect(voice).toMatchObject({ ok: true, context: { surface: "authorized_voice" } });
       if (!completion.ok || !voice.ok) throw new Error("expected issued Stakes contexts");
-      expect(Object.keys(completion.context).sort()).toEqual(["stakes", "surface", "workItemHash"]);
+      expect(Object.keys(completion.context).sort()).toEqual([
+        "basisRef",
+        "contractRevision",
+        "expectedHead",
+        "requestId",
+        "stakes",
+        "surface",
+        "workItemHash",
+      ]);
+      expect(completion.context).toMatchObject({
+        surface: completionSubject.surface,
+        workItemHash: completionSubject.workItemHash,
+        requestId: completionSubject.requestId,
+        contractRevision: completionSubject.contractRevision,
+        basisRef: completionSubject.basisRef,
+        expectedHead: completionSubject.expectedHead,
+      });
       expect(Object.keys(voice.context).sort()).toEqual([
         "authorizationReceiptRef",
         "evaluationId",

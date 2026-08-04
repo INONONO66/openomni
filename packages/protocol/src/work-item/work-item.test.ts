@@ -3,6 +3,7 @@ import { WorkItem } from "./index.js";
 
 const baseItem = {
   hash: "wi_000000000001",
+  revision: 0,
   name: "Implement WorkItem namespace",
   sourceMessageId: "msg_1",
   sourceChannel: "discord",
@@ -20,8 +21,24 @@ const baseItem = {
   blockers: [],
   evidence: [],
   constraints: [],
-  acceptanceCriteria: [],
+  acceptanceCriteria: ["add work item contracts"],
   changedFiles: [],
+  completionContract: {
+    version: 1 as const,
+    revision: "contract:v1",
+    basisRef: "basis:v1",
+  },
+  completionFacts: {
+    ...WorkItem.emptyCompletionFacts(),
+    criteria: [
+      {
+        id: WorkItem.criterionId("wi_000000000001", 0, "add work item contracts"),
+        revision: 1,
+        statement: "add work item contracts",
+        required: true,
+      },
+    ],
+  },
 };
 
 const validCompletionReport = {
@@ -43,6 +60,105 @@ describe("WorkItem.Info", () => {
     expect(item.hash).toBe(baseItem.hash);
     expect(item.relations.childHashes).toEqual([]);
     expect(item.relations.dependsOn).toEqual([]);
+  });
+
+  test("requires current WorkItems to carry non-empty stable completion criteria", () => {
+    const currentCompletion = {
+      completionContract: {
+        version: 1 as const,
+        revision: "contract:v1",
+        basisRef: "basis:v1",
+      },
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        criteria: [
+          {
+            id: WorkItem.criterionId(baseItem.hash, 0, "Protocol contracts are implemented"),
+            revision: 1,
+            statement: "Protocol contracts are implemented",
+            required: true,
+          },
+        ],
+      },
+    };
+
+    const item = WorkItem.Info.parse({
+      ...baseItem,
+      acceptanceCriteria: ["Protocol contracts are implemented"],
+      ...currentCompletion,
+    });
+    const missingAcceptanceCriteria = WorkItem.Info.safeParse({
+      ...baseItem,
+      ...currentCompletion,
+    });
+    const missingStableCriteria = WorkItem.Info.safeParse({
+      ...baseItem,
+      acceptanceCriteria: ["Protocol contracts are implemented"],
+      completionContract: currentCompletion.completionContract,
+      completionFacts: WorkItem.emptyCompletionFacts(),
+    });
+
+    expect(item.completionFacts.criteria[0]?.id).toBe(
+      WorkItem.criterionId(baseItem.hash, 0, "Protocol contracts are implemented"),
+    );
+    expect({
+      missingAcceptanceCriteria: missingAcceptanceCriteria.success,
+      missingStableCriteria: missingStableCriteria.success,
+    }).toEqual({ missingAcceptanceCriteria: false, missingStableCriteria: false });
+  });
+
+  test("rejects forged, reordered, mismatched, and optional persisted acceptance criteria", () => {
+    const first = "first acceptance criterion";
+    const second = "second acceptance criterion";
+    const criteria = [first, second].map((statement, index) => ({
+      id: WorkItem.criterionId(baseItem.hash, index, statement),
+      revision: 1,
+      statement,
+      required: true,
+    }));
+    const current = {
+      ...baseItem,
+      acceptanceCriteria: [first, second],
+      completionFacts: { ...WorkItem.emptyCompletionFacts(), criteria },
+    };
+    const [firstCriterion, secondCriterion] = criteria;
+    if (!firstCriterion || !secondCriterion) throw new Error("missing fixture criteria");
+
+    const candidates = [
+      {
+        ...current,
+        completionFacts: {
+          ...current.completionFacts,
+          criteria: [{ ...firstCriterion, id: "criterion:forged" }, secondCriterion],
+        },
+      },
+      {
+        ...current,
+        completionFacts: {
+          ...current.completionFacts,
+          criteria: [secondCriterion, firstCriterion],
+        },
+      },
+      {
+        ...current,
+        acceptanceCriteria: ["mismatched acceptance criterion", second],
+      },
+      {
+        ...current,
+        completionFacts: {
+          ...current.completionFacts,
+          criteria: [{ ...firstCriterion, required: false }, secondCriterion],
+        },
+      },
+    ];
+
+    expect(WorkItem.Info.safeParse(current).success).toBe(true);
+    expect(candidates.map((candidate) => WorkItem.Info.safeParse(candidate).success)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 
   test("parses ADR-011 ledger routing, completion report, retry, and outcome fields", () => {

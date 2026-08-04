@@ -3,6 +3,15 @@ import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import type { WorkItemAdapter, WorkItemMutation, WorkItemTransitionTarget } from "./types.js";
 
+class WorkItemRevisionError extends Error {
+  readonly name = "WorkItemRevisionError";
+  readonly code = "stale_revision";
+
+  constructor(readonly hash: string) {
+    super(`stale WorkItem revision: ${hash}`);
+  }
+}
+
 export function mutateTimestamps(
   hash: string,
   target: "started" | "cancelled",
@@ -42,26 +51,32 @@ export function persistMutation(
   changedFields: string[],
   afterPublish?: (updated: WorkItem.Info) => void,
 ): WorkItem.Info {
-  adapter.set(updated.hash, updated);
+  const versioned: WorkItem.Info = {
+    ...updated,
+    revision: existing.revision + 1,
+  };
+  if (!adapter.compareAndSet(updated.hash, existing.revision, versioned)) {
+    throw new WorkItemRevisionError(updated.hash);
+  }
 
   const previousStatus = WorkItem.deriveStatus(existing);
-  const nextStatus = WorkItem.deriveStatus(updated);
+  const nextStatus = WorkItem.deriveStatus(versioned);
   if (previousStatus !== nextStatus) {
     Bus.publish(WorkItem.Events.StatusChanged, {
       traceId: crypto.randomUUID(),
       time,
-      sessionId: updated.sessionId,
-      payload: { hash: updated.hash, from: previousStatus, to: nextStatus },
+      sessionId: versioned.sessionId,
+      payload: { hash: versioned.hash, from: previousStatus, to: nextStatus },
     });
   }
-  afterPublish?.(updated);
+  afterPublish?.(versioned);
   Bus.publish(WorkItem.Events.Updated, {
     traceId: crypto.randomUUID(),
     time,
-    sessionId: updated.sessionId,
-    payload: { hash: updated.hash, fields: changedFields },
+    sessionId: versioned.sessionId,
+    payload: { hash: versioned.hash, fields: changedFields },
   });
-  return updated;
+  return versioned;
 }
 
 function assertTransition(existing: WorkItem.Info, target: WorkItemTransitionTarget): void {

@@ -2,10 +2,9 @@ import type { AppConnector, Dispatch, Execution, Model, WorkItem } from "@openom
 import { AppConnectorInstallationStore, Session, WorkItemStore } from "@openomni/session";
 import type { ConnectorEndpointDriverOwner } from "../owners.js";
 import {
-  ignoreWorkItemReflectionFailure,
-  type WorkerCompletionOptions,
-} from "./worker-completion.js";
-import { projectConnectorCompletion } from "./connector-completion-projector.js";
+  projectConnectorCompletion,
+  type ConnectorCompletionOptions,
+} from "./connector-completion-projector.js";
 import { createWorkerSpawnWorkItem, failWorkerSpawnExecutor } from "./worker-work-item.js";
 
 const CONNECTOR_ENDPOINT_EXECUTOR_KIND = "connector_endpoint" satisfies WorkItem.ExecutorKind;
@@ -16,7 +15,7 @@ export interface ConnectorEndpointWorkerSpawnPayload {
   readonly constraints?: string[];
 }
 
-export interface ConnectorEndpointWorkerSpawnOptions extends WorkerCompletionOptions {
+export interface ConnectorEndpointWorkerSpawnOptions extends ConnectorCompletionOptions {
   readonly driver?: ConnectorEndpointDriverOwner;
 }
 
@@ -142,9 +141,7 @@ export async function handleConnectorEndpointWorkerSpawn(
       installation,
     });
   } catch (err) {
-    await ignoreWorkItemReflectionFailure(() =>
-      WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err)),
-    );
+    await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
     throw err;
   }
   const projection = await projectConnectorCompletion(workItemHash, result, options);

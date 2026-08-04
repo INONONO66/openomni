@@ -1,6 +1,5 @@
 import type { Dispatch, WorkItem } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
-import { ignoreWorkItemReflectionFailure } from "./worker-completion.js";
 
 export type WorkerWorkItemRequest = {
   readonly prompt: string;
@@ -45,14 +44,12 @@ export async function failWorkerSpawnExecutor(
   executorKind: WorkItem.ExecutorKind,
   reason: string,
 ): Promise<never> {
-  await ignoreWorkItemReflectionFailure(() =>
-    WorkItemStore.addEvidence(workItemHash, {
-      kind: "custom",
-      description: reason,
-      passed: false,
-      detail: `executorKind=${executorKind}`,
-    }),
-  );
-  await ignoreWorkItemReflectionFailure(() => WorkItemStore.fail(workItemHash, reason));
+  await WorkItemStore.addEvidence(workItemHash, {
+    kind: "custom",
+    description: reason,
+    passed: false,
+    detail: `executorKind=${executorKind}`,
+  });
+  await WorkItemStore.fail(workItemHash, reason);
   throw new Error(reason);
 }

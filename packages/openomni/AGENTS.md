@@ -12,7 +12,8 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 | `src/dispatch/` | Current egress/cross-boundary stage: command authorization, handler routing, PendingInteraction routing, gate-side policy stamping (#479) | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` (+ `BuiltInDispatchOptions.policyResolver`), `DEFAULT_DISPATCH_MODEL` |
 | `src/policy/` | Gate-side policy resolution: actor/target labels → stamped `policyPlan` on spawn requests (production-wired by #479) | `PolicyResolver` |
 | `src/evidence/` | Read-back executors plus scoped deterministic verifier-registry and replay-conformance primitives | `ReadBackExecutor`, `VerifierRegistry`, `VerifierConformance`, `runVerifierRegistryDriver` |
-| `src/ledger/` | Dormant deterministic windowed Stakes calculator, replay driver, criterion treatment, and host capability seams | `Stakes`, `runStakesDriver` |
+| `src/ledger/` | Deterministic windowed Stakes calculator, replay driver, criterion treatment, and host capability seams | `Stakes`, `runStakesDriver` |
+| `src/work-item/` | WorkItem completion fold, trusted authority, origin projection, atomic admission/terminal boundary, and public Manual QA driver | Public `projectCompletionOrigin`, `runCompletionAdmissionDriver`; internal `evaluateCompletion`, `createCompletionAuthorityResolver`, `createCompletionAdmissionService` |
 | `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
@@ -21,7 +22,7 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 - `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
 - `src/ingress/` uses the shipped single kernel `resolveRoute` pipeline (#464, PR #485) for inbound precedence and decision ownership. The stable package-boundary contract keeps `ingress/`, `dispatch/`, `policy/`, `evidence/`, and the cron/injection parts of `execution-runtime/` in the kernel while `resident/` and `agents/` belong to `apps/server`. OpenOmni owns principal-resolution handoff, access checks, correlation, session/target resolution, projection, writeback, and response routing; package placement does not change that product ownership. Live P3 package work belongs to [#459](https://github.com/INONONO66/openomni/issues/459)'s leaf issues #495–#506; #496 owns the remaining IPC extraction, and #497–#500 plus #506 own the concept diet.
 - `src/ingress/` is the current inbound stage. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the resident/direct handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job)` creates internal events with `surface="cron"`.
-- `src/dispatch/` is the current cross-boundary command stage. `DispatchRuntime.submit()` authorizes commands, routes PendingInteraction replies, invokes registered handlers, and emits audit events. Treat dispatch as a kernel stage, not as a standalone product layer.
+- `src/dispatch/` is the current cross-boundary command stage. `DispatchRuntime.submit()` authorizes commands, routes PendingInteraction replies, invokes registered handlers, and emits audit events. Internal and connector Worker completion handlers reference durable WorkItem-local evidence for each criterion; the kernel resolves and verifies that evidence before both paths converge on the `src/work-item/` admission service. They cannot call Session completion directly.
 - `src/execution-runtime/tool/agent/tools/dispatch.ts` is the `dispatch` tool — the runtime-to-runtime/system egress gate. Worker-to-Resident awaited requests use `resident.ask`; scheduling uses `schedule.create`; cron fire remains internal ingress. `Dispatch.submit()` enforces PolicyEngine authorization and emits Bus audit events. See `src/dispatch/` for the runtime, handlers, and policy.
 - `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
 - `src/execution-runtime/cron-job-registry.ts` (`CronJobRegistry`) stores scheduled jobs through the session storage adapter and keeps a process-local fallback map when durable storage is absent. `src/execution-runtime/cron-job-runner.ts` (`CronJobRunner`) polls the registry and accepts an injected fire implementation; server boot wires that to `CronAdapter.fire(job)`.
@@ -81,8 +82,9 @@ Consumers should only use `@openomni/openomni` exports:
 - Messaging/ingress/dispatch kernel entry points from `src/ingress` and `src/dispatch`
 
 - Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
-- Scoped verifier-registry and replay-conformance library surfaces from `src/evidence/`; admission and archived replay stay outside these primitives
-- Dormant windowed Stakes primitive and driver from the dedicated `@openomni/openomni/ledger` subpath; completion, durable-ledger, and Voice consumers are not wired
+- Scoped verifier-registry and replay-conformance library surfaces from `src/evidence/`; archived replay stays outside these primitives
+- The WorkItem completion origin projector and deterministic seven-scenario Manual QA driver; the authority, fold, and terminal service stay kernel-internal
+- Windowed Stakes primitive and driver from the dedicated `@openomni/openomni/ledger` subpath; completion consumes its resolver seam while durable-ledger and Voice consumers remain separate work
 
 If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain. The dormant
 `./ledger` subpath is the one exception: `src/ledger/index.ts` exports `Stakes` and

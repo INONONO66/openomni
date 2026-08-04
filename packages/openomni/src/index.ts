@@ -91,6 +91,18 @@ export type {
   VerifierRegistryDriverScenario,
 } from "./evidence";
 
+export {
+  CompletionAdmissionDriverScenarios,
+  CompletionSourceOrigin,
+  createCompletionAdmissionService,
+  projectCompletionOrigin,
+  runCompletionAdmissionDriver,
+} from "./work-item";
+export type {
+  CompletionAdmissionDriverExecution,
+  CompletionAdmissionDriverScenario,
+} from "./work-item";
+
 // Dispatch runtime
 export {
   DEFAULT_DISPATCH_MODEL,

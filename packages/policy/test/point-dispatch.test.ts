@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyEngine } from "@openomni/policy";
+import { composeEffects, PolicyEngine } from "@openomni/policy";
 import { Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext } from "./point-test-fixtures";
 
@@ -39,33 +39,43 @@ describe("PolicyEngine dispatchPoint selection", () => {
     expect(frozen).toBe(true);
   });
 
-  test("keeps canonical timing stable after the public migration map is mutated", async () => {
-    const timing = Policy.Timing.DISPATCH_AUTHORIZE;
-    const originalMapping = Policy.PolicyPoint.MigrationMapping[timing];
+  test("keeps generic run completion and canonical WorkItem completion independent", async () => {
+    const timing = Policy.Timing.COMPLETION_PREPARE;
+    const engine = PolicyEngine.create();
+    let observedPointId: string | undefined;
+    let observedTiming: Policy.Timing | undefined;
+    engine.register({
+      kind: "point",
+      name: "work-completion-observer",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: (ctx) => {
+        observedPointId = ctx.pointId;
+        observedTiming = ctx.timing;
+        return PolicyDecision.allow({ policyId: "work-completion-observer" });
+      },
+    });
 
-    try {
-      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, ["run.lifecycle.pre"]);
-      const engine = PolicyEngine.create();
-      let observedTiming: Policy.Timing | undefined;
-      engine.register({
-        kind: "point",
-        name: "stable-timing-observer",
-        pointIds: ["dispatch.action.pre"],
-        effectCapabilities: { "dispatch.action.pre": [] },
-        priority: 0,
-        fn: (ctx) => {
-          observedTiming = ctx.timing;
-          return PolicyDecision.allow({ policyId: "stable-timing-observer" });
-        },
-      });
+    const decision = await engine.dispatchPoint("work.complete.pre", {
+      workItemHash: "wi_admission",
+      requestId: "request:completion",
+      contractRevision: "contract:v1",
+      basisRef: "basis:v1",
+      expectedHead: 7,
+      completionCandidate: { effectiveResultIds: ["result:publish"] },
+      unresolvedBlockerIds: [],
+    });
 
-      const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
-
-      expect(decision.verdict).toBe("allow");
-      expect(observedTiming).toBe(Policy.Timing.DISPATCH_AUTHORIZE);
-    } finally {
-      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, originalMapping);
-    }
+    expect(Policy.PolicyPoint.MigrationMapping[timing]).toEqual(["run.completion.pre"]);
+    expect(PolicyEngine.resolvePolicyPoints(timing)).toEqual(["run.completion.pre"]);
+    expect(PolicyEngine.resolvePolicyPoints(timing, { resourceKind: "work" })).toEqual([]);
+    expect(Object.values(Policy.PolicyPoint.MigrationMapping).flat()).not.toContain(
+      "work.complete.pre",
+    );
+    expect(decision.verdict).toBe("allow");
+    expect(observedPointId).toBe("work.complete.pre");
+    expect(observedTiming).toBe(timing);
   });
 
   test("resolves canonical timing after rejecting compatibility map mutation", async () => {
@@ -206,5 +216,40 @@ describe("PolicyEngine dispatchPoint selection", () => {
     expect(decision.verdict).toBe("allow");
     expect(decision.policyId).toBe("agent.policy.composed");
     expect(decision.effects).toEqual([]);
+  });
+});
+
+describe("WorkItem policy effect composition", () => {
+  test("merges asserted-result allowances into one stable criterion list", () => {
+    const later = PolicyDecision.allow({
+      policyId: "later-asserted-allowance",
+      priority: 10,
+      effects: [
+        {
+          type: "work.allow_asserted",
+          criterionIds: ["criterion:a", "criterion:c", "criterion:b"],
+        },
+      ],
+    });
+    const first = PolicyDecision.allow({
+      policyId: "first-asserted-allowance",
+      priority: 0,
+      effects: [
+        {
+          type: "work.allow_asserted",
+          criterionIds: ["criterion:b", "criterion:a"],
+        },
+      ],
+    });
+
+    const composed = composeEffects([later, first]);
+
+    expect(composed.verdict).toBe("allow");
+    expect(composed.mergedEffects).toEqual([
+      {
+        type: "work.allow_asserted",
+        criterionIds: ["criterion:b", "criterion:a", "criterion:c"],
+      },
+    ]);
   });
 });

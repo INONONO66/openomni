@@ -67,6 +67,7 @@ describe("conversation task ledger exhaustion escalations", () => {
       sourceChannel: "dispatch",
       intent: "worker.spawn",
       goal: "complete the exhausted task",
+      acceptanceCriteria: ["the exhausted task is complete"],
       maxAttempts: 1,
     });
     await WorkItemStore.fail(item.hash, "permanent failure");
@@ -100,6 +101,7 @@ describe("conversation task ledger exhaustion escalations", () => {
       sourceChannel: "dispatch",
       intent: "worker.spawn",
       goal: "complete the ordinary failed task",
+      acceptanceCriteria: ["the ordinary failed task is complete"],
     });
     await WorkItemStore.fail(ordinaryFailed.hash, "non-retry failure");
 
@@ -109,6 +111,7 @@ describe("conversation task ledger exhaustion escalations", () => {
       sourceChannel: "dispatch",
       intent: "worker.spawn",
       goal: "complete the resolved exhausted task",
+      acceptanceCriteria: ["the resolved exhausted task is complete"],
       maxAttempts: 1,
     });
     await WorkItemStore.fail(resolvedExhaustion.hash, "permanent failure");

@@ -115,6 +115,7 @@ export const CompletionReport = z
         z
           .object({
             claimIndex: z.number().int().nonnegative(),
+            criterionIndex: z.number().int().nonnegative(),
             request: z.discriminatedUnion("kind", [
               z
                 .object({

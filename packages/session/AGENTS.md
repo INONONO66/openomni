@@ -41,7 +41,7 @@ src/
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
 │   ├── create.ts         # Work item creation, parent linkage, Created event
 │   ├── crud.ts           # get/list/remove/update plus relation cleanup
-│   ├── lifecycle.ts      # start/complete/fail/cancel, blockers, evidence, retry, outcome
+│   ├── lifecycle.ts      # start/fail/cancel plus typed raw-completion refusal, blockers, evidence
 │   ├── mutation.ts       # mutation persistence, transition validation, Updated/StatusChanged events
 │   ├── dependency.ts     # dependency readiness + cycle detection
 │   ├── retry.ts / retry-policy.ts # retry defaults + kernel-enforced exhaustion blocker
@@ -62,7 +62,7 @@ src/
 - **Legacy task/todo tables** (`0001_initial`): remain in SQLite for data preservation, but no TypeScript storage sub-adapters expose them.
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; WorkerRun events flow through `WorkerRun.Events.*`.
 - **SurfaceKey records**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence. This package stores and looks up the mapping; `openomni` decides when the mapping wins over PendingInteraction or other routing facts.
-- **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.complete(hash, completionReport)`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.addReadBackEvidence()`, `.areDependenciesMet()`, `.retry()`. Publishes `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed) on every mutation. Gracefully degrades when `Storage.Adapter.workItem` is absent. Terminal state transitions are validated; completion requires a report whose claim evidence IDs resolve to ledger evidence. `parentHash` is create-only immutable.
+- **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.addReadBackEvidence()`, `.areDependenciesMet()`, `.retry()`, and `.recordOutcome()` own lower-layer storage semantics. `WorkItemStore.complete()` remains only as a typed `admission_required` refusal so no Session caller can close product work. OpenOmni owns completion fact/admission appends and the terminal CAS through the low-level WorkItem adapter. Generic update cannot mutate admission- or lifecycle-owned fields; `parentHash` and stable completion criteria are immutable.
 - **WorkerRun**: Stored through the direct `workerRunState` adapter (`worker_run_state` table in SQLite). `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.updateStatusIfCurrent()`, `WorkerRun.get()`, and `WorkerRun.listBySession()` publish lifecycle bus events but do not depend on event-log replay. State transitions such as `waiting_input → running` increment `resumeCount`.
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
 - **Session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child Worker trees. Future work should add explicit metadata conventions before adding new storage shapes.
@@ -93,3 +93,4 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 - Do NOT persist ad-hoc delegated execution state alongside `Session`. Until the P2 cutover, current code uses `WorkerRun`; after cutover, new writes use the canonical WorkItem attempt contract rather than extending the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.
 - Do NOT add communication routing or authority evaluation here. Session is the durable substrate; OpenOmni is the kernel.
+- Do NOT add a second completion-admission append or terminal method here. The only product completion boundary is `packages/openomni/src/work-item/`.

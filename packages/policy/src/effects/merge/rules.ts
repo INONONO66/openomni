@@ -37,6 +37,9 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   let writebackSuppress: PriorityApprovalAccumulator | undefined;
   let timeout: { readonly timeoutMs: number; readonly order: number } | undefined;
   let workspaceLock: { readonly required: boolean; readonly order: number } | undefined;
+  let allowAsserted:
+    | { readonly criterionIds: string[]; readonly order: number; readonly priority: number }
+    | undefined;
 
   for (const entry of entries) {
     const { effect } = entry;
@@ -115,9 +118,25 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
           order: Math.min(workspaceLock?.order ?? entry.order, entry.order),
         };
         break;
+      case "work.allow_asserted":
+        allowAsserted ??= { criterionIds: [], order: entry.order, priority: entry.priority };
+        for (const criterionId of effect.criterionIds) {
+          if (!allowAsserted.criterionIds.includes(criterionId)) {
+            allowAsserted.criterionIds.push(criterionId);
+          }
+        }
+        break;
       default:
         assertNever(effect);
     }
+  }
+
+  if (allowAsserted !== undefined) {
+    merged.push({
+      effect: { type: "work.allow_asserted", criterionIds: allowAsserted.criterionIds },
+      order: allowAsserted.order,
+      priority: allowAsserted.priority,
+    });
   }
 
   appendMergedEffects(merged, {

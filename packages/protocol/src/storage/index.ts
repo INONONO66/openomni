@@ -13,8 +13,9 @@ export namespace Storage {
   }
 
   export interface WorkItemSubAdapter {
+    create(hash: string, item: WorkItem.Info): boolean;
     get(hash: string): WorkItem.Info | undefined;
-    set(hash: string, item: WorkItem.Info): void;
+    compareAndSet(hash: string, expectedHead: number, item: WorkItem.Info): boolean;
     list(filter?: WorkItemListFilter): WorkItem.Info[];
     remove(hash: string): boolean;
   }

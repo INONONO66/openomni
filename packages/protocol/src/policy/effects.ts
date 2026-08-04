@@ -21,6 +21,7 @@ export namespace PolicyEffects {
     "writeback.suppress",
     "runtime.set_timeout",
     "runtime.workspace_lock",
+    "work.allow_asserted",
   ]);
   export type PolicyEffectType = z.infer<typeof PolicyEffectType>;
 
@@ -103,6 +104,10 @@ export namespace PolicyEffects {
     z.object({
       type: z.literal("runtime.workspace_lock"),
       required: z.boolean(),
+    }),
+    z.object({
+      type: z.literal("work.allow_asserted"),
+      criterionIds: z.array(z.string().min(1)),
     }),
   ]);
   export type PolicyEffect = z.infer<typeof PolicyEffect>;

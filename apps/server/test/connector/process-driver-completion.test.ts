@@ -121,7 +121,10 @@ function command(): Dispatch.Command {
     dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
-    payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
+    payload: {
+      prompt: "ship it",
+      acceptanceCriteria: ["archived source contains the recorded quote exactly"],
+    },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
   };
@@ -141,8 +144,14 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
         "    summary: 'Completed the delegated work.',",
         "    claims: [{ statement: 'Read-back passed.' }],",
         "  },",
+        "  criterionFacts: [{",
+        "    criterionIndex: 0,",
+        "    evidenceRefs: [{ source: 'read_back', requestIndex: 0 }],",
+        "    verification: { kind: 'archived_quote_match' },",
+        "  }],",
         "  readBackRequests: [{",
         "    claimIndex: 0,",
+        "    criterionIndex: 0,",
         "    request: {",
         "      kind: 'citation_match',",
         "      target: 'https://example.com/result',",
@@ -199,8 +208,15 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
         "    summary: 'Published the requested page.',",
         "    claims: [{ statement: 'The published page contains the expected marker.' }],",
         "  },",
-        "  url: 'https://example.com/result',",
-        "  marker: 'expected marker',",
+        "  criterionFacts: [{",
+        "    criterionIndex: 0,",
+        "    evidenceRefs: [{ source: 'read_back', requestIndex: 0 }],",
+        "    verification: { kind: 'archived_quote_match' },",
+        "  }],",
+        "  deliverable: {",
+        "    url: 'https://example.com/result',",
+        "    marker: 'expected marker',",
+        "  },",
         "}));",
       ].join("\n"),
     );
@@ -213,10 +229,11 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
           readBackRequests: [
             {
               claimIndex: 0,
+              criterionIndex: 0,
               request: {
                 kind: "citation_match",
-                target: "{{output.url}}",
-                quotedText: "{{output.marker}}",
+                target: "{{output.deliverable.url}}",
+                quotedText: "{{output.deliverable.marker}}",
               },
             },
           ],
@@ -292,6 +309,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
           readBackRequests: [
             {
               claimIndex: 0,
+              criterionIndex: 0,
               request: {
                 kind: "citation_match",
                 target: "{{output.url}}",

@@ -4,8 +4,16 @@ import type { CreateWorkItemInput } from "./types.js";
 
 export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem.Info {
   const maxAttempts = input.maxAttempts ?? defaultMaxAttempts(input.executorKind);
+  const hash = WorkItem.generateHash();
+  const criteria = input.acceptanceCriteria.map((statement, index) => ({
+    id: WorkItem.criterionId(hash, index, statement),
+    revision: 1,
+    statement,
+    required: true,
+  }));
   return WorkItem.Info.parse({
-    hash: WorkItem.generateHash(),
+    hash,
+    revision: 0,
     name: input.name,
     sourceMessageId: input.sourceMessageId,
     sourceChannel: input.sourceChannel,
@@ -27,9 +35,15 @@ export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem
     goal: input.goal,
     context: input.context,
     constraints: input.constraints ?? [],
-    acceptanceCriteria: input.acceptanceCriteria ?? [],
+    acceptanceCriteria: input.acceptanceCriteria,
     changedFiles: [],
     blockers: [],
     evidence: [],
+    completionContract: {
+      version: 1,
+      revision: "1",
+      basisRef: `${hash}:attempt:1`,
+    },
+    completionFacts: { ...WorkItem.emptyCompletionFacts(), criteria },
   });
 }

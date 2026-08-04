@@ -25,25 +25,39 @@ export function removeWorkItem(hash: string): boolean {
     if (parent) {
       const filtered = parent.relations.childHashes.filter((h) => h !== hash);
       if (filtered.length !== parent.relations.childHashes.length) {
-        adapter.workItem.set(parent.hash, {
-          ...parent,
-          relations: { ...parent.relations, childHashes: filtered },
-          timestamps: { ...parent.timestamps, updated: Date.now() },
-        });
+        const now = Date.now();
+        persistMutation(
+          adapter.workItem,
+          parent,
+          {
+            ...parent,
+            relations: { ...parent.relations, childHashes: filtered },
+            timestamps: { ...parent.timestamps, updated: now },
+          },
+          now,
+          ["relations"],
+        );
       }
     }
   }
 
   for (const item of adapter.workItem.list()) {
     if (item.relations.dependsOn.includes(hash)) {
-      adapter.workItem.set(item.hash, {
-        ...item,
-        relations: {
-          ...item.relations,
-          dependsOn: item.relations.dependsOn.filter((h) => h !== hash),
+      const now = Date.now();
+      persistMutation(
+        adapter.workItem,
+        item,
+        {
+          ...item,
+          relations: {
+            ...item.relations,
+            dependsOn: item.relations.dependsOn.filter((h) => h !== hash),
+          },
+          timestamps: { ...item.timestamps, updated: now },
         },
-        timestamps: { ...item.timestamps, updated: Date.now() },
-      });
+        now,
+        ["relations"],
+      );
     }
   }
 
@@ -70,13 +84,19 @@ export async function updateWorkItem(
   if (!existing) return undefined;
 
   const managedFields = [
+    "revision",
     "timestamps",
     "failureReason",
     "attempt",
+    "maxAttempts",
     "blockers",
     "evidence",
+    "acceptanceCriteria",
+    "completionContract",
+    "completionFacts",
     "completionReport",
     "verificationGate",
+    "completionTerminalReceipt",
     "outcome",
   ] as const;
   for (const key of managedFields) {

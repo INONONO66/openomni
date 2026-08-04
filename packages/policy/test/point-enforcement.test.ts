@@ -18,6 +18,23 @@ function assertDispatchPointRequiresPointInput(engine: ReturnType<typeof PolicyE
 }
 void assertDispatchPointRequiresPointInput;
 
+const workCompletionContext = {
+  workItemHash: "wi_admission",
+  requestId: "request:completion",
+  contractRevision: "contract:v1",
+  basisRef: "basis:v1",
+  expectedHead: 7,
+  completionCandidate: { effectiveResultIds: ["result:publish"] },
+  unresolvedBlockerIds: ["blocker:effect-pending"],
+  resourceDescriptor: {
+    id: "work:wi_admission",
+    kind: "work" as const,
+    labels: [],
+    capabilities: [],
+    effects: [],
+  },
+} satisfies Policy.PolicyPointInputMap["work.complete.pre"];
+
 describe("PolicyEngine dispatchPoint", () => {
   test("denies missing pre-boundary context before middleware runs", async () => {
     const engine = PolicyEngine.create();
@@ -161,6 +178,51 @@ describe("PolicyEngine dispatchPoint", () => {
       expect(decision.verdict).toBe(testCase.verdict);
       expect(decision.reasonCodes).toEqual(testCase.reason === undefined ? [] : [testCase.reason]);
     }
+  });
+
+  test("keeps a WorkItem completion denial authoritative over asserted-result allowance", async () => {
+    const pointId = "work.complete.pre";
+    const allowAsserted = {
+      type: "work.allow_asserted",
+      criterionIds: ["criterion:publish"],
+    } satisfies Policy.PolicyEffect;
+    const engine = PolicyEngine.create();
+    const evaluated: string[] = [];
+    engine.register({
+      kind: "point",
+      name: "allow-low-asserted",
+      pointIds: [pointId],
+      effectCapabilities: { [pointId]: [allowAsserted.type] },
+      priority: 0,
+      fn: () => {
+        evaluated.push("allow");
+        return PolicyDecision.allow({
+          policyId: "allow-low-asserted",
+          effects: [allowAsserted],
+        });
+      },
+    });
+    engine.register({
+      kind: "point",
+      name: "block-unresolved-work",
+      pointIds: [pointId],
+      effectCapabilities: { [pointId]: [] },
+      priority: 1,
+      fn: () => {
+        evaluated.push("deny");
+        return PolicyDecision.deny({
+          policyId: "block-unresolved-work",
+          reasonCodes: ["work.completion_blocked"],
+        });
+      },
+    });
+
+    const decision = await engine.dispatchPoint(pointId, workCompletionContext);
+
+    expect(evaluated).toEqual(["allow", "deny"]);
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("work.completion_blocked");
+    expect(decision.effects.some((effect) => effect.type === "work.allow_asserted")).toBe(false);
   });
 
   test("denies invalid canonical middleware decisions deterministically", async () => {

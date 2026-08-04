@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Operational, WorkItem } from "@openomni/protocol";
+import { ZodError } from "zod";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
@@ -11,6 +12,7 @@ const baseInput = {
   intent: "implement",
   goal: "verify work-item store behavior",
   sessionId: "session_1",
+  acceptanceCriteria: ["the requested behavior is verified"],
 };
 
 const adapters: SqliteStorageAdapter[] = [];
@@ -23,7 +25,7 @@ function configureSqlite(): SqliteStorageAdapter {
 }
 
 async function flushBus(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
 }
 
 async function createItem(
@@ -69,6 +71,89 @@ function completionReport(evidenceId: string): WorkItem.CompletionReport {
   };
 }
 
+function persistCompletedFixture(
+  hash: string,
+  report: WorkItem.CompletionReport,
+): WorkItem.Info | undefined {
+  const adapter = Storage.get().workItem;
+  const current = adapter?.get(hash);
+  if (!adapter || !current) return undefined;
+  const admission = WorkItem.CompletionAdmission.parse({
+    version: 1,
+    id: `admission:${hash}:${current.revision + 1}:session-fixture`,
+    requestId: `completion-request:${hash}:${current.revision}:session-fixture`,
+    requestSnapshot: WorkItem.CompletionRequest.parse({
+      version: 1,
+      id: `completion-request:${hash}:${current.revision}:session-fixture`,
+      origin: "recovery",
+      workItemHash: hash,
+      contractRevision: current.completionContract.revision,
+      basisRef: current.completionContract.basisRef,
+      expectedHead: current.revision,
+      claims: [],
+      observations: [],
+      results: [],
+      invalidations: [],
+      verificationErrors: [],
+      effects: [],
+    }),
+    origin: "recovery",
+    contractRevision: current.completionContract.revision,
+    basisRef: current.completionContract.basisRef,
+    effectiveResultIds: [],
+    unresolvedCriterionIds: [],
+    decision: "admit",
+    reasonCodes: ["session_storage_fixture"],
+    residualRisks: [],
+    policyRef: "policy:session-storage-fixture",
+    expectedHead: current.revision,
+    recordedHead: current.revision + 1,
+    createdAt: current.timestamps.updated + 1,
+  });
+  const admitted = WorkItem.Info.parse({
+    ...current,
+    revision: admission.recordedHead,
+    completionFacts: {
+      ...current.completionFacts,
+      revision: current.completionFacts.revision + 1,
+      admissions: [...current.completionFacts.admissions, admission],
+    },
+    timestamps: { ...current.timestamps, updated: admission.createdAt },
+  });
+  if (!adapter.compareAndSet(hash, current.revision, admitted)) return undefined;
+  const completedAt = admission.createdAt + 1;
+  const completed = WorkItem.Info.parse({
+    ...admitted,
+    revision: admitted.revision + 1,
+    completionReport: report,
+    completionTerminalReceipt: {
+      version: 1,
+      hash,
+      requestId: admission.requestId,
+      admissionId: admission.id,
+      contractRevision: admission.contractRevision,
+      basisRef: admission.basisRef,
+      recordedHead: admitted.revision + 1,
+    },
+    timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
+  });
+  return adapter.compareAndSet(hash, admitted.revision, completed) ? completed : undefined;
+}
+
+async function rawCompletionCode(
+  hash: string,
+  report: WorkItem.CompletionReport,
+): Promise<unknown> {
+  try {
+    await WorkItemStore.complete(hash, report);
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    if (typeof error !== "object" || error === null) throw error;
+    return Reflect.get(error, "code");
+  }
+  return undefined;
+}
+
 afterEach(() => {
   Bus.reset();
   Storage.reset();
@@ -78,32 +163,28 @@ afterEach(() => {
 });
 
 describe("WorkItemStore", () => {
-  test("runs the full lifecycle and publishes lifecycle events", async () => {
+  test("publishes non-terminal lifecycle events and reads a completed storage fixture", async () => {
     configureSqlite();
     const events: string[] = [];
     Bus.subscribe(WorkItem.Events.Created, () => events.push("created"));
     Bus.subscribe(WorkItem.Events.StatusChanged, (event) =>
       events.push(`status:${event.payload.from}->${event.payload.to}`),
     );
-    Bus.subscribe(WorkItem.Events.Completed, () => events.push("completed"));
-
     const item = await createItem("lifecycle");
     const started = await WorkItemStore.start(item.hash);
     const evidenceId = await addPassingEvidence(item.hash);
     const withEvidence = WorkItemStore.get(item.hash);
-    const completed = await WorkItemStore.complete(item.hash, completionReport(evidenceId));
+    const completed = persistCompletedFixture(item.hash, completionReport(evidenceId));
     await flushBus();
 
     expect(started).toBeDefined();
     expect(withEvidence?.evidence).toHaveLength(1);
     expect(completed).toBeDefined();
     expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
-    expect(events).toEqual([
-      "created",
-      "status:pending->running",
-      "status:running->completed",
-      "completed",
-    ]);
+    expect(events).toEqual(["created", "status:pending->running"]);
+    expect(completed?.completionTerminalReceipt?.admissionId).toBe(
+      completed?.completionFacts.admissions[0]?.id,
+    );
   });
 
   test("records Owner outcome feedback for completed work items", async () => {
@@ -118,7 +199,7 @@ describe("WorkItemStore", () => {
 
     const item = await createItem("owner-outcome");
     const evidenceId = await addPassingEvidence(item.hash);
-    await WorkItemStore.complete(item.hash, completionReport(evidenceId));
+    persistCompletedFixture(item.hash, completionReport(evidenceId));
 
     const recorded = await WorkItemStore.recordOutcome(item.hash, "corrected");
     await flushBus();
@@ -149,6 +230,97 @@ describe("WorkItemStore", () => {
     );
   });
 
+  test("requires nonempty acceptance criteria when creating a WorkItem", async () => {
+    configureSqlite();
+
+    try {
+      await WorkItemStore.create({
+        ...baseInput,
+        name: "missing-criteria",
+        acceptanceCriteria: [],
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ZodError);
+      if (!(error instanceof ZodError)) throw error;
+      expect(error.issues.map(({ path }) => path[0])).toContain("acceptanceCriteria");
+      return;
+    }
+    throw new Error("expected empty acceptanceCriteria to be rejected");
+  });
+
+  test("increments the shared WorkItem row revision once for an ordinary mutation", async () => {
+    configureSqlite();
+    const item = await createItem("shared-row-revision");
+
+    const updated = await WorkItemStore.update(item.hash, { name: "shared-row-revision-updated" });
+
+    expect(item).toMatchObject({ revision: 0 });
+    expect(updated).toMatchObject({ revision: 1 });
+    expect(updated?.completionFacts.revision).toBe(item.completionFacts.revision);
+  });
+
+  const immutableUpdates: ReadonlyArray<
+    readonly [string, (item: WorkItem.Info) => Partial<Omit<WorkItem.Info, "hash">>]
+  > = [
+    ["acceptance criteria", () => ({ acceptanceCriteria: ["replacement"] })],
+    [
+      "completion contract",
+      () => ({
+        completionContract: {
+          version: 1,
+          revision: "contract:replacement",
+          basisRef: "basis:replacement",
+        },
+      }),
+    ],
+    [
+      "completion facts",
+      (item) => ({
+        completionFacts: { ...item.completionFacts, revision: item.completionFacts.revision + 1 },
+      }),
+    ],
+    [
+      "legacy completion report archive",
+      () => ({
+        completionReport: {
+          summary: "Replacement archive.",
+          claims: [{ statement: "replacement", evidenceIds: ["evidence:replacement"] }],
+          caveats: [],
+          followUps: [],
+        },
+      }),
+    ],
+    [
+      "legacy verification gate archive",
+      () => ({ verificationGate: { acceptance: { passed: true, criteria: [] } } }),
+    ],
+    [
+      "terminal receipt",
+      (item) => ({
+        name: item.name,
+        completionTerminalReceipt: {
+          version: 1,
+          hash: item.hash,
+          requestId: "completion-request:replacement",
+          admissionId: "admission:replacement",
+          contractRevision: item.completionContract.revision,
+          basisRef: item.completionContract.basisRef,
+          recordedHead: 1,
+        },
+      }),
+    ],
+    ["retry limit", () => ({ maxAttempts: 99 })],
+  ];
+
+  test.each(
+    immutableUpdates,
+  )("rejects update rewrites of immutable %s", async (_field, replacement) => {
+    configureSqlite();
+    const item = await createItem(`immutable-${_field}`);
+
+    await expect(WorkItemStore.update(item.hash, replacement(item))).rejects.toThrow();
+  });
+
   test("records the latest Owner outcome when feedback changes", async () => {
     configureSqlite();
     const outcomes: WorkItem.Outcome[] = [];
@@ -156,7 +328,7 @@ describe("WorkItemStore", () => {
 
     const item = await createItem("owner-outcome-update");
     const evidenceId = await addPassingEvidence(item.hash);
-    await WorkItemStore.complete(item.hash, completionReport(evidenceId));
+    persistCompletedFixture(item.hash, completionReport(evidenceId));
     await WorkItemStore.recordOutcome(item.hash, "adopted");
     const updated = await WorkItemStore.recordOutcome(item.hash, "corrected");
     await flushBus();
@@ -206,7 +378,7 @@ describe("WorkItemStore", () => {
 
     await WorkItemStore.retry(dependency.hash);
     const evidenceId = await addPassingEvidence(dependency.hash);
-    await WorkItemStore.complete(dependency.hash, completionReport(evidenceId));
+    persistCompletedFixture(dependency.hash, completionReport(evidenceId));
 
     expect(WorkItemStore.areDependenciesMet(dependent.hash)).toEqual({
       met: true,
@@ -227,17 +399,17 @@ describe("WorkItemStore", () => {
     );
   });
 
-  test("rejects completing a failed item", async () => {
+  test("rejects raw completion of a failed item without mutation", async () => {
     configureSqlite();
     const item = await createItem("fail-then-complete");
     const evidenceId = await addPassingEvidence(item.hash);
-
     await WorkItemStore.fail(item.hash, "broken");
+    const before = WorkItemStore.get(item.hash);
 
-    await expectRejectsWithMessage(
-      WorkItemStore.complete(item.hash, completionReport(evidenceId)),
-      "Cannot complete a failed work item",
-    );
+    const code = await rawCompletionCode(item.hash, completionReport(evidenceId));
+
+    expect(code).toBe("admission_required");
+    expect(WorkItemStore.get(item.hash)).toEqual(before);
   });
 
   test("rejects failing a completed item", async () => {
@@ -245,7 +417,7 @@ describe("WorkItemStore", () => {
     const item = await createItem("complete-then-fail");
 
     const evidenceId = await addPassingEvidence(item.hash);
-    await WorkItemStore.complete(item.hash, completionReport(evidenceId));
+    persistCompletedFixture(item.hash, completionReport(evidenceId));
 
     await expectRejectsWithMessage(
       WorkItemStore.fail(item.hash),
@@ -266,7 +438,7 @@ describe("WorkItemStore", () => {
     );
   });
 
-  test("retries failed work items with a new attempt and running status", async () => {
+  test("retries failed work items with a new basis and stable completion contract", async () => {
     configureSqlite();
     const item = await createItem("retry");
     const failed = await WorkItemStore.fail(item.hash, "transient error");
@@ -278,6 +450,10 @@ describe("WorkItemStore", () => {
     expect(retried?.timestamps.failed).toBeUndefined();
     expect(retried?.timestamps.started).toBeNumber();
     expect(retried ? WorkItem.deriveStatus(retried) : undefined).toBe("running");
+    expect(retried?.completionContract.revision).toBe(item.completionContract.revision);
+    expect(retried?.completionContract.basisRef).not.toBe(item.completionContract.basisRef);
+    expect(retried?.acceptanceCriteria).toEqual(item.acceptanceCriteria);
+    expect(retried?.completionFacts.criteria).toEqual(item.completionFacts.criteria);
   });
 
   test("defaults internal worker items to three max attempts", async () => {
@@ -474,22 +650,20 @@ describe("WorkItemStore", () => {
     );
   });
 
-  test("rejects completion reports without resolvable evidence", async () => {
+  test("requires admission before inspecting unresolved report evidence", async () => {
     configureSqlite();
     const item = await createItem("missing-evidence");
     await WorkItemStore.start(item.hash);
 
-    await expectRejectsWithMessage(
-      WorkItemStore.complete(item.hash, completionReport("ev_missing")),
-      "completion report references missing evidence",
-    );
+    const code = await rawCompletionCode(item.hash, completionReport("ev_missing"));
 
     const stored = WorkItemStore.get(item.hash);
+    expect(code).toBe("admission_required");
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
     expect(stored?.completionReport).toBeUndefined();
   });
 
-  test("rejects completion reports that cite failed evidence", async () => {
+  test("requires admission before inspecting failed report evidence", async () => {
     configureSqlite();
     const item = await createItem("failed-evidence");
     await WorkItemStore.start(item.hash);
@@ -503,12 +677,10 @@ describe("WorkItemStore", () => {
     const evidenceId = updated?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("expected evidence id");
 
-    await expectRejectsWithMessage(
-      WorkItemStore.complete(item.hash, completionReport(evidenceId)),
-      "completion report references failed evidence",
-    );
+    const code = await rawCompletionCode(item.hash, completionReport(evidenceId));
 
     const stored = WorkItemStore.get(item.hash);
+    expect(code).toBe("admission_required");
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
     expect(stored?.completionReport).toBeUndefined();
   });
@@ -570,10 +742,11 @@ describe("WorkItemStore", () => {
   test("publishes bus events after adapter writes", async () => {
     const adapter = configureSqlite();
     const order: string[] = [];
-    const originalSet = adapter.workItem.set.bind(adapter.workItem);
-    adapter.workItem.set = (hash, item) => {
-      originalSet(hash, item);
-      order.push(`write:${hash}`);
+    const originalCreate = adapter.workItem.create.bind(adapter.workItem);
+    adapter.workItem.create = (hash, item) => {
+      const created = originalCreate(hash, item);
+      if (created) order.push(`write:${hash}`);
+      return created;
     };
     Bus.subscribe(WorkItem.Events.Created, (event) => order.push(`event:${event.payload.hash}`));
 

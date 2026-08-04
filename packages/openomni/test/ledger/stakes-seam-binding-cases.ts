@@ -27,9 +27,14 @@ type VoiceMutation = BindingMutation<VoiceStakesBinding>;
 const completionMutations: readonly CompletionMutation[] = [
   ...sharedBindingMutations,
   mutation("workItemHash", (binding) => ({ ...binding, workItemHash: "wi_other" })),
+  mutation("requestId", (binding) => ({ ...binding, requestId: "request_other" })),
   mutation("contractRevision", (binding) => ({
     ...binding,
-    contractRevision: binding.contractRevision + 1,
+    contractRevision: `${binding.contractRevision}:other`,
+  })),
+  mutation("expectedHead", (binding) => ({
+    ...binding,
+    expectedHead: binding.expectedHead + 1,
   })),
 ];
 

@@ -1,3 +1,4 @@
+import { PolicyEngine } from "@openomni/policy";
 import { Execution, type Dispatch, type Model } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
@@ -11,16 +12,14 @@ import {
   isConnectorEndpointTarget,
 } from "./connector-endpoint-worker.js";
 import { projectConnectorCompletion } from "./connector-completion-projector.js";
-import {
-  ignoreWorkItemReflectionFailure,
-  reflectCoordinatorResult,
-  type WorkerCompletionOptions,
-} from "./worker-completion.js";
+import { reflectCoordinatorResult, type WorkerCompletionOptions } from "./worker-completion.js";
 import { buildWorkerSpawnRequest, parseWorkerSpawnPayload } from "./worker-spawn-payload.js";
 import { createWorkerSpawnWorkItem } from "./worker-work-item.js";
 import { extractText } from "./shared.js";
 
-export interface WorkerDispatchHandlerOptions extends WorkerCompletionOptions {
+export interface WorkerDispatchHandlerOptions
+  extends Omit<WorkerCompletionOptions, "sourceOrigin" | "completionPolicyEngine"> {
+  readonly completionPolicyEngine?: WorkerCompletionOptions["completionPolicyEngine"];
   readonly coordinator?: CoordinatorLike;
   readonly connectorEndpointDriver?: ConnectorEndpointDriverOwner;
   readonly defaultModel?: Model.Ref;
@@ -62,12 +61,33 @@ function resolveCompletedWorkItemHash(
   command: Dispatch.Command,
   payload: WorkerCompletePayload,
 ): string {
-  if (payload.workItemHash !== undefined) return payload.workItemHash;
-  const workerRunId = command.target.runId ?? payload.result.runId;
-  const workItem = WorkItemStore.list().find((item) => item.workerRunId === workerRunId);
-  if (workItem === undefined) {
-    throw new Error(`worker.complete could not resolve WorkItem for run ${workerRunId}`);
+  const targetRunId = command.target.runId;
+  if (!targetRunId) throw new Error("worker.complete requires target.runId");
+  if (targetRunId !== payload.result.runId) {
+    throw new Error(
+      `worker.complete run mismatch: target=${targetRunId} result=${payload.result.runId}`,
+    );
   }
+
+  if (payload.workItemHash !== undefined) {
+    const workItem = WorkItemStore.get(payload.workItemHash);
+    if (!workItem) throw new Error(`worker.complete WorkItem not found: ${payload.workItemHash}`);
+    if (workItem.workerRunId !== targetRunId) {
+      throw new Error(
+        `worker.complete run mismatch: workItem=${workItem.workerRunId ?? "missing"} target=${targetRunId}`,
+      );
+    }
+    return workItem.hash;
+  }
+
+  const matches = WorkItemStore.list().filter((item) => item.workerRunId === targetRunId);
+  if (matches.length !== 1) {
+    throw new Error(
+      `worker.complete requires exactly one WorkItem for run ${targetRunId}: found ${matches.length}`,
+    );
+  }
+  const workItem = matches[0];
+  if (!workItem) throw new Error(`worker.complete WorkItem not found for run ${targetRunId}`);
   return workItem.hash;
 }
 
@@ -84,12 +104,15 @@ export function createWorkerDispatchHandlers(
 > {
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const policyResolver = options.policyResolver ?? PolicyResolver.create();
+  const completionPolicyEngine = options.completionPolicyEngine ?? PolicyEngine.create();
   return {
     async "worker.spawn"(command) {
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
           driver: options.connectorEndpointDriver,
+          completionPolicyEngine,
+          stakesResolver: options.stakesResolver,
           readBack: options.readBack,
           readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
           readBackRecorder: options.readBackRecorder,
@@ -115,14 +138,17 @@ export function createWorkerDispatchHandlers(
       try {
         result = await coordinator.dispatch(request.sessionId, request);
       } catch (err) {
-        await ignoreWorkItemReflectionFailure(() =>
-          WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err)),
-        );
+        await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
         throw err;
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine,
+        stakesResolver: options.stakesResolver,
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+        readBackRecorder: options.readBackRecorder,
+        now: options.now,
       });
       return {
         output: {
@@ -139,6 +165,8 @@ export function createWorkerDispatchHandlers(
       const payload = parseWorkerCompletePayload(command.payload);
       const workItemHash = resolveCompletedWorkItemHash(command, payload);
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
+        completionPolicyEngine,
+        stakesResolver: options.stakesResolver,
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
         readBackRecorder: options.readBackRecorder,

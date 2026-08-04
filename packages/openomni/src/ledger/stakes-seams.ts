@@ -154,6 +154,10 @@ export function createStakesBroker(authority: StakesAuthorityPort) {
       context: Object.freeze({
         surface: "work.complete.pre",
         workItemHash: binding.data.workItemHash,
+        requestId: binding.data.requestId,
+        contractRevision: binding.data.contractRevision,
+        basisRef: binding.data.basisRef,
+        expectedHead: binding.data.expectedHead,
         stakes: record.stakes,
       }),
     });

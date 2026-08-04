@@ -1,7 +1,15 @@
+import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Execution } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
+import type { CompletionStakesResolver } from "../../work-item/index.js";
+import type { CompletionSourceOrigin } from "../../work-item/completion-origin.js";
+import {
+  admitWorkerCompletion,
+  WorkerCriterionFactInput,
+  type WorkerReadBackEvidenceBinding,
+} from "./worker-completion-admission.js";
 
 const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
@@ -40,20 +48,34 @@ const CompletionReportDraft = z
             statement: z.string().min(1),
             evidenceIds: z.array(z.string().min(1)).default([]),
           })
-          .passthrough(),
+          .strict(),
       )
       .min(1),
     caveats: z.array(z.string().min(1)).default([]),
     followUps: z.array(z.string().min(1)).default([]),
   })
-  .passthrough();
+  .strict();
 
 const CompletionEnvelope = z
   .object({
+    deliverable: z.unknown().optional(),
     completionReport: CompletionReportDraft,
+    criterionFacts: z.array(WorkerCriterionFactInput).min(1).max(256),
     readBackRequests: z.array(ReadBackRequestEnvelope).max(MAX_READ_BACK_REQUESTS).default([]),
   })
+  .strict()
   .superRefine((envelope, ctx) => {
+    const criterionIndexes = new Set<number>();
+    for (const [factIndex, fact] of envelope.criterionFacts.entries()) {
+      if (criterionIndexes.has(fact.criterionIndex)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `duplicate criterionIndex ${fact.criterionIndex}`,
+          path: ["criterionFacts", factIndex, "criterionIndex"],
+        });
+      }
+      criterionIndexes.add(fact.criterionIndex);
+    }
     for (const [requestIndex, readBack] of envelope.readBackRequests.entries()) {
       if (readBack.claimIndex >= envelope.completionReport.claims.length) {
         ctx.addIssue({
@@ -72,7 +94,12 @@ type ParsedCompletionEnvelope =
   | { readonly ok: true; readonly envelope: CompletionEnvelope }
   | { readonly ok: false; readonly reason: string };
 
+export type CompletionPolicyEngine = ReturnType<typeof PolicyEngine.create>;
+
 export interface WorkerCompletionOptions {
+  readonly sourceOrigin: CompletionSourceOrigin;
+  readonly completionPolicyEngine: CompletionPolicyEngine;
+  readonly stakesResolver?: CompletionStakesResolver;
   readonly readBack?: ReadBackExecutor.Options;
   readonly readBackEnvelopeTimeoutMs?: number;
   readonly readBackRecorder?: typeof ReadBackExecutor.record;
@@ -88,7 +115,7 @@ export type CompletionReflection = {
 export async function reflectCoordinatorResult(
   workItemHash: string,
   result: Execution.Result,
-  options: WorkerCompletionOptions = {},
+  options: WorkerCompletionOptions,
 ): Promise<CompletionReflection> {
   if (result.status === "succeeded") {
     const parsed = parseCompletionEnvelope(result);
@@ -96,37 +123,37 @@ export async function reflectCoordinatorResult(
       return blockCompletion(workItemHash, parsed.reason);
     }
     try {
-      const completionReport = await prepareCompletionReport(
+      const prepared = await prepareCompletionReport(workItemHash, parsed.envelope, options);
+      const outcome = await admitWorkerCompletion({
         workItemHash,
-        parsed.envelope,
-        options,
-      );
-      await WorkItemStore.complete(workItemHash, completionReport);
+        result,
+        sourceOrigin: options.sourceOrigin,
+        criterionFacts: parsed.envelope.criterionFacts,
+        completionReport: prepared.report,
+        policyEngine: options.completionPolicyEngine,
+        readBackEvidenceBindings: prepared.readBackEvidenceBindings,
+        ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
+        now: options.now ?? Date.now,
+      });
+      if (!outcome.completed) {
+        return blockCompletion(
+          workItemHash,
+          `completion admission ${outcome.admission.decision}: ${outcome.admission.reasonCodes.join(", ")}`,
+        );
+      }
       return completionReflection(workItemHash, false);
     } catch (err) {
       return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
     }
   }
   if (result.status === "cancelled") {
-    await ignoreWorkItemReflectionFailure(() => WorkItemStore.cancel(workItemHash));
+    await WorkItemStore.cancel(workItemHash);
     return completionReflection(workItemHash, false);
   }
   if (result.status === "failed" || result.status === "interrupted") {
-    await ignoreWorkItemReflectionFailure(() =>
-      WorkItemStore.fail(workItemHash, result.error ?? result.status),
-    );
+    await WorkItemStore.fail(workItemHash, result.error ?? result.status);
   }
   return completionReflection(workItemHash, false);
-}
-
-export async function ignoreWorkItemReflectionFailure(
-  reflect: () => Promise<unknown>,
-): Promise<void> {
-  try {
-    await reflect();
-  } catch {
-    return;
-  }
 }
 
 function parseCompletionEnvelope(result: Execution.Result): ParsedCompletionEnvelope {
@@ -135,7 +162,10 @@ function parseCompletionEnvelope(result: Execution.Result): ParsedCompletionEnve
   if (!parsedJson.ok) return { ok: false, reason: "completion report is required" };
   const parsed = CompletionEnvelope.safeParse(parsedJson.value);
   if (parsed.success) return { ok: true, envelope: parsed.data };
-  return { ok: false, reason: `completion report is invalid: ${parsed.error.issues[0]?.message}` };
+  const issue = parsed.error.issues[0];
+  const field = issue?.path.join(".");
+  const detail = field && issue ? `${field}: ${issue.message}` : issue?.message;
+  return { ok: false, reason: `completion report is invalid: ${detail}` };
 }
 
 function parseJson(input: string): { ok: true; value: unknown } | { ok: false } {
@@ -146,20 +176,34 @@ function parseJson(input: string): { ok: true; value: unknown } | { ok: false } 
   }
 }
 
+type PreparedCompletionReport = Readonly<{
+  report: WorkItem.CompletionReport;
+  readBackEvidenceBindings: ReadonlyMap<number, WorkerReadBackEvidenceBinding>;
+}>;
+
 async function prepareCompletionReport(
   workItemHash: string,
   envelope: CompletionEnvelope,
   options: WorkerCompletionOptions,
-): Promise<WorkItem.CompletionReport> {
+): Promise<PreparedCompletionReport> {
   if (envelope.readBackRequests.length === 0) {
-    return WorkItem.CompletionReport.parse(envelope.completionReport);
+    return {
+      report: WorkItem.CompletionReport.parse(envelope.completionReport),
+      readBackEvidenceBindings: new Map(),
+    };
   }
 
+  const item = WorkItemStore.get(workItemHash);
+  if (!item) throw new Error(`WorkItem not found: ${workItemHash}`);
   const evidenceIdsByClaim = new Map<number, string[]>();
+  const readBackEvidenceBindings = new Map<number, WorkerReadBackEvidenceBinding>();
   const now = options.now ?? Date.now;
   const recordReadBack = options.readBackRecorder ?? ReadBackExecutor.record;
   const deadlineAt = now() + resolveReadBackEnvelopeTimeoutMs(options);
-  for (const readBack of envelope.readBackRequests) {
+  for (const [requestIndex, readBack] of envelope.readBackRequests.entries()) {
+    if (!item.completionFacts.criteria[readBack.criterionIndex]) {
+      throw new Error(`read-back completion criterion is unknown: ${readBack.criterionIndex}`);
+    }
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
     const updated = await recordReadBack(
@@ -172,12 +216,19 @@ async function prepareCompletionReport(
     if (!evidenceId) throw new Error("read-back evidence was not recorded");
     const existing = evidenceIdsByClaim.get(readBack.claimIndex) ?? [];
     evidenceIdsByClaim.set(readBack.claimIndex, [...existing, evidenceId]);
+    readBackEvidenceBindings.set(requestIndex, {
+      evidenceId,
+      criterionIndex: readBack.criterionIndex,
+    });
   }
 
-  return WorkItem.CompletionReport.parse({
-    ...envelope.completionReport,
-    claims: attachReadBackEvidence(envelope.completionReport, evidenceIdsByClaim),
-  });
+  return {
+    report: WorkItem.CompletionReport.parse({
+      ...envelope.completionReport,
+      claims: attachReadBackEvidence(envelope.completionReport, evidenceIdsByClaim),
+    }),
+    readBackEvidenceBindings,
+  };
 }
 
 function attachReadBackEvidence(
@@ -185,11 +236,11 @@ function attachReadBackEvidence(
   evidenceIdsByClaim: ReadonlyMap<number, readonly string[]>,
 ): WorkItem.CompletionReport["claims"] {
   return report.claims.map((claim, index) => {
-    const readBackEvidenceIds = evidenceIdsByClaim.get(index);
-    if (!readBackEvidenceIds) return claim;
+    const claimReadBackEvidence = evidenceIdsByClaim.get(index);
+    if (!claimReadBackEvidence) return claim;
     return {
       ...claim,
-      evidenceIds: [...claim.evidenceIds, ...readBackEvidenceIds],
+      evidenceIds: [...claim.evidenceIds, ...claimReadBackEvidence],
     };
   });
 }
@@ -221,12 +272,10 @@ async function blockCompletion(
   workItemHash: string,
   description: string,
 ): Promise<CompletionReflection> {
-  await ignoreWorkItemReflectionFailure(() =>
-    WorkItemStore.addBlocker(workItemHash, {
-      kind: "error",
-      description,
-    }),
-  );
+  await WorkItemStore.addBlocker(workItemHash, {
+    kind: "error",
+    description,
+  });
   return completionReflection(workItemHash, true, description);
 }
 

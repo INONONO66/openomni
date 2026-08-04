@@ -14,27 +14,20 @@ export async function startWorkItem(hash: string): Promise<WorkItem.Info | undef
   }));
 }
 
+class CompletionAdmissionRequiredError extends Error {
+  readonly name = "CompletionAdmissionRequiredError";
+  readonly code = "admission_required";
+
+  constructor() {
+    super("completion admission is required before closing a WorkItem");
+  }
+}
+
 export async function completeWorkItem(
-  hash: string,
-  completionReport: WorkItem.CompletionReport,
+  _hash: string,
+  _completionReport: WorkItem.CompletionReport,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
-    changedFields: ["timestamps", "completionReport"],
-    target: "completed",
-    updated: {
-      ...existing,
-      completionReport: verifyCompletionReport(existing, completionReport),
-      timestamps: { ...existing.timestamps, completed: now, updated: now },
-    },
-    afterPublish: (updated) => {
-      Bus.publish(WorkItem.Events.Completed, {
-        traceId: crypto.randomUUID(),
-        time: now,
-        sessionId: updated.sessionId,
-        payload: { hash, sessionId: updated.sessionId },
-      });
-    },
-  }));
+  throw new CompletionAdmissionRequiredError();
 }
 
 export async function failWorkItem(
@@ -134,30 +127,4 @@ export const areDependenciesMet = areWorkItemDependenciesMet;
 
 export async function retryStoredWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
   return retryWorkItem(hash, Storage.get().workItem, persistMutation);
-}
-
-// merged from completion-report.ts (#453 hygiene: sub-30-LOC single-importer)
-
-export function verifyCompletionReport(
-  item: WorkItem.Info,
-  completionReport: WorkItem.CompletionReport,
-): WorkItem.CompletionReport {
-  const report = WorkItem.CompletionReport.parse(completionReport);
-  const evidenceById = new Map(item.evidence.map((evidence) => [evidence.id, evidence]));
-  const missing = report.claims.flatMap((claim) =>
-    claim.evidenceIds.filter((evidenceId) => !evidenceById.has(evidenceId)),
-  );
-  if (missing.length > 0) {
-    throw new Error(`completion report references missing evidence: ${missing.join(", ")}`);
-  }
-  const failed = report.claims.flatMap((claim) =>
-    claim.evidenceIds.filter((evidenceId) => {
-      const evidence = evidenceById.get(evidenceId);
-      return evidence?.passed === false || evidence?.readBack?.passed === false;
-    }),
-  );
-  if (failed.length > 0) {
-    throw new Error(`completion report references failed evidence: ${failed.join(", ")}`);
-  }
-  return report;
 }

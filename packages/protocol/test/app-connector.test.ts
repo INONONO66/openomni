@@ -288,6 +288,7 @@ describe("AppConnector protocol domain", () => {
             readBackRequests: [
               {
                 claimIndex: 0,
+                criterionIndex: 0,
                 request: {
                   kind: "citation_match",
                   target: "{{output.url}}",
@@ -296,6 +297,7 @@ describe("AppConnector protocol domain", () => {
               },
               {
                 claimIndex: 1,
+                criterionIndex: 1,
                 request: {
                   kind: "api_query",
                   target: "{{output.apiUrl}}",
@@ -328,6 +330,7 @@ describe("AppConnector protocol domain", () => {
             readBackRequests: [
               {
                 claimIndex: 0,
+                criterionIndex: 0,
                 request: {
                   kind: "api_query",
                   target: "{{output.apiUrl}}",

@@ -21,8 +21,8 @@ Documentation may use "guaranteed", "cannot", or "never" only for rows marked �
 | Session ownership and isolation | 🚧 | Current session separation is wired; the target owner/origin/purpose model and WorkItem-attempt absorption are not. |
 | Append-only, record-before-act decisions through `Ledger.append(event, expectedHead)` | 📋 | Target contract; current Bus persistence is not the serialized/CAS write gate. |
 | WorkItem creation requires ≥1 acceptance criterion | Implemented check | WorkItem schema and `worker.spawn` handling; not promoted to the structural-guarantee set. |
-| Completion claims require resolvable evidence | Implemented check | Current `WorkItemStore.complete()` / worker-completion gate; the future `work.complete.pre` point is not the source of this check. |
-| WorkItem terminal completion has one contract-closing admission authority | 📋 | P2 #490 target. Current callers may still reach `WorkItemStore.complete()` after the narrower evidence-reference gate; there is no durable `CompletionAdmission`, contract-revision/basis CAS, or origin-convergence guarantee yet. |
+| Completion claims remain distinct from observations and scoped criterion results | ✅ | The Worker completion projector binds each criterion to durable WorkItem-local evidence, resolves verifier input from those records, executes deterministic verifier-registry checks, and never promotes claimant prose, process exit, an unbound artifact, or a check of a different predicate into a result. |
+| WorkItem terminal completion has one contract-closing admission authority | ✅ | `packages/openomni/src/work-item/` folds current contract/basis/facts/blockers, dispatches fail-closed `work.complete.pre`, records a CAS-bound admission before terminal completion, and resumes idempotently after restart. Session raw completion is a typed refusal. |
 | Retry exhaustion adds a blocker and reaches the current Owner-visible task surface | Implemented check | WorkItem retry enforcement and the authenticated local `show open tasks` surface; broader push notification remains target work. |
 | Worker memory recall is task-scoped | 📋 | Target `memory.recall.pre`; no memory engine or recall consumer is wired. |
 | Memory snapshot character budgets | 📋 | Target memory built-in layer; curated-memory snapshot injection is not wired. |
@@ -221,7 +221,7 @@ completionReport {
 
 One artifact, three jobs: evaluation input (judgment without transcript), distillation unit (raw worker output never enters user-facing context), evidence index (claims bound to ledger records). For humans, the reply itself is the writing — the system assembles the report from ask + reply + receipts. For installed apps, the final message is the report and the diff/exit-code/test-output are the evidence.
 
-**Target contract-closing authority (#490).** Because every unit of OpenOmni work is a WorkItem contract, `completed` is not a Worker exit status, Todo/Goal projection, criterion verdict, or generic `passed` bit. It is the kernel's durable declaration that the obligation represented by the **current contract revision and basis** may be closed. Four layers remain distinct:
+**Contract-closing authority (#490).** Because every unit of OpenOmni work is a WorkItem contract, `completed` is not a Worker exit status, Todo/Goal projection, criterion verdict, or generic `passed` bit. It is the kernel's durable declaration that the obligation represented by the **current contract revision and basis** may be closed. Four layers remain distinct:
 
 | Layer | Meaning | May write `WorkItemCompleted`? |
 |---|---|---|
@@ -232,7 +232,7 @@ One artifact, three jobs: evaluation input (judgment without transcript), distil
 
 Owner outcome (`adopted | corrected | redone | ignored`) is a later calibration signal and never rewrites the historical admission.
 
-The target fact flow is domain-neutral:
+The shipped fact flow is domain-neutral:
 
 ```text
 WorkItem contract revision + stable acceptance criteria
@@ -248,11 +248,12 @@ WorkItem contract revision + stable acceptance criteria
 
 - A **claim** is claimant testimony bound to one criterion, never a verdict.
 - An **observation** records producer, subject, basis, provenance/artifacts, parents, and observation time; it carries no generic truth bit.
-- A **criterion result** records one scoped verdict, the exact checked predicate when applicable, observation and verifier references, assumptions, basis, scope, and residual risk.
+- A **criterion result** records one scoped verdict, the exact checked predicate for `verified`, `refuted`, or `inconclusive` results, observation and verifier references, assumptions, basis, scope, and residual risk. An `asserted` result carries no `checkedPredicate`, because no predicate was checked.
+- An executable verifier result may satisfy only the persisted criterion whose text exactly matches that checked predicate. Citation support is the explicit exception because its frozen classifier evaluates the persisted criterion text directly. An unrelated green predicate never closes another criterion.
 - Invalidation is a separate append-only fact. A historical result remains true of its recorded basis but is excluded from the current effective-result fold after contract, subject, assumption, verifier, artifact, or basis drift.
 - **CompletionAdmission** records contract revision, current basis, effective result IDs, unresolved criterion IDs, policy/stakes references, residual risks, reason codes, and exactly one decision: `admit | block | escalate | owner_override`. Owner override carries a receipt and never promotes an underlying result to `verified`.
 
-The completion decision performs no evidence acquisition: no command, network, clock, subprocess, LLM, sensor, or connector call. Those producers may be added later without creating domain profiles or alternate completion authorities in the kernel. The admission fold sees only stable criteria, current results and invalidations, blockers, basis/revision, policy, stakes, and Owner authority. An effect intent recorded in the WorkItem's current attempt scope that is outcome-less or `unknown` folds as an unresolved blocker: admission cannot admit until reconciliation records its terminal `confirmed` or `failed` outcome or Owner overrides with a receipt.
+The completion decision performs no evidence acquisition: no command, network, clock, subprocess, LLM, sensor, or connector call. Producers run before the boundary and submit typed facts without creating domain profiles or alternate completion authorities in the kernel. The admission fold sees only stable criteria, current results and invalidations, blockers, basis/revision, policy, stakes, and Owner authority. An effect intent recorded in the WorkItem's current attempt scope that is outcome-less or `unknown` folds as an unresolved blocker: admission cannot admit until reconciliation records its terminal `confirmed` or `failed` outcome or Owner overrides with a receipt.
 
 Terminal ordering is record-before-act:
 
@@ -264,13 +265,15 @@ fold current contract/evidence state
   -> append WorkItemCompleted(admissionId)
 ```
 
-Every origin — internal Worker, connector endpoint, external API/A2A, human channel, SDK/internal caller, and future executor — converges on that path. No direct `WorkItemStore.complete()` bypass survives the target migration. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
+Internal and connector Workers are the production consumers of that path today. The public, exhaustive origin projector is the required seam for future Resident, external actor (API/A2A/human), replay, recovery, and identity-qualified SDK/internal integrations: it maps those sources into the same five canonical origin classes without a fallback branch, but those caller paths are not yet wired. No production direct `WorkItemStore.complete()` bypass survives. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
+
+This delivery owns the WorkItem row-CAS admission boundary, not the later one-writer ledger cutover. #510 consumes this boundary when it moves durable appends behind the single FULL ledger writer and freezes legacy stores for archive/upcast reads. That migration may replace the storage port, but it must preserve the request/admission/terminal ordering and cannot introduce a second completion authority.
 
 **Verification — three questions, three parties:**
 
 | Question | Answered by | Cost | Mechanism |
 |---|---|---|---|
-| Did it happen? | code | ~0 | **Current:** every claim's `evidenceIds` must resolve to passing WorkItem-local evidence. **Target #490/#467:** observations and scoped criterion results are distinct facts; `work.complete.pre` consumes their current fold and cannot infer truth from claimant self-report. |
+| Did it happen? | code | ~0 | **Current:** every claim's `evidenceIds` must resolve to passing WorkItem-local evidence. Observations and scoped criterion results are distinct facts; `work.complete.pre` consumes their current fold and cannot infer truth from claimant self-report. |
 | Is it good? | Resident | 1 LLM evaluation | judges report + deliverable + verified evidence only — never the worker transcript. On failure, names the issue and re-dispatches with it attached. |
 | Was it useful? | Owner's behavior (`outcome`) | 0, delayed | adopted / corrected / redone / ignored — harvested retroactively by the Governor as ground truth; also calibrates the Resident's evaluation leniency. |
 

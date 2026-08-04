@@ -3,41 +3,81 @@ import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 
 export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkItemSubAdapter {
   return {
+    create: (hash: string, item: WorkItem.Info): boolean => {
+      const parsed = WorkItem.Info.parse(item);
+      assertMatchingHash(hash, parsed.hash);
+      const result = db
+        .query(
+          `INSERT OR IGNORE INTO work_item
+             (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          hash,
+          JSON.stringify(parsed),
+          WorkItem.deriveStatus(parsed),
+          parsed.assigneeId ?? null,
+          parsed.sessionId ?? null,
+          parsed.relations.parentHash ?? null,
+          parsed.sourceChannel,
+          parsed.timestamps.created,
+          parsed.timestamps.updated,
+        );
+      return result.changes === 1;
+    },
+
     get: (hash: string): WorkItem.Info | undefined => {
       const row = db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
         data: string;
       } | null;
-      return row ? (JSON.parse(row.data) as WorkItem.Info) : undefined;
+      return row ? decodeWorkItem(row.data) : undefined;
     },
 
-    set: (hash: string, item: WorkItem.Info): void => {
-      if (hash !== item.hash) {
-        throw new Error(`WorkItem hash mismatch: key=${hash} payload=${item.hash}`);
+    compareAndSet: (hash: string, expectedHead: number, item: WorkItem.Info): boolean => {
+      const parsed = WorkItem.Info.parse(item);
+      assertMatchingHash(hash, parsed.hash);
+      if (parsed.revision !== expectedHead + 1) {
+        throw new Error(
+          `WorkItem revision must advance once: expected=${expectedHead} payload=${parsed.revision}`,
+        );
       }
-      const now = Date.now();
-      const status = WorkItem.deriveStatus(item);
-      db.query(
-        `INSERT INTO work_item (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(hash) DO UPDATE SET
-           data = excluded.data,
-           status = excluded.status,
-           assignee_id = excluded.assignee_id,
-           session_id = excluded.session_id,
-           parent_hash = excluded.parent_hash,
-           source_channel = excluded.source_channel,
-           time_updated = excluded.time_updated`,
-      ).run(
-        hash,
-        JSON.stringify(item),
-        status,
-        item.assigneeId ?? null,
-        item.sessionId ?? null,
-        item.relations.parentHash ?? null,
-        item.sourceChannel,
-        item.timestamps.created,
-        now,
-      );
+      const result = db
+        .query(
+          `UPDATE work_item SET
+             data = ?,
+             status = ?,
+             assignee_id = ?,
+             session_id = ?,
+             parent_hash = ?,
+             source_channel = ?,
+             time_updated = ?
+           WHERE hash = ?
+             AND (
+               json_extract(data, '$.revision') = ?
+               OR (
+                 json_type(data, '$.revision') IS NULL
+                 AND json_type(data, '$.completionContract') IS NULL
+                 AND json_type(data, '$.completionFacts') IS NULL
+                 AND CASE
+                   WHEN json_type(data, '$.timestamps.completed') IN ('integer', 'real') THEN 2
+                   ELSE 0
+                 END = ?
+               )
+             )`,
+        )
+        .run(
+          JSON.stringify(parsed),
+          WorkItem.deriveStatus(parsed),
+          parsed.assigneeId ?? null,
+          parsed.sessionId ?? null,
+          parsed.relations.parentHash ?? null,
+          parsed.sourceChannel,
+          Date.now(),
+          hash,
+          expectedHead,
+          expectedHead,
+        );
+      return result.changes === 1;
     },
 
     list: (filter?: ProtocolStorage.WorkItemListFilter): WorkItem.Info[] => {
@@ -58,7 +98,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       const rows = db
         .query(`SELECT data FROM work_item ${where} ORDER BY time_created ASC`)
         .all(...params) as Array<{ data: string }>;
-      return rows.map((r) => JSON.parse(r.data) as WorkItem.Info);
+      return rows.map((row) => decodeWorkItem(row.data));
     },
 
     remove: (hash: string): boolean => {
@@ -66,6 +106,16 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       return result.changes > 0;
     },
   };
+}
+
+function decodeWorkItem(data: string): WorkItem.Info {
+  return WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(JSON.parse(data)));
+}
+
+function assertMatchingHash(key: string, payload: string): void {
+  if (key !== payload) {
+    throw new Error(`WorkItem hash mismatch: key=${key} payload=${payload}`);
+  }
 }
 
 function addNullableCondition(

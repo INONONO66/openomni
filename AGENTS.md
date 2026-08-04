@@ -96,7 +96,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
 | Add/modify bus events | `packages/protocol/src/event/index.ts` + `event/agent-execution.ts` | `BusEvent.define()` pattern |
 | Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
-| Add policy point | `packages/protocol/src/policy/point-registry.ts` | 19 registered points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
+| Add policy point | `packages/protocol/src/policy/point-registry.ts` | 20 registered points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
 | Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `workItem`, `workerRunState`) |
@@ -104,9 +104,10 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Bus query API | `packages/session/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
 | Surface → session mapping | `packages/session/src/surface-key/` | N:1 SurfaceKey registry |
 | WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `VerificationGate`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade |
-| WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/set/list/remove) |
-| WorkItemStore engine | `packages/session/src/work-item/index.ts` | CRUD + lifecycle (start/complete/fail/cancel/retry) + blockers + evidence + dependency readiness + cycle detection |
-| Windowed Stakes primitive | `packages/openomni/src/ledger/` | Dormant deterministic consequence calculator, replay driver, criterion-treatment fixture, and per-host completion/authorized-Voice capability seams; no production consumer is wired yet |
+| WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/create/compareAndSet/list/remove) |
+| WorkItemStore substrate | `packages/session/src/work-item/index.ts` | CRUD + non-completion lifecycle + blockers + evidence + dependency readiness + cycle detection; raw `complete()` is a typed refusal because product completion authority belongs in OpenOmni |
+| WorkItem completion authority | `packages/openomni/src/work-item/` | Pure durable+proposed fact fold, trusted Policy/Stakes/result/Owner authority resolver, origin projector, atomic record-before-terminal admission service, and public seven-scenario Manual QA driver |
+| Windowed Stakes primitive | `packages/openomni/src/ledger/` | Deterministic consequence calculator, replay driver, criterion treatment, and per-host capability seams; WorkItem completion now consumes the Stakes resolver seam while authorized Voice remains unwired |
 | Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
 | WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
 | Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |

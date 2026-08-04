@@ -173,6 +173,22 @@ export namespace PolicyPointRegistryModule {
       ["audit.annotate", "run.abort", "prompt.append_context", "run.replace_messages"],
       ...preBoundary,
     ),
+    "work.complete.pre": contract(
+      "work.complete.pre",
+      "pre",
+      ["work"],
+      [
+        "workItemHash",
+        "requestId",
+        "contractRevision",
+        "basisRef",
+        "expectedHead",
+        "completionCandidate",
+        "unresolvedBlockerIds",
+      ],
+      ["audit.annotate", "run.abort", "work.allow_asserted"],
+      ...preBoundary,
+    ),
     "session.writeback.pre": contract(
       "session.writeback.pre",
       "pre",

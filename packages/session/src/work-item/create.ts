@@ -3,6 +3,7 @@ import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { buildWorkItem } from "./builder.js";
 import { detectCycles } from "./dependency.js";
+import { persistMutation } from "./mutation.js";
 import type { CreateWorkItemInput } from "./types.js";
 
 export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkItem.Info> {
@@ -29,23 +30,30 @@ export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkIt
   }
 
   const item = buildWorkItem(input, now);
-  adapter.workItem.set(item.hash, item);
+  if (!adapter.workItem.create(item.hash, item)) {
+    throw new Error(`WorkItem already exists: ${item.hash}`);
+  }
 
   if (parent && !parent.relations.childHashes.includes(item.hash)) {
-    adapter.workItem.set(parent.hash, {
-      ...parent,
-      relations: {
-        ...parent.relations,
-        childHashes: [...parent.relations.childHashes, item.hash],
-      },
-      timestamps: { ...parent.timestamps, updated: now },
-    });
-    Bus.publish(WorkItem.Events.Updated, {
-      traceId: crypto.randomUUID(),
-      time: now,
-      sessionId: parent.sessionId,
-      payload: { hash: parent.hash, fields: ["relations"] },
-    });
+    try {
+      persistMutation(
+        adapter.workItem,
+        parent,
+        {
+          ...parent,
+          relations: {
+            ...parent.relations,
+            childHashes: [...parent.relations.childHashes, item.hash],
+          },
+          timestamps: { ...parent.timestamps, updated: now },
+        },
+        now,
+        ["relations"],
+      );
+    } catch (error) {
+      adapter.workItem.remove(item.hash);
+      throw error;
+    }
   }
 
   Bus.publish(WorkItem.Events.Created, {
