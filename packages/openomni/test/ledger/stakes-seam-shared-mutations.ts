@@ -46,7 +46,7 @@ export const sharedBindingMutations: readonly BindingMutation<SharedBinding>[] =
   })),
 ];
 
-function mutation<T>(
+export function mutation<T>(
   name: string,
   apply: (binding: T) => unknown,
   denial: "binding_mismatch" | "invalid_subject" = "binding_mismatch",

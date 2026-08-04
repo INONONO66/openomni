@@ -15,7 +15,11 @@ import {
   stakesWindow,
   voiceBinding,
 } from "./stakes-fixture.js";
-import { sharedBindingMutations, type BindingMutation } from "./stakes-seam-shared-mutations.js";
+import {
+  mutation,
+  sharedBindingMutations,
+  type BindingMutation,
+} from "./stakes-seam-shared-mutations.js";
 
 type CompletionMutation = BindingMutation<CompletionStakesBinding>;
 type VoiceMutation = BindingMutation<VoiceStakesBinding>;
@@ -85,14 +89,6 @@ export function registerStakesSeamBindingCases(): void {
       });
     }
   });
-}
-
-function mutation<T>(
-  name: string,
-  apply: (binding: T) => unknown,
-  denial: "binding_mismatch" | "invalid_subject" = "binding_mismatch",
-): Readonly<{ name: string; denial: "binding_mismatch" | "invalid_subject"; apply: typeof apply }> {
-  return { name, denial, apply };
 }
 
 function harness() {
