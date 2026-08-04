@@ -12,7 +12,6 @@ export {
   NondeterminismManifestSchema,
   canonicalJson,
   createEnvironmentFingerprint,
-  createCanonicalSchemas,
   hashCanonicalJson,
   hashNondeterminismManifest,
   type EnvironmentFingerprint,
