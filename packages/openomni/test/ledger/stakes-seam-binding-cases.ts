@@ -15,43 +15,13 @@ import {
   stakesWindow,
   voiceBinding,
 } from "./stakes-fixture.js";
+import { sharedBindingMutations, type BindingMutation } from "./stakes-seam-shared-mutations.js";
 
-type CompletionMutation = Readonly<{
-  name: string;
-  denial: "binding_mismatch" | "invalid_subject";
-  apply(binding: CompletionStakesBinding): unknown;
-}>;
-type VoiceMutation = Readonly<{
-  name: string;
-  denial: "binding_mismatch" | "invalid_subject";
-  apply(binding: VoiceStakesBinding): unknown;
-}>;
+type CompletionMutation = BindingMutation<CompletionStakesBinding>;
+type VoiceMutation = BindingMutation<VoiceStakesBinding>;
 
 const completionMutations: readonly CompletionMutation[] = [
-  mutation("ownerKey", (binding) => ({ ...binding, ownerKey: "owner:other" })),
-  mutation("actionRef", (binding) => ({ ...binding, actionRef: "action:other" })),
-  mutation("windowRef", (binding) => ({ ...binding, windowRef: stakesDigest("other-window") })),
-  mutation("asOfOwnerSeq", (binding) => ({
-    ...binding,
-    asOfOwnerSeq: binding.asOfOwnerSeq + 1,
-  })),
-  mutation(
-    "calculatorVersion",
-    (binding) => ({
-      ...binding,
-      calculatorVersion: "stakes-policy-other",
-    }),
-    "invalid_subject",
-  ),
-  mutation("basisRef", (binding) => ({ ...binding, basisRef: stakesDigest("other-basis") })),
-  mutation("ledgerRangeDigest", (binding) => ({
-    ...binding,
-    ledgerRangeDigest: stakesDigest("other-ledger-range"),
-  })),
-  mutation("noveltyBasisDigest", (binding) => ({
-    ...binding,
-    noveltyBasisDigest: stakesDigest("other-novelty-basis"),
-  })),
+  ...sharedBindingMutations,
   mutation("workItemHash", (binding) => ({ ...binding, workItemHash: "wi_other" })),
   mutation("contractRevision", (binding) => ({
     ...binding,
@@ -60,7 +30,7 @@ const completionMutations: readonly CompletionMutation[] = [
 ];
 
 const voiceMutations: readonly VoiceMutation[] = [
-  ...completionMutations.slice(0, 8).map(({ name, denial, apply }) => ({ name, denial, apply })),
+  ...sharedBindingMutations,
   mutation("evaluationId", (binding) => ({ ...binding, evaluationId: "jester:other" })),
   mutation("authorizationReceiptRef", (binding) => ({
     ...binding,
