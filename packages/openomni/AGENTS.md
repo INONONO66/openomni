@@ -12,6 +12,7 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 | `src/dispatch/` | Current egress/cross-boundary stage: command authorization, handler routing, PendingInteraction routing, gate-side policy stamping (#479) | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` (+ `BuiltInDispatchOptions.policyResolver`), `DEFAULT_DISPATCH_MODEL` |
 | `src/policy/` | Gate-side policy resolution: actor/target labels → stamped `policyPlan` on spawn requests (production-wired by #479) | `PolicyResolver` |
 | `src/evidence/` | Read-back executors plus scoped deterministic verifier-registry and replay-conformance primitives | `ReadBackExecutor`, `VerifierRegistry`, `VerifierConformance`, `runVerifierRegistryDriver` |
+| `src/ledger/` | Dormant deterministic windowed Stakes calculator, replay driver, criterion treatment, and host capability seams | `Stakes`, `runStakesDriver` |
 | `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
@@ -63,6 +64,7 @@ agents/             → @openomni/protocol (Model.Ref only)
 resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 policy/             → @openomni/protocol (pure label→plan resolution; consumed by dispatch)
 evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence)
+ledger/             → evidence/ (canonical JSON snapshot boundary only); no orchestration deps
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → dispatch/ (DEFAULT_DISPATCH_MODEL), resident/ (type-only)
 dispatch/           → policy/ (resolver), ingress/ (type-only) — the gate stays the sole author of stamped plans
@@ -80,8 +82,11 @@ Consumers should only use `@openomni/openomni` exports:
 
 - Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
 - Scoped verifier-registry and replay-conformance library surfaces from `src/evidence/`; admission and archived replay stay outside these primitives
+- Dormant windowed Stakes primitive and driver from the dedicated `@openomni/openomni/ledger` subpath; completion, durable-ledger, and Voice consumers are not wired
 
-If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain.
+If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain. The dormant
+`./ledger` subpath is the one exception: `src/ledger/index.ts` exports `Stakes` and
+`runStakesDriver` without widening the root barrel.
 
 ## Extension Points
 
