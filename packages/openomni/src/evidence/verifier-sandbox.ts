@@ -1,15 +1,17 @@
 import { Tool } from "@openomni/protocol";
 import { z } from "zod";
 import {
-  JsonValueSchema,
-  Sha256DigestSchema,
   canonicalJson,
+  createCanonicalSchemas,
   hashCanonicalJson,
 } from "./verifier-conformance-canonical.js";
 import { frozenSymbolicNliInfer } from "./verifier-frozen-nli-model.js";
 
+const { JsonValueSchema: SandboxJsonValueSchema, Sha256DigestSchema: SandboxSha256DigestSchema } =
+  createCanonicalSchemas();
+
 const NativeSchemaInstruction = z
-  .object({ op: z.literal("native_schema"), value: JsonValueSchema })
+  .object({ op: z.literal("native_schema"), value: SandboxJsonValueSchema })
   .strict();
 const NumericInstruction = z
   .object({
@@ -38,15 +40,15 @@ const ArchiveInstruction = z
     method: z.enum(["GET", "HEAD"]).optional(),
     observedStatus: z.number().int().min(100).max(599),
     expectedStatus: z.number().int().min(100).max(599),
-    observedDigest: Sha256DigestSchema.optional(),
-    expectedDigest: Sha256DigestSchema.optional(),
+    observedDigest: SandboxSha256DigestSchema.optional(),
+    expectedDigest: SandboxSha256DigestSchema.optional(),
   })
   .strict();
 const HashInstruction = z
   .object({
     op: z.literal("hash_compare"),
-    value: JsonValueSchema,
-    expectedDigest: Sha256DigestSchema,
+    value: SandboxJsonValueSchema,
+    expectedDigest: SandboxSha256DigestSchema,
   })
   .strict();
 const QuoteInstruction = z

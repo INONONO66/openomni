@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { VerifierConformance } from "../../src";
 import { FrozenNliSourceDigest } from "../../src/evidence/verifier-frozen-nli-model";
 import { VerifierRegistry } from "../../src/evidence/verifier-registry";
 
@@ -276,6 +277,35 @@ describe("VerifierRegistry", () => {
           Object.defineProperty(schema, method, descriptor);
         }
       }
+    }
+  });
+
+  test("keeps authority validators private from public conformance schemas", () => {
+    const registry = VerifierRegistry.create();
+    const invalidNative = obligation("schema_validity", {
+      schema: "native_tool_call",
+      value: { invalid: true },
+    });
+    const jsonEffect = VerifierConformance.JsonValueSchema._def.effect;
+    if (jsonEffect.type !== "transform") throw new Error("expected JSON transform schema");
+    const originalTransform = jsonEffect.transform;
+    const digestChecks = VerifierConformance.Sha256DigestSchema._def.checks;
+    try {
+      jsonEffect.transform = (value: unknown) =>
+        typeof value === "object" && value !== null && "invalid" in value && value.invalid === true
+          ? { id: "forged", tool: "read", input: {} }
+          : value;
+      digestChecks.push({ kind: "regex", regex: /^never$/u });
+      expect(registry.verify(invalidNative)).toMatchObject({
+        type: "verification_result",
+        status: "refuted",
+      });
+      expect(
+        registry.verify(obligation("numeric_recheck", { operator: "eq", left: 1, right: 1 })),
+      ).toMatchObject({ type: "verification_result", status: "verified" });
+    } finally {
+      jsonEffect.transform = originalTransform;
+      digestChecks.pop();
     }
   });
 

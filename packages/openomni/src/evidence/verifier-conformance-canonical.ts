@@ -82,37 +82,50 @@ function invalidJsonError(): z.ZodError {
   ]);
 }
 
-export const JsonValueSchema = snapshotFirstJsonSchema(
-  z.unknown().transform<JsonValue>((value, context) => snapshotJsonInput(value, context)),
-);
-export const JsonObjectSchema = snapshotFirstJsonSchema(
-  z.unknown().transform<JsonObject>((value, context) => {
-    try {
-      const snapshot = snapshotJson(value, 0, {
-        active: new WeakSet<object>(),
-        codeUnits: 0,
-        nodes: 0,
-      });
-      if (!isJsonRecord(snapshot)) failSnapshot();
-      return snapshot;
-    } catch {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "expected bounded plain JSON object",
-      });
-      return z.NEVER;
-    }
-  }),
-);
-export const Sha256DigestSchema = snapshotFirstJsonSchema(
-  z.string().regex(/^sha256:[a-f0-9]{64}$/),
-);
-export const RedactedIdentifierSchema = snapshotFirstJsonSchema(
-  z
-    .string()
-    .max(512)
-    .regex(/^(?:sha256:[a-f0-9]{64}|(?:ref|version):[A-Za-z0-9._+/@-]+)$/),
-);
+export function createCanonicalSchemas() {
+  const JsonValueSchema = snapshotFirstJsonSchema(
+    z.unknown().transform<JsonValue>((value, context) => snapshotJsonInput(value, context)),
+  );
+  const JsonObjectSchema = snapshotFirstJsonSchema(
+    z.unknown().transform<JsonObject>((value, context) => {
+      try {
+        const snapshot = snapshotJson(value, 0, {
+          active: new WeakSet<object>(),
+          codeUnits: 0,
+          nodes: 0,
+        });
+        if (!isJsonRecord(snapshot)) failSnapshot();
+        return snapshot;
+      } catch {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "expected bounded plain JSON object",
+        });
+        return z.NEVER;
+      }
+    }),
+  );
+  const Sha256DigestSchema = snapshotFirstJsonSchema(z.string().regex(/^sha256:[a-f0-9]{64}$/));
+  const RedactedIdentifierSchema = snapshotFirstJsonSchema(
+    z
+      .string()
+      .max(512)
+      .regex(/^(?:sha256:[a-f0-9]{64}|(?:ref|version):[A-Za-z0-9._+/@-]+)$/),
+  );
+  return {
+    JsonValueSchema,
+    JsonObjectSchema,
+    Sha256DigestSchema,
+    RedactedIdentifierSchema,
+  };
+}
+
+const schemas = createCanonicalSchemas();
+
+export const JsonValueSchema = schemas.JsonValueSchema;
+export const JsonObjectSchema = schemas.JsonObjectSchema;
+export const Sha256DigestSchema = schemas.Sha256DigestSchema;
+export const RedactedIdentifierSchema = schemas.RedactedIdentifierSchema;
 
 export function canonicalJson(input: unknown): string {
   return renderCanonical(snapshotJsonValue(input));

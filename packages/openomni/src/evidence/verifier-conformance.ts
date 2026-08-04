@@ -1,12 +1,18 @@
+import { createCanonicalSchemas } from "./verifier-conformance-canonical.js";
+
+const PublicCanonical = createCanonicalSchemas();
+
+export const JsonValueSchema = PublicCanonical.JsonValueSchema;
+export const RedactedIdentifierSchema = PublicCanonical.RedactedIdentifierSchema;
+export const Sha256DigestSchema = PublicCanonical.Sha256DigestSchema;
+
 export {
   EnvironmentFingerprintInputSchema,
   EnvironmentFingerprintSchema,
-  JsonValueSchema,
   NondeterminismManifestSchema,
-  RedactedIdentifierSchema,
-  Sha256DigestSchema,
   canonicalJson,
   createEnvironmentFingerprint,
+  createCanonicalSchemas,
   hashCanonicalJson,
   hashNondeterminismManifest,
   type EnvironmentFingerprint,

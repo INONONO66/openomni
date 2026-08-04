@@ -1,12 +1,10 @@
 import { z } from "zod";
 import {
-  type JsonObject as CanonicalJsonObject,
   type JsonValue as CanonicalJsonValue,
   JsonObjectSchema,
   JsonValueSchema,
   Sha256DigestSchema,
-  snapshotFirstJsonSchema,
-  snapshotJsonValue,
+  createCanonicalSchemas,
 } from "./verifier-conformance-canonical.js";
 
 const obligationKinds = [
@@ -37,7 +35,14 @@ const assertedOnlyKinds = [
   "out_of_archive",
 ] as const;
 
-export function createVerifierRegistrySchemas(isolateCanonicalSchemas = false) {
+type CanonicalSchemas = Pick<
+  ReturnType<typeof createCanonicalSchemas>,
+  "JsonValueSchema" | "JsonObjectSchema" | "Sha256DigestSchema"
+>;
+
+export function createVerifierRegistrySchemas(
+  canonicalSchemas: CanonicalSchemas = createCanonicalSchemas(),
+) {
   const ObligationKind = z.enum(obligationKinds);
   const AssertedOnlyKind = z.enum(assertedOnlyKinds);
   const ResultStatus = z.enum(["verified", "refuted", "inconclusive", "asserted"]);
@@ -51,43 +56,11 @@ export function createVerifierRegistrySchemas(isolateCanonicalSchemas = false) {
     "effect",
     "replay",
   ]);
-  const JsonValue = isolateCanonicalSchemas
-    ? snapshotFirstJsonSchema(
-        z.unknown().transform<CanonicalJsonValue>((value, context) => {
-          try {
-            return snapshotJsonValue(value);
-          } catch {
-            context.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "expected bounded plain JSON value",
-            });
-            return z.NEVER;
-          }
-        }),
-      )
-    : JsonValueSchema;
-  const JsonObject = isolateCanonicalSchemas
-    ? snapshotFirstJsonSchema(
-        z.unknown().transform<CanonicalJsonObject>((value, context) => {
-          try {
-            const snapshot = snapshotJsonValue(value);
-            if (snapshot === null || typeof snapshot !== "object" || Array.isArray(snapshot)) {
-              throw new Error("expected JSON object");
-            }
-            return snapshot as CanonicalJsonObject;
-          } catch {
-            context.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "expected bounded plain JSON object",
-            });
-            return z.NEVER;
-          }
-        }),
-      )
-    : JsonObjectSchema;
-  const Sha256Digest = isolateCanonicalSchemas
-    ? snapshotFirstJsonSchema(z.string().regex(/^sha256:[a-f0-9]{64}$/))
-    : Sha256DigestSchema;
+  const {
+    JsonValueSchema: JsonValue,
+    JsonObjectSchema: JsonObject,
+    Sha256DigestSchema: Sha256Digest,
+  } = canonicalSchemas;
   const Obligation = z
     .object({
       obligationId: z.string().min(1).max(512),
@@ -195,7 +168,11 @@ export function createVerifierRegistrySchemas(isolateCanonicalSchemas = false) {
   };
 }
 
-const schemas = createVerifierRegistrySchemas();
+const schemas = createVerifierRegistrySchemas({
+  JsonValueSchema,
+  JsonObjectSchema,
+  Sha256DigestSchema,
+});
 
 export const ObligationKind = schemas.ObligationKind;
 export type ObligationKind = z.infer<typeof ObligationKind>;

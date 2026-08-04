@@ -2,7 +2,7 @@ import * as Contract from "./verifier-registry-contract.js";
 import { createRegistry } from "./verifier-registry-core.js";
 import { FrozenNliModelFingerprint as pinnedModelFingerprint } from "./verifier-frozen-nli-model.js";
 
-const PublicContract = Contract.createVerifierRegistrySchemas(true);
+const PublicContract = Contract.createVerifierRegistrySchemas();
 
 export namespace VerifierRegistry {
   export const ObligationKind = PublicContract.ObligationKind;
