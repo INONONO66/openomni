@@ -381,7 +381,7 @@ Snapshot injection and persistence nudges ride existing policy points (`prompt.c
 
 ## 6. Determinism, Replay, and Verification
 
-Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). Partially mechanized today: the shipped #467 lint slice covers the vocabulary/tool/schema checks; this section's verifier-registry and replay contracts are target work owned by the open #467 (primitives) and #493 (archived replay integration). Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
+Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). Mechanized primitives now include the #467 vocabulary/tool/schema checks, deterministic verifier registry, and replay-conformance library driver. The registry is intentionally scoped-result-only and the replay functions operate on supplied records; #490 owns completion admission, #510 owns durable ledger wiring, and #493 owns archived projection/replay integration. Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
 
 ### State and the ledger fold
 
