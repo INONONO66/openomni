@@ -42,7 +42,9 @@ describe("bashTool", () => {
   test("kills the subprocess when execution context is aborted", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-abort-"));
     const childPidFileName = "child.pid";
+    const readyFileName = "ready";
     const childPidFile = join(workspace, childPidFileName);
+    const readyFile = join(workspace, readyFileName);
     const controller = new AbortController();
     let resolveReady: (() => void) | undefined;
     let rejectReady: ((error: Error) => void) | undefined;
@@ -50,8 +52,8 @@ describe("bashTool", () => {
       resolveReady = resolve;
       rejectReady = reject;
     });
-    const watcher = watch(workspace, (_eventType, filename) => {
-      if (filename?.toString() === childPidFileName) resolveReady?.();
+    const watcher = watch(workspace, () => {
+      if (existsSync(readyFile)) resolveReady?.();
     });
     const readyTimeout = setTimeout(() => {
       rejectReady?.(new Error("bash child process did not become ready"));
@@ -63,7 +65,10 @@ describe("bashTool", () => {
         {
           id: "call-abort",
           tool: "bash",
-          input: { command: "sleep 1000 & echo $! > child.pid; wait" },
+          input: {
+            command:
+              "trap 'exit 143' TERM; mkfifo pid.pipe; (trap '' TERM; echo \"$BASHPID\" > pid.pipe; exec sleep 1000) >/dev/null 2>&1 & read -r child_pid < pid.pipe; echo \"$child_pid\" > child.pid; touch ready; wait",
+          },
         },
         { signal: controller.signal },
       );

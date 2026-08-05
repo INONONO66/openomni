@@ -9,6 +9,7 @@ import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
 const PROCESS_TERMINATION_GRACE_MS = 1_000;
+const PROCESS_REAP_INTERVAL_MS = 5;
 
 const bashEnvKeys = ["PATH", "TMPDIR", "TEMP", "TMP", "BUN_INSTALL"];
 
@@ -42,23 +43,46 @@ function resolveTimeout(input: Record<string, unknown>): number {
   return Math.min(value, MAX_TIMEOUT_MS);
 }
 
-function terminateProcessGroup(proc: { readonly pid: number; kill(): void }): void {
+async function terminateProcessGroup(proc: {
+  readonly pid: number;
+  readonly exited: Promise<number>;
+  kill(): void;
+}): Promise<void> {
   try {
     process.kill(-proc.pid, "SIGTERM");
-    const escalation = setTimeout(() => {
-      try {
-        process.kill(-proc.pid, "SIGKILL");
-      } catch {
-        // The whole group exited during the graceful termination window.
-      }
-    }, PROCESS_TERMINATION_GRACE_MS);
-    escalation.unref();
+    let resolveGrace: (() => void) | undefined;
+    const grace = new Promise<void>((resolve) => {
+      resolveGrace = resolve;
+    });
+    const escalation = setTimeout(() => resolveGrace?.(), PROCESS_TERMINATION_GRACE_MS);
+    await Promise.race([proc.exited.then(() => undefined), grace]);
+    clearTimeout(escalation);
+    try {
+      process.kill(-proc.pid, "SIGKILL");
+    } catch {
+      // The whole group exited during the graceful termination window.
+    }
+    await proc.exited.catch(() => undefined);
+    await waitForProcessGroupExit(proc.pid);
     return;
   } catch {
     // Windows and non-detached fallback.
   }
 
   proc.kill();
+  await proc.exited.catch(() => undefined);
+}
+
+async function waitForProcessGroupExit(pid: number): Promise<void> {
+  const deadline = Date.now() + PROCESS_TERMINATION_GRACE_MS;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, PROCESS_REAP_INTERVAL_MS));
+  }
 }
 
 function buildBashEnv(workspaceRoot: string | undefined): Record<string, string> {
@@ -116,16 +140,17 @@ export function bashTool(workspaceRoot?: string): NativeTool {
           stdout: "pipe",
           stderr: "pipe",
         });
+        let termination: Promise<void> | undefined;
 
         const abortCommand = () => {
           aborted = true;
-          terminateProcessGroup(proc);
+          termination ??= terminateProcessGroup(proc);
         };
         context?.signal?.addEventListener("abort", abortCommand, { once: true });
 
         const timer = setTimeout(() => {
           timedOut = true;
-          terminateProcessGroup(proc);
+          termination ??= terminateProcessGroup(proc);
         }, timeoutMs);
 
         try {
@@ -134,6 +159,7 @@ export function bashTool(workspaceRoot?: string): NativeTool {
             new Response(proc.stderr).text(),
             proc.exited,
           ]);
+          await termination;
 
           const output = [stdout, stderr]
             .filter((chunk) => chunk.length > 0)
