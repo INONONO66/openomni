@@ -34,6 +34,7 @@ const LegacyCompletionReport = z
     ),
   })
   .passthrough();
+type LegacyReport = z.infer<typeof LegacyCompletionReport>["claims"][number];
 
 const LegacyWorkItem = z
   .object({
@@ -51,24 +52,33 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   if (!isLegacyCompletionRow(input)) return input;
   const parsed = LegacyWorkItem.safeParse(input);
   if (!parsed.success) return input;
-  if (parsed.data.completionReport?.claims.some(({ statement }) => statement.trim().length === 0)) {
-    throw new Error("legacy report claim statement must not be blank");
-  }
+  const completionReports = (parsed.data.completionReport?.claims ?? []).map((report, index) => ({
+    ...report,
+    statement: legacyReportStatement(report.statement, index),
+  }));
+  const normalizedCompletionReport = parsed.data.completionReport
+    ? { ...parsed.data.completionReport, claims: completionReports }
+    : undefined;
 
   const contract: CompletionContract = {
     version: 1,
     revision: "legacy-v1",
     basisRef: "legacy-basis",
   };
-  const acceptanceCriteria = legacyAcceptanceCriteria(parsed.data);
+  const acceptanceCriteria = legacyAcceptanceCriteria(parsed.data, completionReports);
   const criteria = legacyCriteria(parsed.data.hash, acceptanceCriteria);
   const persistedEvidence = parsed.data.evidence;
+  const evidenceIds = new Set<string>();
+  for (const { id } of persistedEvidence) {
+    if (evidenceIds.has(id)) throw new Error(`duplicate legacy evidence id: ${id}`);
+    evidenceIds.add(id);
+  }
   const observationsByEvidenceId = legacyObservations(parsed.data.hash, persistedEvidence);
   const claims = legacyClaims(
     parsed.data.hash,
     contract.basisRef,
     criteria,
-    parsed.data.completionReport?.claims ?? [],
+    completionReports,
     observationsByEvidenceId,
   );
   const observations = [...observationsByEvidenceId.values()].map(({ observation }) => observation);
@@ -78,7 +88,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     claims,
     observationsByEvidenceId,
   );
-  const parsedCompletionReport = CompletionReport.safeParse(parsed.data.completionReport);
+  const parsedCompletionReport = CompletionReport.safeParse(normalizedCompletionReport);
   const completionReport = parsedCompletionReport.success
     ? canonicalCompletionReport(parsedCompletionReport.data)
     : undefined;
@@ -163,18 +173,21 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   };
 }
 
-function legacyAcceptanceCriteria(parsed: z.infer<typeof LegacyWorkItem>): string[] {
+function legacyAcceptanceCriteria(
+  parsed: z.infer<typeof LegacyWorkItem>,
+  reports: readonly LegacyReport[],
+): string[] {
   const acceptanceCriteria = parsed.acceptanceCriteria.filter(
     (statement) => statement.trim().length > 0,
   );
-  if (acceptanceCriteria.length === 0 && (parsed.completionReport?.claims.length ?? 0) === 0) {
+  if (acceptanceCriteria.length === 0 && reports.length === 0) {
     const fallback = [parsed.goal, parsed.name, parsed.hash].find(
       (statement) => statement.trim().length > 0,
     );
     if (fallback) acceptanceCriteria.push(fallback);
   }
   const matched = new Array(acceptanceCriteria.length).fill(false);
-  for (const report of parsed.completionReport?.claims ?? []) {
+  for (const report of reports) {
     const index = acceptanceCriteria.findIndex(
       (statement, candidateIndex) => !matched[candidateIndex] && statement === report.statement,
     );
@@ -186,6 +199,12 @@ function legacyAcceptanceCriteria(parsed: z.infer<typeof LegacyWorkItem>): strin
     matched.push(true);
   }
   return acceptanceCriteria;
+}
+
+function legacyReportStatement(statement: string, index: number): string {
+  return statement.trim().length > 0
+    ? statement
+    : `Legacy archived claim ${index + 1}: ${JSON.stringify(statement)}`;
 }
 
 function isLegacyCompletionRow(input: unknown): input is object {

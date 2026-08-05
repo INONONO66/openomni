@@ -5,6 +5,8 @@ import {
   type CompletionContract,
   type CompletionReport,
   type CompletionTerminalReceipt,
+  type Criterion,
+  type CriterionResult,
 } from "./completion-admission.js";
 
 type TerminalLinkageItem = Readonly<{
@@ -12,7 +14,11 @@ type TerminalLinkageItem = Readonly<{
   revision: number;
   timestamps: Readonly<{ completed?: number }>;
   completionContract: CompletionContract;
-  completionFacts: Readonly<{ admissions: readonly CompletionAdmission[] }>;
+  completionFacts: Readonly<{
+    criteria: readonly Criterion[];
+    results: readonly CriterionResult[];
+    admissions: readonly CompletionAdmission[];
+  }>;
   completionReport?: CompletionReport;
   completionTerminalReceipt?: CompletionTerminalReceipt;
 }>;
@@ -65,6 +71,65 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
       ["completionFacts", "admissions", "unresolvedCriterionIds"],
       "terminal admit cannot carry unresolved required criteria",
     );
+  }
+  const criteriaById = new Map(
+    item.completionFacts.criteria.map((criterion) => [criterion.id, criterion]),
+  );
+  const resultsById = new Map(
+    item.completionFacts.results.map((result, index) => [result.id, { index, result }]),
+  );
+  const effectiveCriterionIds = new Set<string>();
+  for (const [index, criterionId] of admission.unresolvedCriterionIds.entries()) {
+    if (!criteriaById.has(criterionId)) {
+      addIssue(
+        ctx,
+        ["completionFacts", "admissions", "unresolvedCriterionIds", index],
+        "terminal admission references an unknown unresolved criterion",
+      );
+    }
+  }
+  for (const [index, resultId] of admission.effectiveResultIds.entries()) {
+    const effective = resultsById.get(resultId);
+    if (!effective) {
+      addIssue(
+        ctx,
+        ["completionFacts", "admissions", "effectiveResultIds", index],
+        "terminal admission references a missing effective result",
+      );
+      continue;
+    }
+    const { result } = effective;
+    if (!criteriaById.has(result.criterionId)) {
+      addIssue(
+        ctx,
+        ["completionFacts", "results", effective.index, "criterionId"],
+        "terminal admission effective result references an unknown criterion",
+      );
+    }
+    if (result.basisRef !== admission.basisRef) {
+      addIssue(
+        ctx,
+        ["completionFacts", "results", effective.index, "basisRef"],
+        "terminal admission effective result uses a different basis",
+      );
+    }
+    if (result.value !== "asserted" && result.value !== "verified") {
+      addIssue(
+        ctx,
+        ["completionFacts", "results", effective.index, "value"],
+        "terminal admission effective result is not admissible",
+      );
+    }
+    effectiveCriterionIds.add(result.criterionId);
+  }
+  for (const [index, criterion] of item.completionFacts.criteria.entries()) {
+    if (criterion.required && !effectiveCriterionIds.has(criterion.id)) {
+      addIssue(
+        ctx,
+        ["completionFacts", "criteria", index, "id"],
+        "terminal admission does not cover a required criterion",
+      );
+    }
   }
   if (
     admission.decision === "owner_override" &&

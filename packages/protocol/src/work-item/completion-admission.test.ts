@@ -375,6 +375,44 @@ describe("WorkItem completion admission contracts", () => {
     );
   });
 
+  test("rejects duplicate legacy evidence identities before archive admission", () => {
+    const duplicateEvidence = {
+      ...baseItem,
+      timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence: [
+        {
+          id: "evidence:legacy-duplicate",
+          kind: "verification",
+          description: "Legacy publication check passed",
+          passed: true,
+          createdAt: 6,
+        },
+        {
+          id: "evidence:legacy-duplicate",
+          kind: "verification",
+          description: "Legacy publication check failed",
+          passed: false,
+          createdAt: 7,
+        },
+      ],
+      completionReport: {
+        summary: "Duplicate legacy evidence.",
+        claims: [
+          {
+            statement: "publish the artifact",
+            evidenceIds: ["evidence:legacy-duplicate"],
+          },
+        ],
+        caveats: [],
+        followUps: [],
+      },
+    };
+
+    expect(() => WorkItem.upcastLegacyCompletion(duplicateEvidence)).toThrow(
+      "duplicate legacy evidence id: evidence:legacy-duplicate",
+    );
+  });
+
   test("archives completed legacy paraphrases as explicit unresolved overrides", () => {
     const legacyItem = {
       ...baseItem,
@@ -416,20 +454,30 @@ describe("WorkItem completion admission contracts", () => {
     );
   });
 
-  test("rejects trim-empty legacy report claim statements", () => {
+  test("archives historically valid whitespace-only legacy claim statements", () => {
     const legacyItem = {
       ...baseItem,
+      timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence: [
+        {
+          id: "evidence:legacy-publish",
+          kind: "verification",
+          description: "Legacy publication check passed",
+          passed: true,
+          createdAt: 6,
+        },
+      ],
       completionReport: {
-        summary: "Legacy report contains an invalid claim.",
+        summary: "Legacy report contains a whitespace claim.",
         claims: [{ statement: "   ", evidenceIds: ["evidence:legacy-publish"] }],
         caveats: [],
         followUps: [],
       },
     };
 
-    expect(() => WorkItem.upcastLegacyCompletion(legacyItem)).toThrow(
-      "legacy report claim statement must not be blank",
-    );
+    const item = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(legacyItem));
+    expect(WorkItem.deriveStatus(item)).toBe("completed");
+    expect(item.completionReport?.claims[0]?.statement).toBe('Legacy archived claim 1: "   "');
   });
 
   test("retains legacy report claims beyond the original acceptance criteria", () => {
@@ -607,6 +655,17 @@ describe("WorkItem completion admission contracts", () => {
       revision: "contract:v1",
       basisRef: "basis:v1",
     };
+    const terminalCriterionId = WorkItem.criterionId(baseItem.hash, 0, "publish the artifact");
+    const terminalResult = WorkItem.CriterionResult.parse({
+      id: "result:terminal",
+      criterionId: terminalCriterionId,
+      observationIds: [],
+      value: "asserted",
+      assumptions: [],
+      residualRisks: [],
+      basisRef: completionContract.basisRef,
+      createdAt: 6,
+    });
     const admission = WorkItem.CompletionAdmission.parse({
       version: 1,
       id: "admission:terminal",
@@ -618,7 +677,7 @@ describe("WorkItem completion admission contracts", () => {
       origin: "worker",
       contractRevision: completionContract.revision,
       basisRef: completionContract.basisRef,
-      effectiveResultIds: [],
+      effectiveResultIds: [terminalResult.id],
       unresolvedCriterionIds: [],
       decision: "admit",
       reasonCodes: [],
@@ -635,12 +694,13 @@ describe("WorkItem completion admission contracts", () => {
       revision: 1,
       criteria: [
         {
-          id: WorkItem.criterionId(baseItem.hash, 0, "publish the artifact"),
+          id: terminalCriterionId,
           revision: 1,
           statement: "publish the artifact",
           required: true,
         },
       ],
+      results: [terminalResult],
       admissions: [admission],
     };
     const completionTerminalReceipt = {
@@ -663,6 +723,32 @@ describe("WorkItem completion admission contracts", () => {
       completionTerminalReceipt,
     };
     const invalidInputs = [
+      {
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          results: [],
+          admissions: [{ ...admission, effectiveResultIds: [] }],
+        },
+      },
+      {
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          admissions: [
+            {
+              ...admission,
+              decision: "owner_override",
+              unresolvedCriterionIds: ["criterion:missing"],
+              ownerOverrideReceiptRef: "owner-receipt:terminal",
+              requestSnapshot: {
+                ...admission.requestSnapshot,
+                ownerOverrideReceiptRef: "owner-receipt:terminal",
+              },
+            },
+          ],
+        },
+      },
       { ...validInput, completionTerminalReceipt: undefined },
       { ...validInput, timestamps: { created: 1, updated: 8 } },
       {
@@ -775,6 +861,8 @@ describe("WorkItem completion admission contracts", () => {
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);
     expect(invalidInputs.map((input) => WorkItem.Info.safeParse(input).success)).toEqual([
+      false,
+      false,
       false,
       false,
       false,
@@ -1174,6 +1262,8 @@ describe("WorkItem completion admission contracts", () => {
         timestamps: { completed: 8 },
         completionContract: { version: 1, revision: "contract:v1", basisRef: "basis:v1" },
         completionFacts: {
+          criteria: [],
+          results: [],
           admissions: [malformedAdmission as WorkItem.CompletionAdmission],
         },
         completionTerminalReceipt: {
