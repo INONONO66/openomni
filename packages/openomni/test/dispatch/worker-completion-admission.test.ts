@@ -447,10 +447,14 @@ describe("worker completion admission convergence", () => {
   test("reuses one immutable Worker admission before repeating read-back", async () => {
     const predicate = "archived source contains the recorded quote exactly";
     const item = await startedItem("internal_chat_agent", predicate);
+    const requestRoot = workerCompletionRequestRoot(item, succeeded(""));
+    const existingReadBackEvidenceId = `evidence:read-back:${createHash("sha256")
+      .update(`${requestRoot}:0`)
+      .digest("hex")}`;
     const output = JSON.stringify({
       completionReport: {
         summary: "Read-back replay remains bound to one admission.",
-        claims: [{ statement: predicate }],
+        claims: [{ statement: predicate, evidenceIds: [existingReadBackEvidenceId] }],
       },
       criterionFacts: [
         {

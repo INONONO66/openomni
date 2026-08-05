@@ -167,7 +167,8 @@ export async function reflectCoordinatorResult(
         sourceOrigin: options.sourceOrigin,
         completionEnvelopeDigest,
         policyEngine: options.completionPolicyEngine,
-        completionReportMatches: (report) => completionReportDraftMatches(parsed.envelope, report),
+        completionReportMatches: (report) =>
+          completionReportDraftMatches(requestRoot, parsed.envelope, report),
         ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
         now,
       });
@@ -223,7 +224,7 @@ export async function reflectCoordinatorResult(
           completionEnvelopeDigest,
           policyEngine: options.completionPolicyEngine,
           completionReportMatches: (report) =>
-            completionReportDraftMatches(parsed.envelope, report),
+            completionReportDraftMatches(requestRoot, parsed.envelope, report),
           ...(options.stakesResolver === undefined
             ? {}
             : { stakesResolver: options.stakesResolver }),
@@ -460,6 +461,7 @@ function attachReadBackEvidence(
 }
 
 function completionReportDraftMatches(
+  requestRoot: string,
   envelope: CompletionEnvelope,
   stored: WorkItem.CompletionReport,
 ): boolean {
@@ -472,21 +474,20 @@ function completionReportDraftMatches(
   ) {
     return false;
   }
-  const readBackCounts = new Map<number, number>();
-  for (const { claimIndex } of envelope.readBackRequests) {
-    readBackCounts.set(claimIndex, (readBackCounts.get(claimIndex) ?? 0) + 1);
-  }
   return draft.claims.every((claim, index) => {
     const storedClaim = stored.claims[index];
     if (!storedClaim || claim.statement !== storedClaim.statement) return false;
-    if (
-      storedClaim.evidenceIds.length !==
-      claim.evidenceIds.length + (readBackCounts.get(index) ?? 0)
-    ) {
-      return false;
+    const expectedEvidenceIds = new Set(claim.evidenceIds);
+    for (let requestIndex = 0; requestIndex < envelope.readBackRequests.length; requestIndex += 1) {
+      if (envelope.readBackRequests[requestIndex]?.claimIndex === index) {
+        expectedEvidenceIds.add(readBackEvidenceId(requestRoot, requestIndex));
+      }
     }
     const storedEvidenceIds = new Set(storedClaim.evidenceIds);
-    return claim.evidenceIds.every((evidenceId) => storedEvidenceIds.has(evidenceId));
+    return (
+      storedEvidenceIds.size === expectedEvidenceIds.size &&
+      [...expectedEvidenceIds].every((evidenceId) => storedEvidenceIds.has(evidenceId))
+    );
   });
 }
 
