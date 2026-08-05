@@ -118,10 +118,20 @@ function blockingAuthority() {
 function guardedService(
   authorityResolver: unknown,
   writer: Storage.WorkItemCompletionWriter = completionWriter,
-  reservation?: Readonly<{ ownerId: string; leaseDurationMs: number }>,
+  reservation?: Readonly<{
+    ownerId: string;
+    leaseDurationMs: number;
+    requestRoot?: string;
+    envelopeDigest?: string;
+  }>,
 ) {
   const service = Reflect.apply(createCompletionAdmissionService, undefined, [
-    { completionWriter: writer, authorityResolver, now: () => NOW, reservation },
+    {
+      completionWriter: writer,
+      authorityResolver,
+      now: () => NOW,
+      reservation,
+    },
   ]);
   expect(typeof service, "completion admission factory must return a service").toBe("object");
   if (typeof service !== "object" || service === null) return undefined;
@@ -656,6 +666,105 @@ describe("WorkItem completion admission service", () => {
       "request_conflict",
     );
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
+  test("preserves an Owner receipt across the reservation's own head advance", async () => {
+    configure();
+    const { request, report } = await fixture("resident");
+    const ownerOverrideReceiptRef = "owner-receipt:reserved-request";
+    const ownerRequest = WorkItem.CompletionRequest.parse({
+      ...request,
+      ownerOverrideReceiptRef,
+    });
+    const service = guardedService(
+      {
+        resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+          const item = WorkItem.Info.parse(itemInput);
+          const candidate = WorkItem.CompletionRequest.parse(requestInput);
+          return WorkItem.CompletionAdmission.parse({
+            version: 1,
+            id: `admission:${candidate.id}:${item.revision + 1}:owner`,
+            requestId: candidate.id,
+            requestSnapshot: candidate,
+            origin: candidate.origin,
+            contractRevision: item.completionContract.revision,
+            basisRef: item.completionContract.basisRef,
+            effectiveResultIds: [...item.completionFacts.results, ...candidate.results].map(
+              ({ id }) => id,
+            ),
+            unresolvedCriterionIds: [],
+            decision: "owner_override",
+            reasonCodes: [],
+            residualRisks: [],
+            ownerOverrideReceiptRef,
+            policyRef: "policy:owner-reservation",
+            expectedHead: item.revision,
+            recordedHead: item.revision + 1,
+            createdAt: NOW,
+          });
+        },
+      },
+      completionWriter,
+      { ownerId: "process:owner", leaseDurationMs: 10_000 },
+    );
+    if (!service) return;
+
+    const result = await service.requestCompletion(ownerRequest, report);
+    expect(result).toMatchObject({
+      completed: true,
+      admission: { decision: "owner_override", ownerOverrideReceiptRef },
+    });
+    expect(result.admission.requestSnapshot.ownerOverrideReceiptRef).toBe(ownerOverrideReceiptRef);
+  });
+
+  test("recovery reuses a durable custom reservation identity", async () => {
+    configure();
+    const { item, request, report } = await fixture("worker");
+    const resolver = authority().resolver;
+    const crashingWriter: Storage.WorkItemCompletionWriter = (hash, expectedRevision, next) => {
+      if (next.completionTerminalReceipt) throw new Error("crash before terminal CAS");
+      return completionWriter(hash, expectedRevision, next);
+    };
+    const workerService = guardedService(resolver, crashingWriter, {
+      ownerId: "process:worker",
+      leaseDurationMs: 1,
+      requestRoot: "worker-request-root",
+      envelopeDigest: "worker-envelope-digest",
+    });
+    if (!workerService) return;
+
+    await expect(workerService.requestCompletion(request, report)).rejects.toThrow(
+      "crash before terminal CAS",
+    );
+    const interrupted = WorkItemStore.get(item.hash);
+    expect(
+      interrupted?.completionFacts.admissions.some(({ requestId }) => requestId === request.id),
+    ).toBe(true);
+    expect(
+      interrupted?.completionFacts.requestReservations.find(
+        ({ requestId }) => requestId === request.id,
+      ),
+    ).toMatchObject({
+      requestId: request.id,
+      requestRoot: "worker-request-root",
+      envelopeDigest: "worker-envelope-digest",
+    });
+    expect(interrupted?.completionTerminalReceipt).toBeUndefined();
+
+    const recoveryGateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW + 2,
+    });
+    expect(await recoveryGateway.recoverRecordedCompletions()).toEqual({
+      recovered: 1,
+      skipped: 0,
+      failures: [],
+    });
+    expect(WorkItemStore.get(item.hash)).toMatchObject({
+      completionTerminalReceipt: { requestId: request.id },
+    });
   });
 
   test("takes over an expired nonterminal admission reservation after head drift", async () => {

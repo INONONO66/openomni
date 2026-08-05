@@ -279,6 +279,22 @@ export function createCompletionAdmissionService(
             reservation === undefined
               ? undefined
               : reserveCompletionLease(initial, request, completionReport, reservation, options);
+          if (assertReservation) {
+            const reserved = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
+            if (reserved.revision !== initial.revision) {
+              if (reserved.revision === initial.revision + 1) {
+                request = WorkItem.CompletionRequest.parse({
+                  ...request,
+                  expectedHead: reserved.revision,
+                });
+                continue;
+              }
+              throw new CompletionAdmissionServiceError(
+                "stale_head",
+                `WorkItem changed while reserving completion authority: ${reserved.hash}`,
+              );
+            }
+          }
           if (!requestedPublished) {
             publishRequested(request, initial.sessionId, options.now());
             requestedPublished = true;
@@ -439,14 +455,25 @@ async function resumeCompletionAtHead(
     );
   }
   const request = requestFromAdmission(item, admission);
+  const durableReservation = item.completionFacts.requestReservations.find(
+    ({ requestId }) => requestId === admission.requestId,
+  );
+  const recoveryReservation =
+    reservation && durableReservation
+      ? {
+          ...reservation,
+          requestRoot: durableReservation.requestRoot,
+          envelopeDigest: durableReservation.envelopeDigest,
+        }
+      : reservation;
   const assertReservation =
-    reservation === undefined
+    recoveryReservation === undefined
       ? undefined
       : reserveCompletionLease(
           item,
           admission.requestSnapshot,
           completionReport,
-          reservation,
+          recoveryReservation,
           options,
         );
   assertReservation?.();
