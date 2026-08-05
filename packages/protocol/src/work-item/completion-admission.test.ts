@@ -257,7 +257,7 @@ describe("WorkItem completion admission contracts", () => {
     expect(WorkItem.Info.safeParse(baseItem).success).toBe(false);
   });
 
-  test("explicitly upcasts a completed legacy WorkItem without duplicating facts", () => {
+  test("upcasts a fully evidenced completed legacy WorkItem with truthful admission linkage", () => {
     const legacyItem = {
       ...baseItem,
       timestamps: { ...baseItem.timestamps, completed: 8 },
@@ -274,7 +274,7 @@ describe("WorkItem completion admission contracts", () => {
         summary: "Published the artifact.",
         claims: [
           {
-            statement: "The artifact was published",
+            statement: "publish the artifact",
             evidenceIds: ["evidence:legacy-publish"],
           },
         ],
@@ -283,34 +283,82 @@ describe("WorkItem completion admission contracts", () => {
       },
     };
 
-    const upcast = WorkItem.upcastLegacyCompletion(legacyItem);
-    const firstRead = WorkItem.Info.parse(upcast);
-    const repeatedRead = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(legacyItem));
-    const rereadUpcast = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(firstRead));
+    const item = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(legacyItem));
+    const admission = item.completionFacts.admissions[0];
 
-    expect(repeatedRead.completionFacts).toEqual(firstRead.completionFacts);
-    expect(rereadUpcast.completionFacts).toEqual(firstRead.completionFacts);
-    expect(firstRead.completionFacts.criteria[0]?.id).toBe(
-      WorkItem.criterionId(legacyItem.hash, 0, "publish the artifact"),
-    );
-    expect(firstRead.revision).toBe(2);
-    expect(firstRead.completionFacts.admissions[0]?.recordedHead).toBe(1);
-    expect(firstRead.completionFacts.admissions[0]?.requestSnapshot).toMatchObject({
-      id: `completion-request:${legacyItem.hash}:legacy`,
-      workItemHash: legacyItem.hash,
-      claims: firstRead.completionFacts.claims,
-      observations: firstRead.completionFacts.observations,
-      results: firstRead.completionFacts.results,
+    expect(item.completionFacts.results).toEqual([
+      expect.objectContaining({
+        criterionId: WorkItem.criterionId(legacyItem.hash, 0, "publish the artifact"),
+        value: "asserted",
+      }),
+    ]);
+    expect(admission).toMatchObject({
+      decision: "admit",
+      unresolvedCriterionIds: [],
+      effectiveResultIds: item.completionFacts.results.map(({ id }) => id),
     });
-    expect(firstRead.completionTerminalReceipt?.recordedHead).toBe(2);
-    expect(WorkItem.deriveStatus(rereadUpcast)).toBe("completed");
-    expect({
-      criteria: firstRead.completionFacts.criteria.length,
-      claims: firstRead.completionFacts.claims.length,
-      observations: firstRead.completionFacts.observations.length,
-      results: firstRead.completionFacts.results.length,
-      admissions: firstRead.completionFacts.admissions.length,
-    }).toEqual({ criteria: 2, claims: 1, observations: 1, results: 1, admissions: 1 });
+    expect(item.completionTerminalReceipt).toMatchObject({
+      admissionId: admission?.id,
+      requestId: admission?.requestId,
+      recordedHead: 2,
+    });
+  });
+
+  test.each([
+    ["missing", []],
+    [
+      "failed",
+      [
+        {
+          id: "evidence:legacy-failed",
+          kind: "verification",
+          description: "Legacy publication check failed",
+          passed: false,
+          createdAt: 6,
+        },
+      ],
+    ],
+  ])("rejects a completed legacy WorkItem with %s required evidence", (_kind, evidence) => {
+    const legacyItem = {
+      ...baseItem,
+      timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence,
+      completionReport: {
+        summary: "Legacy publication report.",
+        claims: [
+          {
+            statement: "publish the artifact",
+            evidenceIds: ["evidence:legacy-failed"],
+          },
+        ],
+        caveats: [],
+        followUps: [],
+      },
+    };
+
+    expect(() => WorkItem.upcastLegacyCompletion(legacyItem)).toThrow(
+      `completed legacy WorkItem has unresolved required criteria: ${WorkItem.criterionId(
+        legacyItem.hash,
+        0,
+        "publish the artifact",
+      )}`,
+    );
+  });
+
+  test("rejects trim-empty legacy report claim statements", () => {
+    const legacyItem = {
+      ...baseItem,
+      completionReport: {
+        summary: "Legacy report contains an invalid claim.",
+        claims: [{ statement: "   ", evidenceIds: ["evidence:legacy-publish"] }],
+        caveats: [],
+        followUps: [],
+      },
+    };
+
+    expect(() => WorkItem.upcastLegacyCompletion(legacyItem)).toThrow(
+      "legacy report claim statement must not be blank",
+    );
   });
 
   test("retains legacy report claims beyond the original acceptance criteria", () => {

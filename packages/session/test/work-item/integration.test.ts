@@ -9,6 +9,7 @@ import {
   Storage,
   WorkItemStore,
 } from "../../src";
+import { persistCompletedWorkItemFixture } from "./completed-fixture.js";
 
 type WorkItemInput = Parameters<typeof WorkItemStore.create>[0];
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -47,100 +48,12 @@ function persistCompletedFixture(
   report: WorkItem.CompletionReport,
   options: Readonly<{ publishTerminalEvents: boolean }>,
 ): WorkItem.Info | undefined {
-  const workItemAdapter = Storage.get().workItem;
-  const current = workItemAdapter?.get(hash);
-  if (!workItemAdapter || !current) return undefined;
-  const completionReport = WorkItem.canonicalCompletionReport(report);
-  const completionReportRef = WorkItem.completionReportReference(completionReport);
-  const admission = WorkItem.CompletionAdmission.parse({
-    version: 1,
-    id: `admission:${hash}:${current.revision + 1}:integration-fixture`,
-    requestId: `completion-request:${hash}:${current.revision}:integration-fixture`,
-    requestSnapshot: WorkItem.CompletionRequest.parse({
-      version: 1,
-      id: `completion-request:${hash}:${current.revision}:integration-fixture`,
-      origin: "recovery",
-      workItemHash: hash,
-      contractRevision: current.completionContract.revision,
-      basisRef: current.completionContract.basisRef,
-      expectedHead: current.revision,
-      claims: [],
-      observations: [],
-      results: [],
-      invalidations: [],
-      verificationErrors: [],
-      effects: [],
-    }),
-    origin: "recovery",
-    contractRevision: current.completionContract.revision,
-    basisRef: current.completionContract.basisRef,
-    effectiveResultIds: [],
-    unresolvedCriterionIds: [],
-    decision: "admit",
-    reasonCodes: ["session_integration_fixture"],
-    residualRisks: [],
-    policyRef: "policy:session-integration-fixture",
-    completionReportSnapshot: completionReport,
-    completionReportRef,
-    expectedHead: current.revision,
-    recordedHead: current.revision + 1,
-    createdAt: current.timestamps.updated + 1,
-  });
-  const admitted = WorkItem.Info.parse({
-    ...current,
-    revision: admission.recordedHead,
-    completionFacts: {
-      ...current.completionFacts,
-      revision: current.completionFacts.revision + 1,
-      admissions: [...current.completionFacts.admissions, admission],
-    },
-    timestamps: { ...current.timestamps, updated: admission.createdAt },
-  });
-  if (!completionWriter(hash, current.revision, admitted)) {
-    return undefined;
-  }
-  const completedAt = admission.createdAt + 1;
-  const receipt: WorkItem.CompletionTerminalReceipt = {
-    version: 1,
+  return persistCompletedWorkItemFixture({
     hash,
-    requestId: admission.requestId,
-    admissionId: admission.id,
-    contractRevision: admission.contractRevision,
-    basisRef: admission.basisRef,
-    completionReportRef,
-    recordedHead: admitted.revision + 1,
-  };
-  const completed = WorkItem.Info.parse({
-    ...admitted,
-    revision: admitted.revision + 1,
-    completionReport,
-    completionTerminalReceipt: receipt,
-    timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
+    report,
+    completionWriter,
+    publishTerminalEvents: options.publishTerminalEvents,
   });
-  if (!completionWriter(hash, admitted.revision, completed)) {
-    return undefined;
-  }
-  if (options.publishTerminalEvents) {
-    Bus.publish(WorkItem.Events.StatusChanged, {
-      traceId: "trace-session-integration-fixture",
-      time: completedAt,
-      sessionId: completed.sessionId,
-      payload: { hash, from: WorkItem.deriveStatus(admitted), to: "completed" },
-    });
-    Bus.publish(WorkItem.Events.Updated, {
-      traceId: "trace-session-integration-fixture",
-      time: completedAt,
-      sessionId: completed.sessionId,
-      payload: { hash, fields: ["completionTerminalReceipt"] },
-    });
-    Bus.publish(WorkItem.Events.CompletedV2, {
-      traceId: "trace-session-integration-fixture",
-      time: completedAt,
-      sessionId: completed.sessionId,
-      payload: { ...receipt, sessionId: completed.sessionId },
-    });
-  }
-  return completed;
 }
 
 function resolveSessionId(_event: Bus.PublishedDescriptor, payload: unknown): string | undefined {

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
+import { persistCompletedWorkItemFixture } from "../../test/work-item/completed-fixture.js";
 import { WorkItemStore } from "./index.js";
 
 const baseInput = {
@@ -76,76 +77,7 @@ function persistCompletedFixture(
   hash: string,
   report: WorkItem.CompletionReport,
 ): WorkItem.Info | undefined {
-  const adapter = Storage.get().workItem;
-  const current = adapter?.get(hash);
-  if (!adapter || !current) return undefined;
-  const canonicalReport = WorkItem.canonicalCompletionReport(report);
-  const completionReportRef = WorkItem.completionReportReference(canonicalReport);
-  const admission = WorkItem.CompletionAdmission.parse({
-    version: 1,
-    id: `admission:${hash}:${current.revision + 1}:session-fixture`,
-    requestId: `completion-request:${hash}:${current.revision}:session-fixture`,
-    requestSnapshot: WorkItem.CompletionRequest.parse({
-      version: 1,
-      id: `completion-request:${hash}:${current.revision}:session-fixture`,
-      origin: "recovery",
-      workItemHash: hash,
-      contractRevision: current.completionContract.revision,
-      basisRef: current.completionContract.basisRef,
-      expectedHead: current.revision,
-      claims: [],
-      observations: [],
-      results: [],
-      invalidations: [],
-      verificationErrors: [],
-      effects: [],
-    }),
-    origin: "recovery",
-    contractRevision: current.completionContract.revision,
-    basisRef: current.completionContract.basisRef,
-    effectiveResultIds: [],
-    unresolvedCriterionIds: [],
-    decision: "admit",
-    reasonCodes: ["session_storage_fixture"],
-    residualRisks: [],
-    policyRef: "policy:session-storage-fixture",
-    completionReportSnapshot: canonicalReport,
-    completionReportRef,
-    expectedHead: current.revision,
-    recordedHead: current.revision + 1,
-    createdAt: current.timestamps.updated + 1,
-  });
-  const admitted = WorkItem.Info.parse({
-    ...current,
-    revision: admission.recordedHead,
-    completionFacts: {
-      ...current.completionFacts,
-      revision: current.completionFacts.revision + 1,
-      admissions: [...current.completionFacts.admissions, admission],
-    },
-    timestamps: { ...current.timestamps, updated: admission.createdAt },
-  });
-  if (!completionWriter(hash, current.revision, admitted)) {
-    return undefined;
-  }
-  const completedAt = admission.createdAt + 1;
-  const completed = WorkItem.Info.parse({
-    ...admitted,
-    revision: admitted.revision + 1,
-    completionReport: canonicalReport,
-    completionTerminalReceipt: {
-      version: 1,
-      hash,
-      requestId: admission.requestId,
-      admissionId: admission.id,
-      contractRevision: admission.contractRevision,
-      basisRef: admission.basisRef,
-      completionReportRef,
-      recordedHead: admitted.revision + 1,
-    },
-    timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
-  });
-  return completionWriter(hash, admitted.revision, completed) ? completed : undefined;
+  return persistCompletedWorkItemFixture({ hash, report, completionWriter });
 }
 
 async function rawCompletionCode(
@@ -320,6 +252,7 @@ describe("WorkItemStore", () => {
     ["retry limit", () => ({ maxAttempts: 99 })],
     ["Worker run identity", () => ({ workerRunId: "run_reassigned" })],
     ["Worker session identity", () => ({ workSessionId: "session_reassigned" })],
+    ["Executor kind", () => ({ executorKind: "external_api" })],
   ];
 
   test.each(
@@ -455,6 +388,8 @@ describe("WorkItemStore", () => {
       workerRunId: "run:retry:1",
       workSessionId: "session:retry:1",
     });
+    const updatedFields: string[][] = [];
+    Bus.subscribe(WorkItem.Events.Updated, (event) => updatedFields.push(event.payload.fields));
     const failed = await WorkItemStore.fail(item.hash, "transient error");
     const retried = await WorkItemStore.retry(item.hash);
 
@@ -471,6 +406,15 @@ describe("WorkItemStore", () => {
     expect(retried?.executorKind).toBeUndefined();
     expect(retried?.workerRunId).toBeUndefined();
     expect(retried?.workSessionId).toBeUndefined();
+    expect(updatedFields).toContainEqual([
+      "attempt",
+      "timestamps",
+      "failureReason",
+      "completionContract",
+      "executorKind",
+      "workerRunId",
+      "workSessionId",
+    ]);
     await expect(
       WorkItemStore.addEvidence(
         item.hash,
@@ -503,6 +447,54 @@ describe("WorkItemStore", () => {
         workSessionId: "session:retry:duplicate",
       }),
     ).rejects.toThrow("already has an execution assignment");
+  });
+
+  test("checks evidence replay scope before accepting an explicit evidence idempotently", async () => {
+    configureSqlite();
+    const item = await createItem("scoped-evidence-replay");
+    const scope = {
+      expectedAttempt: item.attempt,
+      expectedBasisRef: item.completionContract.basisRef,
+    };
+    const evidence = {
+      id: "evidence:scoped-replay",
+      kind: "verification" as const,
+      description: "original attempt evidence",
+      passed: true,
+    };
+
+    await WorkItemStore.addEvidence(item.hash, evidence, scope);
+    await WorkItemStore.fail(item.hash, "retry required");
+    await WorkItemStore.retry(item.hash);
+
+    await expect(WorkItemStore.addEvidence(item.hash, evidence, scope)).rejects.toThrow(
+      "attempt changed before evidence recording",
+    );
+  });
+
+  test.each([
+    "failed",
+    "cancelled",
+    "completed",
+  ] as const)("rejects execution assignment for a terminal %s work item", async (terminalState) => {
+    configureSqlite();
+    const item = await createItem(`terminal-assignment-${terminalState}`);
+    if (terminalState === "failed") {
+      await WorkItemStore.fail(item.hash, "terminal failure");
+    } else if (terminalState === "cancelled") {
+      await WorkItemStore.cancel(item.hash);
+    } else {
+      const evidenceId = await addPassingEvidence(item.hash);
+      persistCompletedFixture(item.hash, completionReport(evidenceId));
+    }
+
+    await expect(
+      WorkItemStore.assignExecution(item.hash, {
+        executorKind: "internal_chat_agent",
+        workerRunId: `run:${terminalState}`,
+        workSessionId: `session:${terminalState}`,
+      }),
+    ).rejects.toThrow(`Cannot assign execution to a ${terminalState} work item`);
   });
 
   test("defaults internal worker items to three max attempts", async () => {
@@ -665,6 +657,29 @@ describe("WorkItemStore", () => {
     expect(WorkItem.deriveStatus(item)).toBe("pending");
     expect(warnings).toHaveLength(1);
     expect(WorkItemStore.get(item.hash)).toBeUndefined();
+  });
+
+  test("rolls back WorkItem graph removal and publishes no events when deletion fails", async () => {
+    const adapter = configureSqlite();
+    const parent = await createItem("remove-parent");
+    const child = await createItem("remove-child", { parentHash: parent.hash });
+    const dependent = await createItem("remove-dependent", { dependsOn: [child.hash] });
+    const beforeParent = WorkItemStore.get(parent.hash);
+    const beforeDependent = WorkItemStore.get(dependent.hash);
+    const events: string[] = [];
+    Bus.subscribe(WorkItem.Events.Updated, (event) => events.push(`updated:${event.payload.hash}`));
+    Bus.subscribe(WorkItem.Events.Removed, (event) => events.push(`removed:${event.payload.hash}`));
+    const remove = adapter.workItem.remove;
+    adapter.workItem.remove = () => false;
+
+    expect(WorkItemStore.remove(child.hash)).toBe(false);
+    await flushBus();
+
+    expect(WorkItemStore.get(parent.hash)).toEqual(beforeParent);
+    expect(WorkItemStore.get(child.hash)).toEqual(child);
+    expect(WorkItemStore.get(dependent.hash)).toEqual(beforeDependent);
+    expect(events).toEqual([]);
+    adapter.workItem.remove = remove;
   });
 
   test("removes a work item", async () => {

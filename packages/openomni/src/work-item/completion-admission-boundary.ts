@@ -44,6 +44,7 @@ export type CompletionAdmissionServiceOptions = Readonly<{
   beforeAdmissionWrite?: () => void;
   allowTrustedInvalidations?: boolean;
   now: () => number;
+  reservation?: CompletionReservationOptions;
 }>;
 
 export type CompletionAdmissionService = Readonly<{
@@ -83,6 +84,13 @@ export type CompletionReservationLeaseInput = Readonly<{
   now: number;
 }>;
 
+export type CompletionReservationOptions = Readonly<{
+  ownerId: string;
+  leaseDurationMs: number;
+  requestRoot?: string;
+  envelopeDigest?: string;
+}>;
+
 const CompletionCasRetryLimit = 8;
 
 export function reserveCompletionRequest(
@@ -97,6 +105,13 @@ export function reserveCompletionRequest(
     const admission = current.completionFacts.admissions
       .filter(({ requestId }) => requestId === input.requestId)
       .at(-1);
+    if (
+      reservation &&
+      (reservation.requestRoot !== input.requestRoot ||
+        reservation.envelopeDigest !== input.envelopeDigest)
+    ) {
+      throw requestConflict(input.requestId);
+    }
     if (admission && current.completionTerminalReceipt?.admissionId === admission.id) {
       if (!reservation) throw requestConflict(input.requestId);
       return { state: "admitted", reservation };
@@ -213,6 +228,7 @@ export function assertCompletionReservationLease(input: CompletionReservationLea
 export function createCompletionAdmissionService(
   options: CompletionAdmissionServiceOptions,
 ): CompletionAdmissionService {
+  const reservation = options.reservation;
   return Object.freeze({
     async requestCompletion(requestInput, completionReportInput) {
       let request = WorkItem.CompletionRequest.parse(requestInput);
@@ -233,25 +249,45 @@ export function createCompletionAdmissionService(
             ({ requestId }) => requestId === request.id,
           );
           if (priorAdmissions.length > 0) {
+            if (WorkItem.deriveStatus(initial) === "completed") {
+              return await replayRequest(
+                initial,
+                request,
+                completionReport,
+                priorAdmissions,
+                options,
+              );
+            }
+            const assertReservation =
+              reservation === undefined
+                ? undefined
+                : reserveCompletionLease(initial, request, completionReport, reservation, options);
             return await replayRequest(
               initial,
               request,
               completionReport,
               priorAdmissions,
               options,
+              assertReservation,
             );
           }
           assertNotCompleted(initial);
           assertInitialRequest(initial, request);
+          const assertReservation =
+            reservation === undefined
+              ? undefined
+              : reserveCompletionLease(initial, request, completionReport, reservation, options);
           if (!requestedPublished) {
             publishRequested(request, initial.sessionId, options.now());
             requestedPublished = true;
           }
 
+          assertReservation?.();
           const authorityAdmission = await resolveAuthority(options, initial, request);
           const admission = canonicalAdmission(authorityAdmission, completionReport);
           assertUnchangedAfterAuthority(adapter, initial);
           assertAdmissionMatches(admission, initial, request);
+          assertReservation?.();
           options.beforeAdmissionWrite?.();
           assertUnchangedAfterAuthority(adapter, initial);
           const recorded = await appendAdmission(adapter, initial, request, admission);
@@ -266,6 +302,7 @@ export function createCompletionAdmissionService(
             completionReport,
             admission,
             options,
+            assertReservation,
           );
         } catch (error) {
           if (!(error instanceof CompletionAdmissionServiceError) || error.code !== "stale_head") {
@@ -298,43 +335,142 @@ export function createCompletionAdmissionService(
         requiredAdapter(workItemHash),
         options.completionWriter,
       );
-      const item = requiredItem(adapter.get(workItemHash), workItemHash);
-      assertNotFailedOrCancelled(item);
-      const admission = item.completionFacts.admissions.find(({ id }) => id === admissionId);
-      if (!admission) {
-        throw admissionRequired(workItemHash, admissionId);
+      for (let attempt = 0; attempt < CompletionCasRetryLimit; attempt += 1) {
+        try {
+          return await resumeCompletionAtHead(
+            adapter,
+            workItemHash,
+            admissionId,
+            completionReport,
+            reservation,
+            options,
+          );
+        } catch (error) {
+          if (!(error instanceof CompletionAdmissionServiceError) || error.code !== "stale_head") {
+            throw error;
+          }
+        }
       }
-      assertAdmissionReportMatches(admission, completionReport);
-      if (WorkItem.deriveStatus(item) === "completed") {
-        if (item.completionTerminalReceipt?.admissionId === admissionId) return item;
-        throw admissionRequired(workItemHash, admissionId);
-      }
-      if (
-        admission.contractRevision !== item.completionContract.revision ||
-        admission.basisRef !== item.completionContract.basisRef
-      ) {
-        throw new CompletionAdmissionServiceError(
-          "stale_basis",
-          `completion admission basis is stale for ${workItemHash}`,
-        );
-      }
-      if (item.revision === admission.recordedHead) {
-        if (!isAdmitted(admission)) return item;
-        return commitTerminal(adapter, item, admission, completionReport, options.now());
-      }
-
-      const request = requestFromAdmission(item, admission);
-      const nextAdmission = canonicalAdmission(
-        await resolveAuthority(options, item, request),
-        completionReport,
+      throw new CompletionAdmissionServiceError(
+        "stale_head",
+        `completion recovery contention did not converge: ${workItemHash}:${admissionId}`,
       );
-      assertAdmissionMatches(nextAdmission, item, request);
-      assertUnchangedAfterAuthority(adapter, item);
-      const recorded = await appendAdmission(adapter, item, request, nextAdmission);
-      if (!isAdmitted(nextAdmission)) return recorded;
-      return commitTerminal(adapter, recorded, nextAdmission, completionReport, options.now());
     },
   });
+}
+
+function reserveCompletionLease(
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+  completionReport: WorkItem.CompletionReport,
+  reservation: CompletionReservationOptions,
+  options: CompletionAdmissionServiceOptions,
+): () => void {
+  const requestRoot = reservation.requestRoot ?? request.id;
+  const envelopeDigest = reservation.envelopeDigest ?? completionReportReference(completionReport);
+  const acquired = reserveCompletionRequest({
+    completionWriter: options.completionWriter,
+    workItemHash: item.hash,
+    requestId: request.id,
+    requestRoot,
+    envelopeDigest,
+    ownerId: reservation.ownerId,
+    leaseDurationMs: reservation.leaseDurationMs,
+    now: options.now(),
+  });
+  if (acquired.state === "busy") {
+    throw new CompletionAdmissionServiceError(
+      "request_conflict",
+      `completion request is already in progress: ${request.id}`,
+    );
+  }
+  if (acquired.state === "admitted") throw requestConflict(request.id);
+  return () =>
+    assertCompletionReservationLease({
+      workItemHash: item.hash,
+      requestId: request.id,
+      reservationId: acquired.reservation.id,
+      ownerId: reservation.ownerId,
+      fence: acquired.reservation.fence,
+      now: options.now(),
+    });
+}
+
+function assertLiveReservation(
+  assertion: (() => void) | undefined,
+  requestId: string,
+): asserts assertion is () => void {
+  if (!assertion) {
+    throw new CompletionAdmissionServiceError(
+      "request_conflict",
+      `completion reservation is required: ${requestId}`,
+    );
+  }
+  assertion();
+}
+
+async function resumeCompletionAtHead(
+  adapter: NonNullable<ReturnType<typeof Storage.get>["workItem"]>,
+  workItemHash: string,
+  admissionId: string,
+  completionReport: WorkItem.CompletionReport,
+  reservation: CompletionReservationOptions | undefined,
+  options: CompletionAdmissionServiceOptions,
+): Promise<WorkItem.Info> {
+  const item = requiredItem(adapter.get(workItemHash), workItemHash);
+  assertNotFailedOrCancelled(item);
+  const admission = item.completionFacts.admissions.find(({ id }) => id === admissionId);
+  if (!admission) throw admissionRequired(workItemHash, admissionId);
+  assertAdmissionReportMatches(admission, completionReport);
+  if (WorkItem.deriveStatus(item) === "completed") {
+    if (item.completionTerminalReceipt?.admissionId === admissionId) return item;
+    throw admissionRequired(workItemHash, admissionId);
+  }
+  if (
+    admission.contractRevision !== item.completionContract.revision ||
+    admission.basisRef !== item.completionContract.basisRef
+  ) {
+    throw new CompletionAdmissionServiceError(
+      "stale_basis",
+      `completion admission basis is stale for ${workItemHash}`,
+    );
+  }
+  const request = requestFromAdmission(item, admission);
+  const assertReservation =
+    reservation === undefined
+      ? undefined
+      : reserveCompletionLease(item, request, completionReport, reservation, options);
+  assertReservation?.();
+  if (item.revision === admission.recordedHead) {
+    if (!isAdmitted(admission)) return item;
+    return commitTerminal(
+      adapter,
+      item,
+      admission,
+      completionReport,
+      options.now(),
+      assertReservation,
+    );
+  }
+
+  const nextAdmission = canonicalAdmission(
+    await resolveAuthority(options, item, request),
+    completionReport,
+  );
+  assertAdmissionMatches(nextAdmission, item, request);
+  assertReservation?.();
+  options.beforeAdmissionWrite?.();
+  assertUnchangedAfterAuthority(adapter, item);
+  const recorded = await appendAdmission(adapter, item, request, nextAdmission);
+  if (!isAdmitted(nextAdmission)) return recorded;
+  return commitTerminal(
+    adapter,
+    recorded,
+    nextAdmission,
+    completionReport,
+    options.now(),
+    assertReservation,
+  );
 }
 
 async function replayRequest(
@@ -343,6 +479,7 @@ async function replayRequest(
   completionReport: WorkItem.CompletionReport,
   admissions: readonly WorkItem.CompletionAdmission[],
   options: CompletionAdmissionServiceOptions,
+  assertReservation?: () => void,
 ): Promise<CompletionBoundaryOutcome> {
   assertReplayMatches(request, admissions);
   const original = admissions[0];
@@ -362,6 +499,9 @@ async function replayRequest(
   }
   const admission = admissions.at(-1);
   if (!admission) throw requestConflict(request.id);
+  if (options.reservation !== undefined) {
+    assertLiveReservation(assertReservation, request.id);
+  }
   if (!isAdmitted(admission)) {
     if (item.revision === admission.recordedHead) {
       return { admission, workItem: item, completed: false };
@@ -373,6 +513,7 @@ async function replayRequest(
       completionReport,
       admission,
       options,
+      assertReservation,
     );
   }
   if (item.revision === admission.recordedHead) {
@@ -382,6 +523,7 @@ async function replayRequest(
       admission,
       completionReport,
       options.now(),
+      assertReservation,
     );
     return { admission, workItem: completed, completed: true };
   }
@@ -392,6 +534,7 @@ async function replayRequest(
     completionReport,
     admission,
     options,
+    assertReservation,
   );
 }
 
@@ -402,7 +545,9 @@ async function completeOrReevaluate(
   completionReport: WorkItem.CompletionReport,
   admission: WorkItem.CompletionAdmission,
   options: CompletionAdmissionServiceOptions,
+  assertReservation: (() => void) | undefined,
 ): Promise<CompletionBoundaryOutcome> {
+  assertReservation?.();
   const latest = requiredItem(adapter.get(recorded.hash), recorded.hash);
   assertNotFailedOrCancelled(latest);
   if (WorkItem.deriveStatus(latest) === "completed") {
@@ -422,7 +567,14 @@ async function completeOrReevaluate(
     return { admission: terminalAdmission, workItem: latest, completed: true };
   }
   if (latest.revision === admission.recordedHead) {
-    const completed = commitTerminal(adapter, latest, admission, completionReport, options.now());
+    const completed = commitTerminal(
+      adapter,
+      latest,
+      admission,
+      completionReport,
+      options.now(),
+      assertReservation,
+    );
     return { admission, workItem: completed, completed: true };
   }
   assertSameBasis(latest, admission);
@@ -433,6 +585,7 @@ async function completeOrReevaluate(
     completionReport,
   );
   assertAdmissionMatches(nextAdmission, latest, recheck);
+  assertReservation?.();
   options.beforeAdmissionWrite?.();
   assertUnchangedAfterAuthority(adapter, latest);
   const nextRecorded = await appendAdmission(adapter, latest, recheck, nextAdmission);
@@ -452,6 +605,7 @@ async function completeOrReevaluate(
     nextAdmission,
     completionReport,
     options.now(),
+    assertReservation,
   );
   return { admission: nextAdmission, workItem: completed, completed: true };
 }
@@ -529,6 +683,7 @@ function commitTerminal(
   admission: WorkItem.CompletionAdmission,
   completionReport: WorkItem.CompletionReport,
   time: number,
+  assertReservation: (() => void) | undefined,
 ): WorkItem.Info {
   const current = requiredItem(adapter.get(existing.hash), existing.hash);
   assertNotFailedOrCancelled(current);
@@ -558,6 +713,7 @@ function commitTerminal(
     completionTerminalReceipt: receipt,
     timestamps: { ...current.timestamps, completed: time, updated: time },
   });
+  assertReservation?.();
   if (!adapter.compareAndSet(current.hash, current.revision, completed)) {
     throw new CompletionAdmissionServiceError(
       "stale_head",

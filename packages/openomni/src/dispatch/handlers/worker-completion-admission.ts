@@ -15,6 +15,7 @@ import {
   createCompletionAdmissionService,
   CompletionAdmissionServiceError,
   type CompletionBoundaryOutcome,
+  type CompletionReservationOptions,
 } from "../../work-item/completion-admission-boundary.js";
 import {
   type CompletionSourceOrigin,
@@ -73,6 +74,7 @@ export type WorkerReadBackEvidenceBinding = Readonly<{
 
 export type WorkerCompletionAdmissionInput = Readonly<{
   beforeAdmissionWrite?: () => void;
+  completionReservation?: CompletionReservationOptions;
   completionWriter: Storage.WorkItemCompletionWriter;
   requestId: string;
   workItemHash: string;
@@ -147,6 +149,9 @@ export async function admitWorkerCompletion(
     completionWriter: input.completionWriter,
     authorityResolver,
     beforeAdmissionWrite: input.beforeAdmissionWrite,
+    ...(input.completionReservation === undefined
+      ? {}
+      : { reservation: input.completionReservation }),
     now: input.now,
   });
   return service.requestCompletion(request, input.completionReport);
@@ -173,6 +178,7 @@ export async function replayWorkerCompletion(
     WorkerCompletionAdmissionInput,
     | "completionWriter"
     | "beforeAdmissionWrite"
+    | "completionReservation"
     | "workItemHash"
     | "result"
     | "completionEnvelopeDigest"
@@ -185,6 +191,9 @@ export async function replayWorkerCompletion(
     }>,
 ): Promise<CompletionBoundaryOutcome | undefined> {
   const item = requireWorkerCompletionIdentity(input.workItemHash, input.result);
+  if (WorkItem.deriveStatus(item) !== "completed" && input.completionReservation === undefined) {
+    return undefined;
+  }
   const requestRoot = workerCompletionRequestRoot(item, input.result);
   const requestId = `${requestRoot}:${input.completionEnvelopeDigest}`;
   const admission = item.completionFacts.admissions.find(
@@ -232,6 +241,9 @@ export async function replayWorkerCompletion(
       (() => {
         throw new CompletionReplayRequiresReservation();
       }),
+    ...(input.completionReservation === undefined
+      ? {}
+      : { reservation: input.completionReservation }),
     now: input.now,
   });
   try {

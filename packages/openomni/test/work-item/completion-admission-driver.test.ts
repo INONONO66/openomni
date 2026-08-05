@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
+import { completionAdmissionScenarioReceipt } from "../../src/work-item/completion-admission-driver-contract.js";
 import { runAllOriginsCompletionAdmissionScenario } from "../../src/work-item/completion-admission-driver-origin-scenarios.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
@@ -103,6 +104,32 @@ describe("WorkItem completion admission driver", () => {
       mode: "argument_error",
       ok: false,
       resultCode: "invalid_arguments",
+    });
+  });
+
+  test("does not allow scenario fields to override the receipt envelope", () => {
+    const receipt = completionAdmissionScenarioReceipt(
+      "known-bad",
+      true,
+      "expected_success",
+      "unexpected_failure",
+      {
+        version: "forged-version",
+        mode: "forged-mode",
+        scenario: "legacy-archive",
+        ok: false,
+        resultCode: "forged-result",
+        preservedField: "preserved",
+      },
+    );
+
+    expect(receipt).toMatchObject({
+      version: "completion-admission-driver-v1",
+      mode: "scenario",
+      scenario: "known-bad",
+      ok: true,
+      resultCode: "expected_success",
+      preservedField: "preserved",
     });
   });
 
@@ -253,8 +280,12 @@ describe("WorkItem completion admission driver", () => {
       stableReceiptIds: true,
       allClaimsPreserved: true,
       failedEvidencePreserved: true,
+      allRequiredCriteriaEvidenced: true,
+      archivedStatus: "completed",
+      admissionCount: 1,
+      terminalReceiptLinked: true,
       verifiedResultCount: 0,
-      resultValues: ["asserted"],
+      resultValues: ["asserted", "asserted"],
     });
   });
 

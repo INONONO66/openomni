@@ -487,10 +487,11 @@ async function assertDurableResultAuthority(
   item: WorkItem.Info,
   request: WorkItem.CompletionRequest,
 ): Promise<void> {
-  const invalidatedResultIds = new Set([
-    ...item.completionFacts.invalidations.map(({ resultId }) => resultId),
-    ...request.invalidations.map(({ resultId }) => resultId),
-  ]);
+  const invalidatedResultIds = new Set(
+    [...item.completionFacts.invalidations, ...request.invalidations]
+      .filter((invalidation) => invalidation.basisRef === request.basisRef)
+      .map(({ resultId }) => resultId),
+  );
   for (const result of item.completionFacts.results) {
     if (result.basisRef !== request.basisRef || invalidatedResultIds.has(result.id)) {
       continue;

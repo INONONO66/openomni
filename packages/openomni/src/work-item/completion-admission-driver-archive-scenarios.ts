@@ -25,18 +25,28 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
         createdAt: 6,
       },
       {
+        id: "evidence:legacy-driver-second-pass",
+        kind: "verification",
+        description: "Legacy claimant marked the second evidence passed",
+        passed: true,
+        createdAt: 7,
+      },
+      {
         id: "evidence:legacy-driver-fail",
         kind: "verification",
-        description: "Legacy evidence recorded a failure",
+        description: "Unrelated legacy evidence recorded a failure",
         passed: false,
-        createdAt: 7,
+        createdAt: 8,
       },
     ],
     completionReport: {
       summary: "Historical completion report",
       claims: [
         { statement: "Passed legacy claim", evidenceIds: ["evidence:legacy-driver-pass"] },
-        { statement: "Failed legacy claim", evidenceIds: ["evidence:legacy-driver-fail"] },
+        {
+          statement: "Failed legacy claim",
+          evidenceIds: ["evidence:legacy-driver-second-pass"],
+        },
       ],
       caveats: ["Archived without retrospective verification"],
       followUps: [],
@@ -76,6 +86,21 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     );
   const resultValues = first.completionFacts.results.map(({ value }) => value);
   const verifiedResultCount = resultValues.filter((value) => value === "verified").length;
+  const allRequiredCriteriaEvidenced = first.completionFacts.criteria
+    .filter(({ required }) => required)
+    .every((criterion) =>
+      first.completionFacts.results.some(
+        ({ criterionId, observationIds }) =>
+          criterionId === criterion.id && observationIds.length > 0,
+      ),
+    );
+  const archivedStatus = WorkItem.deriveStatus(first);
+  const admissionCount = first.completionFacts.admissions.length;
+  const terminalReceiptLinked =
+    first.completionTerminalReceipt !== undefined &&
+    first.completionFacts.admissions.some(
+      ({ id }) => id === first.completionTerminalReceipt?.admissionId,
+    );
   const ok =
     sourceUnchanged &&
     stableCriterionIds &&
@@ -84,7 +109,11 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     allClaimsPreserved &&
     failedEvidencePreserved &&
     resultValues.includes("asserted") &&
-    verifiedResultCount === 0;
+    verifiedResultCount === 0 &&
+    allRequiredCriteriaEvidenced &&
+    archivedStatus === "completed" &&
+    admissionCount > 0 &&
+    terminalReceiptLinked;
 
   return completionAdmissionScenarioReceipt(
     "legacy-archive",
@@ -104,7 +133,10 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
       failedEvidencePreserved,
       resultValues,
       verifiedResultCount,
-      archivedStatus: WorkItem.deriveStatus(first),
+      allRequiredCriteriaEvidenced,
+      archivedStatus,
+      admissionCount,
+      terminalReceiptLinked,
     },
   );
 }

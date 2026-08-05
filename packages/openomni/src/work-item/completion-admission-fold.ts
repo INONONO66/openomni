@@ -251,6 +251,7 @@ function foldRequiredCriteria(input: CompletionEvaluationInput, facts: FoldFacts
   );
   if (input.proposedFacts.results.some((result) => result.basisRef !== input.basisRef)) {
     addUnique(state.reasonCodes, "basis_mismatch");
+    state.hasBlockingResult = true;
   }
 
   for (const criterion of facts.criteria) {

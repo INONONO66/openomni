@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
+import { Storage, WorkItemStore } from "@openomni/session";
 import { ReadBackExecutor } from "../../src/index";
 import {
   cleanupReadBackFixtures,
@@ -17,6 +18,27 @@ afterEach(async () => {
 });
 
 describe("ReadBackExecutor", () => {
+  test("returns a read-back check without persisting WorkItem evidence", async () => {
+    Storage.initialize({ dbPath: ":memory:" });
+    const item = await WorkItemStore.create({
+      name: "Read-back execution isolation",
+      sourceMessageId: "read-back-execution-isolation",
+      sourceChannel: "test",
+      intent: "verify",
+      goal: "keep read-back execution free of storage side effects",
+      acceptanceCriteria: ["the executor returns a check without recording evidence"],
+    });
+    const origin = await startFixtureServer();
+
+    const check = await ReadBackExecutor.execute(
+      { kind: "url_fetch", target: `${origin}/document` },
+      LOCAL_READ_BACK,
+    );
+
+    expect(check.passed).toBe(true);
+    expect(WorkItemStore.get(item.hash)?.evidence).toEqual([]);
+  });
+
   test("re-fetches a URL and records status plus content digest", async () => {
     const origin = await startFixtureServer();
 

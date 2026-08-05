@@ -119,7 +119,10 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
         };
         break;
       case "work.allow_asserted":
-        allowAsserted ??= { criterionIds: [], order: entry.order, priority: entry.priority };
+        allowAsserted = {
+          ...(allowAsserted ?? { criterionIds: [], order: entry.order, priority: entry.priority }),
+          order: Math.min(allowAsserted?.order ?? entry.order, entry.order),
+        };
         for (const criterionId of effect.criterionIds) {
           if (!allowAsserted.criterionIds.includes(criterionId)) {
             allowAsserted.criterionIds.push(criterionId);

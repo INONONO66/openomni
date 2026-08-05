@@ -36,6 +36,9 @@ export function retryWorkItem(
     "timestamps",
     "failureReason",
     "completionContract",
+    "executorKind",
+    "workerRunId",
+    "workSessionId",
   ]);
 }
 

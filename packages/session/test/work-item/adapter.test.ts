@@ -277,6 +277,29 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(item.hash)).toBeUndefined();
   });
 
+  test("rejects a raw completion baseline whose facts revision is not zero", () => {
+    const item = makeWorkItem({
+      hash: "wi_000rawfactsrevision",
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        revision: 1,
+        criteria: [
+          {
+            id: WorkItem.criterionId("wi_000rawfactsrevision", 0, "the item remains parseable"),
+            revision: 1,
+            statement: "the item remains parseable",
+            required: true,
+          },
+        ],
+      },
+    });
+
+    expect(() => adapter.workItem?.create(item.hash, item)).toThrow(
+      "WorkItem create accepts pending completion baselines only",
+    );
+    expect(adapter.workItem?.get(item.hash)).toBeUndefined();
+  });
+
   test("decodes one historical row identically through get and list after reopen", () => {
     adapter.close();
     const database = new Database(dbPath);
@@ -315,6 +338,35 @@ describe("SqliteStorageAdapter workItem", () => {
     );
     expect(reopenedGet?.completionFacts.admissions.map(({ id }) => id)).toEqual(
       firstGet?.completionFacts.admissions.map(({ id }) => id),
+    );
+    expect(reopenedGet?.completionFacts.admissions[0]).toMatchObject({
+      decision: "admit",
+      unresolvedCriterionIds: [],
+    });
+  });
+
+  test.each([
+    ["missing", []],
+    [
+      "failed",
+      [
+        {
+          ...historicalRow.evidence[0],
+          passed: false,
+        },
+      ],
+    ],
+  ])("rejects a completed historical row with %s required evidence", (_kind, evidence) => {
+    adapter.close();
+    insertRawWorkItem(
+      dbPath,
+      { ...historicalRow, hash: `wi_historical_${_kind}`, evidence },
+      "completed",
+    );
+    adapter = new SqliteStorageAdapter(dbPath);
+
+    expect(() => adapter.workItem.get(`wi_historical_${_kind}`)).toThrow(
+      "completed legacy WorkItem has unresolved required criteria",
     );
   });
 

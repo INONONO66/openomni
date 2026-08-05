@@ -1,15 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import {
+  createDefaultDispatchRuntime,
+  type DefaultDispatchRuntime,
+  type DefaultDispatchRuntimeOptions,
+} from "@openomni/openomni";
 import { Bus, PendingInteractionStore, Session, Storage, WorkerRun } from "@openomni/session";
-import { runRecovery } from "../../src/bootstrap/recovery";
+import { runBootstrapRecovery, runRecovery } from "../../src/bootstrap/recovery";
+import {
+  createBootstrapDispatchRuntime,
+  startInboundSurfacesAfterRecovery,
+} from "../../src/bootstrap/startup";
 
-const bootstrapSource = await Bun.file(
-  new URL("../../src/bootstrap/index.ts", import.meta.url),
-).text();
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 beforeEach(() => {
   Bus.reset();
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
 });
 
 afterEach(() => {
@@ -47,6 +54,51 @@ async function createPendingInteractionFixture(
 }
 
 describe("server recovery", () => {
+  it("injects the public default runtime into recovery before inbound surfaces start", async () => {
+    let runtimeOptions: DefaultDispatchRuntimeOptions | undefined;
+    const runtime = createDefaultDispatchRuntime({ completionWriter });
+    const sharedRuntime = createBootstrapDispatchRuntime({ completionWriter }, (options) => {
+      runtimeOptions = options;
+      return runtime;
+    });
+    let recoveredRuntime:
+      | Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">
+      | undefined;
+    const events: string[] = [];
+
+    const server = await startInboundSurfacesAfterRecovery({
+      recover: async () => {
+        events.push("recovery");
+        await runBootstrapRecovery(
+          {
+            handler: undefined,
+            traceId: "trace-bootstrap-wiring",
+            completionRuntime: sharedRuntime,
+          },
+          async (_handler, _coordinator, _traceId, completionRuntime) => {
+            recoveredRuntime = completionRuntime;
+          },
+        );
+      },
+      createServer: () => {
+        events.push("server");
+        return { close: () => undefined };
+      },
+      channels: [
+        {
+          start() {
+            events.push("channel");
+          },
+        },
+      ],
+    });
+
+    expect(runtimeOptions?.completionPolicyEngine).toBeDefined();
+    expect(recoveredRuntime).toBe(sharedRuntime);
+    expect(events).toEqual(["recovery", "server", "channel"]);
+    expect(server).toEqual({ close: expect.any(Function) });
+  });
+
   it("invokes recorded WorkItem completion recovery during boot", async () => {
     let completionRecoveryCalls = 0;
 
@@ -58,18 +110,6 @@ describe("server recovery", () => {
     });
 
     expect(completionRecoveryCalls).toBe(1);
-    expect(bootstrapSource).not.toContain("createWorkItemCompletionGateway");
-  });
-
-  it("shares the completion policy engine across live dispatch and recovery", () => {
-    const policyEngineCreationCount =
-      bootstrapSource.match(/PolicyEngine\.create\(\)/g)?.length ?? 0;
-
-    expect(policyEngineCreationCount).toBe(1);
-    expect(bootstrapSource).toContain("completionPolicyEngine,");
-    expect(bootstrapSource).toContain(
-      "runRecovery(routingHandler, coordinator, traceId, sharedDispatchRuntime)",
-    );
   });
 
   it("expires stale PendingInteractions during boot recovery", async () => {
@@ -100,20 +140,6 @@ describe("server recovery", () => {
     expect(PendingInteractionStore.get("pi-boot-active")?.status).toBe("open");
     expect(events).toContain("pending_interaction.expired");
     expect(events).toContain("operational.recovery.completed");
-    // #477 review W4: the completed event must carry the recovered session
-    // count from RecoveryResult.sessions, not a number-coerced 0.
     expect(completedPayloads[0]?.sessionsRecovered).toBe(2);
-  });
-
-  it("runs recovery before inbound dispatch surfaces start", () => {
-    const recoveryIndex = bootstrapSource.indexOf("await runRecovery(");
-    const serveIndex = bootstrapSource.indexOf("Bun.serve(");
-    const channelStartIndex = bootstrapSource.indexOf("channel.start()");
-
-    expect(recoveryIndex).toBeGreaterThan(-1);
-    expect(serveIndex).toBeGreaterThan(-1);
-    expect(channelStartIndex).toBeGreaterThan(-1);
-    expect(recoveryIndex).toBeLessThan(serveIndex);
-    expect(recoveryIndex).toBeLessThan(channelStartIndex);
   });
 });

@@ -41,8 +41,8 @@ describe("bashTool", () => {
 
   test("kills the subprocess when execution context is aborted", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-abort-"));
-    const childPidFileName = "child.pid";
-    const childPidFile = join(workspace, childPidFileName);
+    const childPidFile = join(workspace, "child.pid");
+    const readyFile = join(workspace, "ready");
     const controller = new AbortController();
     let resolveReady: (() => void) | undefined;
     let rejectReady: ((error: Error) => void) | undefined;
@@ -50,8 +50,8 @@ describe("bashTool", () => {
       resolveReady = resolve;
       rejectReady = reject;
     });
-    const watcher = watch(workspace, (_eventType, filename) => {
-      if (filename?.toString() === childPidFileName) resolveReady?.();
+    const watcher = watch(workspace, () => {
+      if (existsSync(readyFile)) resolveReady?.();
     });
     const readyTimeout = setTimeout(() => {
       rejectReady?.(new Error("bash child process did not become ready"));
@@ -63,16 +63,19 @@ describe("bashTool", () => {
         {
           id: "call-abort",
           tool: "bash",
-          input: { command: "sleep 1000 & echo $! > child.pid; wait" },
+          input: {
+            command:
+              'trap \'wait "$child_pid" 2>/dev/null; exit 143\' TERM; sleep 1000 & child_pid=$!; printf \'%s\\n\' "$child_pid" > child.pid; touch ready; wait "$child_pid"',
+          },
         },
         { signal: controller.signal },
       );
 
       await ready;
-      clearTimeout(readyTimeout);
       const childPid = Number.parseInt(readFileSync(childPidFile, "utf8").trim(), 10);
       controller.abort();
       const result = await resultPromise;
+      clearTimeout(readyTimeout);
       let childAlive = true;
       try {
         process.kill(childPid, 0);

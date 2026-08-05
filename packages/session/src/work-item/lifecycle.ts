@@ -70,6 +70,10 @@ export async function assignWorkItemExecution(
   }>,
 ): Promise<WorkItem.Info | undefined> {
   return mutate(hash, (existing, now) => {
+    const status = WorkItem.deriveStatus(existing);
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      throw new Error(`Cannot assign execution to a ${status} work item`);
+    }
     if (existing.workerRunId || existing.workSessionId || existing.executorKind) {
       throw new Error(`WorkItem already has an execution assignment: ${hash}`);
     }
@@ -126,6 +130,7 @@ export async function addWorkItemEvidence(
   const explicitId = evidence.id;
   if (explicitId !== undefined) {
     const existing = Storage.get().workItem?.get(hash);
+    assertEvidenceScope(existing, expectedScope);
     const recorded = existing?.evidence.find(({ id }) => id === explicitId);
     if (existing && recorded) {
       const candidate = WorkItem.Evidence.parse({
@@ -142,13 +147,7 @@ export async function addWorkItemEvidence(
     }
   }
   return mutate(hash, (existing, now) => {
-    if (
-      expectedScope &&
-      (existing.attempt !== expectedScope.expectedAttempt ||
-        existing.completionContract.basisRef !== expectedScope.expectedBasisRef)
-    ) {
-      throw new Error("WorkItem attempt changed before evidence recording");
-    }
+    assertEvidenceScope(existing, expectedScope);
     return {
       changedFields: ["evidence"],
       updated: {
@@ -167,6 +166,20 @@ export async function addWorkItemEvidence(
       },
     };
   });
+}
+
+function assertEvidenceScope(
+  existing: WorkItem.Info | undefined,
+  expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }> | undefined,
+): void {
+  if (
+    existing &&
+    expectedScope &&
+    (existing.attempt !== expectedScope.expectedAttempt ||
+      existing.completionContract.basisRef !== expectedScope.expectedBasisRef)
+  ) {
+    throw new Error("WorkItem attempt changed before evidence recording");
+  }
 }
 
 export async function addWorkItemReadBackEvidence(

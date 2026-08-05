@@ -1077,6 +1077,30 @@ describe("completion admission authority resolver", () => {
     expect(policyCalls).toBe(0);
   });
 
+  test("does not let an old-basis invalidation bypass durable result authority", async () => {
+    const durableResult = verifiedResult();
+    const currentItem = item({
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        revision: 2,
+        criteria: [criterion],
+        observations: [observation()],
+        results: [durableResult],
+        invalidations: [
+          {
+            id: "invalidation:old-basis",
+            resultId: durableResult.id,
+            basisRef: "basis:old",
+            reason: "superseded historical contract",
+            createdAt: 3,
+          },
+        ],
+      },
+    });
+
+    expect(await resolveErrorCode(currentItem, request({ results: [] }))).toBe("invalid_verifier");
+  });
+
   test("keeps durable old-basis results as foldable history", async () => {
     const currentItem = item({
       completionFacts: {

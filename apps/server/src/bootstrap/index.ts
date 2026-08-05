@@ -2,7 +2,6 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/policy";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
@@ -11,7 +10,6 @@ import {
   IngressEngine,
   ResidentRuntime,
   SystemToolProvider,
-  createDefaultDispatchRuntime,
   type DispatchRuntime,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
@@ -25,7 +23,8 @@ import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { createServerDispatchOwners } from "./dispatch-owners";
 import { connectMcpServers } from "./mcp";
-import { runRecovery } from "./recovery";
+import { runBootstrapRecovery } from "./recovery";
+import { createBootstrapDispatchRuntime, startInboundSurfacesAfterRecovery } from "./startup";
 import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
 import { installShutdownHandlers } from "./shutdown";
 import { registerAgent } from "../agents";
@@ -141,11 +140,9 @@ export async function main(): Promise<void> {
     completionWriter,
     dispatchOwners,
   });
-  const completionPolicyEngine = PolicyEngine.create();
-  const sharedDispatchRuntime = createDefaultDispatchRuntime({
+  const sharedDispatchRuntime = createBootstrapDispatchRuntime({
     completionWriter,
     owners: dispatchOwners,
-    completionPolicyEngine,
   });
   dispatchRuntimeRef.current = sharedDispatchRuntime;
   IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
@@ -194,30 +191,37 @@ export async function main(): Promise<void> {
 
   const traceId = crypto.randomUUID();
   const mode = "coordinator";
-  await runRecovery(routingHandler, coordinator, traceId, sharedDispatchRuntime);
-
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,
   });
-  const server = Bun.serve({
-    port: config.server.port,
-    hostname: config.server.host,
-    // biome-ignore lint/suspicious/noEmptyBlockStatements: Bun.serve requires a websocket object; these are intentional no-ops when WS is disabled
-    websocket: wsHandler?.ws ?? { open() {}, message() {} },
-    fetch(req, serverInstance) {
-      const url = new URL(req.url);
-      if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
-        if (!wsHandler) {
-          return new Response("WebSocket unavailable", { status: 503 });
-        }
-        const response = wsHandler.handleUpgrade(req, serverInstance);
-        return response ?? new Response(null, { status: 101 });
-      }
-      return app.fetch(req, serverInstance);
-    },
+  const server = await startInboundSurfacesAfterRecovery({
+    recover: () =>
+      runBootstrapRecovery({
+        handler: routingHandler,
+        coordinator,
+        traceId,
+        completionRuntime: sharedDispatchRuntime,
+      }),
+    createServer: () =>
+      Bun.serve({
+        port: config.server.port,
+        hostname: config.server.host,
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: Bun.serve requires a websocket object; these are intentional no-ops when WS is disabled
+        websocket: wsHandler?.ws ?? { open() {}, message() {} },
+        fetch(req, serverInstance) {
+          const url = new URL(req.url);
+          if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+            if (!wsHandler) {
+              return new Response("WebSocket unavailable", { status: 503 });
+            }
+            const response = wsHandler.handleUpgrade(req, serverInstance);
+            return response ?? new Response(null, { status: 101 });
+          }
+          return app.fetch(req, serverInstance);
+        },
+      }),
+    channels,
   });
-
-  await Promise.all(channels.map((channel) => channel.start()));
 
   if (channels.length === 0) {
     Bus.publish(Operational.Info, {
@@ -268,7 +272,7 @@ export async function main(): Promise<void> {
 import { resolveDefaultProviderModel } from "../agents/model-resolution";
 import type { ServerConfig } from "../config";
 
-export async function resolveModel(config?: ServerConfig) {
+async function resolveModel(config?: ServerConfig) {
   if (config?.model) {
     return { providerID: config.model.provider, id: config.model.id, name: config.model.id };
   }

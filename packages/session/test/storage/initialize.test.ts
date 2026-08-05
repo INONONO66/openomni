@@ -67,6 +67,27 @@ describe("Storage.initialize", () => {
     expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
+  test("initializes an isolated storage scope even when the parent uses the same path", () => {
+    const dbPath = join(tmpDir, ".openomni", "storage.db");
+    initialize({ dbPath });
+    const parentAdapter = Storage.getAdapter();
+
+    Storage.withIsolation(() => {
+      expect(() => initialize({ dbPath })).not.toThrow();
+      expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
+      expect(Storage.getAdapter()).not.toBe(parentAdapter);
+      expect(Storage.getInitializedDbPath()).toBe(dbPath);
+      Storage.getAdapter().session.set("isolated-session", {
+        id: "isolated-session",
+        title: "Isolated",
+        model: { providerID: "test", modelID: "test" },
+        time: { created: 1, updated: 1 },
+      });
+    });
+
+    expect(parentAdapter.session.get("isolated-session")?.title).toBe("Isolated");
+  });
+
   test("Storage.initialize is callable on the namespace", () => {
     expect(typeof Storage.initialize).toBe("function");
     Storage.initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });

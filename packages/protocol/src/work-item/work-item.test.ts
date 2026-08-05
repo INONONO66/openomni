@@ -90,6 +90,7 @@ describe("WorkItem.Info", () => {
     const missingAcceptanceCriteria = WorkItem.Info.safeParse({
       ...baseItem,
       ...currentCompletion,
+      acceptanceCriteria: [],
     });
     const missingStableCriteria = WorkItem.Info.safeParse({
       ...baseItem,
@@ -432,6 +433,20 @@ describe("WorkItem.Info", () => {
         ],
       }),
     ).toThrow();
+  });
+
+  test("canonicalizes report evidence IDs as sorted unique values", () => {
+    const canonical = WorkItem.canonicalCompletionReport({
+      ...validCompletionReport,
+      claims: [
+        {
+          statement: "Focused protocol tests passed.",
+          evidenceIds: ["ev_z", "ev_a", "ev_z", "ev_m", "ev_a"],
+        },
+      ],
+    });
+
+    expect(canonical.claims[0]?.evidenceIds).toEqual(["ev_a", "ev_m", "ev_z"]);
   });
 
   test("parses all executorKind and outcome literals", () => {

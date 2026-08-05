@@ -232,6 +232,88 @@ describe("worker completion admission convergence", () => {
     });
   });
 
+  test("normalizes the reservation lease from the bounded read-back timeout", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "hold-normalized-lease",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () => PolicyDecision.deny({ policyId: "hold-normalized-lease", reasonCodes: ["hold"] }),
+    });
+
+    await reflectCoordinatorResultWithPolicy(
+      item.hash,
+      succeeded(await evidenceBackedEnvelope(item.hash)),
+      {
+        completionWriter,
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine,
+        readBackEnvelopeTimeoutMs: 12.1,
+        now: () => 100,
+      },
+    );
+
+    expect(
+      WorkItemStore.get(item.hash)?.completionFacts.requestReservations[0]?.leaseExpiresAt,
+    ).toBe(5_113);
+  });
+
+  test("refuses terminal compare-and-set after its reservation expires", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const adapter = Storage.get().workItem;
+    if (!adapter) throw new Error("missing WorkItem adapter");
+    const compareAndSet = adapter.compareAndSet.bind(adapter);
+    let clock = 0;
+    adapter.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+      if (
+        candidate.completionTerminalReceipt === undefined &&
+        candidate.completionFacts.admissions.length === 1
+      ) {
+        clock = 5_001;
+      }
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+    };
+
+    const reflection = await reflectCoordinatorResult(
+      item.hash,
+      succeeded(await evidenceBackedEnvelope(item.hash)),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 1,
+        now: () => clock,
+      },
+    );
+
+    expect(reflection.completionBlocker).toContain("completion reservation lease lost");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("replays a completed Worker result without renewing an expired reservation", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    await reflectCoordinatorResult(item.hash, succeeded(output), {
+      sourceOrigin: { source: "internal_worker" },
+      readBackEnvelopeTimeoutMs: 1,
+      now: () => 0,
+    });
+    const beforeReplay = WorkItemStore.get(item.hash)?.completionFacts.requestReservations.at(-1);
+
+    const replay = await reflectCoordinatorResult(item.hash, succeeded(output), {
+      sourceOrigin: { source: "internal_worker" },
+      readBackEnvelopeTimeoutMs: 1,
+      now: () => 5_001,
+    });
+
+    expect(replay).toMatchObject({ completionBlocked: false, workItemStatus: "completed" });
+    expect(WorkItemStore.get(item.hash)?.completionFacts.requestReservations.at(-1)).toEqual(
+      beforeReplay,
+    );
+  });
+
   test("persists a qualified completion identity in the durable request", async () => {
     const item = await startedItem("internal_chat_agent");
     const sourceIdentity = {

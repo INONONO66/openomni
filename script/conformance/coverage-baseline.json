@@ -1,8 +1,8 @@
 {
   "apps/server": {
-    "linesFound": 4689,
-    "linesHit": 4120,
-    "pct": 87.87
+    "linesFound": 4711,
+    "linesHit": 4142,
+    "pct": 87.92
   },
   "packages/agent": {
     "linesFound": 2594,
@@ -20,23 +20,23 @@
     "pct": 89.19
   },
   "packages/openomni": {
-    "linesFound": 15348,
-    "linesHit": 14644,
-    "pct": 95.41
+    "linesFound": 15544,
+    "linesHit": 14840,
+    "pct": 95.47
   },
   "packages/policy": {
-    "linesFound": 1771,
-    "linesHit": 1366,
-    "pct": 77.13
+    "linesFound": 1775,
+    "linesHit": 1372,
+    "pct": 77.3
   },
   "packages/protocol": {
-    "linesFound": 4945,
-    "linesHit": 4812,
-    "pct": 97.31
+    "linesFound": 4937,
+    "linesHit": 4820,
+    "pct": 97.63
   },
   "packages/session": {
-    "linesFound": 3966,
-    "linesHit": 3638,
-    "pct": 91.73
+    "linesFound": 4012,
+    "linesHit": 3728,
+    "pct": 92.92
   }
 }

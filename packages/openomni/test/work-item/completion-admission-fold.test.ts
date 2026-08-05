@@ -300,7 +300,7 @@ describe("completion admission pure fold", () => {
     expect(admission.effectiveResultIds).toEqual([durableResult.id, proposedResult.id]);
   });
 
-  test("selects the latest current-basis non-invalidated result", () => {
+  test("blocks a stale proposed result even when a current result is eligible", () => {
     const eligible = result("result:eligible", lowCriterion.id, "verified", "basis:current", 5);
     const invalidated = result(
       "result:invalidated",
@@ -318,8 +318,9 @@ describe("completion admission pure fold", () => {
 
     const admission = evaluate(input({ criteria: [lowCriterion], proposedFacts }));
 
-    expect(admission.decision).toBe("admit");
+    expect(admission.decision).toBe("block");
     expect(admission.effectiveResultIds).toEqual([eligible.id]);
+    expect(admission.reasonCodes).toContain("basis_mismatch");
   });
 
   test("keeps an authoritative result above a later claimant assertion", () => {

@@ -65,6 +65,7 @@ const canonicalTimingByPointId: ReadonlyMap<string, Policy.Timing> = new Map(
 
 export function timingForPolicyPoint(pointId: PolicyPointId): Policy.Timing {
   const contract = Policy.PolicyPoint.Registry[pointId];
+  if (contract === undefined) throw new PolicyPointTimingError(pointId);
   const timing = canonicalTimingByPointId.get(contract.id);
   if (timing !== undefined) return timing;
   throw new PolicyPointTimingError(contract.id);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { composeEffects, PolicyEngine } from "@openomni/policy";
+import { composeEffects, mergeEntries, PolicyEngine } from "@openomni/policy";
 import { Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext } from "./point-test-fixtures";
 
@@ -220,6 +220,40 @@ describe("PolicyEngine dispatchPoint selection", () => {
 });
 
 describe("WorkItem policy effect composition", () => {
+  test("retains the minimum source order when merging asserted-result allowances", () => {
+    const merged = mergeEntries([
+      {
+        effect: { type: "work.allow_asserted", criterionIds: ["criterion:late"] },
+        policyId: "late-asserted-allowance",
+        priority: 0,
+        decisionIndex: 0,
+        effectIndex: 0,
+        order: 10,
+      },
+      {
+        effect: { type: "audit.annotate", annotation: "between" },
+        policyId: "between",
+        priority: 0,
+        decisionIndex: 1,
+        effectIndex: 0,
+        order: 5,
+      },
+      {
+        effect: { type: "work.allow_asserted", criterionIds: ["criterion:early"] },
+        policyId: "early-asserted-allowance",
+        priority: 0,
+        decisionIndex: 2,
+        effectIndex: 0,
+        order: 1,
+      },
+    ]);
+
+    expect(merged.effects).toEqual([
+      { type: "work.allow_asserted", criterionIds: ["criterion:late", "criterion:early"] },
+      { type: "audit.annotate", annotation: "between" },
+    ]);
+  });
+
   test("merges asserted-result allowances into one stable criterion list", () => {
     const later = PolicyDecision.allow({
       policyId: "later-asserted-allowance",

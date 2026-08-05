@@ -125,7 +125,7 @@ export function createDefaultDispatchRuntime(
     policyResolver: options.policyResolver,
   });
   return Object.assign(runtime, {
-    submitActorWorkItemCompletion: (submission: ActorWorkItemCompletionSubmission) => {
+    submitActorWorkItemCompletion: async (submission: ActorWorkItemCompletionSubmission) => {
       if (!completionGateway) throw new Error("completion writer is unavailable");
       const source = CompletionSourceOrigin.parse(submission.source);
       if (!("identity" in source)) {
@@ -142,7 +142,7 @@ export function createDefaultDispatchRuntime(
     },
     recoverRecordedWorkItemCompletions:
       completionGateway?.recoverRecordedCompletions ??
-      (() => {
+      (async () => {
         throw new Error("completion writer is unavailable");
       }),
   });

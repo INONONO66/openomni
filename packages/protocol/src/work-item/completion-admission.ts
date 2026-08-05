@@ -457,7 +457,7 @@ export function canonicalCompletionReport(input: CompletionReport): CompletionRe
     ...report,
     claims: report.claims.map((claim) => ({
       ...claim,
-      evidenceIds: [...claim.evidenceIds].sort(),
+      evidenceIds: [...new Set(claim.evidenceIds)].sort(),
     })),
   });
 }

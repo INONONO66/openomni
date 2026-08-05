@@ -3,9 +3,9 @@ import { IngressEngine, type NativeTool, type ToolProvider } from "@openomni/ope
 import type { Adapter, Ingress, Tool } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage, WorkItemStore } from "@openomni/session";
-import { createCompletionAdmissionService } from "../../../../packages/openomni/src/work-item/completion-admission-boundary";
 import { createMessageHandler } from "../../src/handler/conversation";
 import type { BridgeDeps } from "../../src/ingress/bridge";
+import { completeWorkItem } from "../work-item-completion-fixture";
 
 function makeTool(name: string): NativeTool {
   return {
@@ -58,104 +58,6 @@ async function createWorkItem(
     acceptanceCriteria: [`${name} is handled`],
     ...extra,
   });
-}
-
-async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  const updated = await WorkItemStore.addEvidence(hash, {
-    kind: "verification",
-    description: "conversation ledger fixture evidence",
-    passed: true,
-  });
-  const current = WorkItemStore.get(hash);
-  const criterion = current?.completionFacts.criteria[0];
-  const evidenceId = updated?.evidence.at(-1)?.id;
-  if (!current || !criterion || !evidenceId) throw new Error("expected completion fixture");
-  const observationId = `observation:${hash}:${current.revision}:conversation`;
-  const request = WorkItem.CompletionRequest.parse({
-    version: 1,
-    id: `completion-request:${hash}:${current.revision}:conversation`,
-    origin: "resident",
-    workItemHash: hash,
-    contractRevision: current.completionContract.revision,
-    basisRef: current.completionContract.basisRef,
-    expectedHead: current.revision,
-    claims: [
-      {
-        id: `claim:${hash}:${current.revision}:conversation`,
-        criterionId: criterion.id,
-        statement: criterion.statement,
-        observationIds: [observationId],
-        basisRef: current.completionContract.basisRef,
-        createdAt: current.timestamps.updated + 1,
-      },
-    ],
-    observations: [
-      {
-        id: observationId,
-        producer: "verifier:conversation",
-        subjectRef: current.hash,
-        basisRef: current.completionContract.basisRef,
-        artifactRefs: [evidenceId],
-        provenanceRef: evidenceId,
-        ancestryRefs: [],
-        observedAt: current.timestamps.updated + 1,
-      },
-    ],
-    results: [
-      {
-        id: `result:${hash}:${current.revision}:conversation`,
-        criterionId: criterion.id,
-        value: "verified",
-        checkedPredicate: criterion.statement,
-        observationIds: [observationId],
-        verifierRef: "verifier:conversation",
-        assumptions: [],
-        basisRef: current.completionContract.basisRef,
-        residualRisks: [],
-        createdAt: current.timestamps.updated + 1,
-      },
-    ],
-    invalidations: [],
-    verificationErrors: [],
-    effects: [],
-  });
-  const report: WorkItem.CompletionReport = {
-    summary: "Completed with fixture evidence.",
-    claims: [{ statement: criterion.statement, evidenceIds: [evidenceId] }],
-    caveats: [],
-    followUps: [],
-  };
-  const authorityResolver = {
-    resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
-      const item = WorkItem.Info.parse(itemInput);
-      const candidate = WorkItem.CompletionRequest.parse(requestInput);
-      return WorkItem.CompletionAdmission.parse({
-        version: 1,
-        id: `admission:${candidate.id}:${item.revision + 1}`,
-        requestId: candidate.id,
-        requestSnapshot: candidate,
-        origin: candidate.origin,
-        contractRevision: item.completionContract.revision,
-        basisRef: item.completionContract.basisRef,
-        effectiveResultIds: candidate.results.map(({ id }) => id),
-        unresolvedCriterionIds: [],
-        decision: "admit",
-        reasonCodes: [],
-        residualRisks: [],
-        policyRef: "policy:conversation-test",
-        expectedHead: item.revision,
-        recordedHead: item.revision + 1,
-        createdAt: item.timestamps.updated + 1,
-      });
-    },
-  };
-  const service = createCompletionAdmissionService({
-    completionWriter,
-    authorityResolver,
-    now: () => current.timestamps.updated + 2,
-  });
-  await service.requestCompletion(request, report);
-  return WorkItemStore.get(hash);
 }
 
 const deps: BridgeDeps = {
@@ -300,7 +202,7 @@ describe("conversation task ledger command", () => {
       intent: "verify",
       goal: "verify complete items are hidden",
     });
-    const completedResult = await completeWorkItem(completed.hash);
+    const completedResult = await completeWorkItem(completionWriter, completed.hash);
     const failed = await createWorkItem("Failed thing", {
       intent: "verify",
       goal: "verify failed items are hidden",

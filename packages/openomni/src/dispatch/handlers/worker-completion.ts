@@ -179,7 +179,7 @@ export async function reflectCoordinatorResult(
         requestRoot,
         envelopeDigest: completionEnvelopeDigest,
         ownerId: reservationOwnerId,
-        leaseDurationMs: (options.readBackEnvelopeTimeoutMs ?? MAX_READ_BACK_TIMEOUT_MS) + 5_000,
+        leaseDurationMs: resolveReadBackEnvelopeTimeoutMs(options) + 5_000,
         now: now(),
       });
       const assertLease = () =>
@@ -201,11 +201,18 @@ export async function reflectCoordinatorResult(
           `completion request is already in progress: ${requestId}`,
         );
       }
+      const completionReservation = {
+        ownerId: reservationOwnerId,
+        leaseDurationMs: resolveReadBackEnvelopeTimeoutMs(options) + 5_000,
+        requestRoot,
+        envelopeDigest: completionEnvelopeDigest,
+      };
       const invocationToken = reservation.reservation.id;
       activeCompletionRequests.set(requestId, invocationToken);
       try {
         const admittedReplay = await replayWorkerCompletion({
           beforeAdmissionWrite: assertLease,
+          completionReservation,
           completionWriter: options.completionWriter,
           workItemHash,
           result,
@@ -231,6 +238,7 @@ export async function reflectCoordinatorResult(
         assertLease();
         const outcome = await admitWorkerCompletion({
           beforeAdmissionWrite: assertLease,
+          completionReservation,
           completionWriter: options.completionWriter,
           requestId,
           workItemHash,

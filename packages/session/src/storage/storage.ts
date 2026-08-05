@@ -21,6 +21,7 @@ export namespace Storage {
   };
 
   export interface Adapter {
+    transaction?<T>(operation: () => T): T;
     session: {
       get(id: string): SessionInfo | undefined;
       set(id: string, info: SessionInfo): void;
@@ -96,7 +97,8 @@ export namespace Storage {
   }
 
   export function getInitializedDbPath(): string | null {
-    return storageScope.getStore()?.initializedDbPath ?? initializedDbPathValue;
+    const scope = storageScope.getStore();
+    return scope ? scope.initializedDbPath : initializedDbPathValue;
   }
 
   export function setInitializedDbPath(dbPath: string | null): void {

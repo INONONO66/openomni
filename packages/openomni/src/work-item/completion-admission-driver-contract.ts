@@ -28,11 +28,11 @@ export function completionAdmissionScenarioReceipt(
   fields: Readonly<Record<string, unknown>>,
 ): CompletionAdmissionScenarioReceipt {
   return Object.freeze({
+    ...fields,
     version: CompletionAdmissionDriverVersion,
     mode: "scenario" as const,
     scenario,
     ok,
     resultCode: ok ? successCode : failureCode,
-    ...fields,
   });
 }

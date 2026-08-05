@@ -36,6 +36,17 @@ const workCompletionContext = {
 } satisfies Policy.PolicyPointInputMap["work.complete.pre"];
 
 describe("PolicyEngine dispatchPoint", () => {
+  test("rejects an invalid policy point ID with PolicyPointTimingError", async () => {
+    const engine = PolicyEngine.create();
+
+    await expect(
+      Reflect.apply(engine.dispatchPoint, engine, ["unknown.point.pre", {}]),
+    ).rejects.toMatchObject({
+      name: "PolicyPointTimingError",
+      message: "Registered policy point has no canonical timing: unknown.point.pre",
+    });
+  });
+
   test("denies missing pre-boundary context before middleware runs", async () => {
     const engine = PolicyEngine.create();
     let invoked = false;

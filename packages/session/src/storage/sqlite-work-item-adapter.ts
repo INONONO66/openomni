@@ -126,6 +126,7 @@ function assertPendingCompletionBaseline(item: WorkItem.Info): void {
   const facts = item.completionFacts;
   if (
     WorkItem.deriveStatus(item) !== "pending" ||
+    facts.revision !== 0 ||
     facts.claims.length > 0 ||
     facts.observations.length > 0 ||
     facts.results.length > 0 ||

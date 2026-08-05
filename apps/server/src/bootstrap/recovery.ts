@@ -43,6 +43,20 @@ async function processRetryQueue(
   });
 }
 
+export type BootstrapRecoveryInput = Readonly<{
+  handler: Adapter.MessageHandler | undefined;
+  coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> };
+  traceId?: string;
+  completionRuntime: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">;
+}>;
+
+export async function runBootstrapRecovery(
+  input: BootstrapRecoveryInput,
+  recovery: typeof runRecovery = runRecovery,
+): Promise<void> {
+  return recovery(input.handler, input.coordinator, input.traceId, input.completionRuntime);
+}
+
 export async function runRecovery(
   handler: Adapter.MessageHandler | undefined,
   coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> },

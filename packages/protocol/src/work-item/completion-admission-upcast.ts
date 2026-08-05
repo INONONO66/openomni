@@ -51,6 +51,9 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   if (!isLegacyCompletionRow(input)) return input;
   const parsed = LegacyWorkItem.safeParse(input);
   if (!parsed.success) return input;
+  if (parsed.data.completionReport?.claims.some(({ statement }) => statement.trim().length === 0)) {
+    throw new Error("legacy report claim statement must not be blank");
+  }
 
   const contract: CompletionContract = {
     version: 1,
@@ -59,22 +62,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   };
   const acceptanceCriteria = legacyAcceptanceCriteria(parsed.data);
   const criteria = legacyCriteria(parsed.data.hash, acceptanceCriteria);
-  const legacyCompletionEvidence =
-    parsed.data.timestamps.completed !== undefined &&
-    parsed.data.completionReport === undefined &&
-    parsed.data.evidence.length === 0
-      ? {
-          id: `legacy-evidence:${stableToken(`${parsed.data.hash}:completion-record`)}`,
-          kind: "custom" as const,
-          description: "Legacy completion record had no evidence.",
-          passed: false,
-          createdAt: parsed.data.timestamps.completed,
-        }
-      : undefined;
-  const persistedEvidence =
-    legacyCompletionEvidence === undefined
-      ? parsed.data.evidence
-      : [...parsed.data.evidence, legacyCompletionEvidence];
+  const persistedEvidence = parsed.data.evidence;
   const observationsByEvidenceId = legacyObservations(parsed.data.hash, persistedEvidence);
   const claims = legacyClaims(
     parsed.data.hash,
@@ -91,26 +79,18 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     observationsByEvidenceId,
   );
   const parsedCompletionReport = CompletionReport.safeParse(parsed.data.completionReport);
-  const completionReport =
-    parsed.data.timestamps.completed === undefined
-      ? parsedCompletionReport.success
-        ? canonicalCompletionReport(parsedCompletionReport.data)
-        : undefined
-      : canonicalCompletionReport(
-          parsedCompletionReport.success
-            ? parsedCompletionReport.data
-            : {
-                summary: `Legacy completion retained for ${parsed.data.name}`,
-                claims: [
-                  {
-                    statement: criteria[0]?.statement ?? parsed.data.name,
-                    evidenceIds: [persistedEvidence[0]?.id ?? "legacy-evidence:missing"],
-                  },
-                ],
-                caveats: ["Legacy row had no completion report."],
-                followUps: [],
-              },
-        );
+  const completionReport = parsedCompletionReport.success
+    ? canonicalCompletionReport(parsedCompletionReport.data)
+    : undefined;
+  const unresolvedCriterionIds = legacyUnresolvedCriterionIds(criteria, results);
+  if (parsed.data.timestamps.completed !== undefined && unresolvedCriterionIds.length > 0) {
+    throw new Error(
+      `completed legacy WorkItem has unresolved required criteria: ${unresolvedCriterionIds.join(", ")}`,
+    );
+  }
+  if (parsed.data.timestamps.completed !== undefined && completionReport === undefined) {
+    throw new Error("completed legacy WorkItem requires a valid completion report");
+  }
   const admissions = legacyAdmissions(
     parsed.data.hash,
     contract,
@@ -268,6 +248,20 @@ function legacyClaims(
       ),
     };
   });
+}
+
+function legacyUnresolvedCriterionIds(
+  criteria: readonly Criterion[],
+  results: readonly CriterionResult[],
+): string[] {
+  const resolvedCriterionIds = new Set(
+    results
+      .filter(({ observationIds }) => observationIds.length > 0)
+      .map(({ criterionId }) => criterionId),
+  );
+  return criteria
+    .filter(({ id, required }) => required && !resolvedCriterionIds.has(id))
+    .map(({ id }) => id);
 }
 
 function legacyResults(

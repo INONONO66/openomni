@@ -27,9 +27,14 @@ export function createWorkItemCompletionGateway(
   options: WorkItemCompletionGatewayOptions,
 ): WorkItemCompletionGateway {
   const now = options.now ?? Date.now;
+  const reservation = {
+    ownerId: `completion-recovery:${crypto.randomUUID()}`,
+    leaseDurationMs: 15_000,
+  };
   const service = createCompletionAdmissionService({
     completionWriter: options.completionWriter,
     authorityResolver: createCompletionAuthorityResolver(options),
+    reservation,
     allowTrustedInvalidations: options.invalidationAuthorityPort !== undefined,
     now,
   });
