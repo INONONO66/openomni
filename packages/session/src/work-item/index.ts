@@ -100,6 +100,7 @@ export namespace WorkItemStore {
       expectedAttempt: number;
       expectedBasisRef: string;
       criterionId: string;
+      evidenceId?: string;
     }>,
   ): Promise<WorkItem.Info | undefined> {
     return addWorkItemReadBackEvidence(hash, check, expectedScope);

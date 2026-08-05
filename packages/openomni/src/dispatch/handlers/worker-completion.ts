@@ -154,6 +154,7 @@ export async function reflectCoordinatorResult(
     if (!parsed.ok) {
       return blockCompletion(workItemHash, parsed.reason);
     }
+    const requestRoot = workerCompletionRequestRoot(item, result);
     try {
       const now = options.now ?? Date.now;
       const completionEnvelopeDigest = digestCompletionEnvelope(parsed.envelope);
@@ -175,7 +176,7 @@ export async function reflectCoordinatorResult(
         completionWriter: options.completionWriter,
         workItemHash,
         requestId,
-        requestRoot: workerCompletionRequestRoot(item, result),
+        requestRoot,
         envelopeDigest: completionEnvelopeDigest,
         ownerId: reservationOwnerId,
         leaseDurationMs: (options.readBackEnvelopeTimeoutMs ?? MAX_READ_BACK_TIMEOUT_MS) + 5_000,
@@ -222,6 +223,7 @@ export async function reflectCoordinatorResult(
         }
         const prepared = await prepareCompletionReport(
           workItemHash,
+          requestRoot,
           parsed.envelope,
           options,
           assertLease,
@@ -258,6 +260,24 @@ export async function reflectCoordinatorResult(
             err.message.startsWith("completion reservation lease lost:")))
       ) {
         return completionReflection(workItemHash, true, err.message);
+      }
+      if (
+        !(
+          err instanceof Error &&
+          err.message.startsWith("read-back verifier evidence did not pass:")
+        ) &&
+        parsed.envelope.readBackRequests.length > 0 &&
+        parsed.envelope.readBackRequests.every((_, requestIndex) =>
+          WorkItemStore.get(workItemHash)?.evidence.some(
+            ({ id }) => id === readBackEvidenceId(requestRoot, requestIndex),
+          ),
+        )
+      ) {
+        return completionReflection(
+          workItemHash,
+          true,
+          err instanceof Error ? err.message : String(err),
+        );
       }
       return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
     }
@@ -325,6 +345,7 @@ type PreparedCompletionReport = Readonly<{
 
 async function prepareCompletionReport(
   workItemHash: string,
+  requestRoot: string,
   envelope: CompletionEnvelope,
   options: WorkerCompletionOptions,
   assertLease: () => void,
@@ -347,8 +368,30 @@ async function prepareCompletionReport(
   const deadlineAt = now() + resolveReadBackEnvelopeTimeoutMs(options);
   for (const [requestIndex, readBack] of envelope.readBackRequests.entries()) {
     assertLease();
-    if (!item.completionFacts.criteria[readBack.criterionIndex]) {
+    const criterionId = item.completionFacts.criteria[readBack.criterionIndex]?.id;
+    if (!criterionId) {
       throw new Error(`read-back completion criterion is unknown: ${readBack.criterionIndex}`);
+    }
+    const evidenceId = readBackEvidenceId(requestRoot, requestIndex);
+    const existingEvidence = WorkItemStore.get(workItemHash)?.evidence.find(
+      ({ id }) => id === evidenceId,
+    );
+    if (existingEvidence) {
+      if (
+        existingEvidence.attempt !== item.attempt ||
+        existingEvidence.basisRef !== item.completionContract.basisRef ||
+        existingEvidence.criterionId !== criterionId ||
+        existingEvidence.readBack === undefined
+      ) {
+        throw new Error(`read-back evidence identity conflict: ${evidenceId}`);
+      }
+      const existing = evidenceIdsByClaim.get(readBack.claimIndex) ?? [];
+      evidenceIdsByClaim.set(readBack.claimIndex, [...existing, evidenceId]);
+      readBackEvidenceBindings.set(requestIndex, {
+        evidenceId,
+        criterionIndex: readBack.criterionIndex,
+      });
+      continue;
     }
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
@@ -358,18 +401,17 @@ async function prepareCompletionReport(
       options.readBack,
     );
     assertLease();
-    const criterionId = item.completionFacts.criteria[readBack.criterionIndex]?.id;
-    if (!criterionId)
-      throw new Error(`completion criterion index not found: ${readBack.criterionIndex}`);
     const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {
       expectedAttempt: item.attempt,
       expectedBasisRef: item.completionContract.basisRef,
       criterionId,
+      evidenceId,
     });
     assertLease();
     if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
-    const evidenceId = updated?.evidence.at(-1)?.id;
-    if (!evidenceId) throw new Error("read-back evidence was not recorded");
+    if (!updated?.evidence.some(({ id }) => id === evidenceId)) {
+      throw new Error("read-back evidence was not recorded");
+    }
     const existing = evidenceIdsByClaim.get(readBack.claimIndex) ?? [];
     evidenceIdsByClaim.set(readBack.claimIndex, [...existing, evidenceId]);
     readBackEvidenceBindings.set(requestIndex, {
@@ -385,6 +427,12 @@ async function prepareCompletionReport(
     }),
     readBackEvidenceBindings,
   };
+}
+
+function readBackEvidenceId(requestRoot: string, requestIndex: number): string {
+  return `evidence:read-back:${createHash("sha256")
+    .update(`${requestRoot}:${requestIndex}`)
+    .digest("hex")}`;
 }
 
 function attachReadBackEvidence(

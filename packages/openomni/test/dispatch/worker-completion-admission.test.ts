@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { PolicyEngine } from "@openomni/policy";
 import { type Execution, PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
@@ -11,7 +12,10 @@ import {
   reflectCoordinatorResult as reflectCoordinatorResultWithPolicy,
   type WorkerCompletionOptions,
 } from "../../src/dispatch/handlers/worker-completion.js";
-import { createDurableCompletionResultAuthorityPort } from "../../src/dispatch/handlers/worker-completion-admission.js";
+import {
+  createDurableCompletionResultAuthorityPort,
+  workerCompletionRequestRoot,
+} from "../../src/dispatch/handlers/worker-completion-admission.js";
 
 const NOW = 1_000;
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
@@ -309,6 +313,83 @@ describe("worker completion admission convergence", () => {
     expect(stored?.completionTerminalReceipt?.requestId).toStartWith(
       `completion-request:${item.hash}:${WORKER_RUN_ID}:${WORKER_SESSION_ID}:`,
     );
+  });
+
+  test("reuses durable read-back evidence after failure before admission", async () => {
+    const predicate = "archived source contains the recorded quote exactly";
+    const item = await startedItem("internal_chat_agent", predicate);
+    const output = JSON.stringify({
+      completionReport: {
+        summary: "Read-back survives pre-admission authority failure.",
+        claims: [{ statement: predicate }],
+      },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
+      readBackRequests: [
+        {
+          claimIndex: 0,
+          criterionIndex: 0,
+          request: {
+            kind: "citation_match",
+            target: "http://example.com/read-back",
+            quotedText: "durable pre-admission marker",
+          },
+        },
+      ],
+    });
+    const result = succeeded(output);
+    const requestRoot = workerCompletionRequestRoot(item, result);
+    const evidenceId = `evidence:read-back:${createHash("sha256")
+      .update(`${requestRoot}:0`)
+      .digest("hex")}`;
+    await WorkItemStore.addReadBackEvidence(
+      item.hash,
+      WorkItem.ReadBackCheck.parse({
+        kind: "citation_match",
+        target: "http://example.com/read-back",
+        quotedText: "durable pre-admission marker",
+        matchedText: "durable pre-admission marker",
+        passed: true,
+        observedAt: NOW,
+        statusCode: 200,
+      }),
+      {
+        expectedAttempt: item.attempt,
+        expectedBasisRef: item.completionContract.basisRef,
+        criterionId: item.completionFacts.criteria[0]?.id ?? "criterion:missing",
+        evidenceId,
+      },
+    );
+    const afterFailure = WorkItemStore.get(item.hash);
+    let readBackCalls = 0;
+    const options = {
+      completionWriter,
+      completionReservationOwnerId: "process:one",
+      sourceOrigin: { source: "internal_worker" } as const,
+      completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+      now: () => NOW,
+      readBackRecorder() {
+        readBackCalls += 1;
+        throw new Error("durable read-back was executed again");
+      },
+    };
+
+    const recovered = await reflectCoordinatorResultWithPolicy(item.hash, result, options);
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(afterFailure?.completionFacts.admissions).toEqual([]);
+    expect(afterFailure?.blockers).toEqual([]);
+    expect(afterFailure?.evidence).toHaveLength(1);
+    expect(recovered.completionBlocked).toBe(false);
+    expect(readBackCalls).toBe(0);
+    expect(stored?.evidence).toHaveLength(1);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.completionTerminalReceipt).toBeDefined();
   });
 
   test("reserves one completion request before concurrent read-back", async () => {

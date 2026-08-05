@@ -176,6 +176,7 @@ export async function addWorkItemReadBackEvidence(
     expectedAttempt: number;
     expectedBasisRef: string;
     criterionId: string;
+    evidenceId?: string;
   }>,
 ): Promise<WorkItem.Info | undefined> {
   const readBack = WorkItem.ReadBackCheck.parse(check);
@@ -188,6 +189,7 @@ export async function addWorkItemReadBackEvidence(
       detail: JSON.stringify(readBack),
       readBack,
       criterionId: expectedScope?.criterionId,
+      id: expectedScope?.evidenceId,
     },
     expectedScope,
   );
