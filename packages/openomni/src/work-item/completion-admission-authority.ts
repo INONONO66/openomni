@@ -374,6 +374,25 @@ async function assertProposedResultAuthority(
   item: WorkItem.Info,
   request: WorkItem.CompletionRequest,
 ): Promise<void> {
+  const observations = [...item.completionFacts.observations, ...request.observations];
+  for (const result of request.results) {
+    const resolvedObservations = result.observationIds.flatMap((observationId) => {
+      const observation = observations.find((candidate) => candidate.id === observationId);
+      return observation ? [observation] : [];
+    });
+    if (
+      resolvedObservations.length !== result.observationIds.length ||
+      resolvedObservations.some(
+        (observation) =>
+          observation.basisRef !== result.basisRef || observation.subjectRef !== item.hash,
+      )
+    ) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `proposed result ${result.id} has no authoritative observation basis`,
+      );
+    }
+  }
   const proposedResults = request.results.filter((result) => result.value !== "asserted");
   if (proposedResults.length === 0) return;
   if (!port) {
@@ -383,7 +402,6 @@ async function assertProposedResultAuthority(
     );
   }
 
-  const observations = [...item.completionFacts.observations, ...request.observations];
   for (const result of proposedResults) {
     const criterion = item.completionFacts.criteria.find(
       (candidate) => candidate.id === result.criterionId,
@@ -395,12 +413,7 @@ async function assertProposedResultAuthority(
     if (
       result.observationIds.length === 0 ||
       result.verifierRef === undefined ||
-      criterion === undefined ||
-      resolvedObservations.length !== result.observationIds.length ||
-      resolvedObservations.some(
-        (observation) =>
-          observation.basisRef !== result.basisRef || observation.subjectRef !== item.hash,
-      )
+      criterion === undefined
     ) {
       throw new CompletionAdmissionError(
         "invalid_verifier",

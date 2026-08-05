@@ -91,7 +91,7 @@ export function reserveCompletionRequest(
     const admission = current.completionFacts.admissions
       .filter(({ requestId }) => requestId === input.requestId)
       .at(-1);
-    if (admission && current.revision <= admission.recordedHead + 1) {
+    if (admission && current.completionTerminalReceipt?.admissionId === admission.id) {
       if (!reservation) throw requestConflict(input.requestId);
       return { state: "admitted", reservation };
     }

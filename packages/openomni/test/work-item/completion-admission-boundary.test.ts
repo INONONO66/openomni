@@ -7,6 +7,7 @@ import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
 import {
+  assertCompletionReservationLease,
   createCompletionAdmissionService,
   reserveCompletionRequest,
 } from "../../src/work-item/completion-admission-boundary.js";
@@ -537,6 +538,87 @@ describe("WorkItem completion admission service", () => {
       state: "reserved",
       reservation: { ownerId: "process:two", fence: 3, leaseExpiresAt: 130 },
     });
+  });
+
+  test("takes over an expired nonterminal admission reservation after head drift", async () => {
+    configure();
+    const first = await fixture("worker");
+    const reservationInput = {
+      completionWriter,
+      workItemHash: first.item.hash,
+      requestId: first.request.id,
+      requestRoot: "request-root:admitted-takeover",
+      envelopeDigest: "digest:admitted-takeover",
+      leaseDurationMs: 10,
+    };
+    const initial = reserveCompletionRequest({
+      ...reservationInput,
+      ownerId: "process:one",
+      now: 100,
+    });
+    const reservedItem = WorkItemStore.get(first.item.hash);
+    if (!reservedItem) throw new Error("missing reserved WorkItem");
+    const requestSnapshot = WorkItem.CompletionRequest.parse({
+      ...first.request,
+      expectedHead: reservedItem.revision,
+    });
+    const report = WorkItem.canonicalCompletionReport(first.report);
+    const admission = WorkItem.CompletionAdmission.parse({
+      version: 1,
+      id: `admission:${first.request.id}:takeover`,
+      requestId: first.request.id,
+      requestSnapshot,
+      origin: first.request.origin,
+      contractRevision: reservedItem.completionContract.revision,
+      basisRef: reservedItem.completionContract.basisRef,
+      effectiveResultIds: requestSnapshot.results.map(({ id }) => id),
+      unresolvedCriterionIds: [],
+      decision: "admit",
+      reasonCodes: [],
+      residualRisks: [],
+      policyRef: "policy:admitted-takeover",
+      completionReportSnapshot: report,
+      completionReportRef: WorkItem.completionReportReference(report),
+      expectedHead: reservedItem.revision,
+      recordedHead: reservedItem.revision + 1,
+      createdAt: 101,
+    });
+    const admittedItem = WorkItem.Info.parse({
+      ...reservedItem,
+      revision: admission.recordedHead,
+      completionFacts: {
+        ...reservedItem.completionFacts,
+        revision: reservedItem.completionFacts.revision + 1,
+        admissions: [...reservedItem.completionFacts.admissions, admission],
+      },
+      timestamps: { ...reservedItem.timestamps, updated: admission.createdAt },
+    });
+    expect(completionWriter(first.item.hash, reservedItem.revision, admittedItem)).toBe(true);
+    await WorkItemStore.addEvidence(first.item.hash, {
+      kind: "verification",
+      description: "head drift after admission",
+      passed: true,
+    });
+
+    const takeover = reserveCompletionRequest({
+      ...reservationInput,
+      ownerId: "process:two",
+      now: 111,
+    });
+
+    expect(initial.state).toBe("reserved");
+    expect(takeover.state).toBe("reserved");
+    expect(takeover.reservation.fence).toBe(initial.reservation.fence + 1);
+    expect(() =>
+      assertCompletionReservationLease({
+        workItemHash: first.item.hash,
+        requestId: first.request.id,
+        reservationId: takeover.reservation.id,
+        ownerId: "process:two",
+        fence: takeover.reservation.fence,
+        now: 111,
+      }),
+    ).not.toThrow();
   });
 
   test("keeps the terminal service factory off public package barrels", () => {
