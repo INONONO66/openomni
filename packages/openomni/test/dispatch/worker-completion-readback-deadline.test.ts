@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
-import { WorkItem } from "@openomni/protocol";
+import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 import {
   reflectCoordinatorResult as reflectCoordinatorResultWithPolicy,
@@ -30,7 +30,7 @@ function completionResult(item: WorkItem.Info, readBackRequests: unknown[]) {
     output: JSON.stringify({
       completionReport: {
         summary: "Published the requested update.",
-        claims: [{ statement: "The deployed page includes the expected marker." }],
+        claims: [{ statement: criterion.statement }],
       },
       criterionFacts: [
         {
@@ -73,6 +73,19 @@ function citationRequest(target: string) {
   } as const;
 }
 
+function successfulReadBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+  if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+  return WorkItemStore.addReadBackEvidence(hash, {
+    kind: "citation_match",
+    target: request.target,
+    quotedText: request.quotedText,
+    matchedText: request.quotedText,
+    passed: true,
+    observedAt: 1,
+    statusCode: 200,
+  });
+}
+
 describe("worker completion read-back deadline", () => {
   beforeEach(() => {
     Storage.reset();
@@ -82,7 +95,7 @@ describe("worker completion read-back deadline", () => {
   test("applies one shared deadline across all read-back requests", async () => {
     const workItem = await createStartedWorkItem();
     let recorderCalls = 0;
-    const clock = [0, 0, 11];
+    const clock = [0, 0, 0, 11];
 
     const reflection = await reflectCoordinatorResult(
       workItem.hash,
@@ -160,5 +173,101 @@ describe("worker completion read-back deadline", () => {
       workItemStatus: "completed",
       completionBlocked: false,
     });
+  });
+
+  test("rejects replay with changed criterion facts", async () => {
+    const workItem = await createStartedWorkItem();
+    const result = completionResult(workItem, [citationRequest("http://example.com/source")]);
+    await reflectCoordinatorResult(workItem.hash, result, {
+      sourceOrigin: { source: "internal_worker" },
+      readBackRecorder: successfulReadBackRecorder,
+    });
+    const changedEnvelope = JSON.parse(result.output);
+    changedEnvelope.criterionFacts[0].verification.kind = "numeric_recheck";
+
+    const replay = await reflectCoordinatorResult(
+      workItem.hash,
+      { ...result, output: JSON.stringify(changedEnvelope) },
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackRecorder: successfulReadBackRecorder,
+      },
+    );
+
+    expect(replay).toMatchObject({
+      completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
+    });
+  });
+
+  test("rejects replay with changed read-back request content", async () => {
+    const workItem = await createStartedWorkItem();
+    const result = completionResult(workItem, [citationRequest("http://example.com/source")]);
+    await reflectCoordinatorResult(workItem.hash, result, {
+      sourceOrigin: { source: "internal_worker" },
+      readBackRecorder: successfulReadBackRecorder,
+    });
+    const changedEnvelope = JSON.parse(result.output);
+    changedEnvelope.readBackRequests[0].request.target = "http://example.com/other-source";
+
+    const replay = await reflectCoordinatorResult(
+      workItem.hash,
+      { ...result, output: JSON.stringify(changedEnvelope) },
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackRecorder: successfulReadBackRecorder,
+      },
+    );
+
+    expect(replay).toMatchObject({
+      completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
+    });
+  });
+
+  test("redelivers an unchanged blocked completion without writes", async () => {
+    const workItem = await createStartedWorkItem();
+    const evidence = await successfulReadBackRecorder(
+      workItem.hash,
+      citationRequest("http://example.com/source").request,
+    );
+    const evidenceId = evidence?.evidence.at(-1)?.id;
+    if (!evidenceId) throw new Error("missing completion evidence");
+    const result = completionResult(workItem, []);
+    const envelope = JSON.parse(result.output);
+    envelope.criterionFacts[0].evidenceRefs = [{ source: "work_item", evidenceId }];
+    envelope.completionReport.claims[0].evidenceIds = [evidenceId];
+    const blockedResult = { ...result, output: JSON.stringify(envelope) };
+    const policyEngine = PolicyEngine.create();
+    policyEngine.register({
+      kind: "point",
+      name: "deny-completion",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 100,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "test:deny-completion",
+          reasonCodes: ["completion_denied"],
+        }),
+    });
+
+    await reflectCoordinatorResultWithPolicy(workItem.hash, blockedResult, {
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: policyEngine,
+    });
+    const blocked = WorkItemStore.get(workItem.hash);
+    if (!blocked) throw new Error("missing blocked WorkItem");
+
+    const replay = await reflectCoordinatorResultWithPolicy(workItem.hash, blockedResult, {
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: policyEngine,
+    });
+
+    expect(replay).toMatchObject({ completionBlocked: true, workItemStatus: "blocked" });
+    expect(WorkItemStore.get(workItem.hash)).toEqual(blocked);
+    expect(WorkItemStore.get(workItem.hash)?.revision).toBe(blocked.revision);
+    expect(WorkItemStore.get(workItem.hash)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(workItem.hash)?.blockers).toHaveLength(1);
   });
 });

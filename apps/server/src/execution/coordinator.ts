@@ -22,6 +22,7 @@ export type ToolDispatchHandler = (
 
 export type CoordinatorConfig = {
   workerScript: string;
+  workerManagerFactory?: WorkerManagerFactory;
   workerCount?: number;
   maxWorkers?: number;
   workerIdleTimeoutMs?: number;
@@ -30,6 +31,8 @@ export type CoordinatorConfig = {
   toolDispatcher?: Map<string, ToolDispatchHandler>;
   askResident?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
 };
+
+export type WorkerManagerFactory = typeof createWorkerManager;
 
 export function buildToolDispatcher(providers: ToolProvider[]): Map<string, ToolDispatchHandler> {
   const dispatcher = new Map<string, ToolDispatchHandler>();
@@ -67,7 +70,8 @@ export type ExecutionCoordinator = {
 export function createExecutionCoordinator(config: CoordinatorConfig): ExecutionCoordinator {
   const { toolDispatcher } = config;
 
-  const workerManager: WorkerManager = createWorkerManager(
+  const workerManagerFactory = config.workerManagerFactory ?? createWorkerManager;
+  const workerManager: WorkerManager = workerManagerFactory(
     {
       workerScript: config.workerScript,
       maxActiveWorkers: config.maxWorkers ?? config.workerCount,

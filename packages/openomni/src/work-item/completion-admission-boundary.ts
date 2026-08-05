@@ -53,6 +53,73 @@ export type CompletionAdmissionService = Readonly<{
   ): Promise<WorkItem.Info>;
 }>;
 
+export type CompletionRequestReservationInput = Readonly<{
+  workItemHash: string;
+  requestId: string;
+  requestRoot: string;
+  envelopeDigest: string;
+  now: number;
+}>;
+
+export type CompletionRequestReservationOutcome = Readonly<{
+  state: "reserved" | "existing" | "admitted";
+  reservation: WorkItem.CompletionRequestReservation;
+}>;
+
+export function reserveCompletionRequest(
+  input: CompletionRequestReservationInput,
+): CompletionRequestReservationOutcome {
+  const adapter = requiredAdapter(input.workItemHash);
+  for (;;) {
+    const current = requiredItem(adapter.get(input.workItemHash), input.workItemHash);
+    const reservation = current.completionFacts.requestReservations.find(
+      ({ requestId }) => requestId === input.requestId,
+    );
+    if (current.completionFacts.admissions.some(({ requestId }) => requestId === input.requestId)) {
+      if (!reservation) throw requestConflict(input.requestId);
+      return { state: "admitted", reservation };
+    }
+    assertNotFailedOrCancelled(current);
+    assertNotCompleted(current);
+    const correlated = current.completionFacts.requestReservations.find(
+      ({ requestRoot }) => requestRoot === input.requestRoot,
+    );
+    if (correlated && correlated.envelopeDigest !== input.envelopeDigest) {
+      throw requestConflict(input.requestId);
+    }
+    if (reservation) return { state: "existing", reservation };
+
+    const recordedHead = current.revision + 1;
+    const nextReservation = WorkItem.CompletionRequestReservation.parse({
+      version: 1,
+      id: `completion-reservation:${input.requestId}`,
+      requestId: input.requestId,
+      requestRoot: input.requestRoot,
+      envelopeDigest: input.envelopeDigest,
+      expectedHead: current.revision,
+      recordedHead,
+      createdAt: input.now,
+    });
+    const updated = WorkItem.Info.parse({
+      ...current,
+      revision: recordedHead,
+      completionFacts: {
+        ...current.completionFacts,
+        revision: current.completionFacts.revision + 1,
+        requestReservations: [...current.completionFacts.requestReservations, nextReservation],
+      },
+      timestamps: { ...current.timestamps, updated: input.now },
+    });
+    if (
+      withWorkItemCompletionWriter(() =>
+        adapter.compareAndSet(current.hash, current.revision, updated),
+      )
+    ) {
+      return { state: "reserved", reservation: nextReservation };
+    }
+  }
+}
+
 export function createCompletionAdmissionService(
   options: CompletionAdmissionServiceOptions,
 ): CompletionAdmissionService {

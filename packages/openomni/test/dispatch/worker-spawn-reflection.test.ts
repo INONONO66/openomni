@@ -40,6 +40,25 @@ function criterionFacts(evidenceId: string) {
   ] as const;
 }
 
+function assignedWorkerCommand(
+  target: Parameters<typeof command>[1],
+  payload: unknown,
+  sessionId: string,
+  runId: string,
+) {
+  return {
+    ...command("worker.complete", target, payload),
+    actor: {
+      kind: "worker" as const,
+      actorId: `${sessionId}:${runId}`,
+      sessionId,
+      runId,
+      workerRunId: runId,
+      trustTier: "assigned_worker" as const,
+    },
+  };
+}
+
 describe("worker.spawn result reflection", () => {
   beforeEach(() => {
     Storage.reset();
@@ -258,6 +277,8 @@ describe("worker.spawn result reflection", () => {
             });
             const evidenceId = withEvidence?.evidence.at(-1)?.id;
             if (!evidenceId) throw new Error("missing evidence");
+            const criterion = workItem.completionFacts.criteria[0];
+            if (!criterion) throw new Error("missing completion criterion");
             return {
               runId: request.runId,
               sessionId: request.sessionId,
@@ -266,7 +287,7 @@ describe("worker.spawn result reflection", () => {
                 deliverable: "done",
                 completionReport: {
                   summary: "Completed the delegated work.",
-                  claims: [{ statement: "Tests passed.", evidenceIds: [evidenceId] }],
+                  claims: [{ statement: criterion.statement, evidenceIds: [evidenceId] }],
                 },
                 criterionFacts: criterionFacts(evidenceId),
               }),
@@ -382,11 +403,14 @@ describe("worker.spawn result reflection", () => {
     const connectorEvidenceId = connectorEvidence?.evidence.at(-1)?.id;
     if (!connectorEvidenceId) throw new Error("missing connector evidence");
 
-    await runtime.submit(
-      {
-        action: "worker.complete",
-        target: { kind: "worker", runId: "run:connector-policy" },
-        payload: {
+    await runtime.registry.get("worker.complete")?.(
+      assignedWorkerCommand(
+        {
+          kind: "worker",
+          runId: "run:connector-policy",
+          sessionId: "session:connector-policy",
+        },
+        {
           workItemHash: connectorItem.hash,
           result: {
             runId: "run:connector-policy",
@@ -401,8 +425,9 @@ describe("worker.spawn result reflection", () => {
             }),
           },
         },
-      },
-      { actorKind: "resident", actorId: "resident:owner", agentName: "resident" },
+        "session:connector-policy",
+        "run:connector-policy",
+      ),
     );
 
     const connectorStored = WorkItemStore.get(connectorItem.hash);
@@ -433,8 +458,7 @@ describe("worker.spawn result reflection", () => {
     await expectRejectsWithMessage(
       () =>
         registry.get("worker.complete")?.(
-          command(
-            "worker.complete",
+          assignedWorkerCommand(
             { kind: "worker", runId: "run:target" },
             {
               workItemHash: item.hash,
@@ -444,6 +468,8 @@ describe("worker.spawn result reflection", () => {
                 status: "failed",
               },
             },
+            "session:bound",
+            "run:result",
           ),
         ),
       "worker.complete run mismatch",
@@ -451,8 +477,7 @@ describe("worker.spawn result reflection", () => {
     await expectRejectsWithMessage(
       () =>
         registry.get("worker.complete")?.(
-          command(
-            "worker.complete",
+          assignedWorkerCommand(
             { kind: "worker", runId: "run:target" },
             {
               workItemHash: item.hash,
@@ -462,6 +487,8 @@ describe("worker.spawn result reflection", () => {
                 status: "failed",
               },
             },
+            "session:bound",
+            "run:target",
           ),
         ),
       "worker.complete run mismatch",
@@ -469,8 +496,7 @@ describe("worker.spawn result reflection", () => {
     await expectRejectsWithMessage(
       () =>
         registry.get("worker.complete")?.(
-          command(
-            "worker.complete",
+          assignedWorkerCommand(
             { kind: "worker", runId: "run:missing" },
             {
               result: {
@@ -479,6 +505,8 @@ describe("worker.spawn result reflection", () => {
                 status: "failed",
               },
             },
+            "session:missing",
+            "run:missing",
           ),
         ),
       "requires exactly one WorkItem",
@@ -497,8 +525,7 @@ describe("worker.spawn result reflection", () => {
     await expectRejectsWithMessage(
       () =>
         registry.get("worker.complete")?.(
-          command(
-            "worker.complete",
+          assignedWorkerCommand(
             { kind: "worker", runId: "run:bound" },
             {
               result: {
@@ -507,10 +534,214 @@ describe("worker.spawn result reflection", () => {
                 status: "failed",
               },
             },
+            "session:bound",
+            "run:bound",
           ),
         ),
       "requires exactly one WorkItem",
     );
+  });
+
+  test("worker.complete rejects a non-Worker actor before terminal mutation", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry);
+    const created = await WorkItemStore.create({
+      name: "Authenticated connector completion",
+      sourceMessageId: "dispatch:authenticated-connector-completion",
+      sourceChannel: "dispatch",
+      intent: "worker.complete",
+      goal: "only the assigned Worker may report terminal state",
+      executorKind: "connector_endpoint",
+      workSessionId: "session:authenticated",
+      workerRunId: "run:authenticated",
+      acceptanceCriteria: ["terminal state comes from the assigned Worker"],
+    });
+    const item = await WorkItemStore.start(created.hash);
+    if (!item) throw new Error("missing authenticated completion WorkItem");
+    const before = WorkItemStore.get(item.hash);
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("worker.complete")?.(
+          command(
+            "worker.complete",
+            { kind: "worker", runId: "run:authenticated" },
+            {
+              workItemHash: item.hash,
+              result: {
+                runId: "run:authenticated",
+                sessionId: "session:authenticated",
+                status: "failed",
+                error: "forged failure",
+              },
+            },
+          ),
+        ),
+      "worker.complete actor is not authorized",
+    );
+
+    expect(WorkItemStore.get(item.hash)).toEqual(before);
+  });
+
+  test("worker.complete authenticates actor, target, session, and executor before mutation", async () => {
+    const scenarios = [
+      {
+        name: "mismatched actor run",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:authorized",
+        buildCommand: (workItemHash: string) => ({
+          ...assignedWorkerCommand(
+            {
+              kind: "worker",
+              runId: "run:authorized",
+              sessionId: "session:authorized",
+            },
+            {
+              workItemHash,
+              result: {
+                runId: "run:authorized",
+                sessionId: "session:authorized",
+                status: "failed",
+                error: "forged failure",
+              },
+            },
+            "session:authorized",
+            "run:authorized",
+          ),
+          actor: {
+            kind: "worker" as const,
+            actorId: "session:authorized:run:forged",
+            sessionId: "session:authorized",
+            runId: "run:forged",
+            workerRunId: "run:forged",
+            trustTier: "assigned_worker" as const,
+          },
+        }),
+      },
+      {
+        name: "mismatched actor session",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:authorized",
+        buildCommand: (workItemHash: string) =>
+          assignedWorkerCommand(
+            {
+              kind: "worker",
+              runId: "run:authorized",
+              sessionId: "session:authorized",
+            },
+            {
+              workItemHash,
+              result: {
+                runId: "run:authorized",
+                sessionId: "session:authorized",
+                status: "failed",
+                error: "forged failure",
+              },
+            },
+            "session:forged",
+            "run:authorized",
+          ),
+      },
+      {
+        name: "mismatched target session",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:authorized",
+        buildCommand: (workItemHash: string) =>
+          assignedWorkerCommand(
+            {
+              kind: "worker",
+              runId: "run:authorized",
+              sessionId: "session:forged",
+            },
+            {
+              workItemHash,
+              result: {
+                runId: "run:authorized",
+                sessionId: "session:authorized",
+                status: "failed",
+                error: "forged failure",
+              },
+            },
+            "session:authorized",
+            "run:authorized",
+          ),
+      },
+      {
+        name: "mismatched WorkItem session",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:forged",
+        buildCommand: (workItemHash: string) =>
+          assignedWorkerCommand(
+            {
+              kind: "worker",
+              runId: "run:authorized",
+              sessionId: "session:authorized",
+            },
+            {
+              workItemHash,
+              result: {
+                runId: "run:authorized",
+                sessionId: "session:authorized",
+                status: "failed",
+                error: "forged failure",
+              },
+            },
+            "session:authorized",
+            "run:authorized",
+          ),
+      },
+      {
+        name: "incorrect executor kind",
+        executorKind: "internal_chat_agent",
+        workSessionId: "session:authorized",
+        buildCommand: (workItemHash: string) =>
+          assignedWorkerCommand(
+            {
+              kind: "worker",
+              runId: "run:authorized",
+              sessionId: "session:authorized",
+            },
+            {
+              workItemHash,
+              result: {
+                runId: "run:authorized",
+                sessionId: "session:authorized",
+                status: "failed",
+                error: "forged failure",
+              },
+            },
+            "session:authorized",
+            "run:authorized",
+          ),
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      Storage.reset();
+      Storage.initialize({ dbPath: ":memory:" });
+      const registry = new DispatchRegistry();
+      registerBuiltInDispatchHandlers(registry);
+      const created = await WorkItemStore.create({
+        name: scenario.name,
+        sourceMessageId: `dispatch:${scenario.name}`,
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "reject forged completion authority",
+        executorKind: scenario.executorKind,
+        workSessionId: scenario.workSessionId,
+        workerRunId: "run:authorized",
+        acceptanceCriteria: ["terminal state comes from the assigned connector Worker"],
+      });
+      const item = await WorkItemStore.start(created.hash);
+      if (!item) throw new Error(`missing WorkItem for ${scenario.name}`);
+      const before = WorkItemStore.get(item.hash);
+
+      await expectRejectsWithMessage(
+        () => registry.get("worker.complete")?.(scenario.buildCommand(item.hash)),
+        "worker.complete actor is not authorized",
+      );
+      expect(WorkItemStore.get(item.hash)).toEqual(before);
+    }
   });
 
   test("worker.spawn returns blocker persistence failures", async () => {
@@ -558,6 +789,7 @@ describe("worker.spawn result reflection", () => {
       intent: "worker.complete",
       goal: "record connector evidence durably",
       executorKind: "connector_endpoint",
+      workSessionId: "session:connector-evidence",
       workerRunId: "run:connector-evidence",
       acceptanceCriteria: ["connector evidence persists"],
     });
@@ -570,8 +802,7 @@ describe("worker.spawn result reflection", () => {
     await expectRejectsWithMessage(
       () =>
         registry.get("worker.complete")?.(
-          command(
-            "worker.complete",
+          assignedWorkerCommand(
             { kind: "worker", runId: "run:connector-evidence" },
             {
               workItemHash: item.hash,
@@ -589,6 +820,8 @@ describe("worker.spawn result reflection", () => {
                 ],
               },
             },
+            "session:connector-evidence",
+            "run:connector-evidence",
           ),
         ),
       "work item write failed",

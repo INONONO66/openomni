@@ -158,6 +158,23 @@ describe("worker completion admission convergence", () => {
     });
   });
 
+  test("persists a qualified completion identity in the durable request", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const sourceIdentity = {
+      source: "internal",
+      identity: { kind: "worker", id: WORKER_RUN_ID },
+    } as const;
+
+    await reflectCoordinatorResult(item.hash, succeeded(await evidenceBackedEnvelope(item.hash)), {
+      sourceOrigin: sourceIdentity,
+      now: () => NOW,
+    });
+
+    expect(
+      WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity,
+    ).toEqual(sourceIdentity);
+  });
+
   test.each([
     ["run", { runId: "run:other" }],
     ["session", { sessionId: "session:other" }],
@@ -173,6 +190,23 @@ describe("worker completion admission convergence", () => {
     expect(reflection.completionBlocked).toBe(true);
     expect(reflection.completionBlocker).toContain("identity mismatch");
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
+  test("rejects a terminal WorkItem before reserving its completion request", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    await WorkItemStore.fail(item.hash, "worker failed first");
+    const before = WorkItemStore.get(item.hash);
+    if (!before) throw new Error("missing terminal completion fixture");
+
+    const reflection = await reflectCoordinatorResult(item.hash, succeeded(output), {
+      sourceOrigin: { source: "internal_worker" },
+      now: () => NOW,
+    });
+
+    expect(reflection.completionBlocked).toBe(true);
+    expect(reflection.completionBlocker).toContain("Cannot complete a failed WorkItem");
+    expect(WorkItemStore.get(item.hash)).toEqual(before);
   });
 
   test("reuses one immutable Worker admission before repeating read-back", async () => {
@@ -235,14 +269,94 @@ describe("worker completion admission convergence", () => {
     );
 
     const stored = WorkItemStore.get(item.hash);
+    expect(first.completionBlocker).toBeUndefined();
     expect(first.completionBlocked).toBe(false);
     expect(replay.completionBlocked).toBe(false);
     expect(conflict.completionBlocked).toBe(true);
-    expect(conflict.completionBlocker).toContain("completion report changed");
+    expect(conflict.completionBlocker).toContain("completion envelope changed");
     expect(readBackCalls).toBe(1);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionTerminalReceipt?.requestId).toBe(
-      `completion-request:${item.hash}:${WORKER_RUN_ID}:${WORKER_SESSION_ID}`,
+      stored?.completionFacts.admissions[0]?.requestId,
+    );
+    expect(stored?.completionTerminalReceipt?.requestId).toStartWith(
+      `completion-request:${item.hash}:${WORKER_RUN_ID}:${WORKER_SESSION_ID}:`,
+    );
+  });
+
+  test("reserves one completion request before concurrent read-back", async () => {
+    const predicate = "archived source contains the recorded quote exactly";
+    const item = await startedItem("internal_chat_agent", predicate);
+    const output = JSON.stringify({
+      completionReport: {
+        summary: "Concurrent redelivery shares one read-back.",
+        claims: [{ statement: predicate }],
+      },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
+      readBackRequests: [
+        {
+          claimIndex: 0,
+          criterionIndex: 0,
+          request: {
+            kind: "citation_match",
+            target: "http://example.com/concurrent-read-back",
+            quotedText: "concurrent marker",
+          },
+        },
+      ],
+    });
+    const readBackStarted = Promise.withResolvers<void>();
+    const releaseReadBack = Promise.withResolvers<void>();
+    let readBackCalls = 0;
+    const options = {
+      sourceOrigin: { source: "internal_worker" } as const,
+      now: () => NOW,
+      async readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+        readBackCalls += 1;
+        if (readBackCalls > 1) throw new Error("concurrent delivery repeated read-back");
+        readBackStarted.resolve();
+        await releaseReadBack.promise;
+        if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+        return WorkItemStore.addReadBackEvidence(hash, {
+          kind: "citation_match",
+          target: request.target,
+          quotedText: request.quotedText,
+          matchedText: request.quotedText,
+          passed: true,
+          observedAt: NOW,
+          statusCode: 200,
+        });
+      },
+    };
+
+    const firstPromise = reflectCoordinatorResult(item.hash, succeeded(output), options);
+    await readBackStarted.promise;
+    const second = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+    try {
+      expect(second.completionBlocked).toBe(true);
+      expect(second.completionBlocker).toContain("already in progress");
+      expect(readBackCalls).toBe(1);
+      expect(WorkItemStore.get(item.hash)?.blockers).toEqual([]);
+    } finally {
+      releaseReadBack.resolve();
+    }
+    const first = await firstPromise;
+    const replay = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(stored?.completionFacts.verificationErrors).toEqual([]);
+    expect(first.completionBlocker).toBeUndefined();
+    expect(first.completionBlocked).toBe(false);
+    expect(replay.completionBlocked).toBe(false);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.completionTerminalReceipt?.requestId).toBe(
+      stored?.completionFacts.admissions[0]?.requestId,
     );
   });
 

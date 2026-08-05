@@ -12,7 +12,6 @@ import {
   ResidentRuntime,
   SystemToolProvider,
   createDefaultDispatchRuntime,
-  createWorkItemCompletionGateway,
   type DispatchRuntime,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
@@ -141,8 +140,10 @@ export async function main(): Promise<void> {
   agentProviderRef.current = new AgentToolProvider({
     dispatchOwners,
   });
+  const completionPolicyEngine = PolicyEngine.create();
   const sharedDispatchRuntime = createDefaultDispatchRuntime({
     owners: dispatchOwners,
+    completionPolicyEngine,
   });
   dispatchRuntimeRef.current = sharedDispatchRuntime;
   IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
@@ -191,10 +192,7 @@ export async function main(): Promise<void> {
 
   const traceId = crypto.randomUUID();
   const mode = "coordinator";
-  const completionGateway = createWorkItemCompletionGateway({
-    policyEngine: PolicyEngine.create(),
-  });
-  await runRecovery(routingHandler, coordinator, traceId, completionGateway);
+  await runRecovery(routingHandler, coordinator, traceId, sharedDispatchRuntime);
 
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,

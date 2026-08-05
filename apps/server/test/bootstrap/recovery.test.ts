@@ -51,14 +51,25 @@ describe("server recovery", () => {
     let completionRecoveryCalls = 0;
 
     await runRecovery(undefined, undefined, "trace-completion-recovery", {
-      recoverRecordedCompletions: async () => {
+      recoverRecordedWorkItemCompletions: async () => {
         completionRecoveryCalls += 1;
         return { recovered: 1, skipped: 0, failures: [] };
       },
     });
 
     expect(completionRecoveryCalls).toBe(1);
-    expect(bootstrapSource).toContain("createWorkItemCompletionGateway");
+    expect(bootstrapSource).not.toContain("createWorkItemCompletionGateway");
+  });
+
+  it("shares the completion policy engine across live dispatch and recovery", () => {
+    const policyEngineCreationCount =
+      bootstrapSource.match(/PolicyEngine\.create\(\)/g)?.length ?? 0;
+
+    expect(policyEngineCreationCount).toBe(1);
+    expect(bootstrapSource).toContain("completionPolicyEngine,");
+    expect(bootstrapSource).toContain(
+      "runRecovery(routingHandler, coordinator, traceId, sharedDispatchRuntime)",
+    );
   });
 
   it("expires stale PendingInteractions during boot recovery", async () => {

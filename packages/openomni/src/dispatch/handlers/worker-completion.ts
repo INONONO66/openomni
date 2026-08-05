@@ -1,21 +1,29 @@
 import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Execution } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
 import type { CompletionStakesResolver } from "../../work-item/completion-admission-authority.js";
-import type { CompletionBoundaryOutcome } from "../../work-item/completion-admission-boundary.js";
+import {
+  type CompletionBoundaryOutcome,
+  reserveCompletionRequest,
+} from "../../work-item/completion-admission-boundary.js";
 import type { CompletionSourceOrigin } from "../../work-item/completion-origin.js";
 import {
   admitWorkerCompletion,
   replayWorkerCompletion,
+  requireWorkerCompletionIdentity,
   WorkerCriterionFactInput,
+  workerCompletionRequestId,
+  workerCompletionRequestRoot,
   type WorkerReadBackEvidenceBinding,
 } from "./worker-completion-admission.js";
 
 const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
 const MAX_READ_BACK_BODY_BYTES = 1_000_000;
+const activeCompletionRequests = new Set<string>();
 
 const ReadBackRequest = WorkItem.ReadBackRequest.superRefine((request, ctx) => {
   if (request.timeoutMs !== undefined && request.timeoutMs > MAX_READ_BACK_TIMEOUT_MS) {
@@ -125,28 +133,72 @@ export async function reflectCoordinatorResult(
       return blockCompletion(workItemHash, parsed.reason);
     }
     try {
+      const now = options.now ?? Date.now;
+      const completionEnvelopeDigest = digestCompletionEnvelope(parsed.envelope);
       const replay = await replayWorkerCompletion({
         workItemHash,
         result,
+        completionEnvelopeDigest,
         policyEngine: options.completionPolicyEngine,
         completionReportMatches: (report) => completionReportDraftMatches(parsed.envelope, report),
         ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
-        now: options.now ?? Date.now,
+        now,
       });
       if (replay) return completionOutcomeReflection(workItemHash, replay);
-      const prepared = await prepareCompletionReport(workItemHash, parsed.envelope, options);
-      const outcome = await admitWorkerCompletion({
+      const item = requireWorkerCompletionIdentity(workItemHash, result);
+      const requestId = workerCompletionRequestId(item, result, completionEnvelopeDigest);
+      const reservation = reserveCompletionRequest({
         workItemHash,
-        result,
-        sourceOrigin: options.sourceOrigin,
-        criterionFacts: parsed.envelope.criterionFacts,
-        completionReport: prepared.report,
-        policyEngine: options.completionPolicyEngine,
-        readBackEvidenceBindings: prepared.readBackEvidenceBindings,
-        ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
-        now: options.now ?? Date.now,
+        requestId,
+        requestRoot: workerCompletionRequestRoot(item, result),
+        envelopeDigest: completionEnvelopeDigest,
+        now: now(),
       });
-      return completionOutcomeReflection(workItemHash, outcome);
+      if (reservation.state === "admitted") {
+        const admittedReplay = await replayWorkerCompletion({
+          workItemHash,
+          result,
+          completionEnvelopeDigest,
+          policyEngine: options.completionPolicyEngine,
+          completionReportMatches: (report) =>
+            completionReportDraftMatches(parsed.envelope, report),
+          ...(options.stakesResolver === undefined
+            ? {}
+            : { stakesResolver: options.stakesResolver }),
+          now,
+        });
+        if (!admittedReplay)
+          throw new Error(`completion admission replay is missing: ${requestId}`);
+        return completionOutcomeReflection(workItemHash, admittedReplay);
+      }
+      if (reservation.state === "existing" && activeCompletionRequests.has(requestId)) {
+        return completionReflection(
+          workItemHash,
+          true,
+          `completion request is already in progress: ${requestId}`,
+        );
+      }
+      activeCompletionRequests.add(requestId);
+      try {
+        const prepared = await prepareCompletionReport(workItemHash, parsed.envelope, options);
+        const outcome = await admitWorkerCompletion({
+          workItemHash,
+          result,
+          completionEnvelopeDigest,
+          sourceOrigin: options.sourceOrigin,
+          criterionFacts: parsed.envelope.criterionFacts,
+          completionReport: prepared.report,
+          policyEngine: options.completionPolicyEngine,
+          readBackEvidenceBindings: prepared.readBackEvidenceBindings,
+          ...(options.stakesResolver === undefined
+            ? {}
+            : { stakesResolver: options.stakesResolver }),
+          now,
+        });
+        return completionOutcomeReflection(workItemHash, outcome);
+      } finally {
+        activeCompletionRequests.delete(requestId);
+      }
     } catch (err) {
       return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
     }
@@ -159,6 +211,21 @@ export async function reflectCoordinatorResult(
     await WorkItemStore.fail(workItemHash, result.error ?? result.status);
   }
   return completionReflection(workItemHash, false);
+}
+
+function digestCompletionEnvelope(envelope: CompletionEnvelope): string {
+  return createHash("sha256").update(canonicalJson(envelope)).digest("hex");
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return `{${entries
+    .map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`)
+    .join(",")}}`;
 }
 
 async function completionOutcomeReflection(
@@ -319,6 +386,22 @@ async function blockCompletion(
   workItemHash: string,
   description: string,
 ): Promise<CompletionReflection> {
+  const current = WorkItemStore.get(workItemHash);
+  const currentStatus = current ? WorkItem.deriveStatus(current) : undefined;
+  if (
+    currentStatus === "failed" ||
+    currentStatus === "cancelled" ||
+    currentStatus === "completed"
+  ) {
+    return completionReflection(workItemHash, true, description);
+  }
+  if (
+    current?.blockers.some(
+      (blocker) => blocker.resolvedAt === undefined && blocker.description === description,
+    )
+  ) {
+    return completionReflection(workItemHash, true, description);
+  }
   await WorkItemStore.addBlocker(workItemHash, {
     kind: "error",
     description,

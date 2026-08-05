@@ -47,9 +47,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       } | null;
       const current = currentRow ? decodeWorkItem(currentRow.data) : undefined;
       if (current && changesCompletionAuthority(current, parsed) && !isWorkItemCompletionWriter()) {
-        throw new Error(
-          "WorkItem completion admission writes are restricted to the OpenOmni boundary",
-        );
+        throw new Error("WorkItem completion fact writes are restricted to the OpenOmni boundary");
       }
       const result = db
         .query(
@@ -120,8 +118,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
 
 function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info): boolean {
   return (
-    JSON.stringify(current.completionFacts.admissions) !==
-      JSON.stringify(next.completionFacts.admissions) ||
+    JSON.stringify(current.completionFacts) !== JSON.stringify(next.completionFacts) ||
     JSON.stringify(current.completionReport) !== JSON.stringify(next.completionReport) ||
     JSON.stringify(current.completionTerminalReceipt) !==
       JSON.stringify(next.completionTerminalReceipt)

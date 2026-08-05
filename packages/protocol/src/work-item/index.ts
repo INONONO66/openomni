@@ -68,6 +68,9 @@ export namespace WorkItem {
   export const CompletionOrigin = Completion.CompletionOrigin;
   export type CompletionOrigin = Completion.CompletionOrigin;
 
+  export const CompletionSourceIdentity = Completion.CompletionSourceIdentity;
+  export type CompletionSourceIdentity = Completion.CompletionSourceIdentity;
+
   export const CompletionDecision = Completion.CompletionDecision;
   export type CompletionDecision = Completion.CompletionDecision;
 
@@ -79,6 +82,9 @@ export namespace WorkItem {
 
   export const CompletionAdmission = Completion.CompletionAdmission;
   export type CompletionAdmission = Completion.CompletionAdmission;
+
+  export const CompletionRequestReservation = Completion.CompletionRequestReservation;
+  export type CompletionRequestReservation = Completion.CompletionRequestReservation;
 
   export const CompletionTerminalReceipt = Completion.CompletionTerminalReceipt;
   export type CompletionTerminalReceipt = Completion.CompletionTerminalReceipt;

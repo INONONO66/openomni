@@ -280,7 +280,7 @@ describe("WorkItem completion admission driver", () => {
     });
   });
 
-  test("supports direct execution for help and invalid input", async () => {
+  test("supports direct execution for help, invalid input, and self-test", async () => {
     const entry = new URL("../../src/work-item/completion-admission-driver.ts", import.meta.url)
       .pathname;
     const help = Bun.spawnSync([process.execPath, "run", entry, "--help"], {
@@ -293,6 +293,11 @@ describe("WorkItem completion admission driver", () => {
       stdout: "pipe",
       stderr: "pipe",
     });
+    const selfTest = Bun.spawnSync([process.execPath, "run", entry, "--self-test"], {
+      cwd: new URL("../..", import.meta.url).pathname,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
 
     expect(help.exitCode).toBe(0);
     expect(help.stdout.toString().trim()).toStartWith("Usage: completion-admission-driver");
@@ -301,6 +306,13 @@ describe("WorkItem completion admission driver", () => {
       mode: "argument_error",
       ok: false,
       resultCode: "invalid_arguments",
+    });
+    expect(selfTest.exitCode).toBe(0);
+    expect(selfTest.stderr.toString()).toBe("");
+    expect(parseObject(selfTest.stdout.toString())).toMatchObject({
+      mode: "self_test",
+      ok: true,
+      resultCode: "self_test_passed",
     });
   });
 });

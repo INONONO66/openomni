@@ -144,6 +144,19 @@ export const CompletionOrigin = z.enum([
 ]);
 export type CompletionOrigin = z.infer<typeof CompletionOrigin>;
 
+const CompletionIdentity = z
+  .object({
+    kind: z.enum(["resident", "worker", "external_actor"]),
+    id: Reference,
+  })
+  .strict();
+
+export const CompletionSourceIdentity = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("sdk"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("internal"), identity: CompletionIdentity }).strict(),
+]);
+export type CompletionSourceIdentity = z.infer<typeof CompletionSourceIdentity>;
+
 export const CompletionDecision = z.enum(["admit", "block", "escalate", "owner_override"]);
 export type CompletionDecision = z.infer<typeof CompletionDecision>;
 
@@ -161,6 +174,7 @@ const CompletionRequestShape = z
     version: CurrentVersion,
     id: Reference,
     origin: CompletionOrigin,
+    sourceIdentity: CompletionSourceIdentity.optional(),
     workItemHash: Reference,
     contractRevision: Reference,
     basisRef: Reference,
@@ -278,6 +292,29 @@ export const CompletionAdmission = CompletionAdmissionShape.superRefine((admissi
 });
 export type CompletionAdmission = z.infer<typeof CompletionAdmission>;
 
+export const CompletionRequestReservation = z
+  .object({
+    version: CurrentVersion,
+    id: Reference,
+    requestId: Reference,
+    requestRoot: Reference,
+    envelopeDigest: Reference,
+    expectedHead: z.number().int().nonnegative(),
+    recordedHead: z.number().int().positive(),
+    createdAt: Timestamp,
+  })
+  .strict()
+  .superRefine((reservation, ctx) => {
+    if (reservation.recordedHead !== reservation.expectedHead + 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "recordedHead must immediately follow expectedHead",
+        path: ["recordedHead"],
+      });
+    }
+  });
+export type CompletionRequestReservation = z.infer<typeof CompletionRequestReservation>;
+
 const CompletionFactsShape = z
   .object({
     version: CurrentVersion,
@@ -289,6 +326,7 @@ const CompletionFactsShape = z
     invalidations: z.array(ResultInvalidation),
     verificationErrors: z.array(VerificationErrorFact),
     effects: z.array(EffectRecord),
+    requestReservations: z.array(CompletionRequestReservation).default([]),
     admissions: z.array(CompletionAdmission),
   })
   .strict();
@@ -321,6 +359,7 @@ export function emptyCompletionFacts(): CompletionFacts {
     invalidations: [],
     verificationErrors: [],
     effects: [],
+    requestReservations: [],
     admissions: [],
   };
 }

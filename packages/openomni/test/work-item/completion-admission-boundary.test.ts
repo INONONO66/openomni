@@ -7,6 +7,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
 import { createCompletionAdmissionService } from "../../src/work-item/completion-admission-boundary.js";
+import { createWorkItemCompletionGateway } from "../../src/work-item/completion-gateway.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const NOW = 1_000;
@@ -301,33 +302,26 @@ afterEach(() => {
 });
 
 describe("WorkItem completion admission service", () => {
-  test("publishes one guarded completion gateway for non-Worker origins", async () => {
+  test("uses one kernel-internal guarded completion gateway for non-Worker origins", async () => {
     configure();
-    const createGateway = Reflect.get(OpenOmni, "createWorkItemCompletionGateway");
-    expect(createGateway).toBeFunction();
+    expect(Reflect.get(OpenOmni, "createWorkItemCompletionGateway")).toBeUndefined();
     expect(Reflect.get(OpenOmni, "createCompletionAdmissionService")).toBeUndefined();
     expect(Reflect.get(OpenOmni, "createCompletionAuthorityResolver")).toBeUndefined();
-    if (typeof createGateway !== "function") return;
     const first = await fixture("external_actor");
     const trustedResult = first.request.results[0];
     if (!trustedResult) throw new Error("missing public gateway result");
-    const gateway = Reflect.apply(createGateway, undefined, [
-      {
-        policyEngine: PolicyEngine.create(),
-        resultAuthorityPort: {
-          validate(candidate: unknown) {
-            const result = Reflect.get(candidate as object, "result");
-            return { ok: WorkItem.CriterionResult.safeParse(result).success };
-          },
+    const gateway = createWorkItemCompletionGateway({
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: {
+        validate(candidate: unknown) {
+          const result = Reflect.get(candidate as object, "result");
+          return { ok: WorkItem.CriterionResult.safeParse(result).success };
         },
-        now: () => NOW,
       },
-    ]);
+      now: () => NOW,
+    });
 
-    const outcome = await Reflect.apply(Reflect.get(gateway, "requestCompletion"), gateway, [
-      first.request,
-      first.report,
-    ]);
+    const outcome = await gateway.requestCompletion(first.request, first.report);
 
     expect(Reflect.get(outcome, "completed")).toBe(true);
     expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
@@ -335,10 +329,12 @@ describe("WorkItem completion admission service", () => {
     );
   });
 
-  test("recovers every latest recorded admission through the public gateway", async () => {
+  test("keeps the configurable gateway private while recovering recorded admissions", async () => {
+    expect(Reflect.get(OpenOmni, "createWorkItemCompletionGateway")).toBeUndefined();
+    expect(Reflect.get(WorkItemPublic, "createWorkItemCompletionGateway")).toBeUndefined();
     const adapter = configure();
     const first = await fixture("recovery");
-    const gateway = OpenOmni.createWorkItemCompletionGateway({
+    const gateway = createWorkItemCompletionGateway({
       policyEngine: PolicyEngine.create(),
       resultAuthorityPort: { validate: () => ({ ok: true }) },
       now: () => NOW,
@@ -346,10 +342,10 @@ describe("WorkItem completion admission service", () => {
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     let writeCount = 0;
     class SimulatedBootCrash extends Error {}
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
       writeCount += 1;
       if (writeCount === 2) throw new SimulatedBootCrash("crash before terminal append");
-      return compareAndSet(hash, expectedHead, candidate);
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
     };
 
     await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
@@ -415,8 +411,29 @@ describe("WorkItem completion admission service", () => {
 
     expect(() =>
       adapter.workItem.compareAndSet(first.item.hash, first.item.revision, forged),
-    ).toThrow("WorkItem completion admission writes are restricted to the OpenOmni boundary");
+    ).toThrow("WorkItem completion fact writes are restricted to the OpenOmni boundary");
     expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(0);
+  });
+
+  test("refuses raw storage callers that inject trusted completion facts", async () => {
+    const adapter = configure();
+    const first = await fixture("external_actor");
+    const forged = WorkItem.Info.parse({
+      ...first.item,
+      revision: first.item.revision + 1,
+      completionFacts: {
+        ...first.item.completionFacts,
+        revision: first.item.completionFacts.revision + 1,
+        claims: first.request.claims,
+        observations: first.request.observations,
+        results: first.request.results,
+      },
+    });
+
+    expect(() =>
+      adapter.workItem.compareAndSet(first.item.hash, first.item.revision, forged),
+    ).toThrow("WorkItem completion fact writes are restricted to the OpenOmni boundary");
+    expect(WorkItemStore.get(first.item.hash)?.completionFacts.results).toEqual([]);
   });
 
   test("persists admission before terminal state and links the terminal receipt", async () => {
@@ -424,9 +441,9 @@ describe("WorkItem completion admission service", () => {
     const { item, request, report } = await fixture();
     const candidates: WorkItem.Info[] = [];
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
       candidates.push(candidate);
-      return compareAndSet(hash, expectedHead, candidate);
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
     };
     const admissionAuthority = authority();
     const service = guardedService(admissionAuthority.resolver);
@@ -707,10 +724,10 @@ describe("WorkItem completion admission service", () => {
     const compareAndSet = firstAdapter.workItem.compareAndSet.bind(firstAdapter.workItem);
     let writeCount = 0;
     class SimulatedCrashError extends Error {}
-    firstAdapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
+    firstAdapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
       writeCount += 1;
       if (writeCount === 2) throw new SimulatedCrashError("crash after admission");
-      return compareAndSet(hash, expectedHead, candidate);
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
     };
     const admissionEvent = completionEvents(item.hash);
 
@@ -840,10 +857,10 @@ describe("WorkItem completion admission service", () => {
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     let writeCount = 0;
     class SimulatedCrashError extends Error {}
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
       writeCount += 1;
       if (writeCount === 2) throw new SimulatedCrashError("crash after Owner admission");
-      return compareAndSet(hash, expectedHead, candidate);
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
     };
 
     await expect(service.requestCompletion(requestWithOverride, report)).rejects.toBeInstanceOf(

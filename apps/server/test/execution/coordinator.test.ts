@@ -1,22 +1,10 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 
+import type { WorkerManager } from "@openomni/coordinator";
 import { WorkerDeliveryError, type Execution } from "@openomni/protocol";
+import { createExecutionCoordinator } from "../../src/execution/coordinator";
 
-type MockWorkerManager = {
-  deliver(runId: string, task: Record<string, unknown>): Promise<unknown>;
-  stats(): {
-    workers: number;
-    active: number;
-    idle: number;
-    ready: number;
-    activeRuns: number;
-    maxActiveWorkers: number;
-  };
-  waitUntilReady(timeoutMs?: number): Promise<void>;
-  shutdown(): Promise<void>;
-};
-
-let mockWorkerManager: MockWorkerManager;
+let mockWorkerManager: WorkerManager;
 
 function createDeferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let resolve!: (value: T) => void;
@@ -26,37 +14,29 @@ function createDeferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   return { promise, resolve };
 }
 
-mock.module("@openomni/coordinator", () => ({
-  createWorkerManager: () => mockWorkerManager,
-  recoverInterruptedRuns: async () => ({ recovered: 0, sessions: [] }),
-}));
-
-let createExecutionCoordinator: typeof import("../../src/execution/coordinator").createExecutionCoordinator;
-
-beforeAll(async () => {
-  ({ createExecutionCoordinator } = await import("../../src/execution/coordinator"));
-});
-
-afterAll(() => {
-  mock.restore();
-});
-
 beforeEach(() => {
   mockWorkerManager = {
     deliver(_runId, params) {
-      const deferred = createDeferred<unknown>();
-      if (typeof params.delayMs === "number") {
-        setTimeout(() => {
-          deferred.resolve({
-            runId: params.runId,
-            sessionId: params.sessionId,
-            status: "succeeded",
-            output: `fixture:${String(params.runId)}`,
-            finishReason: "stop",
-          });
-        }, params.delayMs);
+      if (typeof params.delayMs !== "number") {
+        return Promise.reject(new Error("coordinator test worker requires numeric delayMs"));
       }
+      const deferred = createDeferred<unknown>();
+      setTimeout(() => {
+        deferred.resolve({
+          runId: params.runId,
+          sessionId: params.sessionId,
+          status: "succeeded",
+          output: `fixture:${String(params.runId)}`,
+          finishReason: "stop",
+        });
+      }, params.delayMs);
       return deferred.promise;
+    },
+    async send() {
+      return { ok: true };
+    },
+    async cancel() {
+      return { ok: true };
     },
     stats() {
       return { workers: 1, active: 1, idle: 0, ready: 1, activeRuns: 0, maxActiveWorkers: 1 };
@@ -89,6 +69,7 @@ describe("ExecutionCoordinator", () => {
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
       workerCount: 1,
+      workerManagerFactory: () => mockWorkerManager,
     });
 
     await coordinator.waitUntilReady(1_234);
@@ -100,6 +81,7 @@ describe("ExecutionCoordinator", () => {
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
       workerCount: 1,
+      workerManagerFactory: () => mockWorkerManager,
     });
 
     const firstRun = coordinator.dispatch(
@@ -138,6 +120,7 @@ describe("ExecutionCoordinator", () => {
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
       workerCount: 1,
+      workerManagerFactory: () => mockWorkerManager,
     });
 
     try {

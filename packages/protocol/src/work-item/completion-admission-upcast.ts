@@ -37,8 +37,9 @@ const LegacyCompletionReport = z
 const LegacyWorkItem = z
   .object({
     hash: z.string().min(1),
-    goal: z.string().min(1),
-    acceptanceCriteria: z.array(z.string().min(1)).max(LEGACY_COMPLETION_LIMIT).default([]),
+    name: z.string(),
+    goal: z.string(),
+    acceptanceCriteria: z.array(z.string()).max(LEGACY_COMPLETION_LIMIT).default([]),
     timestamps: z.object({ completed: z.number().finite().optional() }).passthrough(),
     evidence: z.array(LegacyEvidence).max(LEGACY_COMPLETION_LIMIT).default([]),
     completionReport: LegacyCompletionReport.optional(),
@@ -92,6 +93,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     invalidations: [],
     verificationErrors: [],
     effects: [],
+    requestReservations: [],
     admissions,
   };
 
@@ -120,12 +122,15 @@ export function upcastLegacyCompletion(input: unknown): unknown {
 }
 
 function legacyAcceptanceCriteria(parsed: z.infer<typeof LegacyWorkItem>): string[] {
-  const acceptanceCriteria =
-    parsed.acceptanceCriteria.length > 0
-      ? [...parsed.acceptanceCriteria]
-      : parsed.completionReport?.claims.length
-        ? []
-        : [parsed.goal];
+  const acceptanceCriteria = parsed.acceptanceCriteria.filter(
+    (statement) => statement.trim().length > 0,
+  );
+  if (acceptanceCriteria.length === 0 && (parsed.completionReport?.claims.length ?? 0) === 0) {
+    const fallback = [parsed.goal, parsed.name, parsed.hash].find(
+      (statement) => statement.trim().length > 0,
+    );
+    if (fallback) acceptanceCriteria.push(fallback);
+  }
   const matched = new Array(acceptanceCriteria.length).fill(false);
   for (const report of parsed.completionReport?.claims ?? []) {
     const index = acceptanceCriteria.findIndex(

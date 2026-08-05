@@ -1,7 +1,12 @@
+import { PolicyEngine } from "@openomni/policy";
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
 import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
 import type { PolicyResolverInstance } from "../policy/index.js";
 import type { CompletionStakesResolver } from "../work-item/completion-admission-authority.js";
+import {
+  createWorkItemCompletionGateway,
+  type WorkItemCompletionGateway,
+} from "../work-item/completion-gateway.js";
 import type { DispatchRegistry } from "./registry.js";
 import { DispatchRuntime, type DispatchRuntimeOptions } from "./runtime.js";
 import type { DispatchOwners } from "./owners.js";
@@ -64,9 +69,22 @@ export interface DefaultDispatchRuntimeOptions
   extends DispatchRuntimeOptions,
     BuiltInDispatchOptions {}
 
+export type DefaultDispatchRuntime = DispatchRuntime &
+  Readonly<{
+    recoverRecordedWorkItemCompletions: WorkItemCompletionGateway["recoverRecordedCompletions"];
+  }>;
+
 export function createDefaultDispatchRuntime(
   options: DefaultDispatchRuntimeOptions = {},
-): DispatchRuntime {
+): DefaultDispatchRuntime {
+  const completionPolicyEngine = options.completionPolicyEngine ?? PolicyEngine.create();
+  const completionGateway = createWorkItemCompletionGateway({
+    policyEngine: completionPolicyEngine,
+    ...(options.completionStakesResolver === undefined
+      ? {}
+      : { stakesResolver: options.completionStakesResolver }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
   const runtime = new DispatchRuntime(options);
   registerBuiltInDispatchHandlers(runtime.registry, {
     owners: options.owners,
@@ -74,9 +92,11 @@ export function createDefaultDispatchRuntime(
     readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
     readBackRecorder: options.readBackRecorder,
     now: options.now,
-    completionPolicyEngine: options.completionPolicyEngine,
+    completionPolicyEngine,
     completionStakesResolver: options.completionStakesResolver,
     policyResolver: options.policyResolver,
   });
-  return runtime;
+  return Object.assign(runtime, {
+    recoverRecordedWorkItemCompletions: completionGateway.recoverRecordedCompletions,
+  });
 }

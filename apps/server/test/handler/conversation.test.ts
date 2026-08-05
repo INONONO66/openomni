@@ -70,6 +70,7 @@ async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined
   const criterion = current?.completionFacts.criteria[0];
   const evidenceId = updated?.evidence.at(-1)?.id;
   if (!current || !criterion || !evidenceId) throw new Error("expected completion fixture");
+  const observationId = `observation:${hash}:${current.revision}:conversation`;
   const request = WorkItem.CompletionRequest.parse({
     version: 1,
     id: `completion-request:${hash}:${current.revision}:conversation`,
@@ -78,15 +79,35 @@ async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined
     contractRevision: current.completionContract.revision,
     basisRef: current.completionContract.basisRef,
     expectedHead: current.revision,
-    claims: [],
-    observations: [],
+    claims: [
+      {
+        id: `claim:${hash}:${current.revision}:conversation`,
+        criterionId: criterion.id,
+        statement: criterion.statement,
+        observationIds: [observationId],
+        basisRef: current.completionContract.basisRef,
+        createdAt: current.timestamps.updated + 1,
+      },
+    ],
+    observations: [
+      {
+        id: observationId,
+        producer: "verifier:conversation",
+        subjectRef: current.hash,
+        basisRef: current.completionContract.basisRef,
+        artifactRefs: [evidenceId],
+        provenanceRef: evidenceId,
+        ancestryRefs: [],
+        observedAt: current.timestamps.updated + 1,
+      },
+    ],
     results: [
       {
         id: `result:${hash}:${current.revision}:conversation`,
         criterionId: criterion.id,
         value: "verified",
         checkedPredicate: criterion.statement,
-        observationIds: [],
+        observationIds: [observationId],
         verifierRef: "verifier:conversation",
         assumptions: [],
         basisRef: current.completionContract.basisRef,
@@ -100,7 +121,7 @@ async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined
   });
   const report: WorkItem.CompletionReport = {
     summary: "Completed with fixture evidence.",
-    claims: [{ statement: "The item is complete.", evidenceIds: [evidenceId] }],
+    claims: [{ statement: criterion.statement, evidenceIds: [evidenceId] }],
     caveats: [],
     followUps: [],
   };

@@ -137,4 +137,20 @@ describe("worker.spawn connector endpoint telemetry evidence", () => {
     );
     expect(workItem?.evidence.map((evidence) => evidence.detail).join("\n")).toContain("call-1");
   });
+
+  test("rejects a foreign connector session before projecting telemetry", async () => {
+    seedConnectorInstallation();
+    const handlers = createConnectorEndpointHandlers(async (request) => ({
+      ...resultWithTelemetry(request.executionRequest),
+      sessionId: "session:foreign",
+    }));
+
+    await expect(handlers["worker.spawn"](connectorEndpointWorkerCommand())).rejects.toThrow(
+      "Worker completion identity mismatch",
+    );
+
+    const workItem = WorkItemStore.list()[0];
+    expect(workItem?.evidence).toEqual([]);
+    expect(workItem?.completionFacts.admissions).toEqual([]);
+  });
 });

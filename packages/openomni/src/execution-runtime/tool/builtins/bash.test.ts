@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashTool } from "./bash";
@@ -41,8 +41,21 @@ describe("bashTool", () => {
 
   test("kills the subprocess when execution context is aborted", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-abort-"));
-    const marker = join(workspace, "late-write.txt");
+    const childPidFileName = "child.pid";
+    const childPidFile = join(workspace, childPidFileName);
     const controller = new AbortController();
+    let resolveReady: (() => void) | undefined;
+    let rejectReady: ((error: Error) => void) | undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    const watcher = watch(workspace, (_eventType, filename) => {
+      if (filename?.toString() === childPidFileName) resolveReady?.();
+    });
+    const readyTimeout = setTimeout(() => {
+      rejectReady?.(new Error("bash child process did not become ready"));
+    }, 1_000);
 
     try {
       const tool = bashTool(workspace);
@@ -50,19 +63,34 @@ describe("bashTool", () => {
         {
           id: "call-abort",
           tool: "bash",
-          input: { command: "(sleep 0.2; touch late-write.txt) & wait" },
+          input: { command: "sleep 1000 & echo $! > child.pid; wait" },
         },
         { signal: controller.signal },
       );
 
-      setTimeout(() => controller.abort(), 20);
+      await ready;
+      clearTimeout(readyTimeout);
+      const childPid = Number.parseInt(readFileSync(childPidFile, "utf8").trim(), 10);
+      controller.abort();
       const result = await resultPromise;
-      await Bun.sleep(300);
+      let childAlive = true;
+      try {
+        process.kill(childPid, 0);
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "ESRCH") {
+          childAlive = false;
+        } else {
+          throw error;
+        }
+      }
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("Command aborted");
-      expect(existsSync(marker)).toBe(false);
+      expect(childAlive).toBe(false);
     } finally {
+      clearTimeout(readyTimeout);
+      controller.abort();
+      watcher.close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });
@@ -70,7 +98,20 @@ describe("bashTool", () => {
   test("allows TERM cleanup before escalating an aborted process group", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-term-"));
     const marker = join(workspace, "term-handled.txt");
+    const readyMarkerName = "term-ready.txt";
     const controller = new AbortController();
+    let resolveReady: (() => void) | undefined;
+    let rejectReady: ((error: Error) => void) | undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    const watcher = watch(workspace, (_eventType, filename) => {
+      if (filename?.toString() === readyMarkerName) resolveReady?.();
+    });
+    const readyTimeout = setTimeout(() => {
+      rejectReady?.(new Error("bash TERM handler did not become ready"));
+    }, 1_000);
 
     try {
       const tool = bashTool(workspace);
@@ -79,19 +120,24 @@ describe("bashTool", () => {
           id: "call-term",
           tool: "bash",
           input: {
-            command: "trap 'touch term-handled.txt; exit 0' TERM; while :; do sleep 1; done",
+            command:
+              "trap 'touch term-handled.txt; exit 0' TERM; touch term-ready.txt; while :; do sleep 1; done",
           },
         },
         { signal: controller.signal },
       );
 
-      setTimeout(() => controller.abort(), 20);
+      await ready;
+      clearTimeout(readyTimeout);
+      controller.abort();
       const result = await resultPromise;
-      await Bun.sleep(150);
 
       expect(result.isError).toBe(true);
       expect(existsSync(marker)).toBe(true);
     } finally {
+      clearTimeout(readyTimeout);
+      controller.abort();
+      watcher.close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });

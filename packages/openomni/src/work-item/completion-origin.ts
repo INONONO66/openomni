@@ -1,4 +1,4 @@
-import type { WorkItem } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
 import { z } from "zod";
 
 const CompletionIdentity = z
@@ -56,4 +56,12 @@ export function projectCompletionOrigin(input: unknown): WorkItem.CompletionOrig
     return identityOriginProjection[origin.identity.kind];
   }
   return fixedOriginProjection[origin.source];
+}
+
+export function projectCompletionSourceIdentity(
+  input: unknown,
+): WorkItem.CompletionSourceIdentity | undefined {
+  const origin = CompletionSourceOrigin.parse(input);
+  if (origin.source !== "sdk" && origin.source !== "internal") return undefined;
+  return WorkItem.CompletionSourceIdentity.parse(origin);
 }

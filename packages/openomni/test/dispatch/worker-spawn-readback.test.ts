@@ -92,7 +92,7 @@ describe("worker.spawn read-back completion gate", () => {
               output: JSON.stringify({
                 completionReport: {
                   summary: "Published the requested update.",
-                  claims: [{ statement: "The deployed page includes the expected marker." }],
+                  claims: [{ statement: "archived source contains the recorded quote exactly" }],
                 },
                 criterionFacts,
                 readBackRequests: [
@@ -214,7 +214,7 @@ describe("worker.spawn read-back completion gate", () => {
       JSON.stringify({
         completionReport: {
           summary: "Published the requested update.",
-          claims: [{ statement: "The deployed page includes the expected marker." }],
+          claims: [{ statement: "archived source contains the recorded quote exactly" }],
         },
         criterionFacts,
         readBackRequests: [
@@ -277,10 +277,14 @@ describe("worker.spawn read-back completion gate", () => {
     });
     const connector = await WorkItemStore.start(connectorCreated.hash);
     if (!connector) throw new Error("missing connector WorkItem");
-    await registry.get("worker.complete")?.(
-      command(
+    await registry.get("worker.complete")?.({
+      ...command(
         "worker.complete",
-        { kind: "worker", runId: "run:connector-read-back" },
+        {
+          kind: "worker",
+          runId: "run:connector-read-back",
+          sessionId: "session:connector-read-back",
+        },
         {
           workItemHash: connector.hash,
           result: {
@@ -291,7 +295,15 @@ describe("worker.spawn read-back completion gate", () => {
           },
         },
       ),
-    );
+      actor: {
+        kind: "worker",
+        actorId: "session:connector-read-back:run:connector-read-back",
+        sessionId: "session:connector-read-back",
+        runId: "run:connector-read-back",
+        workerRunId: "run:connector-read-back",
+        trustTier: "assigned_worker",
+      },
+    });
 
     const internalStored = WorkItemStore.get(internal.hash);
     const connectorStored = WorkItemStore.get(connector.hash);

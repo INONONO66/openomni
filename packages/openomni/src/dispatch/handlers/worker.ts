@@ -1,5 +1,5 @@
 import { PolicyEngine } from "@openomni/policy";
-import { Execution, type Dispatch, type Model } from "@openomni/protocol";
+import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
@@ -57,10 +57,10 @@ function parseWorkerCompletePayload(payload: unknown): WorkerCompletePayload {
   return parsed.data;
 }
 
-function resolveCompletedWorkItemHash(
+function resolveCompletedWorkItem(
   command: Dispatch.Command,
   payload: WorkerCompletePayload,
-): string {
+): WorkItem.Info {
   const targetRunId = command.target.runId;
   if (!targetRunId) throw new Error("worker.complete requires target.runId");
   if (targetRunId !== payload.result.runId) {
@@ -77,7 +77,7 @@ function resolveCompletedWorkItemHash(
         `worker.complete run mismatch: workItem=${workItem.workerRunId ?? "missing"} target=${targetRunId}`,
       );
     }
-    return workItem.hash;
+    return workItem;
   }
 
   const matches = WorkItemStore.list().filter((item) => item.workerRunId === targetRunId);
@@ -88,7 +88,29 @@ function resolveCompletedWorkItemHash(
   }
   const workItem = matches[0];
   if (!workItem) throw new Error(`worker.complete WorkItem not found for run ${targetRunId}`);
-  return workItem.hash;
+  return workItem;
+}
+
+function assertWorkerCompletionAuthority(
+  command: Dispatch.Command,
+  payload: WorkerCompletePayload,
+  workItem?: WorkItem.Info,
+): void {
+  const actor = command.actor;
+  if (
+    actor.kind === "worker" &&
+    actor.trustTier === "assigned_worker" &&
+    actor.workerRunId === payload.result.runId &&
+    actor.sessionId === payload.result.sessionId &&
+    (command.target.sessionId === undefined ||
+      command.target.sessionId === payload.result.sessionId) &&
+    (workItem === undefined ||
+      (workItem.executorKind === "connector_endpoint" &&
+        workItem.workSessionId === payload.result.sessionId))
+  ) {
+    return;
+  }
+  throw new Error("worker.complete actor is not authorized for this Worker result");
 }
 
 export function createWorkerDispatchHandlers(
@@ -163,7 +185,10 @@ export function createWorkerDispatchHandlers(
 
     async "worker.complete"(command) {
       const payload = parseWorkerCompletePayload(command.payload);
-      const workItemHash = resolveCompletedWorkItemHash(command, payload);
+      assertWorkerCompletionAuthority(command, payload);
+      const workItem = resolveCompletedWorkItem(command, payload);
+      assertWorkerCompletionAuthority(command, payload, workItem);
+      const workItemHash = workItem.hash;
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
         completionPolicyEngine,
         stakesResolver: options.stakesResolver,

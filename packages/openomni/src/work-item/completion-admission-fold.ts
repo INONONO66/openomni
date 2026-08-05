@@ -11,7 +11,7 @@ export type CompletionCriterion = WorkItem.Criterion;
 export type CompletionDurableFacts = WorkItem.CompletionFacts;
 export type CompletionProposedFacts = Omit<
   WorkItem.CompletionFacts,
-  "version" | "revision" | "criteria" | "admissions"
+  "version" | "revision" | "criteria" | "requestReservations" | "admissions"
 >;
 
 type OwnerOverride = Readonly<{

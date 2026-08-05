@@ -19,6 +19,7 @@ import {
 import {
   type CompletionSourceOrigin,
   projectCompletionOrigin,
+  projectCompletionSourceIdentity,
 } from "../../work-item/completion-origin.js";
 
 const VerificationInput = z
@@ -71,6 +72,7 @@ export type WorkerReadBackEvidenceBinding = Readonly<{
 export type WorkerCompletionAdmissionInput = Readonly<{
   workItemHash: string;
   result: Execution.Result;
+  completionEnvelopeDigest: string;
   sourceOrigin: CompletionSourceOrigin;
   criterionFacts: readonly WorkerCriterionFactInput[];
   completionReport: WorkItem.CompletionReport;
@@ -98,11 +100,9 @@ type ProjectedFacts = Readonly<{
 export async function admitWorkerCompletion(
   input: WorkerCompletionAdmissionInput,
 ): Promise<CompletionBoundaryOutcome> {
-  const item = WorkItemStore.get(input.workItemHash);
-  if (!item) throw new Error(`WorkItem not found: ${input.workItemHash}`);
-  assertWorkerCompletionIdentity(item, input.result);
+  const item = requireWorkerCompletionIdentity(input.workItemHash, input.result);
   const createdAt = input.now();
-  const requestId = workerCompletionRequestId(item, input.result);
+  const requestId = workerCompletionRequestId(item, input.result, input.completionEnvelopeDigest);
   const projected = projectCriterionFacts(
     item,
     requestId,
@@ -114,6 +114,7 @@ export async function admitWorkerCompletion(
     version: 1,
     id: requestId,
     origin: projectCompletionOrigin(input.sourceOrigin),
+    sourceIdentity: projectCompletionSourceIdentity(input.sourceOrigin),
     workItemHash: item.hash,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
@@ -139,20 +140,33 @@ export async function admitWorkerCompletion(
 export async function replayWorkerCompletion(
   input: Pick<
     WorkerCompletionAdmissionInput,
-    "workItemHash" | "result" | "policyEngine" | "stakesResolver" | "now"
+    | "workItemHash"
+    | "result"
+    | "completionEnvelopeDigest"
+    | "policyEngine"
+    | "stakesResolver"
+    | "now"
   > &
     Readonly<{
       completionReportMatches(report: WorkItem.CompletionReport): boolean;
     }>,
 ): Promise<CompletionBoundaryOutcome | undefined> {
-  const item = WorkItemStore.get(input.workItemHash);
-  if (!item) throw new Error(`WorkItem not found: ${input.workItemHash}`);
-  assertWorkerCompletionIdentity(item, input.result);
-  const requestId = workerCompletionRequestId(item, input.result);
+  const item = requireWorkerCompletionIdentity(input.workItemHash, input.result);
+  const requestRoot = workerCompletionRequestRoot(item, input.result);
+  const requestId = `${requestRoot}:${input.completionEnvelopeDigest}`;
   const admission = item.completionFacts.admissions.find(
     (candidate) => candidate.requestId === requestId,
   );
-  if (!admission) return undefined;
+  if (!admission) {
+    const correlatedAdmission = item.completionFacts.admissions.find((candidate) =>
+      candidate.requestId.startsWith(`${requestRoot}:`),
+    );
+    if (!correlatedAdmission) return undefined;
+    throw new CompletionAdmissionServiceError(
+      "request_conflict",
+      `completion envelope changed for request: ${requestRoot}`,
+    );
+  }
   const report = admission.completionReportSnapshot;
   if (!report) throw new Error(`completion admission report is missing: ${admission.id}`);
   if (!input.completionReportMatches(report)) {
@@ -160,6 +174,16 @@ export async function replayWorkerCompletion(
       "request_conflict",
       `completion report changed for request: ${requestId}`,
     );
+  }
+  const blockerDescription = completionAdmissionBlockerDescription(admission);
+  if (
+    blockerDescription !== undefined &&
+    item.revision === admission.recordedHead + 1 &&
+    item.blockers.some(
+      (blocker) => blocker.resolvedAt === undefined && blocker.description === blockerDescription,
+    )
+  ) {
+    return { admission, workItem: item, completed: false };
   }
   const authorityResolver = createCompletionAuthorityResolver({
     policyEngine: input.policyEngine,
@@ -170,12 +194,32 @@ export async function replayWorkerCompletion(
   return service.requestCompletion(admission.requestSnapshot, report);
 }
 
-function workerCompletionRequestId(item: WorkItem.Info, result: Execution.Result): string {
+function completionAdmissionBlockerDescription(
+  admission: WorkItem.CompletionAdmission,
+): string | undefined {
+  if (admission.decision === "admit" || admission.decision === "owner_override") return undefined;
+  return `completion admission ${admission.decision}: ${admission.reasonCodes.join(", ")}`;
+}
+
+export function workerCompletionRequestId(
+  item: WorkItem.Info,
+  result: Execution.Result,
+  completionEnvelopeDigest: string,
+): string {
+  return `${workerCompletionRequestRoot(item, result)}:${completionEnvelopeDigest}`;
+}
+
+export function workerCompletionRequestRoot(item: WorkItem.Info, result: Execution.Result): string {
   return `completion-request:${item.hash}:${result.runId}:${result.sessionId}`;
 }
 
-function assertWorkerCompletionIdentity(item: WorkItem.Info, result: Execution.Result): void {
-  if (item.workerRunId === result.runId && item.workSessionId === result.sessionId) return;
+export function requireWorkerCompletionIdentity(
+  workItemHash: string,
+  result: Execution.Result,
+): WorkItem.Info {
+  const item = WorkItemStore.get(workItemHash);
+  if (!item) throw new Error(`WorkItem not found: ${workItemHash}`);
+  if (item.workerRunId === result.runId && item.workSessionId === result.sessionId) return item;
   throw new Error(
     `Worker completion identity mismatch: expected ${item.workerRunId ?? "missing"}/${item.workSessionId ?? "missing"}, received ${result.runId}/${result.sessionId}`,
   );

@@ -94,15 +94,12 @@ export type {
 export {
   CompletionAdmissionDriverScenarios,
   CompletionSourceOrigin,
-  createWorkItemCompletionGateway,
   projectCompletionOrigin,
   runCompletionAdmissionDriver,
 } from "./work-item";
 export type {
   CompletionAdmissionDriverExecution,
   CompletionAdmissionDriverScenario,
-  WorkItemCompletionGateway,
-  WorkItemCompletionGatewayOptions,
   WorkItemCompletionRecoveryReceipt,
 } from "./work-item";
 
@@ -124,6 +121,7 @@ export type {
   BuiltInDispatchOptions,
   ConnectorEndpointDriverOwner,
   DefaultDispatchRuntimeOptions,
+  DefaultDispatchRuntime,
   DeviceDispatchHandlerOptions,
   DeviceDispatchOwner,
   DeviceDispatchOwnerInput,

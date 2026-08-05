@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import type { WorkItemCompletionGateway } from "@openomni/openomni";
+import type { DefaultDispatchRuntime } from "@openomni/openomni";
 import { Bus, PendingInteractionStore } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
@@ -47,7 +47,7 @@ export async function runRecovery(
   handler: Adapter.MessageHandler | undefined,
   coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> },
   traceId?: string,
-  completionGateway?: Pick<WorkItemCompletionGateway, "recoverRecordedCompletions">,
+  completionRecovery?: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">,
 ): Promise<void> {
   const startTime = Date.now();
   const id = traceId ?? crypto.randomUUID();
@@ -61,8 +61,8 @@ export async function runRecovery(
   try {
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
-    if (completionGateway) {
-      const receipt = await completionGateway.recoverRecordedCompletions();
+    if (completionRecovery) {
+      const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
       Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
         traceId: id,
         time: Date.now(),

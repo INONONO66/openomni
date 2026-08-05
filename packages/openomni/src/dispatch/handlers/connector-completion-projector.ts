@@ -5,6 +5,7 @@ import {
   type CompletionReflection,
   type WorkerCompletionOptions,
 } from "./worker-completion.js";
+import { requireWorkerCompletionIdentity } from "./worker-completion-admission.js";
 
 export interface ConnectorCompletionProjection {
   readonly reflection: CompletionReflection;
@@ -17,6 +18,7 @@ export async function projectConnectorCompletion(
   result: Execution.Result,
   options: ConnectorCompletionOptions,
 ): Promise<ConnectorCompletionProjection> {
+  requireWorkerCompletionIdentity(workItemHash, result);
   await recordConnectorArtifacts(workItemHash, result);
   await recordConnectorLogEvents(workItemHash, result);
   await recordConnectorTokenUsage(workItemHash, result);

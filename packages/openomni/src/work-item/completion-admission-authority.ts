@@ -61,13 +61,13 @@ export type CompletionResultAuthorityPort = Readonly<{
   ): CompletionResultAuthorityValidation | Promise<CompletionResultAuthorityValidation>;
 }>;
 
-export type CompletionInvalidationAuthorityCandidate = CompletionAuthoritySubject &
+type CompletionInvalidationAuthorityCandidate = CompletionAuthoritySubject &
   Readonly<{
     invalidation: WorkItem.ResultInvalidation;
     result: WorkItem.CriterionResult;
   }>;
 
-export type CompletionInvalidationAuthorityPort = Readonly<{
+type CompletionInvalidationAuthorityPort = Readonly<{
   validate(
     candidate: CompletionInvalidationAuthorityCandidate,
   ): CompletionResultAuthorityValidation | Promise<CompletionResultAuthorityValidation>;

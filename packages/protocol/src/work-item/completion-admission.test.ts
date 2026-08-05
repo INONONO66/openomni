@@ -565,6 +565,38 @@ describe("WorkItem completion admission contracts", () => {
     expect(WorkItem.Info.safeParse(WorkItem.upcastLegacyCompletion(oversized)).success).toBe(false);
   });
 
+  test("upcasts historically valid blank legacy goals and acceptance criteria", () => {
+    const item = WorkItem.Info.parse(
+      WorkItem.upcastLegacyCompletion({
+        ...baseItem,
+        goal: "",
+        acceptanceCriteria: ["", "   "],
+      }),
+    );
+
+    expect(item.goal).toBe("");
+    expect(item.acceptanceCriteria).toEqual([baseItem.name]);
+    expect(item.completionFacts.criteria).toHaveLength(1);
+    expect(item.completionFacts.criteria[0]?.statement).toBe(baseItem.name);
+  });
+
+  test("upcasts the historical acceptance-criteria boundary", () => {
+    const acceptanceCriteria = Array.from(
+      { length: 256 },
+      (_, index) => `historical criterion ${index}`,
+    );
+
+    const item = WorkItem.Info.parse(
+      WorkItem.upcastLegacyCompletion({
+        ...baseItem,
+        acceptanceCriteria,
+      }),
+    );
+
+    expect(item.acceptanceCriteria).toEqual(acceptanceCriteria);
+    expect(item.completionFacts.criteria).toHaveLength(256);
+  });
+
   test("upcasts legacy passed evidence as asserted rather than verified", () => {
     const item = WorkItem.Info.parse(
       WorkItem.upcastLegacyCompletion({
