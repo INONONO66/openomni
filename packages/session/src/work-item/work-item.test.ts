@@ -466,6 +466,21 @@ describe("WorkItemStore", () => {
     expect(retried?.executorKind).toBeUndefined();
     expect(retried?.workerRunId).toBeUndefined();
     expect(retried?.workSessionId).toBeUndefined();
+    await expect(
+      WorkItemStore.addEvidence(
+        item.hash,
+        {
+          kind: "verification",
+          description: "late connector artifact",
+          passed: true,
+        },
+        {
+          expectedAttempt: item.attempt,
+          expectedBasisRef: item.completionContract.basisRef,
+        },
+      ),
+    ).rejects.toThrow("attempt changed before evidence recording");
+    expect(WorkItemStore.get(item.hash)?.evidence).toEqual([]);
     const assigned = await WorkItemStore.assignExecution(item.hash, {
       executorKind: "internal_chat_agent",
       workerRunId: "run:retry:2",

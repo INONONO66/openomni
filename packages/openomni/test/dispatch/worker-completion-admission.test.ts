@@ -769,6 +769,40 @@ describe("worker completion admission convergence", () => {
     );
   });
 
+  test.each([
+    "failed",
+    "cancelled",
+    "interrupted",
+  ] as const)("rejects a late %s result from the prior Worker assignment without mutation", async (status) => {
+    const item = await startedItem("internal_chat_agent");
+    await WorkItemStore.fail(item.hash, "retry before late terminal result");
+    const retried = await WorkItemStore.retry(item.hash);
+    if (!retried) throw new Error("failed to retry late-result fixture");
+    const result: Execution.Result =
+      status === "cancelled"
+        ? { runId: WORKER_RUN_ID, sessionId: WORKER_SESSION_ID, status }
+        : {
+            runId: WORKER_RUN_ID,
+            sessionId: WORKER_SESSION_ID,
+            status,
+            error: `late ${status}`,
+          };
+
+    const reflection = await reflectCoordinatorResult(item.hash, result, {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      now: () => NOW,
+    });
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(reflection.completionBlocked).toBe(true);
+    expect(reflection.completionBlocker).toContain("Worker completion identity mismatch");
+    expect(stored?.revision).toBe(retried.revision);
+    expect(stored?.failureReason).toBeUndefined();
+    expect(stored?.timestamps.cancelled).toBeUndefined();
+    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
+  });
+
   test("fences an in-flight prior attempt when retry rotates the basis", async () => {
     const item = await startedItem("internal_chat_agent");
     const firstOutput = await evidenceBackedEnvelope(item.hash);

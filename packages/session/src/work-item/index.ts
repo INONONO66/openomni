@@ -87,9 +87,10 @@ export namespace WorkItemStore {
 
   export async function addEvidence(
     hash: string,
-    evidence: Omit<WorkItem.Evidence, "id" | "createdAt"> & Readonly<{ id?: string }>,
+    evidence: Parameters<typeof addWorkItemEvidence>[1],
+    expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemEvidence(hash, evidence);
+    return addWorkItemEvidence(hash, evidence, expectedScope);
   }
 
   export async function addReadBackEvidence(

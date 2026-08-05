@@ -63,8 +63,55 @@ export function createWorkItemCompletionGateway(
           skipped += 1;
           continue;
         }
+        if (
+          item.blockers.some(
+            (blocker) => !blocker.resolvedAt && blocker.id === `${admission.id}:recovery-blocker`,
+          )
+        ) {
+          skipped += 1;
+          continue;
+        }
         try {
           if (admission.decision === "block" || admission.decision === "escalate") {
+            const description = `completion admission ${admission.decision}: ${admission.reasonCodes.join(", ")}`;
+            if (
+              item.blockers.some(
+                (blocker) => !blocker.resolvedAt && blocker.description === description,
+              )
+            ) {
+              skipped += 1;
+              continue;
+            }
+            if (
+              item.revision !== admission.recordedHead &&
+              admission.completionReportSnapshot !== undefined
+            ) {
+              const reevaluated = await service.resumeCompletion(
+                item.hash,
+                admission.id,
+                admission.completionReportSnapshot,
+              );
+              if (WorkItem.deriveStatus(reevaluated) === "completed") {
+                recovered += 1;
+                continue;
+              }
+              const latestAdmission = reevaluated.completionFacts.admissions
+                .filter(
+                  (candidate) =>
+                    candidate.contractRevision === reevaluated.completionContract.revision &&
+                    candidate.basisRef === reevaluated.completionContract.basisRef,
+                )
+                .at(-1);
+              if (
+                latestAdmission &&
+                (latestAdmission.decision === "block" || latestAdmission.decision === "escalate") &&
+                (await materializeAdmissionBlocker(item.hash, latestAdmission))
+              ) {
+                recovered += 1;
+                continue;
+              }
+              throw new Error("completion recovery remained incomplete");
+            }
             if (!(await materializeAdmissionBlocker(item.hash, admission))) {
               skipped += 1;
               continue;
@@ -109,10 +156,22 @@ export function createWorkItemCompletionGateway(
             }
           }
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (
+            message.startsWith("completion report ") ||
+            message.startsWith("completion terminal ")
+          ) {
+            if (await materializeRecoveryErrorBlocker(item.hash, admission, message)) {
+              recovered += 1;
+            } else {
+              skipped += 1;
+            }
+            continue;
+          }
           failures.push({
             workItemHash: item.hash,
             admissionId: admission.id,
-            error: error instanceof Error ? error.message : String(error),
+            error: message,
           });
         }
       }
@@ -134,6 +193,26 @@ async function materializeAdmissionBlocker(
   }
   await WorkItemStore.addBlocker(workItemHash, {
     id: `${admission.id}:blocker`,
+    description,
+    kind: "error",
+  });
+  return true;
+}
+
+async function materializeRecoveryErrorBlocker(
+  workItemHash: string,
+  admission: WorkItem.CompletionAdmission,
+  error: string,
+): Promise<boolean> {
+  const description = `completion recovery blocked: ${error}`;
+  const current = WorkItemStore.get(workItemHash);
+  if (
+    current?.blockers.some((blocker) => !blocker.resolvedAt && blocker.description === description)
+  ) {
+    return false;
+  }
+  await WorkItemStore.addBlocker(workItemHash, {
+    id: `${admission.id}:recovery-blocker`,
     description,
     kind: "error",
   });

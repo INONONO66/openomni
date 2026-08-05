@@ -136,6 +136,16 @@ export async function reflectCoordinatorResult(
   result: Execution.Result,
   options: WorkerCompletionOptions,
 ): Promise<CompletionReflection> {
+  let item: WorkItem.Info;
+  try {
+    item = requireWorkerCompletionIdentity(workItemHash, result);
+  } catch (error) {
+    return completionReflection(
+      workItemHash,
+      true,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
   if (result.status === "succeeded") {
     if (!options.completionWriter) {
       return blockCompletion(workItemHash, "completion writer is unavailable");
@@ -158,7 +168,6 @@ export async function reflectCoordinatorResult(
         now,
       });
       if (replay) return completionOutcomeReflection(workItemHash, replay);
-      const item = requireWorkerCompletionIdentity(workItemHash, result);
       const requestId = workerCompletionRequestId(item, result, completionEnvelopeDigest);
       const reservationOwnerId =
         options.completionReservationOwnerId ?? completionReservationOwnerId;

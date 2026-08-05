@@ -428,12 +428,21 @@ describe("WorkItem completion admission service", () => {
     expect(outcome.completed).toBe(false);
     expect(outcome.admission.decision).toBe("block");
     expect(WorkItemStore.get(first.item.hash)?.blockers).toEqual([]);
+    await WorkItemStore.addEvidence(first.item.hash, {
+      kind: "verification",
+      description: "head changed after recorded block",
+      passed: true,
+    });
 
     const receipt = await gateway.recoverRecordedCompletions();
     const recovered = WorkItemStore.get(first.item.hash);
+    const reevaluatedAdmission = recovered?.completionFacts.admissions.at(-1);
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
+    expect(recovered?.completionFacts.admissions).toHaveLength(2);
+    expect(reevaluatedAdmission?.id).not.toBe(outcome.admission.id);
+    expect(reevaluatedAdmission?.decision).toBe("block");
     expect(recovered?.blockers).toHaveLength(1);
-    expect(recovered?.blockers[0]?.id).toBe(`${outcome.admission.id}:blocker`);
+    expect(recovered?.blockers[0]?.id).toBe(`${reevaluatedAdmission?.id}:blocker`);
 
     const replay = await gateway.recoverRecordedCompletions();
     expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
@@ -686,6 +695,43 @@ describe("WorkItem completion admission service", () => {
     expect(stored?.completionReport).toBeUndefined();
   });
 
+  test("materializes one recovery blocker for an invalid recorded terminal report", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+    const invalidReport: WorkItem.CompletionReport = {
+      ...report,
+      claims: report.claims.map((claim) => ({
+        ...claim,
+        evidenceIds: ["evidence:missing-on-recovery"],
+      })),
+    };
+
+    await expect(gateway.requestCompletion(request, invalidReport)).rejects.toThrow(
+      "completion report references missing evidence",
+    );
+    const admission = WorkItemStore.get(item.hash)?.completionFacts.admissions.at(-1);
+    if (!admission) throw new Error("missing invalid-report admission");
+
+    const receipt = await gateway.recoverRecordedCompletions();
+    const recovered = WorkItemStore.get(item.hash);
+    expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
+    expect(recovered?.blockers).toHaveLength(1);
+    expect(recovered?.blockers[0]?.id).toBe(`${admission.id}:recovery-blocker`);
+    expect(recovered?.blockers[0]?.description).toContain(
+      "completion report references missing evidence",
+    );
+
+    const replay = await gateway.recoverRecordedCompletions();
+    expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
+    expect(WorkItemStore.get(item.hash)?.blockers).toHaveLength(1);
+  });
+
   test("rejects a terminal report that cites failed evidence after recording admission", async () => {
     configure();
     const { item, request, report } = await fixture("worker", false);
@@ -817,6 +863,48 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
+  test("canonicalizes report evidence order before admission and terminal linkage", async () => {
+    configure();
+    const first = await fixture();
+    const withSecondEvidence = await WorkItemStore.addEvidence(first.item.hash, {
+      kind: "verification",
+      description: "second terminal artifact",
+      passed: true,
+    });
+    const secondEvidenceId = withSecondEvidence?.evidence.at(-1)?.id;
+    const firstEvidenceId = first.report.claims[0]?.evidenceIds[0];
+    if (!withSecondEvidence || !secondEvidenceId || !firstEvidenceId) {
+      throw new Error("missing report ordering fixture");
+    }
+    const request = WorkItem.CompletionRequest.parse({
+      ...first.request,
+      expectedHead: withSecondEvidence.revision,
+      observations: first.request.observations.map((observation) => ({
+        ...observation,
+        artifactRefs: [secondEvidenceId, firstEvidenceId],
+      })),
+    });
+    const report: WorkItem.CompletionReport = {
+      ...first.report,
+      claims: first.report.claims.map((claim) => ({
+        ...claim,
+        evidenceIds: [secondEvidenceId, firstEvidenceId],
+      })),
+    };
+    const service = guardedService(authority().resolver);
+    if (!service) return;
+
+    const outcome = await service.requestCompletion(request, report);
+    const stored = WorkItemStore.get(first.item.hash);
+    const expectedEvidenceIds = [firstEvidenceId, secondEvidenceId].sort();
+
+    expect(outcome.completed).toBe(true);
+    expect(stored?.completionReport?.claims[0]?.evidenceIds).toEqual(expectedEvidenceIds);
+    expect(
+      stored?.completionFacts.admissions[0]?.completionReportSnapshot?.claims[0]?.evidenceIds,
+    ).toEqual(expectedEvidenceIds);
+  });
+
   test("rejects a hostile admission id colliding with a proposed fact", async () => {
     configure();
     const first = await fixture();
@@ -895,6 +983,46 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
     expect(events.order).not.toContain("CompletedV2");
+  });
+
+  test("rejects a hostile admit that selects a refuted result", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const refutedRequest = WorkItem.CompletionRequest.parse({
+      ...request,
+      results: request.results.map((result) => ({ ...result, value: "refuted" })),
+    });
+    const service = guardedService({
+      resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+        const current = WorkItem.Info.parse(itemInput);
+        const candidate = WorkItem.CompletionRequest.parse(requestInput);
+        return WorkItem.CompletionAdmission.parse({
+          version: 1,
+          id: `admission:${candidate.id}:${current.revision + 1}:hostile-refuted`,
+          requestId: candidate.id,
+          requestSnapshot: candidate,
+          origin: candidate.origin,
+          contractRevision: current.completionContract.revision,
+          basisRef: current.completionContract.basisRef,
+          effectiveResultIds: candidate.results.map(({ id }) => id),
+          unresolvedCriterionIds: [],
+          decision: "admit",
+          reasonCodes: [],
+          residualRisks: [],
+          policyRef: "policy:hostile-refuted",
+          expectedHead: current.revision,
+          recordedHead: current.revision + 1,
+          createdAt: NOW,
+        });
+      },
+    });
+    if (!service) return;
+
+    expect(await errorCode(service.requestCompletion(refutedRequest, report))).toBe(
+      "request_conflict",
+    );
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test.each([

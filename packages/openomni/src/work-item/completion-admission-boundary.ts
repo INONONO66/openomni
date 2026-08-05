@@ -188,7 +188,9 @@ export function createCompletionAdmissionService(
     async requestCompletion(requestInput, completionReportInput) {
       const request = WorkItem.CompletionRequest.parse(requestInput);
       assertRequesterFactsSupported(request, options.allowTrustedInvalidations === true);
-      const completionReport = WorkItem.CompletionReport.parse(completionReportInput);
+      const completionReport = WorkItem.canonicalCompletionReport(
+        WorkItem.CompletionReport.parse(completionReportInput),
+      );
       const adapter = authorizedCompletionAdapter(
         requiredAdapter(request.workItemHash),
         options.completionWriter,
@@ -221,7 +223,9 @@ export function createCompletionAdmissionService(
     },
 
     async resumeCompletion(workItemHash, admissionId, completionReportInput) {
-      const completionReport = WorkItem.CompletionReport.parse(completionReportInput);
+      const completionReport = WorkItem.canonicalCompletionReport(
+        WorkItem.CompletionReport.parse(completionReportInput),
+      );
       const adapter = authorizedCompletionAdapter(
         requiredAdapter(workItemHash),
         options.completionWriter,
@@ -229,7 +233,7 @@ export function createCompletionAdmissionService(
       const item = requiredItem(adapter.get(workItemHash), workItemHash);
       assertNotFailedOrCancelled(item);
       const admission = item.completionFacts.admissions.find(({ id }) => id === admissionId);
-      if (!admission || !isAdmitted(admission)) {
+      if (!admission) {
         throw admissionRequired(workItemHash, admissionId);
       }
       assertAdmissionReportMatches(admission, completionReport);
@@ -247,6 +251,7 @@ export function createCompletionAdmissionService(
         );
       }
       if (item.revision === admission.recordedHead) {
+        if (!isAdmitted(admission)) return item;
         return commitTerminal(adapter, item, admission, completionReport, options.now());
       }
 
