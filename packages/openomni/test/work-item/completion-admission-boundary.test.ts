@@ -1241,6 +1241,39 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
   });
 
+  test("rejects a nonterminal admission with a missing effective result", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const service = guardedService({
+      resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+        const current = WorkItem.Info.parse(itemInput);
+        const candidate = WorkItem.CompletionRequest.parse(requestInput);
+        return WorkItem.CompletionAdmission.parse({
+          version: 1,
+          id: `admission:${candidate.id}:${current.revision + 1}:missing-result`,
+          requestId: candidate.id,
+          requestSnapshot: candidate,
+          origin: candidate.origin,
+          contractRevision: current.completionContract.revision,
+          basisRef: current.completionContract.basisRef,
+          effectiveResultIds: ["result:missing"],
+          unresolvedCriterionIds: [current.completionFacts.criteria[0]?.id],
+          decision: "block",
+          reasonCodes: ["result_missing"],
+          residualRisks: [],
+          policyRef: "policy:hostile-missing-result",
+          expectedHead: current.revision,
+          recordedHead: current.revision + 1,
+          createdAt: NOW,
+        });
+      },
+    });
+    if (!service) return;
+
+    expect(await errorCode(service.requestCompletion(request, report))).toBe("request_conflict");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
   test("rejects a hostile admit that selects a refuted result", async () => {
     configure();
     const { item, request, report } = await fixture();

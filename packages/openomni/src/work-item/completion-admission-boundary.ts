@@ -812,6 +812,17 @@ function assertAdmissionMatches(
   if (factIds.includes(admission.id)) {
     throw requestConflict(request.id);
   }
+  const resultsById = new Map(
+    [...item.completionFacts.results, ...request.results].map((result) => [result.id, result]),
+  );
+  if (
+    admission.effectiveResultIds.some((resultId) => {
+      const result = resultsById.get(resultId);
+      return !result || result.basisRef !== request.basisRef;
+    })
+  ) {
+    throw requestConflict(request.id);
+  }
   const criterionIds = new Set(item.completionFacts.criteria.map(({ id }) => id));
   if (admission.unresolvedCriterionIds.some((criterionId) => !criterionIds.has(criterionId))) {
     throw requestConflict(request.id);
