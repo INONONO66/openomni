@@ -962,6 +962,8 @@
     "workItemHash"
   ],
   "WorkItem.CompletionRequestReservation": [
+    "attempt",
+    "basisRef",
     "createdAt",
     "envelopeDigest",
     "expectedHead",

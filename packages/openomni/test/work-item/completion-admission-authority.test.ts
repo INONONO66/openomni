@@ -556,6 +556,39 @@ describe("completion admission authority resolver", () => {
     expect(admission?.decision).toBe("admit");
   });
 
+  test("rejects claim observations not bound to a criterion result", async () => {
+    const forgedObservationId = "observation:forged-provenance";
+    const candidate = request({
+      claims: [
+        {
+          id: "claim:forged-provenance",
+          criterionId: criterion.id,
+          statement: "unrelated artifact proves completion",
+          observationIds: [forgedObservationId],
+          basisRef: "basis:v1",
+          createdAt: 10,
+        },
+      ],
+      observations: [
+        observation(),
+        {
+          ...observation(),
+          id: forgedObservationId,
+          artifactRefs: ["evidence:unrelated"],
+          provenanceRef: "evidence:unrelated",
+        },
+      ],
+      results: [verifiedResult()],
+    });
+
+    const code = await resolveErrorCode(item(), candidate, {
+      policyEngine: createPolicyEngine(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+    });
+
+    expect(code).toBe("invalid_verifier");
+  });
+
   test("rejects durable decisive results without authoritative verifier basis", async () => {
     const currentItem = item({
       completionFacts: {

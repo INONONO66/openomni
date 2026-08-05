@@ -529,6 +529,110 @@ describe("worker completion admission convergence", () => {
     expect(stored?.completionTerminalReceipt).toBeUndefined();
   });
 
+  test("scopes Worker completion identity to the retried attempt", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const firstOutput = await evidenceBackedEnvelope(item.hash);
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "block-first-attempt",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "block-first-attempt",
+          reasonCodes: ["retry_required"],
+        }),
+    });
+    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(firstOutput), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine,
+      now: () => NOW,
+    });
+    const firstBlocked = WorkItemStore.get(item.hash);
+    for (const blocker of firstBlocked?.blockers ?? []) {
+      await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+    }
+    await WorkItemStore.fail(item.hash, "first attempt failed");
+    const retried = await WorkItemStore.retry(item.hash);
+    if (!retried) throw new Error("failed to retry WorkItem");
+    const secondOutput = await evidenceBackedEnvelope(item.hash);
+
+    const reflection = await reflectCoordinatorResultWithPolicy(
+      item.hash,
+      succeeded(secondOutput),
+      {
+        completionWriter,
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine: PolicyEngine.create(),
+        now: () => NOW + 1,
+      },
+    );
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(reflection.completionBlocked).toBe(false);
+    expect(stored?.attempt).toBe(2);
+    expect(stored?.completionFacts.admissions).toHaveLength(2);
+    expect(stored?.completionFacts.admissions[0]?.requestId).not.toBe(
+      stored?.completionFacts.admissions[1]?.requestId,
+    );
+    expect(stored?.completionTerminalReceipt?.admissionId).toBe(
+      stored?.completionFacts.admissions[1]?.id,
+    );
+  });
+
+  test("fences an in-flight prior attempt when retry rotates the basis", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const firstOutput = await evidenceBackedEnvelope(item.hash);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "hold-prior-attempt",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      async fn() {
+        entered.resolve();
+        await release.promise;
+        return PolicyDecision.allow({ policyId: "hold-prior-attempt", reasonCodes: [] });
+      },
+    });
+    const priorAttempt = reflectCoordinatorResultWithPolicy(item.hash, succeeded(firstOutput), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine,
+      now: () => NOW,
+    });
+    await entered.promise;
+    await WorkItemStore.fail(item.hash, "retry while completion is in flight");
+    await WorkItemStore.retry(item.hash);
+    release.resolve();
+
+    const stale = await priorAttempt;
+    const afterStale = WorkItemStore.get(item.hash);
+    expect(stale.completionBlocker).toContain("completion reservation lease lost");
+    expect(afterStale?.attempt).toBe(2);
+    expect(afterStale?.completionFacts.admissions).toEqual([]);
+    expect(afterStale?.completionTerminalReceipt).toBeUndefined();
+
+    const secondOutput = await evidenceBackedEnvelope(item.hash);
+    const current = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(secondOutput), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: PolicyEngine.create(),
+      now: () => NOW + 1,
+    });
+    const completed = WorkItemStore.get(item.hash);
+
+    expect(current.completionBlocked).toBe(false);
+    expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
+    expect(completed?.completionFacts.admissions).toHaveLength(1);
+  });
+
   test("re-evaluates durable citation results without repeating read-back", async () => {
     const criterion = "archived source contains the recorded quote exactly";
     const item = await startedItem("internal_chat_agent", criterion);

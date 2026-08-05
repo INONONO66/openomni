@@ -322,6 +322,8 @@ export const CompletionRequestReservation = z
     id: Reference,
     requestId: Reference,
     requestRoot: Reference,
+    attempt: z.number().int().positive().optional(),
+    basisRef: Reference.optional(),
     envelopeDigest: Reference,
     expectedHead: z.number().int().nonnegative(),
     recordedHead: z.number().int().positive(),

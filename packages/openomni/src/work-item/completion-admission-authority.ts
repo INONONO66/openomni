@@ -148,6 +148,7 @@ export function createCompletionAuthorityResolver(
       assertUniqueFactIds(item, request);
       await assertDurableResultAuthority(dependencies.resultAuthorityPort, item, request);
       await assertProposedResultAuthority(dependencies.resultAuthorityPort, item, request);
+      assertProposedClaimAuthority(item, request);
       await assertProposedInvalidationAuthority(
         dependencies.invalidationAuthorityPort,
         item,
@@ -408,6 +409,31 @@ async function assertProposedResultAuthority(
       throw new CompletionAdmissionError(
         "invalid_verifier",
         `result authority rejected ${result.id}`,
+      );
+    }
+  }
+}
+
+function assertProposedClaimAuthority(
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+): void {
+  const results = [...item.completionFacts.results, ...request.results].filter(
+    (result) => result.basisRef === request.basisRef,
+  );
+  for (const claim of request.claims) {
+    const authoritativeObservationIds = new Set(
+      results
+        .filter((result) => result.criterionId === claim.criterionId)
+        .flatMap((result) => result.observationIds),
+    );
+    const unboundObservationId = claim.observationIds.find(
+      (observationId) => !authoritativeObservationIds.has(observationId),
+    );
+    if (unboundObservationId) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `claim ${claim.id} observation ${unboundObservationId} is not bound to a criterion result`,
       );
     }
   }

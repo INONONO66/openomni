@@ -131,6 +131,8 @@ export function reserveCompletionRequest(
       id: `completion-reservation:${input.requestId}:${fence}`,
       requestId: input.requestId,
       requestRoot: input.requestRoot,
+      attempt: current.attempt,
+      basisRef: current.completionContract.basisRef,
       envelopeDigest: input.envelopeDigest,
       expectedHead: current.revision,
       recordedHead,
@@ -167,6 +169,8 @@ export function assertCompletionReservationLease(input: CompletionReservationLea
     reservation?.id !== input.reservationId ||
     reservation.ownerId !== input.ownerId ||
     reservation.fence !== input.fence ||
+    reservation.attempt !== current.attempt ||
+    reservation.basisRef !== current.completionContract.basisRef ||
     reservation.leaseExpiresAt === undefined ||
     input.now >= reservation.leaseExpiresAt
   ) {

@@ -74,6 +74,7 @@ export type WorkerReadBackEvidenceBinding = Readonly<{
 export type WorkerCompletionAdmissionInput = Readonly<{
   beforeAdmissionWrite?: () => void;
   completionWriter: Storage.WorkItemCompletionWriter;
+  requestId: string;
   workItemHash: string;
   result: Execution.Result;
   completionEnvelopeDigest: string;
@@ -107,6 +108,11 @@ export async function admitWorkerCompletion(
   const item = requireWorkerCompletionIdentity(input.workItemHash, input.result);
   const createdAt = input.now();
   const requestId = workerCompletionRequestId(item, input.result, input.completionEnvelopeDigest);
+  if (requestId !== input.requestId) {
+    throw new Error(
+      `completion request attempt changed: expected ${input.requestId}, received ${requestId}`,
+    );
+  }
   const projected = projectCriterionFacts(
     item,
     requestId,
@@ -252,7 +258,7 @@ export function workerCompletionRequestId(
 }
 
 export function workerCompletionRequestRoot(item: WorkItem.Info, result: Execution.Result): string {
-  return `completion-request:${item.hash}:${result.runId}:${result.sessionId}`;
+  return `completion-request:${item.hash}:${result.runId}:${result.sessionId}:attempt:${item.attempt}`;
 }
 
 export function requireWorkerCompletionIdentity(

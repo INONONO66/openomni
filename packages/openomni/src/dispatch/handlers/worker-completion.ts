@@ -217,6 +217,7 @@ export async function reflectCoordinatorResult(
         const outcome = await admitWorkerCompletion({
           beforeAdmissionWrite: assertLease,
           completionWriter: options.completionWriter,
+          requestId,
           workItemHash,
           result,
           completionEnvelopeDigest,

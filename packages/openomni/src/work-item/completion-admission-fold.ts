@@ -247,13 +247,13 @@ function foldRequiredCriteria(input: CompletionEvaluationInput, facts: FoldFacts
       .filter((entry) => entry.basisRef === input.basisRef)
       .map((entry) => entry.resultId),
   );
+  if (input.proposedFacts.results.some((result) => result.basisRef !== input.basisRef)) {
+    addUnique(state.reasonCodes, "basis_mismatch");
+  }
 
   for (const criterion of facts.criteria) {
     if (!criterion.required) continue;
     const criterionResults = facts.results.filter((result) => result.criterionId === criterion.id);
-    if (criterionResults.some((result) => result.basisRef !== input.basisRef)) {
-      addUnique(state.reasonCodes, "basis_mismatch");
-    }
     const currentResults = criterionResults.filter(
       (result) => result.basisRef === input.basisRef && !invalidatedIds.has(result.id),
     );
