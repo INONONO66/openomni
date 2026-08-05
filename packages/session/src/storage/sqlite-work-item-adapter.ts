@@ -29,10 +29,10 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
     },
 
     get: (hash: string): WorkItem.Info | undefined => {
-      const row = db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
-        data: string;
-      } | null;
-      return row ? decodeWorkItem(row.data) : undefined;
+      const row = db
+        .query("SELECT hash, data FROM work_item WHERE hash = ?")
+        .get(hash) as WorkItemRow | null;
+      return row ? decodeWorkItemRow(row) : undefined;
     },
 
     compareAndSet: (hash: string, expectedHead: number, item: WorkItem.Info): boolean => {
@@ -43,10 +43,10 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
           `WorkItem revision must advance once: expected=${expectedHead} payload=${parsed.revision}`,
         );
       }
-      const currentRow = db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
-        data: string;
-      } | null;
-      const current = currentRow ? decodeWorkItem(currentRow.data) : undefined;
+      const currentRow = db
+        .query("SELECT hash, data FROM work_item WHERE hash = ?")
+        .get(hash) as WorkItemRow | null;
+      const current = currentRow ? decodeWorkItemRow(currentRow) : undefined;
       if (
         current &&
         changesCompletionAuthority(current, parsed) &&
@@ -109,9 +109,9 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const rows = db
-        .query(`SELECT data FROM work_item ${where} ORDER BY time_created ASC`)
-        .all(...params) as Array<{ data: string }>;
-      return rows.map((row) => decodeWorkItem(row.data));
+        .query(`SELECT hash, data FROM work_item ${where} ORDER BY time_created ASC`)
+        .all(...params) as WorkItemRow[];
+      return rows.map(decodeWorkItemRow);
     },
 
     remove: (hash: string): boolean => {
@@ -153,6 +153,14 @@ function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info)
 
 function decodeWorkItem(data: string): WorkItem.Info {
   return WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(JSON.parse(data)));
+}
+
+type WorkItemRow = Readonly<{ hash: string; data: string }>;
+
+function decodeWorkItemRow(row: WorkItemRow): WorkItem.Info {
+  const item = decodeWorkItem(row.data);
+  assertMatchingHash(row.hash, item.hash);
+  return item;
 }
 
 function assertMatchingHash(key: string, payload: string): void {

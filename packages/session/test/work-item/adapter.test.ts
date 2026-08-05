@@ -393,6 +393,44 @@ describe("SqliteStorageAdapter workItem", () => {
     );
   });
 
+  test("rejects mismatched row and payload hashes across read paths", () => {
+    const rowKey = "wi_historical_row_key";
+    const payload = {
+      ...historicalRow,
+      hash: "wi_historical_payload_hash",
+      evidence: [],
+      completionReport: undefined,
+    };
+    adapter.close();
+    const database = new Database(dbPath);
+    database
+      .query(
+        `INSERT INTO work_item
+           (hash, data, status, source_channel, time_created, time_updated)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        rowKey,
+        JSON.stringify(payload),
+        "completed",
+        payload.sourceChannel,
+        payload.timestamps.created,
+        payload.timestamps.updated,
+      );
+    database.close();
+    adapter = new SqliteStorageAdapter(dbPath);
+
+    expect(() => adapter.workItem.get(rowKey)).toThrow(
+      `WorkItem hash mismatch: key=${rowKey} payload=${payload.hash}`,
+    );
+    expect(() => adapter.workItem.list()).toThrow(
+      `WorkItem hash mismatch: key=${rowKey} payload=${payload.hash}`,
+    );
+    expect(() =>
+      adapter.workItem.compareAndSet(rowKey, -1, makeWorkItem({ hash: rowKey })),
+    ).toThrow(`WorkItem hash mismatch: key=${rowKey} payload=${payload.hash}`);
+  });
+
   test.each([
     ["missing", [], "legacy report claim evidence is missing: evidence:historical"],
     [
