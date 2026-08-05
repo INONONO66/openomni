@@ -417,6 +417,11 @@ describe("WorkItem completion admission service", () => {
 
     const receipt = await gateway.recoverRecordedCompletions();
     const afterRecovery = WorkItemStore.get(retried.hash);
+    const staleHolder = reserveCompletionRequest({
+      ...reservationInput,
+      ownerId: "process:before-restart",
+      now: NOW - 1,
+    });
     const takeover = reserveCompletionRequest({
       ...reservationInput,
       ownerId: "process:after-restart",
@@ -430,10 +435,17 @@ describe("WorkItem completion admission service", () => {
         ({ basisRef }) => basisRef === retried.completionContract.basisRef,
       ),
     ).toBe(false);
-    expect(afterRecovery?.completionFacts.requestReservations.at(-1)?.leaseExpiresAt).toBe(NOW);
+    const recoveryFence = afterRecovery?.completionFacts.requestReservations.at(-1);
+    expect(recoveryFence).toMatchObject({
+      fence: reserved.reservation.fence + 1,
+      leaseExpiresAt: NOW,
+    });
+    expect(recoveryFence?.id).not.toBe(reserved.reservation.id);
+    expect(recoveryFence?.ownerId.startsWith("completion-recovery:")).toBe(true);
+    expect(staleHolder.state).toBe("busy");
     expect(takeover.state).toBe("reserved");
     expect(takeover.reservation.ownerId).toBe("process:after-restart");
-    expect(takeover.reservation.fence).toBe(reserved.reservation.fence + 1);
+    expect(takeover.reservation.fence).toBe(reserved.reservation.fence + 2);
   });
 
   test("skips recovery admissions from a prior retry generation", async () => {
@@ -803,9 +815,10 @@ describe("WorkItem completion admission service", () => {
       "crash before terminal CAS",
     );
     const interrupted = WorkItemStore.get(item.hash);
-    expect(
-      interrupted?.completionFacts.admissions.some(({ requestId }) => requestId === request.id),
-    ).toBe(true);
+    const originalAdmission = interrupted?.completionFacts.admissions.find(
+      ({ requestId }) => requestId === request.id,
+    );
+    expect(originalAdmission).toBeDefined();
     expect(
       interrupted?.completionFacts.requestReservations.find(
         ({ requestId }) => requestId === request.id,
@@ -823,13 +836,18 @@ describe("WorkItem completion admission service", () => {
       resultAuthorityPort: { validate: () => ({ ok: true }) },
       now: () => NOW + 1,
     });
-    expect(await recoveryGateway.recoverRecordedCompletions()).toEqual({
+    const recoveryReceipt = await recoveryGateway.recoverRecordedCompletions();
+    expect(recoveryReceipt).toEqual({
       recovered: 1,
       skipped: 0,
       failures: [],
     });
     expect(WorkItemStore.get(item.hash)).toMatchObject({
-      completionTerminalReceipt: { requestId: request.id },
+      completionFacts: { admissions: [{ id: originalAdmission?.id }] },
+      completionTerminalReceipt: {
+        requestId: request.id,
+        admissionId: originalAdmission?.id,
+      },
     });
   });
 

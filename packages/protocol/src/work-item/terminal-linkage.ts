@@ -4,6 +4,7 @@ import {
   type CompletionAdmission,
   type CompletionContract,
   type CompletionReport,
+  type CompletionRequestReservation,
   type CompletionTerminalReceipt,
   type Criterion,
   type CriterionResult,
@@ -18,6 +19,7 @@ type TerminalLinkageItem = Readonly<{
     criteria: readonly Criterion[];
     results: readonly CriterionResult[];
     admissions: readonly CompletionAdmission[];
+    requestReservations?: readonly CompletionRequestReservation[];
   }>;
   completionReport?: CompletionReport;
   completionTerminalReceipt?: CompletionTerminalReceipt;
@@ -174,10 +176,16 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   ) {
     addIssue(ctx, ["completionTerminalReceipt", "completionReportRef"]);
   }
+  const reservationBridge = item.completionFacts.requestReservations?.some(
+    (reservation) =>
+      reservation.requestId === admission.requestId &&
+      reservation.recordedHead === admission.recordedHead + 1 &&
+      receipt.recordedHead === reservation.recordedHead + 1,
+  );
   if (
     admission.contractRevision !== receipt.contractRevision ||
     admission.basisRef !== receipt.basisRef ||
-    admission.recordedHead + 1 !== receipt.recordedHead
+    (admission.recordedHead + 1 !== receipt.recordedHead && !reservationBridge)
   ) {
     addIssue(ctx, ["completionFacts", "admissions"]);
   }

@@ -27,8 +27,9 @@ export function createWorkItemCompletionGateway(
   options: WorkItemCompletionGatewayOptions,
 ): WorkItemCompletionGateway {
   const now = options.now ?? Date.now;
+  const recoveryOwnerId = `completion-recovery:${crypto.randomUUID()}`;
   const reservation = {
-    ownerId: `completion-recovery:${crypto.randomUUID()}`,
+    ownerId: recoveryOwnerId,
     leaseDurationMs: 15_000,
   };
   const service = createCompletionAdmissionService({
@@ -81,6 +82,7 @@ export function createWorkItemCompletionGateway(
               reservation,
               recoveredAt,
               options.completionWriter,
+              recoveryOwnerId,
             );
             if (!released) {
               failures.push({
@@ -221,6 +223,7 @@ function releasePreAdmissionReservation(
   reservation: WorkItem.CompletionRequestReservation,
   releasedAt: number,
   completionWriter: Storage.WorkItemCompletionWriter,
+  recoveryOwnerId: string,
 ): boolean {
   const candidate = WorkItem.Info.parse({
     ...item,
@@ -232,10 +235,13 @@ function releasePreAdmissionReservation(
         current.id === reservation.id
           ? {
               ...current,
-              leaseExpiresAt:
-                current.leaseExpiresAt === undefined
-                  ? releasedAt
-                  : Math.min(current.leaseExpiresAt, releasedAt),
+              id: `${current.id}:recovery:${current.fence + 1}`,
+              expectedHead: item.revision,
+              recordedHead: item.revision + 1,
+              createdAt: releasedAt,
+              ownerId: recoveryOwnerId,
+              fence: current.fence + 1,
+              leaseExpiresAt: releasedAt,
             }
           : current,
       ),

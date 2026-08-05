@@ -511,6 +511,7 @@ async function resumeCompletionAtHead(
         completionReport,
         options.now(),
         assertReservation,
+        true,
       );
     }
   }
@@ -757,11 +758,13 @@ function commitTerminal(
   completionReport: WorkItem.CompletionReport,
   time: number,
   assertReservation: (() => void) | undefined,
+  reservationBridged = false,
 ): WorkItem.Info {
   const current = requiredItem(adapter.get(existing.hash), existing.hash);
   assertNotFailedOrCancelled(current);
   assertTerminalEligibleAdmission(admission);
-  if (current.revision !== existing.revision || current.revision !== admission.recordedHead) {
+  const expectedAdmissionHead = admission.recordedHead + (reservationBridged ? 1 : 0);
+  if (current.revision !== existing.revision || current.revision !== expectedAdmissionHead) {
     throw new CompletionAdmissionServiceError(
       "stale_head",
       `WorkItem changed before terminal completion: ${existing.hash}`,
