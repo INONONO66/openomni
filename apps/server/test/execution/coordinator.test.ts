@@ -78,6 +78,22 @@ describe("ExecutionCoordinator", () => {
   });
 
   test("rejects new dispatches once shutdown begins while allowing active runs to finish", async () => {
+    const activeRun = createDeferred<Execution.Result>();
+    let activeRuns = 1;
+    const managerShutdown = mock(async () => undefined);
+    mockWorkerManager.deliver = () =>
+      activeRun.promise.finally(() => {
+        activeRuns = 0;
+      });
+    mockWorkerManager.stats = () => ({
+      workers: 1,
+      active: activeRuns,
+      idle: activeRuns === 0 ? 1 : 0,
+      ready: 1,
+      activeRuns,
+      maxActiveWorkers: 1,
+    });
+    mockWorkerManager.shutdown = managerShutdown;
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
       workerCount: 1,
@@ -90,11 +106,11 @@ describe("ExecutionCoordinator", () => {
         runId: "run-1",
         sessionId: "session-1",
         prompt: "long",
-        delayMs: 150,
-      } as never),
+      }),
     );
 
     const shutdown = coordinator.shutdown();
+    expect(managerShutdown).not.toHaveBeenCalled();
 
     try {
       await coordinator.dispatch(
@@ -107,6 +123,13 @@ describe("ExecutionCoordinator", () => {
       expect(error.message).toContain("Execution coordinator is draining");
     }
 
+    activeRun.resolve({
+      runId: "run-1",
+      sessionId: "session-1",
+      status: "succeeded",
+      output: "fixture:run-1",
+      finishReason: "stop",
+    });
     expect(await firstRun).toMatchObject({
       runId: "run-1",
       sessionId: "session-1",
@@ -114,6 +137,7 @@ describe("ExecutionCoordinator", () => {
     });
 
     await shutdown;
+    expect(managerShutdown).toHaveBeenCalledTimes(1);
   });
 
   test("rejects a dispatch whose sessionTreeId diverges from request.sessionId", async () => {

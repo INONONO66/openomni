@@ -72,7 +72,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     observationsByEvidenceId,
   );
   const observations = [...observationsByEvidenceId.values()].map(({ observation }) => observation);
-  const results = legacyResults(
+  const directResults = legacyResults(
     parsed.data.hash,
     contract.basisRef,
     claims,
@@ -82,12 +82,31 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   const completionReport = parsedCompletionReport.success
     ? canonicalCompletionReport(parsedCompletionReport.data)
     : undefined;
-  const unresolvedCriterionIds = legacyUnresolvedCriterionIds(criteria, results);
-  if (parsed.data.timestamps.completed !== undefined && unresolvedCriterionIds.length > 0) {
-    throw new Error(
-      `completed legacy WorkItem has unresolved required criteria: ${unresolvedCriterionIds.join(", ")}`,
-    );
+  if (parsed.data.timestamps.completed !== undefined) {
+    const resultCriterionIds = new Set(directResults.map(({ criterionId }) => criterionId));
+    const unresolvedClaimCriterionIds = claims
+      .filter(({ criterionId }) => !resultCriterionIds.has(criterionId))
+      .map(({ criterionId }) => criterionId);
+    if (unresolvedClaimCriterionIds.length > 0) {
+      throw new Error(
+        `completed legacy WorkItem lacks passed evidence for report claims: ${unresolvedClaimCriterionIds.join(", ")}`,
+      );
+    }
   }
+  const archiveOverrideCriterionIds =
+    parsed.data.timestamps.completed === undefined
+      ? []
+      : legacyUnresolvedCriterionIds(criteria, directResults);
+  const results = [
+    ...directResults,
+    ...legacyArchiveOverrideResults(
+      parsed.data.hash,
+      contract.basisRef,
+      archiveOverrideCriterionIds,
+      claims,
+      parsed.data.timestamps.completed,
+    ),
+  ];
   if (parsed.data.timestamps.completed !== undefined && completionReport === undefined) {
     throw new Error("completed legacy WorkItem requires a valid completion report");
   }
@@ -95,6 +114,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     parsed.data.hash,
     contract,
     parsed.data.timestamps.completed,
+    archiveOverrideCriterionIds.length > 0,
     {
       claims,
       observations,
@@ -225,6 +245,11 @@ function legacyClaims(
 ): Claim[] {
   const matchedCriterionIds = new Set<string>();
   return reports.map((report, index) => {
+    const linkedObservations = report.evidenceIds.map((id) => {
+      const linked = observations.get(id);
+      if (!linked) throw new Error(`legacy report claim evidence is missing: ${id}`);
+      return linked;
+    });
     const criterion = criteria.find(
       (candidate) =>
         !matchedCriterionIds.has(candidate.id) && candidate.statement === report.statement,
@@ -237,15 +262,9 @@ function legacyClaims(
       id: `claim:${hash}:${index}:${stableToken(report.statement)}`,
       criterionId: criterion.id,
       statement: report.statement,
-      observationIds: report.evidenceIds.flatMap((id) => {
-        const observation = observations.get(id)?.observation;
-        return observation ? [observation.id] : [];
-      }),
+      observationIds: linkedObservations.map(({ observation }) => observation.id),
       basisRef,
-      createdAt: Math.max(
-        0,
-        ...report.evidenceIds.map((id) => observations.get(id)?.evidence.createdAt ?? 0),
-      ),
+      createdAt: Math.max(0, ...linkedObservations.map(({ evidence }) => evidence.createdAt)),
     };
   });
 }
@@ -298,10 +317,32 @@ function legacyResults(
   });
 }
 
+function legacyArchiveOverrideResults(
+  hash: string,
+  basisRef: string,
+  criterionIds: readonly string[],
+  claims: readonly Claim[],
+  completedAt: number | undefined,
+): CriterionResult[] {
+  if (completedAt === undefined) return [];
+  const observationIds = [...new Set(claims.flatMap(({ observationIds: ids }) => ids))].sort();
+  return criterionIds.map((criterionId, index) => ({
+    id: `result:${hash}:legacy-archive:${index}:${stableToken(criterionId)}`,
+    criterionId,
+    observationIds,
+    value: "asserted",
+    assumptions: ["historical completion predated criterion-to-claim linkage"],
+    residualRisks: ["legacy acceptance criterion was not independently re-verified"],
+    basisRef,
+    createdAt: completedAt,
+  }));
+}
+
 function legacyAdmissions(
   hash: string,
   contract: CompletionContract,
   completedAt: number | undefined,
+  usedArchiveOverride: boolean,
   facts: Readonly<{
     claims: readonly Claim[];
     observations: readonly Observation[];
@@ -337,8 +378,10 @@ function legacyAdmissions(
       effectiveResultIds: facts.results.map(({ id }) => id),
       unresolvedCriterionIds: [],
       decision: "admit",
-      reasonCodes: ["legacy_completed_row"],
-      residualRisks: ["legacy completion retained without retrospective verification"],
+      reasonCodes: usedArchiveOverride ? ["legacy_archive_override"] : ["legacy_completed_row"],
+      residualRisks: usedArchiveOverride
+        ? ["historical report claims did not map every original acceptance criterion"]
+        : ["legacy completion retained without retrospective verification"],
       policyRef: "policy:legacy-completion:v1",
       completionReportSnapshot: completionReport,
       completionReportRef:

@@ -346,7 +346,7 @@ describe("SqliteStorageAdapter workItem", () => {
   });
 
   test.each([
-    ["missing", []],
+    ["missing", [], "legacy report claim evidence is missing: evidence:historical"],
     [
       "failed",
       [
@@ -355,8 +355,9 @@ describe("SqliteStorageAdapter workItem", () => {
           passed: false,
         },
       ],
+      "completed legacy WorkItem lacks passed evidence for report claims",
     ],
-  ])("rejects a completed historical row with %s required evidence", (_kind, evidence) => {
+  ])("rejects a completed historical row with %s required evidence", (_kind, evidence, expectedError) => {
     adapter.close();
     insertRawWorkItem(
       dbPath,
@@ -365,9 +366,7 @@ describe("SqliteStorageAdapter workItem", () => {
     );
     adapter = new SqliteStorageAdapter(dbPath);
 
-    expect(() => adapter.workItem.get(`wi_historical_${_kind}`)).toThrow(
-      "completed legacy WorkItem has unresolved required criteria",
-    );
+    expect(() => adapter.workItem.get(`wi_historical_${_kind}`)).toThrow(expectedError);
   });
 
   test("persists the first CAS mutation of a pending legacy row at effective head zero", () => {

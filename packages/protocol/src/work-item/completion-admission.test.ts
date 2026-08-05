@@ -305,7 +305,7 @@ describe("WorkItem completion admission contracts", () => {
   });
 
   test.each([
-    ["missing", []],
+    ["missing", [], "legacy report claim evidence is missing: evidence:legacy-failed"],
     [
       "failed",
       [
@@ -317,8 +317,13 @@ describe("WorkItem completion admission contracts", () => {
           createdAt: 6,
         },
       ],
+      `completed legacy WorkItem lacks passed evidence for report claims: ${WorkItem.criterionId(
+        baseItem.hash,
+        0,
+        "publish the artifact",
+      )}`,
     ],
-  ])("rejects a completed legacy WorkItem with %s required evidence", (_kind, evidence) => {
+  ])("rejects a completed legacy WorkItem with %s required evidence", (_kind, evidence, expectedError) => {
     const legacyItem = {
       ...baseItem,
       timestamps: { ...baseItem.timestamps, completed: 8 },
@@ -336,12 +341,78 @@ describe("WorkItem completion admission contracts", () => {
       },
     };
 
+    expect(() => WorkItem.upcastLegacyCompletion(legacyItem)).toThrow(expectedError);
+  });
+
+  test("rejects completed legacy claims with mixed present and missing evidence", () => {
+    const legacyItem = {
+      ...baseItem,
+      timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence: [
+        {
+          id: "evidence:legacy-present",
+          kind: "verification",
+          description: "Legacy publication check passed",
+          passed: true,
+          createdAt: 6,
+        },
+      ],
+      completionReport: {
+        summary: "Legacy publication report.",
+        claims: [
+          {
+            statement: "publish the artifact",
+            evidenceIds: ["evidence:legacy-present", "evidence:legacy-missing"],
+          },
+        ],
+        caveats: [],
+        followUps: [],
+      },
+    };
+
     expect(() => WorkItem.upcastLegacyCompletion(legacyItem)).toThrow(
-      `completed legacy WorkItem has unresolved required criteria: ${WorkItem.criterionId(
-        legacyItem.hash,
-        0,
-        "publish the artifact",
-      )}`,
+      "legacy report claim evidence is missing: evidence:legacy-missing",
+    );
+  });
+
+  test("archives completed legacy paraphrases as explicit unresolved overrides", () => {
+    const legacyItem = {
+      ...baseItem,
+      acceptanceCriteria: ["publish artifact"],
+      timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence: [
+        {
+          id: "evidence:legacy-paraphrase",
+          kind: "verification",
+          description: "Legacy publication check passed",
+          passed: true,
+          createdAt: 6,
+        },
+      ],
+      completionReport: {
+        summary: "Legacy publication report.",
+        claims: [
+          {
+            statement: "The artifact was published",
+            evidenceIds: ["evidence:legacy-paraphrase"],
+          },
+        ],
+        caveats: [],
+        followUps: [],
+      },
+    };
+
+    const item = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(legacyItem));
+    expect(WorkItem.deriveStatus(item)).toBe("completed");
+    expect(item.completionFacts.admissions[0]).toMatchObject({
+      reasonCodes: ["legacy_archive_override"],
+      unresolvedCriterionIds: [],
+    });
+    expect(item.completionFacts.results).toContainEqual(
+      expect.objectContaining({
+        criterionId: WorkItem.criterionId(legacyItem.hash, 0, "publish artifact"),
+        value: "asserted",
+      }),
     );
   });
 
