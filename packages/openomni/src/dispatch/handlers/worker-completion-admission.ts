@@ -549,7 +549,9 @@ export function createDurableCompletionResultAuthorityPort(): CompletionResultAu
           verification.verifierId === candidate.result.verifierRef &&
           (candidate.result.value === "asserted" ||
             verification.checkedPredicate === candidate.result.checkedPredicate) &&
-          observation.producer === verification.verifierId,
+          observation.producer === verification.verifierId &&
+          observation.artifactRefs.length === 1 &&
+          observation.provenanceRef === evidenceId,
       };
     },
   });

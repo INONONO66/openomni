@@ -11,6 +11,7 @@ import {
   reflectCoordinatorResult as reflectCoordinatorResultWithPolicy,
   type WorkerCompletionOptions,
 } from "../../src/dispatch/handlers/worker-completion.js";
+import { createDurableCompletionResultAuthorityPort } from "../../src/dispatch/handlers/worker-completion-admission.js";
 
 const NOW = 1_000;
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
@@ -527,6 +528,60 @@ describe("worker completion admission convergence", () => {
     expect(replay.completionBlocker).toContain("durable result authority rejected");
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("rejects unrelated artifacts appended to a verifier observation", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "hold-artifact-binding",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "hold-artifact-binding",
+          reasonCodes: ["inspect_artifact_binding"],
+        }),
+    });
+    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine,
+      now: () => NOW,
+    });
+    await WorkItemStore.addEvidence(item.hash, {
+      kind: "verification",
+      description: "unrelated passing artifact",
+      passed: true,
+    });
+    const stored = WorkItemStore.get(item.hash);
+    const criterion = stored?.completionFacts.criteria[0];
+    const result = stored?.completionFacts.results[0];
+    const observation = stored?.completionFacts.observations[0];
+    const unrelatedEvidenceId = stored?.evidence.at(-1)?.id;
+    if (!stored || !criterion || !result || !observation || !unrelatedEvidenceId) {
+      throw new Error("missing artifact-binding fixture");
+    }
+
+    const validation = await createDurableCompletionResultAuthorityPort().validate({
+      workItemHash: stored.hash,
+      requestId: "request:artifact-binding",
+      contractRevision: stored.completionContract.revision,
+      basisRef: stored.completionContract.basisRef,
+      criterion,
+      result: { ...result, observationIds: [observation.id] },
+      observations: [
+        {
+          ...observation,
+          artifactRefs: [...observation.artifactRefs, unrelatedEvidenceId],
+        },
+      ],
+    });
+
+    expect(validation).toEqual({ ok: false });
   });
 
   test("scopes Worker completion identity to the retried attempt", async () => {
