@@ -354,6 +354,7 @@ describe("WorkItem completion admission contracts", () => {
           kind: "verification",
           description: "Legacy publication check passed",
           passed: true,
+          detail: "generated while decoding a completed legacy row without a completion report",
           createdAt: 6,
         },
       ],
@@ -377,6 +378,7 @@ describe("WorkItem completion admission contracts", () => {
       expect.objectContaining({
         criterionId: WorkItem.criterionId(legacyItem.hash, 0, "publish the artifact"),
         value: "asserted",
+        assumptions: ["legacy passed evidence was claimant-supplied"],
       }),
     ]);
     expect(admission).toMatchObject({

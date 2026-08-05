@@ -120,6 +120,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     contract.basisRef,
     claims,
     observationsByEvidenceId,
+    needsArchiveReport ? archiveEvidenceId : undefined,
   );
   const parsedCompletionReport = CompletionReport.safeParse(normalizedCompletionReport);
   const completionReport = parsedCompletionReport.success
@@ -355,6 +356,7 @@ function legacyResults(
   basisRef: string,
   claims: readonly Claim[],
   observations: ReadonlyMap<string, LegacyObservation>,
+  archiveEvidenceId: string | undefined,
 ): CriterionResult[] {
   const evidenceByObservationId = new Map(
     [...observations.values()].map(({ evidence: entry, observation }) => [observation.id, entry]),
@@ -371,7 +373,7 @@ function legacyResults(
       criterionId: claim.criterionId,
       observationIds: claim.observationIds,
       assumptions: [
-        linked.every(({ detail }) => detail === LegacyArchiveEvidenceDetail)
+        archiveEvidenceId !== undefined && linked.every(({ id }) => id === archiveEvidenceId)
           ? "archive evidence was generated while decoding historical completion"
           : "legacy passed evidence was claimant-supplied",
       ],
@@ -383,7 +385,7 @@ function legacyResults(
         ...common,
         value: "asserted" as const,
         residualRisks: [
-          linked.every(({ detail }) => detail === LegacyArchiveEvidenceDetail)
+          archiveEvidenceId !== undefined && linked.every(({ id }) => id === archiveEvidenceId)
             ? "historical completion lacked a persisted report"
             : "legacy evidence was not re-verified",
         ],
