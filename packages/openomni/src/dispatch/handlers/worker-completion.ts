@@ -253,8 +253,9 @@ export async function reflectCoordinatorResult(
     } catch (err) {
       if (
         err instanceof CompletionAdmissionServiceError &&
-        err.code === "request_conflict" &&
-        err.message.startsWith("completion reservation lease lost:")
+        (err.code === "stale_basis" ||
+          (err.code === "request_conflict" &&
+            err.message.startsWith("completion reservation lease lost:")))
       ) {
         return completionReflection(workItemHash, true, err.message);
       }

@@ -186,7 +186,7 @@ export function createCompletionAdmissionService(
 ): CompletionAdmissionService {
   return Object.freeze({
     async requestCompletion(requestInput, completionReportInput) {
-      const request = WorkItem.CompletionRequest.parse(requestInput);
+      let request = WorkItem.CompletionRequest.parse(requestInput);
       assertRequesterFactsSupported(request, options.allowTrustedInvalidations === true);
       const completionReport = WorkItem.canonicalCompletionReport(
         WorkItem.CompletionReport.parse(completionReportInput),
@@ -195,31 +195,68 @@ export function createCompletionAdmissionService(
         requiredAdapter(request.workItemHash),
         options.completionWriter,
       );
-      const initial = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
-      assertNotFailedOrCancelled(initial);
-      const priorAdmissions = initial.completionFacts.admissions.filter(
-        ({ requestId }) => requestId === request.id,
-      );
-      if (priorAdmissions.length > 0) {
-        return replayRequest(initial, request, completionReport, priorAdmissions, options);
-      }
-      assertNotCompleted(initial);
-      assertInitialRequest(initial, request);
-      publishRequested(request, initial.sessionId, options.now());
+      let requestedPublished = false;
+      for (;;) {
+        try {
+          const initial = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
+          assertNotFailedOrCancelled(initial);
+          const priorAdmissions = initial.completionFacts.admissions.filter(
+            ({ requestId }) => requestId === request.id,
+          );
+          if (priorAdmissions.length > 0) {
+            return await replayRequest(
+              initial,
+              request,
+              completionReport,
+              priorAdmissions,
+              options,
+            );
+          }
+          assertNotCompleted(initial);
+          assertInitialRequest(initial, request);
+          if (!requestedPublished) {
+            publishRequested(request, initial.sessionId, options.now());
+            requestedPublished = true;
+          }
 
-      const admission = canonicalAdmission(
-        await options.authorityResolver.resolve(initial, request),
-        completionReport,
-      );
-      assertAdmissionMatches(admission, initial, request);
-      options.beforeAdmissionWrite?.();
-      assertUnchangedAfterAuthority(adapter, initial);
-      const recorded = await appendAdmission(adapter, initial, request, admission);
-      if (!isAdmitted(admission)) {
-        return { admission, workItem: recorded, completed: false };
-      }
+          const admission = canonicalAdmission(
+            await options.authorityResolver.resolve(initial, request),
+            completionReport,
+          );
+          assertUnchangedAfterAuthority(adapter, initial);
+          assertAdmissionMatches(admission, initial, request);
+          options.beforeAdmissionWrite?.();
+          assertUnchangedAfterAuthority(adapter, initial);
+          const recorded = await appendAdmission(adapter, initial, request, admission);
+          if (!isAdmitted(admission)) {
+            return { admission, workItem: recorded, completed: false };
+          }
 
-      return completeOrReevaluate(adapter, recorded, request, completionReport, admission, options);
+          return await completeOrReevaluate(
+            adapter,
+            recorded,
+            request,
+            completionReport,
+            admission,
+            options,
+          );
+        } catch (error) {
+          if (!(error instanceof CompletionAdmissionServiceError) || error.code !== "stale_head") {
+            throw error;
+          }
+          const latest = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
+          if (
+            latest.completionContract.revision !== request.contractRevision ||
+            latest.completionContract.basisRef !== request.basisRef
+          ) {
+            throw new CompletionAdmissionServiceError(
+              "stale_basis",
+              `completion request basis is stale for ${latest.hash}`,
+            );
+          }
+          request = rebaseCompletionRequestAtHead(request, latest.revision);
+        }
+      }
     },
 
     async resumeCompletion(workItemHash, admissionId, completionReportInput) {
@@ -635,13 +672,19 @@ function assertReplayMatches(
   admissions: readonly WorkItem.CompletionAdmission[],
 ): void {
   const original = admissions[0];
+  const requestAtOriginalHead =
+    original === undefined
+      ? request
+      : WorkItem.CompletionRequest.parse({
+          ...request,
+          expectedHead: original.expectedHead,
+        });
   if (
     !original ||
     original.origin !== request.origin ||
     original.contractRevision !== request.contractRevision ||
     original.basisRef !== request.basisRef ||
-    original.expectedHead !== request.expectedHead ||
-    !completionRequestsMatch(original.requestSnapshot, request)
+    !completionRequestsMatch(original.requestSnapshot, requestAtOriginalHead)
   ) {
     throw requestConflict(request.id);
   }
@@ -776,6 +819,17 @@ function requestAtHead(
     invalidations: [],
     verificationErrors: [],
     effects: [],
+  });
+}
+
+function rebaseCompletionRequestAtHead(
+  request: WorkItem.CompletionRequest,
+  expectedHead: number,
+): WorkItem.CompletionRequest {
+  const { ownerOverrideReceiptRef: _staleOwnerReceipt, ...unboundRequest } = request;
+  return WorkItem.CompletionRequest.parse({
+    ...unboundRequest,
+    expectedHead,
   });
 }
 

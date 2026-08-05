@@ -1193,13 +1193,7 @@ describe("WorkItem completion admission service", () => {
     expect(events.order).not.toContain("CompletedV2");
   });
 
-  test.each([
-    ["stale_head", (request: WorkItem.CompletionRequest) => ({ ...request, expectedHead: 0 })],
-    [
-      "stale_basis",
-      (request: WorkItem.CompletionRequest) => ({ ...request, basisRef: "basis:stale" }),
-    ],
-  ] as const)("rejects an initial %s without appending", async (expectedCode, mutateRequest) => {
+  test("rejects an initial stale_basis without appending", async () => {
     configure();
     const { item, request, report } = await fixture();
     const admissionAuthority = authority();
@@ -1208,12 +1202,39 @@ describe("WorkItem completion admission service", () => {
     const before = WorkItemStore.get(item.hash);
 
     const code = await errorCode(
-      service.requestCompletion(WorkItem.CompletionRequest.parse(mutateRequest(request)), report),
+      service.requestCompletion(
+        WorkItem.CompletionRequest.parse({ ...request, basisRef: "basis:stale" }),
+        report,
+      ),
     );
 
-    expect(code).toBe(expectedCode);
+    expect(code).toBe("stale_basis");
     expect(WorkItemStore.get(item.hash)).toEqual(before);
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
+  test("re-evaluates an initial stale_head against the current row", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const admissionAuthority = authority();
+    const service = guardedService(admissionAuthority.resolver);
+    if (!service) return;
+
+    const outcome = await service.requestCompletion(
+      WorkItem.CompletionRequest.parse({ ...request, expectedHead: 0 }),
+      report,
+    );
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(outcome.completed).toBe(true);
+    expect(admissionAuthority.calls).toEqual([
+      {
+        itemHead: item.revision,
+        requestHead: item.revision,
+        requestId: request.id,
+      },
+    ]);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
   });
 
   test("resumes one filesystem SQLite admission after restart with its original id", async () => {
@@ -1737,6 +1758,83 @@ describe("WorkItem completion admission service", () => {
       admittedId,
     );
     expect(historicalAdmissionCode).toBe("admission_required");
+  });
+
+  test("re-evaluates when the row head changes during authority resolution", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const baseAuthority = authority();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let authorityCalls = 0;
+    const service = guardedService({
+      async resolve(itemInput: unknown, requestInput: unknown) {
+        authorityCalls += 1;
+        if (authorityCalls === 1) {
+          entered.resolve();
+          await release.promise;
+        }
+        return baseAuthority.resolver.resolve(itemInput, requestInput);
+      },
+    });
+    if (!service) return;
+
+    const pending = service.requestCompletion(request, report);
+    await entered.promise;
+    await WorkItemStore.update(item.hash, { name: "mutated during authority" });
+    release.resolve();
+    const outcome = await pending;
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(outcome.completed).toBe(true);
+    expect(authorityCalls).toBe(2);
+    expect(stored?.name).toBe("mutated during authority");
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.blockers).toEqual([]);
+  });
+
+  test("re-evaluates after terminal CAS contention and emits completion once", async () => {
+    const adapter = configure();
+    const { item, request, report } = await fixture();
+    const admissionAuthority = authority();
+    const service = guardedService(admissionAuthority.resolver);
+    if (!service) return;
+    const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
+    let terminalContended = false;
+    let completedEvents = 0;
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+      if (!terminalContended && candidate.completionTerminalReceipt !== undefined) {
+        terminalContended = true;
+        const current = adapter.workItem.get(hash);
+        if (!current) throw new Error("missing terminal contention WorkItem");
+        const competitor = WorkItem.Info.parse({
+          ...current,
+          revision: current.revision + 1,
+          name: "mutated during terminal CAS",
+          timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
+        });
+        expect(compareAndSet(hash, expectedHead, competitor, writerCapability)).toBe(true);
+        return false;
+      }
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+    };
+    const stopCompleted = Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
+      if (event.payload.hash === item.hash) completedEvents += 1;
+    });
+
+    const outcome = await service.requestCompletion(request, report);
+    stopCompleted();
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(outcome.completed).toBe(true);
+    expect(terminalContended).toBe(true);
+    expect(stored?.name).toBe("mutated during terminal CAS");
+    expect(stored?.completionFacts.admissions).toHaveLength(2);
+    expect(stored?.completionTerminalReceipt?.admissionId).toBe(
+      stored?.completionFacts.admissions.at(-1)?.id,
+    );
+    expect(completedEvents).toBe(1);
+    expect(stored?.blockers).toEqual([]);
   });
 
   test("re-evaluates at a new head when the row mutates after admission", async () => {

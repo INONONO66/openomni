@@ -834,7 +834,7 @@ describe("worker completion admission convergence", () => {
 
     const stale = await priorAttempt;
     const afterStale = WorkItemStore.get(item.hash);
-    expect(stale.completionBlocker).toContain("completion reservation lease lost");
+    expect(stale.completionBlocker).toContain("completion request basis is stale");
     expect(afterStale?.attempt).toBe(2);
     expect(afterStale?.completionFacts.admissions).toEqual([]);
     expect(afterStale?.completionTerminalReceipt).toBeUndefined();
