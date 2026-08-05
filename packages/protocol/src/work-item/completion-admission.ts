@@ -197,6 +197,17 @@ const CompletionRequestShape = z
   })
   .strict()
   .superRefine((request, ctx) => {
+    const fixedOrigin = request.sourceIdentity?.source;
+    if (fixedOrigin === "replay" || fixedOrigin === "recovery") {
+      if (request.origin !== fixedOrigin) {
+        ctx.addIssue({
+          code: "custom",
+          message: "sourceIdentity source must match completion origin",
+          path: ["sourceIdentity", "source"],
+        });
+      }
+      return;
+    }
     const sourceKind = request.sourceIdentity?.identity.kind;
     const sourceOrigin =
       sourceKind === "resident"

@@ -123,6 +123,26 @@ describe("WorkItem completion admission contracts", () => {
         },
       }).success,
     ).toBe(true);
+    expect(
+      WorkItem.CompletionRequest.safeParse({
+        ...request,
+        origin: "replay",
+        sourceIdentity: {
+          source: "replay",
+          identity: { kind: "worker", id: "worker:assigned" },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      WorkItem.CompletionRequest.safeParse({
+        ...request,
+        origin: "recovery",
+        sourceIdentity: {
+          source: "replay",
+          identity: { kind: "worker", id: "worker:assigned" },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   test("keeps criteria, claims, observations, results, and invalidations distinct", () => {

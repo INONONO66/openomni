@@ -445,6 +445,30 @@ describe("worker completion admission convergence", () => {
     });
   });
 
+  test.each([
+    "replay",
+    "recovery",
+  ] as const)("admits a fresh %s Worker completion source", async (source) => {
+    const item = await startedItem("internal_chat_agent");
+    const result = succeeded(await evidenceBackedEnvelope(item.hash));
+
+    const reflection = await reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin: { source },
+      now: () => NOW,
+    });
+
+    expect(reflection.completionBlocked).toBe(false);
+    expect(
+      WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity,
+    ).toEqual({
+      source,
+      identity: {
+        kind: "worker",
+        id: `${WORKER_SESSION_ID}:${WORKER_RUN_ID}`,
+      },
+    });
+  });
+
   test("binds pre-admission reservations to the qualified source identity", async () => {
     const item = await startedItem("internal_chat_agent");
     const result = succeeded(await evidenceBackedEnvelope(item.hash));
