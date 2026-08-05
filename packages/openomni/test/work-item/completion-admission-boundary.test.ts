@@ -822,6 +822,45 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
+  test("rejects a hostile admission id colliding with a proposed fact", async () => {
+    configure();
+    const first = await fixture();
+    const collisionId = first.request.claims[0]?.id;
+    if (!collisionId) throw new Error("missing collision fixture");
+    const service = guardedService({
+      resolve(itemInput: unknown, requestInput: unknown) {
+        const item = WorkItem.Info.parse(itemInput);
+        const request = WorkItem.CompletionRequest.parse(requestInput);
+        return WorkItem.CompletionAdmission.parse({
+          version: 1,
+          id: collisionId,
+          requestId: request.id,
+          requestSnapshot: request,
+          origin: request.origin,
+          contractRevision: item.completionContract.revision,
+          basisRef: item.completionContract.basisRef,
+          effectiveResultIds: request.results.map(({ id }) => id),
+          unresolvedCriterionIds: [],
+          decision: "admit",
+          reasonCodes: [],
+          residualRisks: [],
+          policyRef: "policy:collision",
+          expectedHead: item.revision,
+          recordedHead: item.revision + 1,
+          createdAt: NOW,
+        });
+      },
+    });
+    if (!service) return;
+
+    await expect(service.requestCompletion(first.request, first.report)).rejects.toThrow(
+      "completion request conflicts with durable facts",
+    );
+    const stored = WorkItemStore.get(first.item.hash);
+    expect(stored?.completionFacts.admissions).toEqual([]);
+    expect(stored?.completionTerminalReceipt).toBeUndefined();
+  });
+
   test("rejects a hostile admit with unresolved required criteria before terminal commit", async () => {
     configure();
     const { item, request, report } = await fixture();

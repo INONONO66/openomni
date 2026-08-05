@@ -547,6 +547,24 @@ function assertAdmissionMatches(
       `completion admission head does not match ${item.revision}`,
     );
   }
+  const factIds = [
+    ...item.completionFacts.claims,
+    ...item.completionFacts.observations,
+    ...item.completionFacts.results,
+    ...item.completionFacts.invalidations,
+    ...item.completionFacts.verificationErrors,
+    ...item.completionFacts.effects,
+    ...item.completionFacts.admissions,
+    ...request.claims,
+    ...request.observations,
+    ...request.results,
+    ...request.invalidations,
+    ...request.verificationErrors,
+    ...request.effects,
+  ].map(({ id }) => id);
+  if (factIds.includes(admission.id)) {
+    throw requestConflict(request.id);
+  }
   if (
     admission.decision === "owner_override" &&
     admission.ownerOverrideReceiptRef !== request.ownerOverrideReceiptRef

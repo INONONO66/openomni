@@ -223,7 +223,7 @@ One artifact, three jobs: evaluation input (judgment without transcript), distil
 
 **Contract-closing authority (#490).** Because every unit of OpenOmni work is a WorkItem contract, `completed` is not a Worker exit status, Todo/Goal projection, criterion verdict, or generic `passed` bit. It is the kernel's durable declaration that the obligation represented by the **current contract revision and basis** may be closed. Four layers remain distinct:
 
-| Layer | Meaning | May write `WorkItemCompleted`? |
+| Layer | Meaning | May commit `CompletionTerminalReceipt`? |
 |---|---|---|
 | Progress projection | Plan/Todo state such as pending, in-progress, or done | No |
 | Attempt outcome | One execution settled as succeeded, failed, interrupted, or cancelled | No |
@@ -243,7 +243,8 @@ WorkItem contract revision + stable acceptance criteria
   -> work.complete.requested
   -> work.complete.pre
   -> CompletionAdmission
-  -> WorkItemCompleted(admissionId)
+  -> commit CompletionTerminalReceipt(admissionId) by WorkItem row CAS
+  -> publish work_item.completed.v2 observer projection (best-effort)
 ```
 
 - A **claim** is claimant testimony bound to one criterion, never a verdict.
@@ -262,7 +263,8 @@ fold current contract/evidence state
   -> dispatch work.complete.pre
   -> append CompletionAdmission(expectedHead)
   -> confirm contractRevision/basis by CAS
-  -> append WorkItemCompleted(admissionId)
+  -> commit CompletionTerminalReceipt(admissionId) by WorkItem row CAS
+  -> publish work_item.completed.v2 observer projection (best-effort)
 ```
 
 Internal and connector Workers are the production consumers of that path today. The public, exhaustive origin projector is the required seam for future Resident, external actor (API/A2A/human), replay, recovery, and identity-qualified SDK/internal integrations: it maps those sources into the same five canonical origin classes without a fallback branch, but those caller paths are not yet wired. No production direct `WorkItemStore.complete()` bypass survives. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
