@@ -23,6 +23,17 @@ let completionWriter: Storage.WorkItemCompletionWriter;
 const WORKER_RUN_ID = "run:completion-admission";
 const WORKER_SESSION_ID = "session:completion-admission";
 
+function codeUnitCanonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(codeUnitCanonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return `{${entries
+    .map(([key, entryValue]) => `${JSON.stringify(key)}:${codeUnitCanonicalJson(entryValue)}`)
+    .join(",")}}`;
+}
+
 function reflectCoordinatorResult(
   workItemHash: string,
   result: Execution.Result,
@@ -148,6 +159,39 @@ async function bindRetryAttempt(
 }
 
 describe("worker completion admission convergence", () => {
+  test("uses code-unit ordering for Unicode completion envelope identity", async () => {
+    const item = await startedItem();
+    const rawEnvelope = JSON.parse(await evidenceBackedEnvelope(item.hash)) as Record<
+      string,
+      unknown
+    >;
+    rawEnvelope.deliverable = { ä: "umlaut", z: "zed" };
+    const normalizedEnvelope = {
+      ...rawEnvelope,
+      completionReport: {
+        ...(rawEnvelope.completionReport as Record<string, unknown>),
+        caveats: [],
+        followUps: [],
+      },
+      readBackRequests: [],
+    };
+    const result = succeeded(JSON.stringify(rawEnvelope));
+
+    await reflectCoordinatorResultWithPolicy(item.hash, result, {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+      now: () => NOW,
+    });
+    const digest = createHash("sha256")
+      .update(codeUnitCanonicalJson(normalizedEnvelope))
+      .digest("hex");
+
+    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt?.requestId).toBe(
+      `${workerCompletionRequestRoot(item, result)}:${digest}`,
+    );
+  });
+
   test("admits one real internal worker result and links its terminal receipt", async () => {
     const item = await startedItem("internal_chat_agent");
 

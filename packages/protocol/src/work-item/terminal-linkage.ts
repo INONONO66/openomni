@@ -18,6 +18,18 @@ type TerminalLinkageItem = Readonly<{
 }>;
 
 export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: RefinementCtx): void {
+  const foreignAdmissionIndex = item.completionFacts.admissions.findIndex(
+    ({ requestSnapshot }) => requestSnapshot.workItemHash !== item.hash,
+  );
+  if (foreignAdmissionIndex !== -1) {
+    addIssue(ctx, [
+      "completionFacts",
+      "admissions",
+      foreignAdmissionIndex,
+      "requestSnapshot",
+      "workItemHash",
+    ]);
+  }
   const receipt = item.completionTerminalReceipt;
   const completedAt = item.timestamps.completed;
   if (completedAt !== undefined && receipt === undefined) {

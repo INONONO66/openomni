@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WorkItem } from "@openomni/protocol";
+import { Storage } from "../../src/storage/index";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { persistMutation } from "../../src/work-item/mutation";
 
@@ -110,6 +111,39 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
       recordedHead: admission.recordedHead + 1,
     },
   };
+}
+
+function persistCompletedFixture(adapter: SqliteStorageAdapter, item: WorkItem.Info): void {
+  const { completed: _completed, ...nonterminalTimestamps } = item.timestamps;
+  const admission = item.completionFacts.admissions[0];
+  if (!admission) throw new Error("missing completed fixture admission");
+  const baseline = WorkItem.Info.parse({
+    ...item,
+    revision: 0,
+    completionReport: undefined,
+    completionTerminalReceipt: undefined,
+    completionFacts: {
+      ...WorkItem.emptyCompletionFacts(),
+      criteria: item.completionFacts.criteria,
+    },
+    timestamps: nonterminalTimestamps,
+  });
+  const admitted = WorkItem.Info.parse({
+    ...item,
+    revision: admission.recordedHead,
+    completionReport: undefined,
+    completionTerminalReceipt: undefined,
+    completionFacts: {
+      ...item.completionFacts,
+      revision: 1,
+      admissions: [admission],
+    },
+    timestamps: nonterminalTimestamps,
+  });
+  const completionWriter = Storage.configure(adapter);
+  expect(adapter.workItem?.create(item.hash, baseline)).toBe(true);
+  expect(completionWriter(item.hash, baseline.revision, admitted)).toBe(true);
+  expect(completionWriter(item.hash, admitted.revision, item)).toBe(true);
 }
 
 const historicalRow = {
@@ -219,7 +253,7 @@ describe("SqliteStorageAdapter workItem", () => {
       sessionId: "session-1",
       assigneeId: "agent-1",
       relations: { parentHash: "parent-1", childHashes: [], dependsOn: [] },
-      timestamps: { created: 1000, updated: 1000, completed: 2000 },
+      timestamps: { created: 1000, updated: 1000 },
     });
 
     expect(adapter.workItem?.create(item.hash, item)).toBe(true);
@@ -228,6 +262,18 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(item.hash)).toEqual(parsed);
     expect(adapter.workItem?.list()).toEqual([parsed]);
     expect(adapter.workItem?.remove(item.hash)).toBe(true);
+    expect(adapter.workItem?.get(item.hash)).toBeUndefined();
+  });
+
+  test("rejects direct creation of completed WorkItems", () => {
+    const item = makeWorkItem({
+      hash: "wi_000rawterminal",
+      timestamps: { created: 1000, updated: 1000, completed: 2000 },
+    });
+
+    expect(() => adapter.workItem?.create(item.hash, item)).toThrow(
+      "WorkItem create accepts pending completion baselines only",
+    );
     expect(adapter.workItem?.get(item.hash)).toBeUndefined();
   });
 
@@ -383,7 +429,7 @@ describe("SqliteStorageAdapter workItem", () => {
     });
 
     expect(adapter.workItem?.create(pending.hash, pending)).toBe(true);
-    expect(adapter.workItem?.create(completed.hash, completed)).toBe(true);
+    persistCompletedFixture(adapter, completed);
 
     expect(adapter.workItem?.list({ status: ["completed"] }).map((item) => item.hash)).toEqual([
       "wi_000completed",
@@ -398,11 +444,11 @@ describe("SqliteStorageAdapter workItem", () => {
       makeWorkItem({ hash: "wi_00000000000a", timestamps: { created: 1, updated: 1 } }),
       makeWorkItem({
         hash: "wi_00000000000b",
-        timestamps: { created: 2, updated: 2, completed: 3 },
+        timestamps: { created: 2, updated: 2 },
       }),
       makeWorkItem({
         hash: "wi_00000000000c",
-        timestamps: { created: 3, updated: 3, cancelled: 4 },
+        timestamps: { created: 3, updated: 3 },
       }),
     ];
 

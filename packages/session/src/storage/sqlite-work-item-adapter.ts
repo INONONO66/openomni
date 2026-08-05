@@ -7,6 +7,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
     create: (hash: string, item: WorkItem.Info): boolean => {
       const parsed = WorkItem.Info.parse(item);
       assertMatchingHash(hash, parsed.hash);
+      assertPendingCompletionBaseline(parsed);
       const result = db
         .query(
           `INSERT OR IGNORE INTO work_item
@@ -119,6 +120,25 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
     },
   };
   return adapter;
+}
+
+function assertPendingCompletionBaseline(item: WorkItem.Info): void {
+  const facts = item.completionFacts;
+  if (
+    WorkItem.deriveStatus(item) !== "pending" ||
+    facts.claims.length > 0 ||
+    facts.observations.length > 0 ||
+    facts.results.length > 0 ||
+    facts.invalidations.length > 0 ||
+    facts.verificationErrors.length > 0 ||
+    facts.effects.length > 0 ||
+    facts.requestReservations.length > 0 ||
+    facts.admissions.length > 0 ||
+    item.completionReport !== undefined ||
+    item.completionTerminalReceipt !== undefined
+  ) {
+    throw new Error("WorkItem create accepts pending completion baselines only");
+  }
 }
 
 function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info): boolean {

@@ -584,6 +584,18 @@ describe("WorkItem completion admission contracts", () => {
         ...validInput,
         completionFacts: {
           ...completionFacts,
+          admissions: [
+            {
+              ...admission,
+              requestSnapshot: { ...admission.requestSnapshot, workItemHash: "wi_other" },
+            },
+          ],
+        },
+      },
+      {
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
           admissions: [{ ...admission, contractRevision: "contract:other" }],
         },
       },
@@ -644,6 +656,7 @@ describe("WorkItem completion admission contracts", () => {
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);
     expect(invalidInputs.map((input) => WorkItem.Info.safeParse(input).success)).toEqual([
+      false,
       false,
       false,
       false,
