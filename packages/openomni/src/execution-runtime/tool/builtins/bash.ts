@@ -50,20 +50,17 @@ async function terminateProcessGroup(proc: {
 }): Promise<void> {
   try {
     process.kill(-proc.pid, "SIGTERM");
-    let resolveGrace: (() => void) | undefined;
-    const grace = new Promise<void>((resolve) => {
-      resolveGrace = resolve;
-    });
-    const escalation = setTimeout(() => resolveGrace?.(), PROCESS_TERMINATION_GRACE_MS);
-    await Promise.race([proc.exited.then(() => undefined), grace]);
-    clearTimeout(escalation);
+    if (await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS)) {
+      await proc.exited.catch(() => undefined);
+      return;
+    }
     try {
       process.kill(-proc.pid, "SIGKILL");
     } catch {
       // The whole group exited during the graceful termination window.
     }
     await proc.exited.catch(() => undefined);
-    await waitForProcessGroupExit(proc.pid);
+    await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS);
     return;
   } catch {
     // Windows and non-detached fallback.
@@ -73,16 +70,17 @@ async function terminateProcessGroup(proc: {
   await proc.exited.catch(() => undefined);
 }
 
-async function waitForProcessGroupExit(pid: number): Promise<void> {
-  const deadline = Date.now() + PROCESS_TERMINATION_GRACE_MS;
+async function waitForProcessGroupExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       process.kill(-pid, 0);
     } catch {
-      return;
+      return true;
     }
     await new Promise((resolve) => setTimeout(resolve, PROCESS_REAP_INTERVAL_MS));
   }
+  return false;
 }
 
 function buildBashEnv(workspaceRoot: string | undefined): Record<string, string> {

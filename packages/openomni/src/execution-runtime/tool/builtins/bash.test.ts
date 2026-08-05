@@ -126,7 +126,7 @@ describe("bashTool", () => {
           tool: "bash",
           input: {
             command:
-              "trap 'touch term-handled.txt; exit 0' TERM; touch term-ready.txt; while :; do sleep 1; done",
+              "trap 'exit 0' TERM; (trap 'sleep 0.25; touch term-handled.txt; exit 0' TERM; touch term-ready.txt; while :; do :; done) & wait",
           },
         },
         { signal: controller.signal },
