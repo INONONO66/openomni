@@ -262,10 +262,8 @@ export async function reflectCoordinatorResult(
         return completionReflection(workItemHash, true, err.message);
       }
       if (
-        !(
-          err instanceof Error &&
-          err.message.startsWith("read-back verifier evidence did not pass:")
-        ) &&
+        err instanceof CompletionAdmissionServiceError &&
+        err.code === "authority_unavailable" &&
         parsed.envelope.readBackRequests.length > 0 &&
         parsed.envelope.readBackRequests.every((_, requestIndex) =>
           WorkItemStore.get(workItemHash)?.evidence.some(

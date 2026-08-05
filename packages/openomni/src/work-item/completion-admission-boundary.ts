@@ -1,6 +1,9 @@
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
-import type { CompletionAuthorityResolver } from "./completion-admission-authority.js";
+import {
+  CompletionAdmissionError,
+  type CompletionAuthorityResolver,
+} from "./completion-admission-authority.js";
 import {
   completionReportReference,
   completionReportsMatch,
@@ -12,6 +15,7 @@ export type CompletionAdmissionServiceErrorCode =
   | "invalid_subject"
   | "stale_basis"
   | "stale_head"
+  | "authority_unavailable"
   | "admission_required"
   | "request_conflict"
   | "terminal_state"
@@ -225,10 +229,22 @@ export function createCompletionAdmissionService(
             requestedPublished = true;
           }
 
-          const admission = canonicalAdmission(
-            await options.authorityResolver.resolve(initial, request),
-            completionReport,
-          );
+          let authorityAdmission: WorkItem.CompletionAdmission;
+          try {
+            authorityAdmission = await options.authorityResolver.resolve(initial, request);
+          } catch (error) {
+            if (
+              error instanceof CompletionAdmissionError ||
+              error instanceof CompletionAdmissionServiceError
+            ) {
+              throw error;
+            }
+            throw new CompletionAdmissionServiceError(
+              "authority_unavailable",
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+          const admission = canonicalAdmission(authorityAdmission, completionReport);
           assertUnchangedAfterAuthority(adapter, initial);
           assertAdmissionMatches(admission, initial, request);
           options.beforeAdmissionWrite?.();

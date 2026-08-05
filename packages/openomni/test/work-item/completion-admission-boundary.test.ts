@@ -375,6 +375,45 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItem.deriveStatus(recovered)).toBe("completed");
   });
 
+  test("releases a pre-admission reservation during boot recovery", async () => {
+    configure();
+    const first = await fixture("worker");
+    const reservationInput = {
+      completionWriter,
+      workItemHash: first.item.hash,
+      requestId: first.request.id,
+      requestRoot: "request-root:pre-admission-recovery",
+      envelopeDigest: "digest:pre-admission-recovery",
+      leaseDurationMs: 15_000,
+    };
+    const reserved = reserveCompletionRequest({
+      ...reservationInput,
+      ownerId: "process:before-restart",
+      now: NOW,
+    });
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW + 1,
+    });
+
+    const receipt = await gateway.recoverRecordedCompletions();
+    const afterRecovery = WorkItemStore.get(first.item.hash);
+    const takeover = reserveCompletionRequest({
+      ...reservationInput,
+      ownerId: "process:after-restart",
+      now: NOW + 1,
+    });
+
+    expect(receipt).toEqual({ recovered: 0, skipped: 1, failures: [] });
+    expect(afterRecovery?.completionFacts.admissions).toEqual([]);
+    expect(afterRecovery?.completionFacts.requestReservations[0]?.leaseExpiresAt).toBe(NOW + 1);
+    expect(takeover.state).toBe("reserved");
+    expect(takeover.reservation.ownerId).toBe("process:after-restart");
+    expect(takeover.reservation.fence).toBe(reserved.reservation.fence + 1);
+  });
+
   test("skips recovery admissions from a prior retry generation", async () => {
     const adapter = configure();
     const first = await fixture("recovery");

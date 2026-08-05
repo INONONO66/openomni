@@ -392,6 +392,69 @@ describe("worker completion admission convergence", () => {
     expect(stored?.completionTerminalReceipt).toBeDefined();
   });
 
+  test("persists deterministic verifier mismatch after checkpoint without repeating read-back", async () => {
+    const predicate = "archived source contains the recorded quote exactly";
+    const item = await startedItem("internal_chat_agent", predicate);
+    const output = JSON.stringify({
+      completionReport: {
+        summary: "Verifier kind does not match the durable read-back.",
+        claims: [{ statement: predicate }],
+      },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "numeric_recheck" },
+        },
+      ],
+      readBackRequests: [
+        {
+          claimIndex: 0,
+          criterionIndex: 0,
+          request: {
+            kind: "citation_match",
+            target: "http://example.com/read-back-mismatch",
+            quotedText: "deterministic mismatch marker",
+          },
+        },
+      ],
+    });
+    let readBackCalls = 0;
+    const options = {
+      completionWriter,
+      completionReservationOwnerId: "process:one",
+      sourceOrigin: { source: "internal_worker" } as const,
+      completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+      now: () => NOW,
+      readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+        readBackCalls += 1;
+        if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+        return WorkItem.ReadBackCheck.parse({
+          kind: "citation_match",
+          target: request.target,
+          quotedText: request.quotedText,
+          matchedText: request.quotedText,
+          passed: true,
+          observedAt: NOW,
+          statusCode: 200,
+        });
+      },
+    };
+
+    const first = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const second = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(first.completionBlocked).toBe(true);
+    expect(first.completionBlocker).toContain("verifier evidence does not match read-back kind");
+    expect(second.completionBlocker).toBe(first.completionBlocker);
+    expect(readBackCalls).toBe(1);
+    expect(stored?.evidence).toHaveLength(1);
+    expect(stored?.blockers).toHaveLength(1);
+    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("blocked");
+    expect(stored?.completionFacts.admissions).toEqual([]);
+  });
+
   test("reserves one completion request before concurrent read-back", async () => {
     const predicate = "archived source contains the recorded quote exactly";
     const item = await startedItem("internal_chat_agent", predicate);

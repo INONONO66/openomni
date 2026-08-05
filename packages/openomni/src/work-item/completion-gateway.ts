@@ -46,7 +46,37 @@ export function createWorkItemCompletionGateway(
         error: string;
       }> = [];
       for (const item of adapter.list()) {
-        if (item.completionFacts.admissions.length === 0 || item.completionTerminalReceipt) {
+        if (item.completionTerminalReceipt) {
+          continue;
+        }
+        if (item.completionFacts.admissions.length === 0) {
+          const reservation = item.completionFacts.requestReservations
+            .filter(({ attempt, basisRef }) => {
+              return attempt === item.attempt && basisRef === item.completionContract.basisRef;
+            })
+            .at(-1);
+          if (!reservation) continue;
+          const recoveredAt = now();
+          if (
+            reservation.leaseExpiresAt !== undefined &&
+            reservation.leaseExpiresAt > recoveredAt
+          ) {
+            const released = releasePreAdmissionReservation(
+              item,
+              reservation,
+              recoveredAt,
+              options.completionWriter,
+            );
+            if (!released) {
+              failures.push({
+                workItemHash: item.hash,
+                admissionId: reservation.id,
+                error: "completion reservation release lost row CAS",
+              });
+              continue;
+            }
+          }
+          skipped += 1;
           continue;
         }
         const admission = item.completionFacts.admissions
@@ -178,6 +208,35 @@ export function createWorkItemCompletionGateway(
       return { recovered, skipped, failures };
     },
   });
+}
+
+function releasePreAdmissionReservation(
+  item: WorkItem.Info,
+  reservation: WorkItem.CompletionRequestReservation,
+  releasedAt: number,
+  completionWriter: Storage.WorkItemCompletionWriter,
+): boolean {
+  const candidate = WorkItem.Info.parse({
+    ...item,
+    revision: item.revision + 1,
+    completionFacts: {
+      ...item.completionFacts,
+      revision: item.completionFacts.revision + 1,
+      requestReservations: item.completionFacts.requestReservations.map((current) =>
+        current.id === reservation.id
+          ? {
+              ...current,
+              leaseExpiresAt:
+                current.leaseExpiresAt === undefined
+                  ? releasedAt
+                  : Math.min(current.leaseExpiresAt, releasedAt),
+            }
+          : current,
+      ),
+    },
+    timestamps: { ...item.timestamps, updated: Math.max(item.timestamps.updated, releasedAt) },
+  });
+  return completionWriter(item.hash, item.revision, candidate);
 }
 
 async function materializeAdmissionBlocker(
