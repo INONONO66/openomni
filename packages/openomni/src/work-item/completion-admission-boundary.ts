@@ -551,7 +551,7 @@ async function replayRequest(
   completionReport: WorkItem.CompletionReport,
   admissions: readonly WorkItem.CompletionAdmission[],
   options: CompletionAdmissionServiceOptions,
-  assertReservation?: () => void,
+  assertReservation?: CompletionReservationAssertion,
 ): Promise<CompletionBoundaryOutcome> {
   assertReplayMatches(request, admissions);
   const original = admissions[0];
@@ -596,6 +596,21 @@ async function replayRequest(
       completionReport,
       options.now(),
       assertReservation,
+    );
+    return { admission, workItem: completed, completed: true };
+  }
+  if (
+    assertReservation?.recordedHead === item.revision &&
+    hasContiguousReservationBridge(item, admission)
+  ) {
+    const completed = commitTerminal(
+      authorizedCompletionAdapter(requiredAdapter(item.hash), options.completionWriter),
+      item,
+      admission,
+      completionReport,
+      options.now(),
+      assertReservation,
+      true,
     );
     return { admission, workItem: completed, completed: true };
   }

@@ -124,12 +124,13 @@ function guardedService(
     requestRoot?: string;
     envelopeDigest?: string;
   }>,
+  now: () => number = () => NOW,
 ) {
   const service = Reflect.apply(createCompletionAdmissionService, undefined, [
     {
       completionWriter: writer,
       authorityResolver,
-      now: () => NOW,
+      now,
       reservation,
     },
   ]);
@@ -879,6 +880,53 @@ describe("WorkItem completion admission service", () => {
       requestId: request.id,
       admissionId: originalAdmission?.id,
     });
+  });
+
+  test("request replay reuses the original admission after reservation takeover", async () => {
+    configure();
+    const { item, request, report } = await fixture("worker");
+    const resolver = authority().resolver;
+    const crashingWriter: Storage.WorkItemCompletionWriter = (hash, expectedRevision, next) => {
+      if (next.completionTerminalReceipt) throw new Error("crash before replay terminal");
+      return completionWriter(hash, expectedRevision, next);
+    };
+    const firstService = guardedService(
+      resolver,
+      crashingWriter,
+      { ownerId: "process:replay-first", leaseDurationMs: 1 },
+      () => NOW,
+    );
+    if (!firstService) return;
+
+    await expect(firstService.requestCompletion(request, report)).rejects.toThrow(
+      "crash before replay terminal",
+    );
+    const originalAdmission = WorkItemStore.get(item.hash)?.completionFacts.admissions[0];
+    expect(originalAdmission).toBeDefined();
+
+    const replayService = guardedService(
+      {
+        resolve(): never {
+          throw new Error("request replay must not re-run authority");
+        },
+      },
+      completionWriter,
+      { ownerId: "process:replay-second", leaseDurationMs: 1 },
+      () => NOW + 2,
+    );
+    if (!replayService) return;
+    const replay = await replayService.requestCompletion(request, report);
+
+    expect(replay).toMatchObject({
+      completed: true,
+      admission: { id: originalAdmission?.id },
+      workItem: {
+        completionTerminalReceipt: { admissionId: originalAdmission?.id },
+      },
+    });
+    expect(replay.workItem.completionFacts.admissions.map(({ id }) => id)).toEqual([
+      originalAdmission?.id,
+    ]);
   });
 
   test("takes over an expired nonterminal admission reservation after head drift", async () => {
