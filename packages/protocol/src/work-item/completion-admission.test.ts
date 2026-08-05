@@ -728,11 +728,18 @@ describe("WorkItem completion admission contracts", () => {
       value: "refuted",
       checkedPredicate: "Owner accepted the known verification failure",
     });
+    const ownerUnresolvedCriterion = {
+      id: WorkItem.criterionId(baseItem.hash, 1, "accept the residual risk"),
+      revision: 1,
+      statement: "accept the residual risk",
+      required: true,
+    };
     const ownerAdmission = WorkItem.CompletionAdmission.parse({
       ...admission,
       id: "admission:owner-override",
       decision: "owner_override",
       effectiveResultIds: [ownerRefutedResult.id],
+      unresolvedCriterionIds: [ownerUnresolvedCriterion.id],
       ownerOverrideReceiptRef: "owner-receipt:terminal",
       requestSnapshot: {
         ...admission.requestSnapshot,
@@ -741,8 +748,10 @@ describe("WorkItem completion admission contracts", () => {
     });
     const ownerOverrideInput = {
       ...validInput,
+      acceptanceCriteria: [...validInput.acceptanceCriteria, ownerUnresolvedCriterion.statement],
       completionFacts: {
         ...completionFacts,
+        criteria: [...completionFacts.criteria, ownerUnresolvedCriterion],
         results: [ownerRefutedResult],
         admissions: [ownerAdmission],
       },

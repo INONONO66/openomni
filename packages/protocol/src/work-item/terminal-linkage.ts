@@ -127,7 +127,11 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     effectiveCriterionIds.add(result.criterionId);
   }
   for (const [index, criterion] of item.completionFacts.criteria.entries()) {
-    if (criterion.required && !effectiveCriterionIds.has(criterion.id)) {
+    if (
+      admission.decision === "admit" &&
+      criterion.required &&
+      !effectiveCriterionIds.has(criterion.id)
+    ) {
       addIssue(
         ctx,
         ["completionFacts", "criteria", index, "id"],
