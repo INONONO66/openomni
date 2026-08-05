@@ -717,6 +717,72 @@ describe("WorkItem completion admission service", () => {
     expect(result.admission.requestSnapshot.ownerOverrideReceiptRef).toBe(ownerOverrideReceiptRef);
   });
 
+  test("does not preserve an Owner receipt across external one-head drift", async () => {
+    configure();
+    const { item, request, report } = await fixture("resident");
+    const ownerOverrideReceiptRef = "owner-receipt:stale-after-drift";
+    const ownerRequest = WorkItem.CompletionRequest.parse({
+      ...request,
+      ownerOverrideReceiptRef,
+    });
+    let injectExternalHead = true;
+    const driftingWriter: Storage.WorkItemCompletionWriter = (hash, expectedRevision, next) => {
+      const current = WorkItemStore.get(hash);
+      if (
+        injectExternalHead &&
+        current &&
+        next.completionFacts.requestReservations.length >
+          current.completionFacts.requestReservations.length
+      ) {
+        injectExternalHead = false;
+        const advanced = WorkItem.Info.parse({
+          ...current,
+          revision: current.revision + 1,
+          timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
+        });
+        Storage.get().workItem?.compareAndSet(hash, expectedRevision, advanced);
+      }
+      return completionWriter(hash, expectedRevision, next);
+    };
+    const service = guardedService(
+      {
+        resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+          const current = WorkItem.Info.parse(itemInput);
+          const candidate = WorkItem.CompletionRequest.parse(requestInput);
+          return WorkItem.CompletionAdmission.parse({
+            version: 1,
+            id: `admission:${candidate.id}:${current.revision + 1}:owner`,
+            requestId: candidate.id,
+            requestSnapshot: candidate,
+            origin: candidate.origin,
+            contractRevision: current.completionContract.revision,
+            basisRef: current.completionContract.basisRef,
+            effectiveResultIds: [...current.completionFacts.results, ...candidate.results].map(
+              ({ id }) => id,
+            ),
+            unresolvedCriterionIds: [],
+            decision: "owner_override",
+            reasonCodes: [],
+            residualRisks: [],
+            ownerOverrideReceiptRef,
+            policyRef: "policy:owner-stale-drift",
+            expectedHead: current.revision,
+            recordedHead: current.revision + 1,
+            createdAt: NOW,
+          });
+        },
+      },
+      driftingWriter,
+      { ownerId: "process:owner-drift", leaseDurationMs: 10_000 },
+    );
+    if (!service) return;
+
+    expect(await errorCode(service.requestCompletion(ownerRequest, report))).toBe(
+      "request_conflict",
+    );
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
   test("recovery reuses a durable custom reservation identity", async () => {
     configure();
     const { item, request, report } = await fixture("worker");
@@ -727,7 +793,7 @@ describe("WorkItem completion admission service", () => {
     };
     const workerService = guardedService(resolver, crashingWriter, {
       ownerId: "process:worker",
-      leaseDurationMs: 1,
+      leaseDurationMs: 15_000,
       requestRoot: "worker-request-root",
       envelopeDigest: "worker-envelope-digest",
     });
@@ -755,7 +821,7 @@ describe("WorkItem completion admission service", () => {
       completionWriter,
       policyEngine: PolicyEngine.create(),
       resultAuthorityPort: { validate: () => ({ ok: true }) },
-      now: () => NOW + 2,
+      now: () => NOW + 1,
     });
     expect(await recoveryGateway.recoverRecordedCompletions()).toEqual({
       recovered: 1,

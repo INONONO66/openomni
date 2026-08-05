@@ -70,6 +70,7 @@ export type CompletionRequestReservationInput = Readonly<{
   ownerId: string;
   leaseDurationMs: number;
   now: number;
+  forceTakeover?: boolean;
 }>;
 
 export type CompletionRequestReservationOutcome = Readonly<{
@@ -92,6 +93,12 @@ export type CompletionReservationOptions = Readonly<{
   requestRoot?: string;
   envelopeDigest?: string;
 }>;
+
+type CompletionReservationAssertion = (() => void) &
+  Readonly<{
+    state: "reserved" | "existing";
+    recordedHead: number;
+  }>;
 
 const CompletionCasRetryLimit = 8;
 
@@ -136,7 +143,8 @@ export function reserveCompletionRequest(
     if (
       reservation?.ownerId !== undefined &&
       reservation.leaseExpiresAt !== undefined &&
-      input.now < reservation.leaseExpiresAt
+      input.now < reservation.leaseExpiresAt &&
+      !input.forceTakeover
     ) {
       return { state: "busy", reservation };
     }
@@ -282,7 +290,11 @@ export function createCompletionAdmissionService(
           if (assertReservation) {
             const reserved = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
             if (reserved.revision !== initial.revision) {
-              if (reserved.revision === initial.revision + 1) {
+              if (
+                assertReservation.state === "reserved" &&
+                assertReservation.recordedHead === reserved.revision &&
+                reserved.revision === initial.revision + 1
+              ) {
                 request = WorkItem.CompletionRequest.parse({
                   ...request,
                   expectedHead: reserved.revision,
@@ -383,7 +395,8 @@ function reserveCompletionLease(
   completionReport: WorkItem.CompletionReport,
   reservation: CompletionReservationOptions,
   options: CompletionAdmissionServiceOptions,
-): () => void {
+  forceTakeover = false,
+): CompletionReservationAssertion {
   const requestRoot = reservation.requestRoot ?? completionRequestRoot(request);
   const envelopeDigest =
     reservation.envelopeDigest ?? completionRequestEnvelopeDigest(request, completionReport);
@@ -396,6 +409,7 @@ function reserveCompletionLease(
     ownerId: reservation.ownerId,
     leaseDurationMs: reservation.leaseDurationMs,
     now: options.now(),
+    forceTakeover,
   });
   if (acquired.state === "busy") {
     throw new CompletionAdmissionServiceError(
@@ -404,7 +418,7 @@ function reserveCompletionLease(
     );
   }
   if (acquired.state === "admitted") throw requestConflict(request.id);
-  return () =>
+  const assertReservation = () =>
     assertCompletionReservationLease({
       workItemHash: item.hash,
       requestId: request.id,
@@ -413,6 +427,10 @@ function reserveCompletionLease(
       fence: acquired.reservation.fence,
       now: options.now(),
     });
+  return Object.assign(assertReservation, {
+    state: acquired.state,
+    recordedHead: acquired.reservation.recordedHead,
+  });
 }
 
 function assertLiveReservation(
@@ -475,8 +493,27 @@ async function resumeCompletionAtHead(
           completionReport,
           recoveryReservation,
           options,
+          true,
         );
   assertReservation?.();
+  if (
+    isAdmitted(admission) &&
+    item.revision === admission.recordedHead &&
+    assertReservation?.state === "reserved" &&
+    assertReservation.recordedHead === item.revision + 1
+  ) {
+    const reservedItem = requiredItem(adapter.get(workItemHash), workItemHash);
+    if (reservedItem.revision === assertReservation.recordedHead) {
+      return commitTerminal(
+        adapter,
+        reservedItem,
+        admission,
+        completionReport,
+        options.now(),
+        assertReservation,
+      );
+    }
+  }
   if (item.revision === admission.recordedHead) {
     if (!isAdmitted(admission)) return item;
     return commitTerminal(
