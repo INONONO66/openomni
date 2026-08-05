@@ -112,13 +112,35 @@ async function evidenceBackedEnvelope(
   });
 }
 
-function succeeded(output: string): Execution.Result {
+type ResultIdentity = Readonly<{ runId: string; sessionId: string }>;
+
+function succeeded(
+  output: string,
+  identity: ResultIdentity = { runId: WORKER_RUN_ID, sessionId: WORKER_SESSION_ID },
+): Execution.Result {
   return {
-    runId: WORKER_RUN_ID,
-    sessionId: WORKER_SESSION_ID,
+    ...identity,
     status: "succeeded",
     output,
   };
+}
+
+async function bindRetryAttempt(
+  hash: string,
+  attempt: number,
+  executorKind: WorkItem.ExecutorKind = "internal_chat_agent",
+): Promise<ResultIdentity> {
+  const identity = {
+    runId: `${WORKER_RUN_ID}:attempt:${attempt}`,
+    sessionId: `${WORKER_SESSION_ID}:attempt:${attempt}`,
+  };
+  const updated = await WorkItemStore.assignExecution(hash, {
+    workerRunId: identity.runId,
+    workSessionId: identity.sessionId,
+    executorKind,
+  });
+  if (!updated) throw new Error("failed to bind retry Worker identity");
+  return identity;
 }
 
 describe("worker completion admission convergence", () => {
@@ -616,6 +638,80 @@ describe("worker completion admission convergence", () => {
     expect(unrelatedCriterion).toEqual({ ok: false });
   });
 
+  test("rejects actor reuse of read-back evidence across duplicate criteria", async () => {
+    const statement = "archived source contains the recorded quote exactly";
+    const created = await WorkItemStore.create({
+      name: "Duplicate criterion binding",
+      sourceMessageId: "dispatch:duplicate-criterion-binding",
+      sourceChannel: "dispatch",
+      intent: "worker.spawn",
+      goal: "keep read-back evidence criterion-local",
+      executorKind: "internal_chat_agent",
+      workSessionId: WORKER_SESSION_ID,
+      workerRunId: WORKER_RUN_ID,
+      acceptanceCriteria: [statement, statement],
+    });
+    const item = await WorkItemStore.start(created.hash);
+    const sourceCriterion = item?.completionFacts.criteria[0];
+    const targetCriterion = item?.completionFacts.criteria[1];
+    if (!item || !sourceCriterion || !targetCriterion) {
+      throw new Error("missing duplicate criterion fixture");
+    }
+    const withEvidence = await WorkItemStore.addReadBackEvidence(
+      item.hash,
+      {
+        kind: "citation_match",
+        target: "https://example.com/criterion-binding",
+        quotedText: "criterion-local marker",
+        matchedText: "criterion-local marker",
+        passed: true,
+        observedAt: NOW,
+        statusCode: 200,
+      },
+      {
+        expectedAttempt: item.attempt,
+        expectedBasisRef: item.completionContract.basisRef,
+        criterionId: sourceCriterion.id,
+      },
+    );
+    const evidenceId = withEvidence?.evidence.at(-1)?.id;
+    if (!evidenceId) throw new Error("missing criterion-bound evidence");
+    const observationId = "observation:cross-criterion-actor";
+    const validation = await createDurableCompletionResultAuthorityPort().validate({
+      workItemHash: item.hash,
+      requestId: "request:cross-criterion-actor",
+      contractRevision: item.completionContract.revision,
+      basisRef: item.completionContract.basisRef,
+      criterion: targetCriterion,
+      result: {
+        id: "result:cross-criterion-actor",
+        criterionId: targetCriterion.id,
+        value: "verified",
+        checkedPredicate: targetCriterion.statement,
+        observationIds: [observationId],
+        verifierRef: "builtin.archived-quote-v1",
+        basisRef: item.completionContract.basisRef,
+        assumptions: [],
+        residualRisks: [],
+        createdAt: NOW,
+      },
+      observations: [
+        {
+          id: observationId,
+          producer: "builtin.archived-quote-v1",
+          subjectRef: item.hash,
+          basisRef: item.completionContract.basisRef,
+          artifactRefs: [evidenceId],
+          provenanceRef: evidenceId,
+          ancestryRefs: [],
+          observedAt: NOW,
+        },
+      ],
+    });
+
+    expect(validation).toEqual({ ok: false });
+  });
+
   test("scopes Worker completion identity to the retried attempt", async () => {
     const item = await startedItem("internal_chat_agent");
     const firstOutput = await evidenceBackedEnvelope(item.hash);
@@ -645,11 +741,14 @@ describe("worker completion admission convergence", () => {
     await WorkItemStore.fail(item.hash, "first attempt failed");
     const retried = await WorkItemStore.retry(item.hash);
     if (!retried) throw new Error("failed to retry WorkItem");
+    expect(retried.workerRunId).toBeUndefined();
+    expect(retried.workSessionId).toBeUndefined();
+    const retryIdentity = await bindRetryAttempt(item.hash, 2);
     const secondOutput = await evidenceBackedEnvelope(item.hash);
 
     const reflection = await reflectCoordinatorResultWithPolicy(
       item.hash,
-      succeeded(secondOutput),
+      succeeded(secondOutput, retryIdentity),
       {
         completionWriter,
         sourceOrigin: { source: "internal_worker" },
@@ -706,13 +805,18 @@ describe("worker completion admission convergence", () => {
     expect(afterStale?.completionFacts.admissions).toEqual([]);
     expect(afterStale?.completionTerminalReceipt).toBeUndefined();
 
+    const retryIdentity = await bindRetryAttempt(item.hash, 2);
     const secondOutput = await evidenceBackedEnvelope(item.hash);
-    const current = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(secondOutput), {
-      completionWriter,
-      sourceOrigin: { source: "internal_worker" },
-      completionPolicyEngine: PolicyEngine.create(),
-      now: () => NOW + 1,
-    });
+    const current = await reflectCoordinatorResultWithPolicy(
+      item.hash,
+      succeeded(secondOutput, retryIdentity),
+      {
+        completionWriter,
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine: PolicyEngine.create(),
+        now: () => NOW + 1,
+      },
+    );
     const completed = WorkItemStore.get(item.hash);
 
     expect(current.completionBlocked).toBe(false);
@@ -823,14 +927,13 @@ describe("worker completion admission convergence", () => {
         now: () => NOW + 1,
       },
     );
-    expect(staleEvidence.completionBlocker).toContain(
-      "verifier evidence is from a different attempt",
-    );
+    expect(staleEvidence.completionBlocker).toContain("Worker completion identity mismatch");
     for (const blocker of WorkItemStore.get(item.hash)?.blockers ?? []) {
       await WorkItemStore.resolveBlocker(item.hash, blocker.id);
     }
     await WorkItemStore.fail(item.hash, "retry again with a current verifier artifact");
     await WorkItemStore.retry(item.hash);
+    const retryIdentity = await bindRetryAttempt(item.hash, 3);
     const currentOutput = JSON.parse(await evidenceBackedEnvelope(item.hash)) as {
       completionReport: WorkItem.CompletionReport;
       criterionFacts: unknown[];
@@ -848,7 +951,7 @@ describe("worker completion admission convergence", () => {
 
     const replay = await reflectCoordinatorResultWithPolicy(
       item.hash,
-      succeeded(mismatchedOutput),
+      succeeded(mismatchedOutput, retryIdentity),
       {
         completionWriter,
         sourceOrigin: { source: "internal_worker" },

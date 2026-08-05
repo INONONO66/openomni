@@ -61,6 +61,29 @@ export async function cancelWorkItem(hash: string): Promise<WorkItem.Info | unde
   }));
 }
 
+export async function assignWorkItemExecution(
+  hash: string,
+  assignment: Readonly<{
+    executorKind: WorkItem.ExecutorKind;
+    workerRunId: string;
+    workSessionId: string;
+  }>,
+): Promise<WorkItem.Info | undefined> {
+  return mutate(hash, (existing, now) => {
+    if (existing.workerRunId || existing.workSessionId || existing.executorKind) {
+      throw new Error(`WorkItem already has an execution assignment: ${hash}`);
+    }
+    return {
+      changedFields: ["executorKind", "workerRunId", "workSessionId"],
+      updated: {
+        ...existing,
+        ...assignment,
+        timestamps: { ...existing.timestamps, updated: now },
+      },
+    };
+  });
+}
+
 export async function addWorkItemBlocker(
   hash: string,
   blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
@@ -149,7 +172,11 @@ export async function addWorkItemEvidence(
 export async function addWorkItemReadBackEvidence(
   hash: string,
   check: WorkItem.ReadBackCheck,
-  expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
+  expectedScope?: Readonly<{
+    expectedAttempt: number;
+    expectedBasisRef: string;
+    criterionId: string;
+  }>,
 ): Promise<WorkItem.Info | undefined> {
   const readBack = WorkItem.ReadBackCheck.parse(check);
   return addWorkItemEvidence(
@@ -160,6 +187,7 @@ export async function addWorkItemReadBackEvidence(
       passed: readBack.passed,
       detail: JSON.stringify(readBack),
       readBack,
+      criterionId: expectedScope?.criterionId,
     },
     expectedScope,
   );

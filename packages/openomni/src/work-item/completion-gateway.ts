@@ -65,21 +65,10 @@ export function createWorkItemCompletionGateway(
         }
         try {
           if (admission.decision === "block" || admission.decision === "escalate") {
-            const description = `completion admission ${admission.decision}: ${admission.reasonCodes.join(", ")}`;
-            const current = WorkItemStore.get(item.hash);
-            if (
-              current?.blockers.some(
-                (blocker) => !blocker.resolvedAt && blocker.description === description,
-              )
-            ) {
+            if (!(await materializeAdmissionBlocker(item.hash, admission))) {
               skipped += 1;
               continue;
             }
-            await WorkItemStore.addBlocker(item.hash, {
-              id: `${admission.id}:blocker`,
-              description,
-              kind: "error",
-            });
             recovered += 1;
             continue;
           }
@@ -98,11 +87,26 @@ export function createWorkItemCompletionGateway(
           if (WorkItem.deriveStatus(recoveredItem) === "completed") {
             recovered += 1;
           } else {
-            failures.push({
-              workItemHash: item.hash,
-              admissionId: admission.id,
-              error: "completion recovery remained incomplete",
-            });
+            const latestAdmission = recoveredItem.completionFacts.admissions
+              .filter(
+                (candidate) =>
+                  candidate.contractRevision === recoveredItem.completionContract.revision &&
+                  candidate.basisRef === recoveredItem.completionContract.basisRef,
+              )
+              .at(-1);
+            if (
+              latestAdmission &&
+              (latestAdmission.decision === "block" || latestAdmission.decision === "escalate") &&
+              (await materializeAdmissionBlocker(item.hash, latestAdmission))
+            ) {
+              recovered += 1;
+            } else {
+              failures.push({
+                workItemHash: item.hash,
+                admissionId: admission.id,
+                error: "completion recovery remained incomplete",
+              });
+            }
           }
         } catch (error) {
           failures.push({
@@ -115,4 +119,23 @@ export function createWorkItemCompletionGateway(
       return { recovered, skipped, failures };
     },
   });
+}
+
+async function materializeAdmissionBlocker(
+  workItemHash: string,
+  admission: WorkItem.CompletionAdmission,
+): Promise<boolean> {
+  const description = `completion admission ${admission.decision}: ${admission.reasonCodes.join(", ")}`;
+  const current = WorkItemStore.get(workItemHash);
+  if (
+    current?.blockers.some((blocker) => !blocker.resolvedAt && blocker.description === description)
+  ) {
+    return false;
+  }
+  await WorkItemStore.addBlocker(workItemHash, {
+    id: `${admission.id}:blocker`,
+    description,
+    kind: "error",
+  });
+  return true;
 }

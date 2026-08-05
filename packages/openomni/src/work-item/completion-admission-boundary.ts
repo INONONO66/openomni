@@ -548,6 +548,7 @@ function assertAdmissionMatches(
     );
   }
   const factIds = [
+    ...item.completionFacts.criteria,
     ...item.completionFacts.claims,
     ...item.completionFacts.observations,
     ...item.completionFacts.results,
@@ -555,6 +556,7 @@ function assertAdmissionMatches(
     ...item.completionFacts.verificationErrors,
     ...item.completionFacts.effects,
     ...item.completionFacts.admissions,
+    ...item.completionFacts.requestReservations,
     ...request.claims,
     ...request.observations,
     ...request.results,
@@ -564,6 +566,40 @@ function assertAdmissionMatches(
   ].map(({ id }) => id);
   if (factIds.includes(admission.id)) {
     throw requestConflict(request.id);
+  }
+  if (admission.decision === "admit") {
+    const results = [...item.completionFacts.results, ...request.results];
+    const effectiveResults = admission.effectiveResultIds.map((resultId) =>
+      results.find(({ id }) => id === resultId),
+    );
+    if (
+      effectiveResults.some(
+        (result) =>
+          !result ||
+          result.basisRef !== admission.basisRef ||
+          result.value === "refuted" ||
+          result.value === "inconclusive",
+      )
+    ) {
+      throw requestConflict(request.id);
+    }
+    const resolvedCriterionIds = new Set(
+      effectiveResults.flatMap((result) => (result ? [result.criterionId] : [])),
+    );
+    const expectedUnresolvedCriterionIds = item.completionFacts.criteria
+      .filter((criterion) => criterion.required && !resolvedCriterionIds.has(criterion.id))
+      .map(({ id }) => id)
+      .sort();
+    const actualUnresolvedCriterionIds = [...admission.unresolvedCriterionIds].sort();
+    if (
+      expectedUnresolvedCriterionIds.length !== actualUnresolvedCriterionIds.length ||
+      expectedUnresolvedCriterionIds.some(
+        (criterionId, index) => criterionId !== actualUnresolvedCriterionIds[index],
+      ) ||
+      (admission.decision === "admit" && expectedUnresolvedCriterionIds.length > 0)
+    ) {
+      throw requestConflict(request.id);
+    }
   }
   if (
     admission.decision === "owner_override" &&

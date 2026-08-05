@@ -5,6 +5,7 @@ import {
   addWorkItemBlocker,
   addWorkItemEvidence,
   addWorkItemReadBackEvidence,
+  assignWorkItemExecution,
   areDependenciesMet as areStoredDependenciesMet,
   cancelWorkItem,
   completeWorkItem,
@@ -42,6 +43,17 @@ export namespace WorkItemStore {
 
   export async function start(hash: string): Promise<WorkItem.Info | undefined> {
     return startWorkItem(hash);
+  }
+
+  export async function assignExecution(
+    hash: string,
+    assignment: Readonly<{
+      executorKind: WorkItem.ExecutorKind;
+      workerRunId: string;
+      workSessionId: string;
+    }>,
+  ): Promise<WorkItem.Info | undefined> {
+    return assignWorkItemExecution(hash, assignment);
   }
 
   export async function complete(
@@ -83,7 +95,11 @@ export namespace WorkItemStore {
   export async function addReadBackEvidence(
     hash: string,
     check: WorkItem.ReadBackCheck,
-    expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
+    expectedScope?: Readonly<{
+      expectedAttempt: number;
+      expectedBasisRef: string;
+      criterionId: string;
+    }>,
   ): Promise<WorkItem.Info | undefined> {
     return addWorkItemReadBackEvidence(hash, check, expectedScope);
   }

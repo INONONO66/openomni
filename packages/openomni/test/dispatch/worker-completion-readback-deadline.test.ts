@@ -233,7 +233,13 @@ describe("worker completion read-back deadline", () => {
       workItem.hash,
       citationRequest("http://example.com/source").request,
     );
-    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check);
+    const criterionId = workItem.completionFacts.criteria[0]?.id;
+    if (!criterionId) throw new Error("missing read-back criterion");
+    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check, {
+      expectedAttempt: workItem.attempt,
+      expectedBasisRef: workItem.completionContract.basisRef,
+      criterionId,
+    });
     const evidenceId = evidence?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("missing completion evidence");
     const result = completionResult(workItem, []);

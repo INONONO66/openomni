@@ -1031,6 +1031,7 @@
     "attempt",
     "basisRef",
     "createdAt",
+    "criterionId",
     "description",
     "detail",
     "id",

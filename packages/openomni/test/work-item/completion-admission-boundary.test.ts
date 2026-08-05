@@ -440,7 +440,7 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(first.item.hash)?.blockers).toHaveLength(1);
   });
 
-  test("reports a blocked stale-admission recovery as a failure", async () => {
+  test("materializes a blocker when stale-admission recovery re-evaluates to block", async () => {
     const adapter = configure();
     const first = await fixture("recovery");
     const gateway = createWorkItemCompletionGateway({
@@ -471,17 +471,12 @@ describe("WorkItem completion admission service", () => {
 
     const receipt = await gateway.recoverRecordedCompletions();
 
-    expect(receipt.recovered).toBe(0);
-    expect(receipt.failures).toEqual([
-      {
-        workItemHash: first.item.hash,
-        admissionId: admitted.id,
-        error: "completion recovery remained incomplete",
-      },
-    ]);
+    expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
     const recovered = WorkItemStore.get(first.item.hash);
     if (!recovered) throw new Error("missing blocked recovery WorkItem");
     expect(WorkItem.deriveStatus(recovered)).toBe("blocked");
+    expect(recovered.blockers).toHaveLength(2);
+    expect(recovered.blockers.at(-1)?.description).toContain("completion admission block");
   });
 
   test("holds completion reservations across process owners until lease expiry", async () => {
@@ -825,7 +820,7 @@ describe("WorkItem completion admission service", () => {
   test("rejects a hostile admission id colliding with a proposed fact", async () => {
     configure();
     const first = await fixture();
-    const collisionId = first.request.claims[0]?.id;
+    const collisionId = first.item.completionFacts.criteria[0]?.id;
     if (!collisionId) throw new Error("missing collision fixture");
     const service = guardedService({
       resolve(itemInput: unknown, requestInput: unknown) {

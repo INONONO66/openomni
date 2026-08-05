@@ -109,6 +109,7 @@ export const Evidence = z
     readBack: ReadBackCheck.optional(),
     attempt: z.number().int().positive().optional(),
     basisRef: z.string().min(1).optional(),
+    criterionId: z.string().min(1).optional(),
     createdAt: z.number(),
   })
   .superRefine((evidence, ctx) => {

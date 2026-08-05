@@ -348,9 +348,13 @@ async function prepareCompletionReport(
       options.readBack,
     );
     assertLease();
+    const criterionId = item.completionFacts.criteria[readBack.criterionIndex]?.id;
+    if (!criterionId)
+      throw new Error(`completion criterion index not found: ${readBack.criterionIndex}`);
     const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {
       expectedAttempt: item.attempt,
       expectedBasisRef: item.completionContract.basisRef,
+      criterionId,
     });
     assertLease();
     if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");

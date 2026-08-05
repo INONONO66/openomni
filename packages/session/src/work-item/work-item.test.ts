@@ -445,7 +445,11 @@ describe("WorkItemStore", () => {
 
   test("retries failed work items with a new basis and stable completion contract", async () => {
     configureSqlite();
-    const item = await createItem("retry");
+    const item = await createItem("retry", {
+      executorKind: "internal_chat_agent",
+      workerRunId: "run:retry:1",
+      workSessionId: "session:retry:1",
+    });
     const failed = await WorkItemStore.fail(item.hash, "transient error");
     const retried = await WorkItemStore.retry(item.hash);
 
@@ -459,6 +463,26 @@ describe("WorkItemStore", () => {
     expect(retried?.completionContract.basisRef).not.toBe(item.completionContract.basisRef);
     expect(retried?.acceptanceCriteria).toEqual(item.acceptanceCriteria);
     expect(retried?.completionFacts.criteria).toEqual(item.completionFacts.criteria);
+    expect(retried?.executorKind).toBeUndefined();
+    expect(retried?.workerRunId).toBeUndefined();
+    expect(retried?.workSessionId).toBeUndefined();
+    const assigned = await WorkItemStore.assignExecution(item.hash, {
+      executorKind: "internal_chat_agent",
+      workerRunId: "run:retry:2",
+      workSessionId: "session:retry:2",
+    });
+    expect(assigned).toMatchObject({
+      executorKind: "internal_chat_agent",
+      workerRunId: "run:retry:2",
+      workSessionId: "session:retry:2",
+    });
+    await expect(
+      WorkItemStore.assignExecution(item.hash, {
+        executorKind: "internal_chat_agent",
+        workerRunId: "run:retry:duplicate",
+        workSessionId: "session:retry:duplicate",
+      }),
+    ).rejects.toThrow("already has an execution assignment");
   });
 
   test("defaults internal worker items to three max attempts", async () => {

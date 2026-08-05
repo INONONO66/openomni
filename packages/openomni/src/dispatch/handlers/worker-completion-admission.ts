@@ -453,6 +453,9 @@ function recordedInputsFromEvidence(
     throw new Error(`verifier evidence is from a different attempt: ${evidence.id}`);
   }
   if (evidence.readBack) {
+    if (evidence.criterionId !== criterion.id) {
+      throw new Error(`read-back evidence is bound to a different criterion: ${evidence.id}`);
+    }
     return recordedInputsFromReadBack(input.verification.kind, evidence);
   }
   if (!evidence.detail) throw new Error(`verifier evidence is malformed: ${evidence.id}`);
@@ -579,6 +582,7 @@ function durableVerifierInput(
     return undefined;
   }
   if (evidence.readBack?.kind === "citation_match") {
+    if (evidence.criterionId !== criterion.id) return undefined;
     return {
       kind: "archived_quote_match",
       recordedInputs: {
