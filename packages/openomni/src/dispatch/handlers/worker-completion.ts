@@ -172,7 +172,7 @@ export async function reflectCoordinatorResult(
         now,
       });
       if (replay) return completionOutcomeReflection(workItemHash, replay);
-      const requestId = workerCompletionRequestId(item, result, completionEnvelopeDigest);
+      const requestId = workerCompletionRequestId(item, result);
       const reservationOwnerId =
         options.completionReservationOwnerId ?? completionReservationOwnerId;
       const reservation = reserveCompletionRequest({

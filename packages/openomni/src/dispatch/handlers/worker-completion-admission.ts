@@ -110,7 +110,7 @@ export async function admitWorkerCompletion(
 ): Promise<CompletionBoundaryOutcome> {
   const item = requireWorkerCompletionIdentity(input.workItemHash, input.result);
   const createdAt = input.now();
-  const requestId = workerCompletionRequestId(item, input.result, input.completionEnvelopeDigest);
+  const requestId = workerCompletionRequestId(item, input.result);
   if (requestId !== input.requestId) {
     throw new Error(
       `completion request attempt changed: expected ${input.requestId}, received ${requestId}`,
@@ -196,19 +196,20 @@ export async function replayWorkerCompletion(
   if (WorkItem.deriveStatus(item) !== "completed" && input.completionReservation === undefined) {
     return undefined;
   }
-  const requestRoot = workerCompletionRequestRoot(item, input.result);
-  const requestId = `${requestRoot}:${input.completionEnvelopeDigest}`;
+  const requestId = workerCompletionRequestId(item, input.result);
   const admission = item.completionFacts.admissions.find(
     (candidate) => candidate.requestId === requestId,
   );
   if (!admission) {
-    const correlatedAdmission = item.completionFacts.admissions.find((candidate) =>
-      candidate.requestId.startsWith(`${requestRoot}:`),
-    );
-    if (!correlatedAdmission) return undefined;
+    return undefined;
+  }
+  const durableReservation = item.completionFacts.requestReservations
+    .filter((reservation) => reservation.requestId === requestId)
+    .at(-1);
+  if (!durableReservation || durableReservation.envelopeDigest !== input.completionEnvelopeDigest) {
     throw new CompletionAdmissionServiceError(
       "request_conflict",
-      `completion envelope changed for request: ${requestRoot}`,
+      `completion envelope changed for request: ${requestId}`,
     );
   }
   const replaySourceIdentity = workerCompletionSourceIdentity(input.sourceOrigin, input.result);
@@ -273,12 +274,8 @@ function completionAdmissionBlockerDescription(
   return `completion admission ${admission.decision}: ${admission.reasonCodes.join(", ")}`;
 }
 
-export function workerCompletionRequestId(
-  item: WorkItem.Info,
-  result: Execution.Result,
-  completionEnvelopeDigest: string,
-): string {
-  return `${workerCompletionRequestRoot(item, result)}:${completionEnvelopeDigest}`;
+export function workerCompletionRequestId(item: WorkItem.Info, result: Execution.Result): string {
+  return workerCompletionRequestRoot(item, result);
 }
 
 export function workerCompletionRequestRoot(item: WorkItem.Info, result: Execution.Result): string {

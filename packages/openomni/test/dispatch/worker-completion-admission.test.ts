@@ -190,8 +190,11 @@ describe("worker completion admission convergence", () => {
       .update(codeUnitCanonicalJson(normalizedEnvelope))
       .digest("hex");
 
+    expect(
+      WorkItemStore.get(item.hash)?.completionFacts.requestReservations.at(-1)?.envelopeDigest,
+    ).toBe(digest);
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt?.requestId).toBe(
-      `${workerCompletionRequestRoot(item, result)}:${digest}`,
+      workerCompletionRequestRoot(item, result),
     );
   });
 
@@ -377,7 +380,7 @@ describe("worker completion admission convergence", () => {
       identity: { kind: "worker", id: "worker:source-b" },
     } as const;
     const envelopeDigest = "envelope-digest:source-bound";
-    const requestId = workerCompletionRequestId(item, result, envelopeDigest);
+    const requestId = workerCompletionRequestId(item, result);
     const rootA = workerCompletionReservationRoot(item, result, sourceA);
     const rootB = workerCompletionReservationRoot(item, result, sourceB);
 
@@ -399,7 +402,7 @@ describe("worker completion admission convergence", () => {
         workItemHash: item.hash,
         requestId,
         requestRoot: rootB,
-        envelopeDigest,
+        envelopeDigest: "envelope-digest:source-b",
         ownerId: "process:source-b",
         leaseDurationMs: 1,
         now: NOW + 2,
