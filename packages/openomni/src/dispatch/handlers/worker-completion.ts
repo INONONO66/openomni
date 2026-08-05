@@ -168,24 +168,15 @@ export async function reflectCoordinatorResult(
         leaseDurationMs: (options.readBackEnvelopeTimeoutMs ?? MAX_READ_BACK_TIMEOUT_MS) + 5_000,
         now: now(),
       });
-      if (reservation.state === "admitted") {
-        const admittedReplay = await replayWorkerCompletion({
-          completionWriter: options.completionWriter,
+      const assertLease = () =>
+        assertCompletionReservationLease({
           workItemHash,
-          result,
-          completionEnvelopeDigest,
-          policyEngine: options.completionPolicyEngine,
-          completionReportMatches: (report) =>
-            completionReportDraftMatches(parsed.envelope, report),
-          ...(options.stakesResolver === undefined
-            ? {}
-            : { stakesResolver: options.stakesResolver }),
-          now,
+          requestId,
+          reservationId: reservation.reservation.id,
+          ownerId: reservationOwnerId,
+          fence: reservation.reservation.fence,
+          now: now(),
         });
-        if (!admittedReplay)
-          throw new Error(`completion admission replay is missing: ${requestId}`);
-        return completionOutcomeReflection(workItemHash, admittedReplay);
-      }
       if (
         reservation.state === "busy" ||
         (reservation.state === "existing" && activeCompletionRequests.has(requestId))
@@ -198,15 +189,23 @@ export async function reflectCoordinatorResult(
       }
       activeCompletionRequests.add(requestId);
       try {
-        const assertLease = () =>
-          assertCompletionReservationLease({
-            workItemHash,
-            requestId,
-            reservationId: reservation.reservation.id,
-            ownerId: reservationOwnerId,
-            fence: reservation.reservation.fence,
-            now: now(),
-          });
+        const admittedReplay = await replayWorkerCompletion({
+          beforeAdmissionWrite: assertLease,
+          completionWriter: options.completionWriter,
+          workItemHash,
+          result,
+          completionEnvelopeDigest,
+          policyEngine: options.completionPolicyEngine,
+          completionReportMatches: (report) =>
+            completionReportDraftMatches(parsed.envelope, report),
+          ...(options.stakesResolver === undefined
+            ? {}
+            : { stakesResolver: options.stakesResolver }),
+          now,
+        });
+        if (admittedReplay) {
+          return completionOutcomeReflection(workItemHash, admittedReplay);
+        }
         const prepared = await prepareCompletionReport(
           workItemHash,
           parsed.envelope,
@@ -215,6 +214,7 @@ export async function reflectCoordinatorResult(
         );
         assertLease();
         const outcome = await admitWorkerCompletion({
+          beforeAdmissionWrite: assertLease,
           completionWriter: options.completionWriter,
           workItemHash,
           result,

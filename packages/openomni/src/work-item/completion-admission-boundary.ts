@@ -37,6 +37,7 @@ export type CompletionBoundaryOutcome = Readonly<{
 export type CompletionAdmissionServiceOptions = Readonly<{
   completionWriter: Storage.WorkItemCompletionWriter;
   authorityResolver: CompletionAuthorityResolver;
+  beforeAdmissionWrite?: () => void;
   allowTrustedInvalidations?: boolean;
   now: () => number;
 }>;
@@ -87,7 +88,10 @@ export function reserveCompletionRequest(
     const reservation = current.completionFacts.requestReservations
       .filter(({ requestId }) => requestId === input.requestId)
       .at(-1);
-    if (current.completionFacts.admissions.some(({ requestId }) => requestId === input.requestId)) {
+    const admission = current.completionFacts.admissions
+      .filter(({ requestId }) => requestId === input.requestId)
+      .at(-1);
+    if (admission && current.revision <= admission.recordedHead + 1) {
       if (!reservation) throw requestConflict(input.requestId);
       return { state: "admitted", reservation };
     }
@@ -99,7 +103,11 @@ export function reserveCompletionRequest(
     if (correlated && correlated.envelopeDigest !== input.envelopeDigest) {
       throw requestConflict(input.requestId);
     }
-    if (reservation?.ownerId === input.ownerId) {
+    if (
+      reservation?.ownerId === input.ownerId &&
+      reservation.leaseExpiresAt !== undefined &&
+      input.now < reservation.leaseExpiresAt
+    ) {
       return { state: "existing", reservation };
     }
     if (
@@ -199,6 +207,7 @@ export function createCompletionAdmissionService(
       );
       assertAdmissionMatches(admission, initial, request);
       assertUnchangedAfterAuthority(adapter, initial);
+      options.beforeAdmissionWrite?.();
       const recorded = await appendAdmission(adapter, initial, request, admission);
       if (!isAdmitted(admission)) {
         return { admission, workItem: recorded, completed: false };
@@ -332,6 +341,7 @@ async function completeOrReevaluate(
   );
   assertAdmissionMatches(nextAdmission, latest, recheck);
   assertUnchangedAfterAuthority(adapter, latest);
+  options.beforeAdmissionWrite?.();
   const nextRecorded = await appendAdmission(adapter, latest, recheck, nextAdmission);
   if (!isAdmitted(nextAdmission)) {
     return { admission: nextAdmission, workItem: nextRecorded, completed: false };
@@ -679,6 +689,7 @@ function requestFromAdmission(
     version: 1,
     id: admission.requestId,
     origin: admission.origin,
+    sourceIdentity: admission.requestSnapshot.sourceIdentity,
     workItemHash: item.hash,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,

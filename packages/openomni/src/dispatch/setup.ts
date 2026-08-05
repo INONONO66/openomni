@@ -27,6 +27,7 @@ import type {
   CompletionPolicyEngine,
   WorkerCompletionOptions,
 } from "./handlers/worker-completion.js";
+import { createDurableCompletionResultAuthorityPort } from "./handlers/worker-completion-admission.js";
 import { createWorkerDispatchHandlers } from "./handlers/worker.js";
 
 export interface BuiltInDispatchOptions {
@@ -92,7 +93,6 @@ export type DefaultDispatchRuntime = DispatchRuntime &
     submitActorWorkItemCompletion(
       submission: ActorWorkItemCompletionSubmission,
     ): ReturnType<WorkItemCompletionGateway["requestCompletion"]>;
-    requestWorkItemCompletion: WorkItemCompletionGateway["requestCompletion"];
     recoverRecordedWorkItemCompletions: WorkItemCompletionGateway["recoverRecordedCompletions"];
   }>;
 
@@ -104,9 +104,8 @@ export function createDefaultDispatchRuntime(
     ? createWorkItemCompletionGateway({
         completionWriter: options.completionWriter,
         policyEngine: completionPolicyEngine,
-        ...(options.completionResultAuthorityPort === undefined
-          ? {}
-          : { resultAuthorityPort: options.completionResultAuthorityPort }),
+        resultAuthorityPort:
+          options.completionResultAuthorityPort ?? createDurableCompletionResultAuthorityPort(),
         ...(options.completionStakesResolver === undefined
           ? {}
           : { stakesResolver: options.completionStakesResolver }),
@@ -130,7 +129,7 @@ export function createDefaultDispatchRuntime(
       if (!completionGateway) throw new Error("completion writer is unavailable");
       const source = CompletionSourceOrigin.parse(submission.source);
       if (!("identity" in source)) {
-        throw new Error("actor completion source requires authenticated identity");
+        throw new Error("actor completion source requires caller-authenticated identity");
       }
       return completionGateway.requestCompletion(
         WorkItem.CompletionRequest.parse({
@@ -141,11 +140,6 @@ export function createDefaultDispatchRuntime(
         submission.completionReport,
       );
     },
-    requestWorkItemCompletion:
-      completionGateway?.requestCompletion ??
-      (() => {
-        throw new Error("completion writer is unavailable");
-      }),
     recoverRecordedWorkItemCompletions:
       completionGateway?.recoverRecordedCompletions ??
       (() => {

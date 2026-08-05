@@ -146,7 +146,7 @@ export function createCompletionAuthorityResolver(
       assertRequesterFactsSupported(request);
       assertProposedFacts(item, request);
       assertUniqueFactIds(item, request);
-      assertDurableResultAuthority(item, request);
+      await assertDurableResultAuthority(dependencies.resultAuthorityPort, item, request);
       await assertProposedResultAuthority(dependencies.resultAuthorityPort, item, request);
       await assertProposedInvalidationAuthority(
         dependencies.invalidationAuthorityPort,
@@ -413,10 +413,11 @@ async function assertProposedResultAuthority(
   }
 }
 
-function assertDurableResultAuthority(
+async function assertDurableResultAuthority(
+  port: CompletionResultAuthorityPort | undefined,
   item: WorkItem.Info,
   request: WorkItem.CompletionRequest,
-): void {
+): Promise<void> {
   const invalidatedResultIds = new Set([
     ...item.completionFacts.invalidations.map(({ resultId }) => resultId),
     ...request.invalidations.map(({ resultId }) => resultId),
@@ -434,7 +435,6 @@ function assertDurableResultAuthority(
     });
     if (
       criterion === undefined ||
-      result.checkedPredicate !== criterion.statement ||
       result.observationIds.length === 0 ||
       observations.length !== result.observationIds.length ||
       observations.some(({ basisRef }) => basisRef !== result.basisRef) ||
@@ -443,6 +443,27 @@ function assertDurableResultAuthority(
       throw new CompletionAdmissionError(
         "invalid_verifier",
         `durable result ${result.id} has no authoritative verifier basis`,
+      );
+    }
+    if (!port) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `durable result ${result.id} has no configured result authority`,
+      );
+    }
+    const validation = await port.validate({
+      workItemHash: item.hash,
+      requestId: request.id,
+      contractRevision: request.contractRevision,
+      basisRef: request.basisRef,
+      criterion,
+      result,
+      observations,
+    });
+    if (!validation.ok) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `durable result authority rejected ${result.id}`,
       );
     }
   }

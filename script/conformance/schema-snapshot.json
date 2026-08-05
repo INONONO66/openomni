@@ -44,6 +44,14 @@
     "updatedAt"
   ],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
+  "AgentProfile.AgentBudget": [
+    "maxToolCalls",
+    "maxToolRuntimeMs",
+    "maxTurns",
+    "maxWallTimeMs",
+    "reassuranceThreshold",
+    "warningThreshold"
+  ],
   "AgentProfile.BudgetThresholdInput": [
     "reassuranceThreshold",
     "warningThreshold"
@@ -99,6 +107,21 @@
     "submit"
   ],
   "AppConnector.Evidence": ["completionReport", "emits"],
+  "AppConnector.Installation": [
+    "connectorId",
+    "connectorVersion",
+    "consent",
+    "createdAt",
+    "definition",
+    "detectedVersion",
+    "endpointId",
+    "id",
+    "registeredBy",
+    "status",
+    "testedVersions",
+    "updatedAt",
+    "workspace"
+  ],
   "AppConnector.Logs#0": [
     "eventTimeField",
     "kind",
@@ -418,6 +441,7 @@
     "workspace"
   ],
   "Ingress.MetaSchema": ["actor", "target"],
+  "Ingress.TargetSchema": ["kind", "parentSessionId", "sessionId", "workerId"],
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
@@ -683,6 +707,7 @@
   "Policy.PolicyEffect#16": ["reason", "type"],
   "Policy.PolicyEffect#17": ["timeoutMs", "type"],
   "Policy.PolicyEffect#18": ["required", "type"],
+  "Policy.PolicyEffect#19": ["criterionIds", "type"],
   "Policy.PolicyEffect#2": ["prompt", "type"],
   "Policy.PolicyEffect#3": ["toolPattern", "type"],
   "Policy.PolicyEffect#4": ["input", "type"],
@@ -721,6 +746,19 @@
     "digest",
     "labels",
     "permissions"
+  ],
+  "RuntimeResource.Descriptor": [
+    "capabilities",
+    "digest",
+    "effects",
+    "id",
+    "kind",
+    "labels",
+    "owner",
+    "risk",
+    "schemaRef",
+    "source",
+    "version"
   ],
   "RuntimeResource.SessionDescriptor": [
     "digest",

@@ -1,6 +1,7 @@
 import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
 import { createDefaultDispatchRuntime } from "../dispatch/setup.js";
+import { createWorkItemCompletionGateway } from "./completion-gateway.js";
 import { completionAdmissionScenarioReceipt } from "./completion-admission-driver-contract.js";
 import {
   CompletionAdmissionDriverNow,
@@ -135,12 +136,20 @@ export async function runAllOriginsCompletionAdmissionScenario(
         origin,
         sourceIdentity: projectCompletionSourceIdentity(expectation.source),
       });
+      const resultAuthorityPort = completionAdmissionDriverVerifierPort(criterion, result, [
+        observation,
+      ]);
+      const policyEngine = PolicyEngine.create();
       const runtime = createDefaultDispatchRuntime({
         completionWriter,
-        completionPolicyEngine: PolicyEngine.create(),
-        completionResultAuthorityPort: completionAdmissionDriverVerifierPort(criterion, result, [
-          observation,
-        ]),
+        completionPolicyEngine: policyEngine,
+        completionResultAuthorityPort: resultAuthorityPort,
+        now: () => CompletionAdmissionDriverNow,
+      });
+      const trustedGateway = createWorkItemCompletionGateway({
+        completionWriter,
+        policyEngine,
+        resultAuthorityPort,
         now: () => CompletionAdmissionDriverNow,
       });
       const completionReport = completionAdmissionDriverReport(item);
@@ -158,7 +167,7 @@ export async function runAllOriginsCompletionAdmissionScenario(
               request: actorRequest,
               completionReport,
             })
-          : await runtime.requestWorkItemCompletion(request, completionReport);
+          : await trustedGateway.requestCompletion(request, completionReport);
       const stored = requiredCompletionAdmissionDriverItem(item.hash);
       sourceReceipts.push({
         source: sourceLabel(expectation.source),

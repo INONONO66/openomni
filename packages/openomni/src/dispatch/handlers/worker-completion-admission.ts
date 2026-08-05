@@ -55,6 +55,8 @@ const PersistedVerifierInput = z
   })
   .strict();
 
+class CompletionReplayRequiresReservation extends Error {}
+
 export const WorkerCriterionFactInput = z
   .object({
     criterionIndex: z.number().int().nonnegative(),
@@ -70,6 +72,7 @@ export type WorkerReadBackEvidenceBinding = Readonly<{
 }>;
 
 export type WorkerCompletionAdmissionInput = Readonly<{
+  beforeAdmissionWrite?: () => void;
   completionWriter: Storage.WorkItemCompletionWriter;
   workItemHash: string;
   result: Execution.Result;
@@ -137,6 +140,7 @@ export async function admitWorkerCompletion(
   const service = createCompletionAdmissionService({
     completionWriter: input.completionWriter,
     authorityResolver,
+    beforeAdmissionWrite: input.beforeAdmissionWrite,
     now: input.now,
   });
   return service.requestCompletion(request, input.completionReport);
@@ -162,6 +166,7 @@ export async function replayWorkerCompletion(
   input: Pick<
     WorkerCompletionAdmissionInput,
     | "completionWriter"
+    | "beforeAdmissionWrite"
     | "workItemHash"
     | "result"
     | "completionEnvelopeDigest"
@@ -209,15 +214,26 @@ export async function replayWorkerCompletion(
   }
   const authorityResolver = createCompletionAuthorityResolver({
     policyEngine: input.policyEngine,
+    resultAuthorityPort: createDurableCompletionResultAuthorityPort(),
     ...(input.stakesResolver === undefined ? {} : { stakesResolver: input.stakesResolver }),
     now: input.now,
   });
   const service = createCompletionAdmissionService({
     completionWriter: input.completionWriter,
     authorityResolver,
+    beforeAdmissionWrite:
+      input.beforeAdmissionWrite ??
+      (() => {
+        throw new CompletionReplayRequiresReservation();
+      }),
     now: input.now,
   });
-  return service.requestCompletion(admission.requestSnapshot, report);
+  try {
+    return await service.requestCompletion(admission.requestSnapshot, report);
+  } catch (error) {
+    if (error instanceof CompletionReplayRequiresReservation) return undefined;
+    throw error;
+  }
 }
 
 function completionAdmissionBlockerDescription(
@@ -495,6 +511,77 @@ function resultAuthorityPort(
       };
     },
   });
+}
+
+export function createDurableCompletionResultAuthorityPort(): CompletionResultAuthorityPort {
+  const verifierRegistry = VerifierRegistry.create();
+  return Object.freeze({
+    validate(candidate: CompletionResultAuthorityCandidate) {
+      const item = WorkItemStore.get(candidate.workItemHash);
+      if (!item) return { ok: false };
+      const observation = candidate.observations.find(({ id }) =>
+        candidate.result.observationIds.includes(id),
+      );
+      const evidenceId = observation?.artifactRefs[0];
+      const evidence = evidenceId ? item.evidence.find(({ id }) => id === evidenceId) : undefined;
+      const verifierInput =
+        evidence === undefined
+          ? undefined
+          : durableVerifierInput(item, candidate.criterion, evidence);
+      if (!observation || !verifierInput) return { ok: false };
+
+      const verification = verifierRegistry.verify({
+        obligationId: candidate.criterion.id,
+        kind: verifierInput.kind,
+        claim: candidate.criterion.statement,
+        recordedInputs: verifierInput.recordedInputs,
+      });
+      if (verification.type !== "verification_result") return { ok: false };
+      return {
+        ok:
+          verification.status === candidate.result.value &&
+          verification.verifierId === candidate.result.verifierRef &&
+          (candidate.result.value === "asserted" ||
+            verification.checkedPredicate === candidate.result.checkedPredicate) &&
+          observation.producer === verification.verifierId,
+      };
+    },
+  });
+}
+
+function durableVerifierInput(
+  item: WorkItem.Info,
+  criterion: WorkItem.Criterion,
+  evidence: WorkItem.Evidence,
+):
+  | Readonly<{
+      kind: VerifierRegistry.ObligationKind;
+      recordedInputs: Record<string, VerifierRegistry.JsonValue>;
+    }>
+  | undefined {
+  if (evidence.readBack?.kind === "citation_match") {
+    return {
+      kind: "archived_quote_match",
+      recordedInputs: {
+        archivedText: evidence.readBack.matchedText ?? "",
+        quotedText: evidence.readBack.quotedText,
+      },
+    };
+  }
+  if (evidence.detail === undefined) return undefined;
+  const persisted = PersistedVerifierInput.safeParse(parseJson(evidence.detail));
+  if (
+    !persisted.success ||
+    persisted.data.workItemHash !== item.hash ||
+    persisted.data.basisRef !== item.completionContract.basisRef ||
+    persisted.data.criterionId !== criterion.id
+  ) {
+    return undefined;
+  }
+  return {
+    kind: persisted.data.verifierKind,
+    recordedInputs: persisted.data.recordedInputs,
+  };
 }
 
 function verificationErrorAuthorityPort(

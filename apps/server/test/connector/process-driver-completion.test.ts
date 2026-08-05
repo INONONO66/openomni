@@ -167,6 +167,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const handlers = createWorkerDispatchHandlers({
       completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
+      now: () => 1,
       readBackRecorder: (workItemHash, readBack) =>
         WorkItemStore.addReadBackEvidence(workItemHash, {
           kind: "citation_match",
@@ -247,6 +248,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const handlers = createWorkerDispatchHandlers({
       completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
+      now: () => 1,
       readBackRecorder: (workItemHash, readBack) => {
         recordedReadBacks.push(readBack);
         return WorkItemStore.addReadBackEvidence(workItemHash, {
@@ -327,6 +329,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const handlers = createWorkerDispatchHandlers({
       completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
+      now: () => 1,
     });
 
     // When

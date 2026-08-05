@@ -442,6 +442,11 @@ describe("WorkItem completion admission service", () => {
       ownerId: "process:two",
       now: 110,
     });
+    const renewal = reserveCompletionRequest({
+      ...base,
+      ownerId: "process:two",
+      now: 120,
+    });
 
     expect(first).toMatchObject({
       state: "reserved",
@@ -454,6 +459,10 @@ describe("WorkItem completion admission service", () => {
     expect(takeover).toMatchObject({
       state: "reserved",
       reservation: { ownerId: "process:two", fence: 2, leaseExpiresAt: 120 },
+    });
+    expect(renewal).toMatchObject({
+      state: "reserved",
+      reservation: { ownerId: "process:two", fence: 3, leaseExpiresAt: 130 },
     });
   });
 
@@ -912,6 +921,11 @@ describe("WorkItem completion admission service", () => {
     const ownerOverrideReceiptRef = "owner-override:receipt:restart";
     const requestWithOverride = WorkItem.CompletionRequest.parse({
       ...request,
+      origin: "resident",
+      sourceIdentity: {
+        source: "resident",
+        identity: { kind: "resident", id: "resident:primary" },
+      },
       ownerOverrideReceiptRef,
     });
     const observedReceiptRefs: Array<string | undefined> = [];
@@ -972,6 +986,9 @@ describe("WorkItem completion admission service", () => {
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("pending");
     expect(stored?.completionFacts.admissions).toHaveLength(2);
     expect(stored?.completionFacts.admissions[1]).toMatchObject({ decision: "block" });
+    expect(stored?.completionFacts.admissions[1]?.requestSnapshot.sourceIdentity).toEqual(
+      requestWithOverride.sourceIdentity,
+    );
     expect(stored?.completionFacts.admissions[1]?.ownerOverrideReceiptRef).toBeUndefined();
     expect(stored?.completionTerminalReceipt).toBeUndefined();
   });

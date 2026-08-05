@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
-import { type Execution, WorkItem } from "@openomni/protocol";
+import { type Execution, PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 import {
   type ConnectorCompletionOptions,
@@ -365,6 +365,179 @@ describe("worker completion admission convergence", () => {
     expect(stored?.completionTerminalReceipt?.requestId).toBe(
       stored?.completionFacts.admissions[0]?.requestId,
     );
+  });
+
+  test("refuses admission when the reservation expires during authority evaluation", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    let clock = 0;
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "expire-completion-lease",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () => {
+        clock = 20_000;
+        return PolicyDecision.allow({
+          policyId: "expire-completion-lease",
+          reasonCodes: [],
+        });
+      },
+    });
+
+    const reflection = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine,
+      now: () => clock,
+    });
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(reflection.completionBlocked).toBe(true);
+    expect(reflection.completionBlocker).toContain("completion reservation lease lost");
+    expect(stored?.completionFacts.admissions).toEqual([]);
+    expect(stored?.completionTerminalReceipt).toBeUndefined();
+    expect(stored?.blockers).toEqual([]);
+  });
+
+  test("re-verifies durable results before stale-head replay admission", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "block-before-durable-replay",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "block-before-durable-replay",
+          reasonCodes: ["hold_for_replay"],
+        }),
+    });
+    const options = {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" } as const,
+      completionPolicyEngine,
+      now: () => NOW,
+    };
+
+    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const blocked = WorkItemStore.get(item.hash);
+    const evidence = blocked?.evidence[0];
+    if (!blocked || !evidence) throw new Error("missing blocked durable verifier evidence");
+    const detail = JSON.parse(evidence.detail) as {
+      recordedInputs: Record<string, unknown>;
+    };
+    const tampered = WorkItem.Info.parse({
+      ...blocked,
+      revision: blocked.revision + 1,
+      evidence: blocked.evidence.map((entry) =>
+        entry.id === evidence.id
+          ? {
+              ...entry,
+              detail: JSON.stringify({
+                ...detail,
+                recordedInputs: { operator: "eq", left: 1, right: 2 },
+              }),
+            }
+          : entry,
+      ),
+      timestamps: { ...blocked.timestamps, updated: NOW + 1 },
+    });
+    expect(completionWriter(blocked.hash, blocked.revision, tampered)).toBe(true);
+
+    const replay = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(replay.completionBlocked).toBe(true);
+    expect(replay.completionBlocker).toContain("durable result authority rejected");
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("re-evaluates durable citation results without repeating read-back", async () => {
+    const criterion = "archived source contains the recorded quote exactly";
+    const item = await startedItem("internal_chat_agent", criterion);
+    const output = JSON.stringify({
+      completionReport: {
+        summary: "Citation result remains verifier-bound during replay.",
+        claims: [{ statement: criterion }],
+      },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
+      readBackRequests: [
+        {
+          claimIndex: 0,
+          criterionIndex: 0,
+          request: {
+            kind: "citation_match",
+            target: "https://example.com/archive",
+            quotedText: "durable citation marker",
+          },
+        },
+      ],
+    });
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "hold-citation-replay",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "hold-citation-replay",
+          reasonCodes: ["hold_citation_replay"],
+        }),
+    });
+    let readBackCalls = 0;
+    const options = {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" } as const,
+      completionPolicyEngine,
+      now: () => NOW,
+      readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+        readBackCalls += 1;
+        if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+        return WorkItemStore.addReadBackEvidence(hash, {
+          kind: "citation_match",
+          target: request.target,
+          quotedText: request.quotedText,
+          matchedText: request.quotedText,
+          passed: true,
+          observedAt: NOW,
+          statusCode: 200,
+        });
+      },
+    };
+
+    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const blocked = WorkItemStore.get(item.hash);
+    if (!blocked) throw new Error("missing blocked citation WorkItem");
+    const advanced = WorkItem.Info.parse({
+      ...blocked,
+      name: "citation head advanced",
+      revision: blocked.revision + 1,
+      timestamps: { ...blocked.timestamps, updated: NOW + 1 },
+    });
+    expect(completionWriter(blocked.hash, blocked.revision, advanced)).toBe(true);
+    const replay = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(replay.completionBlocked).toBe(true);
+    expect(readBackCalls).toBe(1);
+    expect(stored?.completionFacts.admissions).toHaveLength(2);
+    expect(stored?.completionFacts.admissions[1]?.decision).toBe("block");
+    expect(stored?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("rejects an unrelated claimant statement for an indexed criterion", async () => {
