@@ -40,6 +40,28 @@ describe("ReadBackExecutor", () => {
     });
   });
 
+  test("bounds unresolved response headers by the read-back timeout", async () => {
+    const result = await loadReadBackUrl(
+      "http://127.0.0.1/document",
+      "GET",
+      5,
+      1_024,
+      true,
+      undefined,
+      async () =>
+        new Promise<never>(() => {
+          // Intentionally never settles: active transport cannot extend the wall-clock deadline.
+        }),
+    );
+
+    expect(result).toEqual({
+      statusCode: undefined,
+      body: "",
+      bodyDigest: undefined,
+      complete: false,
+    });
+  });
+
   test("returns a read-back check without persisting WorkItem evidence", async () => {
     Storage.initialize({ dbPath: ":memory:" });
     const item = await WorkItemStore.create({

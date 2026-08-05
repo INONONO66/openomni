@@ -18,6 +18,7 @@ export async function loadReadBackUrl(
   maxBodyBytes: number,
   allowPrivateNetwork: boolean,
   validateTarget: typeof validateNetworkTarget = validateNetworkTarget,
+  requestResponse: typeof requestReadBackResponse = requestReadBackResponse,
 ): Promise<ReadBackHttpResult> {
   try {
     const deadlineAt = Date.now() + timeoutMs;
@@ -28,7 +29,10 @@ export async function loadReadBackUrl(
     if (validated === undefined) return failedReadBackHttpResult();
     const remainingMs = deadlineAt - Date.now();
     if (remainingMs <= 0) return failedReadBackHttpResult();
-    const response = await requestReadBackResponse(validated, method, remainingMs);
+    const response = await settleBeforeDeadline(
+      requestResponse(validated, method, deadlineAt),
+      deadlineAt,
+    );
     if (response === undefined) return failedReadBackHttpResult();
     if (method === "HEAD") {
       response.resume();
@@ -124,35 +128,37 @@ async function readBody(
 function requestReadBackResponse(
   target: Awaited<ReturnType<typeof validateNetworkTarget>>,
   method: ReadBackHttpMethod,
-  timeoutMs: number,
+  deadlineAt: number,
 ): Promise<IncomingMessage | undefined> {
   return new Promise((resolve) => {
     let settled = false;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const timeoutMs = Math.max(0, deadlineAt - Date.now());
     const options = createRequestOptions(target, method, timeoutMs);
+    const finish = (response: IncomingMessage | undefined): void => {
+      if (settled) return;
+      settled = true;
+      if (deadline !== undefined) clearTimeout(deadline);
+      resolve(response);
+    };
     const request =
       target.url.protocol === "https:"
         ? httpsRequest({ ...options, servername: target.serverName }, (response) => {
-            if (settled) return;
-            settled = true;
-            resolve(response);
+            finish(response);
           })
         : httpRequest(options, (response) => {
-            if (settled) return;
-            settled = true;
-            resolve(response);
+            finish(response);
           });
 
-    request.once("error", () => {
-      if (settled) return;
-      settled = true;
-      resolve(undefined);
-    });
+    request.once("error", () => finish(undefined));
     request.setTimeout(timeoutMs, () => {
       request.destroy();
-      if (settled) return;
-      settled = true;
-      resolve(undefined);
+      finish(undefined);
     });
+    deadline = setTimeout(() => {
+      request.destroy();
+      finish(undefined);
+    }, timeoutMs);
     request.end();
   });
 }
