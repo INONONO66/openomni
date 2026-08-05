@@ -786,7 +786,9 @@ describe("worker completion admission convergence", () => {
     const stored = WorkItemStore.get(item.hash);
 
     expect(replay.completionBlocked).toBe(true);
-    expect(replay.completionBlocker).toContain("completion report evidence is not admitted");
+    expect(replay.completionBlocker).toContain(
+      "completion report references evidence from a different attempt",
+    );
     expect(stored?.completionTerminalReceipt).toBeUndefined();
   });
 

@@ -601,6 +601,17 @@ function verifyCompletionReport(
   if (missing.length > 0) {
     throw new Error(`completion report references missing evidence: ${missing.join(", ")}`);
   }
+  const outOfScope = report.claims.flatMap((claim) =>
+    claim.evidenceIds.filter((evidenceId) => {
+      const evidence = evidenceById.get(evidenceId);
+      return evidence?.attempt !== item.attempt || evidence.basisRef !== admission.basisRef;
+    }),
+  );
+  if (outOfScope.length > 0) {
+    throw new Error(
+      `completion report references evidence from a different attempt: ${outOfScope.join(", ")}`,
+    );
+  }
   const failed = report.claims.flatMap((claim) =>
     claim.evidenceIds.filter((evidenceId) => {
       const evidence = evidenceById.get(evidenceId);

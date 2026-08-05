@@ -11,6 +11,10 @@ export namespace ReadBackExecutor {
   export type Options = {
     allowPrivateNetwork?: boolean;
   };
+  export type RecordOptions = Options & {
+    expectedAttempt?: number;
+    expectedBasisRef?: string;
+  };
 
   export async function execute(
     input: ReadBackRequestInput,
@@ -30,9 +34,17 @@ export namespace ReadBackExecutor {
   export async function record(
     workItemHash: string,
     input: ReadBackRequestInput,
-    options: Options = {},
+    options: RecordOptions = {},
   ): Promise<WorkItem.Info | undefined> {
     const check = await execute(input, options);
+    const current = WorkItemStore.get(workItemHash);
+    if (
+      (options.expectedAttempt !== undefined && current?.attempt !== options.expectedAttempt) ||
+      (options.expectedBasisRef !== undefined &&
+        current?.completionContract.basisRef !== options.expectedBasisRef)
+    ) {
+      throw new Error("read-back WorkItem attempt changed before evidence recording");
+    }
     return WorkItemStore.addReadBackEvidence(workItemHash, check);
   }
 }

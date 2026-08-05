@@ -43,6 +43,8 @@ export function completionAdmissionDriverWorkItem(
         kind: "verification",
         description: "Deterministic completion report evidence",
         passed: true,
+        attempt: 1,
+        basisRef: `basis:${hash}:v1`,
         createdAt: CompletionAdmissionDriverNow,
       },
     ],

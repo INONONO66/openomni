@@ -339,7 +339,11 @@ async function prepareCompletionReport(
     const updated = await recordReadBack(
       workItemHash,
       applySharedDeadline(readBack.request, remainingMs),
-      options.readBack,
+      {
+        ...options.readBack,
+        expectedAttempt: item.attempt,
+        expectedBasisRef: item.completionContract.basisRef,
+      },
     );
     if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
     const evidenceId = updated?.evidence.at(-1)?.id;
