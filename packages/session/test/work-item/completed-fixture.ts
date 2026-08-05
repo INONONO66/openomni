@@ -1,6 +1,26 @@
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage } from "../../src";
 
+export function completedFixtureResults(
+  item: WorkItem.Info,
+  source: string,
+): WorkItem.CriterionResult[] {
+  return item.completionFacts.criteria
+    .filter(({ required }) => required)
+    .map((criterion, index) =>
+      WorkItem.CriterionResult.parse({
+        id: `result:${item.hash}:${source}:${index}`,
+        criterionId: criterion.id,
+        observationIds: [],
+        value: "asserted",
+        assumptions: [],
+        residualRisks: [],
+        basisRef: item.completionContract.basisRef,
+        createdAt: item.timestamps.updated + 1,
+      }),
+    );
+}
+
 export function persistCompletedWorkItemFixture(input: {
   readonly hash: string;
   readonly report: WorkItem.CompletionReport;
@@ -10,6 +30,7 @@ export function persistCompletedWorkItemFixture(input: {
   const workItemAdapter = Storage.get().workItem;
   const current = workItemAdapter?.get(input.hash);
   if (!workItemAdapter || !current) return undefined;
+  const results = completedFixtureResults(current, "session-fixture");
   const completionReport = WorkItem.canonicalCompletionReport(input.report);
   const completionReportRef = WorkItem.completionReportReference(completionReport);
   const requestId = `completion-request:${input.hash}:${current.revision}:session-fixture`;
@@ -27,7 +48,7 @@ export function persistCompletedWorkItemFixture(input: {
       expectedHead: current.revision,
       claims: [],
       observations: [],
-      results: [],
+      results,
       invalidations: [],
       verificationErrors: [],
       effects: [],
@@ -35,7 +56,7 @@ export function persistCompletedWorkItemFixture(input: {
     origin: "recovery",
     contractRevision: current.completionContract.revision,
     basisRef: current.completionContract.basisRef,
-    effectiveResultIds: [],
+    effectiveResultIds: results.map(({ id }) => id),
     unresolvedCriterionIds: [],
     decision: "admit",
     reasonCodes: ["session_completed_fixture"],
@@ -53,6 +74,7 @@ export function persistCompletedWorkItemFixture(input: {
     completionFacts: {
       ...current.completionFacts,
       revision: current.completionFacts.revision + 1,
+      results: [...current.completionFacts.results, ...results],
       admissions: [...current.completionFacts.admissions, admission],
     },
     timestamps: { ...current.timestamps, updated: admission.createdAt },

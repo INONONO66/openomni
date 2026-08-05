@@ -3,6 +3,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
+import { completedFixtureResults } from "../../test/work-item/completed-fixture.js";
 import { WorkItemStore } from "./index.js";
 
 const baseInput = {
@@ -31,6 +32,7 @@ async function createItem(
 }
 
 function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
+  const results = completedFixtureResults(item, "oracle-storage");
   const completionReport = WorkItem.canonicalCompletionReport({
     summary: "Oracle storage fixture completed.",
     claims: [
@@ -58,7 +60,7 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
       expectedHead: item.revision,
       claims: [],
       observations: [],
-      results: [],
+      results,
       invalidations: [],
       verificationErrors: [],
       effects: [],
@@ -66,7 +68,7 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
     origin: "recovery",
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
-    effectiveResultIds: [],
+    effectiveResultIds: results.map(({ id }) => id),
     unresolvedCriterionIds: [],
     decision: "admit",
     reasonCodes: ["oracle_storage_fixture"],
@@ -89,6 +91,7 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
     completionFacts: {
       ...item.completionFacts,
       revision: item.completionFacts.revision + 1,
+      results: [...item.completionFacts.results, ...results],
       admissions: [admission],
     },
     completionReport,
@@ -110,6 +113,7 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
     completionFacts: {
       ...item.completionFacts,
       revision: item.completionFacts.revision + 1,
+      results: [...item.completionFacts.results, ...results],
       admissions: [admission],
     },
   });

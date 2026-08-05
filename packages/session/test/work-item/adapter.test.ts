@@ -7,6 +7,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Storage } from "../../src/storage/index";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { persistMutation } from "../../src/work-item/mutation";
+import { completedFixtureResults } from "./completed-fixture.js";
 
 function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
   const item: WorkItem.Info = {
@@ -43,6 +44,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     })),
   };
   if (item.timestamps.completed === undefined) return item;
+  const results = completedFixtureResults(item, "adapter-fixture");
 
   const completionReport = WorkItem.canonicalCompletionReport({
     summary: "Storage adapter fixture completed.",
@@ -71,7 +73,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
       expectedHead: item.revision,
       claims: [],
       observations: [],
-      results: [],
+      results,
       invalidations: [],
       verificationErrors: [],
       effects: [],
@@ -79,7 +81,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     origin: "recovery",
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
-    effectiveResultIds: [],
+    effectiveResultIds: results.map(({ id }) => id),
     unresolvedCriterionIds: [],
     decision: "admit",
     reasonCodes: ["adapter_fixture"],
@@ -97,6 +99,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     completionFacts: {
       ...item.completionFacts,
       revision: item.completionFacts.revision + 1,
+      results: [...item.completionFacts.results, ...results],
       admissions: [admission],
     },
     completionReport,
