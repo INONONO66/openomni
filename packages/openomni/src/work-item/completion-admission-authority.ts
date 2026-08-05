@@ -480,16 +480,9 @@ async function assertDurableResultAuthority(
     ...request.invalidations.map(({ resultId }) => resultId),
   ]);
   for (const result of item.completionFacts.results) {
-    if (
-      result.basisRef !== request.basisRef ||
-      result.value === "asserted" ||
-      invalidatedResultIds.has(result.id)
-    ) {
+    if (result.basisRef !== request.basisRef || invalidatedResultIds.has(result.id)) {
       continue;
     }
-    const criterion = item.completionFacts.criteria.find(
-      (candidate) => candidate.id === result.criterionId,
-    );
     const observations = result.observationIds.flatMap((observationId) => {
       const observation = item.completionFacts.observations.find(
         (candidate) => candidate.id === observationId,
@@ -497,10 +490,24 @@ async function assertDurableResultAuthority(
       return observation ? [observation] : [];
     });
     if (
+      observations.length !== result.observationIds.length ||
+      observations.some(
+        (observation) =>
+          observation.basisRef !== result.basisRef || observation.subjectRef !== item.hash,
+      )
+    ) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `durable result ${result.id} has no authoritative observation basis`,
+      );
+    }
+    if (result.value === "asserted") continue;
+    const criterion = item.completionFacts.criteria.find(
+      (candidate) => candidate.id === result.criterionId,
+    );
+    if (
       criterion === undefined ||
       result.observationIds.length === 0 ||
-      observations.length !== result.observationIds.length ||
-      observations.some(({ basisRef }) => basisRef !== result.basisRef) ||
       result.verifierRef === undefined
     ) {
       throw new CompletionAdmissionError(

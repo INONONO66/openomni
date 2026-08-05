@@ -1180,6 +1180,36 @@ describe("completion admission authority resolver", () => {
     ).rejects.toMatchObject({ code: "invalid_verifier" });
   });
 
+  test("rejects a durable asserted result that references an old-basis observation", async () => {
+    const currentItem = item({
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        revision: 2,
+        criteria: [criterion],
+        observations: [{ ...observation(), id: "observation:durable-old", basisRef: "basis:old" }],
+        results: [
+          {
+            ...assertedResult(),
+            observationIds: ["observation:durable-old"],
+            basisRef: "basis:v1",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      resolveAdmission(
+        {
+          policyEngine: createPolicyEngine({ allowAsserted: true }),
+          stakesResolver: { resolve: () => stakesInjection({}, false) },
+          now: () => 10,
+        },
+        currentItem,
+        request({ results: [] }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_verifier" });
+  });
+
   test("rejects duplicate facts with a typed error", async () => {
     const duplicate = { ...assertedResult(), createdAt: 3 };
     const candidate = request({ results: [assertedResult(), duplicate] });
