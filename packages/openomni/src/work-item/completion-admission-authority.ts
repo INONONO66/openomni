@@ -161,7 +161,7 @@ export function createCompletionAuthorityResolver(
       );
 
       const foldInput = completionInput(item, request, now());
-      const preAdmission = foldCompletion(foldInput);
+      const preAdmission = foldWithAuthorityErrors(foldInput);
       const candidate = completionCandidate(item, request, preAdmission);
       const stakes = await resolveStakes(
         dependencies.stakesResolver,
@@ -191,7 +191,7 @@ export function createCompletionAuthorityResolver(
         request,
       );
 
-      return foldCompletion({
+      return foldWithAuthorityErrors({
         ...foldInput,
         policy: completionPolicy(policyDecision),
         ...(stakes ? { stakes } : {}),
@@ -199,6 +199,17 @@ export function createCompletionAuthorityResolver(
       });
     },
   });
+}
+
+function foldWithAuthorityErrors(input: CompletionEvaluationInput): WorkItem.CompletionAdmission {
+  try {
+    return foldCompletion(input);
+  } catch (error) {
+    if (error instanceof Error && error.name === "CompletionFoldError") {
+      throw new CompletionAdmissionError("unsupported_fact", error.message);
+    }
+    throw error;
+  }
 }
 
 function assertCurrentRequest(item: WorkItem.Info, request: WorkItem.CompletionRequest): void {

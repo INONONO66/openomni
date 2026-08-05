@@ -1246,6 +1246,32 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
+  test("preserves deterministic fold errors as unsupported completion facts", async () => {
+    configure();
+    const { item, request, report } = await fixture("worker");
+    const observation = request.observations[0];
+    if (!observation) throw new Error("missing proposed observation");
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+
+    const code = await errorCode(
+      gateway.requestCompletion(
+        WorkItem.CompletionRequest.parse({
+          ...request,
+          observations: [{ ...observation, ancestryRefs: ["observation:missing"] }],
+        }),
+        report,
+      ),
+    );
+
+    expect(code).toBe("unsupported_fact");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
   test.each([
     [
       "invalidation",
