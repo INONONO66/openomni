@@ -349,10 +349,20 @@ describe("SqliteStorageAdapter workItem", () => {
   });
 
   test("decodes a completed historical row without a report through get and list", () => {
+    const occupiedArchiveEvidenceId =
+      "evidence:wi_historical_without_report:legacy-completion-archive";
     const row = {
       ...historicalRow,
       hash: "wi_historical_without_report",
-      evidence: [],
+      evidence: [
+        {
+          id: occupiedArchiveEvidenceId,
+          kind: "custom" as const,
+          description: "pre-existing legacy evidence",
+          passed: false,
+          createdAt: historicalRow.timestamps.created,
+        },
+      ],
       completionReport: undefined,
     };
     adapter.close();
@@ -376,8 +386,11 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(reopenedGet).toEqual(firstGet);
     expect(reopenedGet ? WorkItem.deriveStatus(reopenedGet) : undefined).toBe("completed");
     expect(reopenedGet?.completionReport?.claims[0]?.evidenceIds).toEqual([
-      `evidence:${row.hash}:legacy-completion-archive`,
+      `${occupiedArchiveEvidenceId}:1`,
     ]);
+    expect(reopenedGet?.completionFacts.results[0]?.assumptions).toContain(
+      "archive evidence was generated while decoding historical completion",
+    );
   });
 
   test.each([

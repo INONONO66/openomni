@@ -35,6 +35,8 @@ const LegacyCompletionReport = z
   })
   .passthrough();
 type LegacyReport = z.infer<typeof LegacyCompletionReport>["claims"][number];
+const LegacyArchiveEvidenceDetail =
+  "generated while decoding a completed legacy row without a completion report";
 
 const LegacyWorkItem = z
   .object({
@@ -68,7 +70,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   const completedAt = parsed.data.timestamps.completed;
   const needsArchiveReport =
     completedAt !== undefined && parsed.data.completionReport === undefined;
-  const archiveEvidenceId = `evidence:${parsed.data.hash}:legacy-completion-archive`;
+  const archiveEvidenceId = legacyArchiveEvidenceId(parsed.data.hash, parsed.data.evidence);
   const completionReports = needsArchiveReport
     ? acceptanceCriteria.map((statement) => ({
         statement,
@@ -94,7 +96,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
           kind: "custom" as const,
           description: "Historical completion archive marker",
           passed: true,
-          detail: "generated while decoding a completed legacy row without a completion report",
+          detail: LegacyArchiveEvidenceDetail,
           createdAt: completedAt,
         },
       ]
@@ -238,6 +240,21 @@ function legacyReportStatement(statement: string, index: number): string {
     : `Legacy archived claim ${index + 1}: ${JSON.stringify(statement)}`;
 }
 
+function legacyArchiveEvidenceId(
+  hash: string,
+  evidence: readonly z.infer<typeof LegacyEvidence>[],
+): string {
+  const prefix = `evidence:${hash}:legacy-completion-archive`;
+  const evidenceIds = new Set(evidence.map(({ id }) => id));
+  let candidate = prefix;
+  let suffix = 0;
+  while (evidenceIds.has(candidate)) {
+    suffix += 1;
+    candidate = `${prefix}:${suffix}`;
+  }
+  return candidate;
+}
+
 function isLegacyCompletionRow(input: unknown): input is object {
   return (
     typeof input === "object" &&
@@ -353,7 +370,11 @@ function legacyResults(
       id: `result:${hash}:${index}:${stableToken(claim.id)}`,
       criterionId: claim.criterionId,
       observationIds: claim.observationIds,
-      assumptions: ["legacy passed evidence was claimant-supplied"],
+      assumptions: [
+        linked.every(({ detail }) => detail === LegacyArchiveEvidenceDetail)
+          ? "archive evidence was generated while decoding historical completion"
+          : "legacy passed evidence was claimant-supplied",
+      ],
       basisRef,
       createdAt: Math.max(...linked.map((entry) => entry.createdAt)),
     };
@@ -361,7 +382,11 @@ function legacyResults(
       {
         ...common,
         value: "asserted" as const,
-        residualRisks: ["legacy evidence was not re-verified"],
+        residualRisks: [
+          linked.every(({ detail }) => detail === LegacyArchiveEvidenceDetail)
+            ? "historical completion lacked a persisted report"
+            : "legacy evidence was not re-verified",
+        ],
       },
     ];
   });

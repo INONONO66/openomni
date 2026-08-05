@@ -392,14 +392,23 @@ describe("WorkItem completion admission contracts", () => {
   });
 
   test("archives a completed legacy WorkItem without a persisted report", () => {
+    const occupiedArchiveEvidenceId = `evidence:${baseItem.hash}:legacy-completion-archive`;
     const legacyItem = {
       ...baseItem,
       timestamps: { ...baseItem.timestamps, completed: 8 },
-      evidence: [],
+      evidence: [
+        {
+          id: occupiedArchiveEvidenceId,
+          kind: "custom",
+          description: "pre-existing legacy evidence",
+          passed: false,
+          createdAt: 7,
+        },
+      ],
     };
 
     const item = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(legacyItem));
-    const archiveEvidenceId = `evidence:${legacyItem.hash}:legacy-completion-archive`;
+    const archiveEvidenceId = `${occupiedArchiveEvidenceId}:1`;
     const admission = item.completionFacts.admissions[0];
 
     expect(item.evidence).toContainEqual(
@@ -425,6 +434,9 @@ describe("WorkItem completion admission contracts", () => {
       completionReportRef: admission?.completionReportRef,
       recordedHead: 2,
     });
+    expect(item.completionFacts.results[0]?.assumptions).toContain(
+      "archive evidence was generated while decoding historical completion",
+    );
   });
 
   test.each([
