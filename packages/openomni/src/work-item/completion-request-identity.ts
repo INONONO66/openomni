@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { WorkItem } from "@openomni/protocol";
 
 export function canonicalCompletionRequest(
@@ -12,6 +13,21 @@ export function canonicalCompletionRequest(
     invalidations: sortFacts(request.invalidations),
     verificationErrors: sortFacts(request.verificationErrors),
     effects: sortFacts(request.effects),
+  });
+}
+
+export function completionRequestRoot(input: WorkItem.CompletionRequest): string {
+  const { expectedHead: _expectedHead, ...request } = canonicalCompletionRequest(input);
+  return digest(request);
+}
+
+export function completionRequestEnvelopeDigest(
+  input: WorkItem.CompletionRequest,
+  report: WorkItem.CompletionReport,
+): string {
+  return digest({
+    requestRoot: completionRequestRoot(input),
+    completionReportRef: WorkItem.completionReportReference(report),
   });
 }
 
@@ -34,6 +50,10 @@ export function completionReportsMatch(
   right: WorkItem.CompletionReport,
 ): boolean {
   return completionReportReference(left) === completionReportReference(right);
+}
+
+function digest(input: unknown): string {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
 function canonicalClaim(claim: WorkItem.Claim): WorkItem.Claim {

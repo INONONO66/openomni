@@ -118,9 +118,10 @@ function blockingAuthority() {
 function guardedService(
   authorityResolver: unknown,
   writer: Storage.WorkItemCompletionWriter = completionWriter,
+  reservation?: Readonly<{ ownerId: string; leaseDurationMs: number }>,
 ) {
   const service = Reflect.apply(createCompletionAdmissionService, undefined, [
-    { completionWriter: writer, authorityResolver, now: () => NOW },
+    { completionWriter: writer, authorityResolver, now: () => NOW, reservation },
   ]);
   expect(typeof service, "completion admission factory must return a service").toBe("object");
   if (typeof service !== "object" || service === null) return undefined;
@@ -618,6 +619,43 @@ describe("WorkItem completion admission service", () => {
         "completion request conflicts with durable facts",
       );
     }
+  });
+
+  test("binds pre-admission reservations to the authenticated request envelope", async () => {
+    configure();
+    const { item, request, report } = await fixture("resident");
+    const fallback = authority().resolver;
+    let failAuthority = true;
+    const service = guardedService(
+      {
+        resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+          if (failAuthority) {
+            failAuthority = false;
+            throw new Error("authority failed before admission");
+          }
+          return fallback.resolve(itemInput, requestInput);
+        },
+      },
+      completionWriter,
+      { ownerId: "process:one", leaseDurationMs: 10_000 },
+    );
+    if (!service) return;
+
+    await expect(service.requestCompletion(request, report)).rejects.toThrow(
+      "authority failed before admission",
+    );
+    const changedSource = WorkItem.CompletionRequest.parse({
+      ...request,
+      sourceIdentity: {
+        source: "resident",
+        identity: { kind: "resident", id: "resident:replacement" },
+      },
+    });
+
+    expect(await errorCode(service.requestCompletion(changedSource, report))).toBe(
+      "request_conflict",
+    );
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
   });
 
   test("takes over an expired nonterminal admission reservation after head drift", async () => {

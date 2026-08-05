@@ -5,9 +5,11 @@ import {
   type CompletionAuthorityResolver,
 } from "./completion-admission-authority.js";
 import {
+  canonicalCompletionRequest,
   completionReportReference,
   completionReportsMatch,
-  canonicalCompletionRequest,
+  completionRequestEnvelopeDigest,
+  completionRequestRoot,
   completionRequestsMatch,
 } from "./completion-request-identity.js";
 
@@ -366,8 +368,9 @@ function reserveCompletionLease(
   reservation: CompletionReservationOptions,
   options: CompletionAdmissionServiceOptions,
 ): () => void {
-  const requestRoot = reservation.requestRoot ?? request.id;
-  const envelopeDigest = reservation.envelopeDigest ?? completionReportReference(completionReport);
+  const requestRoot = reservation.requestRoot ?? completionRequestRoot(request);
+  const envelopeDigest =
+    reservation.envelopeDigest ?? completionRequestEnvelopeDigest(request, completionReport);
   const acquired = reserveCompletionRequest({
     completionWriter: options.completionWriter,
     workItemHash: item.hash,
@@ -439,7 +442,13 @@ async function resumeCompletionAtHead(
   const assertReservation =
     reservation === undefined
       ? undefined
-      : reserveCompletionLease(item, request, completionReport, reservation, options);
+      : reserveCompletionLease(
+          item,
+          admission.requestSnapshot,
+          completionReport,
+          reservation,
+          options,
+        );
   assertReservation?.();
   if (item.revision === admission.recordedHead) {
     if (!isAdmitted(admission)) return item;
