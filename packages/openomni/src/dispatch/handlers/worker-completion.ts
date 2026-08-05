@@ -4,6 +4,7 @@ import { type Storage, WorkItemStore } from "@openomni/session";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
+import { canonicalJson as canonicalEvidenceJson } from "../../evidence/verifier-conformance-canonical.js";
 import type { CompletionStakesResolver } from "../../work-item/completion-admission-authority.js";
 import {
   assertCompletionReservationLease,
@@ -304,18 +305,7 @@ export async function reflectCoordinatorResult(
 }
 
 function digestCompletionEnvelope(envelope: CompletionEnvelope): string {
-  return createHash("sha256").update(canonicalJson(envelope)).digest("hex");
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-  return `{${entries
-    .map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`)
-    .join(",")}}`;
+  return createHash("sha256").update(canonicalEvidenceJson(envelope)).digest("hex");
 }
 
 async function completionOutcomeReflection(
@@ -406,10 +396,15 @@ async function prepareCompletionReport(
     }
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
-    const check = await executeReadBack(
-      workItemHash,
-      applySharedDeadline(readBack.request, remainingMs),
-      options.readBack,
+    const check = await settleReadBackBeforeDeadline(
+      Promise.resolve(
+        executeReadBack(
+          workItemHash,
+          applySharedDeadline(readBack.request, remainingMs),
+          options.readBack,
+        ),
+      ),
+      remainingMs,
     );
     assertLease();
     const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {
@@ -497,6 +492,28 @@ function resolveReadBackEnvelopeTimeoutMs(options: WorkerCompletionOptions): num
     return MAX_READ_BACK_TIMEOUT_MS;
   }
   return Math.min(Math.ceil(configured), MAX_READ_BACK_TIMEOUT_MS);
+}
+
+function settleReadBackBeforeDeadline<T>(operation: Promise<T>, remainingMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(
+      () => finish(() => reject(new Error("read-back envelope deadline exceeded"))),
+      remainingMs,
+    );
+
+    function finish(settle: () => void): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      settle();
+    }
+
+    operation.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
 }
 
 function applySharedDeadline(request: ReadBackRequest, remainingMs: number): ReadBackRequest {

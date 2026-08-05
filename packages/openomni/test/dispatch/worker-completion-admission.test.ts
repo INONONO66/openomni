@@ -198,6 +198,28 @@ describe("worker completion admission convergence", () => {
     );
   });
 
+  test("rejects non-finite completion envelope numbers before reservation", async () => {
+    const item = await startedItem();
+    const envelope = await evidenceBackedEnvelope(item.hash);
+    const nonFiniteEnvelope = envelope.replace("{", '{"deliverable":1e400,');
+
+    const reflection = await reflectCoordinatorResultWithPolicy(
+      item.hash,
+      succeeded(nonFiniteEnvelope),
+      {
+        completionWriter,
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+        now: () => NOW,
+      },
+    );
+
+    expect(reflection.completionBlocked).toBe(true);
+    expect(reflection.completionBlocker).toContain("expected bounded plain JSON data");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.hash)?.completionFacts.requestReservations).toEqual([]);
+  });
+
   test("admits one real internal worker result and links its terminal receipt", async () => {
     const item = await startedItem("internal_chat_agent");
 

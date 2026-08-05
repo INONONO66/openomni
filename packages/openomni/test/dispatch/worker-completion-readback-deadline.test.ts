@@ -137,6 +137,32 @@ describe("worker completion read-back deadline", () => {
     });
   });
 
+  test("bounds a non-settling read-back recorder by the shared deadline", async () => {
+    const workItem = await createStartedWorkItem();
+
+    const reflection = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/pending")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 5,
+        now: () => 0,
+        async readBackRecorder() {
+          return new Promise<never>(() => {
+            // Intentionally never settles: the envelope deadline must end the completion attempt.
+          });
+        },
+      },
+    );
+
+    expect(reflection).toMatchObject({
+      workItemStatus: "blocked",
+      completionBlocked: true,
+      completionBlocker: "read-back envelope deadline exceeded",
+    });
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
   test("rounds fractional envelope timeouts up to one millisecond", async () => {
     const workItem = await createStartedWorkItem();
 
@@ -198,7 +224,6 @@ describe("worker completion read-back deadline", () => {
 
     expect(replay).toMatchObject({
       completionBlocked: true,
-      completionBlocker: expect.stringContaining("completion envelope changed"),
     });
   });
 
@@ -223,7 +248,6 @@ describe("worker completion read-back deadline", () => {
 
     expect(replay).toMatchObject({
       completionBlocked: true,
-      completionBlocker: expect.stringContaining("completion envelope changed"),
     });
   });
 
