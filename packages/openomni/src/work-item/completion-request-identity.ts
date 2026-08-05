@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { WorkItem } from "@openomni/protocol";
 
 export function canonicalCompletionRequest(
@@ -27,8 +26,7 @@ export function completionRequestsMatch(
 }
 
 export function completionReportReference(input: WorkItem.CompletionReport): string {
-  const report = WorkItem.CompletionReport.parse(input);
-  return `sha256:${createHash("sha256").update(JSON.stringify(report)).digest("hex")}`;
+  return WorkItem.completionReportReference(input);
 }
 
 export function completionReportsMatch(

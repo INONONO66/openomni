@@ -402,6 +402,37 @@ async function validateDeepRelativeImports(): Promise<string[]> {
   return violations;
 }
 
+async function validateCompletionWriterBoundary(): Promise<string[]> {
+  const violations: string[] = [];
+  const allowedFile = "packages/openomni/src/work-item/completion-admission-boundary.ts";
+  const importPath = "@openomni/session/work-item-completion-writer";
+  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (
+      filePath.includes("/node_modules/") ||
+      filePath.includes("/dist/") ||
+      isTestFile(filePath) ||
+      filePath.startsWith("script/")
+    ) {
+      continue;
+    }
+    const source = await Bun.file(filePath).text();
+    if (source.includes(importPath) && filePath !== allowedFile) {
+      violations.push(
+        `VIOLATION: ${filePath} imports the WorkItem completion writer capability — only ${allowedFile} may own terminal admission writes`,
+      );
+    }
+  }
+  return violations;
+}
+
 // See docs/golden-principles.local.md for the full list.
 
 // Allowed `as any` locations:
@@ -576,6 +607,7 @@ async function main(): Promise<void> {
   const sourceImportViolations = await validateSourceImportDirection();
   const deepImportViolations = await validateDeepImports();
   const deepRelativeImportViolations = await validateDeepRelativeImports();
+  const completionWriterViolations = await validateCompletionWriterBoundary();
   const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
   const violations = [
@@ -583,6 +615,7 @@ async function main(): Promise<void> {
     ...sourceImportViolations,
     ...deepImportViolations,
     ...deepRelativeImportViolations,
+    ...completionWriterViolations,
     ...goldenViolations,
   ];
 

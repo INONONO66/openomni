@@ -384,6 +384,19 @@ describe("WorkItem completion admission contracts", () => {
   });
 
   test("enforces terminal receipt linkage to its completion head and admission", () => {
+    const completionReport = {
+      summary: "Completed through terminal linkage.",
+      claims: [
+        {
+          statement: "publish the artifact",
+          evidenceIds: ["evidence:terminal"],
+        },
+      ],
+      caveats: [],
+      followUps: [],
+    };
+    const completionReportRef =
+      "sha256:5385886237aaad18a0e18c9ef931a7cddc9d1d06a4fbe4203df6fcf4839efa05";
     const completionContract = {
       version: 1 as const,
       revision: "contract:v1",
@@ -406,6 +419,8 @@ describe("WorkItem completion admission contracts", () => {
       reasonCodes: [],
       residualRisks: [],
       policyRef: "policy:terminal",
+      completionReportSnapshot: completionReport,
+      completionReportRef,
       expectedHead: 0,
       recordedHead: 1,
       createdAt: 7,
@@ -430,6 +445,7 @@ describe("WorkItem completion admission contracts", () => {
       admissionId: admission.id,
       contractRevision: completionContract.revision,
       basisRef: completionContract.basisRef,
+      completionReportRef,
       recordedHead: 2,
     };
     const validInput = {
@@ -438,6 +454,7 @@ describe("WorkItem completion admission contracts", () => {
       timestamps: { ...baseItem.timestamps, completed: 8 },
       completionContract,
       completionFacts,
+      completionReport,
       completionTerminalReceipt,
     };
     const invalidInputs = [
@@ -498,6 +515,24 @@ describe("WorkItem completion admission contracts", () => {
           admissions: [{ ...admission, expectedHead: 1, recordedHead: 2 }],
         },
       },
+      {
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          admissions: [
+            {
+              ...admission,
+              completionReportRef:
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            },
+          ],
+        },
+        completionTerminalReceipt: {
+          ...completionTerminalReceipt,
+          completionReportRef:
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        },
+      },
     ];
 
     expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
@@ -505,6 +540,7 @@ describe("WorkItem completion admission contracts", () => {
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);
     expect(invalidInputs.map((input) => WorkItem.Info.safeParse(input).success)).toEqual([
+      false,
       false,
       false,
       false,

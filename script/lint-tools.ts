@@ -364,6 +364,7 @@ interface ZodObjectLike {
   readonly shape?: Record<string, unknown>;
   readonly options?: readonly unknown[];
   readonly safeParse?: unknown;
+  readonly _def?: Readonly<Record<string, unknown>>;
 }
 
 function isZodSchema(value: unknown): value is ZodObjectLike {
@@ -374,9 +375,22 @@ function isZodSchema(value: unknown): value is ZodObjectLike {
   );
 }
 
-function shapeKeys(schema: ZodObjectLike): string[] | undefined {
+function shapeKeys(schema: ZodObjectLike, seen: Set<unknown> = new Set()): string[] | undefined {
+  if (seen.has(schema)) return undefined;
+  seen.add(schema);
   if (schema.shape && typeof schema.shape === "object") {
     return Object.keys(schema.shape).sort((a, b) => a.localeCompare(b));
+  }
+  for (const candidate of [
+    schema._def?.schema,
+    schema._def?.innerType,
+    schema._def?.type,
+    schema._def?.out,
+  ]) {
+    if (isZodSchema(candidate)) {
+      const keys = shapeKeys(candidate, seen);
+      if (keys) return keys;
+    }
   }
   return undefined;
 }

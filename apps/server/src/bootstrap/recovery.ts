@@ -1,5 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
+import type { WorkItemCompletionGateway } from "@openomni/openomni";
 import { Bus, PendingInteractionStore } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
@@ -46,6 +47,7 @@ export async function runRecovery(
   handler: Adapter.MessageHandler | undefined,
   coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> },
   traceId?: string,
+  completionGateway?: Pick<WorkItemCompletionGateway, "recoverRecordedCompletions">,
 ): Promise<void> {
   const startTime = Date.now();
   const id = traceId ?? crypto.randomUUID();
@@ -59,6 +61,19 @@ export async function runRecovery(
   try {
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
+    if (completionGateway) {
+      const receipt = await completionGateway.recoverRecordedCompletions();
+      Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
+        traceId: id,
+        time: Date.now(),
+        component: "server",
+        msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
+        context: {
+          skipped: receipt.skipped,
+          failures: receipt.failures,
+        },
+      });
+    }
     const expiredPendingInteractions = PendingInteractionStore.cleanupExpired();
     if (expiredPendingInteractions.length > 0) {
       Bus.publish(Operational.Info, {

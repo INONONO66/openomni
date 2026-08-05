@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 const Reference = z.string().min(1);
@@ -226,6 +227,16 @@ export const CompletionAdmission = CompletionAdmissionShape.superRefine((admissi
       path: ["completionReportSnapshot"],
     });
   }
+  if (
+    admission.completionReportSnapshot !== undefined &&
+    admission.completionReportRef !== completionReportReference(admission.completionReportSnapshot)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "completion report reference must match its canonical snapshot",
+      path: ["completionReportRef"],
+    });
+  }
   if (admission.recordedHead !== admission.expectedHead + 1) {
     ctx.addIssue({
       code: "custom",
@@ -312,4 +323,20 @@ export function emptyCompletionFacts(): CompletionFacts {
     effects: [],
     admissions: [],
   };
+}
+
+export function canonicalCompletionReport(input: CompletionReport): CompletionReport {
+  const report = CompletionReport.parse(input);
+  return CompletionReport.parse({
+    ...report,
+    claims: report.claims.map((claim) => ({
+      ...claim,
+      evidenceIds: [...claim.evidenceIds].sort(),
+    })),
+  });
+}
+
+export function completionReportReference(input: CompletionReport): string {
+  const canonical = canonicalCompletionReport(input);
+  return `sha256:${createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}`;
 }

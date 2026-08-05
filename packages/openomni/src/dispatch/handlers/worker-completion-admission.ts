@@ -8,9 +8,12 @@ import {
   type CompletionResultAuthorityCandidate,
   type CompletionResultAuthorityPort,
   type CompletionStakesResolver,
+  type CompletionVerificationErrorAuthorityCandidate,
+  type CompletionVerificationErrorAuthorityPort,
 } from "../../work-item/completion-admission-authority.js";
 import {
   createCompletionAdmissionService,
+  CompletionAdmissionServiceError,
   type CompletionBoundaryOutcome,
 } from "../../work-item/completion-admission-boundary.js";
 import {
@@ -89,6 +92,7 @@ type ProjectedFacts = Readonly<{
   results: readonly WorkItem.CriterionResult[];
   verificationErrors: readonly WorkItem.VerificationErrorFact[];
   authorityPort: CompletionResultAuthorityPort;
+  verificationErrorAuthorityPort: CompletionVerificationErrorAuthorityPort;
 }>;
 
 export async function admitWorkerCompletion(
@@ -124,6 +128,7 @@ export async function admitWorkerCompletion(
   const authorityResolver = createCompletionAuthorityResolver({
     policyEngine: input.policyEngine,
     resultAuthorityPort: projected.authorityPort,
+    verificationErrorAuthorityPort: projected.verificationErrorAuthorityPort,
     ...(input.stakesResolver === undefined ? {} : { stakesResolver: input.stakesResolver }),
     now: input.now,
   });
@@ -135,7 +140,10 @@ export async function replayWorkerCompletion(
   input: Pick<
     WorkerCompletionAdmissionInput,
     "workItemHash" | "result" | "policyEngine" | "stakesResolver" | "now"
-  >,
+  > &
+    Readonly<{
+      completionReportMatches(report: WorkItem.CompletionReport): boolean;
+    }>,
 ): Promise<CompletionBoundaryOutcome | undefined> {
   const item = WorkItemStore.get(input.workItemHash);
   if (!item) throw new Error(`WorkItem not found: ${input.workItemHash}`);
@@ -147,6 +155,12 @@ export async function replayWorkerCompletion(
   if (!admission) return undefined;
   const report = admission.completionReportSnapshot;
   if (!report) throw new Error(`completion admission report is missing: ${admission.id}`);
+  if (!input.completionReportMatches(report)) {
+    throw new CompletionAdmissionServiceError(
+      "request_conflict",
+      `completion report changed for request: ${requestId}`,
+    );
+  }
   const authorityResolver = createCompletionAuthorityResolver({
     policyEngine: input.policyEngine,
     ...(input.stakesResolver === undefined ? {} : { stakesResolver: input.stakesResolver }),
@@ -180,6 +194,10 @@ function projectCriterionFacts(
   const results: WorkItem.CriterionResult[] = [];
   const verificationErrors: WorkItem.VerificationErrorFact[] = [];
   const trustedResults = new Map<string, TrustedResult>();
+  const trustedVerificationErrors = new Map<
+    string,
+    Readonly<{ criterion: WorkItem.Criterion; error: WorkItem.VerificationErrorFact }>
+  >();
 
   for (const [index, input] of inputs.entries()) {
     const criterion = item.completionFacts.criteria[input.criterionIndex];
@@ -203,7 +221,7 @@ function projectCriterionFacts(
         basisRef: item.completionContract.basisRef,
         createdAt,
       });
-      verificationErrors.push({
+      const error = WorkItem.VerificationErrorFact.parse({
         id: `verification-error:${factRef}`,
         criterionId: criterion.id,
         code: verification.code,
@@ -212,6 +230,8 @@ function projectCriterionFacts(
         basisRef: item.completionContract.basisRef,
         createdAt,
       });
+      verificationErrors.push(error);
+      trustedVerificationErrors.set(error.id, { criterion, error });
       continue;
     }
     if (
@@ -227,7 +247,7 @@ function projectCriterionFacts(
         basisRef: item.completionContract.basisRef,
         createdAt,
       });
-      verificationErrors.push({
+      const error = WorkItem.VerificationErrorFact.parse({
         id: `verification-error:${factRef}`,
         criterionId: criterion.id,
         code: "malformed_output",
@@ -236,6 +256,8 @@ function projectCriterionFacts(
         basisRef: item.completionContract.basisRef,
         createdAt,
       });
+      verificationErrors.push(error);
+      trustedVerificationErrors.set(error.id, { criterion, error });
       continue;
     }
 
@@ -292,6 +314,7 @@ function projectCriterionFacts(
     results,
     verificationErrors,
     authorityPort: resultAuthorityPort(trustedResults),
+    verificationErrorAuthorityPort: verificationErrorAuthorityPort(trustedVerificationErrors),
   };
 }
 
@@ -399,6 +422,25 @@ function resultAuthorityPort(
           equal(candidate.criterion, trusted.criterion) &&
           equal(candidate.result, trusted.result) &&
           equal(candidate.observations, trusted.observations),
+      };
+    },
+  });
+}
+
+function verificationErrorAuthorityPort(
+  trustedErrors: ReadonlyMap<
+    string,
+    Readonly<{ criterion: WorkItem.Criterion; error: WorkItem.VerificationErrorFact }>
+  >,
+): CompletionVerificationErrorAuthorityPort {
+  return Object.freeze({
+    validate(candidate: CompletionVerificationErrorAuthorityCandidate) {
+      const trusted = trustedErrors.get(candidate.error.id);
+      return {
+        ok:
+          trusted !== undefined &&
+          equal(candidate.criterion, trusted.criterion) &&
+          equal(candidate.error, trusted.error),
       };
     },
   });

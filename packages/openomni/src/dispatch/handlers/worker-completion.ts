@@ -129,6 +129,7 @@ export async function reflectCoordinatorResult(
         workItemHash,
         result,
         policyEngine: options.completionPolicyEngine,
+        completionReportMatches: (report) => completionReportDraftMatches(parsed.envelope, report),
         ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
         now: options.now ?? Date.now,
       });
@@ -257,6 +258,37 @@ function attachReadBackEvidence(
       ...claim,
       evidenceIds: [...claim.evidenceIds, ...claimReadBackEvidence],
     };
+  });
+}
+
+function completionReportDraftMatches(
+  envelope: CompletionEnvelope,
+  stored: WorkItem.CompletionReport,
+): boolean {
+  const draft = envelope.completionReport;
+  if (
+    draft.summary !== stored.summary ||
+    JSON.stringify(draft.caveats) !== JSON.stringify(stored.caveats) ||
+    JSON.stringify(draft.followUps) !== JSON.stringify(stored.followUps) ||
+    draft.claims.length !== stored.claims.length
+  ) {
+    return false;
+  }
+  const readBackCounts = new Map<number, number>();
+  for (const { claimIndex } of envelope.readBackRequests) {
+    readBackCounts.set(claimIndex, (readBackCounts.get(claimIndex) ?? 0) + 1);
+  }
+  return draft.claims.every((claim, index) => {
+    const storedClaim = stored.claims[index];
+    if (!storedClaim || claim.statement !== storedClaim.statement) return false;
+    if (
+      storedClaim.evidenceIds.length !==
+      claim.evidenceIds.length + (readBackCounts.get(index) ?? 0)
+    ) {
+      return false;
+    }
+    const storedEvidenceIds = new Set(storedClaim.evidenceIds);
+    return claim.evidenceIds.every((evidenceId) => storedEvidenceIds.has(evidenceId));
   });
 }
 

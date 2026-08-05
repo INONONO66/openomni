@@ -93,15 +93,35 @@ export async function resolveWorkItemBlocker(
 
 export async function addWorkItemEvidence(
   hash: string,
-  evidence: Omit<WorkItem.Evidence, "id" | "createdAt">,
+  evidence: Omit<WorkItem.Evidence, "id" | "createdAt"> & Readonly<{ id?: string }>,
 ): Promise<WorkItem.Info | undefined> {
+  const explicitId = evidence.id;
+  if (explicitId !== undefined) {
+    const existing = Storage.get().workItem?.get(hash);
+    const recorded = existing?.evidence.find(({ id }) => id === explicitId);
+    if (existing && recorded) {
+      const candidate = WorkItem.Evidence.parse({
+        ...evidence,
+        id: explicitId,
+        createdAt: recorded.createdAt,
+      });
+      if (JSON.stringify(recorded) !== JSON.stringify(candidate)) {
+        throw new Error(`WorkItem evidence identity conflict: ${explicitId}`);
+      }
+      return existing;
+    }
+  }
   return mutate(hash, (existing, now) => ({
     changedFields: ["evidence"],
     updated: {
       ...existing,
       evidence: [
         ...existing.evidence,
-        WorkItem.Evidence.parse({ id: crypto.randomUUID(), ...evidence, createdAt: now }),
+        WorkItem.Evidence.parse({
+          ...evidence,
+          id: explicitId ?? crypto.randomUUID(),
+          createdAt: now,
+        }),
       ],
       timestamps: { ...existing.timestamps, updated: now },
     },

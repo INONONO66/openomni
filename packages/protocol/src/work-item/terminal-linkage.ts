@@ -1,9 +1,10 @@
 import type { RefinementCtx } from "zod";
-import type {
-  CompletionAdmission,
-  CompletionContract,
-  CompletionReport,
-  CompletionTerminalReceipt,
+import {
+  completionReportReference,
+  type CompletionAdmission,
+  type CompletionContract,
+  type CompletionReport,
+  type CompletionTerminalReceipt,
 } from "./completion-admission.js";
 
 type TerminalLinkageItem = Readonly<{
@@ -69,6 +70,9 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   }
   if (
     admission.completionReportRef !== receipt.completionReportRef ||
+    (admission.completionReportSnapshot !== undefined &&
+      admission.completionReportRef !==
+        completionReportReference(admission.completionReportSnapshot)) ||
     (admission.completionReportSnapshot !== undefined &&
       JSON.stringify(admission.completionReportSnapshot) !== JSON.stringify(item.completionReport))
   ) {

@@ -224,10 +224,21 @@ describe("worker completion admission convergence", () => {
 
     const first = await reflectCoordinatorResult(item.hash, succeeded(output), options);
     const replay = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+    const changedEnvelope = JSON.parse(output) as {
+      completionReport: { summary: string };
+    };
+    changedEnvelope.completionReport.summary = "A changed report must not reuse the old admission.";
+    const conflict = await reflectCoordinatorResult(
+      item.hash,
+      succeeded(JSON.stringify(changedEnvelope)),
+      options,
+    );
 
     const stored = WorkItemStore.get(item.hash);
     expect(first.completionBlocked).toBe(false);
     expect(replay.completionBlocked).toBe(false);
+    expect(conflict.completionBlocked).toBe(true);
+    expect(conflict.completionBlocker).toContain("completion report changed");
     expect(readBackCalls).toBe(1);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionTerminalReceipt?.requestId).toBe(
@@ -310,18 +321,47 @@ describe("worker completion admission convergence", () => {
 
   test("routes connector Worker completion through the same durable admission boundary", async () => {
     const item = await startedItem("connector_endpoint");
+    const result: Execution.Result = {
+      ...succeeded(await evidenceBackedEnvelope(item.hash)),
+      artifacts: [
+        {
+          kind: "connector_log",
+          artifactId: "artifact:connector-completion",
+          title: "Connector completion log",
+          mimeType: "application/json",
+        },
+      ],
+      logEvents: [
+        {
+          kind: "connector_log_event",
+          artifactId: "artifact:connector-completion",
+          message: "connector completed",
+          sequence: 0,
+          data: {},
+          toolCall: {
+            id: "tool:connector-completion",
+            tool: "connector.finish",
+            status: "completed",
+          },
+        },
+      ],
+      usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
+    };
 
-    const projection = await projectConnectorCompletion(
-      item.hash,
-      succeeded(await evidenceBackedEnvelope(item.hash)),
-      { now: () => NOW },
-    );
+    const projection = await projectConnectorCompletion(item.hash, result, { now: () => NOW });
+    const projectedEvidenceCount = WorkItemStore.get(item.hash)?.evidence.length;
+    const replay = await projectConnectorCompletion(item.hash, result, { now: () => NOW });
 
     const stored = WorkItemStore.get(item.hash);
     expect(projection.reflection).toMatchObject({
       workItemStatus: "completed",
       completionBlocked: false,
     });
+    expect(replay.reflection).toMatchObject({
+      workItemStatus: "completed",
+      completionBlocked: false,
+    });
+    expect(stored?.evidence).toHaveLength(projectedEvidenceCount ?? 0);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionFacts.admissions[0]).toMatchObject({
       origin: "worker",

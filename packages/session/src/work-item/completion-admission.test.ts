@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
+import { withWorkItemCompletionWriter } from "./completion-writer.js";
 import { WorkItemStore } from "./index.js";
 
 const adapters: SqliteStorageAdapter[] = [];
@@ -11,6 +12,17 @@ function configure(): SqliteStorageAdapter {
   adapters.push(adapter);
   Storage.configure(adapter);
   return adapter;
+}
+
+function authorizedCompareAndSet(
+  adapter: SqliteStorageAdapter,
+  hash: string,
+  expectedHead: number,
+  candidate: WorkItem.Info,
+): boolean {
+  return withWorkItemCompletionWriter(() =>
+    adapter.workItem.compareAndSet(hash, expectedHead, candidate),
+  );
 }
 
 async function createItem() {
@@ -144,7 +156,7 @@ describe("WorkItemStore completion admission storage boundary", () => {
     const item = await createItem();
     const candidate = admissionCandidate(item);
 
-    const recorded = adapter.workItem.compareAndSet(item.hash, item.revision, candidate);
+    const recorded = authorizedCompareAndSet(adapter, item.hash, item.revision, candidate);
 
     expect(recorded).toBe(true);
     expect(adapter.workItem.get(item.hash)?.revision).toBe(item.revision + 1);
@@ -158,10 +170,10 @@ describe("WorkItemStore completion admission storage boundary", () => {
     const adapter = configure();
     const item = await createItem();
     const first = admissionCandidate(item);
-    expect(adapter.workItem.compareAndSet(item.hash, item.revision, first)).toBe(true);
+    expect(authorizedCompareAndSet(adapter, item.hash, item.revision, first)).toBe(true);
     const stale = admissionCandidate(item, "block");
 
-    const recorded = adapter.workItem.compareAndSet(item.hash, item.revision, stale);
+    const recorded = authorizedCompareAndSet(adapter, item.hash, item.revision, stale);
 
     expect(recorded).toBe(false);
     expect(adapter.workItem.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
@@ -181,7 +193,7 @@ describe("WorkItemStore completion admission storage boundary", () => {
     if (!mutated) throw new Error("missing mutated item");
     const candidate = admissionCandidate(mutated);
 
-    const recorded = adapter.workItem.compareAndSet(item.hash, mutated.revision, candidate);
+    const recorded = authorizedCompareAndSet(adapter, item.hash, mutated.revision, candidate);
 
     expect(mutated).toMatchObject({ revision: 1 });
     expect(mutated.completionFacts.revision).toBe(0);
@@ -201,7 +213,7 @@ describe("WorkItemStore completion admission storage boundary", () => {
     if (state !== "pending") {
       const decision = state === "admitted" ? "admit" : state === "blocked" ? "block" : "escalate";
       const candidate = admissionCandidate(item, decision);
-      expect(adapter.workItem.compareAndSet(item.hash, item.revision, candidate)).toBe(true);
+      expect(authorizedCompareAndSet(adapter, item.hash, item.revision, candidate)).toBe(true);
     }
     const before = adapter.workItem.get(item.hash);
 

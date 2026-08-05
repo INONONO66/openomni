@@ -61,6 +61,30 @@ export type CompletionResultAuthorityPort = Readonly<{
   ): CompletionResultAuthorityValidation | Promise<CompletionResultAuthorityValidation>;
 }>;
 
+export type CompletionInvalidationAuthorityCandidate = CompletionAuthoritySubject &
+  Readonly<{
+    invalidation: WorkItem.ResultInvalidation;
+    result: WorkItem.CriterionResult;
+  }>;
+
+export type CompletionInvalidationAuthorityPort = Readonly<{
+  validate(
+    candidate: CompletionInvalidationAuthorityCandidate,
+  ): CompletionResultAuthorityValidation | Promise<CompletionResultAuthorityValidation>;
+}>;
+
+export type CompletionVerificationErrorAuthorityCandidate = CompletionAuthoritySubject &
+  Readonly<{
+    criterion: WorkItem.Criterion;
+    error: WorkItem.VerificationErrorFact;
+  }>;
+
+export type CompletionVerificationErrorAuthorityPort = Readonly<{
+  validate(
+    candidate: CompletionVerificationErrorAuthorityCandidate,
+  ): CompletionResultAuthorityValidation | Promise<CompletionResultAuthorityValidation>;
+}>;
+
 type OwnerOverrideValidation = Readonly<{ ok: true; receiptRef: string }> | Readonly<{ ok: false }>;
 
 type OwnerOverrideAuthorityPort = Readonly<{
@@ -71,6 +95,7 @@ type OwnerOverrideAuthorityPort = Readonly<{
       requestId: string;
       contractRevision: string;
       basisRef: string;
+      expectedHead: number;
     }>,
   ): OwnerOverrideValidation | Promise<OwnerOverrideValidation>;
 }>;
@@ -79,6 +104,8 @@ export type CompletionAuthorityDependencies = Readonly<{
   policyEngine: ReturnType<typeof PolicyEngine.create>;
   stakesResolver?: CompletionStakesResolver;
   resultAuthorityPort?: CompletionResultAuthorityPort;
+  invalidationAuthorityPort?: CompletionInvalidationAuthorityPort;
+  verificationErrorAuthorityPort?: CompletionVerificationErrorAuthorityPort;
   ownerOverrideAuthorityPort?: OwnerOverrideAuthorityPort;
   now?: () => number;
 }>;
@@ -120,6 +147,16 @@ export function createCompletionAuthorityResolver(
       assertProposedFacts(item, request);
       assertUniqueFactIds(item, request);
       await assertProposedResultAuthority(dependencies.resultAuthorityPort, item, request);
+      await assertProposedInvalidationAuthority(
+        dependencies.invalidationAuthorityPort,
+        item,
+        request,
+      );
+      await assertProposedVerificationErrorAuthority(
+        dependencies.verificationErrorAuthorityPort,
+        item,
+        request,
+      );
 
       const foldInput = completionInput(item, request, now());
       const preAdmission = foldCompletion(foldInput);
@@ -187,17 +224,80 @@ function assertCurrentRequest(item: WorkItem.Info, request: WorkItem.CompletionR
 }
 
 function assertRequesterFactsSupported(request: WorkItem.CompletionRequest): void {
-  if (request.invalidations.length > 0) {
-    throw new CompletionAdmissionError(
-      "unsupported_fact",
-      "proposed result invalidations require trusted invalidation authority",
-    );
-  }
   if (request.effects.length > 0) {
     throw new CompletionAdmissionError(
       "unsupported_fact",
       "proposed effects require trusted effect authority",
     );
+  }
+}
+
+async function assertProposedInvalidationAuthority(
+  port: CompletionInvalidationAuthorityPort | undefined,
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+): Promise<void> {
+  if (request.invalidations.length === 0) return;
+  if (!port) {
+    throw new CompletionAdmissionError(
+      "unsupported_fact",
+      "proposed result invalidations require trusted invalidation authority",
+    );
+  }
+  const results = [...item.completionFacts.results, ...request.results];
+  for (const invalidation of request.invalidations) {
+    const result = results.find(({ id }) => id === invalidation.resultId);
+    if (!result) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `invalidation target is unknown: ${invalidation.resultId}`,
+      );
+    }
+    const validation = await port.validate({
+      ...authoritySubject(request),
+      invalidation,
+      result,
+    });
+    if (!validation.ok) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `invalidation authority rejected ${invalidation.id}`,
+      );
+    }
+  }
+}
+
+async function assertProposedVerificationErrorAuthority(
+  port: CompletionVerificationErrorAuthorityPort | undefined,
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+): Promise<void> {
+  if (request.verificationErrors.length === 0) return;
+  if (!port) {
+    throw new CompletionAdmissionError(
+      "invalid_verifier",
+      "proposed verification errors require verifier authority",
+    );
+  }
+  for (const error of request.verificationErrors) {
+    const criterion = item.completionFacts.criteria.find(({ id }) => id === error.criterionId);
+    if (!criterion) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `verification error criterion is unknown: ${error.criterionId}`,
+      );
+    }
+    const validation = await port.validate({
+      ...authoritySubject(request),
+      criterion,
+      error,
+    });
+    if (!validation.ok) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `verification error authority rejected ${error.id}`,
+      );
+    }
   }
 }
 
@@ -427,6 +527,7 @@ async function resolveOwnerOverride(
     requestId: request.id,
     contractRevision: request.contractRevision,
     basisRef: request.basisRef,
+    expectedHead: request.expectedHead,
   } as const;
   const validation = await port.validate(candidate);
   if (!validation.ok || validation.receiptRef !== receiptRef) return undefined;

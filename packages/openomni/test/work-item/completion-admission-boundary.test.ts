@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
@@ -62,7 +63,10 @@ function authority(decisions: readonly WorkItem.CompletionDecision[] = ["admit"]
           origin: request.origin,
           contractRevision: item.completionContract.revision,
           basisRef: item.completionContract.basisRef,
-          effectiveResultIds: decision === "admit" ? request.results.map(({ id }) => id) : [],
+          effectiveResultIds:
+            decision === "admit"
+              ? [...item.completionFacts.results, ...request.results].map(({ id }) => id)
+              : [],
           unresolvedCriterionIds:
             decision === "admit" ? [] : item.completionFacts.criteria.map(({ id }) => id),
           decision,
@@ -174,7 +178,9 @@ function completionRequest(
   origin: WorkItem.CompletionOrigin = "worker",
 ): WorkItem.CompletionRequest {
   const criterion = item.completionFacts.criteria[0];
-  if (!criterion) throw new Error("missing completion criterion");
+  const evidenceId = item.evidence[0]?.id;
+  if (!criterion || !evidenceId) throw new Error("missing completion criterion evidence");
+  const observationId = `observation:${item.hash}:${item.revision}`;
   return WorkItem.CompletionRequest.parse({
     version: 1,
     id: `completion-request:${item.hash}:${item.revision}:${origin}`,
@@ -183,15 +189,35 @@ function completionRequest(
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
-    claims: [],
-    observations: [],
+    claims: [
+      {
+        id: `claim:${item.hash}:${item.revision}`,
+        criterionId: criterion.id,
+        statement: criterion.statement,
+        observationIds: [observationId],
+        basisRef: item.completionContract.basisRef,
+        createdAt: NOW,
+      },
+    ],
+    observations: [
+      {
+        id: observationId,
+        producer: "test:boundary",
+        subjectRef: item.hash,
+        basisRef: item.completionContract.basisRef,
+        artifactRefs: [evidenceId],
+        provenanceRef: evidenceId,
+        ancestryRefs: [],
+        observedAt: NOW,
+      },
+    ],
     results: [
       {
         id: `result:${item.hash}:${item.revision}`,
         criterionId: criterion.id,
         value: "verified",
         checkedPredicate: criterion.statement,
-        observationIds: [],
+        observationIds: [observationId],
         verifierRef: "verifier:test",
         assumptions: [],
         basisRef: item.completionContract.basisRef,
@@ -275,6 +301,74 @@ afterEach(() => {
 });
 
 describe("WorkItem completion admission service", () => {
+  test("publishes one guarded completion gateway for non-Worker origins", async () => {
+    configure();
+    const createGateway = Reflect.get(OpenOmni, "createWorkItemCompletionGateway");
+    expect(createGateway).toBeFunction();
+    expect(Reflect.get(OpenOmni, "createCompletionAdmissionService")).toBeUndefined();
+    expect(Reflect.get(OpenOmni, "createCompletionAuthorityResolver")).toBeUndefined();
+    if (typeof createGateway !== "function") return;
+    const first = await fixture("external_actor");
+    const trustedResult = first.request.results[0];
+    if (!trustedResult) throw new Error("missing public gateway result");
+    const gateway = Reflect.apply(createGateway, undefined, [
+      {
+        policyEngine: PolicyEngine.create(),
+        resultAuthorityPort: {
+          validate(candidate: unknown) {
+            const result = Reflect.get(candidate as object, "result");
+            return { ok: WorkItem.CriterionResult.safeParse(result).success };
+          },
+        },
+        now: () => NOW,
+      },
+    ]);
+
+    const outcome = await Reflect.apply(Reflect.get(gateway, "requestCompletion"), gateway, [
+      first.request,
+      first.report,
+    ]);
+
+    expect(Reflect.get(outcome, "completed")).toBe(true);
+    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
+      WorkItemStore.get(first.item.hash)?.completionFacts.admissions[0]?.id,
+    );
+  });
+
+  test("recovers every latest recorded admission through the public gateway", async () => {
+    const adapter = configure();
+    const first = await fixture("recovery");
+    const gateway = OpenOmni.createWorkItemCompletionGateway({
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+    const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
+    let writeCount = 0;
+    class SimulatedBootCrash extends Error {}
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
+      writeCount += 1;
+      if (writeCount === 2) throw new SimulatedBootCrash("crash before terminal append");
+      return compareAndSet(hash, expectedHead, candidate);
+    };
+
+    await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
+      SimulatedBootCrash,
+    );
+    adapter.workItem.compareAndSet = compareAndSet;
+
+    const receipt = await gateway.recoverRecordedCompletions();
+
+    expect(receipt).toEqual({
+      recovered: 1,
+      skipped: 0,
+      failures: [],
+    });
+    const recovered = WorkItemStore.get(first.item.hash);
+    if (!recovered) throw new Error("missing recovered WorkItem");
+    expect(WorkItem.deriveStatus(recovered)).toBe("completed");
+  });
+
   test("keeps the terminal service factory off public package barrels", () => {
     expect(Reflect.get(OpenOmni, "createCompletionAdmissionService")).toBeUndefined();
     expect(Reflect.get(WorkItemPublic, "createCompletionAdmissionService")).toBeUndefined();
@@ -304,6 +398,25 @@ describe("WorkItem completion admission service", () => {
         "CompletedV2",
       ]);
     }
+  });
+
+  test("refuses raw storage callers that append a completion admission", async () => {
+    const adapter = configure();
+    const first = await fixture("external_actor");
+    const admission = await authority().resolver.resolve(first.item, first.request);
+    const forged = WorkItem.Info.parse({
+      ...first.item,
+      revision: admission.recordedHead,
+      completionFacts: {
+        ...first.item.completionFacts,
+        admissions: [admission],
+      },
+    });
+
+    expect(() =>
+      adapter.workItem.compareAndSet(first.item.hash, first.item.revision, forged),
+    ).toThrow("WorkItem completion admission writes are restricted to the OpenOmni boundary");
+    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(0);
   });
 
   test("persists admission before terminal state and links the terminal receipt", async () => {
@@ -399,6 +512,31 @@ describe("WorkItem completion admission service", () => {
 
     await expect(service.requestCompletion(request, report)).rejects.toThrow(
       "completion report references failed evidence",
+    );
+
+    const stored = WorkItemStore.get(item.hash);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
+    expect(stored?.completionReport).toBeUndefined();
+  });
+
+  test("rejects a terminal report claim outside the admitted criterion graph", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const service = guardedService(authority().resolver);
+    if (!service) return;
+    const unrelatedReport: WorkItem.CompletionReport = {
+      ...report,
+      claims: [
+        {
+          statement: "An unrelated deployment claim.",
+          evidenceIds: report.claims[0]?.evidenceIds ?? [],
+        },
+      ],
+    };
+
+    await expect(service.requestCompletion(request, unrelatedReport)).rejects.toThrow(
+      "completion report claim is not admitted",
     );
 
     const stored = WorkItemStore.get(item.hash);
@@ -659,7 +797,7 @@ describe("WorkItem completion admission service", () => {
     expect(events.order).not.toContain("CompletedV2");
   });
 
-  test("retains the Owner override receipt when resume re-evaluates at a newer head", async () => {
+  test("requires a fresh Owner override receipt when resume re-evaluates at a newer head", async () => {
     const adapter = configure();
     const { item, request, report } = await fixture("recovery");
     const ownerOverrideReceiptRef = "owner-override:receipt:restart";
@@ -721,14 +859,49 @@ describe("WorkItem completion admission service", () => {
     await resumedService.resumeCompletion(item.hash, originalAdmissionId, report);
 
     const stored = WorkItemStore.get(item.hash);
-    expect(observedReceiptRefs).toEqual([ownerOverrideReceiptRef, ownerOverrideReceiptRef]);
-    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("completed");
+    expect(observedReceiptRefs).toEqual([ownerOverrideReceiptRef, undefined]);
+    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("pending");
     expect(stored?.completionFacts.admissions).toHaveLength(2);
-    expect(stored?.completionFacts.admissions[1]?.ownerOverrideReceiptRef).toBe(
-      ownerOverrideReceiptRef,
-    );
-    expect(stored?.completionTerminalReceipt?.admissionId).toBe(
-      stored?.completionFacts.admissions[1]?.id,
+    expect(stored?.completionFacts.admissions[1]).toMatchObject({ decision: "block" });
+    expect(stored?.completionFacts.admissions[1]?.ownerOverrideReceiptRef).toBeUndefined();
+    expect(stored?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test.each([
+    "block",
+    "escalate",
+  ] as const)("re-evaluates a stale %s admission after the WorkItem head advances", async (firstDecision) => {
+    configure();
+    const first = await fixture("replay");
+    const admissionAuthority = authority([firstDecision, "admit"]);
+    const service = guardedService(admissionAuthority.resolver);
+    if (!service) return;
+
+    await service.requestCompletion(first.request, first.report);
+    const firstRecorded = WorkItemStore.get(first.item.hash);
+    if (!firstRecorded) throw new Error("missing first recorded admission");
+    await WorkItemStore.update(first.item.hash, { name: "head advanced after blocked admission" });
+    const advanced = WorkItemStore.get(first.item.hash);
+    if (!advanced) throw new Error("missing advanced WorkItem");
+
+    const replay = await service.requestCompletion(first.request, first.report);
+
+    expect(admissionAuthority.calls).toEqual([
+      {
+        itemHead: first.item.revision,
+        requestHead: first.request.expectedHead,
+        requestId: first.request.id,
+      },
+      {
+        itemHead: advanced.revision,
+        requestHead: advanced.revision,
+        requestId: first.request.id,
+      },
+    ]);
+    expect(Reflect.get(replay as object, "completed")).toBe(true);
+    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(2);
+    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
+      WorkItemStore.get(first.item.hash)?.completionFacts.admissions[1]?.id,
     );
   });
 

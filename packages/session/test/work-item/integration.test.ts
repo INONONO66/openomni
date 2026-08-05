@@ -9,6 +9,7 @@ import {
   Storage,
   WorkItemStore,
 } from "../../src";
+import { withWorkItemCompletionWriter } from "../../src/work-item/completion-writer.js";
 
 type WorkItemInput = Parameters<typeof WorkItemStore.create>[0];
 
@@ -91,7 +92,13 @@ function persistCompletedFixture(
     },
     timestamps: { ...current.timestamps, updated: admission.createdAt },
   });
-  if (!workItemAdapter.compareAndSet(hash, current.revision, admitted)) return undefined;
+  if (
+    !withWorkItemCompletionWriter(() =>
+      workItemAdapter.compareAndSet(hash, current.revision, admitted),
+    )
+  ) {
+    return undefined;
+  }
   const completedAt = admission.createdAt + 1;
   const receipt: WorkItem.CompletionTerminalReceipt = {
     version: 1,
@@ -109,7 +116,13 @@ function persistCompletedFixture(
     completionTerminalReceipt: receipt,
     timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
   });
-  if (!workItemAdapter.compareAndSet(hash, admitted.revision, completed)) return undefined;
+  if (
+    !withWorkItemCompletionWriter(() =>
+      workItemAdapter.compareAndSet(hash, admitted.revision, completed),
+    )
+  ) {
+    return undefined;
+  }
   if (options.publishTerminalEvents) {
     Bus.publish(WorkItem.Events.StatusChanged, {
       traceId: "trace-session-integration-fixture",

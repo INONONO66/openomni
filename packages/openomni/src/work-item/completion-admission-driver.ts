@@ -3,6 +3,7 @@ import {
   type CompletionAdmissionDriverScenario,
   CompletionAdmissionDriverVersion,
 } from "./completion-admission-driver-contract.js";
+import { Bus, Storage } from "@openomni/session";
 import { runCompletionAdmissionScenario } from "./completion-admission-driver-scenarios.js";
 
 const VERSION = CompletionAdmissionDriverVersion;
@@ -32,7 +33,7 @@ export async function runCompletionAdmissionDriver(
       argumentsInput[2] === "--json" &&
       isScenario(argumentsInput[1])
     ) {
-      const receipt = await runCompletionAdmissionScenario(argumentsInput[1]);
+      const receipt = await runIsolatedScenario(argumentsInput[1]);
       return execution(receipt.ok, receipt);
     }
     return argumentError();
@@ -57,8 +58,8 @@ async function selfTest(): Promise<CompletionAdmissionDriverExecution> {
   }> = [];
   let allPassed = true;
   for (const scenario of CompletionAdmissionDriverScenarios) {
-    const first = await runCompletionAdmissionScenario(scenario);
-    const second = await runCompletionAdmissionScenario(scenario);
+    const first = await runIsolatedScenario(scenario);
+    const second = await runIsolatedScenario(scenario);
     const deterministic = JSON.stringify(first) === JSON.stringify(second);
     const passed = first.ok && second.ok && deterministic;
     if (!passed) allPassed = false;
@@ -79,6 +80,12 @@ async function selfTest(): Promise<CompletionAdmissionDriverExecution> {
     deterministic: scenarios.every(({ deterministic }) => deterministic),
     scenarios,
   });
+}
+
+function runIsolatedScenario(scenario: CompletionAdmissionDriverScenario) {
+  return Bus.withIsolation(() =>
+    Storage.withIsolation(() => runCompletionAdmissionScenario(scenario)),
+  );
 }
 
 function isScenario(value: string | undefined): value is CompletionAdmissionDriverScenario {

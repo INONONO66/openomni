@@ -3,6 +3,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
+import { withWorkItemCompletionWriter } from "./completion-writer.js";
 import { WorkItemStore } from "./index.js";
 
 const baseInput = {
@@ -98,10 +99,18 @@ function persistCompletedFixture(
       admissions: [admission],
     },
   });
-  if (!storage.workItem.compareAndSet(item.hash, item.revision, admitted)) {
+  if (
+    !withWorkItemCompletionWriter(() =>
+      storage.workItem.compareAndSet(item.hash, item.revision, admitted),
+    )
+  ) {
     throw new Error("failed to persist completed fixture admission");
   }
-  if (!storage.workItem.compareAndSet(item.hash, admitted.revision, completed)) {
+  if (
+    !withWorkItemCompletionWriter(() =>
+      storage.workItem.compareAndSet(item.hash, admitted.revision, completed),
+    )
+  ) {
     throw new Error("failed to persist completed fixture terminal record");
   }
   return completed;

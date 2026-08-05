@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { isWorkItemCompletionWriter } from "../work-item/completion-writer.js";
 
 export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkItemSubAdapter {
   return {
@@ -39,6 +40,15 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       if (parsed.revision !== expectedHead + 1) {
         throw new Error(
           `WorkItem revision must advance once: expected=${expectedHead} payload=${parsed.revision}`,
+        );
+      }
+      const currentRow = db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
+        data: string;
+      } | null;
+      const current = currentRow ? decodeWorkItem(currentRow.data) : undefined;
+      if (current && changesCompletionAuthority(current, parsed) && !isWorkItemCompletionWriter()) {
+        throw new Error(
+          "WorkItem completion admission writes are restricted to the OpenOmni boundary",
         );
       }
       const result = db
@@ -106,6 +116,16 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       return result.changes > 0;
     },
   };
+}
+
+function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info): boolean {
+  return (
+    JSON.stringify(current.completionFacts.admissions) !==
+      JSON.stringify(next.completionFacts.admissions) ||
+    JSON.stringify(current.completionReport) !== JSON.stringify(next.completionReport) ||
+    JSON.stringify(current.completionTerminalReceipt) !==
+      JSON.stringify(next.completionTerminalReceipt)
+  );
 }
 
 function decodeWorkItem(data: string): WorkItem.Info {

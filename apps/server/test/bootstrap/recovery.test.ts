@@ -47,6 +47,20 @@ async function createPendingInteractionFixture(
 }
 
 describe("server recovery", () => {
+  it("invokes recorded WorkItem completion recovery during boot", async () => {
+    let completionRecoveryCalls = 0;
+
+    await runRecovery(undefined, undefined, "trace-completion-recovery", {
+      recoverRecordedCompletions: async () => {
+        completionRecoveryCalls += 1;
+        return { recovered: 1, skipped: 0, failures: [] };
+      },
+    });
+
+    expect(completionRecoveryCalls).toBe(1);
+    expect(bootstrapSource).toContain("createWorkItemCompletionGateway");
+  });
+
   it("expires stale PendingInteractions during boot recovery", async () => {
     const events: string[] = [];
     const completedPayloads: Array<Record<string, unknown>> = [];

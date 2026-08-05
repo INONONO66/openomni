@@ -61,6 +61,37 @@ export function completionAdmissionDriverRequest(
     >
   > = {},
 ): WorkItem.CompletionRequest {
+  const observations = [...(facts.observations ?? [])];
+  const results = (facts.results ?? []).map((result) => {
+    if (result.observationIds.length > 0) return result;
+    const observation: WorkItem.Observation = {
+      id: `observation:${id}:${result.id}`,
+      producer: "completion-admission-driver",
+      subjectRef: item.hash,
+      basisRef: item.completionContract.basisRef,
+      artifactRefs: [`evidence:${item.hash}:report`],
+      ancestryRefs: [],
+      observedAt: CompletionAdmissionDriverNow,
+    };
+    observations.push(observation);
+    return { ...result, observationIds: [observation.id] };
+  });
+  const claims =
+    facts.claims ??
+    results.map((result) => {
+      const criterion = item.completionFacts.criteria.find(({ id: criterionId }) => {
+        return criterionId === result.criterionId;
+      });
+      if (!criterion) throw new Error(`missing driver criterion ${result.criterionId}`);
+      return {
+        id: `claim:${id}:${result.id}`,
+        criterionId: criterion.id,
+        statement: criterion.statement,
+        observationIds: result.observationIds,
+        basisRef: item.completionContract.basisRef,
+        createdAt: CompletionAdmissionDriverNow,
+      };
+    });
   return WorkItem.CompletionRequest.parse({
     version: 1,
     id,
@@ -69,9 +100,9 @@ export function completionAdmissionDriverRequest(
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
-    claims: facts.claims ?? [],
-    observations: facts.observations ?? [],
-    results: facts.results ?? [],
+    claims,
+    observations,
+    results,
     invalidations: facts.invalidations ?? [],
     verificationErrors: facts.verificationErrors ?? [],
     effects: facts.effects ?? [],

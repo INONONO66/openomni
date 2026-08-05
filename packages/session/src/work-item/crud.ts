@@ -89,6 +89,8 @@ export async function updateWorkItem(
     "failureReason",
     "attempt",
     "maxAttempts",
+    "workerRunId",
+    "workSessionId",
     "blockers",
     "evidence",
     "acceptanceCriteria",

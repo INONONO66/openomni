@@ -861,14 +861,128 @@
     "title"
   ],
   "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
+  "WorkItem.Claim": [
+    "basisRef",
+    "createdAt",
+    "criterionId",
+    "id",
+    "observationIds",
+    "statement"
+  ],
+  "WorkItem.CompletionAdmission": [
+    "basisRef",
+    "completionReportRef",
+    "completionReportSnapshot",
+    "contractRevision",
+    "createdAt",
+    "decision",
+    "effectiveResultIds",
+    "expectedHead",
+    "id",
+    "origin",
+    "ownerOverrideReceiptRef",
+    "policyRef",
+    "reasonCodes",
+    "recordedHead",
+    "requestId",
+    "requestSnapshot",
+    "residualRisks",
+    "stakesRef",
+    "unresolvedCriterionIds",
+    "version"
+  ],
+  "WorkItem.CompletionContract": ["basisRef", "revision", "version"],
+  "WorkItem.CompletionFacts": [
+    "admissions",
+    "claims",
+    "criteria",
+    "effects",
+    "invalidations",
+    "observations",
+    "results",
+    "revision",
+    "verificationErrors",
+    "version"
+  ],
   "WorkItem.CompletionReport": ["caveats", "claims", "followUps", "summary"],
+  "WorkItem.CompletionRequest": [
+    "basisRef",
+    "claims",
+    "contractRevision",
+    "effects",
+    "expectedHead",
+    "id",
+    "invalidations",
+    "observations",
+    "origin",
+    "ownerOverrideReceiptRef",
+    "results",
+    "verificationErrors",
+    "version",
+    "workItemHash"
+  ],
+  "WorkItem.CompletionTerminalReceipt": [
+    "admissionId",
+    "basisRef",
+    "completionReportRef",
+    "contractRevision",
+    "hash",
+    "recordedHead",
+    "requestId",
+    "version"
+  ],
+  "WorkItem.Criterion": ["id", "required", "revision", "statement"],
+  "WorkItem.CriterionResult#0": [
+    "assumptions",
+    "basisRef",
+    "createdAt",
+    "criterionId",
+    "id",
+    "observationIds",
+    "residualRisks",
+    "scope",
+    "value",
+    "verifierRef"
+  ],
+  "WorkItem.CriterionResult#1": [
+    "assumptions",
+    "basisRef",
+    "checkedPredicate",
+    "createdAt",
+    "criterionId",
+    "id",
+    "observationIds",
+    "residualRisks",
+    "scope",
+    "value",
+    "verifierRef"
+  ],
+  "WorkItem.EffectRecord": [
+    "attempt",
+    "createdAt",
+    "id",
+    "intentRef",
+    "outcome"
+  ],
+  "WorkItem.Evidence": [
+    "createdAt",
+    "description",
+    "detail",
+    "id",
+    "kind",
+    "passed",
+    "readBack"
+  ],
   "WorkItem.Info": [
     "acceptanceCriteria",
     "assigneeId",
     "attempt",
     "blockers",
     "changedFiles",
+    "completionContract",
+    "completionFacts",
     "completionReport",
+    "completionTerminalReceipt",
     "constraints",
     "context",
     "evidence",
@@ -882,6 +996,7 @@
     "originSessionId",
     "outcome",
     "relations",
+    "revision",
     "sessionId",
     "sourceChannel",
     "sourceMessageId",
@@ -889,6 +1004,16 @@
     "verificationGate",
     "workerRunId",
     "workSessionId"
+  ],
+  "WorkItem.Observation": [
+    "ancestryRefs",
+    "artifactRefs",
+    "basisRef",
+    "id",
+    "observedAt",
+    "producer",
+    "provenanceRef",
+    "subjectRef"
   ],
   "WorkItem.ReadBackRequest#0": ["kind", "maxBodyBytes", "target", "timeoutMs"],
   "WorkItem.ReadBackRequest#1": [
@@ -905,6 +1030,26 @@
     "target",
     "timeoutMs"
   ],
-  "WorkItem.ReadBackRequestEnvelope": ["claimIndex", "request"],
+  "WorkItem.ReadBackRequestEnvelope": [
+    "claimIndex",
+    "criterionIndex",
+    "request"
+  ],
+  "WorkItem.ResultInvalidation": [
+    "basisRef",
+    "createdAt",
+    "id",
+    "reason",
+    "resultId"
+  ],
+  "WorkItem.VerificationErrorFact": [
+    "basisRef",
+    "code",
+    "createdAt",
+    "criterionId",
+    "detail",
+    "id",
+    "verifierRef"
+  ],
   "WorkItem.VerificationGate": ["acceptance", "automated", "review"]
 }

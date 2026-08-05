@@ -86,7 +86,7 @@ export async function runAllOriginsCompletionAdmissionScenario(
         producer: "verifier:driver-origin",
         subjectRef: item.hash,
         basisRef: item.completionContract.basisRef,
-        artifactRefs: [],
+        artifactRefs: [`evidence:${item.hash}:report`],
         ancestryRefs: [],
         observedAt: CompletionAdmissionDriverNow,
       };

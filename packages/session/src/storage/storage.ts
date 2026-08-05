@@ -1,4 +1,5 @@
 import type { Message, Storage as ProtocolStorage } from "@openomni/protocol";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { SqliteStorageAdapter } from "./sqlite-storage";
@@ -60,25 +61,57 @@ export namespace Storage {
   }
 }
 
+type StorageScope = {
+  adapter: Storage.Adapter | null;
+  initializedDbPath: string | null;
+  warnedOnce: boolean;
+};
+
+const storageScope = new AsyncLocalStorage<StorageScope>();
+
 export namespace Storage {
   let adapter: Adapter | null = null;
   let initializedDbPathValue: string | null = null;
   let warnedOnce = false;
 
   export function configure(newAdapter: Adapter): void {
+    const scope = storageScope.getStore();
+    if (scope) {
+      scope.adapter = newAdapter;
+      scope.initializedDbPath = "__configured__";
+      return;
+    }
     adapter = newAdapter;
     initializedDbPathValue = "__configured__";
   }
 
   export function getInitializedDbPath(): string | null {
-    return initializedDbPathValue;
+    return storageScope.getStore()?.initializedDbPath ?? initializedDbPathValue;
   }
 
   export function setInitializedDbPath(dbPath: string | null): void {
+    const scope = storageScope.getStore();
+    if (scope) {
+      scope.initializedDbPath = dbPath;
+      return;
+    }
     initializedDbPathValue = dbPath;
   }
 
   export function get(): Adapter {
+    const scope = storageScope.getStore();
+    if (scope) {
+      if (scope.adapter === null) {
+        if (!scope.warnedOnce) {
+          console.warn(
+            "Storage.get() called before initialize() — auto-initializing in-memory adapter. Call Storage.initialize({ dbPath }) at app entry to suppress this warning.",
+          );
+          scope.warnedOnce = true;
+        }
+        scope.adapter = new SqliteStorageAdapter(":memory:");
+      }
+      return scope.adapter;
+    }
     if (adapter === null) {
       if (!warnedOnce) {
         console.warn(
@@ -96,8 +129,22 @@ export namespace Storage {
   }
 
   export function reset(): void {
+    const scope = storageScope.getStore();
+    if (scope) {
+      scope.adapter = null;
+      scope.initializedDbPath = null;
+      scope.warnedOnce = false;
+      return;
+    }
     adapter = null;
     initializedDbPathValue = null;
     warnedOnce = false;
+  }
+
+  export function withIsolation<T>(operation: () => T): T {
+    return storageScope.run(
+      { adapter: null, initializedDbPath: null, warnedOnce: false },
+      operation,
+    );
   }
 }

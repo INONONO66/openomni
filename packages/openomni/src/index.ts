@@ -94,12 +94,16 @@ export type {
 export {
   CompletionAdmissionDriverScenarios,
   CompletionSourceOrigin,
+  createWorkItemCompletionGateway,
   projectCompletionOrigin,
   runCompletionAdmissionDriver,
 } from "./work-item";
 export type {
   CompletionAdmissionDriverExecution,
   CompletionAdmissionDriverScenario,
+  WorkItemCompletionGateway,
+  WorkItemCompletionGatewayOptions,
+  WorkItemCompletionRecoveryReceipt,
 } from "./work-item";
 
 // Dispatch runtime

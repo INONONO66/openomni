@@ -1,5 +1,6 @@
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
+import { withWorkItemCompletionWriter } from "@openomni/session/work-item-completion-writer";
 import type { CompletionAuthorityResolver } from "./completion-admission-authority.js";
 import {
   completionReportReference,
@@ -36,6 +37,7 @@ export type CompletionBoundaryOutcome = Readonly<{
 
 export type CompletionAdmissionServiceOptions = Readonly<{
   authorityResolver: CompletionAuthorityResolver;
+  allowTrustedInvalidations?: boolean;
   now: () => number;
 }>;
 
@@ -57,7 +59,7 @@ export function createCompletionAdmissionService(
   return Object.freeze({
     async requestCompletion(requestInput, completionReportInput) {
       const request = WorkItem.CompletionRequest.parse(requestInput);
-      assertRequesterFactsSupported(request);
+      assertRequesterFactsSupported(request, options.allowTrustedInvalidations === true);
       const completionReport = WorkItem.CompletionReport.parse(completionReportInput);
       const adapter = requiredAdapter(request.workItemHash);
       const initial = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
@@ -140,7 +142,10 @@ async function replayRequest(
   assertAdmissionReportMatches(original, completionReport);
   const receipt = item.completionTerminalReceipt;
   if (WorkItem.deriveStatus(item) === "completed") {
-    if (JSON.stringify(item.completionReport) !== JSON.stringify(completionReport)) {
+    if (
+      item.completionReport === undefined ||
+      !completionReportsMatch(item.completionReport, completionReport)
+    ) {
       throw requestConflict(request.id);
     }
     const admission = admissions.find(({ id }) => id === receipt?.admissionId);
@@ -149,7 +154,19 @@ async function replayRequest(
   }
   const admission = admissions.at(-1);
   if (!admission) throw requestConflict(request.id);
-  if (!isAdmitted(admission)) return { admission, workItem: item, completed: false };
+  if (!isAdmitted(admission)) {
+    if (item.revision === admission.recordedHead) {
+      return { admission, workItem: item, completed: false };
+    }
+    return completeOrReevaluate(
+      requiredAdapter(item.hash),
+      item,
+      request,
+      completionReport,
+      admission,
+      options,
+    );
+  }
   if (item.revision === admission.recordedHead) {
     const completed = commitTerminal(
       requiredAdapter(item.hash),
@@ -261,7 +278,11 @@ async function appendAdmission(
     },
     timestamps: { ...existing.timestamps, updated: admission.createdAt },
   });
-  if (!adapter.compareAndSet(existing.hash, existing.revision, updated)) {
+  if (
+    !withWorkItemCompletionWriter(() =>
+      adapter.compareAndSet(existing.hash, existing.revision, updated),
+    )
+  ) {
     throw new CompletionAdmissionServiceError(
       "stale_head",
       `WorkItem changed while recording completion admission: ${existing.hash}`,
@@ -298,7 +319,7 @@ function commitTerminal(
     );
   }
   assertSameBasis(current, admission);
-  const report = verifyCompletionReport(current, completionReport);
+  const report = verifyCompletionReport(current, admission, completionReport);
   const receipt: WorkItem.CompletionTerminalReceipt = {
     version: 1,
     hash: current.hash,
@@ -316,7 +337,11 @@ function commitTerminal(
     completionTerminalReceipt: receipt,
     timestamps: { ...current.timestamps, completed: time, updated: time },
   });
-  if (!adapter.compareAndSet(current.hash, current.revision, completed)) {
+  if (
+    !withWorkItemCompletionWriter(() =>
+      adapter.compareAndSet(current.hash, current.revision, completed),
+    )
+  ) {
     throw new CompletionAdmissionServiceError(
       "stale_head",
       `WorkItem changed during terminal completion: ${current.hash}`,
@@ -437,6 +462,7 @@ function appendFacts<T extends { id: string }>(
 
 function verifyCompletionReport(
   item: WorkItem.Info,
+  admission: WorkItem.CompletionAdmission,
   completionReport: WorkItem.CompletionReport,
 ): WorkItem.CompletionReport {
   const report = WorkItem.CompletionReport.parse(completionReport);
@@ -455,6 +481,48 @@ function verifyCompletionReport(
   );
   if (failed.length > 0) {
     throw new Error(`completion report references failed evidence: ${failed.join(", ")}`);
+  }
+  const effectiveResults = item.completionFacts.results.filter((result) =>
+    admission.effectiveResultIds.includes(result.id),
+  );
+  const effectiveCriterionIds = new Set(effectiveResults.map(({ criterionId }) => criterionId));
+  const observationsById = new Map(
+    item.completionFacts.observations.map((observation) => [observation.id, observation]),
+  );
+  for (const reportClaim of report.claims) {
+    const admittedClaims = item.completionFacts.claims.filter(
+      (claim) =>
+        claim.statement === reportClaim.statement &&
+        (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
+    );
+    if (admittedClaims.length === 0) {
+      throw new Error(`completion report claim is not admitted: ${reportClaim.statement}`);
+    }
+    const criterionIds = new Set(admittedClaims.map(({ criterionId }) => criterionId));
+    const observationIds = new Set([
+      ...admittedClaims.flatMap(({ observationIds: ids }) => ids),
+      ...effectiveResults
+        .filter(({ criterionId }) => criterionIds.has(criterionId))
+        .flatMap(({ observationIds: ids }) => ids),
+    ]);
+    const admittedEvidenceIds = new Set(
+      [...observationIds].flatMap((observationId) => {
+        const observation = observationsById.get(observationId);
+        if (!observation) return [];
+        return [
+          ...observation.artifactRefs,
+          ...(observation.provenanceRef === undefined ? [] : [observation.provenanceRef]),
+        ];
+      }),
+    );
+    const unrelatedEvidence = reportClaim.evidenceIds.filter(
+      (evidenceId) => !admittedEvidenceIds.has(evidenceId),
+    );
+    if (unrelatedEvidence.length > 0) {
+      throw new Error(
+        `completion report evidence is not admitted: ${unrelatedEvidence.join(", ")}`,
+      );
+    }
   }
   return report;
 }
@@ -476,8 +544,9 @@ function requestAtHead(
   request: WorkItem.CompletionRequest,
   expectedHead: number,
 ): WorkItem.CompletionRequest {
+  const { ownerOverrideReceiptRef: _staleOwnerReceipt, ...unboundRequest } = request;
   return WorkItem.CompletionRequest.parse({
-    ...request,
+    ...unboundRequest,
     expectedHead,
     claims: [],
     observations: [],
@@ -500,9 +569,6 @@ function requestFromAdmission(
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
-    ...(admission.requestSnapshot.ownerOverrideReceiptRef
-      ? { ownerOverrideReceiptRef: admission.requestSnapshot.ownerOverrideReceiptRef }
-      : {}),
     claims: [],
     observations: [],
     results: [],
@@ -561,7 +627,7 @@ function canonicalAdmission(
 ): WorkItem.CompletionAdmission {
   assertTerminalEligibleAdmission(input);
   const admission = WorkItem.CompletionAdmission.parse(input);
-  const completionReportSnapshot = WorkItem.CompletionReport.parse(completionReport);
+  const completionReportSnapshot = WorkItem.canonicalCompletionReport(completionReport);
   const completionReportRef = completionReportReference(completionReportSnapshot);
   if (
     (admission.completionReportSnapshot !== undefined &&
@@ -601,11 +667,20 @@ function requiredCompletionReportRef(admission: WorkItem.CompletionAdmission): s
   return reference;
 }
 
-function assertRequesterFactsSupported(request: WorkItem.CompletionRequest): void {
-  if (request.invalidations.length === 0 && request.effects.length === 0) return;
+function assertRequesterFactsSupported(
+  request: WorkItem.CompletionRequest,
+  allowTrustedInvalidations: boolean,
+): void {
+  if (request.invalidations.length > 0 && !allowTrustedInvalidations) {
+    throw new CompletionAdmissionServiceError(
+      "unsupported_fact",
+      "completion request invalidations require the trusted invalidation boundary",
+    );
+  }
+  if (request.effects.length === 0) return;
   throw new CompletionAdmissionServiceError(
     "unsupported_fact",
-    "completion requests cannot propose invalidations or effects without trusted authority",
+    "completion requests cannot propose effects without trusted authority",
   );
 }
 

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { WorkItem } from "@openomni/protocol";
+import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
 import { runAllOriginsCompletionAdmissionScenario } from "../../src/work-item/completion-admission-driver-origin-scenarios.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
@@ -43,6 +45,48 @@ async function scenarioReceipt(scenario: Scenario): Promise<Record<string, unkno
 }
 
 describe("WorkItem completion admission driver", () => {
+  test("preserves host Storage and Bus state across an embedded scenario", async () => {
+    const hostAdapter = new SqliteStorageAdapter(":memory:");
+    Storage.configure(hostAdapter);
+    let createdEvents = 0;
+    const unsubscribe = Bus.subscribe(WorkItem.Events.Created, () => {
+      createdEvents += 1;
+    });
+    try {
+      const hostItem = await WorkItemStore.create({
+        name: "Host state sentinel",
+        sourceMessageId: "msg_host_sentinel",
+        sourceChannel: "test",
+        intent: "preserve",
+        goal: "prove the public driver cannot clobber its host",
+        acceptanceCriteria: ["host state remains available"],
+      });
+
+      const execution = await publicDriver()(["--scenario", "known-bad", "--json"]);
+      await Promise.resolve();
+
+      expect(execution.exitCode).toBe(0);
+      expect(Storage.get()).toBe(hostAdapter);
+      expect(WorkItemStore.get(hostItem.hash)?.name).toBe("Host state sentinel");
+      expect(Bus.stats().subscriberCount).toBe(1);
+      await WorkItemStore.create({
+        name: "Host event sentinel",
+        sourceMessageId: "msg_host_event",
+        sourceChannel: "test",
+        intent: "observe",
+        goal: "prove the host subscription remains active",
+        acceptanceCriteria: ["host subscriber receives this event"],
+      });
+      await Promise.resolve();
+      expect(createdEvents).toBe(2);
+    } finally {
+      unsubscribe();
+      hostAdapter.close();
+      Storage.reset();
+      Bus.reset();
+    }
+  });
+
   test("publishes deterministic help and argument_error receipts", async () => {
     const run = publicDriver();
     const help = await run(["--help"]);

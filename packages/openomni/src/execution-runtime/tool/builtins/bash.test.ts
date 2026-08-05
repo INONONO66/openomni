@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, watch } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashTool } from "./bash";
@@ -70,43 +70,28 @@ describe("bashTool", () => {
   test("allows TERM cleanup before escalating an aborted process group", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-term-"));
     const marker = join(workspace, "term-handled.txt");
-    const readyMarker = join(workspace, "term-ready.txt");
     const controller = new AbortController();
-    const readyWatcher = watch(workspace);
 
     try {
-      const ready = new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("child process did not install its TERM trap"));
-        }, 1_000);
-        readyWatcher.on("change", (_eventType, filename) => {
-          if (filename !== "term-ready.txt" || !existsSync(readyMarker)) return;
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
       const tool = bashTool(workspace);
       const resultPromise = tool.execute(
         {
           id: "call-term",
           tool: "bash",
           input: {
-            command:
-              "trap 'touch term-handled.txt; exit 0' TERM; touch term-ready.txt; while :; do sleep 1; done",
+            command: "trap 'touch term-handled.txt; exit 0' TERM; while :; do sleep 1; done",
           },
         },
         { signal: controller.signal },
       );
 
-      await ready;
-      controller.abort();
+      setTimeout(() => controller.abort(), 20);
       const result = await resultPromise;
+      await Bun.sleep(150);
 
       expect(result.isError).toBe(true);
       expect(existsSync(marker)).toBe(true);
     } finally {
-      controller.abort();
-      readyWatcher.close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });

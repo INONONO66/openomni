@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
+import { PolicyEngine } from "@openomni/policy";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
@@ -11,6 +12,7 @@ import {
   ResidentRuntime,
   SystemToolProvider,
   createDefaultDispatchRuntime,
+  createWorkItemCompletionGateway,
   type DispatchRuntime,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
@@ -189,7 +191,10 @@ export async function main(): Promise<void> {
 
   const traceId = crypto.randomUUID();
   const mode = "coordinator";
-  await runRecovery(routingHandler, coordinator, traceId);
+  const completionGateway = createWorkItemCompletionGateway({
+    policyEngine: PolicyEngine.create(),
+  });
+  await runRecovery(routingHandler, coordinator, traceId, completionGateway);
 
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,

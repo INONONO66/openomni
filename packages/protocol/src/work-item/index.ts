@@ -32,6 +32,8 @@ export namespace WorkItem {
 
   export const CompletionReport = Completion.CompletionReport;
   export type CompletionReport = Completion.CompletionReport;
+  export const canonicalCompletionReport = Completion.canonicalCompletionReport;
+  export const completionReportReference = Completion.completionReportReference;
 
   export const Criterion = Completion.Criterion;
   export type Criterion = Completion.Criterion;

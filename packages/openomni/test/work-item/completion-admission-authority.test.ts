@@ -664,6 +664,7 @@ describe("completion admission authority resolver", () => {
       requestId: "request:completion",
       contractRevision: "contract:v1",
       basisRef: "basis:v1",
+      expectedHead: 2,
     });
     expect(admission?.decision).toBe("escalate");
     expect(admission?.stakesRef).toStartWith("sha256:");
@@ -730,6 +731,7 @@ describe("completion admission authority resolver", () => {
       requestId: "request:completion",
       contractRevision: "contract:v1",
       basisRef: "basis:v1",
+      expectedHead: 2,
     });
     expect(admission?.decision).toBe("owner_override");
     expect(admission?.ownerOverrideReceiptRef).toBe("owner-receipt:one");
@@ -760,6 +762,7 @@ describe("completion admission authority resolver", () => {
         ...WorkItem.emptyCompletionFacts(),
         revision: 2,
         criteria: [criterion],
+        observations: [observation()],
         results: [refuted],
       },
     });
@@ -786,6 +789,74 @@ describe("completion admission authority resolver", () => {
 
     expect(code).toBe("unsupported_fact");
     expect(policyCalls).toBe(0);
+  });
+
+  test("accepts invalidation only through its exact trusted authority binding", async () => {
+    const refuted = {
+      ...verifiedResult("refuted"),
+      id: "result:durable-refuted",
+    };
+    const currentItem = item({
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        revision: 2,
+        criteria: [criterion],
+        observations: [observation()],
+        results: [refuted],
+      },
+    });
+    const invalidation = {
+      id: "invalidation:trusted-refuted",
+      resultId: refuted.id,
+      basisRef: "basis:v1",
+      reason: "trusted verifier withdrew its result",
+      createdAt: 3,
+    };
+    let validatedCandidate: unknown;
+
+    const admission = await resolveAdmission(
+      {
+        policyEngine: createPolicyEngine(),
+        invalidationAuthorityPort: {
+          validate(input: unknown) {
+            validatedCandidate = input;
+            return { ok: true } as const;
+          },
+        },
+      },
+      currentItem,
+      request({ invalidations: [invalidation] }),
+    );
+
+    expect(validatedCandidate).toEqual({
+      workItemHash: currentItem.hash,
+      requestId: "request:completion",
+      contractRevision: "contract:v1",
+      basisRef: "basis:v1",
+      expectedHead: 2,
+      invalidation,
+      result: refuted,
+    });
+    expect(admission?.requestSnapshot.invalidations).toEqual([invalidation]);
+  });
+
+  test("rejects requester verification errors without trusted verifier authority", async () => {
+    const verificationError = {
+      id: "verification-error:hostile",
+      criterionId: criterion.id,
+      code: "verifier_crash" as const,
+      detail: "claimant says the verifier crashed",
+      verifierRef: "verifier:claimed",
+      basisRef: "basis:v1",
+      createdAt: 99,
+    };
+
+    const code = await resolveErrorCode(
+      item(),
+      request({ results: [], verificationErrors: [verificationError] }),
+    );
+
+    expect(code).toBe("invalid_verifier");
   });
 
   test("rejects a caller attempt to settle a durable unknown effect before policy", async () => {
@@ -875,8 +946,8 @@ describe("completion admission authority resolver", () => {
     ],
     ["result basis", "stale_basis", { results: [{ ...assertedResult(), basisRef: "basis:old" }] }],
     [
-      "invalidation without authority",
-      "unsupported_fact",
+      "invalidation basis",
+      "stale_basis",
       {
         invalidations: [
           {
