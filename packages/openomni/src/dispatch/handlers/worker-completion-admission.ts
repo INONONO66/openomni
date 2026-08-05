@@ -449,6 +449,9 @@ function recordedInputsFromEvidence(
   input: WorkerCriterionFactInput,
   evidence: WorkItem.Evidence,
 ): Record<string, VerifierRegistry.JsonValue> {
+  if (evidence.attempt !== item.attempt || evidence.basisRef !== item.completionContract.basisRef) {
+    throw new Error(`verifier evidence is from a different attempt: ${evidence.id}`);
+  }
   if (evidence.readBack) {
     return recordedInputsFromReadBack(input.verification.kind, evidence);
   }
@@ -569,6 +572,9 @@ function durableVerifierInput(
       recordedInputs: Record<string, VerifierRegistry.JsonValue>;
     }>
   | undefined {
+  if (evidence.attempt !== item.attempt || evidence.basisRef !== item.completionContract.basisRef) {
+    return undefined;
+  }
   if (evidence.readBack?.kind === "citation_match") {
     return {
       kind: "archived_quote_match",

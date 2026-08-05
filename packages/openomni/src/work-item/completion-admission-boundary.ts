@@ -628,12 +628,19 @@ function verifyCompletionReport(
       throw new Error(`completion report claim is not admitted: ${reportClaim.statement}`);
     }
     const criterionIds = new Set(admittedClaims.map(({ criterionId }) => criterionId));
-    const observationIds = new Set([
-      ...admittedClaims.flatMap(({ observationIds: ids }) => ids),
-      ...effectiveResults
+    const effectiveObservationIds = new Set(
+      effectiveResults
         .filter(({ criterionId }) => criterionIds.has(criterionId))
         .flatMap(({ observationIds: ids }) => ids),
-    ]);
+    );
+    const observationIds = new Set(
+      admittedClaims.flatMap(({ observationIds: ids }) =>
+        ids.filter(
+          (observationId) =>
+            admission.decision === "owner_override" || effectiveObservationIds.has(observationId),
+        ),
+      ),
+    );
     const admittedEvidenceIds = new Set(
       [...observationIds].flatMap((observationId) => {
         const observation = observationsById.get(observationId);

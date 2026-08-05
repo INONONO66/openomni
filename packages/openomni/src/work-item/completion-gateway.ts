@@ -49,7 +49,13 @@ export function createWorkItemCompletionGateway(
         if (item.completionFacts.admissions.length === 0 || item.completionTerminalReceipt) {
           continue;
         }
-        const admission = item.completionFacts.admissions.at(-1);
+        const admission = item.completionFacts.admissions
+          .filter(
+            (candidate) =>
+              candidate.contractRevision === item.completionContract.revision &&
+              candidate.basisRef === item.completionContract.basisRef,
+          )
+          .at(-1);
         if (
           !admission ||
           (admission.decision !== "admit" && admission.decision !== "owner_override") ||

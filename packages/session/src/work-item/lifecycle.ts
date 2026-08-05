@@ -93,7 +93,8 @@ export async function resolveWorkItemBlocker(
 
 export async function addWorkItemEvidence(
   hash: string,
-  evidence: Omit<WorkItem.Evidence, "id" | "createdAt"> & Readonly<{ id?: string }>,
+  evidence: Omit<WorkItem.Evidence, "id" | "createdAt" | "attempt" | "basisRef"> &
+    Readonly<{ id?: string }>,
 ): Promise<WorkItem.Info | undefined> {
   const explicitId = evidence.id;
   if (explicitId !== undefined) {
@@ -103,6 +104,8 @@ export async function addWorkItemEvidence(
       const candidate = WorkItem.Evidence.parse({
         ...evidence,
         id: explicitId,
+        attempt: recorded.attempt,
+        basisRef: recorded.basisRef,
         createdAt: recorded.createdAt,
       });
       if (JSON.stringify(recorded) !== JSON.stringify(candidate)) {
@@ -120,6 +123,8 @@ export async function addWorkItemEvidence(
         WorkItem.Evidence.parse({
           ...evidence,
           id: explicitId ?? crypto.randomUUID(),
+          attempt: existing.attempt,
+          basisRef: existing.completionContract.basisRef,
           createdAt: now,
         }),
       ],

@@ -371,6 +371,36 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItem.deriveStatus(recovered)).toBe("completed");
   });
 
+  test("skips recovery admissions from a prior retry generation", async () => {
+    const adapter = configure();
+    const first = await fixture("recovery");
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+    const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
+    let writeCount = 0;
+    class SimulatedBootCrash extends Error {}
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+      writeCount += 1;
+      if (writeCount === 2) throw new SimulatedBootCrash("crash before terminal append");
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+    };
+    await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
+      SimulatedBootCrash,
+    );
+    adapter.workItem.compareAndSet = compareAndSet;
+    await WorkItemStore.fail(first.item.hash, "retry after crashed completion");
+    await WorkItemStore.retry(first.item.hash);
+
+    const receipt = await gateway.recoverRecordedCompletions();
+
+    expect(receipt).toEqual({ recovered: 0, skipped: 1, failures: [] });
+    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
+  });
+
   test("reports a blocked stale-admission recovery as a failure", async () => {
     const adapter = configure();
     const first = await fixture("recovery");
@@ -661,6 +691,96 @@ describe("WorkItem completion admission service", () => {
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
     expect(stored?.completionReport).toBeUndefined();
+  });
+
+  test("rejects evidence reachable only through a non-effective refuted result", async () => {
+    configure();
+    const first = await fixture();
+    const withEvidence = await WorkItemStore.addEvidence(first.item.hash, {
+      kind: "verification",
+      description: "passing artifact attached to a refuted result",
+      passed: true,
+    });
+    const refutedEvidenceId = withEvidence?.evidence.at(-1)?.id;
+    if (!withEvidence || !refutedEvidenceId) throw new Error("missing refuted-result evidence");
+    const verifiedResult = first.request.results[0];
+    const verifiedClaim = first.request.claims[0];
+    if (!verifiedResult || !verifiedClaim) throw new Error("missing verified fixture facts");
+    const refutedObservationId = "observation:refuted-current-basis";
+    const candidate = WorkItem.CompletionRequest.parse({
+      ...first.request,
+      expectedHead: withEvidence.revision,
+      claims: [
+        ...first.request.claims,
+        {
+          ...verifiedClaim,
+          id: "claim:refuted-current-basis",
+          observationIds: [refutedObservationId],
+        },
+      ],
+      observations: [
+        ...first.request.observations,
+        {
+          id: refutedObservationId,
+          producer: "builtin:refuted",
+          subjectRef: withEvidence.hash,
+          basisRef: withEvidence.completionContract.basisRef,
+          artifactRefs: [refutedEvidenceId],
+          provenanceRef: refutedEvidenceId,
+          ancestryRefs: [],
+          observedAt: NOW,
+        },
+      ],
+      results: [
+        ...first.request.results,
+        {
+          ...verifiedResult,
+          id: "result:refuted-current-basis",
+          value: "refuted",
+          observationIds: [refutedObservationId],
+        },
+      ],
+    });
+    const resolver = {
+      resolve(currentInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+        const current = WorkItem.Info.parse(currentInput);
+        const request = WorkItem.CompletionRequest.parse(requestInput);
+        return WorkItem.CompletionAdmission.parse({
+          version: 1,
+          id: `admission:${request.id}:${current.revision + 1}:verified-only`,
+          requestId: request.id,
+          requestSnapshot: request,
+          origin: request.origin,
+          contractRevision: current.completionContract.revision,
+          basisRef: current.completionContract.basisRef,
+          effectiveResultIds: [verifiedResult.id],
+          unresolvedCriterionIds: [],
+          decision: "admit",
+          reasonCodes: [],
+          residualRisks: [],
+          policyRef: "policy:verified-only",
+          expectedHead: current.revision,
+          recordedHead: current.revision + 1,
+          createdAt: NOW,
+        });
+      },
+    };
+    const service = guardedService(resolver);
+    if (!service) return;
+    const report: WorkItem.CompletionReport = {
+      ...first.report,
+      claims: [
+        {
+          statement: verifiedClaim.statement,
+          evidenceIds: [refutedEvidenceId],
+        },
+      ],
+    };
+
+    await expect(service.requestCompletion(candidate, report)).rejects.toThrow(
+      "completion report evidence is not admitted",
+    );
+    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("rejects a hostile admit with unresolved required criteria before terminal commit", async () => {

@@ -740,6 +740,24 @@ describe("worker completion admission convergence", () => {
     }
     await WorkItemStore.fail(item.hash, "retry with fresh evidence");
     await WorkItemStore.retry(item.hash);
+    const staleEvidence = await reflectCoordinatorResultWithPolicy(
+      item.hash,
+      succeeded(firstOutput),
+      {
+        completionWriter,
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine: PolicyEngine.create(),
+        now: () => NOW + 1,
+      },
+    );
+    expect(staleEvidence.completionBlocker).toContain(
+      "verifier evidence is from a different attempt",
+    );
+    for (const blocker of WorkItemStore.get(item.hash)?.blockers ?? []) {
+      await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+    }
+    await WorkItemStore.fail(item.hash, "retry again with a current verifier artifact");
+    await WorkItemStore.retry(item.hash);
     const currentOutput = JSON.parse(await evidenceBackedEnvelope(item.hash)) as {
       completionReport: WorkItem.CompletionReport;
       criterionFacts: unknown[];

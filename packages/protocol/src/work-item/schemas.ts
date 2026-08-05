@@ -107,6 +107,8 @@ export const Evidence = z
     passed: z.boolean(),
     detail: z.string().optional(),
     readBack: ReadBackCheck.optional(),
+    attempt: z.number().int().positive().optional(),
+    basisRef: z.string().min(1).optional(),
     createdAt: z.number(),
   })
   .superRefine((evidence, ctx) => {

@@ -1028,6 +1028,8 @@
     "outcome"
   ],
   "WorkItem.Evidence": [
+    "attempt",
+    "basisRef",
     "createdAt",
     "description",
     "detail",
