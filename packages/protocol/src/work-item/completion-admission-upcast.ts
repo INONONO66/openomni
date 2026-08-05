@@ -10,8 +10,6 @@ import type {
   Observation,
 } from "./completion-admission.js";
 
-const LEGACY_COMPLETION_LIMIT = 256;
-
 const LegacyEvidence = z
   .object({
     id: z.string().min(1),
@@ -23,14 +21,12 @@ const LegacyEvidence = z
 
 const LegacyCompletionReport = z
   .object({
-    claims: z
-      .array(
-        z.object({
-          statement: z.string().min(1),
-          evidenceIds: z.array(z.string().min(1)).max(LEGACY_COMPLETION_LIMIT),
-        }),
-      )
-      .max(LEGACY_COMPLETION_LIMIT),
+    claims: z.array(
+      z.object({
+        statement: z.string().min(1),
+        evidenceIds: z.array(z.string().min(1)),
+      }),
+    ),
   })
   .passthrough();
 
@@ -39,9 +35,9 @@ const LegacyWorkItem = z
     hash: z.string().min(1),
     name: z.string(),
     goal: z.string(),
-    acceptanceCriteria: z.array(z.string()).max(LEGACY_COMPLETION_LIMIT).default([]),
+    acceptanceCriteria: z.array(z.string()).default([]),
     timestamps: z.object({ completed: z.number().finite().optional() }).passthrough(),
-    evidence: z.array(LegacyEvidence).max(LEGACY_COMPLETION_LIMIT).default([]),
+    evidence: z.array(LegacyEvidence).default([]),
     completionReport: LegacyCompletionReport.optional(),
   })
   .passthrough();

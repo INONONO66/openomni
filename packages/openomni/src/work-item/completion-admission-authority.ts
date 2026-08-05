@@ -360,6 +360,13 @@ function assertUniqueFactIds(item: WorkItem.Info, request: WorkItem.CompletionRe
     }
     ids.add(fact.id);
   }
+  const reservedAdmissionId = admissionId(request);
+  if (ids.has(reservedAdmissionId)) {
+    throw new CompletionAdmissionError(
+      "duplicate_fact_id",
+      `completion fact id is reserved for its admission: ${reservedAdmissionId}`,
+    );
+  }
 }
 
 async function assertProposedResultAuthority(

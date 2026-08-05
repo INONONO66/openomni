@@ -245,11 +245,11 @@ describe("worker completion admission convergence", () => {
       completionReservationOwnerId: "process:one",
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
-      async readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+      async readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
         readBackCalls += 1;
         if (readBackCalls > 1) throw new Error("duplicate delivery repeated read-back");
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-        return WorkItemStore.addReadBackEvidence(hash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: request.target,
           quotedText: request.quotedText,
@@ -322,13 +322,13 @@ describe("worker completion admission convergence", () => {
     const options = {
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
-      async readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+      async readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
         readBackCalls += 1;
         if (readBackCalls > 1) throw new Error("concurrent delivery repeated read-back");
         readBackStarted.resolve();
         await releaseReadBack.promise;
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-        return WorkItemStore.addReadBackEvidence(hash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: request.target,
           quotedText: request.quotedText,
@@ -601,9 +601,19 @@ describe("worker completion admission convergence", () => {
         },
       ],
     });
+    const unrelatedCriterion = await port.validate({
+      workItemHash: stored.hash,
+      requestId: "request:criterion-binding",
+      contractRevision: stored.completionContract.revision,
+      basisRef: stored.completionContract.basisRef,
+      criterion: { ...criterion, statement: "production deployed" },
+      result,
+      observations: [observation],
+    });
 
     expect(appendedArtifact).toEqual({ ok: false });
     expect(appendedObservation).toEqual({ ok: false });
+    expect(unrelatedCriterion).toEqual({ ok: false });
   });
 
   test("scopes Worker completion identity to the retried attempt", async () => {
@@ -708,6 +718,69 @@ describe("worker completion admission convergence", () => {
     expect(current.completionBlocked).toBe(false);
     expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
     expect(completed?.completionFacts.admissions).toHaveLength(1);
+  });
+
+  test("does not persist a read-back that finishes after retry", async () => {
+    const criterion = "archived source contains the recorded quote exactly";
+    const item = await startedItem("internal_chat_agent", criterion);
+    const output = JSON.stringify({
+      completionReport: {
+        summary: "Read-back belongs only to its initiating attempt.",
+        claims: [{ statement: criterion }],
+      },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
+      readBackRequests: [
+        {
+          claimIndex: 0,
+          criterionIndex: 0,
+          request: {
+            kind: "citation_match",
+            target: "https://example.com/retry-read-back",
+            quotedText: "retry marker",
+          },
+        },
+      ],
+    });
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const priorAttempt = reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: PolicyEngine.create(),
+      now: () => NOW,
+      async readBackRecorder(_hash, request) {
+        entered.resolve();
+        await release.promise;
+        if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+        return WorkItem.ReadBackCheck.parse({
+          kind: "citation_match",
+          target: request.target,
+          quotedText: request.quotedText,
+          matchedText: request.quotedText,
+          passed: true,
+          observedAt: NOW,
+          statusCode: 200,
+        });
+      },
+    });
+    await entered.promise;
+    await WorkItemStore.fail(item.hash, "retry while read-back is in flight");
+    await WorkItemStore.retry(item.hash);
+    release.resolve();
+
+    const stale = await priorAttempt;
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(stale.completionBlocker).toContain("completion reservation lease lost");
+    expect(stored?.attempt).toBe(2);
+    expect(stored?.evidence).toEqual([]);
+    expect(stored?.completionFacts.admissions).toEqual([]);
   });
 
   test("rejects prior-attempt claim evidence after retry", async () => {
@@ -838,10 +911,10 @@ describe("worker completion admission convergence", () => {
       sourceOrigin: { source: "internal_worker" } as const,
       completionPolicyEngine,
       now: () => NOW,
-      readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+      readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
         readBackCalls += 1;
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-        return WorkItemStore.addReadBackEvidence(hash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: request.target,
           quotedText: request.quotedText,
@@ -1135,9 +1208,9 @@ describe("worker completion admission convergence", () => {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,
-      async readBackRecorder(hash, request) {
+      async readBackRecorder(_hash, request) {
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-        return WorkItemStore.addReadBackEvidence(hash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: request.target,
           quotedText: request.quotedText,

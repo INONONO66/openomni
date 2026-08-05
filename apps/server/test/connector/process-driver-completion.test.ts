@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AppConnector, Dispatch } from "@openomni/protocol";
+import { type AppConnector, type Dispatch, WorkItem } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
@@ -168,8 +168,8 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
       completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
-      readBackRecorder: (workItemHash, readBack) =>
-        WorkItemStore.addReadBackEvidence(workItemHash, {
+      readBackRecorder: (_workItemHash, readBack) =>
+        WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: readBack.target,
           quotedText: readBack.kind === "citation_match" ? readBack.quotedText : "expected marker",
@@ -249,9 +249,9 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
       completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
-      readBackRecorder: (workItemHash, readBack) => {
+      readBackRecorder: (_workItemHash, readBack) => {
         recordedReadBacks.push(readBack);
-        return WorkItemStore.addReadBackEvidence(workItemHash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: readBack.target,
           quotedText: readBack.kind === "citation_match" ? readBack.quotedText : "expected marker",

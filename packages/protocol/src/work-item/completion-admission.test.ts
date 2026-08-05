@@ -610,13 +610,13 @@ describe("WorkItem completion admission contracts", () => {
     ]);
   });
 
-  test("bounds the explicit legacy upcast", () => {
+  test("preserves the explicit legacy upcast above the former boundary", () => {
     const oversized = {
       ...baseItem,
       acceptanceCriteria: Array.from({ length: 257 }, (_, index) => `criterion ${index}`),
     };
 
-    expect(WorkItem.Info.safeParse(WorkItem.upcastLegacyCompletion(oversized)).success).toBe(false);
+    expect(WorkItem.Info.safeParse(WorkItem.upcastLegacyCompletion(oversized)).success).toBe(true);
   });
 
   test("upcasts historically valid blank legacy goals and acceptance criteria", () => {
@@ -636,7 +636,7 @@ describe("WorkItem completion admission contracts", () => {
 
   test("upcasts the historical acceptance-criteria boundary", () => {
     const acceptanceCriteria = Array.from(
-      { length: 256 },
+      { length: 257 },
       (_, index) => `historical criterion ${index}`,
     );
 
@@ -648,7 +648,33 @@ describe("WorkItem completion admission contracts", () => {
     );
 
     expect(item.acceptanceCriteria).toEqual(acceptanceCriteria);
-    expect(item.completionFacts.criteria).toHaveLength(256);
+    expect(item.completionFacts.criteria).toHaveLength(257);
+  });
+
+  test("upcasts historical evidence and report arrays beyond the former boundary", () => {
+    const evidence = Array.from({ length: 257 }, (_, index) => ({
+      id: `evidence:historical:${index}`,
+      kind: "verification",
+      description: `historical evidence ${index}`,
+      passed: true,
+      createdAt: index + 1,
+    }));
+    const claims = Array.from({ length: 257 }, (_, index) => ({
+      statement: `historical claim ${index}`,
+      evidenceIds: evidence.map(({ id }) => id),
+    }));
+
+    const item = WorkItem.Info.parse(
+      WorkItem.upcastLegacyCompletion({
+        ...baseItem,
+        evidence,
+        completionReport: { summary: "historical", claims, caveats: [], followUps: [] },
+      }),
+    );
+
+    expect(item.evidence).toHaveLength(257);
+    expect(item.completionReport?.claims).toHaveLength(257);
+    expect(item.completionReport?.claims[0]?.evidenceIds).toHaveLength(257);
   });
 
   test("upcasts legacy passed evidence as asserted rather than verified", () => {

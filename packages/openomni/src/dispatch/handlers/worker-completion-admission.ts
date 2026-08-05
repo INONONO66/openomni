@@ -554,6 +554,9 @@ export function createDurableCompletionResultAuthorityPort(): CompletionResultAu
           verification.verifierId === candidate.result.verifierRef &&
           (candidate.result.value === "asserted" ||
             verification.checkedPredicate === candidate.result.checkedPredicate) &&
+          (verifierInput.kind === "citation_support" ||
+            candidate.result.value === "asserted" ||
+            candidate.result.checkedPredicate === candidate.criterion.statement) &&
           observation.producer === verification.verifierId &&
           observation.artifactRefs.length === 1 &&
           observation.provenanceRef === evidenceId,

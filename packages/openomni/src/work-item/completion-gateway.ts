@@ -1,5 +1,5 @@
 import { WorkItem } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/session";
 import type { CompletionAuthorityDependencies } from "./completion-admission-authority.js";
 import { createCompletionAuthorityResolver } from "./completion-admission-authority.js";
 import {
@@ -58,14 +58,38 @@ export function createWorkItemCompletionGateway(
           .at(-1);
         if (
           !admission ||
-          (admission.decision !== "admit" && admission.decision !== "owner_override") ||
-          admission.completionReportSnapshot === undefined ||
           ["completed", "failed", "cancelled"].includes(WorkItem.deriveStatus(item))
         ) {
           skipped += 1;
           continue;
         }
         try {
+          if (admission.decision === "block" || admission.decision === "escalate") {
+            const description = `completion admission ${admission.decision}: ${admission.reasonCodes.join(", ")}`;
+            const current = WorkItemStore.get(item.hash);
+            if (
+              current?.blockers.some(
+                (blocker) => !blocker.resolvedAt && blocker.description === description,
+              )
+            ) {
+              skipped += 1;
+              continue;
+            }
+            await WorkItemStore.addBlocker(item.hash, {
+              id: `${admission.id}:blocker`,
+              description,
+              kind: "error",
+            });
+            recovered += 1;
+            continue;
+          }
+          if (
+            (admission.decision !== "admit" && admission.decision !== "owner_override") ||
+            admission.completionReportSnapshot === undefined
+          ) {
+            skipped += 1;
+            continue;
+          }
           const recoveredItem = await service.resumeCompletion(
             item.hash,
             admission.id,

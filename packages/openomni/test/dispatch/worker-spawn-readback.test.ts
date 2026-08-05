@@ -245,7 +245,7 @@ describe("worker.spawn read-back completion gate", () => {
       async readBackRecorder(hash, request) {
         recordedHashes.push(hash);
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-        return WorkItemStore.addReadBackEvidence(hash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: request.target,
           quotedText: request.quotedText,

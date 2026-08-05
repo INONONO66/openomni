@@ -3,7 +3,7 @@ import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PolicyEngine } from "@openomni/policy";
-import { WorkItem } from "@openomni/protocol";
+import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
 import {
@@ -399,6 +399,45 @@ describe("WorkItem completion admission service", () => {
 
     expect(receipt).toEqual({ recovered: 0, skipped: 1, failures: [] });
     expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("recovers a recorded block admission into one deterministic blocker", async () => {
+    configure();
+    const first = await fixture();
+    const policyEngine = PolicyEngine.create();
+    policyEngine.register({
+      kind: "point",
+      name: "recorded-block-recovery",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "recorded-block-recovery",
+          reasonCodes: ["recorded_block_recovery"],
+        }),
+    });
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine,
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+
+    const outcome = await gateway.requestCompletion(first.request, first.report);
+    expect(outcome.completed).toBe(false);
+    expect(outcome.admission.decision).toBe("block");
+    expect(WorkItemStore.get(first.item.hash)?.blockers).toEqual([]);
+
+    const receipt = await gateway.recoverRecordedCompletions();
+    const recovered = WorkItemStore.get(first.item.hash);
+    expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
+    expect(recovered?.blockers).toHaveLength(1);
+    expect(recovered?.blockers[0]?.id).toBe(`${outcome.admission.id}:blocker`);
+
+    const replay = await gateway.recoverRecordedCompletions();
+    expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
+    expect(WorkItemStore.get(first.item.hash)?.blockers).toHaveLength(1);
   });
 
   test("reports a blocked stale-admission recovery as a failure", async () => {

@@ -1089,6 +1089,19 @@ describe("completion admission authority resolver", () => {
     expect(await resolveErrorCode(item(), candidate)).toBe("duplicate_fact_id");
   });
 
+  test("reserves the generated admission id against proposed facts", async () => {
+    const candidate = request({
+      results: [
+        {
+          ...assertedResult(),
+          id: "admission:wi_authority:request:completion:3",
+        },
+      ],
+    });
+
+    expect(await resolveErrorCode(item(), candidate)).toBe("duplicate_fact_id");
+  });
+
   test("keeps completion authority and fold exports kernel internal", () => {
     expect(Reflect.get(WorkItemPublic, "createCompletionAuthorityResolver")).toBeUndefined();
     expect(Reflect.get(WorkItemPublic, "evaluateCompletion")).toBeUndefined();

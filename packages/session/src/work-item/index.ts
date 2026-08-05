@@ -61,7 +61,7 @@ export namespace WorkItemStore {
 
   export async function addBlocker(
     hash: string,
-    blocker: Omit<WorkItem.Blocker, "id" | "createdAt">,
+    blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
   ): Promise<WorkItem.Info | undefined> {
     return addWorkItemBlocker(hash, blocker);
   }
@@ -83,8 +83,9 @@ export namespace WorkItemStore {
   export async function addReadBackEvidence(
     hash: string,
     check: WorkItem.ReadBackCheck,
+    expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemReadBackEvidence(hash, check);
+    return addWorkItemReadBackEvidence(hash, check, expectedScope);
   }
 
   export const recordOutcome = recordWorkItemOutcome;

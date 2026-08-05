@@ -63,13 +63,16 @@ export async function cancelWorkItem(hash: string): Promise<WorkItem.Info | unde
 
 export async function addWorkItemBlocker(
   hash: string,
-  blocker: Omit<WorkItem.Blocker, "id" | "createdAt">,
+  blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
 ): Promise<WorkItem.Info | undefined> {
   return mutate(hash, (existing, now) => ({
     changedFields: ["blockers"],
     updated: {
       ...existing,
-      blockers: [...existing.blockers, { id: crypto.randomUUID(), ...blocker, createdAt: now }],
+      blockers: [
+        ...existing.blockers,
+        { ...blocker, id: blocker.id ?? crypto.randomUUID(), createdAt: now },
+      ],
       timestamps: { ...existing.timestamps, updated: now },
     },
   }));
@@ -95,6 +98,7 @@ export async function addWorkItemEvidence(
   hash: string,
   evidence: Omit<WorkItem.Evidence, "id" | "createdAt" | "attempt" | "basisRef"> &
     Readonly<{ id?: string }>,
+  expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
 ): Promise<WorkItem.Info | undefined> {
   const explicitId = evidence.id;
   if (explicitId !== undefined) {
@@ -114,37 +118,51 @@ export async function addWorkItemEvidence(
       return existing;
     }
   }
-  return mutate(hash, (existing, now) => ({
-    changedFields: ["evidence"],
-    updated: {
-      ...existing,
-      evidence: [
-        ...existing.evidence,
-        WorkItem.Evidence.parse({
-          ...evidence,
-          id: explicitId ?? crypto.randomUUID(),
-          attempt: existing.attempt,
-          basisRef: existing.completionContract.basisRef,
-          createdAt: now,
-        }),
-      ],
-      timestamps: { ...existing.timestamps, updated: now },
-    },
-  }));
+  return mutate(hash, (existing, now) => {
+    if (
+      expectedScope &&
+      (existing.attempt !== expectedScope.expectedAttempt ||
+        existing.completionContract.basisRef !== expectedScope.expectedBasisRef)
+    ) {
+      throw new Error("WorkItem attempt changed before evidence recording");
+    }
+    return {
+      changedFields: ["evidence"],
+      updated: {
+        ...existing,
+        evidence: [
+          ...existing.evidence,
+          WorkItem.Evidence.parse({
+            ...evidence,
+            id: explicitId ?? crypto.randomUUID(),
+            attempt: existing.attempt,
+            basisRef: existing.completionContract.basisRef,
+            createdAt: now,
+          }),
+        ],
+        timestamps: { ...existing.timestamps, updated: now },
+      },
+    };
+  });
 }
 
 export async function addWorkItemReadBackEvidence(
   hash: string,
   check: WorkItem.ReadBackCheck,
+  expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
 ): Promise<WorkItem.Info | undefined> {
   const readBack = WorkItem.ReadBackCheck.parse(check);
-  return addWorkItemEvidence(hash, {
-    kind: "verification",
-    description: `${readBack.kind} read-back ${readBack.passed ? "passed" : "failed"} for ${readBack.target}`,
-    passed: readBack.passed,
-    detail: JSON.stringify(readBack),
-    readBack,
-  });
+  return addWorkItemEvidence(
+    hash,
+    {
+      kind: "verification",
+      description: `${readBack.kind} read-back ${readBack.passed ? "passed" : "failed"} for ${readBack.target}`,
+      passed: readBack.passed,
+      detail: JSON.stringify(readBack),
+      readBack,
+    },
+    expectedScope,
+  );
 }
 
 export const recordOutcome = recordWorkItemOutcome;

@@ -117,7 +117,11 @@ export interface WorkerCompletionOptions {
   readonly stakesResolver?: CompletionStakesResolver;
   readonly readBack?: ReadBackExecutor.Options;
   readonly readBackEnvelopeTimeoutMs?: number;
-  readonly readBackRecorder?: typeof ReadBackExecutor.record;
+  readonly readBackRecorder?: (
+    workItemHash: string,
+    input: Parameters<typeof ReadBackExecutor.execute>[0],
+    options?: ReadBackExecutor.Options,
+  ) => Promise<WorkItem.ReadBackCheck>;
   readonly now?: () => number;
 }
 
@@ -327,7 +331,9 @@ async function prepareCompletionReport(
   const evidenceIdsByClaim = new Map<number, string[]>();
   const readBackEvidenceBindings = new Map<number, WorkerReadBackEvidenceBinding>();
   const now = options.now ?? Date.now;
-  const recordReadBack = options.readBackRecorder ?? ReadBackExecutor.record;
+  const executeReadBack =
+    options.readBackRecorder ??
+    ((_workItemHash, input, readBackOptions) => ReadBackExecutor.execute(input, readBackOptions));
   const deadlineAt = now() + resolveReadBackEnvelopeTimeoutMs(options);
   for (const [requestIndex, readBack] of envelope.readBackRequests.entries()) {
     assertLease();
@@ -336,15 +342,17 @@ async function prepareCompletionReport(
     }
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
-    const updated = await recordReadBack(
+    const check = await executeReadBack(
       workItemHash,
       applySharedDeadline(readBack.request, remainingMs),
-      {
-        ...options.readBack,
-        expectedAttempt: item.attempt,
-        expectedBasisRef: item.completionContract.basisRef,
-      },
+      options.readBack,
     );
+    assertLease();
+    const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {
+      expectedAttempt: item.attempt,
+      expectedBasisRef: item.completionContract.basisRef,
+    });
+    assertLease();
     if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
     const evidenceId = updated?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("read-back evidence was not recorded");

@@ -75,9 +75,9 @@ function citationRequest(target: string) {
   } as const;
 }
 
-function successfulReadBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
+function successfulReadBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
   if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-  return WorkItemStore.addReadBackEvidence(hash, {
+  return WorkItem.ReadBackCheck.parse({
     kind: "citation_match",
     target: request.target,
     quotedText: request.quotedText,
@@ -109,10 +109,10 @@ describe("worker completion read-back deadline", () => {
         sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 10,
         now: () => clock.shift() ?? 11,
-        async readBackRecorder(hash, request) {
+        async readBackRecorder(_hash, request) {
           recorderCalls += 1;
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-          return WorkItemStore.addReadBackEvidence(hash, {
+          return WorkItem.ReadBackCheck.parse({
             kind: "citation_match",
             target: request.target,
             quotedText: request.quotedText,
@@ -147,11 +147,11 @@ describe("worker completion read-back deadline", () => {
         sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 0.25,
         now: () => 0,
-        async readBackRecorder(hash, request) {
+        async readBackRecorder(_hash, request) {
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
           expect(request.timeoutMs).toBe(1);
           expect(request.maxBodyBytes).toBe(1_000_000);
-          return WorkItemStore.addReadBackEvidence(hash, {
+          return WorkItem.ReadBackCheck.parse({
             kind: "citation_match",
             target: request.target,
             quotedText: request.quotedText,
@@ -229,10 +229,11 @@ describe("worker completion read-back deadline", () => {
 
   test("redelivers an unchanged blocked completion without writes", async () => {
     const workItem = await createStartedWorkItem();
-    const evidence = await successfulReadBackRecorder(
+    const check = await successfulReadBackRecorder(
       workItem.hash,
       citationRequest("http://example.com/source").request,
     );
+    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check);
     const evidenceId = evidence?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("missing completion evidence");
     const result = completionResult(workItem, []);
