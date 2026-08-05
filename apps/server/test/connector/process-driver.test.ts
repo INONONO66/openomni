@@ -9,6 +9,7 @@ import { resolveConnectorLogPath } from "../../src/connector/log-path.js";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 const ConnectorDispatchOutput = z
   .object({
@@ -30,7 +31,7 @@ const ConnectorDispatchOutput = z
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
   Storage.getAdapter().session.set("ses_fake", {
     id: "ses_fake",
     title: "Fake CLI session",
@@ -1128,6 +1129,7 @@ describe("createConnectorEndpointProcessDriver", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
+      completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
     });
 

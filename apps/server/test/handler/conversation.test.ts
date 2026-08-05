@@ -150,6 +150,7 @@ async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined
     },
   };
   const service = createCompletionAdmissionService({
+    completionWriter,
     authorityResolver,
     now: () => current.timestamps.updated + 2,
   });
@@ -167,10 +168,11 @@ const deps: BridgeDeps = {
 };
 
 const originalIngest = IngressEngine.ingest;
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
   IngressEngine.ingest = originalIngest;
 });
 

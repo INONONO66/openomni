@@ -1,4 +1,5 @@
 import type { Tool } from "@openomni/protocol";
+import type { Storage } from "@openomni/session";
 import { createDefaultDispatchRuntime, type DispatchOwners } from "../../../dispatch/index.js";
 import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
 import {
@@ -8,6 +9,7 @@ import {
 } from "./tools/dispatch.js";
 
 export type AgentToolProviderOptions = {
+  readonly completionWriter?: Storage.WorkItemCompletionWriter;
   readonly dispatchRuntime?: DispatchToolRuntime;
   readonly dispatchOwners?: DispatchOwners;
   readonly dispatchToolMode?: "default" | "worker-resident-ask";
@@ -21,7 +23,11 @@ export class AgentToolProvider implements ToolProvider {
 
   constructor(options?: AgentToolProviderOptions) {
     const dispatchRuntime =
-      options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
+      options?.dispatchRuntime ??
+      createDefaultDispatchRuntime({
+        completionWriter: options?.completionWriter,
+        owners: options?.dispatchOwners,
+      });
     this.register(
       options?.dispatchToolMode === "worker-resident-ask"
         ? createWorkerResidentAskDispatchTool(dispatchRuntime)

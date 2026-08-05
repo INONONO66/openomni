@@ -4,7 +4,6 @@ import { ZodError } from "zod";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
-import { withWorkItemCompletionWriter } from "./completion-writer.js";
 import { WorkItemStore } from "./index.js";
 
 const baseInput = {
@@ -17,11 +16,12 @@ const baseInput = {
 };
 
 const adapters: SqliteStorageAdapter[] = [];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function configureSqlite(): SqliteStorageAdapter {
   const adapter = new SqliteStorageAdapter(":memory:");
   adapters.push(adapter);
-  Storage.configure(adapter);
+  completionWriter = Storage.configure(adapter);
   return adapter;
 }
 
@@ -121,9 +121,7 @@ function persistCompletedFixture(
     },
     timestamps: { ...current.timestamps, updated: admission.createdAt },
   });
-  if (
-    !withWorkItemCompletionWriter(() => adapter.compareAndSet(hash, current.revision, admitted))
-  ) {
+  if (!completionWriter(hash, current.revision, admitted)) {
     return undefined;
   }
   const completedAt = admission.createdAt + 1;
@@ -142,11 +140,7 @@ function persistCompletedFixture(
     },
     timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
   });
-  return withWorkItemCompletionWriter(() =>
-    adapter.compareAndSet(hash, admitted.revision, completed),
-  )
-    ? completed
-    : undefined;
+  return completionWriter(hash, admitted.revision, completed) ? completed : undefined;
 }
 
 async function rawCompletionCode(

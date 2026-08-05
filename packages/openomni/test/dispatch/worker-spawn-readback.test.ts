@@ -3,12 +3,23 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
-import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
+import { registerBuiltInDispatchHandlers as registerBuiltInDispatchHandlersProduction } from "../../src/dispatch/setup";
 import { command } from "./helpers";
 
 const servers: Server[] = [];
+let completionWriter: Storage.WorkItemCompletionWriter;
+
+function registerBuiltInDispatchHandlers(
+  registry: Parameters<typeof registerBuiltInDispatchHandlersProduction>[0],
+  options?: Parameters<typeof registerBuiltInDispatchHandlersProduction>[1],
+) {
+  return registerBuiltInDispatchHandlersProduction(registry, {
+    completionWriter,
+    ...options,
+  });
+}
 
 function workerSpawnPayload(text: string) {
   return {
@@ -71,7 +82,7 @@ function closeServer(server: Server): Promise<void> {
 describe("worker.spawn read-back completion gate", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
   });
 
   afterEach(async () => {
@@ -277,6 +288,22 @@ describe("worker.spawn read-back completion gate", () => {
     });
     const connector = await WorkItemStore.start(connectorCreated.hash);
     if (!connector) throw new Error("missing connector WorkItem");
+    Storage.getAdapter().session.set("session:connector-read-back", {
+      id: "session:connector-read-back",
+      title: "Connector read-back composition",
+      model: { providerID: "test", modelID: "test" },
+      time: { created: 1, updated: 1 },
+      spawnDepth: 0,
+    });
+    WorkerRunStateStore.create("session:connector-read-back", {
+      runId: "run:connector-read-back",
+      agentName: "connector-worker",
+      status: "running",
+      executorKind: "connector_endpoint",
+      assignedStepId: connector.hash,
+      title: "Connector read-back composition",
+      prompt: "complete the connector read-back WorkItem",
+    });
     await registry.get("worker.complete")?.({
       ...command(
         "worker.complete",

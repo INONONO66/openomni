@@ -14,6 +14,7 @@ import {
 
 const NOW = 1_000;
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
+let completionWriter: Storage.WorkItemCompletionWriter;
 const WORKER_RUN_ID = "run:completion-admission";
 const WORKER_SESSION_ID = "session:completion-admission";
 
@@ -23,6 +24,7 @@ function reflectCoordinatorResult(
   options: Omit<WorkerCompletionOptions, "completionPolicyEngine">,
 ) {
   return reflectCoordinatorResultWithPolicy(workItemHash, result, {
+    completionWriter,
     ...options,
     completionPolicyEngine: COMPLETION_POLICY_ENGINE,
   });
@@ -34,6 +36,7 @@ function projectConnectorCompletion(
   options: Omit<ConnectorCompletionOptions, "completionPolicyEngine">,
 ) {
   return projectConnectorCompletionWithPolicy(workItemHash, result, {
+    completionWriter,
     ...options,
     completionPolicyEngine: COMPLETION_POLICY_ENGINE,
   });
@@ -41,7 +44,7 @@ function projectConnectorCompletion(
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
 });
 
 async function startedItem(
@@ -238,6 +241,7 @@ describe("worker completion admission convergence", () => {
     });
     let readBackCalls = 0;
     const options = {
+      completionReservationOwnerId: "process:one",
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
       async readBackRecorder(hash: string, request: WorkItem.ReadBackRequest) {
@@ -337,7 +341,10 @@ describe("worker completion admission convergence", () => {
 
     const firstPromise = reflectCoordinatorResult(item.hash, succeeded(output), options);
     await readBackStarted.promise;
-    const second = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+    const second = await reflectCoordinatorResult(item.hash, succeeded(output), {
+      ...options,
+      completionReservationOwnerId: "process:two",
+    });
     try {
       expect(second.completionBlocked).toBe(true);
       expect(second.completionBlocker).toContain("already in progress");
@@ -618,6 +625,7 @@ describe("worker completion admission convergence", () => {
     });
 
     const reflection = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      completionWriter,
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,

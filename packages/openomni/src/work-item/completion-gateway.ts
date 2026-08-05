@@ -7,7 +7,8 @@ import {
   createCompletionAdmissionService,
 } from "./completion-admission-boundary.js";
 
-export type WorkItemCompletionGatewayOptions = CompletionAuthorityDependencies;
+export type WorkItemCompletionGatewayOptions = CompletionAuthorityDependencies &
+  Readonly<{ completionWriter: Storage.WorkItemCompletionWriter }>;
 export type WorkItemCompletionRecoveryReceipt = Readonly<{
   recovered: number;
   skipped: number;
@@ -27,6 +28,7 @@ export function createWorkItemCompletionGateway(
 ): WorkItemCompletionGateway {
   const now = options.now ?? Date.now;
   const service = createCompletionAdmissionService({
+    completionWriter: options.completionWriter,
     authorityResolver: createCompletionAuthorityResolver(options),
     allowTrustedInvalidations: options.invalidationAuthorityPort !== undefined,
     now,
@@ -58,12 +60,20 @@ export function createWorkItemCompletionGateway(
           continue;
         }
         try {
-          await service.resumeCompletion(
+          const recoveredItem = await service.resumeCompletion(
             item.hash,
             admission.id,
             admission.completionReportSnapshot,
           );
-          recovered += 1;
+          if (WorkItem.deriveStatus(recoveredItem) === "completed") {
+            recovered += 1;
+          } else {
+            failures.push({
+              workItemHash: item.hash,
+              admissionId: admission.id,
+              error: "completion recovery remained incomplete",
+            });
+          }
         } catch (error) {
           failures.push({
             workItemHash: item.hash,

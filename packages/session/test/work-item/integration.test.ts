@@ -9,9 +9,9 @@ import {
   Storage,
   WorkItemStore,
 } from "../../src";
-import { withWorkItemCompletionWriter } from "../../src/work-item/completion-writer.js";
 
 type WorkItemInput = Parameters<typeof WorkItemStore.create>[0];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function createInput(overrides: Partial<WorkItemInput> = {}): WorkItemInput {
   return {
@@ -92,11 +92,7 @@ function persistCompletedFixture(
     },
     timestamps: { ...current.timestamps, updated: admission.createdAt },
   });
-  if (
-    !withWorkItemCompletionWriter(() =>
-      workItemAdapter.compareAndSet(hash, current.revision, admitted),
-    )
-  ) {
+  if (!completionWriter(hash, current.revision, admitted)) {
     return undefined;
   }
   const completedAt = admission.createdAt + 1;
@@ -116,11 +112,7 @@ function persistCompletedFixture(
     completionTerminalReceipt: receipt,
     timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
   });
-  if (
-    !withWorkItemCompletionWriter(() =>
-      workItemAdapter.compareAndSet(hash, admitted.revision, completed),
-    )
-  ) {
+  if (!completionWriter(hash, admitted.revision, completed)) {
     return undefined;
   }
   if (options.publishTerminalEvents) {
@@ -159,7 +151,7 @@ describe("WorkItem integration", () => {
 
   beforeEach(() => {
     adapter = new SqliteStorageAdapter(":memory:");
-    Storage.configure(adapter);
+    completionWriter = Storage.configure(adapter);
   });
 
   afterEach(() => {

@@ -240,13 +240,16 @@ export function requiredCompletionAdmissionDriverItem(hash: string): WorkItem.In
 }
 
 export async function withCompletionAdmissionDriverStorage<T>(
-  operation: (adapter: SqliteStorageAdapter) => Promise<T>,
+  operation: (
+    adapter: SqliteStorageAdapter,
+    completionWriter: Storage.WorkItemCompletionWriter,
+  ) => Promise<T>,
 ): Promise<T> {
   Bus.reset();
   const adapter = new SqliteStorageAdapter(":memory:");
-  Storage.configure(adapter);
+  const completionWriter = Storage.configure(adapter);
   try {
-    return await operation(adapter);
+    return await operation(adapter, completionWriter);
   } finally {
     adapter.close();
     Storage.reset();

@@ -1,6 +1,6 @@
 import { PolicyEngine } from "@openomni/policy";
 import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
 import { PolicyResolver, type PolicyResolverInstance } from "../../policy/index.js";
@@ -98,19 +98,39 @@ function assertWorkerCompletionAuthority(
 ): void {
   const actor = command.actor;
   if (
-    actor.kind === "worker" &&
-    actor.trustTier === "assigned_worker" &&
-    actor.workerRunId === payload.result.runId &&
-    actor.sessionId === payload.result.sessionId &&
-    (command.target.sessionId === undefined ||
-      command.target.sessionId === payload.result.sessionId) &&
-    (workItem === undefined ||
-      (workItem.executorKind === "connector_endpoint" &&
-        workItem.workSessionId === payload.result.sessionId))
+    actor.kind !== "worker" ||
+    actor.trustTier !== "assigned_worker" ||
+    actor.workerRunId !== payload.result.runId ||
+    actor.sessionId !== payload.result.sessionId
   ) {
-    return;
+    throw new Error("worker.complete actor is not authorized for this Worker result");
   }
-  throw new Error("worker.complete actor is not authorized for this Worker result");
+  if (
+    command.target.sessionId !== undefined &&
+    command.target.sessionId !== payload.result.sessionId
+  ) {
+    throw new Error("worker.complete actor is not authorized for this Worker result");
+  }
+  if (workItem === undefined) return;
+  if (
+    workItem.executorKind !== "connector_endpoint" ||
+    workItem.workSessionId !== payload.result.sessionId
+  ) {
+    throw new Error("worker.complete actor is not authorized for this Worker result");
+  }
+  const workerRun = WorkerRunStateStore.get(payload.result.sessionId, payload.result.runId);
+  if (!workerRun) {
+    throw new Error(`worker.complete WorkerRun not found: ${payload.result.runId}`);
+  }
+  if (
+    (workerRun.executorKind !== undefined && workerRun.executorKind !== workItem.executorKind) ||
+    (workerRun.assignedStepId !== undefined && workerRun.assignedStepId !== workItem.hash) ||
+    (workerRun.status !== "running" && workerRun.status !== "waiting_input")
+  ) {
+    throw new Error(
+      `worker.complete WorkerRun is not assigned to this active WorkItem: executor=${workerRun.executorKind ?? "missing"} assignedStep=${workerRun.assignedStepId ?? "missing"} status=${workerRun.status}`,
+    );
+  }
 }
 
 export function createWorkerDispatchHandlers(
@@ -132,6 +152,7 @@ export function createWorkerDispatchHandlers(
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
+          completionWriter: options.completionWriter,
           driver: options.connectorEndpointDriver,
           completionPolicyEngine,
           stakesResolver: options.stakesResolver,
@@ -164,6 +185,7 @@ export function createWorkerDispatchHandlers(
         throw err;
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
+        completionWriter: options.completionWriter,
         sourceOrigin: { source: "internal_worker" },
         completionPolicyEngine,
         stakesResolver: options.stakesResolver,
@@ -190,6 +212,7 @@ export function createWorkerDispatchHandlers(
       assertWorkerCompletionAuthority(command, payload, workItem);
       const workItemHash = workItem.hash;
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
+        completionWriter: options.completionWriter,
         completionPolicyEngine,
         stakesResolver: options.stakesResolver,
         readBack: options.readBack,

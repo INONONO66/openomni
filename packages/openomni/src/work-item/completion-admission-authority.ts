@@ -146,6 +146,7 @@ export function createCompletionAuthorityResolver(
       assertRequesterFactsSupported(request);
       assertProposedFacts(item, request);
       assertUniqueFactIds(item, request);
+      assertDurableResultAuthority(item, request);
       await assertProposedResultAuthority(dependencies.resultAuthorityPort, item, request);
       await assertProposedInvalidationAuthority(
         dependencies.invalidationAuthorityPort,
@@ -407,6 +408,41 @@ async function assertProposedResultAuthority(
       throw new CompletionAdmissionError(
         "invalid_verifier",
         `result authority rejected ${result.id}`,
+      );
+    }
+  }
+}
+
+function assertDurableResultAuthority(
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+): void {
+  const invalidatedResultIds = new Set([
+    ...item.completionFacts.invalidations.map(({ resultId }) => resultId),
+    ...request.invalidations.map(({ resultId }) => resultId),
+  ]);
+  for (const result of item.completionFacts.results) {
+    if (result.value === "asserted" || invalidatedResultIds.has(result.id)) continue;
+    const criterion = item.completionFacts.criteria.find(
+      (candidate) => candidate.id === result.criterionId,
+    );
+    const observations = result.observationIds.flatMap((observationId) => {
+      const observation = item.completionFacts.observations.find(
+        (candidate) => candidate.id === observationId,
+      );
+      return observation ? [observation] : [];
+    });
+    if (
+      criterion === undefined ||
+      result.checkedPredicate !== criterion.statement ||
+      result.observationIds.length === 0 ||
+      observations.length !== result.observationIds.length ||
+      observations.some(({ basisRef }) => basisRef !== result.basisRef) ||
+      result.verifierRef === undefined
+    ) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `durable result ${result.id} has no authoritative verifier basis`,
       );
     }
   }

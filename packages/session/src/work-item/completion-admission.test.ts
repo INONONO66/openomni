@@ -2,15 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
-import { withWorkItemCompletionWriter } from "./completion-writer.js";
 import { WorkItemStore } from "./index.js";
 
 const adapters: SqliteStorageAdapter[] = [];
+const completionWriters = new WeakMap<SqliteStorageAdapter, Storage.WorkItemCompletionWriter>();
 
 function configure(): SqliteStorageAdapter {
   const adapter = new SqliteStorageAdapter(":memory:");
   adapters.push(adapter);
-  Storage.configure(adapter);
+  completionWriters.set(adapter, Storage.configure(adapter));
   return adapter;
 }
 
@@ -20,9 +20,9 @@ function authorizedCompareAndSet(
   expectedHead: number,
   candidate: WorkItem.Info,
 ): boolean {
-  return withWorkItemCompletionWriter(() =>
-    adapter.workItem.compareAndSet(hash, expectedHead, candidate),
-  );
+  const completionWriter = completionWriters.get(adapter);
+  if (!completionWriter) throw new Error("missing completion writer");
+  return completionWriter(hash, expectedHead, candidate);
 }
 
 async function createItem() {

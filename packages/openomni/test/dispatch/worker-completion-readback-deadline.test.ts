@@ -8,6 +8,7 @@ import {
 } from "../../src/dispatch/handlers/worker-completion";
 
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function reflectCoordinatorResult(
   workItemHash: string,
@@ -15,6 +16,7 @@ function reflectCoordinatorResult(
   options: Omit<WorkerCompletionOptions, "completionPolicyEngine">,
 ) {
   return reflectCoordinatorResultWithPolicy(workItemHash, result, {
+    completionWriter,
     ...options,
     completionPolicyEngine: COMPLETION_POLICY_ENGINE,
   });
@@ -89,13 +91,13 @@ function successfulReadBackRecorder(hash: string, request: WorkItem.ReadBackRequ
 describe("worker completion read-back deadline", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("applies one shared deadline across all read-back requests", async () => {
     const workItem = await createStartedWorkItem();
     let recorderCalls = 0;
-    const clock = [0, 0, 0, 11];
+    const clock = [0, 0, 0, 0, 11];
 
     const reflection = await reflectCoordinatorResult(
       workItem.hash,
@@ -253,6 +255,7 @@ describe("worker completion read-back deadline", () => {
     });
 
     await reflectCoordinatorResultWithPolicy(workItem.hash, blockedResult, {
+      completionWriter,
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: policyEngine,
     });
@@ -260,6 +263,7 @@ describe("worker completion read-back deadline", () => {
     if (!blocked) throw new Error("missing blocked WorkItem");
 
     const replay = await reflectCoordinatorResultWithPolicy(workItem.hash, blockedResult, {
+      completionWriter,
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: policyEngine,
     });

@@ -57,7 +57,7 @@ export async function main(): Promise<void> {
   }
 
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
-  initialize({ dbPath: config.storage.dbPath });
+  const completionWriter = initialize({ dbPath: config.storage.dbPath });
   BusPersistence.start();
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
@@ -138,10 +138,12 @@ export async function main(): Promise<void> {
     residentAgentResolver,
   });
   agentProviderRef.current = new AgentToolProvider({
+    completionWriter,
     dispatchOwners,
   });
   const completionPolicyEngine = PolicyEngine.create();
   const sharedDispatchRuntime = createDefaultDispatchRuntime({
+    completionWriter,
     owners: dispatchOwners,
     completionPolicyEngine,
   });

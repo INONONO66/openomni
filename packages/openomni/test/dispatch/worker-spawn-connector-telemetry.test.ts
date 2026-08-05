@@ -8,6 +8,7 @@ import { command, workerSpawnPayload } from "./helpers";
 const TEST_CONNECTOR_ID = "app.test-telemetry";
 const TEST_INSTALLATION_ID = "install:test-telemetry";
 const TEST_ENDPOINT_ID = `endpoint:${TEST_INSTALLATION_ID}`;
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 type WorkerDispatchHandlerOptions = NonNullable<Parameters<typeof createWorkerDispatchHandlers>[0]>;
 type ConnectorEndpointDriverOwner = NonNullable<
@@ -83,7 +84,10 @@ function connectorEndpointWorkerCommand() {
 }
 
 function createConnectorEndpointHandlers(dispatch: ConnectorEndpointDriverOwner["dispatch"]) {
-  return createWorkerDispatchHandlers({ connectorEndpointDriver: { dispatch } });
+  return createWorkerDispatchHandlers({
+    completionWriter,
+    connectorEndpointDriver: { dispatch },
+  });
 }
 
 function resultWithTelemetry(request: Execution.Request): Execution.Result {
@@ -115,7 +119,7 @@ function resultWithTelemetry(request: Execution.Request): Execution.Result {
 describe("worker.spawn connector endpoint telemetry evidence", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("records connector token usage and tool calls as WorkItem evidence", async () => {

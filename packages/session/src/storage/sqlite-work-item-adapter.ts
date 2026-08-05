@@ -1,9 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { isWorkItemCompletionWriter } from "../work-item/completion-writer.js";
+import { isAuthorizedCompletionWriter } from "../work-item/completion-writer.js";
 
 export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkItemSubAdapter {
-  return {
+  const adapter: ProtocolStorage.WorkItemSubAdapter = {
     create: (hash: string, item: WorkItem.Info): boolean => {
       const parsed = WorkItem.Info.parse(item);
       assertMatchingHash(hash, parsed.hash);
@@ -46,7 +46,11 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
         data: string;
       } | null;
       const current = currentRow ? decodeWorkItem(currentRow.data) : undefined;
-      if (current && changesCompletionAuthority(current, parsed) && !isWorkItemCompletionWriter()) {
+      if (
+        current &&
+        changesCompletionAuthority(current, parsed) &&
+        !isAuthorizedCompletionWriter()
+      ) {
         throw new Error("WorkItem completion fact writes are restricted to the OpenOmni boundary");
       }
       const result = db
@@ -114,6 +118,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       return result.changes > 0;
     },
   };
+  return adapter;
 }
 
 function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info): boolean {

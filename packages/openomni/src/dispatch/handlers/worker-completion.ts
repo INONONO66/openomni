@@ -1,12 +1,14 @@
 import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Execution } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { type Storage, WorkItemStore } from "@openomni/session";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
 import type { CompletionStakesResolver } from "../../work-item/completion-admission-authority.js";
 import {
+  assertCompletionReservationLease,
   type CompletionBoundaryOutcome,
+  CompletionAdmissionServiceError,
   reserveCompletionRequest,
 } from "../../work-item/completion-admission-boundary.js";
 import type { CompletionSourceOrigin } from "../../work-item/completion-origin.js";
@@ -24,6 +26,7 @@ const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
 const MAX_READ_BACK_BODY_BYTES = 1_000_000;
 const activeCompletionRequests = new Set<string>();
+const completionReservationOwnerId = `completion-process:${crypto.randomUUID()}`;
 
 const ReadBackRequest = WorkItem.ReadBackRequest.superRefine((request, ctx) => {
   if (request.timeoutMs !== undefined && request.timeoutMs > MAX_READ_BACK_TIMEOUT_MS) {
@@ -107,6 +110,8 @@ type ParsedCompletionEnvelope =
 export type CompletionPolicyEngine = ReturnType<typeof PolicyEngine.create>;
 
 export interface WorkerCompletionOptions {
+  readonly completionReservationOwnerId?: string;
+  readonly completionWriter?: Storage.WorkItemCompletionWriter;
   readonly sourceOrigin: CompletionSourceOrigin;
   readonly completionPolicyEngine: CompletionPolicyEngine;
   readonly stakesResolver?: CompletionStakesResolver;
@@ -128,6 +133,9 @@ export async function reflectCoordinatorResult(
   options: WorkerCompletionOptions,
 ): Promise<CompletionReflection> {
   if (result.status === "succeeded") {
+    if (!options.completionWriter) {
+      return blockCompletion(workItemHash, "completion writer is unavailable");
+    }
     const parsed = parseCompletionEnvelope(result);
     if (!parsed.ok) {
       return blockCompletion(workItemHash, parsed.reason);
@@ -136,6 +144,7 @@ export async function reflectCoordinatorResult(
       const now = options.now ?? Date.now;
       const completionEnvelopeDigest = digestCompletionEnvelope(parsed.envelope);
       const replay = await replayWorkerCompletion({
+        completionWriter: options.completionWriter,
         workItemHash,
         result,
         completionEnvelopeDigest,
@@ -147,15 +156,21 @@ export async function reflectCoordinatorResult(
       if (replay) return completionOutcomeReflection(workItemHash, replay);
       const item = requireWorkerCompletionIdentity(workItemHash, result);
       const requestId = workerCompletionRequestId(item, result, completionEnvelopeDigest);
+      const reservationOwnerId =
+        options.completionReservationOwnerId ?? completionReservationOwnerId;
       const reservation = reserveCompletionRequest({
+        completionWriter: options.completionWriter,
         workItemHash,
         requestId,
         requestRoot: workerCompletionRequestRoot(item, result),
         envelopeDigest: completionEnvelopeDigest,
+        ownerId: reservationOwnerId,
+        leaseDurationMs: (options.readBackEnvelopeTimeoutMs ?? MAX_READ_BACK_TIMEOUT_MS) + 5_000,
         now: now(),
       });
       if (reservation.state === "admitted") {
         const admittedReplay = await replayWorkerCompletion({
+          completionWriter: options.completionWriter,
           workItemHash,
           result,
           completionEnvelopeDigest,
@@ -171,7 +186,10 @@ export async function reflectCoordinatorResult(
           throw new Error(`completion admission replay is missing: ${requestId}`);
         return completionOutcomeReflection(workItemHash, admittedReplay);
       }
-      if (reservation.state === "existing" && activeCompletionRequests.has(requestId)) {
+      if (
+        reservation.state === "busy" ||
+        (reservation.state === "existing" && activeCompletionRequests.has(requestId))
+      ) {
         return completionReflection(
           workItemHash,
           true,
@@ -180,8 +198,24 @@ export async function reflectCoordinatorResult(
       }
       activeCompletionRequests.add(requestId);
       try {
-        const prepared = await prepareCompletionReport(workItemHash, parsed.envelope, options);
+        const assertLease = () =>
+          assertCompletionReservationLease({
+            workItemHash,
+            requestId,
+            reservationId: reservation.reservation.id,
+            ownerId: reservationOwnerId,
+            fence: reservation.reservation.fence,
+            now: now(),
+          });
+        const prepared = await prepareCompletionReport(
+          workItemHash,
+          parsed.envelope,
+          options,
+          assertLease,
+        );
+        assertLease();
         const outcome = await admitWorkerCompletion({
+          completionWriter: options.completionWriter,
           workItemHash,
           result,
           completionEnvelopeDigest,
@@ -200,6 +234,13 @@ export async function reflectCoordinatorResult(
         activeCompletionRequests.delete(requestId);
       }
     } catch (err) {
+      if (
+        err instanceof CompletionAdmissionServiceError &&
+        err.code === "request_conflict" &&
+        err.message.startsWith("completion reservation lease lost:")
+      ) {
+        return completionReflection(workItemHash, true, err.message);
+      }
       return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
     }
   }
@@ -268,6 +309,7 @@ async function prepareCompletionReport(
   workItemHash: string,
   envelope: CompletionEnvelope,
   options: WorkerCompletionOptions,
+  assertLease: () => void,
 ): Promise<PreparedCompletionReport> {
   if (envelope.readBackRequests.length === 0) {
     return {
@@ -284,6 +326,7 @@ async function prepareCompletionReport(
   const recordReadBack = options.readBackRecorder ?? ReadBackExecutor.record;
   const deadlineAt = now() + resolveReadBackEnvelopeTimeoutMs(options);
   for (const [requestIndex, readBack] of envelope.readBackRequests.entries()) {
+    assertLease();
     if (!item.completionFacts.criteria[readBack.criterionIndex]) {
       throw new Error(`read-back completion criterion is unknown: ${readBack.criterionIndex}`);
     }

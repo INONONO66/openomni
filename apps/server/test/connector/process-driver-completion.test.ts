@@ -8,6 +8,7 @@ import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 const CompletedConnectorDispatchOutput = z
   .object({
@@ -48,7 +49,7 @@ const FailedConnectorDispatchOutput = z
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
 });
 
 afterEach(() => {
@@ -164,6 +165,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
+      completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       readBackRecorder: (workItemHash, readBack) =>
         WorkItemStore.addReadBackEvidence(workItemHash, {
@@ -243,6 +245,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const recordedReadBacks: unknown[] = [];
     const handlers = createWorkerDispatchHandlers({
+      completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       readBackRecorder: (workItemHash, readBack) => {
         recordedReadBacks.push(readBack);
@@ -322,6 +325,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     } satisfies AppConnector.Definition;
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
+      completionWriter,
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
     });
 

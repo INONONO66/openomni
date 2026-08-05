@@ -1,10 +1,19 @@
-import type { Message, Storage as ProtocolStorage } from "@openomni/protocol";
+import type { Message, Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createWorkItemCompletionWriter } from "../work-item/completion-writer.js";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { SqliteStorageAdapter } from "./sqlite-storage";
 
+// Same-process application modules are trusted composition-root code. The completion writer
+// prevents accidental bypass through ordinary store APIs; it is not an OS isolation boundary.
 export namespace Storage {
+  export type WorkItemCompletionWriter = (
+    hash: string,
+    expectedHead: number,
+    item: WorkItem.Info,
+  ) => boolean;
+
   export type MessagePage = {
     items: Message.Info[];
     nextCursor: string | null;
@@ -74,15 +83,16 @@ export namespace Storage {
   let initializedDbPathValue: string | null = null;
   let warnedOnce = false;
 
-  export function configure(newAdapter: Adapter): void {
+  export function configure(newAdapter: Adapter): WorkItemCompletionWriter {
     const scope = storageScope.getStore();
     if (scope) {
       scope.adapter = newAdapter;
       scope.initializedDbPath = "__configured__";
-      return;
+      return createWorkItemCompletionWriter(() => Storage.get().workItem);
     }
     adapter = newAdapter;
     initializedDbPathValue = "__configured__";
+    return createWorkItemCompletionWriter(() => Storage.get().workItem);
   }
 
   export function getInitializedDbPath(): string | null {

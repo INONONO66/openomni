@@ -6,18 +6,22 @@ import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
-import { createCompletionAdmissionService } from "../../src/work-item/completion-admission-boundary.js";
+import {
+  createCompletionAdmissionService,
+  reserveCompletionRequest,
+} from "../../src/work-item/completion-admission-boundary.js";
 import { createWorkItemCompletionGateway } from "../../src/work-item/completion-gateway.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const NOW = 1_000;
 const adapters: SqliteStorageAdapter[] = [];
 const databasePaths: string[] = [];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function configure(dbPath = ":memory:"): SqliteStorageAdapter {
   const adapter = new SqliteStorageAdapter(dbPath);
   adapters.push(adapter);
-  Storage.configure(adapter);
+  completionWriter = Storage.configure(adapter);
   return adapter;
 }
 
@@ -112,7 +116,7 @@ function blockingAuthority() {
 
 function guardedService(authorityResolver: unknown) {
   const service = Reflect.apply(createCompletionAdmissionService, undefined, [
-    { authorityResolver, now: () => NOW },
+    { completionWriter, authorityResolver, now: () => NOW },
   ]);
   expect(typeof service, "completion admission factory must return a service").toBe("object");
   if (typeof service !== "object" || service === null) return undefined;
@@ -311,6 +315,7 @@ describe("WorkItem completion admission service", () => {
     const trustedResult = first.request.results[0];
     if (!trustedResult) throw new Error("missing public gateway result");
     const gateway = createWorkItemCompletionGateway({
+      completionWriter,
       policyEngine: PolicyEngine.create(),
       resultAuthorityPort: {
         validate(candidate: unknown) {
@@ -335,6 +340,7 @@ describe("WorkItem completion admission service", () => {
     const adapter = configure();
     const first = await fixture("recovery");
     const gateway = createWorkItemCompletionGateway({
+      completionWriter,
       policyEngine: PolicyEngine.create(),
       resultAuthorityPort: { validate: () => ({ ok: true }) },
       now: () => NOW,
@@ -363,6 +369,92 @@ describe("WorkItem completion admission service", () => {
     const recovered = WorkItemStore.get(first.item.hash);
     if (!recovered) throw new Error("missing recovered WorkItem");
     expect(WorkItem.deriveStatus(recovered)).toBe("completed");
+  });
+
+  test("reports a blocked stale-admission recovery as a failure", async () => {
+    const adapter = configure();
+    const first = await fixture("recovery");
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+    const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
+    let writeCount = 0;
+    class SimulatedBootCrash extends Error {}
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+      writeCount += 1;
+      if (writeCount === 2) throw new SimulatedBootCrash("crash before terminal append");
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+    };
+
+    await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
+      SimulatedBootCrash,
+    );
+    adapter.workItem.compareAndSet = compareAndSet;
+    const admitted = WorkItemStore.get(first.item.hash)?.completionFacts.admissions.at(-1);
+    if (!admitted) throw new Error("missing crashed completion admission");
+    await WorkItemStore.addBlocker(first.item.hash, {
+      kind: "external",
+      description: "external state changed before restart",
+    });
+
+    const receipt = await gateway.recoverRecordedCompletions();
+
+    expect(receipt.recovered).toBe(0);
+    expect(receipt.failures).toEqual([
+      {
+        workItemHash: first.item.hash,
+        admissionId: admitted.id,
+        error: "completion recovery remained incomplete",
+      },
+    ]);
+    const recovered = WorkItemStore.get(first.item.hash);
+    if (!recovered) throw new Error("missing blocked recovery WorkItem");
+    expect(WorkItem.deriveStatus(recovered)).toBe("blocked");
+  });
+
+  test("holds completion reservations across process owners until lease expiry", async () => {
+    configure();
+    const { item, request } = await fixture("worker");
+    const base = {
+      completionWriter,
+      workItemHash: item.hash,
+      requestId: request.id,
+      requestRoot: "request-root:reservation-lease",
+      envelopeDigest: "digest:reservation-lease",
+      leaseDurationMs: 10,
+    };
+
+    const first = reserveCompletionRequest({
+      ...base,
+      ownerId: "process:one",
+      now: 100,
+    });
+    const busy = reserveCompletionRequest({
+      ...base,
+      ownerId: "process:two",
+      now: 109,
+    });
+    const takeover = reserveCompletionRequest({
+      ...base,
+      ownerId: "process:two",
+      now: 110,
+    });
+
+    expect(first).toMatchObject({
+      state: "reserved",
+      reservation: { ownerId: "process:one", fence: 1, leaseExpiresAt: 110 },
+    });
+    expect(busy).toMatchObject({
+      state: "busy",
+      reservation: { ownerId: "process:one", fence: 1 },
+    });
+    expect(takeover).toMatchObject({
+      state: "reserved",
+      reservation: { ownerId: "process:two", fence: 2, leaseExpiresAt: 120 },
+    });
   });
 
   test("keeps the terminal service factory off public package barrels", () => {

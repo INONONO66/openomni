@@ -152,6 +152,12 @@ const CompletionIdentity = z
   .strict();
 
 export const CompletionSourceIdentity = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("internal_worker"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("connector_worker"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("api"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("a2a"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("human"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("resident"), identity: CompletionIdentity }).strict(),
   z.object({ source: z.literal("sdk"), identity: CompletionIdentity }).strict(),
   z.object({ source: z.literal("internal"), identity: CompletionIdentity }).strict(),
 ]);
@@ -187,7 +193,25 @@ const CompletionRequestShape = z
     verificationErrors: z.array(VerificationErrorFact),
     effects: z.array(EffectRecord),
   })
-  .strict();
+  .strict()
+  .superRefine((request, ctx) => {
+    const sourceKind = request.sourceIdentity?.identity.kind;
+    const sourceOrigin =
+      sourceKind === "resident"
+        ? "resident"
+        : sourceKind === "worker"
+          ? "worker"
+          : sourceKind === "external_actor"
+            ? "external_actor"
+            : undefined;
+    if (sourceOrigin !== undefined && sourceOrigin !== request.origin) {
+      ctx.addIssue({
+        code: "custom",
+        message: "sourceIdentity kind must match completion origin",
+        path: ["sourceIdentity", "identity", "kind"],
+      });
+    }
+  });
 
 export const CompletionRequest = CompletionRequestShape;
 export type CompletionRequest = z.infer<typeof CompletionRequest>;
@@ -302,6 +326,9 @@ export const CompletionRequestReservation = z
     expectedHead: z.number().int().nonnegative(),
     recordedHead: z.number().int().positive(),
     createdAt: Timestamp,
+    ownerId: Reference.optional(),
+    fence: z.number().int().nonnegative().default(0),
+    leaseExpiresAt: Timestamp.optional(),
   })
   .strict()
   .superRefine((reservation, ctx) => {
@@ -310,6 +337,38 @@ export const CompletionRequestReservation = z
         code: "custom",
         message: "recordedHead must immediately follow expectedHead",
         path: ["recordedHead"],
+      });
+    }
+    const held = reservation.ownerId !== undefined;
+    if (held !== (reservation.leaseExpiresAt !== undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "ownerId and leaseExpiresAt must be present together",
+        path: ["ownerId"],
+      });
+    }
+    if (held && reservation.fence < 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "held reservations require a positive fence",
+        path: ["fence"],
+      });
+    }
+    if (!held && reservation.fence !== 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "unheld reservations require fence zero",
+        path: ["fence"],
+      });
+    }
+    if (
+      reservation.leaseExpiresAt !== undefined &&
+      reservation.leaseExpiresAt <= reservation.createdAt
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "leaseExpiresAt must follow createdAt",
+        path: ["leaseExpiresAt"],
       });
     }
   });

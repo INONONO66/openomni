@@ -39,6 +39,60 @@ function completionRequestSnapshot(overrides: Readonly<Record<string, unknown>> 
 }
 
 describe("WorkItem completion admission contracts", () => {
+  test("distinguishes legacy reservations from held leases", () => {
+    const base = {
+      version: 1,
+      id: "reservation:one",
+      requestId: "request:one",
+      requestRoot: "request-root:one",
+      envelopeDigest: "digest:one",
+      expectedHead: 0,
+      recordedHead: 1,
+      createdAt: 100,
+    };
+
+    expect(WorkItem.CompletionRequestReservation.parse(base)).toMatchObject({
+      fence: 0,
+    });
+    expect(
+      WorkItem.CompletionRequestReservation.parse({
+        ...base,
+        ownerId: "process:one",
+        fence: 1,
+        leaseExpiresAt: 110,
+      }),
+    ).toMatchObject({
+      ownerId: "process:one",
+      fence: 1,
+      leaseExpiresAt: 110,
+    });
+  });
+
+  test("binds qualified source identity kind to completion origin", () => {
+    const request = completionRequestSnapshot();
+
+    expect(
+      WorkItem.CompletionRequest.safeParse({
+        ...request,
+        origin: "resident",
+        sourceIdentity: {
+          source: "sdk",
+          identity: { kind: "worker", id: "worker:forged" },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      WorkItem.CompletionRequest.safeParse({
+        ...request,
+        origin: "worker",
+        sourceIdentity: {
+          source: "sdk",
+          identity: { kind: "worker", id: "worker:assigned" },
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   test("keeps criteria, claims, observations, results, and invalidations distinct", () => {
     const completionFacts = WorkItem.CompletionFacts.parse({
       version: 1,

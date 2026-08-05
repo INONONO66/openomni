@@ -29,7 +29,7 @@ import {
 } from "./completion-admission-driver-fixtures.js";
 
 export async function runStaleBasisCompletionAdmissionScenario() {
-  return withCompletionAdmissionDriverStorage(async (adapter) => {
+  return withCompletionAdmissionDriverStorage(async (adapter, completionWriter) => {
     const item = completionAdmissionDriverWorkItem("wi_driver_stale_basis", [
       "Current basis remains authoritative",
     ]);
@@ -47,6 +47,7 @@ export async function runStaleBasisCompletionAdmissionScenario() {
       CompletionAdmissionError,
     );
     const service = createCompletionAdmissionService({
+      completionWriter,
       authorityResolver: resolver,
       now: () => CompletionAdmissionDriverNow,
     });
@@ -93,7 +94,7 @@ export async function runRestartRecoveryCompletionAdmissionScenario() {
   try {
     Bus.reset();
     activeAdapter = new SqliteStorageAdapter(databasePath);
-    Storage.configure(activeAdapter);
+    let completionWriter = Storage.configure(activeAdapter);
     const item = completionAdmissionDriverWorkItem("wi_driver_restart_recovery", [
       "Recovery criterion is asserted",
     ]);
@@ -109,6 +110,7 @@ export async function runRestartRecoveryCompletionAdmissionScenario() {
       results: [result],
     });
     const service = createCompletionAdmissionService({
+      completionWriter,
       authorityResolver: createCompletionAuthorityResolver({
         policyEngine: completionAdmissionDriverAssertedPolicy(criterion.id),
         now: () => CompletionAdmissionDriverNow,
@@ -140,8 +142,9 @@ export async function runRestartRecoveryCompletionAdmissionScenario() {
     Storage.reset();
 
     activeAdapter = new SqliteStorageAdapter(databasePath);
-    Storage.configure(activeAdapter);
+    completionWriter = Storage.configure(activeAdapter);
     const resumedService = createCompletionAdmissionService({
+      completionWriter,
       authorityResolver: createCompletionAuthorityResolver({
         policyEngine: completionAdmissionDriverAssertedPolicy(criterion.id),
         now: () => CompletionAdmissionDriverNow,

@@ -556,7 +556,7 @@ describe("completion admission authority resolver", () => {
     expect(admission?.decision).toBe("admit");
   });
 
-  test("does not revalidate durable legacy results", async () => {
+  test("rejects durable decisive results without authoritative verifier basis", async () => {
     const currentItem = item({
       completionFacts: {
         ...WorkItem.emptyCompletionFacts(),
@@ -566,14 +566,12 @@ describe("completion admission authority resolver", () => {
       },
     });
 
-    const admission = await resolveAdmission(
-      { policyEngine: createPolicyEngine(), now: () => 10 },
-      currentItem,
-      request({ results: [] }),
-    );
+    const code = await resolveErrorCode(currentItem, request({ results: [] }), {
+      policyEngine: createPolicyEngine(),
+      now: () => 10,
+    });
 
-    expect(admission?.decision).toBe("admit");
-    expect(admission?.effectiveResultIds).toEqual(["result:hostile"]);
+    expect(code).toBe("invalid_verifier");
   });
 
   test("acquires Stakes before policy and includes the typed kernel value in the candidate", async () => {

@@ -1,6 +1,6 @@
 import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Execution } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { type Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
 import {
@@ -70,6 +70,7 @@ export type WorkerReadBackEvidenceBinding = Readonly<{
 }>;
 
 export type WorkerCompletionAdmissionInput = Readonly<{
+  completionWriter: Storage.WorkItemCompletionWriter;
   workItemHash: string;
   result: Execution.Result;
   completionEnvelopeDigest: string;
@@ -114,7 +115,7 @@ export async function admitWorkerCompletion(
     version: 1,
     id: requestId,
     origin: projectCompletionOrigin(input.sourceOrigin),
-    sourceIdentity: projectCompletionSourceIdentity(input.sourceOrigin),
+    sourceIdentity: workerCompletionSourceIdentity(input.sourceOrigin, input.result),
     workItemHash: item.hash,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
@@ -133,13 +134,34 @@ export async function admitWorkerCompletion(
     ...(input.stakesResolver === undefined ? {} : { stakesResolver: input.stakesResolver }),
     now: input.now,
   });
-  const service = createCompletionAdmissionService({ authorityResolver, now: input.now });
+  const service = createCompletionAdmissionService({
+    completionWriter: input.completionWriter,
+    authorityResolver,
+    now: input.now,
+  });
   return service.requestCompletion(request, input.completionReport);
+}
+
+function workerCompletionSourceIdentity(
+  sourceOrigin: CompletionSourceOrigin,
+  result: Execution.Result,
+): WorkItem.CompletionSourceIdentity | undefined {
+  if (sourceOrigin.source === "internal_worker" || sourceOrigin.source === "connector_worker") {
+    return WorkItem.CompletionSourceIdentity.parse({
+      source: sourceOrigin.source,
+      identity: {
+        kind: "worker",
+        id: `${result.sessionId}:${result.runId}`,
+      },
+    });
+  }
+  return projectCompletionSourceIdentity(sourceOrigin);
 }
 
 export async function replayWorkerCompletion(
   input: Pick<
     WorkerCompletionAdmissionInput,
+    | "completionWriter"
     | "workItemHash"
     | "result"
     | "completionEnvelopeDigest"
@@ -190,7 +212,11 @@ export async function replayWorkerCompletion(
     ...(input.stakesResolver === undefined ? {} : { stakesResolver: input.stakesResolver }),
     now: input.now,
   });
-  const service = createCompletionAdmissionService({ authorityResolver, now: input.now });
+  const service = createCompletionAdmissionService({
+    completionWriter: input.completionWriter,
+    authorityResolver,
+    now: input.now,
+  });
   return service.requestCompletion(admission.requestSnapshot, report);
 }
 

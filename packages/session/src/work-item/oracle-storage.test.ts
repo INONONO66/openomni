@@ -3,7 +3,6 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
-import { withWorkItemCompletionWriter } from "./completion-writer.js";
 import { WorkItemStore } from "./index.js";
 
 const baseInput = {
@@ -16,10 +15,11 @@ const baseInput = {
 };
 
 let adapter: SqliteStorageAdapter | undefined;
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function configureSqlite(): SqliteStorageAdapter {
   adapter = new SqliteStorageAdapter(":memory:");
-  Storage.configure(adapter);
+  completionWriter = Storage.configure(adapter);
   return adapter;
 }
 
@@ -30,10 +30,7 @@ async function createItem(
   return WorkItemStore.create({ ...baseInput, ...extra, name });
 }
 
-function persistCompletedFixture(
-  storage: SqliteStorageAdapter,
-  item: WorkItem.Info,
-): WorkItem.Info {
+function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
   const admission = WorkItem.CompletionAdmission.parse({
     version: 1,
     id: `admission:${item.hash}:oracle-storage`,
@@ -99,18 +96,10 @@ function persistCompletedFixture(
       admissions: [admission],
     },
   });
-  if (
-    !withWorkItemCompletionWriter(() =>
-      storage.workItem.compareAndSet(item.hash, item.revision, admitted),
-    )
-  ) {
+  if (!completionWriter(item.hash, item.revision, admitted)) {
     throw new Error("failed to persist completed fixture admission");
   }
-  if (
-    !withWorkItemCompletionWriter(() =>
-      storage.workItem.compareAndSet(item.hash, admitted.revision, completed),
-    )
-  ) {
+  if (!completionWriter(item.hash, admitted.revision, completed)) {
     throw new Error("failed to persist completed fixture terminal record");
   }
   return completed;
@@ -142,7 +131,7 @@ describe("WorkItem oracle storage concurrency", () => {
   test("records Owner outcome through one shared row CAS", async () => {
     const storage = configureSqlite();
     const item = await createItem("CAS outcome");
-    const completed = persistCompletedFixture(storage, item);
+    const completed = persistCompletedFixture(item);
     const originalCompareAndSet = storage.workItem.compareAndSet.bind(storage.workItem);
     const attemptedHeads: Array<readonly [number, number]> = [];
     storage.workItem.compareAndSet = (hash, expectedHead, candidate) => {
@@ -160,7 +149,7 @@ describe("WorkItem oracle storage concurrency", () => {
   test("rejects a stale Owner outcome without rewinding the competing row", async () => {
     const storage = configureSqlite();
     const item = await createItem("Stale outcome");
-    const completed = persistCompletedFixture(storage, item);
+    const completed = persistCompletedFixture(item);
     const originalCompareAndSet = storage.workItem.compareAndSet.bind(storage.workItem);
     let injectedCompetingWrite = false;
     storage.workItem.compareAndSet = (hash, expectedHead, candidate) => {

@@ -1,13 +1,34 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import {
-  createDefaultDispatchRuntime,
-  registerBuiltInDispatchHandlers,
+  createDefaultDispatchRuntime as createDefaultDispatchRuntimeProduction,
+  registerBuiltInDispatchHandlers as registerBuiltInDispatchHandlersProduction,
 } from "../../src/dispatch/setup";
 import { command, expectRejectsWithMessage } from "./helpers";
+
+let completionWriter: Storage.WorkItemCompletionWriter;
+
+function registerBuiltInDispatchHandlers(
+  registry: Parameters<typeof registerBuiltInDispatchHandlersProduction>[0],
+  options?: Parameters<typeof registerBuiltInDispatchHandlersProduction>[1],
+) {
+  return registerBuiltInDispatchHandlersProduction(registry, {
+    completionWriter,
+    ...options,
+  });
+}
+
+function createDefaultDispatchRuntime(
+  options?: Parameters<typeof createDefaultDispatchRuntimeProduction>[0],
+) {
+  return createDefaultDispatchRuntimeProduction({
+    completionWriter,
+    ...options,
+  });
+}
 
 function workerSpawnPayload(text: string) {
   return {
@@ -45,7 +66,35 @@ function assignedWorkerCommand(
   payload: unknown,
   sessionId: string,
   runId: string,
+  registerRun = true,
 ) {
+  if (registerRun && !WorkerRunStateStore.get(sessionId, runId)) {
+    const sessionAdapter = Storage.getAdapter().session;
+    if (!sessionAdapter.get(sessionId)) {
+      sessionAdapter.set(sessionId, {
+        id: sessionId,
+        title: "Connector completion fixture",
+        model: { providerID: "test", modelID: "test" },
+        time: { created: Date.now(), updated: Date.now() },
+        spawnDepth: 0,
+      });
+    }
+    WorkerRunStateStore.create(sessionId, {
+      runId,
+      agentName: "connector-worker",
+      status: "running",
+      executorKind: "connector_endpoint",
+      assignedStepId:
+        typeof payload === "object" &&
+        payload !== null &&
+        "workItemHash" in payload &&
+        typeof payload.workItemHash === "string"
+          ? payload.workItemHash
+          : undefined,
+      title: "Connector completion fixture",
+      prompt: "complete the assigned connector WorkItem",
+    });
+  }
   return {
     ...command("worker.complete", target, payload),
     actor: {
@@ -62,7 +111,7 @@ function assignedWorkerCommand(
 describe("worker.spawn result reflection", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("worker.spawn marks the work item failed when coordinator dispatch throws", async () => {
@@ -578,6 +627,53 @@ describe("worker.spawn result reflection", () => {
           ),
         ),
       "worker.complete actor is not authorized",
+    );
+
+    expect(WorkItemStore.get(item.hash)).toEqual(before);
+  });
+
+  test("worker.complete rejects a missing WorkerRun assignment before mutation", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry);
+    const created = await WorkItemStore.create({
+      name: "Missing WorkerRun completion",
+      sourceMessageId: "dispatch:missing-worker-run",
+      sourceChannel: "dispatch",
+      intent: "worker.complete",
+      goal: "reject a completion without an assigned WorkerRun",
+      executorKind: "connector_endpoint",
+      workSessionId: "session:missing-worker-run",
+      workerRunId: "run:missing-worker-run",
+      acceptanceCriteria: ["persist no forged terminal state"],
+    });
+    const item = await WorkItemStore.start(created.hash);
+    if (!item) throw new Error("missing WorkerRun completion fixture");
+    const before = WorkItemStore.get(item.hash);
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("worker.complete")?.(
+          assignedWorkerCommand(
+            {
+              kind: "worker",
+              runId: "run:missing-worker-run",
+              sessionId: "session:missing-worker-run",
+            },
+            {
+              workItemHash: item.hash,
+              result: {
+                runId: "run:missing-worker-run",
+                sessionId: "session:missing-worker-run",
+                status: "failed",
+                error: "forged without assignment",
+              },
+            },
+            "session:missing-worker-run",
+            "run:missing-worker-run",
+            false,
+          ),
+        ),
+      "WorkerRun not found",
     );
 
     expect(WorkItemStore.get(item.hash)).toEqual(before);

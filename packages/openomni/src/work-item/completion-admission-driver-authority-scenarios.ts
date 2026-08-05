@@ -22,7 +22,7 @@ import {
 import { evaluateCompletion } from "./completion-admission-fold.js";
 
 export async function runKnownBadCompletionAdmissionScenario() {
-  return withCompletionAdmissionDriverStorage(async (adapter) => {
+  return withCompletionAdmissionDriverStorage(async (adapter, completionWriter) => {
     const item = completionAdmissionDriverWorkItem("wi_driver_known_bad", [
       "recorded numeric operands satisfy lt",
     ]);
@@ -95,6 +95,7 @@ export async function runKnownBadCompletionAdmissionScenario() {
       now: () => CompletionAdmissionDriverNow,
     });
     const service = createCompletionAdmissionService({
+      completionWriter,
       authorityResolver: resolver,
       now: () => CompletionAdmissionDriverNow,
     });

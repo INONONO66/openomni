@@ -1,7 +1,6 @@
 import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
-import { createCompletionAuthorityResolver } from "./completion-admission-authority.js";
-import { createCompletionAdmissionService } from "./completion-admission-boundary.js";
+import { createDefaultDispatchRuntime } from "../dispatch/setup.js";
 import { completionAdmissionScenarioReceipt } from "./completion-admission-driver-contract.js";
 import {
   CompletionAdmissionDriverNow,
@@ -14,7 +13,11 @@ import {
   requiredCompletionAdmissionDriverItem,
   withCompletionAdmissionDriverStorage,
 } from "./completion-admission-driver-fixtures.js";
-import { type CompletionSourceOrigin, projectCompletionOrigin } from "./completion-origin.js";
+import {
+  type CompletionSourceOrigin,
+  projectCompletionOrigin,
+  projectCompletionSourceIdentity,
+} from "./completion-origin.js";
 
 type OriginExpectation = Readonly<{
   source: CompletionSourceOrigin;
@@ -30,12 +33,24 @@ type OriginAdmissionReceipt = Readonly<{
 }>;
 
 const OriginExpectations = [
-  { source: { source: "resident" }, origin: "resident" },
+  {
+    source: { source: "resident", identity: { kind: "resident", id: "resident:driver" } },
+    origin: "resident",
+  },
   { source: { source: "internal_worker" }, origin: "worker" },
   { source: { source: "connector_worker" }, origin: "worker" },
-  { source: { source: "api" }, origin: "external_actor" },
-  { source: { source: "a2a" }, origin: "external_actor" },
-  { source: { source: "human" }, origin: "external_actor" },
+  {
+    source: { source: "api", identity: { kind: "external_actor", id: "actor:api-driver" } },
+    origin: "external_actor",
+  },
+  {
+    source: { source: "a2a", identity: { kind: "external_actor", id: "actor:a2a-driver" } },
+    origin: "external_actor",
+  },
+  {
+    source: { source: "human", identity: { kind: "external_actor", id: "actor:human-driver" } },
+    origin: "external_actor",
+  },
   {
     source: { source: "sdk", identity: { kind: "resident", id: "resident:driver" } },
     origin: "resident",
@@ -72,7 +87,7 @@ const CanonicalOrigins = ["resident", "worker", "external_actor", "replay", "rec
 export async function runAllOriginsCompletionAdmissionScenario(
   project: typeof projectCompletionOrigin = projectCompletionOrigin,
 ) {
-  return withCompletionAdmissionDriverStorage(async (adapter) => {
+  return withCompletionAdmissionDriverStorage(async (adapter, completionWriter) => {
     const sourceReceipts: OriginAdmissionReceipt[] = [];
     for (const [index, expectation] of OriginExpectations.entries()) {
       const origin = project(expectation.source);
@@ -80,6 +95,16 @@ export async function runAllOriginsCompletionAdmissionScenario(
         `Origin ${index} traverses admission`,
       ]);
       insertCompletionAdmissionDriverItem(adapter, item);
+      if (origin !== expectation.origin) {
+        sourceReceipts.push({
+          source: sourceLabel(expectation.source),
+          origin,
+          admissionOrigin: origin,
+          boundaryTraversed: false,
+          terminalReceiptLinked: false,
+        });
+        continue;
+      }
       const criterion = completionAdmissionDriverCriterion(item, 0);
       const observation: WorkItem.Observation = {
         id: `observation:driver-origin:${index}`,
@@ -108,21 +133,32 @@ export async function runAllOriginsCompletionAdmissionScenario(
           results: [result],
         }),
         origin,
+        sourceIdentity: projectCompletionSourceIdentity(expectation.source),
       });
-      const service = createCompletionAdmissionService({
-        authorityResolver: createCompletionAuthorityResolver({
-          policyEngine: PolicyEngine.create(),
-          resultAuthorityPort: completionAdmissionDriverVerifierPort(criterion, result, [
-            observation,
-          ]),
-          now: () => CompletionAdmissionDriverNow,
-        }),
+      const runtime = createDefaultDispatchRuntime({
+        completionWriter,
+        completionPolicyEngine: PolicyEngine.create(),
+        completionResultAuthorityPort: completionAdmissionDriverVerifierPort(criterion, result, [
+          observation,
+        ]),
         now: () => CompletionAdmissionDriverNow,
       });
-      const outcome = await service.requestCompletion(
-        request,
-        completionAdmissionDriverReport(item),
-      );
+      const completionReport = completionAdmissionDriverReport(item);
+      const {
+        origin: projectedOrigin,
+        sourceIdentity: projectedSourceIdentity,
+        ...actorRequest
+      } = request;
+      void projectedOrigin;
+      void projectedSourceIdentity;
+      const outcome =
+        "identity" in expectation.source
+          ? await runtime.submitActorWorkItemCompletion({
+              source: expectation.source,
+              request: actorRequest,
+              completionReport,
+            })
+          : await runtime.requestWorkItemCompletion(request, completionReport);
       const stored = requiredCompletionAdmissionDriverItem(item.hash);
       sourceReceipts.push({
         source: sourceLabel(expectation.source),

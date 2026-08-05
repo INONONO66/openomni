@@ -2,7 +2,7 @@
 
 Single source of truth for current wiring between accepted design and running code. Other docs (core-model, AGENTS.md, ADRs) link here instead of restating implementation status inline. This document does not set future delivery sequence, issue status, or roadmap checkpoints; those belong only in [GitHub #459](https://github.com/INONONO66/openomni/issues/459).
 
-**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: 2026-08-04 (claims re-checked by code inspection at HEAD).
+**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: 2026-08-05 (claims re-checked by code inspection at HEAD).
 
 > Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
 
@@ -70,6 +70,8 @@ The tables below report what is wired, dormant, partial, or designed in code. Ta
 | Built-in curated memory (frozen-snapshot system-prompt injection, bounded budgets, add/replace/remove tool) | 📋 | — | ADR-013 — Hermes pattern; injection via `on_system_prompt` policy timing |
 | Session search tool (FTS5 over session store) | 📋 | — | ADR-013 — episodic recall, zero engines required |
 | `Memory.Engine` port (ingest/recall/profile/feedback; transport-agnostic; mandatory scope filter) | 📋 | `packages/protocol/src/memory/` (planned) | ADR-013 — Anamnesis is the first plugin, not a dependency |
+
+Completion admission now has production entrypoints for every origin family without exporting the configurable gateway: run/session-authenticated internal and connector Workers use the specialized dispatch handlers; trusted Resident, API, A2A, human, SDK, and internal adapters use `DefaultDispatchRuntime.submitActorWorkItemCompletion`, which derives the canonical origin and durable source identity; exact replay uses `requestWorkItemCompletion`; boot recovery uses `recoverRecordedWorkItemCompletions`. Request reservations carry process ownership, a lease, and a fencing counter before read-back work begins. The privileged SQLite completion writer is a composition-root-held closure authorized by a module-private token, not a public package subpath; same-process application modules remain trusted because `Storage.configure/reset/get` are composition-root APIs rather than an OS security boundary.
 
 ## Resident model (core-model, ADR-008, ADR-010)
 

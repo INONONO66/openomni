@@ -1,6 +1,5 @@
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
-import { withWorkItemCompletionWriter } from "@openomni/session/work-item-completion-writer";
 import type { CompletionAuthorityResolver } from "./completion-admission-authority.js";
 import {
   completionReportReference,
@@ -36,6 +35,7 @@ export type CompletionBoundaryOutcome = Readonly<{
 }>;
 
 export type CompletionAdmissionServiceOptions = Readonly<{
+  completionWriter: Storage.WorkItemCompletionWriter;
   authorityResolver: CompletionAuthorityResolver;
   allowTrustedInvalidations?: boolean;
   now: () => number;
@@ -54,16 +54,28 @@ export type CompletionAdmissionService = Readonly<{
 }>;
 
 export type CompletionRequestReservationInput = Readonly<{
+  completionWriter: Storage.WorkItemCompletionWriter;
   workItemHash: string;
   requestId: string;
   requestRoot: string;
   envelopeDigest: string;
+  ownerId: string;
+  leaseDurationMs: number;
   now: number;
 }>;
 
 export type CompletionRequestReservationOutcome = Readonly<{
-  state: "reserved" | "existing" | "admitted";
+  state: "reserved" | "existing" | "busy" | "admitted";
   reservation: WorkItem.CompletionRequestReservation;
+}>;
+
+export type CompletionReservationLeaseInput = Readonly<{
+  workItemHash: string;
+  requestId: string;
+  reservationId: string;
+  ownerId: string;
+  fence: number;
+  now: number;
 }>;
 
 export function reserveCompletionRequest(
@@ -72,33 +84,52 @@ export function reserveCompletionRequest(
   const adapter = requiredAdapter(input.workItemHash);
   for (;;) {
     const current = requiredItem(adapter.get(input.workItemHash), input.workItemHash);
-    const reservation = current.completionFacts.requestReservations.find(
-      ({ requestId }) => requestId === input.requestId,
-    );
+    const reservation = current.completionFacts.requestReservations
+      .filter(({ requestId }) => requestId === input.requestId)
+      .at(-1);
     if (current.completionFacts.admissions.some(({ requestId }) => requestId === input.requestId)) {
       if (!reservation) throw requestConflict(input.requestId);
       return { state: "admitted", reservation };
     }
     assertNotFailedOrCancelled(current);
     assertNotCompleted(current);
-    const correlated = current.completionFacts.requestReservations.find(
-      ({ requestRoot }) => requestRoot === input.requestRoot,
-    );
+    const correlated = current.completionFacts.requestReservations
+      .filter(({ requestRoot }) => requestRoot === input.requestRoot)
+      .at(-1);
     if (correlated && correlated.envelopeDigest !== input.envelopeDigest) {
       throw requestConflict(input.requestId);
     }
-    if (reservation) return { state: "existing", reservation };
+    if (reservation?.ownerId === input.ownerId) {
+      return { state: "existing", reservation };
+    }
+    if (
+      reservation?.ownerId !== undefined &&
+      reservation.leaseExpiresAt !== undefined &&
+      input.now < reservation.leaseExpiresAt
+    ) {
+      return { state: "busy", reservation };
+    }
+    if (!Number.isFinite(input.leaseDurationMs) || input.leaseDurationMs <= 0) {
+      throw new CompletionAdmissionServiceError(
+        "request_conflict",
+        "completion reservation leaseDurationMs must be positive",
+      );
+    }
 
     const recordedHead = current.revision + 1;
+    const fence = (reservation?.fence ?? 0) + 1;
     const nextReservation = WorkItem.CompletionRequestReservation.parse({
       version: 1,
-      id: `completion-reservation:${input.requestId}`,
+      id: `completion-reservation:${input.requestId}:${fence}`,
       requestId: input.requestId,
       requestRoot: input.requestRoot,
       envelopeDigest: input.envelopeDigest,
       expectedHead: current.revision,
       recordedHead,
       createdAt: input.now,
+      ownerId: input.ownerId,
+      fence,
+      leaseExpiresAt: input.now + input.leaseDurationMs,
     });
     const updated = WorkItem.Info.parse({
       ...current,
@@ -110,13 +141,31 @@ export function reserveCompletionRequest(
       },
       timestamps: { ...current.timestamps, updated: input.now },
     });
-    if (
-      withWorkItemCompletionWriter(() =>
-        adapter.compareAndSet(current.hash, current.revision, updated),
-      )
-    ) {
+    if (input.completionWriter(current.hash, current.revision, updated)) {
       return { state: "reserved", reservation: nextReservation };
     }
+  }
+}
+
+export function assertCompletionReservationLease(input: CompletionReservationLeaseInput): void {
+  const current = requiredItem(
+    requiredAdapter(input.workItemHash).get(input.workItemHash),
+    input.workItemHash,
+  );
+  const reservation = current.completionFacts.requestReservations
+    .filter(({ requestId }) => requestId === input.requestId)
+    .at(-1);
+  if (
+    reservation?.id !== input.reservationId ||
+    reservation.ownerId !== input.ownerId ||
+    reservation.fence !== input.fence ||
+    reservation.leaseExpiresAt === undefined ||
+    input.now >= reservation.leaseExpiresAt
+  ) {
+    throw new CompletionAdmissionServiceError(
+      "request_conflict",
+      `completion reservation lease lost: ${input.requestId}`,
+    );
   }
 }
 
@@ -128,7 +177,10 @@ export function createCompletionAdmissionService(
       const request = WorkItem.CompletionRequest.parse(requestInput);
       assertRequesterFactsSupported(request, options.allowTrustedInvalidations === true);
       const completionReport = WorkItem.CompletionReport.parse(completionReportInput);
-      const adapter = requiredAdapter(request.workItemHash);
+      const adapter = authorizedCompletionAdapter(
+        requiredAdapter(request.workItemHash),
+        options.completionWriter,
+      );
       const initial = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
       assertNotFailedOrCancelled(initial);
       const priorAdmissions = initial.completionFacts.admissions.filter(
@@ -157,7 +209,10 @@ export function createCompletionAdmissionService(
 
     async resumeCompletion(workItemHash, admissionId, completionReportInput) {
       const completionReport = WorkItem.CompletionReport.parse(completionReportInput);
-      const adapter = requiredAdapter(workItemHash);
+      const adapter = authorizedCompletionAdapter(
+        requiredAdapter(workItemHash),
+        options.completionWriter,
+      );
       const item = requiredItem(adapter.get(workItemHash), workItemHash);
       assertNotFailedOrCancelled(item);
       const admission = item.completionFacts.admissions.find(({ id }) => id === admissionId);
@@ -226,7 +281,7 @@ async function replayRequest(
       return { admission, workItem: item, completed: false };
     }
     return completeOrReevaluate(
-      requiredAdapter(item.hash),
+      authorizedCompletionAdapter(requiredAdapter(item.hash), options.completionWriter),
       item,
       request,
       completionReport,
@@ -236,7 +291,7 @@ async function replayRequest(
   }
   if (item.revision === admission.recordedHead) {
     const completed = commitTerminal(
-      requiredAdapter(item.hash),
+      authorizedCompletionAdapter(requiredAdapter(item.hash), options.completionWriter),
       item,
       admission,
       completionReport,
@@ -245,7 +300,7 @@ async function replayRequest(
     return { admission, workItem: completed, completed: true };
   }
   return completeOrReevaluate(
-    requiredAdapter(item.hash),
+    authorizedCompletionAdapter(requiredAdapter(item.hash), options.completionWriter),
     item,
     request,
     completionReport,
@@ -345,11 +400,7 @@ async function appendAdmission(
     },
     timestamps: { ...existing.timestamps, updated: admission.createdAt },
   });
-  if (
-    !withWorkItemCompletionWriter(() =>
-      adapter.compareAndSet(existing.hash, existing.revision, updated),
-    )
-  ) {
+  if (!adapter.compareAndSet(existing.hash, existing.revision, updated)) {
     throw new CompletionAdmissionServiceError(
       "stale_head",
       `WorkItem changed while recording completion admission: ${existing.hash}`,
@@ -404,11 +455,7 @@ function commitTerminal(
     completionTerminalReceipt: receipt,
     timestamps: { ...current.timestamps, completed: time, updated: time },
   });
-  if (
-    !withWorkItemCompletionWriter(() =>
-      adapter.compareAndSet(current.hash, current.revision, completed),
-    )
-  ) {
+  if (!adapter.compareAndSet(current.hash, current.revision, completed)) {
     throw new CompletionAdmissionServiceError(
       "stale_head",
       `WorkItem changed during terminal completion: ${current.hash}`,
@@ -783,6 +830,16 @@ function requiredAdapter(hash: string): NonNullable<ReturnType<typeof Storage.ge
     );
   }
   return adapter;
+}
+
+function authorizedCompletionAdapter(
+  adapter: NonNullable<ReturnType<typeof Storage.get>["workItem"]>,
+  completionWriter: Storage.WorkItemCompletionWriter,
+): NonNullable<ReturnType<typeof Storage.get>["workItem"]> {
+  return {
+    ...adapter,
+    compareAndSet: completionWriter,
+  };
 }
 
 function requiredItem(item: WorkItem.Info | undefined, hash: string): WorkItem.Info {
