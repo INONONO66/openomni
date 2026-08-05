@@ -8,7 +8,7 @@ import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
-const PROCESS_TERMINATION_GRACE_MS = 100;
+const PROCESS_TERMINATION_GRACE_MS = 1_000;
 
 const bashEnvKeys = ["PATH", "TMPDIR", "TEMP", "TMP", "BUN_INSTALL"];
 
