@@ -760,7 +760,36 @@ describe("WorkItem completion admission contracts", () => {
         admissionId: ownerAdmission.id,
       },
     };
+    const reservationBridge = (id: string) =>
+      WorkItem.CompletionRequestReservation.parse({
+        version: 1,
+        id,
+        requestId: admission.requestId,
+        requestRoot: "request-root:terminal",
+        envelopeDigest: "envelope-digest:terminal",
+        expectedHead: admission.recordedHead,
+        recordedHead: admission.recordedHead + 1,
+        createdAt: 7,
+        ownerId: "process:terminal",
+        fence: 1,
+        leaseExpiresAt: 20,
+      });
     const invalidInputs = [
+      {
+        ...validInput,
+        revision: validInput.revision + 1,
+        completionFacts: {
+          ...completionFacts,
+          requestReservations: [
+            reservationBridge("reservation:terminal:first"),
+            reservationBridge("reservation:terminal:second"),
+          ],
+        },
+        completionTerminalReceipt: {
+          ...completionTerminalReceipt,
+          recordedHead: completionTerminalReceipt.recordedHead + 1,
+        },
+      },
       {
         ...validInput,
         completionFacts: {
@@ -900,6 +929,7 @@ describe("WorkItem completion admission contracts", () => {
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);
     expect(invalidInputs.map((input) => WorkItem.Info.safeParse(input).success)).toEqual([
+      false,
       false,
       false,
       false,

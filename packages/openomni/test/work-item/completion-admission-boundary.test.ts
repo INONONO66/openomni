@@ -830,24 +830,46 @@ describe("WorkItem completion admission service", () => {
     });
     expect(interrupted?.completionTerminalReceipt).toBeUndefined();
 
-    const recoveryGateway = createWorkItemCompletionGateway({
-      completionWriter,
+    const interruptedRecoveryGateway = createWorkItemCompletionGateway({
+      completionWriter: crashingWriter,
       policyEngine: PolicyEngine.create(),
       resultAuthorityPort: { validate: () => ({ ok: true }) },
       now: () => NOW + 1,
     });
-    const recoveryReceipt = await recoveryGateway.recoverRecordedCompletions();
-    expect(recoveryReceipt).toEqual({
+    const interruptedRecovery = await interruptedRecoveryGateway.recoverRecordedCompletions();
+    expect(interruptedRecovery).toMatchObject({
+      recovered: 0,
+      skipped: 0,
+      failures: [{ admissionId: originalAdmission?.id }],
+    });
+    const afterInterruptedRecovery = WorkItemStore.get(item.hash);
+    expect(afterInterruptedRecovery?.completionFacts.admissions.map(({ id }) => id)).toEqual([
+      originalAdmission?.id,
+    ]);
+    expect(afterInterruptedRecovery?.completionTerminalReceipt).toBeUndefined();
+
+    const recoveryGateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: {
+        validate: () => {
+          throw new Error("recorded admission must not re-run authority");
+        },
+      },
+      now: () => NOW + 2,
+    });
+    expect(await recoveryGateway.recoverRecordedCompletions()).toEqual({
       recovered: 1,
       skipped: 0,
       failures: [],
     });
-    expect(WorkItemStore.get(item.hash)).toMatchObject({
-      completionFacts: { admissions: [{ id: originalAdmission?.id }] },
-      completionTerminalReceipt: {
-        requestId: request.id,
-        admissionId: originalAdmission?.id,
-      },
+    const recovered = WorkItemStore.get(item.hash);
+    expect(recovered?.completionFacts.admissions.map(({ id }) => id)).toEqual([
+      originalAdmission?.id,
+    ]);
+    expect(recovered?.completionTerminalReceipt).toMatchObject({
+      requestId: request.id,
+      admissionId: originalAdmission?.id,
     });
   });
 

@@ -176,16 +176,28 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   ) {
     addIssue(ctx, ["completionTerminalReceipt", "completionReportRef"]);
   }
-  const reservationBridge = item.completionFacts.requestReservations?.some(
+  const reservationBridges = (item.completionFacts.requestReservations ?? []).filter(
     (reservation) =>
       reservation.requestId === admission.requestId &&
-      reservation.recordedHead === admission.recordedHead + 1 &&
-      receipt.recordedHead === reservation.recordedHead + 1,
+      reservation.recordedHead > admission.recordedHead &&
+      reservation.recordedHead < receipt.recordedHead,
   );
+  const expectedBridgeCount = receipt.recordedHead - admission.recordedHead - 1;
+  const reservationBridgeHeads = new Set(
+    reservationBridges.map(({ recordedHead }) => recordedHead),
+  );
+  const hasReservationBridge =
+    expectedBridgeCount > 0 &&
+    reservationBridges.length === expectedBridgeCount &&
+    reservationBridgeHeads.size === expectedBridgeCount &&
+    Array.from(
+      { length: expectedBridgeCount },
+      (_, index) => admission.recordedHead + index + 1,
+    ).every((head) => reservationBridgeHeads.has(head));
   if (
     admission.contractRevision !== receipt.contractRevision ||
     admission.basisRef !== receipt.basisRef ||
-    (admission.recordedHead + 1 !== receipt.recordedHead && !reservationBridge)
+    (admission.recordedHead + 1 !== receipt.recordedHead && !hasReservationBridge)
   ) {
     addIssue(ctx, ["completionFacts", "admissions"]);
   }

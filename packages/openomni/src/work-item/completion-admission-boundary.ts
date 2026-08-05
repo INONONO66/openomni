@@ -496,14 +496,12 @@ async function resumeCompletionAtHead(
           true,
         );
   assertReservation?.();
-  if (
-    isAdmitted(admission) &&
-    item.revision === admission.recordedHead &&
-    assertReservation?.state === "reserved" &&
-    assertReservation.recordedHead === item.revision + 1
-  ) {
+  if (isAdmitted(admission) && assertReservation?.state === "reserved") {
     const reservedItem = requiredItem(adapter.get(workItemHash), workItemHash);
-    if (reservedItem.revision === assertReservation.recordedHead) {
+    if (
+      reservedItem.revision === assertReservation.recordedHead &&
+      hasContiguousReservationBridge(reservedItem, admission)
+    ) {
       return commitTerminal(
         adapter,
         reservedItem,
@@ -763,8 +761,10 @@ function commitTerminal(
   const current = requiredItem(adapter.get(existing.hash), existing.hash);
   assertNotFailedOrCancelled(current);
   assertTerminalEligibleAdmission(admission);
-  const expectedAdmissionHead = admission.recordedHead + (reservationBridged ? 1 : 0);
-  if (current.revision !== existing.revision || current.revision !== expectedAdmissionHead) {
+  if (
+    current.revision !== existing.revision ||
+    (!reservationBridged && current.revision !== admission.recordedHead)
+  ) {
     throw new CompletionAdmissionServiceError(
       "stale_head",
       `WorkItem changed before terminal completion: ${existing.hash}`,
@@ -1277,6 +1277,28 @@ function assertTerminalEligibleAdmission(admission: WorkItem.CompletionAdmission
       `owner_override requires its request-bound receipt: ${admission.id}`,
     );
   }
+}
+
+function hasContiguousReservationBridge(
+  item: WorkItem.Info,
+  admission: WorkItem.CompletionAdmission,
+): boolean {
+  const expectedCount = item.revision - admission.recordedHead;
+  if (expectedCount <= 0) return false;
+  const reservations = item.completionFacts.requestReservations.filter(
+    ({ recordedHead, requestId }) =>
+      requestId === admission.requestId &&
+      recordedHead > admission.recordedHead &&
+      recordedHead <= item.revision,
+  );
+  const heads = new Set(reservations.map(({ recordedHead }) => recordedHead));
+  return (
+    reservations.length === expectedCount &&
+    heads.size === expectedCount &&
+    Array.from({ length: expectedCount }, (_, index) => admission.recordedHead + index + 1).every(
+      (head) => heads.has(head),
+    )
+  );
 }
 
 function isAdmitted(admission: WorkItem.CompletionAdmission): boolean {
