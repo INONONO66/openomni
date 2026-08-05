@@ -197,6 +197,27 @@ const CompletionRequestShape = z
   })
   .strict()
   .superRefine((request, ctx) => {
+    const factGroups = [
+      ["claims", request.claims],
+      ["observations", request.observations],
+      ["results", request.results],
+      ["invalidations", request.invalidations],
+      ["verificationErrors", request.verificationErrors],
+      ["effects", request.effects],
+    ] as const;
+    const factIds = new Set<string>();
+    for (const [group, facts] of factGroups) {
+      for (const [index, fact] of facts.entries()) {
+        if (factIds.has(fact.id)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `duplicate completion fact id: ${fact.id}`,
+            path: [group, index, "id"],
+          });
+        }
+        factIds.add(fact.id);
+      }
+    }
     const fixedSource = request.sourceIdentity?.source;
     const fixedOrigin =
       fixedSource === "internal_worker" || fixedSource === "connector_worker"

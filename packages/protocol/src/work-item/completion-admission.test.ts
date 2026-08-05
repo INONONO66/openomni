@@ -39,6 +39,36 @@ function completionRequestSnapshot(overrides: Readonly<Record<string, unknown>> 
 }
 
 describe("WorkItem completion admission contracts", () => {
+  test("rejects duplicate fact ids across request-local arrays", () => {
+    const duplicateId = "fact:request-local-duplicate";
+    expect(
+      WorkItem.CompletionRequest.safeParse({
+        ...completionRequestSnapshot(),
+        claims: [
+          {
+            id: duplicateId,
+            criterionId: "criterion:one",
+            statement: "the claim and observation ids must not collide",
+            observationIds: [],
+            basisRef: "basis:v1",
+            createdAt: 1,
+          },
+        ],
+        observations: [
+          {
+            id: duplicateId,
+            producer: "verifier:test",
+            subjectRef: baseItem.hash,
+            basisRef: "basis:v1",
+            artifactRefs: [],
+            ancestryRefs: [],
+            observedAt: 1,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   test("distinguishes legacy reservations from held leases", () => {
     const base = {
       version: 1,

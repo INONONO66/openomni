@@ -201,7 +201,7 @@ describe("worker completion admission convergence", () => {
   test("rejects non-finite completion envelope numbers before reservation", async () => {
     const item = await startedItem();
     const envelope = await evidenceBackedEnvelope(item.hash);
-    const nonFiniteEnvelope = envelope.replace("{", '{"deliverable":1e400,');
+    const nonFiniteEnvelope = `{"deliverable":1e400,${envelope.slice(1)}`;
 
     const reflection = await reflectCoordinatorResultWithPolicy(
       item.hash,

@@ -1234,11 +1234,20 @@ describe("completion admission authority resolver", () => {
     ).rejects.toMatchObject({ code: "invalid_verifier" });
   });
 
-  test("rejects duplicate facts with a typed error", async () => {
-    const duplicate = { ...assertedResult(), createdAt: 3 };
-    const candidate = request({ results: [assertedResult(), duplicate] });
+  test("rejects facts that collide with the durable ledger", async () => {
+    const currentItem = item({
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        revision: 2,
+        criteria: [criterion],
+        results: [assertedResult()],
+      },
+    });
+    const candidate = request({
+      results: [{ ...assertedResult(), createdAt: 3 }],
+    });
 
-    expect(await resolveErrorCode(item(), candidate)).toBe("duplicate_fact_id");
+    expect(await resolveErrorCode(currentItem, candidate)).toBe("duplicate_fact_id");
   });
 
   test("reserves the generated admission id against proposed facts", async () => {
