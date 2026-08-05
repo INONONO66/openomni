@@ -17,11 +17,18 @@ export async function loadReadBackUrl(
   timeoutMs: number,
   maxBodyBytes: number,
   allowPrivateNetwork: boolean,
+  validateTarget: typeof validateNetworkTarget = validateNetworkTarget,
 ): Promise<ReadBackHttpResult> {
   try {
-    const validated = await validateNetworkTarget(target, allowPrivateNetwork);
     const deadlineAt = Date.now() + timeoutMs;
-    const response = await requestReadBackResponse(validated, method, timeoutMs);
+    const validated = await settleBeforeDeadline(
+      validateTarget(target, allowPrivateNetwork),
+      deadlineAt,
+    );
+    if (validated === undefined) return failedReadBackHttpResult();
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return failedReadBackHttpResult();
+    const response = await requestReadBackResponse(validated, method, remainingMs);
     if (response === undefined) return failedReadBackHttpResult();
     if (method === "HEAD") {
       response.resume();
@@ -33,6 +40,31 @@ export async function loadReadBackUrl(
     if (error instanceof DisallowedNetworkTargetError) throw error;
     return failedReadBackHttpResult();
   }
+}
+
+function settleBeforeDeadline<T>(
+  operation: Promise<T>,
+  deadlineAt: number,
+): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(
+      () => finish(() => resolve(undefined)),
+      Math.max(0, deadlineAt - Date.now()),
+    );
+
+    function finish(settle: () => void): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      settle();
+    }
+
+    operation.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
 }
 
 export function digestObservedBody(result: ReadBackHttpResult): string | undefined {

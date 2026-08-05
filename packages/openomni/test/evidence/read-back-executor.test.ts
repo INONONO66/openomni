@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { Storage, WorkItemStore } from "@openomni/session";
 import { ReadBackExecutor } from "../../src/index";
+import { loadReadBackUrl } from "../../src/evidence/read-back-http.js";
 import {
   cleanupReadBackFixtures,
   closeFixtureServers,
@@ -18,6 +19,27 @@ afterEach(async () => {
 });
 
 describe("ReadBackExecutor", () => {
+  test("bounds unresolved target validation by the read-back timeout", async () => {
+    const result = await loadReadBackUrl(
+      "https://example.com/document",
+      "GET",
+      5,
+      1_024,
+      false,
+      async () =>
+        new Promise<never>(() => {
+          // Intentionally never settles: the wall-clock deadline must resolve the read-back.
+        }),
+    );
+
+    expect(result).toEqual({
+      statusCode: undefined,
+      body: "",
+      bodyDigest: undefined,
+      complete: false,
+    });
+  });
+
   test("returns a read-back check without persisting WorkItem evidence", async () => {
     Storage.initialize({ dbPath: ":memory:" });
     const item = await WorkItemStore.create({
