@@ -162,6 +162,7 @@ export async function reflectCoordinatorResult(
         completionWriter: options.completionWriter,
         workItemHash,
         result,
+        sourceOrigin: options.sourceOrigin,
         completionEnvelopeDigest,
         policyEngine: options.completionPolicyEngine,
         completionReportMatches: (report) => completionReportDraftMatches(parsed.envelope, report),
@@ -216,6 +217,7 @@ export async function reflectCoordinatorResult(
           completionWriter: options.completionWriter,
           workItemHash,
           result,
+          sourceOrigin: options.sourceOrigin,
           completionEnvelopeDigest,
           policyEngine: options.completionPolicyEngine,
           completionReportMatches: (report) =>

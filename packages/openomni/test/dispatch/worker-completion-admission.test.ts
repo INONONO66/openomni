@@ -331,6 +331,37 @@ describe("worker completion admission convergence", () => {
     ).toEqual(sourceIdentity);
   });
 
+  test("rejects completed replay from a different qualified source identity", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const result = succeeded(await evidenceBackedEnvelope(item.hash));
+    const sourceA = {
+      source: "internal",
+      identity: { kind: "worker", id: "worker:source-a" },
+    } as const;
+    const sourceB = {
+      source: "internal",
+      identity: { kind: "worker", id: "worker:source-b" },
+    } as const;
+
+    const first = await reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin: sourceA,
+      now: () => NOW,
+    });
+    const replay = await reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin: sourceB,
+      now: () => NOW + 1,
+    });
+
+    expect(first.completionBlocked).toBe(false);
+    expect(replay.completionBlocked).toBe(true);
+    expect(replay.completionBlocker).toContain("conflicts with durable source identity");
+    expect(
+      WorkItemStore.get(item.hash)?.completionFacts.admissions.map(
+        ({ requestSnapshot }) => requestSnapshot.sourceIdentity,
+      ),
+    ).toEqual([sourceA]);
+  });
+
   test.each([
     ["run", { runId: "run:other" }],
     ["session", { sessionId: "session:other" }],

@@ -181,6 +181,7 @@ export async function replayWorkerCompletion(
     | "completionReservation"
     | "workItemHash"
     | "result"
+    | "sourceOrigin"
     | "completionEnvelopeDigest"
     | "policyEngine"
     | "stakesResolver"
@@ -207,6 +208,16 @@ export async function replayWorkerCompletion(
     throw new CompletionAdmissionServiceError(
       "request_conflict",
       `completion envelope changed for request: ${requestRoot}`,
+    );
+  }
+  const replaySourceIdentity = workerCompletionSourceIdentity(input.sourceOrigin, input.result);
+  if (
+    JSON.stringify(admission.requestSnapshot.sourceIdentity ?? null) !==
+    JSON.stringify(replaySourceIdentity ?? null)
+  ) {
+    throw new CompletionAdmissionServiceError(
+      "request_conflict",
+      `completion request conflicts with durable source identity: ${admission.requestId}`,
     );
   }
   const report = admission.completionReportSnapshot;
