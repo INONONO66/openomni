@@ -812,6 +812,10 @@ function assertAdmissionMatches(
   if (factIds.includes(admission.id)) {
     throw requestConflict(request.id);
   }
+  const criterionIds = new Set(item.completionFacts.criteria.map(({ id }) => id));
+  if (admission.unresolvedCriterionIds.some((criterionId) => !criterionIds.has(criterionId))) {
+    throw requestConflict(request.id);
+  }
   if (admission.decision === "admit") {
     const results = [...item.completionFacts.results, ...request.results];
     const effectiveResults = admission.effectiveResultIds.map((resultId) =>

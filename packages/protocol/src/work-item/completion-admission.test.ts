@@ -722,6 +722,35 @@ describe("WorkItem completion admission contracts", () => {
       completionReport,
       completionTerminalReceipt,
     };
+    const ownerRefutedResult = WorkItem.CriterionResult.parse({
+      ...terminalResult,
+      id: "result:terminal-owner-refuted",
+      value: "refuted",
+      checkedPredicate: "Owner accepted the known verification failure",
+    });
+    const ownerAdmission = WorkItem.CompletionAdmission.parse({
+      ...admission,
+      id: "admission:owner-override",
+      decision: "owner_override",
+      effectiveResultIds: [ownerRefutedResult.id],
+      ownerOverrideReceiptRef: "owner-receipt:terminal",
+      requestSnapshot: {
+        ...admission.requestSnapshot,
+        ownerOverrideReceiptRef: "owner-receipt:terminal",
+      },
+    });
+    const ownerOverrideInput = {
+      ...validInput,
+      completionFacts: {
+        ...completionFacts,
+        results: [ownerRefutedResult],
+        admissions: [ownerAdmission],
+      },
+      completionTerminalReceipt: {
+        ...completionTerminalReceipt,
+        admissionId: ownerAdmission.id,
+      },
+    };
     const invalidInputs = [
       {
         ...validInput,
@@ -857,6 +886,7 @@ describe("WorkItem completion admission contracts", () => {
     ];
 
     expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
+    expect(WorkItem.Info.safeParse(ownerOverrideInput).success).toBe(true);
     expect(
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);

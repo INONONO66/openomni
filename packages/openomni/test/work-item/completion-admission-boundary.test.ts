@@ -1208,6 +1208,39 @@ describe("WorkItem completion admission service", () => {
     expect(events.order).not.toContain("CompletedV2");
   });
 
+  test("rejects a nonterminal admission with an unknown unresolved criterion", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const service = guardedService({
+      resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+        const current = WorkItem.Info.parse(itemInput);
+        const candidate = WorkItem.CompletionRequest.parse(requestInput);
+        return WorkItem.CompletionAdmission.parse({
+          version: 1,
+          id: `admission:${candidate.id}:${current.revision + 1}:unknown-criterion`,
+          requestId: candidate.id,
+          requestSnapshot: candidate,
+          origin: candidate.origin,
+          contractRevision: current.completionContract.revision,
+          basisRef: current.completionContract.basisRef,
+          effectiveResultIds: [],
+          unresolvedCriterionIds: ["criterion:missing"],
+          decision: "block",
+          reasonCodes: ["criterion_missing"],
+          residualRisks: [],
+          policyRef: "policy:hostile-unknown-criterion",
+          expectedHead: current.revision,
+          recordedHead: current.revision + 1,
+          createdAt: NOW,
+        });
+      },
+    });
+    if (!service) return;
+
+    expect(await errorCode(service.requestCompletion(request, report))).toBe("request_conflict");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
   test("rejects a hostile admit that selects a refuted result", async () => {
     configure();
     const { item, request, report } = await fixture();

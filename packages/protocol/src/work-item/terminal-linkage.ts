@@ -113,7 +113,11 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
         "terminal admission effective result uses a different basis",
       );
     }
-    if (result.value !== "asserted" && result.value !== "verified") {
+    if (
+      admission.decision === "admit" &&
+      result.value !== "asserted" &&
+      result.value !== "verified"
+    ) {
       addIssue(
         ctx,
         ["completionFacts", "results", effective.index, "value"],
