@@ -18,6 +18,7 @@ import {
   requireWorkerCompletionIdentity,
   WorkerCriterionFactInput,
   workerCompletionRequestId,
+  workerCompletionReservationRoot,
   workerCompletionRequestRoot,
   type WorkerReadBackEvidenceBinding,
 } from "./worker-completion-admission.js";
@@ -155,6 +156,7 @@ export async function reflectCoordinatorResult(
       return blockCompletion(workItemHash, parsed.reason);
     }
     const requestRoot = workerCompletionRequestRoot(item, result);
+    const reservationRoot = workerCompletionReservationRoot(item, result, options.sourceOrigin);
     try {
       const now = options.now ?? Date.now;
       const completionEnvelopeDigest = digestCompletionEnvelope(parsed.envelope);
@@ -177,7 +179,7 @@ export async function reflectCoordinatorResult(
         completionWriter: options.completionWriter,
         workItemHash,
         requestId,
-        requestRoot,
+        requestRoot: reservationRoot,
         envelopeDigest: completionEnvelopeDigest,
         ownerId: reservationOwnerId,
         leaseDurationMs: resolveReadBackEnvelopeTimeoutMs(options) + 5_000,
@@ -205,7 +207,7 @@ export async function reflectCoordinatorResult(
       const completionReservation = {
         ownerId: reservationOwnerId,
         leaseDurationMs: resolveReadBackEnvelopeTimeoutMs(options) + 5_000,
-        requestRoot,
+        requestRoot: reservationRoot,
         envelopeDigest: completionEnvelopeDigest,
       };
       const invocationToken = reservation.reservation.id;

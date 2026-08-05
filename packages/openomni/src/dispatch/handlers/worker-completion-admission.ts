@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Execution } from "@openomni/protocol";
 import { type Storage, WorkItemStore } from "@openomni/session";
@@ -282,6 +283,19 @@ export function workerCompletionRequestId(
 
 export function workerCompletionRequestRoot(item: WorkItem.Info, result: Execution.Result): string {
   return `completion-request:${item.hash}:${result.runId}:${result.sessionId}:attempt:${item.attempt}`;
+}
+
+export function workerCompletionReservationRoot(
+  item: WorkItem.Info,
+  result: Execution.Result,
+  sourceOrigin: CompletionSourceOrigin | undefined,
+): string {
+  const sourceIdentity =
+    sourceOrigin === undefined ? undefined : workerCompletionSourceIdentity(sourceOrigin, result);
+  const sourceDigest = createHash("sha256")
+    .update(JSON.stringify(sourceIdentity ?? null))
+    .digest("hex");
+  return `${workerCompletionRequestRoot(item, result)}:source:${sourceDigest}`;
 }
 
 export function requireWorkerCompletionIdentity(

@@ -14,8 +14,11 @@ import {
 } from "../../src/dispatch/handlers/worker-completion.js";
 import {
   createDurableCompletionResultAuthorityPort,
+  workerCompletionRequestId,
+  workerCompletionReservationRoot,
   workerCompletionRequestRoot,
 } from "../../src/dispatch/handlers/worker-completion-admission.js";
+import { reserveCompletionRequest } from "../../src/work-item/completion-admission-boundary.js";
 
 const NOW = 1_000;
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
@@ -360,6 +363,48 @@ describe("worker completion admission convergence", () => {
         ({ requestSnapshot }) => requestSnapshot.sourceIdentity,
       ),
     ).toEqual([sourceA]);
+  });
+
+  test("binds pre-admission reservations to the qualified source identity", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const result = succeeded(await evidenceBackedEnvelope(item.hash));
+    const sourceA = {
+      source: "internal",
+      identity: { kind: "worker", id: "worker:source-a" },
+    } as const;
+    const sourceB = {
+      source: "internal",
+      identity: { kind: "worker", id: "worker:source-b" },
+    } as const;
+    const envelopeDigest = "envelope-digest:source-bound";
+    const requestId = workerCompletionRequestId(item, result, envelopeDigest);
+    const rootA = workerCompletionReservationRoot(item, result, sourceA);
+    const rootB = workerCompletionReservationRoot(item, result, sourceB);
+
+    expect(rootA).not.toBe(rootB);
+    reserveCompletionRequest({
+      completionWriter,
+      workItemHash: item.hash,
+      requestId,
+      requestRoot: rootA,
+      envelopeDigest,
+      ownerId: "process:source-a",
+      leaseDurationMs: 1,
+      now: NOW,
+    });
+
+    expect(() =>
+      reserveCompletionRequest({
+        completionWriter,
+        workItemHash: item.hash,
+        requestId,
+        requestRoot: rootB,
+        envelopeDigest,
+        ownerId: "process:source-b",
+        leaseDurationMs: 1,
+        now: NOW + 2,
+      }),
+    ).toThrow("completion request conflicts with durable facts");
   });
 
   test.each([
