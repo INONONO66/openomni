@@ -25,7 +25,7 @@ import {
 const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
 const MAX_READ_BACK_BODY_BYTES = 1_000_000;
-const activeCompletionRequests = new Set<string>();
+const activeCompletionRequests = new Map<string, string>();
 const completionReservationOwnerId = `completion-process:${crypto.randomUUID()}`;
 
 const ReadBackRequest = WorkItem.ReadBackRequest.superRefine((request, ctx) => {
@@ -187,7 +187,8 @@ export async function reflectCoordinatorResult(
           `completion request is already in progress: ${requestId}`,
         );
       }
-      activeCompletionRequests.add(requestId);
+      const invocationToken = reservation.reservation.id;
+      activeCompletionRequests.set(requestId, invocationToken);
       try {
         const admittedReplay = await replayWorkerCompletion({
           beforeAdmissionWrite: assertLease,
@@ -231,7 +232,9 @@ export async function reflectCoordinatorResult(
         });
         return completionOutcomeReflection(workItemHash, outcome);
       } finally {
-        activeCompletionRequests.delete(requestId);
+        if (activeCompletionRequests.get(requestId) === invocationToken) {
+          activeCompletionRequests.delete(requestId);
+        }
       }
     } catch (err) {
       if (

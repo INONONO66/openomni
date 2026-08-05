@@ -1027,7 +1027,15 @@ describe("completion admission authority resolver", () => {
         ...WorkItem.emptyCompletionFacts(),
         revision: 2,
         criteria: [criterion],
-        results: [{ ...assertedResult(), id: "result:history", basisRef: "basis:old" }],
+        observations: [{ ...observation(), id: "observation:history", basisRef: "basis:old" }],
+        results: [
+          {
+            ...verifiedResult(),
+            id: "result:history",
+            observationIds: ["observation:history"],
+            basisRef: "basis:old",
+          },
+        ],
       },
     });
 

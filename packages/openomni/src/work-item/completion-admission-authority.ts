@@ -423,7 +423,13 @@ async function assertDurableResultAuthority(
     ...request.invalidations.map(({ resultId }) => resultId),
   ]);
   for (const result of item.completionFacts.results) {
-    if (result.value === "asserted" || invalidatedResultIds.has(result.id)) continue;
+    if (
+      result.basisRef !== request.basisRef ||
+      result.value === "asserted" ||
+      invalidatedResultIds.has(result.id)
+    ) {
+      continue;
+    }
     const criterion = item.completionFacts.criteria.find(
       (candidate) => candidate.id === result.criterionId,
     );

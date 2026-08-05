@@ -367,6 +367,76 @@ describe("worker completion admission convergence", () => {
     );
   });
 
+  test("keeps takeover ownership active when the expired predecessor exits", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    const aEntered = Promise.withResolvers<void>();
+    const releaseA = Promise.withResolvers<void>();
+    const bEntered = Promise.withResolvers<void>();
+    const releaseB = Promise.withResolvers<void>();
+    let policyBCalls = 0;
+    const policy = (
+      name: string,
+      entered: PromiseWithResolvers<void>,
+      release: PromiseWithResolvers<void>,
+    ) => {
+      const engine = PolicyEngine.create();
+      engine.register({
+        kind: "point",
+        name,
+        pointIds: ["work.complete.pre"],
+        effectCapabilities: { "work.complete.pre": [] },
+        priority: 0,
+        async fn() {
+          if (name === "takeover-owner-b") policyBCalls += 1;
+          entered.resolve();
+          await release.promise;
+          return PolicyDecision.allow({ policyId: name, reasonCodes: [] });
+        },
+      });
+      return engine;
+    };
+    const policyA = policy("takeover-owner-a", aEntered, releaseA);
+    const policyB = policy("takeover-owner-b", bEntered, releaseB);
+    let clock = 0;
+    const base = {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" } as const,
+      now: () => clock,
+    };
+
+    const attemptA = reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      ...base,
+      completionPolicyEngine: policyA,
+    });
+    await aEntered.promise;
+    clock = 20_000;
+    const attemptB = reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      ...base,
+      completionPolicyEngine: policyB,
+    });
+    await bEntered.promise;
+    releaseA.resolve();
+    const expiredA = await attemptA;
+    const contenderC = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+      ...base,
+      completionPolicyEngine: policyB,
+    });
+    try {
+      expect(expiredA.completionBlocker).toContain("completion reservation lease lost");
+      expect(contenderC.completionBlocker).toContain("already in progress");
+      expect(policyBCalls).toBe(1);
+    } finally {
+      releaseB.resolve();
+    }
+    const completedB = await attemptB;
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(completedB.completionBlocked).toBe(false);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.completionTerminalReceipt).toBeDefined();
+  });
+
   test("refuses admission when the reservation expires during authority evaluation", async () => {
     const item = await startedItem("internal_chat_agent");
     const output = await evidenceBackedEnvelope(item.hash);

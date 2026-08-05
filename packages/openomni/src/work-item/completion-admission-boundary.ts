@@ -206,8 +206,8 @@ export function createCompletionAdmissionService(
         completionReport,
       );
       assertAdmissionMatches(admission, initial, request);
-      assertUnchangedAfterAuthority(adapter, initial);
       options.beforeAdmissionWrite?.();
+      assertUnchangedAfterAuthority(adapter, initial);
       const recorded = await appendAdmission(adapter, initial, request, admission);
       if (!isAdmitted(admission)) {
         return { admission, workItem: recorded, completed: false };
@@ -340,8 +340,8 @@ async function completeOrReevaluate(
     completionReport,
   );
   assertAdmissionMatches(nextAdmission, latest, recheck);
-  assertUnchangedAfterAuthority(adapter, latest);
   options.beforeAdmissionWrite?.();
+  assertUnchangedAfterAuthority(adapter, latest);
   const nextRecorded = await appendAdmission(adapter, latest, recheck, nextAdmission);
   if (!isAdmitted(nextAdmission)) {
     return { admission: nextAdmission, workItem: nextRecorded, completed: false };
