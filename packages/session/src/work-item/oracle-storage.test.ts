@@ -31,6 +31,19 @@ async function createItem(
 }
 
 function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
+  const completionReport = WorkItem.canonicalCompletionReport({
+    summary: "Oracle storage fixture completed.",
+    claims: [
+      {
+        statement:
+          item.completionFacts.criteria[0]?.statement ?? "Oracle storage fixture completed.",
+        evidenceIds: [`evidence:${item.hash}:oracle-storage-fixture`],
+      },
+    ],
+    caveats: [],
+    followUps: [],
+  });
+  const completionReportRef = WorkItem.completionReportReference(completionReport);
   const admission = WorkItem.CompletionAdmission.parse({
     version: 1,
     id: `admission:${item.hash}:oracle-storage`,
@@ -59,6 +72,8 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
     reasonCodes: ["oracle_storage_fixture"],
     residualRisks: [],
     policyRef: "policy:oracle-storage",
+    completionReportSnapshot: completionReport,
+    completionReportRef,
     expectedHead: item.revision,
     recordedHead: item.revision + 1,
     createdAt: item.timestamps.updated + 1,
@@ -76,6 +91,7 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
       revision: item.completionFacts.revision + 1,
       admissions: [admission],
     },
+    completionReport,
     completionTerminalReceipt: {
       version: 1,
       hash: item.hash,
@@ -83,6 +99,7 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
       admissionId: admission.id,
       contractRevision: admission.contractRevision,
       basisRef: admission.basisRef,
+      completionReportRef,
       recordedHead: admission.recordedHead + 1,
     },
   });

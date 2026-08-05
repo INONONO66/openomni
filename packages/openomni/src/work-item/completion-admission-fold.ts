@@ -315,7 +315,10 @@ function foldSelectedResult(
         addUnique(state.reasonCodes, "high_risk_asserted");
         return;
       }
-      if (input.policy.allowedAssertedCriterionIds.includes(criterion.id)) {
+      if (
+        input.stakes?.comparison === "below" &&
+        input.policy.allowedAssertedCriterionIds.includes(criterion.id)
+      ) {
         addUnique(state.reasonCodes, "low_risk_asserted_allowed");
         return;
       }

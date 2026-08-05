@@ -10,6 +10,7 @@ import {
   completionAdmissionDriverAssertedResult,
   completionAdmissionDriverCriterion,
   completionAdmissionDriverHighStakes,
+  completionAdmissionDriverLowStakesResolver,
   completionAdmissionDriverProposedFacts,
   completionAdmissionDriverReport,
   completionAdmissionDriverRequest,
@@ -168,6 +169,7 @@ export async function runAssertedCompletionAdmissionScenario() {
   }).resolve(lowItem, lowRequest);
   const withPolicy = await createCompletionAuthorityResolver({
     policyEngine: completionAdmissionDriverAssertedPolicy(lowCriterion.id),
+    stakesResolver: completionAdmissionDriverLowStakesResolver(),
     now: () => CompletionAdmissionDriverNow,
   }).resolve(lowItem, lowRequest);
 

@@ -79,6 +79,8 @@ function persistCompletedFixture(
   const adapter = Storage.get().workItem;
   const current = adapter?.get(hash);
   if (!adapter || !current) return undefined;
+  const canonicalReport = WorkItem.canonicalCompletionReport(report);
+  const completionReportRef = WorkItem.completionReportReference(canonicalReport);
   const admission = WorkItem.CompletionAdmission.parse({
     version: 1,
     id: `admission:${hash}:${current.revision + 1}:session-fixture`,
@@ -107,6 +109,8 @@ function persistCompletedFixture(
     reasonCodes: ["session_storage_fixture"],
     residualRisks: [],
     policyRef: "policy:session-storage-fixture",
+    completionReportSnapshot: canonicalReport,
+    completionReportRef,
     expectedHead: current.revision,
     recordedHead: current.revision + 1,
     createdAt: current.timestamps.updated + 1,
@@ -128,7 +132,7 @@ function persistCompletedFixture(
   const completed = WorkItem.Info.parse({
     ...admitted,
     revision: admitted.revision + 1,
-    completionReport: report,
+    completionReport: canonicalReport,
     completionTerminalReceipt: {
       version: 1,
       hash,
@@ -136,6 +140,7 @@ function persistCompletedFixture(
       admissionId: admission.id,
       contractRevision: admission.contractRevision,
       basisRef: admission.basisRef,
+      completionReportRef,
       recordedHead: admitted.revision + 1,
     },
     timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },

@@ -396,7 +396,11 @@ async function assertProposedResultAuthority(
       result.observationIds.length === 0 ||
       result.verifierRef === undefined ||
       criterion === undefined ||
-      resolvedObservations.length !== result.observationIds.length
+      resolvedObservations.length !== result.observationIds.length ||
+      resolvedObservations.some(
+        (observation) =>
+          observation.basisRef !== result.basisRef || observation.subjectRef !== item.hash,
+      )
     ) {
       throw new CompletionAdmissionError(
         "invalid_verifier",

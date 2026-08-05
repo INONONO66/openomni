@@ -1593,6 +1593,37 @@ describe("WorkItem completion admission service", () => {
     );
   });
 
+  test("keeps reentrant replay from admission publication exactly terminal-once", async () => {
+    configure();
+    const first = await fixture("replay");
+    const service = guardedService(authority().resolver);
+    if (!service) return;
+    let replay: ReturnType<typeof service.requestCompletion> | undefined;
+    let completedEvents = 0;
+    const stopAdmission = Bus.subscribe(WorkItem.Events.CompletionAdmissionRecorded, (event) => {
+      if (event.payload.hash === first.item.hash && replay === undefined) {
+        replay = service.requestCompletion(first.request, first.report);
+      }
+    });
+    const stopCompleted = Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
+      if (event.payload.hash === first.item.hash) completedEvents += 1;
+    });
+
+    const firstOutcome = await service.requestCompletion(first.request, first.report);
+    const replayOutcome = await replay;
+    stopAdmission();
+    stopCompleted();
+    const stored = WorkItemStore.get(first.item.hash);
+
+    expect(firstOutcome.completed).toBe(true);
+    expect(replayOutcome?.completed).toBe(true);
+    expect(stored?.completionFacts.admissions).toHaveLength(1);
+    expect(stored?.completionTerminalReceipt?.admissionId).toBe(
+      stored?.completionFacts.admissions[0]?.id,
+    );
+    expect(completedEvents).toBe(1);
+  });
+
   test("after admission B completes, replay is idempotent for B and refuses blocked A", async () => {
     configure();
     const admissionAuthority = authority(["block", "admit"]);

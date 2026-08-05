@@ -535,7 +535,14 @@ export function createDurableCompletionResultAuthorityPort(): CompletionResultAu
         return { ok: false };
       }
       const observation = candidate.observations[0];
-      if (observation?.id !== candidate.result.observationIds[0]) return { ok: false };
+      if (!observation) return { ok: false };
+      if (
+        observation.id !== candidate.result.observationIds[0] ||
+        observation.basisRef !== candidate.basisRef ||
+        observation.subjectRef !== candidate.workItemHash
+      ) {
+        return { ok: false };
+      }
       const evidenceId = observation?.artifactRefs[0];
       const evidence = evidenceId ? item.evidence.find(({ id }) => id === evidenceId) : undefined;
       const verifierInput =

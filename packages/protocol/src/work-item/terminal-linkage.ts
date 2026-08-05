@@ -69,12 +69,23 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     addIssue(ctx, ["completionTerminalReceipt", "requestId"]);
   }
   if (
+    item.completionReport === undefined ||
+    admission.completionReportSnapshot === undefined ||
+    admission.completionReportRef === undefined ||
+    receipt.completionReportRef === undefined
+  ) {
+    addIssue(
+      ctx,
+      ["completionTerminalReceipt", "completionReportRef"],
+      "terminal receipt requires canonical completion report linkage",
+    );
+    return;
+  }
+  if (
     admission.completionReportRef !== receipt.completionReportRef ||
-    (admission.completionReportSnapshot !== undefined &&
-      admission.completionReportRef !==
-        completionReportReference(admission.completionReportSnapshot)) ||
-    (admission.completionReportSnapshot !== undefined &&
-      JSON.stringify(admission.completionReportSnapshot) !== JSON.stringify(item.completionReport))
+    admission.completionReportRef !==
+      completionReportReference(admission.completionReportSnapshot) ||
+    JSON.stringify(admission.completionReportSnapshot) !== JSON.stringify(item.completionReport)
   ) {
     addIssue(ctx, ["completionTerminalReceipt", "completionReportRef"]);
   }

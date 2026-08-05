@@ -587,6 +587,24 @@ describe("WorkItem completion admission contracts", () => {
             "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         },
       },
+      {
+        ...validInput,
+        completionReport: undefined,
+        completionFacts: {
+          ...completionFacts,
+          admissions: [
+            {
+              ...admission,
+              completionReportSnapshot: undefined,
+              completionReportRef: undefined,
+            },
+          ],
+        },
+        completionTerminalReceipt: {
+          ...completionTerminalReceipt,
+          completionReportRef: undefined,
+        },
+      },
     ];
 
     expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
@@ -594,6 +612,7 @@ describe("WorkItem completion admission contracts", () => {
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);
     expect(invalidInputs.map((input) => WorkItem.Info.safeParse(input).success)).toEqual([
+      false,
       false,
       false,
       false,

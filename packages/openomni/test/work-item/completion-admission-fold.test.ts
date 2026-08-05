@@ -524,7 +524,12 @@ describe("completion admission pure fold", () => {
       } satisfies ResolvedPolicy;
 
       const admission = evaluate(
-        input({ criteria: [lowCriterion], proposedFacts: oneCriterionFacts("asserted"), policy }),
+        input({
+          criteria: [lowCriterion],
+          proposedFacts: oneCriterionFacts("asserted"),
+          policy,
+          stakes: { ref: "stakes:trusted-low", valueMilli: 1, comparison: "below" },
+        }),
       );
 
       expect(admission.decision).toBe(decision);

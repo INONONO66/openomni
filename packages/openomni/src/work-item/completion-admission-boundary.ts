@@ -337,6 +337,22 @@ async function completeOrReevaluate(
 ): Promise<CompletionBoundaryOutcome> {
   const latest = requiredItem(adapter.get(recorded.hash), recorded.hash);
   assertNotFailedOrCancelled(latest);
+  if (WorkItem.deriveStatus(latest) === "completed") {
+    if (
+      latest.completionTerminalReceipt?.requestId !== request.id ||
+      latest.completionReport === undefined ||
+      !completionReportsMatch(latest.completionReport, completionReport)
+    ) {
+      throw requestConflict(request.id);
+    }
+    const terminalAdmission = latest.completionFacts.admissions.find(
+      ({ id }) => id === latest.completionTerminalReceipt?.admissionId,
+    );
+    if (!terminalAdmission) {
+      throw admissionRequired(latest.hash, latest.completionTerminalReceipt.admissionId);
+    }
+    return { admission: terminalAdmission, workItem: latest, completed: true };
+  }
   if (latest.revision === admission.recordedHead) {
     const completed = commitTerminal(adapter, latest, admission, completionReport, options.now());
     return { admission, workItem: completed, completed: true };

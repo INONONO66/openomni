@@ -179,6 +179,7 @@ function admissionInput(overrides: Readonly<Record<string, unknown>> = {}) {
 
 function stakesInjection(
   subjectOverrides: Readonly<Record<string, unknown>> = {},
+  high = true,
 ): Ledger.CompletionStakesInjection {
   const window = Ledger.Stakes.createWindow({
     ownerKey: "owner:authority",
@@ -193,17 +194,21 @@ function stakesInjection(
       windowRef: window.windowRef,
       ledgerObservedAt: 2,
       facts: {
-        irreversibleChangeCount: 10,
-        externalSurfaceCount: 10,
-        spendMicros: 100_000_000,
-        budgetReservedMicros: 100_000_000,
-        outreachRecipientCount: 10,
+        irreversibleChangeCount: high ? 10 : 0,
+        externalSurfaceCount: high ? 10 : 0,
+        spendMicros: high ? 100_000_000 : 0,
+        budgetReservedMicros: high ? 100_000_000 : 0,
+        outreachRecipientCount: high ? 10 : 0,
         contentFingerprints: [
           "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ],
       },
     },
-    { window, actions: [], knownFingerprints: [] },
+    {
+      window,
+      actions: [],
+      knownFingerprints: [],
+    },
   );
   return {
     ok: true,
@@ -388,11 +393,25 @@ describe("completion admission authority resolver", () => {
       },
     });
 
-    const admission = await resolveAdmission({ policyEngine, now: () => 10 });
+    const admission = await resolveAdmission({
+      policyEngine,
+      stakesResolver: { resolve: () => stakesInjection({}, false) },
+      now: () => 10,
+    });
 
     expect(dispatchedContext).toMatchObject(policyContext());
     expect(admission?.decision).toBe("admit");
     expect(admission?.policyRef).toBe("agent.policy.composed");
+  });
+
+  test("blocks asserted allowance when completion Stakes are unavailable", async () => {
+    const admission = await resolveAdmission({
+      policyEngine: createPolicyEngine({ allowAsserted: true }),
+      now: () => 10,
+    });
+
+    expect(admission?.decision).toBe("block");
+    expect(admission?.reasonCodes).toContain("stakes_required");
   });
 
   test("the closure preserves policy denial over asserted allowance", async () => {
@@ -773,7 +792,11 @@ describe("completion admission authority resolver", () => {
     if (!candidate) return;
 
     const admission = await resolveAdmission(
-      { policyEngine: createPolicyEngine({ allowAsserted: true }), now: () => 10 },
+      {
+        policyEngine: createPolicyEngine({ allowAsserted: true }),
+        stakesResolver: { resolve: () => stakesInjection({}, false) },
+        now: () => 10,
+      },
       item(),
       candidate,
     );
@@ -1073,13 +1096,56 @@ describe("completion admission authority resolver", () => {
     });
 
     const admission = await resolveAdmission(
-      { policyEngine: createPolicyEngine({ allowAsserted: true }), now: () => 10 },
+      {
+        policyEngine: createPolicyEngine({ allowAsserted: true }),
+        stakesResolver: { resolve: () => stakesInjection({}, false) },
+        now: () => 10,
+      },
       currentItem,
       request(),
     );
 
     expect(admission?.decision).toBe("admit");
     expect(admission?.effectiveResultIds).toContain("result:one");
+  });
+
+  test("rejects a current result that references an old-basis observation", async () => {
+    let authorityCalls = 0;
+    const currentItem = item({
+      completionFacts: {
+        ...WorkItem.emptyCompletionFacts(),
+        revision: 2,
+        criteria: [criterion],
+        observations: [{ ...observation(), id: "observation:old-basis", basisRef: "basis:old" }],
+      },
+    });
+    const candidate = request({
+      results: [
+        {
+          ...verifiedResult(),
+          observationIds: ["observation:old-basis"],
+          basisRef: "basis:v1",
+        },
+      ],
+    });
+
+    await expect(
+      resolveAdmission(
+        {
+          policyEngine: createPolicyEngine(),
+          resultAuthorityPort: {
+            validate: () => {
+              authorityCalls += 1;
+              return { ok: true };
+            },
+          },
+          now: () => 10,
+        },
+        currentItem,
+        candidate,
+      ),
+    ).rejects.toMatchObject({ code: "invalid_verifier" });
+    expect(authorityCalls).toBe(0);
   });
 
   test("rejects duplicate facts with a typed error", async () => {

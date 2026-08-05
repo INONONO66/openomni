@@ -5,6 +5,7 @@ import { Stakes } from "../ledger/index.js";
 import type {
   CompletionResultAuthorityCandidate,
   CompletionResultAuthorityPort,
+  CompletionStakesResolver,
 } from "./completion-admission-authority.js";
 
 export const CompletionAdmissionDriverNow = 4_900;
@@ -183,6 +184,53 @@ export function completionAdmissionDriverHighStakes() {
     },
     { window, actions: [], knownFingerprints: [] },
   );
+}
+
+function completionAdmissionDriverLowStakes() {
+  const window = Stakes.createWindow({
+    ownerKey: "owner:completion-admission-driver",
+    windowId: "window:completion-admission-driver-low",
+    openedAt: 1,
+    closesAt: 10_000,
+  });
+  return Stakes.compute(
+    {
+      actionId: "action:completion-admission-driver-low",
+      ownerKey: window.ownerKey,
+      windowRef: window.windowRef,
+      ledgerObservedAt: CompletionAdmissionDriverNow,
+      facts: {
+        irreversibleChangeCount: 0,
+        externalSurfaceCount: 0,
+        spendMicros: 0,
+        budgetReservedMicros: 0,
+        outreachRecipientCount: 0,
+        contentFingerprints: [
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        ],
+      },
+    },
+    { window, actions: [], knownFingerprints: [] },
+  );
+}
+
+export function completionAdmissionDriverLowStakesResolver(): CompletionStakesResolver {
+  return {
+    resolve(subject) {
+      return {
+        ok: true,
+        context: {
+          surface: "work.complete.pre",
+          workItemHash: subject.workItemHash,
+          requestId: subject.requestId,
+          contractRevision: subject.contractRevision,
+          basisRef: subject.basisRef,
+          expectedHead: subject.expectedHead,
+          stakes: completionAdmissionDriverLowStakes(),
+        },
+      };
+    },
+  };
 }
 
 export function completionAdmissionDriverVerifierPort(

@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  canonicalCompletionReport,
+  CompletionReport,
+  completionReportReference,
+} from "./completion-admission.js";
 import { criterionId, stableToken } from "./hash.js";
 import type {
   Claim,
@@ -54,7 +59,23 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   };
   const acceptanceCriteria = legacyAcceptanceCriteria(parsed.data);
   const criteria = legacyCriteria(parsed.data.hash, acceptanceCriteria);
-  const observationsByEvidenceId = legacyObservations(parsed.data.hash, parsed.data.evidence);
+  const legacyCompletionEvidence =
+    parsed.data.timestamps.completed !== undefined &&
+    parsed.data.completionReport === undefined &&
+    parsed.data.evidence.length === 0
+      ? {
+          id: `legacy-evidence:${stableToken(`${parsed.data.hash}:completion-record`)}`,
+          kind: "custom" as const,
+          description: "Legacy completion record had no evidence.",
+          passed: false,
+          createdAt: parsed.data.timestamps.completed,
+        }
+      : undefined;
+  const persistedEvidence =
+    legacyCompletionEvidence === undefined
+      ? parsed.data.evidence
+      : [...parsed.data.evidence, legacyCompletionEvidence];
+  const observationsByEvidenceId = legacyObservations(parsed.data.hash, persistedEvidence);
   const claims = legacyClaims(
     parsed.data.hash,
     contract.basisRef,
@@ -69,6 +90,27 @@ export function upcastLegacyCompletion(input: unknown): unknown {
     claims,
     observationsByEvidenceId,
   );
+  const parsedCompletionReport = CompletionReport.safeParse(parsed.data.completionReport);
+  const completionReport =
+    parsed.data.timestamps.completed === undefined
+      ? parsedCompletionReport.success
+        ? canonicalCompletionReport(parsedCompletionReport.data)
+        : undefined
+      : canonicalCompletionReport(
+          parsedCompletionReport.success
+            ? parsedCompletionReport.data
+            : {
+                summary: `Legacy completion retained for ${parsed.data.name}`,
+                claims: [
+                  {
+                    statement: criteria[0]?.statement ?? parsed.data.name,
+                    evidenceIds: [persistedEvidence[0]?.id ?? "legacy-evidence:missing"],
+                  },
+                ],
+                caveats: ["Legacy row had no completion report."],
+                followUps: [],
+              },
+        );
   const admissions = legacyAdmissions(
     parsed.data.hash,
     contract,
@@ -78,6 +120,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
       observations,
       results,
     },
+    completionReport,
   );
   const facts: CompletionFacts = {
     version: 1,
@@ -103,6 +146,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
         admissionId: admission.id,
         contractRevision: admission.contractRevision,
         basisRef: admission.basisRef,
+        completionReportRef: admission.completionReportRef,
         recordedHead,
       }
     : undefined;
@@ -110,9 +154,11 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   return {
     ...parsed.data,
     revision: recordedHead,
+    evidence: persistedEvidence,
     acceptanceCriteria,
     completionContract: contract,
     completionFacts: facts,
+    completionReport,
     completionTerminalReceipt,
   };
 }
@@ -267,6 +313,7 @@ function legacyAdmissions(
     observations: readonly Observation[];
     results: readonly CriterionResult[];
   }>,
+  completionReport: CompletionReport | undefined,
 ): CompletionAdmission[] {
   if (completedAt === undefined) return [];
   const requestId = `completion-request:${hash}:legacy`;
@@ -299,6 +346,9 @@ function legacyAdmissions(
       reasonCodes: ["legacy_completed_row"],
       residualRisks: ["legacy completion retained without retrospective verification"],
       policyRef: "policy:legacy-completion:v1",
+      completionReportSnapshot: completionReport,
+      completionReportRef:
+        completionReport === undefined ? undefined : completionReportReference(completionReport),
       expectedHead: 0,
       recordedHead: 1,
       createdAt: completedAt,

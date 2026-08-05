@@ -43,6 +43,19 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
   };
   if (item.timestamps.completed === undefined) return item;
 
+  const completionReport = WorkItem.canonicalCompletionReport({
+    summary: "Storage adapter fixture completed.",
+    claims: [
+      {
+        statement:
+          item.completionFacts.criteria[0]?.statement ?? "Storage adapter fixture completed.",
+        evidenceIds: [`evidence:${item.hash}:adapter-fixture`],
+      },
+    ],
+    caveats: [],
+    followUps: [],
+  });
+  const completionReportRef = WorkItem.completionReportReference(completionReport);
   const admission = WorkItem.CompletionAdmission.parse({
     version: 1,
     id: `admission:${item.hash}:adapter`,
@@ -71,6 +84,8 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     reasonCodes: ["adapter_fixture"],
     residualRisks: [],
     policyRef: "policy:adapter",
+    completionReportSnapshot: completionReport,
+    completionReportRef,
     expectedHead: item.revision,
     recordedHead: item.revision + 1,
     createdAt: item.timestamps.completed,
@@ -83,6 +98,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
       revision: item.completionFacts.revision + 1,
       admissions: [admission],
     },
+    completionReport,
     completionTerminalReceipt: {
       version: 1,
       hash: item.hash,
@@ -90,6 +106,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
       admissionId: admission.id,
       contractRevision: admission.contractRevision,
       basisRef: admission.basisRef,
+      completionReportRef,
       recordedHead: admission.recordedHead + 1,
     },
   };

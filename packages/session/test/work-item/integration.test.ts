@@ -50,6 +50,8 @@ function persistCompletedFixture(
   const workItemAdapter = Storage.get().workItem;
   const current = workItemAdapter?.get(hash);
   if (!workItemAdapter || !current) return undefined;
+  const completionReport = WorkItem.canonicalCompletionReport(report);
+  const completionReportRef = WorkItem.completionReportReference(completionReport);
   const admission = WorkItem.CompletionAdmission.parse({
     version: 1,
     id: `admission:${hash}:${current.revision + 1}:integration-fixture`,
@@ -78,6 +80,8 @@ function persistCompletedFixture(
     reasonCodes: ["session_integration_fixture"],
     residualRisks: [],
     policyRef: "policy:session-integration-fixture",
+    completionReportSnapshot: completionReport,
+    completionReportRef,
     expectedHead: current.revision,
     recordedHead: current.revision + 1,
     createdAt: current.timestamps.updated + 1,
@@ -103,12 +107,13 @@ function persistCompletedFixture(
     admissionId: admission.id,
     contractRevision: admission.contractRevision,
     basisRef: admission.basisRef,
+    completionReportRef,
     recordedHead: admitted.revision + 1,
   };
   const completed = WorkItem.Info.parse({
     ...admitted,
     revision: admitted.revision + 1,
-    completionReport: report,
+    completionReport,
     completionTerminalReceipt: receipt,
     timestamps: { ...admitted.timestamps, completed: completedAt, updated: completedAt },
   });

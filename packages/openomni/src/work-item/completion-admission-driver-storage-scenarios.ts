@@ -20,6 +20,7 @@ import {
   completionAdmissionDriverAssertedPolicy,
   completionAdmissionDriverAssertedResult,
   completionAdmissionDriverCriterion,
+  completionAdmissionDriverLowStakesResolver,
   completionAdmissionDriverReport,
   completionAdmissionDriverRequest,
   completionAdmissionDriverWorkItem,
@@ -113,6 +114,7 @@ export async function runRestartRecoveryCompletionAdmissionScenario() {
       completionWriter,
       authorityResolver: createCompletionAuthorityResolver({
         policyEngine: completionAdmissionDriverAssertedPolicy(criterion.id),
+        stakesResolver: completionAdmissionDriverLowStakesResolver(),
         now: () => CompletionAdmissionDriverNow,
       }),
       now: () => CompletionAdmissionDriverNow,
@@ -147,6 +149,7 @@ export async function runRestartRecoveryCompletionAdmissionScenario() {
       completionWriter,
       authorityResolver: createCompletionAuthorityResolver({
         policyEngine: completionAdmissionDriverAssertedPolicy(criterion.id),
+        stakesResolver: completionAdmissionDriverLowStakesResolver(),
         now: () => CompletionAdmissionDriverNow,
       }),
       now: () => CompletionAdmissionDriverNow,
