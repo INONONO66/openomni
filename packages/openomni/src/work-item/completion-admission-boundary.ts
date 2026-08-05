@@ -496,7 +496,7 @@ async function resumeCompletionAtHead(
           true,
         );
   assertReservation?.();
-  if (isAdmitted(admission) && assertReservation?.state === "reserved") {
+  if (isAdmitted(admission) && assertReservation) {
     const reservedItem = requiredItem(adapter.get(workItemHash), workItemHash);
     if (
       reservedItem.revision === assertReservation.recordedHead &&

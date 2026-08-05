@@ -847,6 +847,14 @@ describe("WorkItem completion admission service", () => {
       originalAdmission?.id,
     ]);
     expect(afterInterruptedRecovery?.completionTerminalReceipt).toBeUndefined();
+    expect(await interruptedRecoveryGateway.recoverRecordedCompletions()).toMatchObject({
+      recovered: 0,
+      skipped: 0,
+      failures: [{ admissionId: originalAdmission?.id }],
+    });
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions.map(({ id }) => id)).toEqual([
+      originalAdmission?.id,
+    ]);
 
     const recoveryGateway = createWorkItemCompletionGateway({
       completionWriter,
