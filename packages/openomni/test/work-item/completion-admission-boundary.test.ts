@@ -378,10 +378,16 @@ describe("WorkItem completion admission service", () => {
   test("releases a pre-admission reservation during boot recovery", async () => {
     configure();
     const first = await fixture("worker");
+    const blockingService = guardedService(blockingAuthority());
+    if (!blockingService) return;
+    await blockingService.requestCompletion(first.request, first.report);
+    await WorkItemStore.fail(first.item.hash, "retry after historical admission");
+    const retried = await WorkItemStore.retry(first.item.hash);
+    if (!retried) throw new Error("missing retried WorkItem");
     const reservationInput = {
       completionWriter,
-      workItemHash: first.item.hash,
-      requestId: first.request.id,
+      workItemHash: retried.hash,
+      requestId: "completion-request:pre-admission-recovery:retry",
       requestRoot: "request-root:pre-admission-recovery",
       envelopeDigest: "digest:pre-admission-recovery",
       leaseDurationMs: 15_000,
@@ -395,20 +401,25 @@ describe("WorkItem completion admission service", () => {
       completionWriter,
       policyEngine: PolicyEngine.create(),
       resultAuthorityPort: { validate: () => ({ ok: true }) },
-      now: () => NOW + 1,
+      now: () => NOW,
     });
 
     const receipt = await gateway.recoverRecordedCompletions();
-    const afterRecovery = WorkItemStore.get(first.item.hash);
+    const afterRecovery = WorkItemStore.get(retried.hash);
     const takeover = reserveCompletionRequest({
       ...reservationInput,
       ownerId: "process:after-restart",
-      now: NOW + 1,
+      now: NOW,
     });
 
     expect(receipt).toEqual({ recovered: 0, skipped: 1, failures: [] });
-    expect(afterRecovery?.completionFacts.admissions).toEqual([]);
-    expect(afterRecovery?.completionFacts.requestReservations[0]?.leaseExpiresAt).toBe(NOW + 1);
+    expect(afterRecovery?.completionFacts.admissions).toHaveLength(1);
+    expect(
+      afterRecovery?.completionFacts.admissions.some(
+        ({ basisRef }) => basisRef === retried.completionContract.basisRef,
+      ),
+    ).toBe(false);
+    expect(afterRecovery?.completionFacts.requestReservations.at(-1)?.leaseExpiresAt).toBe(NOW);
     expect(takeover.state).toBe("reserved");
     expect(takeover.reservation.ownerId).toBe("process:after-restart");
     expect(takeover.reservation.fence).toBe(reserved.reservation.fence + 1);
@@ -679,6 +690,48 @@ describe("WorkItem completion admission service", () => {
         now: 100,
       }),
     ).toThrow("completion reservation contention did not converge");
+    expect(WorkItemStore.get(first.item.hash)?.completionFacts.requestReservations).toEqual([]);
+  });
+
+  test("rejects a reservation id colliding with a completion fact", async () => {
+    configure();
+    const first = await fixture("worker");
+    const current = WorkItemStore.get(first.item.hash);
+    if (!current) throw new Error("missing collision fixture WorkItem");
+    const reservationId = `completion-reservation:${first.request.id}:1`;
+    const candidate = WorkItem.Info.parse({
+      ...current,
+      revision: current.revision + 1,
+      completionFacts: {
+        ...current.completionFacts,
+        revision: current.completionFacts.revision + 1,
+        claims: [
+          ...current.completionFacts.claims,
+          {
+            id: reservationId,
+            criterionId: current.completionFacts.criteria[0]?.id ?? "criterion:missing",
+            statement: "reservation ids remain globally unique",
+            observationIds: [],
+            basisRef: current.completionContract.basisRef,
+            createdAt: 99,
+          },
+        ],
+      },
+    });
+    expect(completionWriter(current.hash, current.revision, candidate)).toBe(true);
+
+    expect(() =>
+      reserveCompletionRequest({
+        completionWriter,
+        workItemHash: first.item.hash,
+        requestId: first.request.id,
+        requestRoot: "request-root:collision",
+        envelopeDigest: "digest:collision",
+        ownerId: "process:collision",
+        leaseDurationMs: 10,
+        now: 100,
+      }),
+    ).toThrow(`completion reservation id collides with completion fact: ${reservationId}`);
     expect(WorkItemStore.get(first.item.hash)?.completionFacts.requestReservations).toEqual([]);
   });
 
@@ -1165,6 +1218,31 @@ describe("WorkItem completion admission service", () => {
       "request_conflict",
     );
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("normalizes authority failure while resume re-evaluates a newer head", async () => {
+    configure();
+    const { item, request, report } = await fixture("recovery");
+    const blockingService = guardedService(blockingAuthority());
+    if (!blockingService) return;
+    await blockingService.requestCompletion(request, report);
+    const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    if (!admissionId) throw new Error("missing blocking admission");
+    await WorkItemStore.update(item.hash, { name: "mutated before recovery re-evaluation" });
+    const unavailableService = guardedService({
+      resolve() {
+        throw new Error("authority backend unavailable");
+      },
+    });
+    if (!unavailableService) return;
+
+    const code = await errorCode(
+      unavailableService.resumeCompletion(item.hash, admissionId, report),
+    );
+
+    expect(code).toBe("authority_unavailable");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 

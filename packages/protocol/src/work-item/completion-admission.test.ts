@@ -66,6 +66,38 @@ describe("WorkItem completion admission contracts", () => {
       fence: 1,
       leaseExpiresAt: 110,
     });
+    expect(
+      WorkItem.CompletionRequestReservation.parse({
+        ...base,
+        ownerId: "process:recovery",
+        fence: 2,
+        leaseExpiresAt: base.createdAt,
+      }),
+    ).toMatchObject({
+      ownerId: "process:recovery",
+      fence: 2,
+      leaseExpiresAt: base.createdAt,
+    });
+    const reservation = WorkItem.CompletionRequestReservation.parse({
+      ...base,
+      ownerId: "process:collision",
+      fence: 3,
+      leaseExpiresAt: 120,
+    });
+    expect(
+      WorkItem.CompletionFacts.safeParse({
+        ...WorkItem.emptyCompletionFacts(),
+        criteria: [
+          {
+            id: reservation.id,
+            revision: 1,
+            statement: "reservation ids remain globally unique",
+            required: true,
+          },
+        ],
+        requestReservations: [reservation],
+      }).success,
+    ).toBe(false);
   });
 
   test("binds qualified source identity kind to completion origin", () => {

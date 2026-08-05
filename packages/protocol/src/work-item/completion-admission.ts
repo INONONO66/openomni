@@ -365,11 +365,11 @@ export const CompletionRequestReservation = z
     }
     if (
       reservation.leaseExpiresAt !== undefined &&
-      reservation.leaseExpiresAt <= reservation.createdAt
+      reservation.leaseExpiresAt < reservation.createdAt
     ) {
       ctx.addIssue({
         code: "custom",
-        message: "leaseExpiresAt must follow createdAt",
+        message: "leaseExpiresAt must not precede createdAt",
         path: ["leaseExpiresAt"],
       });
     }
@@ -390,7 +390,33 @@ const CompletionFactsShape = z
     requestReservations: z.array(CompletionRequestReservation).default([]),
     admissions: z.array(CompletionAdmission),
   })
-  .strict();
+  .strict()
+  .superRefine((facts, ctx) => {
+    const seen = new Set<string>();
+    const collections: ReadonlyArray<readonly [string, ReadonlyArray<Readonly<{ id: string }>>]> = [
+      ["criteria", facts.criteria],
+      ["claims", facts.claims],
+      ["observations", facts.observations],
+      ["results", facts.results],
+      ["invalidations", facts.invalidations],
+      ["verificationErrors", facts.verificationErrors],
+      ["effects", facts.effects],
+      ["requestReservations", facts.requestReservations],
+      ["admissions", facts.admissions],
+    ];
+    for (const [collection, entries] of collections) {
+      for (const [index, entry] of entries.entries()) {
+        if (seen.has(entry.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `duplicate completion fact id: ${entry.id}`,
+            path: [collection, index, "id"],
+          });
+        }
+        seen.add(entry.id);
+      }
+    }
+  });
 
 export const CompletionFacts = CompletionFactsShape;
 export type CompletionFacts = z.infer<typeof CompletionFacts>;

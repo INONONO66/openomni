@@ -88,7 +88,7 @@ type FoldState = {
 export function evaluateCompletion(input: CompletionEvaluationInput): WorkItem.CompletionAdmission {
   const facts = mergeFacts(input);
   assertOwnerOverrideBinding(input);
-  assertFactGraph(input.durableFacts.admissions, facts);
+  assertFactGraph(input.durableFacts.requestReservations, input.durableFacts.admissions, facts);
 
   const state = foldRequiredCriteria(input, facts);
   foldResolvedPolicy(input.policy, state);
@@ -149,6 +149,7 @@ function mergeFacts(input: CompletionEvaluationInput): FoldFacts {
 }
 
 function assertFactGraph(
+  reservations: readonly WorkItem.CompletionRequestReservation[],
   admissions: readonly WorkItem.CompletionAdmission[],
   facts: FoldFacts,
 ): void {
@@ -160,6 +161,7 @@ function assertFactGraph(
     ...facts.invalidations,
     ...facts.verificationErrors,
     ...facts.effects,
+    ...reservations,
     ...admissions,
   ];
   const ids = new Set<string>();

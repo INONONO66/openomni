@@ -345,6 +345,7 @@ function assertUniqueFactIds(item: WorkItem.Info, request: WorkItem.CompletionRe
     ...item.completionFacts.invalidations,
     ...item.completionFacts.verificationErrors,
     ...item.completionFacts.effects,
+    ...item.completionFacts.requestReservations,
     ...item.completionFacts.admissions,
     ...request.claims,
     ...request.observations,

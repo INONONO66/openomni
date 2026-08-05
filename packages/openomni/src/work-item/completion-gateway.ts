@@ -49,13 +49,23 @@ export function createWorkItemCompletionGateway(
         if (item.completionTerminalReceipt) {
           continue;
         }
-        if (item.completionFacts.admissions.length === 0) {
+        const currentAdmission = item.completionFacts.admissions
+          .filter(
+            (candidate) =>
+              candidate.contractRevision === item.completionContract.revision &&
+              candidate.basisRef === item.completionContract.basisRef,
+          )
+          .at(-1);
+        if (!currentAdmission) {
           const reservation = item.completionFacts.requestReservations
             .filter(({ attempt, basisRef }) => {
               return attempt === item.attempt && basisRef === item.completionContract.basisRef;
             })
             .at(-1);
-          if (!reservation) continue;
+          if (!reservation) {
+            if (item.completionFacts.admissions.length > 0) skipped += 1;
+            continue;
+          }
           const recoveredAt = now();
           if (
             reservation.leaseExpiresAt !== undefined &&
@@ -79,17 +89,8 @@ export function createWorkItemCompletionGateway(
           skipped += 1;
           continue;
         }
-        const admission = item.completionFacts.admissions
-          .filter(
-            (candidate) =>
-              candidate.contractRevision === item.completionContract.revision &&
-              candidate.basisRef === item.completionContract.basisRef,
-          )
-          .at(-1);
-        if (
-          !admission ||
-          ["completed", "failed", "cancelled"].includes(WorkItem.deriveStatus(item))
-        ) {
+        const admission = currentAdmission;
+        if (["completed", "failed", "cancelled"].includes(WorkItem.deriveStatus(item))) {
           skipped += 1;
           continue;
         }

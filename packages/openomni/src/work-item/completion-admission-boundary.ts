@@ -147,6 +147,7 @@ export function reserveCompletionRequest(
       fence,
       leaseExpiresAt: input.now + input.leaseDurationMs,
     });
+    assertReservationIdAvailable(current, nextReservation.id);
     const updated = WorkItem.Info.parse({
       ...current,
       revision: recordedHead,
@@ -164,6 +165,24 @@ export function reserveCompletionRequest(
   throw new CompletionAdmissionServiceError(
     "stale_head",
     `completion reservation contention did not converge: ${input.requestId}`,
+  );
+}
+
+function assertReservationIdAvailable(item: WorkItem.Info, reservationId: string): void {
+  const collidingFact = [
+    ...item.completionFacts.criteria,
+    ...item.completionFacts.claims,
+    ...item.completionFacts.observations,
+    ...item.completionFacts.results,
+    ...item.completionFacts.invalidations,
+    ...item.completionFacts.verificationErrors,
+    ...item.completionFacts.effects,
+    ...item.completionFacts.admissions,
+  ].find(({ id }) => id === reservationId);
+  if (!collidingFact) return;
+  throw new CompletionAdmissionError(
+    "duplicate_fact_id",
+    `completion reservation id collides with completion fact: ${reservationId}`,
   );
 }
 
@@ -229,21 +248,7 @@ export function createCompletionAdmissionService(
             requestedPublished = true;
           }
 
-          let authorityAdmission: WorkItem.CompletionAdmission;
-          try {
-            authorityAdmission = await options.authorityResolver.resolve(initial, request);
-          } catch (error) {
-            if (
-              error instanceof CompletionAdmissionError ||
-              error instanceof CompletionAdmissionServiceError
-            ) {
-              throw error;
-            }
-            throw new CompletionAdmissionServiceError(
-              "authority_unavailable",
-              error instanceof Error ? error.message : String(error),
-            );
-          }
+          const authorityAdmission = await resolveAuthority(options, initial, request);
           const admission = canonicalAdmission(authorityAdmission, completionReport);
           assertUnchangedAfterAuthority(adapter, initial);
           assertAdmissionMatches(admission, initial, request);
@@ -320,7 +325,7 @@ export function createCompletionAdmissionService(
 
       const request = requestFromAdmission(item, admission);
       const nextAdmission = canonicalAdmission(
-        await options.authorityResolver.resolve(item, request),
+        await resolveAuthority(options, item, request),
         completionReport,
       );
       assertAdmissionMatches(nextAdmission, item, request);
@@ -424,7 +429,7 @@ async function completeOrReevaluate(
 
   const recheck = requestAtHead(request, latest.revision);
   const nextAdmission = canonicalAdmission(
-    await options.authorityResolver.resolve(latest, recheck),
+    await resolveAuthority(options, latest, recheck),
     completionReport,
   );
   assertAdmissionMatches(nextAdmission, latest, recheck);
@@ -846,6 +851,27 @@ function requestAtHead(
     verificationErrors: [],
     effects: [],
   });
+}
+
+async function resolveAuthority(
+  options: CompletionAdmissionServiceOptions,
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+): Promise<WorkItem.CompletionAdmission> {
+  try {
+    return await options.authorityResolver.resolve(item, request);
+  } catch (error) {
+    if (
+      error instanceof CompletionAdmissionError ||
+      error instanceof CompletionAdmissionServiceError
+    ) {
+      throw error;
+    }
+    throw new CompletionAdmissionServiceError(
+      "authority_unavailable",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 function rebaseCompletionRequestAtHead(
