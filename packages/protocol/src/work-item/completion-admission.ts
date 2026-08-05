@@ -197,13 +197,26 @@ const CompletionRequestShape = z
   })
   .strict()
   .superRefine((request, ctx) => {
-    const fixedOrigin = request.sourceIdentity?.source;
-    if (fixedOrigin === "replay" || fixedOrigin === "recovery") {
+    const fixedSource = request.sourceIdentity?.source;
+    const fixedOrigin =
+      fixedSource === "internal_worker" || fixedSource === "connector_worker"
+        ? "worker"
+        : fixedSource === "replay" || fixedSource === "recovery"
+          ? fixedSource
+          : undefined;
+    if (fixedOrigin !== undefined) {
       if (request.origin !== fixedOrigin) {
         ctx.addIssue({
           code: "custom",
           message: "sourceIdentity source must match completion origin",
           path: ["sourceIdentity", "source"],
+        });
+      }
+      if (request.sourceIdentity?.identity.kind !== "worker") {
+        ctx.addIssue({
+          code: "custom",
+          message: "fixed Worker source requires worker identity",
+          path: ["sourceIdentity", "identity", "kind"],
         });
       }
       return;

@@ -143,6 +143,43 @@ describe("WorkItem completion admission contracts", () => {
         },
       }).success,
     ).toBe(false);
+    for (const [source, origin] of [
+      ["internal_worker", "worker"],
+      ["connector_worker", "worker"],
+      ["replay", "replay"],
+      ["recovery", "recovery"],
+    ] as const) {
+      expect(
+        WorkItem.CompletionRequest.safeParse({
+          ...request,
+          origin,
+          sourceIdentity: {
+            source,
+            identity: { kind: "worker", id: "worker:assigned" },
+          },
+        }).success,
+      ).toBe(true);
+      expect(
+        WorkItem.CompletionRequest.safeParse({
+          ...request,
+          origin: "resident",
+          sourceIdentity: {
+            source,
+            identity: { kind: "resident", id: "resident:forged" },
+          },
+        }).success,
+      ).toBe(false);
+      expect(
+        WorkItem.CompletionRequest.safeParse({
+          ...request,
+          origin,
+          sourceIdentity: {
+            source,
+            identity: { kind: "external_actor", id: "actor:forged" },
+          },
+        }).success,
+      ).toBe(false);
+    }
   });
 
   test("keeps criteria, claims, observations, results, and invalidations distinct", () => {
