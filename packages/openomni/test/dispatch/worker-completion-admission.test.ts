@@ -566,7 +566,8 @@ describe("worker completion admission convergence", () => {
       throw new Error("missing artifact-binding fixture");
     }
 
-    const validation = await createDurableCompletionResultAuthorityPort().validate({
+    const port = createDurableCompletionResultAuthorityPort();
+    const appendedArtifact = await port.validate({
       workItemHash: stored.hash,
       requestId: "request:artifact-binding",
       contractRevision: stored.completionContract.revision,
@@ -580,8 +581,29 @@ describe("worker completion admission convergence", () => {
         },
       ],
     });
+    const appendedObservation = await port.validate({
+      workItemHash: stored.hash,
+      requestId: "request:observation-binding",
+      contractRevision: stored.completionContract.revision,
+      basisRef: stored.completionContract.basisRef,
+      criterion,
+      result: {
+        ...result,
+        observationIds: [observation.id, "observation:unrelated"],
+      },
+      observations: [
+        observation,
+        {
+          ...observation,
+          id: "observation:unrelated",
+          artifactRefs: [unrelatedEvidenceId],
+          provenanceRef: unrelatedEvidenceId,
+        },
+      ],
+    });
 
-    expect(validation).toEqual({ ok: false });
+    expect(appendedArtifact).toEqual({ ok: false });
+    expect(appendedObservation).toEqual({ ok: false });
   });
 
   test("scopes Worker completion identity to the retried attempt", async () => {
@@ -686,6 +708,68 @@ describe("worker completion admission convergence", () => {
     expect(current.completionBlocked).toBe(false);
     expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
     expect(completed?.completionFacts.admissions).toHaveLength(1);
+  });
+
+  test("rejects prior-attempt claim evidence after retry", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const firstOutput = await evidenceBackedEnvelope(item.hash);
+    const completionPolicyEngine = PolicyEngine.create();
+    completionPolicyEngine.register({
+      kind: "point",
+      name: "hold-prior-attempt-evidence",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "hold-prior-attempt-evidence",
+          reasonCodes: ["retry_with_fresh_evidence"],
+        }),
+    });
+    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(firstOutput), {
+      completionWriter,
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine,
+      now: () => NOW,
+    });
+    const firstBlocked = WorkItemStore.get(item.hash);
+    const priorEvidenceId = firstBlocked?.evidence[0]?.id;
+    if (!firstBlocked || !priorEvidenceId) throw new Error("missing prior-attempt evidence");
+    for (const blocker of firstBlocked.blockers) {
+      await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+    }
+    await WorkItemStore.fail(item.hash, "retry with fresh evidence");
+    await WorkItemStore.retry(item.hash);
+    const currentOutput = JSON.parse(await evidenceBackedEnvelope(item.hash)) as {
+      completionReport: WorkItem.CompletionReport;
+      criterionFacts: unknown[];
+    };
+    const mismatchedOutput = JSON.stringify({
+      ...currentOutput,
+      completionReport: {
+        ...currentOutput.completionReport,
+        claims: currentOutput.completionReport.claims.map((claim) => ({
+          ...claim,
+          evidenceIds: [priorEvidenceId],
+        })),
+      },
+    });
+
+    const replay = await reflectCoordinatorResultWithPolicy(
+      item.hash,
+      succeeded(mismatchedOutput),
+      {
+        completionWriter,
+        sourceOrigin: { source: "internal_worker" },
+        completionPolicyEngine: PolicyEngine.create(),
+        now: () => NOW + 1,
+      },
+    );
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(replay.completionBlocked).toBe(true);
+    expect(replay.completionBlocker).toContain("completion report evidence is not admitted");
+    expect(stored?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("re-evaluates durable citation results without repeating read-back", async () => {

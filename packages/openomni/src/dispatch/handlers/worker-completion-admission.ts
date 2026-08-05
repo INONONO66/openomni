@@ -525,9 +525,11 @@ export function createDurableCompletionResultAuthorityPort(): CompletionResultAu
     validate(candidate: CompletionResultAuthorityCandidate) {
       const item = WorkItemStore.get(candidate.workItemHash);
       if (!item) return { ok: false };
-      const observation = candidate.observations.find(({ id }) =>
-        candidate.result.observationIds.includes(id),
-      );
+      if (candidate.result.observationIds.length !== 1 || candidate.observations.length !== 1) {
+        return { ok: false };
+      }
+      const observation = candidate.observations[0];
+      if (observation?.id !== candidate.result.observationIds[0]) return { ok: false };
       const evidenceId = observation?.artifactRefs[0];
       const evidence = evidenceId ? item.evidence.find(({ id }) => id === evidenceId) : undefined;
       const verifierInput =

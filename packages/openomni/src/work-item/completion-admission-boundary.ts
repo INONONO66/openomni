@@ -621,6 +621,7 @@ function verifyCompletionReport(
     const admittedClaims = item.completionFacts.claims.filter(
       (claim) =>
         claim.statement === reportClaim.statement &&
+        claim.basisRef === admission.basisRef &&
         (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
     );
     if (admittedClaims.length === 0) {

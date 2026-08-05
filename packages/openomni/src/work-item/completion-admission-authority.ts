@@ -422,6 +422,13 @@ function assertProposedClaimAuthority(
     (result) => result.basisRef === request.basisRef,
   );
   for (const claim of request.claims) {
+    const criterion = item.completionFacts.criteria.find(({ id }) => id === claim.criterionId);
+    if (!criterion || claim.statement !== criterion.statement) {
+      throw new CompletionAdmissionError(
+        "invalid_verifier",
+        `claim ${claim.id} does not match its persisted criterion`,
+      );
+    }
     const authoritativeObservationIds = new Set(
       results
         .filter((result) => result.criterionId === claim.criterionId)
