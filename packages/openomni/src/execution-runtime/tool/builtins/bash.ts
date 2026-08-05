@@ -49,25 +49,37 @@ async function terminateProcessGroup(proc: {
   kill(): void;
 }): Promise<void> {
   try {
-    process.kill(-proc.pid, "SIGTERM");
-    if (await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS)) {
-      await proc.exited.catch(() => undefined);
-      return;
-    }
-    try {
-      process.kill(-proc.pid, "SIGKILL");
-    } catch {
-      // The whole group exited during the graceful termination window.
-    }
-    await proc.exited.catch(() => undefined);
-    await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS);
-    return;
-  } catch {
+    process.kill(-proc.pid, 0);
+  } catch (error) {
+    if (isMissingProcess(error)) return;
     // Windows and non-detached fallback.
+    proc.kill();
+    await proc.exited.catch(() => undefined);
+    return;
   }
-
-  proc.kill();
+  try {
+    process.kill(-proc.pid, "SIGTERM");
+  } catch (error) {
+    if (isMissingProcess(error)) return;
+    proc.kill();
+    await proc.exited.catch(() => undefined);
+    return;
+  }
+  if (await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS)) {
+    await proc.exited.catch(() => undefined);
+    return;
+  }
+  try {
+    process.kill(-proc.pid, "SIGKILL");
+  } catch (error) {
+    if (!isMissingProcess(error)) throw error;
+  }
   await proc.exited.catch(() => undefined);
+  await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS);
+}
+
+function isMissingProcess(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ESRCH";
 }
 
 async function waitForProcessGroupExit(pid: number, timeoutMs: number): Promise<boolean> {
@@ -119,8 +131,7 @@ export function bashTool(workspaceRoot?: string): NativeTool {
     isConcurrencySafe: false,
     source: "system",
     async execute(call, context?: ToolExecutionContext) {
-      let timedOut = false;
-      let aborted = false;
+      let interruption: "aborted" | "timedOut" | undefined;
 
       try {
         const command = requireString(call.input, "command");
@@ -141,34 +152,36 @@ export function bashTool(workspaceRoot?: string): NativeTool {
         let termination: Promise<void> | undefined;
 
         const abortCommand = () => {
-          aborted = true;
+          interruption ??= "aborted";
           termination ??= terminateProcessGroup(proc);
         };
         context?.signal?.addEventListener("abort", abortCommand, { once: true });
 
         const timer = setTimeout(() => {
-          timedOut = true;
+          interruption ??= "timedOut";
           termination ??= terminateProcessGroup(proc);
         }, timeoutMs);
 
         try {
-          const [stdout, stderr, exitCode] = await Promise.all([
-            new Response(proc.stdout).text(),
-            new Response(proc.stderr).text(),
-            proc.exited,
-          ]);
+          const stdoutTask = new Response(proc.stdout).text();
+          const stderrTask = new Response(proc.stderr).text();
+          const exitCode = await proc.exited;
+          clearTimeout(timer);
+          context?.signal?.removeEventListener("abort", abortCommand);
+          termination ??= terminateProcessGroup(proc);
           await termination;
+          const [stdout, stderr] = await Promise.all([stdoutTask, stderrTask]);
 
           const output = [stdout, stderr]
             .filter((chunk) => chunk.length > 0)
             .join("\n")
             .trim();
 
-          if (aborted) {
+          if (interruption === "aborted") {
             return errorResult(call, output || "Command aborted");
           }
 
-          if (timedOut) {
+          if (interruption === "timedOut") {
             return errorResult(call, output || `Command timed out after ${timeoutMs}ms`);
           }
 
