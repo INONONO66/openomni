@@ -52,22 +52,53 @@ export function upcastLegacyCompletion(input: unknown): unknown {
   if (!isLegacyCompletionRow(input)) return input;
   const parsed = LegacyWorkItem.safeParse(input);
   if (!parsed.success) return input;
-  const completionReports = (parsed.data.completionReport?.claims ?? []).map((report, index) => ({
-    ...report,
-    statement: legacyReportStatement(report.statement, index),
-  }));
-  const normalizedCompletionReport = parsed.data.completionReport
-    ? { ...parsed.data.completionReport, claims: completionReports }
-    : undefined;
+  const persistedCompletionReports = (parsed.data.completionReport?.claims ?? []).map(
+    (report, index) => ({
+      ...report,
+      statement: legacyReportStatement(report.statement, index),
+    }),
+  );
 
   const contract: CompletionContract = {
     version: 1,
     revision: "legacy-v1",
     basisRef: "legacy-basis",
   };
-  const acceptanceCriteria = legacyAcceptanceCriteria(parsed.data, completionReports);
+  const acceptanceCriteria = legacyAcceptanceCriteria(parsed.data, persistedCompletionReports);
+  const completedAt = parsed.data.timestamps.completed;
+  const needsArchiveReport =
+    completedAt !== undefined && parsed.data.completionReport === undefined;
+  const archiveEvidenceId = `evidence:${parsed.data.hash}:legacy-completion-archive`;
+  const completionReports = needsArchiveReport
+    ? acceptanceCriteria.map((statement) => ({
+        statement,
+        evidenceIds: [archiveEvidenceId],
+      }))
+    : persistedCompletionReports;
+  const normalizedCompletionReport = parsed.data.completionReport
+    ? { ...parsed.data.completionReport, claims: completionReports }
+    : needsArchiveReport
+      ? {
+          summary: "Archived historical completion without a persisted report.",
+          claims: completionReports,
+          caveats: ["the historical completion report was not persisted"],
+          followUps: [],
+        }
+      : undefined;
   const criteria = legacyCriteria(parsed.data.hash, acceptanceCriteria);
-  const persistedEvidence = parsed.data.evidence;
+  const persistedEvidence = needsArchiveReport
+    ? [
+        ...parsed.data.evidence,
+        {
+          id: archiveEvidenceId,
+          kind: "custom" as const,
+          description: "Historical completion archive marker",
+          passed: true,
+          detail: "generated while decoding a completed legacy row without a completion report",
+          createdAt: completedAt,
+        },
+      ]
+    : parsed.data.evidence;
   const evidenceIds = new Set<string>();
   for (const { id } of persistedEvidence) {
     if (evidenceIds.has(id)) throw new Error(`duplicate legacy evidence id: ${id}`);
@@ -117,7 +148,7 @@ export function upcastLegacyCompletion(input: unknown): unknown {
       parsed.data.timestamps.completed,
     ),
   ];
-  if (parsed.data.timestamps.completed !== undefined && completionReport === undefined) {
+  if (completedAt !== undefined && completionReport === undefined) {
     throw new Error("completed legacy WorkItem requires a valid completion report");
   }
   const admissions = legacyAdmissions(

@@ -391,6 +391,42 @@ describe("WorkItem completion admission contracts", () => {
     });
   });
 
+  test("archives a completed legacy WorkItem without a persisted report", () => {
+    const legacyItem = {
+      ...baseItem,
+      timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence: [],
+    };
+
+    const item = WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(legacyItem));
+    const archiveEvidenceId = `evidence:${legacyItem.hash}:legacy-completion-archive`;
+    const admission = item.completionFacts.admissions[0];
+
+    expect(item.evidence).toContainEqual(
+      expect.objectContaining({
+        id: archiveEvidenceId,
+        kind: "custom",
+        passed: true,
+      }),
+    );
+    expect(item.completionReport).toEqual({
+      summary: "Archived historical completion without a persisted report.",
+      claims: [
+        {
+          statement: "publish the artifact",
+          evidenceIds: [archiveEvidenceId],
+        },
+      ],
+      caveats: ["the historical completion report was not persisted"],
+      followUps: [],
+    });
+    expect(item.completionTerminalReceipt).toMatchObject({
+      admissionId: admission?.id,
+      completionReportRef: admission?.completionReportRef,
+      recordedHead: 2,
+    });
+  });
+
   test.each([
     ["missing", [], "legacy report claim evidence is missing: evidence:legacy-failed"],
     [
