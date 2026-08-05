@@ -12,7 +12,7 @@ import {
   CompletionAdmissionServiceError,
   reserveCompletionRequest,
 } from "../../work-item/completion-admission-boundary.js";
-import type { CompletionSourceOrigin } from "../../work-item/completion-origin.js";
+import { CompletionSourceOrigin } from "../../work-item/completion-origin.js";
 import {
   admitWorkerCompletion,
   replayWorkerCompletion,
@@ -139,7 +139,9 @@ export async function reflectCoordinatorResult(
   options: WorkerCompletionOptions,
 ): Promise<CompletionReflection> {
   let item: WorkItem.Info;
+  let sourceOrigin: CompletionSourceOrigin;
   try {
+    sourceOrigin = CompletionSourceOrigin.parse(options.sourceOrigin);
     item = requireWorkerCompletionIdentity(workItemHash, result);
   } catch (error) {
     return completionReflection(
@@ -157,7 +159,7 @@ export async function reflectCoordinatorResult(
       return blockCompletion(workItemHash, parsed.reason);
     }
     const requestRoot = workerCompletionRequestRoot(item, result);
-    const reservationRoot = workerCompletionReservationRoot(item, result, options.sourceOrigin);
+    const reservationRoot = workerCompletionReservationRoot(item, result, sourceOrigin);
     try {
       const now = options.now ?? Date.now;
       const completionEnvelopeDigest = digestCompletionEnvelope(parsed.envelope);
@@ -165,7 +167,7 @@ export async function reflectCoordinatorResult(
         completionWriter: options.completionWriter,
         workItemHash,
         result,
-        sourceOrigin: options.sourceOrigin,
+        sourceOrigin,
         completionEnvelopeDigest,
         policyEngine: options.completionPolicyEngine,
         completionReportMatches: (report) =>
@@ -221,7 +223,7 @@ export async function reflectCoordinatorResult(
           completionWriter: options.completionWriter,
           workItemHash,
           result,
-          sourceOrigin: options.sourceOrigin,
+          sourceOrigin,
           completionEnvelopeDigest,
           policyEngine: options.completionPolicyEngine,
           completionReportMatches: (report) =>
@@ -250,7 +252,7 @@ export async function reflectCoordinatorResult(
           workItemHash,
           result,
           completionEnvelopeDigest,
-          sourceOrigin: options.sourceOrigin,
+          sourceOrigin,
           criterionFacts: parsed.envelope.criterionFacts,
           completionReport: prepared.report,
           policyEngine: options.completionPolicyEngine,

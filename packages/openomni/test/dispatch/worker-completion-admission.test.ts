@@ -359,6 +359,35 @@ describe("worker completion admission convergence", () => {
     ).toEqual(sourceIdentity);
   });
 
+  test("snapshots mutable source identity before reservation", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const result = succeeded(await evidenceBackedEnvelope(item.hash));
+    const sourceOrigin = {
+      source: "internal" as const,
+      identity: { kind: "worker" as const, id: "worker:source-a" },
+    };
+    const expectedRoot = workerCompletionReservationRoot(
+      item,
+      result,
+      structuredClone(sourceOrigin),
+    );
+
+    const pending = reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin,
+      now: () => NOW,
+    });
+    sourceOrigin.identity.id = "worker:source-b";
+    const reflection = await pending;
+    const stored = WorkItemStore.get(item.hash);
+
+    expect(reflection.completionBlocked).toBe(false);
+    expect(stored?.completionFacts.requestReservations.at(-1)?.requestRoot).toBe(expectedRoot);
+    expect(stored?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity).toEqual({
+      source: "internal",
+      identity: { kind: "worker", id: "worker:source-a" },
+    });
+  });
+
   test("rejects completed replay from a different qualified source identity", async () => {
     const item = await startedItem("internal_chat_agent");
     const result = succeeded(await evidenceBackedEnvelope(item.hash));
@@ -390,6 +419,32 @@ describe("worker completion admission convergence", () => {
     ).toEqual([sourceA]);
   });
 
+  test("rejects recovery replay of an internal Worker admission", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const result = succeeded(await evidenceBackedEnvelope(item.hash));
+
+    const first = await reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin: { source: "internal_worker" },
+      now: () => NOW,
+    });
+    const recovery = await reflectCoordinatorResult(item.hash, result, {
+      sourceOrigin: { source: "recovery" },
+      now: () => NOW + 1,
+    });
+
+    expect(first.completionBlocked).toBe(false);
+    expect(recovery.completionBlocked).toBe(true);
+    expect(
+      WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity,
+    ).toEqual({
+      source: "internal_worker",
+      identity: {
+        kind: "worker",
+        id: `${WORKER_SESSION_ID}:${WORKER_RUN_ID}`,
+      },
+    });
+  });
+
   test("binds pre-admission reservations to the qualified source identity", async () => {
     const item = await startedItem("internal_chat_agent");
     const result = succeeded(await evidenceBackedEnvelope(item.hash));
@@ -405,8 +460,11 @@ describe("worker completion admission convergence", () => {
     const requestId = workerCompletionRequestId(item, result);
     const rootA = workerCompletionReservationRoot(item, result, sourceA);
     const rootB = workerCompletionReservationRoot(item, result, sourceB);
+    const replayRoot = workerCompletionReservationRoot(item, result, { source: "replay" });
+    const recoveryRoot = workerCompletionReservationRoot(item, result, { source: "recovery" });
 
     expect(rootA).not.toBe(rootB);
+    expect(replayRoot).not.toBe(recoveryRoot);
     reserveCompletionRequest({
       completionWriter,
       workItemHash: item.hash,

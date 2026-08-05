@@ -154,6 +154,8 @@ const CompletionIdentity = z
 export const CompletionSourceIdentity = z.discriminatedUnion("source", [
   z.object({ source: z.literal("internal_worker"), identity: CompletionIdentity }).strict(),
   z.object({ source: z.literal("connector_worker"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("replay"), identity: CompletionIdentity }).strict(),
+  z.object({ source: z.literal("recovery"), identity: CompletionIdentity }).strict(),
   z.object({ source: z.literal("api"), identity: CompletionIdentity }).strict(),
   z.object({ source: z.literal("a2a"), identity: CompletionIdentity }).strict(),
   z.object({ source: z.literal("human"), identity: CompletionIdentity }).strict(),

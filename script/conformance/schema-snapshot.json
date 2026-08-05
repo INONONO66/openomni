@@ -984,6 +984,8 @@
   "WorkItem.CompletionSourceIdentity#5": ["identity", "source"],
   "WorkItem.CompletionSourceIdentity#6": ["identity", "source"],
   "WorkItem.CompletionSourceIdentity#7": ["identity", "source"],
+  "WorkItem.CompletionSourceIdentity#8": ["identity", "source"],
+  "WorkItem.CompletionSourceIdentity#9": ["identity", "source"],
   "WorkItem.CompletionTerminalReceipt": [
     "admissionId",
     "basisRef",

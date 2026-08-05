@@ -162,7 +162,12 @@ function workerCompletionSourceIdentity(
   sourceOrigin: CompletionSourceOrigin,
   result: Execution.Result,
 ): WorkItem.CompletionSourceIdentity | undefined {
-  if (sourceOrigin.source === "internal_worker" || sourceOrigin.source === "connector_worker") {
+  if (
+    sourceOrigin.source === "internal_worker" ||
+    sourceOrigin.source === "connector_worker" ||
+    sourceOrigin.source === "replay" ||
+    sourceOrigin.source === "recovery"
+  ) {
     return WorkItem.CompletionSourceIdentity.parse({
       source: sourceOrigin.source,
       identity: {
