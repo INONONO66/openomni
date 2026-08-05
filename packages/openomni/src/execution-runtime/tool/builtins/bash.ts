@@ -8,8 +8,7 @@ import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
-const PROCESS_TERMINATION_GRACE_MS = 1_000;
-const PROCESS_REAP_INTERVAL_MS = 5;
+const PROCESS_TERMINATION_GRACE_MS = 100;
 
 const bashEnvKeys = ["PATH", "TMPDIR", "TEMP", "TMP", "BUN_INSTALL"];
 
@@ -43,56 +42,23 @@ function resolveTimeout(input: Record<string, unknown>): number {
   return Math.min(value, MAX_TIMEOUT_MS);
 }
 
-async function terminateProcessGroup(proc: {
-  readonly pid: number;
-  readonly exited: Promise<number>;
-  kill(): void;
-}): Promise<void> {
-  try {
-    process.kill(-proc.pid, 0);
-  } catch (error) {
-    if (isMissingProcess(error)) return;
-    // Windows and non-detached fallback.
-    proc.kill();
-    await proc.exited.catch(() => undefined);
-    return;
-  }
+function terminateProcessGroup(proc: { readonly pid: number; kill(): void }): void {
   try {
     process.kill(-proc.pid, "SIGTERM");
-  } catch (error) {
-    if (isMissingProcess(error)) return;
-    proc.kill();
-    await proc.exited.catch(() => undefined);
+    const escalation = setTimeout(() => {
+      try {
+        process.kill(-proc.pid, "SIGKILL");
+      } catch {
+        // The whole group exited during the graceful termination window.
+      }
+    }, PROCESS_TERMINATION_GRACE_MS);
+    escalation.unref();
     return;
+  } catch {
+    // Windows and non-detached fallback.
   }
-  if (await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS)) {
-    await proc.exited.catch(() => undefined);
-    return;
-  }
-  try {
-    process.kill(-proc.pid, "SIGKILL");
-  } catch (error) {
-    if (!isMissingProcess(error)) throw error;
-  }
-  await proc.exited.catch(() => undefined);
-  await waitForProcessGroupExit(proc.pid, PROCESS_TERMINATION_GRACE_MS);
-}
 
-function isMissingProcess(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ESRCH";
-}
-
-async function waitForProcessGroupExit(pid: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      process.kill(-pid, 0);
-    } catch {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, PROCESS_REAP_INTERVAL_MS));
-  }
-  return false;
+  proc.kill();
 }
 
 function buildBashEnv(workspaceRoot: string | undefined): Record<string, string> {
@@ -131,7 +97,8 @@ export function bashTool(workspaceRoot?: string): NativeTool {
     isConcurrencySafe: false,
     source: "system",
     async execute(call, context?: ToolExecutionContext) {
-      let interruption: "aborted" | "timedOut" | undefined;
+      let timedOut = false;
+      let aborted = false;
 
       try {
         const command = requireString(call.input, "command");
@@ -149,39 +116,35 @@ export function bashTool(workspaceRoot?: string): NativeTool {
           stdout: "pipe",
           stderr: "pipe",
         });
-        let termination: Promise<void> | undefined;
 
         const abortCommand = () => {
-          interruption ??= "aborted";
-          termination ??= terminateProcessGroup(proc);
+          aborted = true;
+          terminateProcessGroup(proc);
         };
         context?.signal?.addEventListener("abort", abortCommand, { once: true });
 
         const timer = setTimeout(() => {
-          interruption ??= "timedOut";
-          termination ??= terminateProcessGroup(proc);
+          timedOut = true;
+          terminateProcessGroup(proc);
         }, timeoutMs);
 
         try {
-          const stdoutTask = new Response(proc.stdout).text();
-          const stderrTask = new Response(proc.stderr).text();
-          const exitCode = await proc.exited;
-          clearTimeout(timer);
-          context?.signal?.removeEventListener("abort", abortCommand);
-          termination ??= terminateProcessGroup(proc);
-          await termination;
-          const [stdout, stderr] = await Promise.all([stdoutTask, stderrTask]);
+          const [stdout, stderr, exitCode] = await Promise.all([
+            new Response(proc.stdout).text(),
+            new Response(proc.stderr).text(),
+            proc.exited,
+          ]);
 
           const output = [stdout, stderr]
             .filter((chunk) => chunk.length > 0)
             .join("\n")
             .trim();
 
-          if (interruption === "aborted") {
+          if (aborted) {
             return errorResult(call, output || "Command aborted");
           }
 
-          if (interruption === "timedOut") {
+          if (timedOut) {
             return errorResult(call, output || `Command timed out after ${timeoutMs}ms`);
           }
 

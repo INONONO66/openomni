@@ -58,27 +58,22 @@ describe("Bus async dispatch", () => {
   it("FIFO order is preserved across multiple publishes", async () => {
     const event = BusEvent.define("test:order", (s) => s);
     const order: string[] = [];
-    let resolveDelivered: (() => void) | undefined;
-    const delivered = new Promise<void>((resolve) => {
-      resolveDelivered = resolve;
-    });
-    const record = (handler: string) => {
-      order.push(handler);
-      if (order.length === 4) resolveDelivered?.();
-    };
 
     Bus.subscribe(event, () => {
-      record("handler1");
+      order.push("handler1");
     });
 
     Bus.subscribe(event, () => {
-      record("handler2");
+      order.push("handler2");
     });
 
     Bus.publish(event, "data1");
     Bus.publish(event, "data2");
 
-    await delivered;
+    await new Promise((resolve) => queueMicrotask(resolve));
+    await new Promise((resolve) => queueMicrotask(resolve));
+    await new Promise((resolve) => queueMicrotask(resolve));
+    await new Promise((resolve) => queueMicrotask(resolve));
 
     expect(order).toEqual(["handler1", "handler2", "handler1", "handler2"]);
   });
