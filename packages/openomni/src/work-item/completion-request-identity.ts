@@ -82,5 +82,5 @@ function sortFacts<T extends Readonly<{ id: string }>>(facts: readonly T[]): T[]
 }
 
 function sortReferences(references: readonly string[]): string[] {
-  return [...references].sort();
+  return [...new Set(references)].sort();
 }

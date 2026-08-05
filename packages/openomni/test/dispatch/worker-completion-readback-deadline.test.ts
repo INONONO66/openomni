@@ -128,7 +128,7 @@ describe("worker completion read-back deadline", () => {
     const blocked = WorkItemStore.get(workItem.hash);
     expect(recorderCalls).toBe(1);
     expect(blocked ? WorkItem.deriveStatus(blocked) : undefined).toBe("blocked");
-    expect(blocked?.evidence).toHaveLength(1);
+    expect(blocked?.evidence).toHaveLength(0);
     expect(blocked?.blockers[0]?.description).toBe("read-back envelope deadline exceeded");
     expect(reflection).toMatchObject({
       workItemStatus: "blocked",
@@ -150,6 +150,41 @@ describe("worker completion read-back deadline", () => {
         async readBackRecorder() {
           return new Promise<never>(() => {
             // Intentionally never settles: the envelope deadline must end the completion attempt.
+          });
+        },
+      },
+    );
+
+    expect(reflection).toMatchObject({
+      workItemStatus: "blocked",
+      completionBlocked: true,
+      completionBlocker: "read-back envelope deadline exceeded",
+    });
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
+  test("does not persist a recorder result produced after the shared deadline", async () => {
+    const workItem = await createStartedWorkItem();
+    let clock = 0;
+
+    const reflection = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/late")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 10,
+        now: () => clock,
+        readBackRecorder(_hash, request) {
+          if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+          clock = 20;
+          return WorkItem.ReadBackCheck.parse({
+            kind: "citation_match",
+            target: request.target,
+            quotedText: request.quotedText,
+            matchedText: request.quotedText,
+            passed: true,
+            observedAt: clock,
+            statusCode: 200,
           });
         },
       },

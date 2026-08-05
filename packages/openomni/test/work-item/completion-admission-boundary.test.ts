@@ -2172,20 +2172,28 @@ describe("WorkItem completion admission service", () => {
         ...originalRequest,
         claims: claims.map((claim) => ({
           ...claim,
-          observationIds: [...claim.observationIds].reverse(),
+          observationIds: [...claim.observationIds].reverse().concat(claim.observationIds[0] ?? []),
         })),
         observations: [...observations].reverse().map((observation) => ({
           ...observation,
-          artifactRefs: [...observation.artifactRefs].reverse(),
-          ancestryRefs: [...observation.ancestryRefs].reverse(),
+          artifactRefs: [...observation.artifactRefs]
+            .reverse()
+            .concat(observation.artifactRefs[0] ?? []),
+          ancestryRefs: [...observation.ancestryRefs]
+            .reverse()
+            .concat(observation.ancestryRefs[0] ?? []),
         })),
         results: [...results].reverse().map((result) =>
           Object.fromEntries(
             Object.entries({
               ...result,
-              observationIds: [...result.observationIds].reverse(),
-              assumptions: [...result.assumptions].reverse(),
-              residualRisks: [...result.residualRisks].reverse(),
+              observationIds: [...result.observationIds]
+                .reverse()
+                .concat(result.observationIds[0] ?? []),
+              assumptions: [...result.assumptions].reverse().concat(result.assumptions[0] ?? []),
+              residualRisks: [...result.residualRisks]
+                .reverse()
+                .concat(result.residualRisks[0] ?? []),
             }).reverse(),
           ),
         ),

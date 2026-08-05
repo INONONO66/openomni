@@ -396,17 +396,19 @@ async function prepareCompletionReport(
     }
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
+    const operation = executeReadBack(
+      workItemHash,
+      applySharedDeadline(readBack.request, remainingMs),
+      options.readBack,
+    );
+    const remainingAfterStartMs = deadlineAt - now();
+    if (remainingAfterStartMs <= 0) throw new Error("read-back envelope deadline exceeded");
     const check = await settleReadBackBeforeDeadline(
-      Promise.resolve(
-        executeReadBack(
-          workItemHash,
-          applySharedDeadline(readBack.request, remainingMs),
-          options.readBack,
-        ),
-      ),
-      remainingMs,
+      Promise.resolve(operation),
+      remainingAfterStartMs,
     );
     assertLease();
+    if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
     const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {
       expectedAttempt: item.attempt,
       expectedBasisRef: item.completionContract.basisRef,
