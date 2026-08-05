@@ -115,9 +115,12 @@ function blockingAuthority() {
   };
 }
 
-function guardedService(authorityResolver: unknown) {
+function guardedService(
+  authorityResolver: unknown,
+  writer: Storage.WorkItemCompletionWriter = completionWriter,
+) {
   const service = Reflect.apply(createCompletionAdmissionService, undefined, [
-    { completionWriter, authorityResolver, now: () => NOW },
+    { completionWriter: writer, authorityResolver, now: () => NOW },
   ]);
   expect(typeof service, "completion admission factory must return a service").toBe("object");
   if (typeof service !== "object" || service === null) return undefined;
@@ -619,6 +622,25 @@ describe("WorkItem completion admission service", () => {
         now: 111,
       }),
     ).not.toThrow();
+  });
+
+  test("bounds persistent completion reservation CAS contention", async () => {
+    configure();
+    const first = await fixture("worker");
+
+    expect(() =>
+      reserveCompletionRequest({
+        completionWriter: () => false,
+        workItemHash: first.item.hash,
+        requestId: first.request.id,
+        requestRoot: "request-root:persistent-contention",
+        envelopeDigest: "digest:persistent-contention",
+        ownerId: "process:contended",
+        leaseDurationMs: 10,
+        now: 100,
+      }),
+    ).toThrow("completion reservation contention did not converge");
+    expect(WorkItemStore.get(first.item.hash)?.completionFacts.requestReservations).toEqual([]);
   });
 
   test("keeps the terminal service factory off public package barrels", () => {
@@ -1835,6 +1857,21 @@ describe("WorkItem completion admission service", () => {
     );
     expect(completedEvents).toBe(1);
     expect(stored?.blockers).toEqual([]);
+  });
+
+  test("bounds persistent admission CAS contention without durable output", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    const admissionAuthority = authority();
+    const service = guardedService(admissionAuthority.resolver, () => false);
+    if (!service) return;
+
+    const code = await errorCode(service.requestCompletion(request, report));
+
+    expect(code).toBe("stale_head");
+    expect(admissionAuthority.calls).toHaveLength(8);
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("re-evaluates at a new head when the row mutates after admission", async () => {

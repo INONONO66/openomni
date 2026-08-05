@@ -79,11 +79,13 @@ export type CompletionReservationLeaseInput = Readonly<{
   now: number;
 }>;
 
+const CompletionCasRetryLimit = 8;
+
 export function reserveCompletionRequest(
   input: CompletionRequestReservationInput,
 ): CompletionRequestReservationOutcome {
   const adapter = requiredAdapter(input.workItemHash);
-  for (;;) {
+  for (let attempt = 0; attempt < CompletionCasRetryLimit; attempt += 1) {
     const current = requiredItem(adapter.get(input.workItemHash), input.workItemHash);
     const reservation = current.completionFacts.requestReservations
       .filter(({ requestId }) => requestId === input.requestId)
@@ -155,6 +157,10 @@ export function reserveCompletionRequest(
       return { state: "reserved", reservation: nextReservation };
     }
   }
+  throw new CompletionAdmissionServiceError(
+    "stale_head",
+    `completion reservation contention did not converge: ${input.requestId}`,
+  );
 }
 
 export function assertCompletionReservationLease(input: CompletionReservationLeaseInput): void {
@@ -196,7 +202,7 @@ export function createCompletionAdmissionService(
         options.completionWriter,
       );
       let requestedPublished = false;
-      for (;;) {
+      for (let attempt = 0; attempt < CompletionCasRetryLimit; attempt += 1) {
         try {
           const initial = requiredItem(adapter.get(request.workItemHash), request.workItemHash);
           assertNotFailedOrCancelled(initial);
@@ -257,6 +263,10 @@ export function createCompletionAdmissionService(
           request = rebaseCompletionRequestAtHead(request, latest.revision);
         }
       }
+      throw new CompletionAdmissionServiceError(
+        "stale_head",
+        `completion admission contention did not converge: ${request.id}`,
+      );
     },
 
     async resumeCompletion(workItemHash, admissionId, completionReportInput) {
