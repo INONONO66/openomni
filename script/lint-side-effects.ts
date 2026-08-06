@@ -75,7 +75,9 @@ const rules: readonly SideEffectRule[] = [
     ruleId: "processor-projected-sink",
     filePath: "packages/llm/src/processor/index.ts",
     sideEffect: /\bsink\.on(?:Message|ToolCall|ToolResult|Snapshot)\(/g,
-    requiredBefore: ["const sink = createProjectedSink(configuredSink, sessionID);"],
+    requiredBefore: [
+      "const sink = createProjectedSink(configuredSink, sessionID, trace?.traceId);",
+    ],
     message: "processor sink side effects must flow through createProjectedSink",
   },
   {

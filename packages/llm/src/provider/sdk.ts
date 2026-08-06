@@ -14,10 +14,13 @@ type SdkOptions = {
 type BundledProviderSDK = AnthropicProvider | OpenAIProvider;
 type ProviderSDK = BundledProviderSDK;
 
-const BUNDLED_PROVIDERS = {
-  "@ai-sdk/anthropic": (options) => createAnthropic(options),
-  "@ai-sdk/openai": (options) => createOpenAI(options),
-} satisfies Record<string, (options: SdkOptions) => BundledProviderSDK>;
+// A Map keeps the lookup free of Object.prototype keys ("toString",
+// "constructor", …) that an object literal would resolve via `in`/index
+// access and invoke as SDK factories.
+const BUNDLED_PROVIDERS = new Map<string, (options: SdkOptions) => BundledProviderSDK>([
+  ["@ai-sdk/anthropic", (options) => createAnthropic(options)],
+  ["@ai-sdk/openai", (options) => createOpenAI(options)],
+]);
 
 const SDK_CACHE = new Map<string, ProviderSDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
@@ -62,11 +65,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   if (cached) return cached;
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
-  // Own-property check: `in` would resolve Object.prototype keys such as
-  // "toString" to prototype members and invoke them as SDK factories.
-  const factory = Object.hasOwn(BUNDLED_PROVIDERS, npm)
-    ? BUNDLED_PROVIDERS[npm as keyof typeof BUNDLED_PROVIDERS]
-    : undefined;
+  const factory = BUNDLED_PROVIDERS.get(npm);
 
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
