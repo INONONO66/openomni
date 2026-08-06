@@ -37,6 +37,18 @@ export namespace LlmCall {
     { visibility: "llm_reason" },
   );
 
+  export const Failed = BusEvent.define(
+    "llm.call.failed",
+    Base.extend({
+      provider: z.string(),
+      model: z.string(),
+      durationMs: z.number(),
+      error: z.string(),
+      aborted: z.boolean().default(false),
+    }),
+    { visibility: "llm_reason" },
+  );
+
   export const RetryDecided = BusEvent.define(
     "llm.call.retry.decided",
     Base.extend({

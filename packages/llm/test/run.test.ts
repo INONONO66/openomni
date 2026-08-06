@@ -2,7 +2,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import { LlmCall, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
 
@@ -86,44 +87,6 @@ describe("run", () => {
     aiCapture.__openomniAiStreamArgs = undefined;
   });
 
-  test("accepts RunInput with required fields", () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: testModel,
-    };
-
-    expect(input.messages).toEqual([]);
-    expect(input.tools).toEqual([]);
-    expect(input.system).toBeUndefined();
-    expect(input.signal).toBeUndefined();
-  });
-
-  test("accepts RunInput with optional fields", () => {
-    const abortController = new AbortController();
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: testModel,
-      auth: testAuth,
-      system: "test system prompt",
-      signal: abortController.signal,
-      toolChoice: "required",
-      maxSteps: 12,
-      toolExecutor: async () => ({
-        id: "result-1",
-        toolCallId: "call-1",
-        output: "ok",
-      }),
-    };
-
-    expect(input.system).toBe("test system prompt");
-    expect(input.signal).toBe(abortController.signal);
-    expect(input.toolChoice).toBe("required");
-    expect(input.maxSteps).toBe(12);
-    expect(input.toolExecutor).toBeFunction();
-  });
-
   test("returns RunOutcome with stop type", async () => {
     const input: import("../src/run").RunInput = {
       messages: [],
@@ -175,6 +138,37 @@ describe("run", () => {
       expect(outcome.error.message).toContain("no-auth-provider-xyz");
     }
     expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("publishes LlmCall.Failed on error so every Started call terminates", async () => {
+    const failures: Array<{ error: string; aborted: boolean; traceId: string }> = [];
+    const unsub = Bus.subscribe(LlmCall.Failed, (event) => {
+      failures.push(event);
+    });
+
+    const outcome = await run(
+      {
+        messages: [],
+        tools: [],
+        model: {
+          id: "claude-3-haiku",
+          providerID: "no-auth-provider-failed-event",
+          name: "Test Model",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        trace: { traceId: "trace-run-failed" },
+      },
+      mockSink,
+    );
+    unsub();
+
+    expect(outcome.type).toBe("error");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      traceId: "trace-run-failed",
+      aborted: false,
+    });
+    expect(failures[0]?.error).toContain("no-auth-provider-failed-event");
   });
 
   test("does not read stored auth when fallback is disabled", async () => {
@@ -267,30 +261,5 @@ describe("run", () => {
     expect(textParts.length).toBe(1);
     expect(textParts[0]?.text).toBe("hello world");
     expect(textParts.some((part) => part.text === "")).toBe(false);
-  });
-
-  test("returns RunOutcome with correct type mapping for processor results", () => {
-    const testCases: Array<["stop" | "continue" | "compact", "stop" | "continue" | "compact"]> = [
-      ["stop", "stop"],
-      ["continue", "continue"],
-      ["compact", "compact"],
-    ];
-
-    for (const [processorResult, expectedOutcomeType] of testCases) {
-      const switchResult = (() => {
-        switch (processorResult) {
-          case "stop":
-            return { type: "stop" as const };
-          case "continue":
-            return { type: "continue" as const };
-          case "compact":
-            return { type: "compact" as const };
-          default:
-            return { type: "stop" as const };
-        }
-      })();
-
-      expect(switchResult.type).toBe(expectedOutcomeType);
-    }
   });
 });

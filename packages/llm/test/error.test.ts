@@ -1,5 +1,41 @@
 import { describe, expect, test } from "bun:test";
-import { NamedError, ProviderError, APIError } from "../src/error";
+import { NamedError, ProviderError, APIError, coerceApiError } from "../src/error";
+
+describe("coerceApiError", () => {
+  test("passes through protocol APIError instances", () => {
+    const error = new APIError({ message: "boom", isRetryable: true });
+    expect(coerceApiError(error)).toBe(error);
+  });
+
+  test("coerces AI SDK APICallError-shaped errors with lowercased headers", () => {
+    const sdkError = Object.assign(new Error("Overloaded"), {
+      name: "AI_APICallError",
+      isRetryable: true,
+      statusCode: 529,
+      responseHeaders: { "Retry-After-Ms": "1200" },
+      responseBody: '{"type":"error"}',
+    });
+
+    const coerced = coerceApiError(sdkError);
+
+    expect(coerced).toBeDefined();
+    expect(APIError.isInstance(coerced)).toBe(true);
+    expect(coerced?.data).toMatchObject({
+      message: "Overloaded",
+      isRetryable: true,
+      statusCode: 529,
+      responseHeaders: { "retry-after-ms": "1200" },
+      responseBody: '{"type":"error"}',
+    });
+    expect(coerced?.cause).toBe(sdkError);
+  });
+
+  test("returns undefined for errors without retry metadata", () => {
+    expect(coerceApiError(new Error("plain"))).toBeUndefined();
+    expect(coerceApiError("string error")).toBeUndefined();
+    expect(coerceApiError(null)).toBeUndefined();
+  });
+});
 
 describe("NamedError", () => {
   test("Unknown error", () => {

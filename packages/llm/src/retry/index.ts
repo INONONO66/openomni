@@ -56,8 +56,6 @@ export namespace Retry {
             return Math.ceil(parsed);
           }
         }
-
-        return baseDelay * RETRY_BACKOFF_FACTOR ** (attempt - 1);
       }
     }
 
@@ -73,43 +71,68 @@ export namespace Retry {
       return undefined;
     }
 
-    const message = error.data.message;
-
-    try {
-      const json = JSON.parse(message);
-
-      if (!json || typeof json !== "object") {
-        return undefined;
-      }
-
-      const code = typeof json.code === "string" ? json.code : "";
-
-      if (json.type === "error" && json.error?.type === "too_many_requests") {
-        return "Too Many Requests";
-      }
-
-      if (code.includes("exhausted") || code.includes("unavailable")) {
-        return "Provider is overloaded";
-      }
-
-      if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
-        return "Rate Limited";
-      }
-
-      if (
-        json.error?.message?.includes("no_kv_space") ||
-        (json.type === "error" && json.error?.type === "server_error") ||
-        !!json.error
-      ) {
-        return "Provider Server Error";
-      }
-
-      return undefined;
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        return undefined;
-      }
-      throw error;
+    const sniffed =
+      classifyErrorPayload(error.data.message) ?? classifyErrorPayload(error.data.responseBody);
+    if (sniffed !== undefined) {
+      return sniffed;
     }
+
+    const status = error.data.statusCode;
+    if (status === 429) {
+      return "Rate Limited";
+    }
+    if (status !== undefined && status >= 500) {
+      return "Provider Server Error";
+    }
+
+    // The provider marked this retryable (408/409, x-should-retry, …) even
+    // though the payload carries no recognizable detail.
+    return "Provider Error";
+  }
+
+  function classifyErrorPayload(payload: string | undefined): string | undefined {
+    if (!payload) return undefined;
+
+    let json: unknown;
+    try {
+      json = JSON.parse(payload);
+    } catch {
+      return undefined;
+    }
+
+    if (!json || typeof json !== "object") {
+      return undefined;
+    }
+
+    const body = json as {
+      type?: unknown;
+      code?: unknown;
+      error?: { type?: unknown; code?: unknown; message?: unknown };
+    };
+    const code = typeof body.code === "string" ? body.code : "";
+    const errorCode = typeof body.error?.code === "string" ? body.error.code : "";
+    const errorMessage = typeof body.error?.message === "string" ? body.error.message : "";
+
+    if (body.type === "error" && body.error?.type === "too_many_requests") {
+      return "Too Many Requests";
+    }
+
+    if (code.includes("exhausted") || code.includes("unavailable")) {
+      return "Provider is overloaded";
+    }
+
+    if (body.type === "error" && errorCode.includes("rate_limit")) {
+      return "Rate Limited";
+    }
+
+    if (
+      errorMessage.includes("no_kv_space") ||
+      (body.type === "error" && body.error?.type === "server_error") ||
+      !!body.error
+    ) {
+      return "Provider Server Error";
+    }
+
+    return undefined;
   }
 }
