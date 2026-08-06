@@ -590,6 +590,53 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(item.hash)).toEqual(firstWriter);
   });
 
+  test("authorized completion writes cannot rewrite admitted observations", () => {
+    const completed = makeWorkItem({
+      hash: "wi_append_only_completion",
+      timestamps: { created: 1, updated: 3, completed: 3 },
+    });
+    persistCompletedFixture(adapter, completed);
+    const current = adapter.workItem?.get(completed.hash);
+    const observation = current?.completionFacts.observations[0];
+    const admission = current?.completionFacts.admissions[0];
+    if (!current || !observation || !admission) throw new Error("missing completed fixture facts");
+    const rewrittenObservation = WorkItem.Observation.parse({
+      ...observation,
+      producer: "claimant:rewritten",
+      observedAt: observation.observedAt + 1,
+    });
+    const rewrittenAdmission = WorkItem.CompletionAdmission.parse({
+      ...admission,
+      requestSnapshot: {
+        ...admission.requestSnapshot,
+        observations: admission.requestSnapshot.observations.map((candidate) =>
+          candidate.id === observation.id ? rewrittenObservation : candidate,
+        ),
+      },
+    });
+    const rewritten = WorkItem.Info.parse({
+      ...current,
+      revision: current.revision + 1,
+      timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
+      completionFacts: {
+        ...current.completionFacts,
+        revision: current.completionFacts.revision + 1,
+        observations: current.completionFacts.observations.map((candidate) =>
+          candidate.id === observation.id ? rewrittenObservation : candidate,
+        ),
+        admissions: current.completionFacts.admissions.map((candidate) =>
+          candidate.id === admission.id ? rewrittenAdmission : candidate,
+        ),
+      },
+    });
+    const completionWriter = Storage.configure(adapter);
+
+    expect(() => completionWriter(current.hash, current.revision, rewritten)).toThrow(
+      "completion observations are append-only",
+    );
+    expect(adapter.workItem?.get(current.hash)).toEqual(current);
+  });
+
   test("list filters by status and sessionId", () => {
     const pending = makeWorkItem({
       hash: "wi_00000pending",

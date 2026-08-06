@@ -915,6 +915,7 @@ describe("WorkItem completion admission contracts", () => {
       requestSnapshot: {
         ...admission.requestSnapshot,
         ownerOverrideReceiptRef: "owner-receipt:terminal",
+        results: [ownerRefutedResult],
       },
     });
     const ownerOverrideInput = {
@@ -1269,6 +1270,29 @@ describe("WorkItem completion admission contracts", () => {
         0,
         "observationIds",
         1,
+      ]);
+    }
+    const rewrittenObservation = WorkItem.Info.safeParse({
+      ...validInput,
+      revision: validInput.revision + 1,
+      completionFacts: {
+        ...completionFacts,
+        observations: [
+          {
+            ...terminalObservation,
+            producer: "claimant:rewritten",
+            provenanceRef: undefined,
+            observedAt: terminalObservation.observedAt + 1_000,
+          },
+        ],
+      },
+    });
+    expect(rewrittenObservation.success).toBe(false);
+    if (!rewrittenObservation.success) {
+      expect(rewrittenObservation.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionFacts",
+        "observations",
+        0,
       ]);
     }
   });
@@ -1660,6 +1684,9 @@ describe("WorkItem completion admission contracts", () => {
           claims: [],
           observations: [],
           results: [],
+          invalidations: [],
+          verificationErrors: [],
+          effects: [],
           admissions: [malformedAdmission as WorkItem.CompletionAdmission],
         },
         completionTerminalReceipt: {

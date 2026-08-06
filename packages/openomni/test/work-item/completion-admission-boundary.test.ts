@@ -755,6 +755,7 @@ describe("WorkItem completion admission service", () => {
             ok: true,
             receiptRef: ownerOverrideReceiptRef,
             requestRoot: completionRequestRoot(ownerRequest),
+            expectedHead: ownerRequest.expectedHead,
           } as const;
         },
       },

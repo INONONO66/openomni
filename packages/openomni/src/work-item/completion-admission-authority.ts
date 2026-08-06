@@ -89,7 +89,7 @@ export type CompletionVerificationErrorAuthorityPort = Readonly<{
 }>;
 
 type OwnerOverrideValidation =
-  | Readonly<{ ok: true; receiptRef: string; requestRoot: string }>
+  | Readonly<{ ok: true; receiptRef: string; requestRoot: string; expectedHead: number }>
   | Readonly<{ ok: false }>;
 
 type OwnerOverrideAuthorityPort = Readonly<{
@@ -156,6 +156,7 @@ export function createCompletionAuthorityResolver(
       await assertProposedResultAuthority(dependencies.resultAuthorityPort, item, request);
       const ownerOverride = await resolveOwnerOverride(
         dependencies.ownerOverrideAuthorityPort,
+        item,
         request,
       );
       assertProposedClaimAuthority(item, request, ownerOverride !== undefined);
@@ -670,24 +671,30 @@ async function resolveStakes(
 
 async function resolveOwnerOverride(
   port: OwnerOverrideAuthorityPort | undefined,
+  item: WorkItem.Info,
   request: WorkItem.CompletionRequest,
 ): Promise<CompletionEvaluationInput["ownerOverride"]> {
   const receiptRef = request.ownerOverrideReceiptRef;
   if (!port || receiptRef === undefined) return undefined;
+  const requestRoot = completionRequestRoot(request);
+  const reservation = item.completionFacts.requestReservations.find(
+    (candidate) => candidate.requestId === request.id && candidate.requestRoot === requestRoot,
+  );
   const candidate = {
     receiptRef,
     workItemHash: request.workItemHash,
     requestId: request.id,
     contractRevision: request.contractRevision,
     basisRef: request.basisRef,
-    expectedHead: request.expectedHead,
-    requestRoot: completionRequestRoot(request),
+    expectedHead: reservation?.expectedHead ?? request.expectedHead,
+    requestRoot,
   } as const;
   const validation = await port.validate(candidate);
   if (
     !validation.ok ||
     validation.receiptRef !== receiptRef ||
-    validation.requestRoot !== candidate.requestRoot
+    validation.requestRoot !== candidate.requestRoot ||
+    validation.expectedHead !== candidate.expectedHead
   ) {
     return undefined;
   }

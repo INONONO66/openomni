@@ -47,6 +47,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
         .query("SELECT hash, data FROM work_item WHERE hash = ?")
         .get(hash) as WorkItemRow | null;
       const current = currentRow ? decodeWorkItemRow(currentRow) : undefined;
+      if (current?.revision === expectedHead) assertCompletionLedgerExtension(current, parsed);
       if (
         current &&
         changesCompletionAuthority(current, parsed) &&
@@ -120,6 +121,72 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
     },
   };
   return adapter;
+}
+
+function assertCompletionLedgerExtension(current: WorkItem.Info, next: WorkItem.Info): void {
+  assertAppendOnly("evidence", current.evidence, next.evidence);
+  const collections = [
+    ["criteria", current.completionFacts.criteria, next.completionFacts.criteria],
+    ["claims", current.completionFacts.claims, next.completionFacts.claims],
+    ["observations", current.completionFacts.observations, next.completionFacts.observations],
+    ["results", current.completionFacts.results, next.completionFacts.results],
+    ["invalidations", current.completionFacts.invalidations, next.completionFacts.invalidations],
+    [
+      "verification errors",
+      current.completionFacts.verificationErrors,
+      next.completionFacts.verificationErrors,
+    ],
+    ["effects", current.completionFacts.effects, next.completionFacts.effects],
+    ["admissions", current.completionFacts.admissions, next.completionFacts.admissions],
+  ] as const;
+  for (const [name, previous, candidate] of collections) {
+    assertAppendOnly(`completion ${name}`, previous, candidate);
+  }
+  if (next.completionFacts.revision < current.completionFacts.revision) {
+    throw new Error("completion facts revision cannot move backward");
+  }
+  for (const reservation of current.completionFacts.requestReservations) {
+    const candidate = next.completionFacts.requestReservations.find(
+      ({ id }) => id === reservation.id,
+    );
+    if (!candidate) continue;
+    const { ownerId: _owner, fence: _fence, leaseExpiresAt: _lease, ...identity } = reservation;
+    const {
+      ownerId: _nextOwner,
+      fence: _nextFence,
+      leaseExpiresAt: _nextLease,
+      ...candidateIdentity
+    } = candidate;
+    if (JSON.stringify(identity) !== JSON.stringify(candidateIdentity)) {
+      throw new Error("completion reservation identity is immutable");
+    }
+  }
+  if (
+    current.completionReport !== undefined &&
+    JSON.stringify(current.completionReport) !== JSON.stringify(next.completionReport)
+  ) {
+    throw new Error("completion report is immutable");
+  }
+  if (
+    current.completionTerminalReceipt !== undefined &&
+    JSON.stringify(current.completionTerminalReceipt) !==
+      JSON.stringify(next.completionTerminalReceipt)
+  ) {
+    throw new Error("completion terminal receipt is immutable");
+  }
+}
+
+function assertAppendOnly(
+  name: string,
+  previous: readonly unknown[],
+  candidate: readonly unknown[],
+): void {
+  if (
+    candidate.length < previous.length ||
+    previous.some((entry, index) => JSON.stringify(entry) !== JSON.stringify(candidate[index]))
+  ) {
+    throw new Error(`${name} are append-only`);
+  }
 }
 
 function assertPendingCompletionBaseline(item: WorkItem.Info): void {

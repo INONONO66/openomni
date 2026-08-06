@@ -30,6 +30,9 @@ type TerminalLinkageItem = Readonly<{
     claims: readonly Claim[];
     observations: readonly Observation[];
     results: readonly CriterionResult[];
+    invalidations: readonly Readonly<{ id: string }>[];
+    verificationErrors: readonly Readonly<{ id: string }>[];
+    effects: readonly Readonly<{ id: string }>[];
     admissions: readonly CompletionAdmission[];
     requestReservations?: readonly CompletionRequestReservation[];
   }>;
@@ -90,6 +93,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     addIssue(ctx, ["completionTerminalReceipt", "admissionId"]);
     return;
   }
+  validateAdmissionFactSnapshot(item, admission, admissionIndex, ctx);
   if (admission.decision !== "admit" && admission.decision !== "owner_override") {
     addIssue(ctx, ["completionFacts", "admissions", admissionIndex, "decision"]);
   }
@@ -258,6 +262,52 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     (admission.recordedHead + 1 !== receipt.recordedHead && !hasReservationBridge)
   ) {
     addIssue(ctx, ["completionFacts", "admissions", admissionIndex]);
+  }
+}
+
+function validateAdmissionFactSnapshot(
+  item: TerminalLinkageItem,
+  admission: CompletionAdmission,
+  admissionIndex: number,
+  ctx: RefinementCtx,
+): void {
+  type IdentifiedFact = Readonly<{ id: string }>;
+  const collections: readonly (readonly [
+    string,
+    readonly IdentifiedFact[],
+    readonly IdentifiedFact[],
+  ])[] = [
+    ["claims", item.completionFacts.claims, admission.requestSnapshot.claims],
+    ["observations", item.completionFacts.observations, admission.requestSnapshot.observations],
+    ["results", item.completionFacts.results, admission.requestSnapshot.results],
+    ["invalidations", item.completionFacts.invalidations, admission.requestSnapshot.invalidations],
+    [
+      "verificationErrors",
+      item.completionFacts.verificationErrors,
+      admission.requestSnapshot.verificationErrors,
+    ],
+    ["effects", item.completionFacts.effects, admission.requestSnapshot.effects],
+  ];
+  for (const [collection, durableFacts, requestedFacts] of collections) {
+    const durableById = new Map(
+      durableFacts.map((fact, index) => [fact.id, { fact, index }] as const),
+    );
+    for (const [requestIndex, requestedFact] of requestedFacts.entries()) {
+      const durable = durableById.get(requestedFact.id);
+      if (!durable) {
+        addIssue(ctx, [
+          "completionFacts",
+          "admissions",
+          admissionIndex,
+          "requestSnapshot",
+          collection,
+          requestIndex,
+          "id",
+        ]);
+      } else if (JSON.stringify(durable.fact) !== JSON.stringify(requestedFact)) {
+        addIssue(ctx, ["completionFacts", collection, durable.index]);
+      }
+    }
   }
 }
 

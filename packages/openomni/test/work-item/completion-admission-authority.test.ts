@@ -768,7 +768,12 @@ describe("completion admission authority resolver", () => {
         ownerOverrideAuthorityPort: {
           validate(input: unknown) {
             validatedCandidate = input;
-            return { ok: true, receiptRef: "owner-receipt:one", requestRoot } as const;
+            return {
+              ok: true,
+              receiptRef: "owner-receipt:one",
+              requestRoot,
+              expectedHead: candidate.expectedHead,
+            } as const;
           },
         },
         now: () => 10,
@@ -803,6 +808,33 @@ describe("completion admission authority resolver", () => {
               ok: true,
               receiptRef: "owner-receipt:one",
               requestRoot: "sha256:other-request",
+              expectedHead: candidate.expectedHead,
+            }) as const,
+        },
+        now: () => 10,
+      },
+      item(),
+      candidate,
+    );
+
+    expect(admission?.decision).not.toBe("owner_override");
+    expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
+  });
+
+  test("rejects an Owner receipt validated against a different WorkItem head", async () => {
+    const candidate = requestWithOwnerReceipt("owner-receipt:one");
+    if (!candidate) return;
+
+    const admission = await resolveAdmission(
+      {
+        policyEngine: createPolicyEngine({ allowAsserted: true }),
+        ownerOverrideAuthorityPort: {
+          validate: () =>
+            ({
+              ok: true,
+              receiptRef: "owner-receipt:one",
+              requestRoot: completionRequestRoot(candidate),
+              expectedHead: candidate.expectedHead - 1,
             }) as const,
         },
         now: () => 10,

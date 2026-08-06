@@ -952,7 +952,7 @@ describe("worker completion admission convergence", () => {
     expect(stored?.blockers).toEqual([]);
   });
 
-  test("re-verifies durable results before stale-head replay admission", async () => {
+  test("rejects durable verifier evidence rewrites before stale-head replay", async () => {
     const item = await startedItem("internal_chat_agent");
     const output = await evidenceBackedEnvelope(item.hash);
     const completionPolicyEngine = PolicyEngine.create();
@@ -998,15 +998,10 @@ describe("worker completion admission convergence", () => {
       ),
       timestamps: { ...blocked.timestamps, updated: NOW + 1 },
     });
-    expect(completionWriter(blocked.hash, blocked.revision, tampered)).toBe(true);
-
-    const replay = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
-    const stored = WorkItemStore.get(item.hash);
-
-    expect(replay.completionBlocked).toBe(true);
-    expect(replay.completionBlocker).toContain("durable result authority rejected");
-    expect(stored?.completionFacts.admissions).toHaveLength(1);
-    expect(stored?.completionTerminalReceipt).toBeUndefined();
+    expect(() => completionWriter(blocked.hash, blocked.revision, tampered)).toThrow(
+      "evidence are append-only",
+    );
+    expect(WorkItemStore.get(item.hash)).toEqual(blocked);
   });
 
   test("rejects unrelated artifacts appended to a verifier observation", async () => {
