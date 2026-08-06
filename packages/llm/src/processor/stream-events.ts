@@ -291,6 +291,8 @@ function normalizeOutputPayload(event: StreamEvent): { output: string; isError: 
 function stringifyOutput(value: unknown): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
+  // Errors JSON-serialize to "{}" — keep their message.
+  if (value instanceof Error) return value.message || String(value);
   if (typeof value === "object") {
     try {
       return JSON.stringify(value) ?? String(value);

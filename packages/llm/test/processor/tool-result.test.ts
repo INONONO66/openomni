@@ -281,3 +281,49 @@ describe("Processor tool output normalization", () => {
     });
   });
 });
+
+describe("Processor tool error normalization", () => {
+  test("preserves Error messages in tool-error stream parts", async () => {
+    const toolResults: Tool.Result[] = [];
+    const sink: Sink = {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => toolResults.push(result),
+      onSnapshot: () => undefined,
+    };
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: new AbortController().signal,
+      sink,
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-error-object",
+            toolName: "search",
+            input: {},
+          };
+          yield {
+            type: "tool-error",
+            toolCallId: "call-error-object",
+            error: new Error("network down"),
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+    });
+
+    await processor.process({ system: "" });
+
+    expect(toolResults).toHaveLength(1);
+    // Error objects must not JSON-serialize to "{}".
+    expect(toolResults[0]).toMatchObject({
+      toolCallId: "call-error-object",
+      output: "network down",
+      isError: true,
+    });
+  });
+});

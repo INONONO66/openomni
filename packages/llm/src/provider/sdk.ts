@@ -55,8 +55,10 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
 
 // Auth material is hashed into cache keys so credentials never sit in Map
 // keys (visible in heap dumps, debugger key listings, or accidental logs).
+// SHA-256 (not a fast non-cryptographic hash): a key collision would hand
+// one credential's cached SDK instance to a different credential.
 function authFingerprint(auth: Auth.Info): string {
-  return Bun.hash(JSON.stringify(auth)).toString(16);
+  return new Bun.CryptoHasher("sha256").update(JSON.stringify(auth)).digest("hex");
 }
 
 export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
