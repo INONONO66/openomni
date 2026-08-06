@@ -7,6 +7,7 @@ import {
   createCompletionAuthorityResolver,
 } from "../../src/work-item/completion-admission-authority.js";
 import * as CompletionFold from "../../src/work-item/completion-admission-fold.js";
+import { completionRequestRoot } from "../../src/work-item/completion-request-identity.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const criterion = {
@@ -758,6 +759,7 @@ describe("completion admission authority resolver", () => {
   test("honors an Owner candidate only after the injected authority port validates its binding", async () => {
     const candidate = requestWithOwnerReceipt("owner-receipt:one");
     if (!candidate) return;
+    const requestRoot = completionRequestRoot(candidate);
     let validatedCandidate: unknown;
 
     const admission = await resolveAdmission(
@@ -766,7 +768,7 @@ describe("completion admission authority resolver", () => {
         ownerOverrideAuthorityPort: {
           validate(input: unknown) {
             validatedCandidate = input;
-            return { ok: true, receiptRef: "owner-receipt:one" } as const;
+            return { ok: true, receiptRef: "owner-receipt:one", requestRoot } as const;
           },
         },
         now: () => 10,
@@ -782,9 +784,35 @@ describe("completion admission authority resolver", () => {
       contractRevision: "contract:v1",
       basisRef: "basis:v1",
       expectedHead: 2,
+      requestRoot,
     });
     expect(admission?.decision).toBe("owner_override");
     expect(admission?.ownerOverrideReceiptRef).toBe("owner-receipt:one");
+  });
+
+  test("rejects an Owner receipt validated against a different request root", async () => {
+    const candidate = requestWithOwnerReceipt("owner-receipt:one");
+    if (!candidate) return;
+
+    const admission = await resolveAdmission(
+      {
+        policyEngine: createPolicyEngine({ allowAsserted: true }),
+        ownerOverrideAuthorityPort: {
+          validate: () =>
+            ({
+              ok: true,
+              receiptRef: "owner-receipt:one",
+              requestRoot: "sha256:other-request",
+            }) as const,
+        },
+        now: () => 10,
+      },
+      item(),
+      candidate,
+    );
+
+    expect(admission?.decision).not.toBe("owner_override");
+    expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
   });
 
   test("does not honor an Owner candidate without an injected authority port", async () => {

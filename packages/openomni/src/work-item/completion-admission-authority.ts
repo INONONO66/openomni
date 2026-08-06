@@ -2,7 +2,10 @@ import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Policy } from "@openomni/protocol";
 
 import type { CompletionStakesInjection } from "../ledger/index.js";
-import { canonicalCompletionRequest } from "./completion-request-identity.js";
+import {
+  canonicalCompletionRequest,
+  completionRequestRoot,
+} from "./completion-request-identity.js";
 import {
   evaluateCompletion as foldCompletion,
   type CompletionEvaluationInput,
@@ -85,7 +88,9 @@ export type CompletionVerificationErrorAuthorityPort = Readonly<{
   ): CompletionResultAuthorityValidation | Promise<CompletionResultAuthorityValidation>;
 }>;
 
-type OwnerOverrideValidation = Readonly<{ ok: true; receiptRef: string }> | Readonly<{ ok: false }>;
+type OwnerOverrideValidation =
+  | Readonly<{ ok: true; receiptRef: string; requestRoot: string }>
+  | Readonly<{ ok: false }>;
 
 type OwnerOverrideAuthorityPort = Readonly<{
   validate(
@@ -96,6 +101,7 @@ type OwnerOverrideAuthorityPort = Readonly<{
       contractRevision: string;
       basisRef: string;
       expectedHead: number;
+      requestRoot: string;
     }>,
   ): OwnerOverrideValidation | Promise<OwnerOverrideValidation>;
 }>;
@@ -675,9 +681,16 @@ async function resolveOwnerOverride(
     contractRevision: request.contractRevision,
     basisRef: request.basisRef,
     expectedHead: request.expectedHead,
+    requestRoot: completionRequestRoot(request),
   } as const;
   const validation = await port.validate(candidate);
-  if (!validation.ok || validation.receiptRef !== receiptRef) return undefined;
+  if (
+    !validation.ok ||
+    validation.receiptRef !== receiptRef ||
+    validation.requestRoot !== candidate.requestRoot
+  ) {
+    return undefined;
+  }
   return candidate;
 }
 

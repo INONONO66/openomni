@@ -11,6 +11,7 @@ import {
   createCompletionAdmissionService,
   reserveCompletionRequest,
 } from "../../src/work-item/completion-admission-boundary.js";
+import { completionRequestRoot } from "../../src/work-item/completion-request-identity.js";
 import { createWorkItemCompletionGateway } from "../../src/work-item/completion-gateway.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
@@ -748,8 +749,13 @@ describe("WorkItem completion admission service", () => {
             receiptRef: ownerOverrideReceiptRef,
             workItemHash: item.hash,
             requestId: ownerRequest.id,
+            requestRoot: completionRequestRoot(ownerRequest),
           });
-          return { ok: true, receiptRef: ownerOverrideReceiptRef } as const;
+          return {
+            ok: true,
+            receiptRef: ownerOverrideReceiptRef,
+            requestRoot: completionRequestRoot(ownerRequest),
+          } as const;
         },
       },
       now: () => NOW,
