@@ -167,9 +167,11 @@ describe("toModelMessages", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].role).toBe("assistant");
+    // Reasoning must come first: Anthropic rejects assistant turns where a
+    // thinking block follows other content.
     expect(result[0].content).toEqual([
-      { type: "text", text: "Final answer" },
       { type: "reasoning", text: "I should preserve this." },
+      { type: "text", text: "Final answer" },
     ]);
   });
 

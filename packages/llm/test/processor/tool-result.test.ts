@@ -75,7 +75,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     expect(toolCalls).toEqual([{ id: "call-weather", tool: "weather", input: { city: "Seoul" } }]);
     expect(toolResults).toHaveLength(1);
@@ -122,7 +122,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     expect(toolCalls).toEqual([]);
     expect(toolResults).toEqual([]);
@@ -163,7 +163,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     expect(toolResults).toHaveLength(1);
     expect(toolResults[0]).toMatchObject({
@@ -213,7 +213,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
     expect(toolPart).toMatchObject({

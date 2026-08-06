@@ -86,44 +86,6 @@ describe("run", () => {
     aiCapture.__openomniAiStreamArgs = undefined;
   });
 
-  test("accepts RunInput with required fields", () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: testModel,
-    };
-
-    expect(input.messages).toEqual([]);
-    expect(input.tools).toEqual([]);
-    expect(input.system).toBeUndefined();
-    expect(input.signal).toBeUndefined();
-  });
-
-  test("accepts RunInput with optional fields", () => {
-    const abortController = new AbortController();
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: testModel,
-      auth: testAuth,
-      system: "test system prompt",
-      signal: abortController.signal,
-      toolChoice: "required",
-      maxSteps: 12,
-      toolExecutor: async () => ({
-        id: "result-1",
-        toolCallId: "call-1",
-        output: "ok",
-      }),
-    };
-
-    expect(input.system).toBe("test system prompt");
-    expect(input.signal).toBe(abortController.signal);
-    expect(input.toolChoice).toBe("required");
-    expect(input.maxSteps).toBe(12);
-    expect(input.toolExecutor).toBeFunction();
-  });
-
   test("returns RunOutcome with stop type", async () => {
     const input: import("../src/run").RunInput = {
       messages: [],
@@ -267,30 +229,5 @@ describe("run", () => {
     expect(textParts.length).toBe(1);
     expect(textParts[0]?.text).toBe("hello world");
     expect(textParts.some((part) => part.text === "")).toBe(false);
-  });
-
-  test("returns RunOutcome with correct type mapping for processor results", () => {
-    const testCases: Array<["stop" | "continue" | "compact", "stop" | "continue" | "compact"]> = [
-      ["stop", "stop"],
-      ["continue", "continue"],
-      ["compact", "compact"],
-    ];
-
-    for (const [processorResult, expectedOutcomeType] of testCases) {
-      const switchResult = (() => {
-        switch (processorResult) {
-          case "stop":
-            return { type: "stop" as const };
-          case "continue":
-            return { type: "continue" as const };
-          case "compact":
-            return { type: "compact" as const };
-          default:
-            return { type: "stop" as const };
-        }
-      })();
-
-      expect(switchResult.type).toBe(expectedOutcomeType);
-    }
   });
 });

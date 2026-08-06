@@ -56,7 +56,8 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   if (cached) return cached;
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
-  const factory = getBundledProviderFactory(npm);
+  const factory =
+    npm in BUNDLED_PROVIDERS ? BUNDLED_PROVIDERS[npm as keyof typeof BUNDLED_PROVIDERS] : undefined;
 
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
@@ -152,19 +153,6 @@ function resolveLanguageModel(
 
 function isOpenAIProvider(sdk: ProviderSDK): sdk is OpenAIProvider {
   return "responses" in sdk;
-}
-
-function getBundledProviderFactory(
-  npm: string,
-): ((options: SdkOptions) => BundledProviderSDK) | undefined {
-  switch (npm) {
-    case "@ai-sdk/anthropic":
-      return BUNDLED_PROVIDERS["@ai-sdk/anthropic"];
-    case "@ai-sdk/openai":
-      return BUNDLED_PROVIDERS["@ai-sdk/openai"];
-    default:
-      return undefined;
-  }
 }
 
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {

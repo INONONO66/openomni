@@ -1,15 +1,13 @@
 import type { Token } from "@openomni/protocol";
 import type { LanguageModelUsage } from "ai";
 
-interface TokenUsage extends Token.ProviderUsage {}
-
 type UsageInput = Partial<LanguageModelUsage>;
 
 export namespace TokenTracker {
   export function extractUsage(response: {
     readonly usage?: UsageInput | unknown;
     readonly providerMetadata?: unknown;
-  }): TokenUsage {
+  }): Token.ProviderUsage {
     const usage = response.usage;
     if (!isRecord(usage)) {
       return zeroUsage();
@@ -61,7 +59,7 @@ export namespace TokenTracker {
     };
   }
 
-  function zeroUsage(): TokenUsage {
+  function zeroUsage(): Token.ProviderUsage {
     return {
       inputTokens: 0,
       outputTokens: 0,

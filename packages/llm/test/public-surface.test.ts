@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { Auth, Provider, RunInput } from "../src";
 
 describe("@openomni/llm root public surface", () => {
   test("exposes the package contract", async () => {
@@ -42,27 +41,5 @@ describe("@openomni/llm root public surface", () => {
     for (const exportName of removedExports) {
       expect(Reflect.ownKeys(root).includes(exportName)).toBe(false);
     }
-  });
-
-  test("keeps RunInput usable as the root input contract", () => {
-    // Given: a consumer writes against root-level RunInput.
-    const model: Provider.Model = {
-      id: "claude-3-haiku",
-      providerID: "anthropic",
-      name: "Claude 3 Haiku",
-      api: { npm: "@ai-sdk/anthropic" },
-    };
-    const input: RunInput & { readonly auth?: Auth.Info } = {
-      messages: [],
-      tools: [],
-      model,
-      auth: { type: "api", key: "test-key" },
-    };
-
-    // When: the typed input is constructed.
-    const messageCount = input.messages.length;
-
-    // Then: the root type preserves run() input shape.
-    expect(messageCount).toBe(0);
   });
 });

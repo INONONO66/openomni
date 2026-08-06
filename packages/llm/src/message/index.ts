@@ -147,41 +147,36 @@ export function toModelMessages(
         }
       }
 
+      // Reasoning blocks must precede text/tool-call blocks: Anthropic rejects
+      // assistant turns where a thinking block follows other content.
       if (toolCalls.length > 0) {
-        // Assistant message with tool calls
         const assistantContent: Array<
           AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock
         > = [];
 
-        if (textContent.length > 0) {
-          assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
-        }
         if (reasoningContent.length > 0) {
           assistantContent.push(buildAssistantReasoningBlock(reasoningContent.join("\n")));
+        }
+        if (textContent.length > 0) {
+          assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
         }
         assistantContent.push(...toolCalls);
 
         coreMessages.push(buildAssistantBlock(assistantContent));
 
-        // Add tool results
         for (const result of toolResults) {
           coreMessages.push(result);
         }
-      } else if (textContent.length > 0) {
-        if (reasoningContent.length > 0) {
-          coreMessages.push(
-            buildAssistantBlock([
-              buildAssistantTextBlock(textContent.join("\n")),
-              buildAssistantReasoningBlock(reasoningContent.join("\n")),
-            ]),
-          );
-        } else {
-          coreMessages.push(buildAssistantBlock(textContent.join("\n")));
-        }
       } else if (reasoningContent.length > 0) {
-        coreMessages.push(
-          buildAssistantBlock([buildAssistantReasoningBlock(reasoningContent.join("\n"))]),
-        );
+        const assistantContent: Array<AssistantTextBlock | AssistantReasoningBlock> = [
+          buildAssistantReasoningBlock(reasoningContent.join("\n")),
+        ];
+        if (textContent.length > 0) {
+          assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
+        }
+        coreMessages.push(buildAssistantBlock(assistantContent));
+      } else if (textContent.length > 0) {
+        coreMessages.push(buildAssistantBlock(textContent.join("\n")));
       }
     }
   }

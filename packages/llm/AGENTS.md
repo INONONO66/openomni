@@ -12,12 +12,8 @@ src/
 ├── message/
 │   └── index.ts      # toModelMessages() — Message.WithParts[] → AI SDK messages
 ├── processor/
-│   ├── index.ts      # Processor.create() orchestrator — bounded retry loop + stream driving
-│   ├── stream-events.ts # Stream event dispatch for text/reasoning/tool/step events
-│   ├── sink-projection.ts # Sink projection to Bus telemetry + noop sink
-│   ├── step-accounting.ts # step-start / step-finish token accounting
-│   ├── tool-projection.ts # tool-call/tool-result projection, optional execution, interruption cleanup
-│   └── contracts.ts  # Internal Processor implementation contracts
+│   ├── index.ts      # Processor.create() — bounded retry loop, sink projection to Bus telemetry, status snapshots
+│   └── stream-events.ts # Stream event projection: text/reasoning/tool/step parts + interruption cleanup
 ├── retry/
 │   └── index.ts      # Retry.delay / sleep / isRetryable — exponential backoff + retry-after
 ├── auth/
@@ -42,7 +38,7 @@ src/
 - **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "proxy", baseURL, apiKey? }`. Stored via `Auth.set(providerId, info)` and read by `getSDK()` before each call.
 - **SDK wiring** (`provider/sdk.ts`): `getSDK(model, auth)` resolves to Anthropic / OpenAI. Custom OpenAI-compatible endpoints use `@ai-sdk/openai` with `baseURL` / `name`, keeping returned language models on the same AI SDK provider type version. SDK and `LanguageModel` instances are cached per `providerID:npm:modelID:auth` key. Provider-specific behavior belongs in `provider/`, `auth/`, or `transform/`, not in call sites.
 - **Provider transforms** (`provider/transform.ts`): `normalizeMessages()` filters empty blocks, sanitizes tool-call IDs, applies Anthropic ephemeral caching to the last two user/assistant messages. `variants(model)` exposes per-provider thinking / reasoning presets; `resolveVariant(model, variant?)` picks one. This is an internal/deep import surface, not a root export.
-- **Processor**: Created via `Processor.create({ assistantMessage, sessionID, model, abort, sink, onToolCall, createStream, maxRetryAttempts? })`. `process()` returns `"stop" | "continue" | "compact"`. Accumulates `TextPart` / `ReasoningPart` / `ToolPart` and publishes through `Sink`. Processor owns `tool-call` and `tool-result` stream projection; `run()`'s AI SDK `execute` callback must not directly emit tool sink events.
+- **Processor**: Created via `Processor.create({ assistantMessage, sessionID, model, abort, sink?, createStream, maxRetryAttempts?, trace? })`. `process({ system })` resolves on stream completion and throws on abort/terminal error; `run()` maps that to `Run.Outcome`. Accumulates `TextPart` / `ReasoningPart` / `ToolPart` and publishes through `Sink` — text/reasoning parts carry the accumulated text on every delta so consumers can stream. Processor owns `tool-call` and `tool-result` stream projection; tool *execution* happens only in `run()`'s AI SDK `execute` callback, which must not directly emit tool sink events. Status snapshots are `busy` → (`retry`…) → `idle`, exactly one `idle` per process() call.
 - **Retry**: `Retry.delay(attempt, error?)` computes backoff respecting `retry-after` / `retry-after-ms` headers. `Retry.isRetryable(error)` checks `APIError.isRetryable`. Processor retrying is finite by default; do not use unbounded retry loops or publish `Number.MAX_SAFE_INTEGER` as a retry cap.
 - **TokenTracker**: Extracts token usage from AI SDK/provider responses. Runtime accounting stores token counts on the assistant message, keyed by that message's provider/model identity. The llm package does not calculate dollar cost.
 - **ModelsDev**: Lazy-loads the catalog from `models.dev` into a local cache, falls back to a bundled snapshot. Respects `OPENOMNI_MODELS_URL`, `OPENOMNI_MODELS_PATH`, `OPENOMNI_DISABLE_MODELS_FETCH`. Remote/cache catalog data is untrusted: only providers backed by bundled AI SDK packages are exposed, provider `api` URLs are stripped, and model-level provider overrides are stripped before caching/returning.

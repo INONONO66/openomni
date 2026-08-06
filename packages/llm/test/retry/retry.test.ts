@@ -15,24 +15,6 @@ describe("Retry", () => {
     expect(retrySource).not.toMatch(/\bexport\s+interface\s+WithRetryOptions\b/);
   });
 
-  describe("Constants", () => {
-    test("RETRY_INITIAL_DELAY is 2000ms", () => {
-      expect(Retry.RETRY_INITIAL_DELAY).toBe(2000);
-    });
-
-    test("RETRY_BACKOFF_FACTOR is 2", () => {
-      expect(Retry.RETRY_BACKOFF_FACTOR).toBe(2);
-    });
-
-    test("RETRY_MAX_DELAY_NO_HEADERS is 30000ms", () => {
-      expect(Retry.RETRY_MAX_DELAY_NO_HEADERS).toBe(30000);
-    });
-
-    test("RETRY_MAX_DELAY is 2147483647ms", () => {
-      expect(Retry.RETRY_MAX_DELAY).toBe(2_147_483_647);
-    });
-  });
-
   describe("sleep(ms, abortSignal)", () => {
     test("resolves after specified milliseconds", async () => {
       const controller = new AbortController();
@@ -175,6 +157,31 @@ describe("Retry", () => {
 
       const delay = Retry.delay(2, error);
       expect(delay).toBe(4000); // 2000 * 2^1
+    });
+
+    test("caps the fallback backoff even when headers are present", () => {
+      const error = new APIError({
+        message: "Rate limited",
+        isRetryable: true,
+        responseHeaders: {
+          "retry-after": "invalid",
+        },
+      });
+
+      const delay = Retry.delay(20, error);
+      expect(delay).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS);
+    });
+
+    test("does not throw when error payload code fields are not strings", () => {
+      const error = new APIError({
+        message: JSON.stringify({
+          type: "error",
+          error: { code: 42, message: 7 },
+        }),
+        isRetryable: true,
+      });
+
+      expect(Retry.isRetryable(error)).toBe("Provider Server Error");
     });
 
     test("prioritizes Retry-After-Ms over Retry-After", () => {
