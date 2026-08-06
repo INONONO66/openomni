@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
-import { CompletionRequest, CompletionTerminalReceipt } from "./completion-admission.js";
+import {
+  CompletionDecision,
+  CompletionRequest,
+  CompletionTerminalReceipt,
+} from "./completion-admission.js";
 import { Outcome, Status } from "./schemas.js";
 
 const BaseEvent = z.object({
@@ -80,7 +84,7 @@ const CompletionAdmissionRecorded = BusEvent.define(
     payload: z.object({
       hash: z.string(),
       admissionId: z.string(),
-      decision: z.enum(["admit", "block", "escalate", "owner_override"]),
+      decision: CompletionDecision,
       recordedHead: z.number().int().positive(),
     }),
   }),

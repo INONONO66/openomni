@@ -5,26 +5,83 @@ import { type Execution, PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 import {
   type ConnectorCompletionOptions,
-  projectConnectorCompletion as projectConnectorCompletionWithPolicy,
+  projectConnectorCompletion as projectConnectorCompletionProduction,
 } from "../../src/dispatch/handlers/connector-completion-projector.js";
 import { Stakes } from "../../src/ledger/index.js";
 import {
-  reflectCoordinatorResult as reflectCoordinatorResultWithPolicy,
+  reflectCoordinatorResult as reflectCoordinatorResultProduction,
   type WorkerCompletionOptions,
-} from "../../src/dispatch/handlers/worker-completion.js";
-import {
-  createDurableCompletionResultAuthorityPort,
   workerCompletionRequestId,
   workerCompletionReservationRoot,
   workerCompletionRequestRoot,
-} from "../../src/dispatch/handlers/worker-completion-admission.js";
-import { reserveCompletionRequest } from "../../src/work-item/completion-admission-boundary.js";
+} from "../../src/dispatch/handlers/worker-completion.js";
+import {
+  createCompletionAdmissionService,
+  createDurableCompletionResultAuthorityPort,
+  reserveCompletionRequest,
+  type CompletionAdmissionService,
+  type CompletionStakesResolver,
+} from "../../src/work-item/completion-admission.js";
 
 const NOW = 1_000;
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
 let completionWriter: Storage.WorkItemCompletionWriter;
 const WORKER_RUN_ID = "run:completion-admission";
 const WORKER_SESSION_ID = "session:completion-admission";
+
+type CompletionServiceOverrides = Readonly<{
+  policyEngine?: ReturnType<typeof PolicyEngine.create>;
+  ownerId?: string;
+  stakesResolver?: CompletionStakesResolver;
+  now?: () => number;
+}>;
+
+function completionService(overrides: CompletionServiceOverrides = {}): CompletionAdmissionService {
+  return createCompletionAdmissionService({
+    completionWriter,
+    policyEngine: overrides.policyEngine ?? COMPLETION_POLICY_ENGINE,
+    now: overrides.now ?? Date.now,
+    ...(overrides.ownerId === undefined ? {} : { ownerId: overrides.ownerId }),
+    ...(overrides.stakesResolver === undefined ? {} : { stakesResolver: overrides.stakesResolver }),
+  });
+}
+
+/** One completion-point policy engine that always denies with the given reasons. */
+function denyingPolicyEngine(
+  reasonCodes: readonly string[],
+  policyId = "deny-completion",
+): ReturnType<typeof PolicyEngine.create> {
+  const engine = PolicyEngine.create();
+  engine.register({
+    kind: "point",
+    name: policyId,
+    pointIds: ["work.complete.pre"],
+    effectCapabilities: { "work.complete.pre": [] },
+    priority: 0,
+    fn: () => PolicyDecision.deny({ policyId, reasonCodes: [...reasonCodes] }),
+  });
+  return engine;
+}
+
+type ReflectOptions = Omit<WorkerCompletionOptions, "completionService"> &
+  Readonly<{
+    completionService?: CompletionAdmissionService;
+    completionPolicyEngine?: ReturnType<typeof PolicyEngine.create>;
+    stakesResolver?: CompletionStakesResolver;
+  }>;
+
+function completionServiceFor(options: ReflectOptions): CompletionAdmissionService {
+  return (
+    options.completionService ??
+    completionService({
+      ...(options.completionPolicyEngine === undefined
+        ? {}
+        : { policyEngine: options.completionPolicyEngine }),
+      ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
+      ...(options.now === undefined ? {} : { now: options.now }),
+    })
+  );
+}
 
 function codeUnitCanonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -40,24 +97,35 @@ function codeUnitCanonicalJson(value: unknown): string {
 function reflectCoordinatorResult(
   workItemHash: string,
   result: Execution.Result,
-  options: Omit<WorkerCompletionOptions, "completionPolicyEngine">,
+  options: ReflectOptions,
 ) {
-  return reflectCoordinatorResultWithPolicy(workItemHash, result, {
-    completionWriter,
-    ...options,
-    completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+  const {
+    completionPolicyEngine: _policyEngine,
+    stakesResolver: _stakesResolver,
+    completionService: _completionService,
+    ...rest
+  } = options;
+  return reflectCoordinatorResultProduction(workItemHash, result, {
+    ...rest,
+    completionService: completionServiceFor(options),
   });
 }
 
 function projectConnectorCompletion(
   workItemHash: string,
   result: Execution.Result,
-  options: Omit<ConnectorCompletionOptions, "completionPolicyEngine">,
+  options: Omit<ConnectorCompletionOptions, "completionService"> &
+    Pick<ReflectOptions, "completionService" | "completionPolicyEngine" | "stakesResolver">,
 ) {
-  return projectConnectorCompletionWithPolicy(workItemHash, result, {
-    completionWriter,
-    ...options,
-    completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+  const {
+    completionPolicyEngine: _policyEngine,
+    stakesResolver: _stakesResolver,
+    completionService: _completionService,
+    ...rest
+  } = options;
+  return projectConnectorCompletionProduction(workItemHash, result, {
+    ...rest,
+    completionService: completionServiceFor(options),
   });
 }
 
@@ -180,8 +248,7 @@ describe("worker completion admission convergence", () => {
     };
     const result = succeeded(JSON.stringify(rawEnvelope));
 
-    await reflectCoordinatorResultWithPolicy(item.hash, result, {
-      completionWriter,
+    await reflectCoordinatorResult(item.hash, result, {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,
@@ -203,16 +270,11 @@ describe("worker completion admission convergence", () => {
     const envelope = await evidenceBackedEnvelope(item.hash);
     const nonFiniteEnvelope = `{"deliverable":1e400,${envelope.slice(1)}`;
 
-    const reflection = await reflectCoordinatorResultWithPolicy(
-      item.hash,
-      succeeded(nonFiniteEnvelope),
-      {
-        completionWriter,
-        sourceOrigin: { source: "internal_worker" },
-        completionPolicyEngine: COMPLETION_POLICY_ENGINE,
-        now: () => NOW,
-      },
-    );
+    const reflection = await reflectCoordinatorResult(item.hash, succeeded(nonFiniteEnvelope), {
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+      now: () => NOW,
+    });
 
     expect(reflection.completionBlocked).toBe(true);
     expect(reflection.completionBlocker).toContain("expected bounded plain JSON data");
@@ -262,27 +324,14 @@ describe("worker completion admission convergence", () => {
 
   test("normalizes the reservation lease from the bounded read-back timeout", async () => {
     const item = await startedItem("internal_chat_agent");
-    const completionPolicyEngine = PolicyEngine.create();
-    completionPolicyEngine.register({
-      kind: "point",
-      name: "hold-normalized-lease",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: () => PolicyDecision.deny({ policyId: "hold-normalized-lease", reasonCodes: ["hold"] }),
-    });
+    const completionPolicyEngine = denyingPolicyEngine(["hold"], "hold-normalized-lease");
 
-    await reflectCoordinatorResultWithPolicy(
-      item.hash,
-      succeeded(await evidenceBackedEnvelope(item.hash)),
-      {
-        completionWriter,
-        sourceOrigin: { source: "internal_worker" },
-        completionPolicyEngine,
-        readBackEnvelopeTimeoutMs: 12.1,
-        now: () => 100,
-      },
-    );
+    await reflectCoordinatorResult(item.hash, succeeded(await evidenceBackedEnvelope(item.hash)), {
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine,
+      readBackEnvelopeTimeoutMs: 12.1,
+      now: () => 100,
+    });
 
     expect(
       WorkItemStore.get(item.hash)?.completionFacts.requestReservations[0]?.leaseExpiresAt,
@@ -354,9 +403,9 @@ describe("worker completion admission convergence", () => {
       now: () => NOW,
     });
 
-    expect(
-      WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity,
-    ).toEqual(sourceIdentity);
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.sourceIdentity).toEqual(
+      sourceIdentity,
+    );
   });
 
   test("snapshots mutable source identity before reservation", async () => {
@@ -382,7 +431,7 @@ describe("worker completion admission convergence", () => {
 
     expect(reflection.completionBlocked).toBe(false);
     expect(stored?.completionFacts.requestReservations.at(-1)?.requestRoot).toBe(expectedRoot);
-    expect(stored?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity).toEqual({
+    expect(stored?.completionFacts.admissions[0]?.sourceIdentity).toEqual({
       source: "internal",
       identity: { kind: "worker", id: "worker:source-a" },
     });
@@ -414,7 +463,7 @@ describe("worker completion admission convergence", () => {
     expect(replay.completionBlocker).toContain("conflicts with durable source identity");
     expect(
       WorkItemStore.get(item.hash)?.completionFacts.admissions.map(
-        ({ requestSnapshot }) => requestSnapshot.sourceIdentity,
+        ({ sourceIdentity }) => sourceIdentity,
       ),
     ).toEqual([sourceA]);
   });
@@ -434,9 +483,7 @@ describe("worker completion admission convergence", () => {
 
     expect(first.completionBlocked).toBe(false);
     expect(recovery.completionBlocked).toBe(true);
-    expect(
-      WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity,
-    ).toEqual({
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.sourceIdentity).toEqual({
       source: "internal_worker",
       identity: {
         kind: "worker",
@@ -458,9 +505,7 @@ describe("worker completion admission convergence", () => {
     });
 
     expect(reflection.completionBlocked).toBe(false);
-    expect(
-      WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.requestSnapshot.sourceIdentity,
-    ).toEqual({
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.sourceIdentity).toEqual({
       source,
       identity: {
         kind: "worker",
@@ -581,7 +626,7 @@ describe("worker completion admission convergence", () => {
     });
     let readBackCalls = 0;
     const options = {
-      completionReservationOwnerId: "process:one",
+      completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
       async readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
@@ -681,8 +726,7 @@ describe("worker completion admission convergence", () => {
     const afterFailure = WorkItemStore.get(item.hash);
     let readBackCalls = 0;
     const options = {
-      completionWriter,
-      completionReservationOwnerId: "process:one",
+      completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,
@@ -692,7 +736,7 @@ describe("worker completion admission convergence", () => {
       },
     };
 
-    const recovered = await reflectCoordinatorResultWithPolicy(item.hash, result, options);
+    const recovered = await reflectCoordinatorResult(item.hash, result, options);
     const stored = WorkItemStore.get(item.hash);
 
     expect(afterFailure?.completionFacts.admissions).toEqual([]);
@@ -734,8 +778,7 @@ describe("worker completion admission convergence", () => {
     });
     let readBackCalls = 0;
     const options = {
-      completionWriter,
-      completionReservationOwnerId: "process:one",
+      completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,
@@ -754,8 +797,8 @@ describe("worker completion admission convergence", () => {
       },
     };
 
-    const first = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
-    const second = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const first = await reflectCoordinatorResult(item.hash, succeeded(output), options);
+    const second = await reflectCoordinatorResult(item.hash, succeeded(output), options);
     const stored = WorkItemStore.get(item.hash);
 
     expect(first.completionBlocked).toBe(true);
@@ -799,6 +842,7 @@ describe("worker completion admission convergence", () => {
     const releaseReadBack = Promise.withResolvers<void>();
     let readBackCalls = 0;
     const options = {
+      completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
       async readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
@@ -823,7 +867,7 @@ describe("worker completion admission convergence", () => {
     await readBackStarted.promise;
     const second = await reflectCoordinatorResult(item.hash, succeeded(output), {
       ...options,
-      completionReservationOwnerId: "process:two",
+      completionService: completionService({ ownerId: "process:two", now: () => NOW }),
     });
     try {
       expect(second.completionBlocked).toBe(true);
@@ -880,27 +924,29 @@ describe("worker completion admission convergence", () => {
     const policyB = policy("takeover-owner-b", bEntered, releaseB);
     let clock = 0;
     const base = {
-      completionWriter,
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => clock,
     };
+    // One process owner across contenders, matching production's single service.
+    const contenderService = (policyEngine: ReturnType<typeof PolicyEngine.create>) =>
+      completionService({ policyEngine, ownerId: "process:takeover", now: () => clock });
 
-    const attemptA = reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+    const attemptA = reflectCoordinatorResult(item.hash, succeeded(output), {
       ...base,
-      completionPolicyEngine: policyA,
+      completionService: contenderService(policyA),
     });
     await aEntered.promise;
     clock = 20_000;
-    const attemptB = reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+    const attemptB = reflectCoordinatorResult(item.hash, succeeded(output), {
       ...base,
-      completionPolicyEngine: policyB,
+      completionService: contenderService(policyB),
     });
     await bEntered.promise;
     releaseA.resolve();
     const expiredA = await attemptA;
-    const contenderC = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
+    const contenderC = await reflectCoordinatorResult(item.hash, succeeded(output), {
       ...base,
-      completionPolicyEngine: policyB,
+      completionService: contenderService(policyB),
     });
     try {
       expect(expiredA.completionBlocker).toContain("completion reservation lease lost");
@@ -937,8 +983,7 @@ describe("worker completion admission convergence", () => {
       },
     });
 
-    const reflection = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
-      completionWriter,
+    const reflection = await reflectCoordinatorResult(item.hash, succeeded(output), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine,
       now: () => clock,
@@ -955,27 +1000,17 @@ describe("worker completion admission convergence", () => {
   test("rejects durable verifier evidence rewrites before stale-head replay", async () => {
     const item = await startedItem("internal_chat_agent");
     const output = await evidenceBackedEnvelope(item.hash);
-    const completionPolicyEngine = PolicyEngine.create();
-    completionPolicyEngine.register({
-      kind: "point",
-      name: "block-before-durable-replay",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.deny({
-          policyId: "block-before-durable-replay",
-          reasonCodes: ["hold_for_replay"],
-        }),
-    });
+    const completionPolicyEngine = denyingPolicyEngine(
+      ["hold_for_replay"],
+      "block-before-durable-replay",
+    );
     const options = {
-      completionWriter,
       sourceOrigin: { source: "internal_worker" } as const,
       completionPolicyEngine,
       now: () => NOW,
     };
 
-    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    await reflectCoordinatorResult(item.hash, succeeded(output), options);
     const blocked = WorkItemStore.get(item.hash);
     const evidence = blocked?.evidence[0];
     if (!blocked || !evidence) throw new Error("missing blocked durable verifier evidence");
@@ -1007,21 +1042,11 @@ describe("worker completion admission convergence", () => {
   test("rejects unrelated artifacts appended to a verifier observation", async () => {
     const item = await startedItem("internal_chat_agent");
     const output = await evidenceBackedEnvelope(item.hash);
-    const completionPolicyEngine = PolicyEngine.create();
-    completionPolicyEngine.register({
-      kind: "point",
-      name: "hold-artifact-binding",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.deny({
-          policyId: "hold-artifact-binding",
-          reasonCodes: ["inspect_artifact_binding"],
-        }),
-    });
-    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
-      completionWriter,
+    const completionPolicyEngine = denyingPolicyEngine(
+      ["inspect_artifact_binding"],
+      "hold-artifact-binding",
+    );
+    await reflectCoordinatorResult(item.hash, succeeded(output), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine,
       now: () => NOW,
@@ -1167,21 +1192,8 @@ describe("worker completion admission convergence", () => {
   test("scopes Worker completion identity to the retried attempt", async () => {
     const item = await startedItem("internal_chat_agent");
     const firstOutput = await evidenceBackedEnvelope(item.hash);
-    const completionPolicyEngine = PolicyEngine.create();
-    completionPolicyEngine.register({
-      kind: "point",
-      name: "block-first-attempt",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.deny({
-          policyId: "block-first-attempt",
-          reasonCodes: ["retry_required"],
-        }),
-    });
-    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(firstOutput), {
-      completionWriter,
+    const completionPolicyEngine = denyingPolicyEngine(["retry_required"], "block-first-attempt");
+    await reflectCoordinatorResult(item.hash, succeeded(firstOutput), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine,
       now: () => NOW,
@@ -1198,11 +1210,10 @@ describe("worker completion admission convergence", () => {
     const retryIdentity = await bindRetryAttempt(item.hash, 2);
     const secondOutput = await evidenceBackedEnvelope(item.hash);
 
-    const reflection = await reflectCoordinatorResultWithPolicy(
+    const reflection = await reflectCoordinatorResult(
       item.hash,
       succeeded(secondOutput, retryIdentity),
       {
-        completionWriter,
         sourceOrigin: { source: "internal_worker" },
         completionPolicyEngine: PolicyEngine.create(),
         now: () => NOW + 1,
@@ -1241,7 +1252,6 @@ describe("worker completion admission convergence", () => {
           };
 
     const reflection = await reflectCoordinatorResult(item.hash, result, {
-      completionWriter,
       sourceOrigin: { source: "internal_worker" },
       now: () => NOW,
     });
@@ -1273,8 +1283,7 @@ describe("worker completion admission convergence", () => {
         return PolicyDecision.allow({ policyId: "hold-prior-attempt", reasonCodes: [] });
       },
     });
-    const priorAttempt = reflectCoordinatorResultWithPolicy(item.hash, succeeded(firstOutput), {
-      completionWriter,
+    const priorAttempt = reflectCoordinatorResult(item.hash, succeeded(firstOutput), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine,
       now: () => NOW,
@@ -1293,11 +1302,10 @@ describe("worker completion admission convergence", () => {
 
     const retryIdentity = await bindRetryAttempt(item.hash, 2);
     const secondOutput = await evidenceBackedEnvelope(item.hash);
-    const current = await reflectCoordinatorResultWithPolicy(
+    const current = await reflectCoordinatorResult(
       item.hash,
       succeeded(secondOutput, retryIdentity),
       {
-        completionWriter,
         sourceOrigin: { source: "internal_worker" },
         completionPolicyEngine: PolicyEngine.create(),
         now: () => NOW + 1,
@@ -1339,8 +1347,7 @@ describe("worker completion admission convergence", () => {
     });
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
-    const priorAttempt = reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
-      completionWriter,
+    const priorAttempt = reflectCoordinatorResult(item.hash, succeeded(output), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: PolicyEngine.create(),
       now: () => NOW,
@@ -1376,21 +1383,11 @@ describe("worker completion admission convergence", () => {
   test("rejects prior-attempt claim evidence after retry", async () => {
     const item = await startedItem("internal_chat_agent");
     const firstOutput = await evidenceBackedEnvelope(item.hash);
-    const completionPolicyEngine = PolicyEngine.create();
-    completionPolicyEngine.register({
-      kind: "point",
-      name: "hold-prior-attempt-evidence",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.deny({
-          policyId: "hold-prior-attempt-evidence",
-          reasonCodes: ["retry_with_fresh_evidence"],
-        }),
-    });
-    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(firstOutput), {
-      completionWriter,
+    const completionPolicyEngine = denyingPolicyEngine(
+      ["retry_with_fresh_evidence"],
+      "hold-prior-attempt-evidence",
+    );
+    await reflectCoordinatorResult(item.hash, succeeded(firstOutput), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine,
       now: () => NOW,
@@ -1403,16 +1400,11 @@ describe("worker completion admission convergence", () => {
     }
     await WorkItemStore.fail(item.hash, "retry with fresh evidence");
     await WorkItemStore.retry(item.hash);
-    const staleEvidence = await reflectCoordinatorResultWithPolicy(
-      item.hash,
-      succeeded(firstOutput),
-      {
-        completionWriter,
-        sourceOrigin: { source: "internal_worker" },
-        completionPolicyEngine: PolicyEngine.create(),
-        now: () => NOW + 1,
-      },
-    );
+    const staleEvidence = await reflectCoordinatorResult(item.hash, succeeded(firstOutput), {
+      sourceOrigin: { source: "internal_worker" },
+      completionPolicyEngine: PolicyEngine.create(),
+      now: () => NOW + 1,
+    });
     expect(staleEvidence.completionBlocker).toContain("Worker completion identity mismatch");
     for (const blocker of WorkItemStore.get(item.hash)?.blockers ?? []) {
       await WorkItemStore.resolveBlocker(item.hash, blocker.id);
@@ -1435,11 +1427,10 @@ describe("worker completion admission convergence", () => {
       },
     });
 
-    const replay = await reflectCoordinatorResultWithPolicy(
+    const replay = await reflectCoordinatorResult(
       item.hash,
       succeeded(mismatchedOutput, retryIdentity),
       {
-        completionWriter,
         sourceOrigin: { source: "internal_worker" },
         completionPolicyEngine: PolicyEngine.create(),
         now: () => NOW + 1,
@@ -1481,24 +1472,17 @@ describe("worker completion admission convergence", () => {
         },
       ],
     });
-    const completionPolicyEngine = PolicyEngine.create();
-    completionPolicyEngine.register({
-      kind: "point",
-      name: "hold-citation-replay",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.deny({
-          policyId: "hold-citation-replay",
-          reasonCodes: ["hold_citation_replay"],
-        }),
-    });
+    const completionPolicyEngine = denyingPolicyEngine(
+      ["hold_citation_replay"],
+      "hold-citation-replay",
+    );
     let readBackCalls = 0;
     const options = {
-      completionWriter,
+      completionService: completionService({
+        policyEngine: completionPolicyEngine,
+        now: () => NOW,
+      }),
       sourceOrigin: { source: "internal_worker" } as const,
-      completionPolicyEngine,
       now: () => NOW,
       readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
         readBackCalls += 1;
@@ -1515,7 +1499,7 @@ describe("worker completion admission convergence", () => {
       },
     };
 
-    await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    await reflectCoordinatorResult(item.hash, succeeded(output), options);
     const blocked = WorkItemStore.get(item.hash);
     if (!blocked) throw new Error("missing blocked citation WorkItem");
     const advanced = WorkItem.Info.parse({
@@ -1525,7 +1509,7 @@ describe("worker completion admission convergence", () => {
       timestamps: { ...blocked.timestamps, updated: NOW + 1 },
     });
     expect(completionWriter(blocked.hash, blocked.revision, advanced)).toBe(true);
-    const replay = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), options);
+    const replay = await reflectCoordinatorResult(item.hash, succeeded(output), options);
     const stored = WorkItemStore.get(item.hash);
 
     expect(replay.completionBlocked).toBe(true);
@@ -1792,8 +1776,7 @@ describe("worker completion admission convergence", () => {
       ],
     });
 
-    const reflection = await reflectCoordinatorResultWithPolicy(item.hash, succeeded(output), {
-      completionWriter,
+    const reflection = await reflectCoordinatorResult(item.hash, succeeded(output), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,

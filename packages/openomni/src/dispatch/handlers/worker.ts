@@ -1,4 +1,3 @@
-import { PolicyEngine } from "@openomni/policy";
 import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
 import { WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
@@ -21,8 +20,7 @@ import {
 import { extractText } from "./shared.js";
 
 export interface WorkerDispatchHandlerOptions
-  extends Omit<WorkerCompletionOptions, "sourceOrigin" | "completionPolicyEngine"> {
-  readonly completionPolicyEngine?: WorkerCompletionOptions["completionPolicyEngine"];
+  extends Omit<WorkerCompletionOptions, "sourceOrigin"> {
   readonly coordinator?: CoordinatorLike;
   readonly connectorEndpointDriver?: ConnectorEndpointDriverOwner;
   readonly defaultModel?: Model.Ref;
@@ -94,10 +92,9 @@ function resolveCompletedWorkItem(
   return workItem;
 }
 
-function assertWorkerCompletionAuthority(
+function assertWorkerCompletionActorAuthority(
   command: Dispatch.Command,
   payload: WorkerCompletePayload,
-  workItem?: WorkItem.Info,
 ): void {
   const actor = command.actor;
   if (
@@ -114,7 +111,12 @@ function assertWorkerCompletionAuthority(
   ) {
     throw new Error("worker.complete actor is not authorized for this Worker result");
   }
-  if (workItem === undefined) return;
+}
+
+function assertWorkerCompletionWorkItemAuthority(
+  payload: WorkerCompletePayload,
+  workItem: WorkItem.Info,
+): void {
   if (
     workItem.executorKind !== "connector_endpoint" ||
     workItem.workSessionId !== payload.result.sessionId
@@ -149,16 +151,13 @@ export function createWorkerDispatchHandlers(
 > {
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const policyResolver = options.policyResolver ?? PolicyResolver.create();
-  const completionPolicyEngine = options.completionPolicyEngine ?? PolicyEngine.create();
   return {
     async "worker.spawn"(command) {
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
-          completionWriter: options.completionWriter,
+          completionService: options.completionService,
           driver: options.connectorEndpointDriver,
-          completionPolicyEngine,
-          stakesResolver: options.stakesResolver,
           readBack: options.readBack,
           readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
           readBackRecorder: options.readBackRecorder,
@@ -192,10 +191,8 @@ export function createWorkerDispatchHandlers(
         throw err;
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
-        completionWriter: options.completionWriter,
+        completionService: options.completionService,
         sourceOrigin: { source: "internal_worker" },
-        completionPolicyEngine,
-        stakesResolver: options.stakesResolver,
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
         readBackRecorder: options.readBackRecorder,
@@ -214,14 +211,12 @@ export function createWorkerDispatchHandlers(
 
     async "worker.complete"(command) {
       const payload = parseWorkerCompletePayload(command.payload);
-      assertWorkerCompletionAuthority(command, payload);
+      assertWorkerCompletionActorAuthority(command, payload);
       const workItem = resolveCompletedWorkItem(command, payload);
-      assertWorkerCompletionAuthority(command, payload, workItem);
+      assertWorkerCompletionWorkItemAuthority(payload, workItem);
       const workItemHash = workItem.hash;
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
-        completionWriter: options.completionWriter,
-        completionPolicyEngine,
-        stakesResolver: options.stakesResolver,
+        completionService: options.completionService,
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
         readBackRecorder: options.readBackRecorder,

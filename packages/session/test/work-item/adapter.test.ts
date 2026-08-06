@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { WorkItem } from "@openomni/protocol";
 import { Storage } from "../../src/storage/index";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
-import { persistMutation } from "../../src/work-item/mutation";
 import { completedFixtureResults } from "./completed-fixture.js";
 
 function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
@@ -86,24 +85,19 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     version: 1,
     id: `admission:${item.hash}:adapter`,
     requestId: `completion-request:${item.hash}:adapter`,
-    requestSnapshot: WorkItem.CompletionRequest.parse({
-      version: 1,
-      id: `completion-request:${item.hash}:adapter`,
-      origin: "recovery",
-      workItemHash: item.hash,
-      contractRevision: item.completionContract.revision,
-      basisRef: item.completionContract.basisRef,
-      expectedHead: item.revision,
-      claims: [claim],
-      observations: [observation],
-      results,
-      invalidations: [],
-      verificationErrors: [],
-      effects: [],
-    }),
+    workItemHash: item.hash,
     origin: "recovery",
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
+    requestRoot: "request-root:adapter-fixture",
+    proposedFactIds: {
+      claims: [claim.id],
+      observations: [observation.id],
+      results: results.map(({ id }) => id),
+      invalidations: [],
+      verificationErrors: [],
+      effects: [],
+    },
     effectiveResultIds: results.map(({ id }) => id),
     unresolvedCriterionIds: [],
     decision: "admit",
@@ -186,87 +180,6 @@ function persistCompletedFixture(adapter: SqliteStorageAdapter, item: WorkItem.I
   expect(completionWriter(item.hash, admitted.revision, item)).toBe(true);
 }
 
-const historicalRow = {
-  hash: "wi_historical",
-  name: "Historical item",
-  sourceMessageId: "msg-historical",
-  sourceChannel: "test",
-  attempt: 1,
-  timestamps: { created: 10, updated: 11, completed: 12 },
-  relations: { childHashes: [], dependsOn: [] },
-  intent: "verify",
-  goal: "retain historical completion",
-  constraints: [],
-  acceptanceCriteria: ["historical completion remains visible"],
-  changedFiles: [],
-  blockers: [],
-  evidence: [
-    {
-      id: "evidence:historical",
-      kind: "verification",
-      description: "historical evidence",
-      passed: true,
-      createdAt: 11,
-    },
-  ],
-  completionReport: {
-    summary: "Historical work completed.",
-    claims: [
-      {
-        statement: "historical completion remains visible",
-        evidenceIds: ["evidence:historical"],
-      },
-    ],
-    caveats: [],
-    followUps: [],
-  },
-};
-
-const historicalPendingRow = {
-  ...historicalRow,
-  hash: "wi_historical_pending",
-  name: "Historical pending item",
-  timestamps: { created: 20, updated: 21 },
-  evidence: [],
-  completionReport: undefined,
-};
-
-function insertRawWorkItem(
-  dbPath: string,
-  row: {
-    hash: string;
-    sourceChannel: string;
-    timestamps: { created: number; updated: number };
-  },
-  status: WorkItem.Status,
-): void {
-  const database = new Database(dbPath);
-  database
-    .query(
-      `INSERT INTO work_item
-         (hash, data, status, source_channel, time_created, time_updated)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      row.hash,
-      JSON.stringify(row),
-      status,
-      row.sourceChannel,
-      row.timestamps.created,
-      row.timestamps.updated,
-    );
-  database.close();
-}
-
-function readRawWorkItem(dbPath: string, hash: string): Record<string, unknown> {
-  const database = new Database(dbPath);
-  const row = database.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
-    data: string;
-  };
-  database.close();
-  return JSON.parse(row.data) as Record<string, unknown>;
-}
-
 describe("SqliteStorageAdapter workItem", () => {
   let fixtureDir = "";
   let dbPath = "";
@@ -340,104 +253,9 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(item.hash)).toBeUndefined();
   });
 
-  test("decodes one historical row identically through get and list after reopen", () => {
-    adapter.close();
-    const database = new Database(dbPath);
-    database
-      .query(
-        `INSERT INTO work_item
-           (hash, data, status, source_channel, time_created, time_updated)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        historicalRow.hash,
-        JSON.stringify(historicalRow),
-        "completed",
-        historicalRow.sourceChannel,
-        historicalRow.timestamps.created,
-        historicalRow.timestamps.updated,
-      );
-    database.close();
-
-    adapter = new SqliteStorageAdapter(dbPath);
-    const firstGet = adapter.workItem?.get(historicalRow.hash);
-    const firstList = adapter.workItem?.list({ status: ["completed"] })[0];
-    adapter.close();
-
-    adapter = new SqliteStorageAdapter(dbPath);
-    const reopenedGet = adapter.workItem?.get(historicalRow.hash);
-    const reopenedList = adapter.workItem?.list({ status: ["completed"] })[0];
-
-    expect(firstGet).toEqual(firstList);
-    expect(reopenedGet).toEqual(reopenedList);
-    expect(reopenedGet).toEqual(firstGet);
-    expect(reopenedGet?.hash).toBe(historicalRow.hash);
-    expect(reopenedGet ? WorkItem.deriveStatus(reopenedGet) : undefined).toBe("completed");
-    expect(reopenedGet?.completionFacts.criteria.map(({ id }) => id)).toEqual(
-      firstGet?.completionFacts.criteria.map(({ id }) => id),
-    );
-    expect(reopenedGet?.completionFacts.admissions.map(({ id }) => id)).toEqual(
-      firstGet?.completionFacts.admissions.map(({ id }) => id),
-    );
-    expect(reopenedGet?.completionFacts.admissions[0]).toMatchObject({
-      decision: "admit",
-      unresolvedCriterionIds: [],
-    });
-  });
-
-  test("decodes a completed historical row without a report through get and list", () => {
-    const occupiedArchiveEvidenceId =
-      "evidence:wi_historical_without_report:legacy-completion-archive";
-    const row = {
-      ...historicalRow,
-      hash: "wi_historical_without_report",
-      evidence: [
-        {
-          id: occupiedArchiveEvidenceId,
-          kind: "custom" as const,
-          description: "pre-existing legacy evidence",
-          passed: false,
-          createdAt: historicalRow.timestamps.created,
-        },
-      ],
-      completionReport: undefined,
-    };
-    adapter.close();
-    insertRawWorkItem(dbPath, row, "completed");
-
-    adapter = new SqliteStorageAdapter(dbPath);
-    const firstGet = adapter.workItem.get(row.hash);
-    const firstList = adapter.workItem
-      .list({ status: ["completed"] })
-      .find(({ hash }) => hash === row.hash);
-    adapter.close();
-
-    adapter = new SqliteStorageAdapter(dbPath);
-    const reopenedGet = adapter.workItem.get(row.hash);
-    const reopenedList = adapter.workItem
-      .list({ status: ["completed"] })
-      .find(({ hash }) => hash === row.hash);
-
-    expect(firstGet).toEqual(firstList);
-    expect(reopenedGet).toEqual(reopenedList);
-    expect(reopenedGet).toEqual(firstGet);
-    expect(reopenedGet ? WorkItem.deriveStatus(reopenedGet) : undefined).toBe("completed");
-    expect(reopenedGet?.completionReport?.claims[0]?.evidenceIds).toEqual([
-      `${occupiedArchiveEvidenceId}:1`,
-    ]);
-    expect(reopenedGet?.completionFacts.results[0]?.assumptions).toContain(
-      "archive evidence was generated while decoding historical completion",
-    );
-  });
-
   test("rejects mismatched row and payload hashes across read paths", () => {
-    const rowKey = "wi_historical_row_key";
-    const payload = {
-      ...historicalRow,
-      hash: "wi_historical_payload_hash",
-      evidence: [],
-      completionReport: undefined,
-    };
+    const rowKey = "wi_mismatch_row_key";
+    const payload = makeWorkItem({ hash: "wi_mismatch_payload" });
     adapter.close();
     const database = new Database(dbPath);
     database
@@ -449,7 +267,7 @@ describe("SqliteStorageAdapter workItem", () => {
       .run(
         rowKey,
         JSON.stringify(payload),
-        "completed",
+        "pending",
         payload.sourceChannel,
         payload.timestamps.created,
         payload.timestamps.updated,
@@ -470,93 +288,6 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(() =>
       adapter.workItem.compareAndSet(rowKey, -1, makeWorkItem({ hash: rowKey })),
     ).toThrow(`WorkItem hash mismatch: key=${rowKey} payload=${payload.hash}`);
-  });
-
-  test.each([
-    ["missing", [], "legacy report claim evidence is missing: evidence:historical"],
-    [
-      "failed",
-      [
-        {
-          ...historicalRow.evidence[0],
-          passed: false,
-        },
-      ],
-      "completed legacy WorkItem lacks passed evidence for report claims",
-    ],
-  ])("rejects a completed historical row with %s required evidence", (_kind, evidence, expectedError) => {
-    adapter.close();
-    insertRawWorkItem(
-      dbPath,
-      { ...historicalRow, hash: `wi_historical_${_kind}`, evidence },
-      "completed",
-    );
-    adapter = new SqliteStorageAdapter(dbPath);
-
-    expect(() => adapter.workItem.get(`wi_historical_${_kind}`)).toThrow(expectedError);
-  });
-
-  test("persists the first CAS mutation of a pending legacy row at effective head zero", () => {
-    adapter.close();
-    insertRawWorkItem(dbPath, historicalPendingRow, "pending");
-    adapter = new SqliteStorageAdapter(dbPath);
-
-    const existing = adapter.workItem.get(historicalPendingRow.hash);
-    if (!existing) throw new Error("expected upcast pending WorkItem");
-    expect(readRawWorkItem(dbPath, historicalPendingRow.hash)).not.toHaveProperty("revision");
-    const updatedAt = existing.timestamps.updated + 1;
-    const updated = persistMutation(
-      adapter.workItem,
-      existing,
-      {
-        ...existing,
-        name: "Migrated pending item",
-        timestamps: { ...existing.timestamps, updated: updatedAt },
-      },
-      updatedAt,
-      ["name"],
-    );
-    const raw = readRawWorkItem(dbPath, historicalPendingRow.hash);
-
-    expect(adapter.workItem.get(existing.hash)).toEqual(updated);
-    expect(raw).toMatchObject({
-      revision: 1,
-      name: "Migrated pending item",
-      completionContract: { version: 1 },
-      completionFacts: { version: 1 },
-    });
-  });
-
-  test("persists the first CAS mutation of a completed legacy row at effective head two", () => {
-    adapter.close();
-    insertRawWorkItem(dbPath, historicalRow, "completed");
-    adapter = new SqliteStorageAdapter(dbPath);
-
-    const existing = adapter.workItem.get(historicalRow.hash);
-    if (!existing) throw new Error("expected upcast completed WorkItem");
-    expect(readRawWorkItem(dbPath, historicalRow.hash)).not.toHaveProperty("revision");
-    const updatedAt = existing.timestamps.updated + 1;
-    const updated = persistMutation(
-      adapter.workItem,
-      existing,
-      {
-        ...existing,
-        outcome: "adopted",
-        timestamps: { ...existing.timestamps, updated: updatedAt },
-      },
-      updatedAt,
-      ["outcome"],
-    );
-    const raw = readRawWorkItem(dbPath, historicalRow.hash);
-
-    expect(adapter.workItem.get(existing.hash)).toEqual(updated);
-    expect(raw).toMatchObject({
-      revision: 3,
-      outcome: "adopted",
-      completionContract: { version: 1 },
-      completionFacts: { version: 1 },
-      completionTerminalReceipt: { recordedHead: 2 },
-    });
   });
 
   test("exposes no unconditional WorkItem upsert", () => {
@@ -609,16 +340,7 @@ describe("SqliteStorageAdapter workItem", () => {
       producer: "claimant:rewritten",
       observedAt: observation.observedAt + 1,
     });
-    const rewrittenAdmission = WorkItem.CompletionAdmission.parse({
-      ...admission,
-      requestSnapshot: {
-        ...admission.requestSnapshot,
-        observations: admission.requestSnapshot.observations.map((candidate) =>
-          candidate.id === observation.id ? rewrittenObservation : candidate,
-        ),
-      },
-    });
-    const rewritten = WorkItem.Info.parse({
+    const rewritten = {
       ...current,
       revision: current.revision + 1,
       timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
@@ -628,11 +350,8 @@ describe("SqliteStorageAdapter workItem", () => {
         observations: current.completionFacts.observations.map((candidate) =>
           candidate.id === observation.id ? rewrittenObservation : candidate,
         ),
-        admissions: current.completionFacts.admissions.map((candidate) =>
-          candidate.id === admission.id ? rewrittenAdmission : candidate,
-        ),
       },
-    });
+    };
     const completionWriter = Storage.configure(adapter);
 
     expect(() => completionWriter(current.hash, current.revision, rewritten)).toThrow(

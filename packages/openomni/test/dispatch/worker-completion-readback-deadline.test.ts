@@ -3,22 +3,41 @@ import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 import {
-  reflectCoordinatorResult as reflectCoordinatorResultWithPolicy,
+  reflectCoordinatorResult as reflectCoordinatorResultProduction,
   type WorkerCompletionOptions,
 } from "../../src/dispatch/handlers/worker-completion";
+import {
+  createCompletionAdmissionService,
+  type CompletionAdmissionService,
+} from "../../src/work-item/completion-admission.js";
 
 const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
 let completionWriter: Storage.WorkItemCompletionWriter;
 
+function completionService(
+  overrides: Readonly<{
+    policyEngine?: ReturnType<typeof PolicyEngine.create>;
+    now?: () => number;
+  }> = {},
+): CompletionAdmissionService {
+  return createCompletionAdmissionService({
+    completionWriter,
+    policyEngine: overrides.policyEngine ?? COMPLETION_POLICY_ENGINE,
+    now: overrides.now ?? Date.now,
+  });
+}
+
 function reflectCoordinatorResult(
   workItemHash: string,
-  result: Parameters<typeof reflectCoordinatorResultWithPolicy>[1],
-  options: Omit<WorkerCompletionOptions, "completionPolicyEngine">,
+  result: Parameters<typeof reflectCoordinatorResultProduction>[1],
+  options: Omit<WorkerCompletionOptions, "completionService"> &
+    Readonly<{ completionService?: CompletionAdmissionService }>,
 ) {
-  return reflectCoordinatorResultWithPolicy(workItemHash, result, {
-    completionWriter,
+  return reflectCoordinatorResultProduction(workItemHash, result, {
     ...options,
-    completionPolicyEngine: COMPLETION_POLICY_ENGINE,
+    completionService:
+      options.completionService ??
+      completionService(options.now === undefined ? {} : { now: options.now }),
   });
 }
 
@@ -348,18 +367,17 @@ describe("worker completion read-back deadline", () => {
         }),
     });
 
-    await reflectCoordinatorResultWithPolicy(workItem.hash, blockedResult, {
-      completionWriter,
+    const denyingService = completionService({ policyEngine });
+    await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
+      completionService: denyingService,
       sourceOrigin: { source: "internal_worker" },
-      completionPolicyEngine: policyEngine,
     });
     const blocked = WorkItemStore.get(workItem.hash);
     if (!blocked) throw new Error("missing blocked WorkItem");
 
-    const replay = await reflectCoordinatorResultWithPolicy(workItem.hash, blockedResult, {
-      completionWriter,
+    const replay = await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
+      completionService: denyingService,
       sourceOrigin: { source: "internal_worker" },
-      completionPolicyEngine: policyEngine,
     });
 
     expect(replay).toMatchObject({ completionBlocked: true, workItemStatus: "blocked" });

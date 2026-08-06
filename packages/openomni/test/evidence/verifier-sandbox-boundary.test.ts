@@ -6,7 +6,11 @@ import ts from "typescript";
 
 const allowedImports: Readonly<Record<string, ReadonlySet<string>>> = {
   "verifier-conformance-canonical.ts": new Set(["node:crypto", "node:util/types", "zod"]),
-  "verifier-registry-contract.ts": new Set(["zod", "./verifier-conformance-canonical.js"]),
+  "verifier-registry-contract.ts": new Set([
+    "zod",
+    "@openomni/protocol",
+    "./verifier-conformance-canonical.js",
+  ]),
   "verifier-registry-core.ts": new Set([
     "./verifier-registry-contract.js",
     "./verifier-conformance-canonical.js",
@@ -59,7 +63,7 @@ const boundaryRoots = ["verifier-registry.ts"];
 const allowedExternalBindings: Readonly<Record<string, ReadonlySet<string>>> = {
   "node:crypto": new Set(["createHash"]),
   "node:util/types": new Set(["isProxy"]),
-  "@openomni/protocol": new Set(["Tool"]),
+  "@openomni/protocol": new Set(["Tool", "WorkItem"]),
   zod: new Set(["z"]),
 };
 

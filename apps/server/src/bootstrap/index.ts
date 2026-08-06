@@ -5,6 +5,7 @@ import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
+  createDefaultDispatchRuntime,
   CronAdapter,
   CronJobRunner,
   IngressEngine,
@@ -23,7 +24,7 @@ import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { createServerDispatchOwners } from "./dispatch-owners";
 import { connectMcpServers } from "./mcp";
-import { createBootstrapDispatchContext, startInboundSurfacesAfterRecovery } from "./startup";
+import { runRecovery, startInboundSurfacesAfterRecovery } from "./recovery";
 import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
 import { installShutdownHandlers } from "./shutdown";
 import { registerAgent } from "../agents";
@@ -135,15 +136,13 @@ export async function main(): Promise<void> {
     model,
     residentAgentResolver,
   });
-  agentProviderRef.current = new AgentToolProvider({
-    completionWriter,
-    dispatchOwners,
-  });
-  const bootstrapDispatch = createBootstrapDispatchContext({
+  const sharedDispatchRuntime = createDefaultDispatchRuntime({
     completionWriter,
     owners: dispatchOwners,
   });
-  const sharedDispatchRuntime = bootstrapDispatch.runtime;
+  agentProviderRef.current = new AgentToolProvider({
+    dispatchRuntime: sharedDispatchRuntime,
+  });
   dispatchRuntimeRef.current = sharedDispatchRuntime;
   IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
   IngressEngine.setAgentResolver(residentAgentResolver);
@@ -196,10 +195,11 @@ export async function main(): Promise<void> {
   });
   const server = await startInboundSurfacesAfterRecovery({
     recover: () =>
-      bootstrapDispatch.recover({
+      runRecovery({
         handler: routingHandler,
         coordinator,
         traceId,
+        completionRuntime: sharedDispatchRuntime,
       }),
     createServer: () =>
       Bun.serve({

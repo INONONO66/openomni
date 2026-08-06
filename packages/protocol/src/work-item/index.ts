@@ -1,9 +1,13 @@
 import { Events as EventDescriptors } from "./events.js";
-import { criterionId as createCriterionId, generateHash as createHash } from "./hash.js";
+import {
+  criterionId as createCriterionId,
+  generateHash as createHash,
+  sha256JsonRef as createSha256JsonRef,
+} from "./hash.js";
 import * as Schema from "./schemas.js";
 import { deriveStatus as resolveStatus } from "./status.js";
 import * as Completion from "./completion-admission.js";
-import { upcastLegacyCompletion as upcastCompletion } from "./completion-admission-upcast.js";
+import { hasContiguousReservationBridge as hasReservationBridge } from "./terminal-linkage.js";
 
 export namespace WorkItem {
   export const Status = Schema.Status;
@@ -59,23 +63,28 @@ export namespace WorkItem {
   export const VerificationErrorFact = Completion.VerificationErrorFact;
   export type VerificationErrorFact = Completion.VerificationErrorFact;
 
-  export const EffectOutcome = Completion.EffectOutcome;
-  export type EffectOutcome = Completion.EffectOutcome;
-
   export const EffectRecord = Completion.EffectRecord;
   export type EffectRecord = Completion.EffectRecord;
 
   export const CompletionOrigin = Completion.CompletionOrigin;
   export type CompletionOrigin = Completion.CompletionOrigin;
 
+  export type CompletionIdentity = Completion.CompletionIdentity;
+
+  export const CompletionSource = Completion.CompletionSource;
+  export type CompletionSource = Completion.CompletionSource;
+
+  export const CompletionSourceOrigin = Completion.CompletionSourceOrigin;
+  export type CompletionSourceOrigin = Completion.CompletionSourceOrigin;
+
   export const CompletionSourceIdentity = Completion.CompletionSourceIdentity;
   export type CompletionSourceIdentity = Completion.CompletionSourceIdentity;
 
+  export const projectCompletionOrigin = Completion.projectCompletionOrigin;
+  export const projectCompletionSourceIdentity = Completion.projectCompletionSourceIdentity;
+
   export const CompletionDecision = Completion.CompletionDecision;
   export type CompletionDecision = Completion.CompletionDecision;
-
-  export const CompletionContract = Completion.CompletionContract;
-  export type CompletionContract = Completion.CompletionContract;
 
   export const CompletionRequest = Completion.CompletionRequest;
   export type CompletionRequest = Completion.CompletionRequest;
@@ -92,7 +101,7 @@ export namespace WorkItem {
   export const CompletionFacts = Completion.CompletionFacts;
   export type CompletionFacts = Completion.CompletionFacts;
   export const emptyCompletionFacts = Completion.emptyCompletionFacts;
-  export const upcastLegacyCompletion = upcastCompletion;
+  export const hasContiguousReservationBridge = hasReservationBridge;
 
   export const VerificationGate = Schema.VerificationGate;
   export type VerificationGate = Schema.VerificationGate;
@@ -103,5 +112,6 @@ export namespace WorkItem {
   export const deriveStatus = resolveStatus;
   export const criterionId = createCriterionId;
   export const generateHash = createHash;
+  export const sha256JsonRef = createSha256JsonRef;
   export const Events = EventDescriptors;
 }

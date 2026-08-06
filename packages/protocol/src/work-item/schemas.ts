@@ -35,6 +35,10 @@ const ReadBackRequestBase = z.object({
   maxBodyBytes: z.number().int().positive().default(1_000_000),
 });
 
+// Deliberately NOT unified with AppConnector's CompletionReport.readBackRequests
+// mirror (app-connector/definition.ts): that schema carries unresolved target
+// templates rendered by the server-side read-back builder, while this one
+// validates fully resolved http(s) URLs.
 export const ReadBackRequest = z.discriminatedUnion("kind", [
   ReadBackRequestBase.extend({
     kind: z.literal("url_fetch"),

@@ -122,6 +122,7 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
         allowAsserted = {
           ...(allowAsserted ?? { criterionIds: [], order: entry.order, priority: entry.priority }),
           order: Math.min(allowAsserted?.order ?? entry.order, entry.order),
+          priority: Math.max(allowAsserted?.priority ?? entry.priority, entry.priority),
         };
         for (const criterionId of effect.criterionIds) {
           if (!allowAsserted.criterionIds.includes(criterionId)) {

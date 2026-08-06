@@ -2,10 +2,10 @@ import type { Execution } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
 import {
   reflectCoordinatorResult,
+  requireWorkerCompletionIdentity,
   type CompletionReflection,
   type WorkerCompletionOptions,
 } from "./worker-completion.js";
-import { requireWorkerCompletionIdentity } from "./worker-completion-admission.js";
 
 export interface ConnectorCompletionProjection {
   readonly reflection: CompletionReflection;

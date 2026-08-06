@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import * as CompletionFold from "../../src/work-item/completion-admission-fold.js";
 import type {
-  CompletionCriterion,
-  CompletionDurableFacts,
   CompletionEvaluationInput,
   CompletionPolicy,
   CompletionProposedFacts,
@@ -14,13 +12,13 @@ const lowCriterion = {
   revision: 1,
   statement: "Unit tests pass",
   required: true,
-} satisfies CompletionCriterion;
+} satisfies WorkItem.Criterion;
 const highCriterion = {
   id: "criterion:high",
   revision: 1,
   statement: "Production effect is confirmed",
   required: true,
-} satisfies CompletionCriterion;
+} satisfies WorkItem.Criterion;
 
 function observation(id: string, basisRef = "basis:current"): WorkItem.Observation {
   return {
@@ -81,7 +79,7 @@ type InputOptions = Partial<
     | "ownerOverride"
   >
 > &
-  Readonly<{ criteria?: readonly CompletionCriterion[] }>;
+  Readonly<{ criteria?: readonly WorkItem.Criterion[] }>;
 
 function proposed(overrides: Partial<ProposedFacts> = {}): ProposedFacts {
   const results = overrides.results ?? [
@@ -111,19 +109,7 @@ function input(options: InputOptions = {}): FoldInput {
   return {
     admissionId: "admission:one",
     requestId: "request:one",
-    requestSnapshot: WorkItem.CompletionRequest.parse({
-      version: 1,
-      id: "request:one",
-      origin: "worker",
-      workItemHash: "wi_one",
-      contractRevision: "contract:v1",
-      basisRef: "basis:current",
-      expectedHead: 3,
-      ...(options.ownerOverride
-        ? { ownerOverrideReceiptRef: options.ownerOverride.receiptRef }
-        : {}),
-      ...proposedFacts,
-    }),
+    requestRoot: "request-root:fold",
     origin: "worker",
     workItemHash: "wi_one",
     contractRevision: "contract:v1",
@@ -288,7 +274,7 @@ describe("completion admission pure fold", () => {
       criteria: [lowCriterion, highCriterion],
       observations: [observationFor(durableResult)],
       results: [durableResult],
-    } satisfies CompletionDurableFacts;
+    } satisfies WorkItem.CompletionFacts;
     const proposedFacts = proposed({
       observations: [observationFor(proposedResult)],
       results: [proposedResult],
@@ -364,7 +350,7 @@ describe("completion admission pure fold", () => {
       observations: [observationFor(currentResult)],
       results: [currentResult],
       invalidations: [oldInvalidation],
-    } satisfies CompletionDurableFacts;
+    } satisfies WorkItem.CompletionFacts;
     const recordedHistory = structuredClone(durableFacts);
 
     const admission = evaluate(
@@ -511,6 +497,18 @@ describe("completion admission pure fold", () => {
     });
   }
 
+  test("rejects a fold input whose admission id collides with an existing fact id", () => {
+    const collidingResult = result("admission:one", lowCriterion.id, "verified");
+    const proposedFacts = proposed({
+      observations: [observationFor(collidingResult)],
+      results: [collidingResult],
+    });
+
+    expect(() => evaluate(input({ criteria: [lowCriterion], proposedFacts }))).toThrow(
+      "duplicate_fact_id",
+    );
+  });
+
   const assertedCases = [
     ["explicitly authorized", [lowCriterion.id], "admit"],
     ["not criterion-authorized", [], "block"],
@@ -529,7 +527,7 @@ describe("completion admission pure fold", () => {
           criteria: [lowCriterion],
           proposedFacts: oneCriterionFacts("asserted"),
           policy,
-          stakes: { ref: "stakes:trusted-low", valueMilli: 1, comparison: "below" },
+          stakes: { ref: "stakes:trusted-low", comparison: "below" },
         }),
       );
 
@@ -542,11 +540,7 @@ describe("completion admission pure fold", () => {
 
   const stakesCases = [
     ["without trusted Stakes", undefined, "block"],
-    [
-      "with trusted Stakes",
-      { ref: "stakes:trusted", valueMilli: 1_001, comparison: "above" },
-      "escalate",
-    ],
+    ["with trusted Stakes", { ref: "stakes:trusted", comparison: "above" }, "escalate"],
   ] as const;
   for (const [name, stakes, decision] of stakesCases) {
     test(`high-risk asserted result ${name}`, () => {
@@ -581,7 +575,6 @@ describe("completion admission pure fold", () => {
         policy,
         stakes: {
           ref: "stakes:trusted-high",
-          valueMilli: 1_001,
           comparison: "above",
         },
       }),

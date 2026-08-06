@@ -49,7 +49,7 @@ export async function loadReadBackUrl(
   }
 }
 
-function settleBeforeDeadline<T>(
+export function settleBeforeDeadline<T>(
   operation: Promise<T>,
   deadlineAt: number,
   now: () => number,

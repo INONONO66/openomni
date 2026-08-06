@@ -4,10 +4,10 @@ import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import * as Ledger from "../../src/ledger/index.js";
 import {
   CompletionAdmissionError,
-  createCompletionAuthorityResolver,
-} from "../../src/work-item/completion-admission-authority.js";
+  completionRequestRoot,
+  createCompletionDecision,
+} from "../../src/work-item/completion-admission.js";
 import * as CompletionFold from "../../src/work-item/completion-admission-fold.js";
-import { completionRequestRoot } from "../../src/work-item/completion-request-identity.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const criterion = {
@@ -190,7 +190,16 @@ function admissionInput(overrides: Readonly<Record<string, unknown>> = {}) {
     version: 1,
     id: "admission:one",
     requestId: "request:completion",
-    requestSnapshot: requestInput(),
+    workItemHash: "wi_authority",
+    requestRoot: "request-root:authority",
+    proposedFactIds: {
+      claims: [],
+      observations: [],
+      results: ["result:one"],
+      invalidations: [],
+      verificationErrors: [],
+      effects: [],
+    },
     origin: "worker",
     contractRevision: "contract:v1",
     basisRef: "basis:v1",
@@ -327,22 +336,17 @@ type ResolverDependencies = Readonly<{
   policyEngine: ReturnType<typeof PolicyEngine.create>;
   stakesResolver?: Readonly<{ resolve(subject: unknown): unknown }>;
   resultAuthorityPort?: Readonly<{ validate(candidate: unknown): unknown }>;
-  ownerOverrideAuthorityPort?: Readonly<{ validate(candidate: unknown): unknown }>;
+  ownerOverrideValidator?: (candidate: unknown) => boolean | Promise<boolean>;
   now?: () => number;
 }>;
 
 function guardedResolver(dependencies: ResolverDependencies) {
-  const resolver = Reflect.apply(createCompletionAuthorityResolver, undefined, [dependencies]);
-  expect(typeof resolver, "factory must return a resolver object").toBe("object");
-  if (typeof resolver !== "object" || resolver === null) return undefined;
-  const resolve = Reflect.get(resolver, "resolve");
-  expect(typeof resolve, "completion authority resolver must expose resolve(item, request)").toBe(
-    "function",
-  );
+  const resolve = Reflect.apply(createCompletionDecision, undefined, [dependencies]);
+  expect(typeof resolve, "factory must return a completion decision function").toBe("function");
   if (typeof resolve !== "function") return undefined;
 
   return async (currentItem: WorkItem.Info, candidate: WorkItem.CompletionRequest) => {
-    const output = await Reflect.apply(resolve, resolver, [currentItem, candidate]);
+    const output = await Reflect.apply(resolve, undefined, [currentItem, candidate]);
     const parsed = WorkItem.CompletionAdmission.safeParse(output);
     expect(parsed.success, "resolver must return a schema-valid CompletionAdmission").toBe(true);
     if (!parsed.success) return undefined;
@@ -794,16 +798,9 @@ describe("completion admission authority resolver", () => {
     const admission = await resolveAdmission(
       {
         policyEngine: createPolicyEngine(),
-        ownerOverrideAuthorityPort: {
-          validate(input: unknown) {
-            validatedCandidate = input;
-            return {
-              ok: true,
-              receiptRef: "owner-receipt:one",
-              requestRoot,
-              expectedHead: candidate.expectedHead - 1,
-            } as const;
-          },
+        ownerOverrideValidator: (input: unknown) => {
+          validatedCandidate = input;
+          return true;
         },
         now: () => 10,
       },
@@ -824,22 +821,49 @@ describe("completion admission authority resolver", () => {
     expect(admission?.ownerOverrideReceiptRef).toBe("owner-receipt:one");
   });
 
-  test("rejects an Owner receipt validated against a different request root", async () => {
+  test("does not validate an Owner receipt when the reservation binds a different request root", async () => {
+    const candidate = requestWithOwnerReceipt("owner-receipt:one");
+    if (!candidate) return;
+    const reserved = itemWithOwnerReservation(candidate);
+    const foreignRootItem = item({
+      completionFacts: {
+        ...reserved.completionFacts,
+        requestReservations: reserved.completionFacts.requestReservations.map((reservation) =>
+          WorkItem.CompletionRequestReservation.parse({
+            ...reservation,
+            requestRoot: "sha256:other-request",
+          }),
+        ),
+      },
+    });
+    let validations = 0;
+
+    const admission = await resolveAdmission(
+      {
+        policyEngine: createPolicyEngine({ allowAsserted: true }),
+        ownerOverrideValidator: () => {
+          validations += 1;
+          return true;
+        },
+        now: () => 10,
+      },
+      foreignRootItem,
+      candidate,
+    );
+
+    expect(validations).toBe(0);
+    expect(admission?.decision).not.toBe("owner_override");
+    expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
+  });
+
+  test("rejects an Owner receipt the injected validator refuses", async () => {
     const candidate = requestWithOwnerReceipt("owner-receipt:one");
     if (!candidate) return;
 
     const admission = await resolveAdmission(
       {
         policyEngine: createPolicyEngine({ allowAsserted: true }),
-        ownerOverrideAuthorityPort: {
-          validate: () =>
-            ({
-              ok: true,
-              receiptRef: "owner-receipt:one",
-              requestRoot: "sha256:other-request",
-              expectedHead: candidate.expectedHead,
-            }) as const,
-        },
+        ownerOverrideValidator: () => false,
         now: () => 10,
       },
       itemWithOwnerReservation(candidate),
@@ -850,33 +874,7 @@ describe("completion admission authority resolver", () => {
     expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
   });
 
-  test("rejects an Owner receipt validated against a different WorkItem head", async () => {
-    const candidate = requestWithOwnerReceipt("owner-receipt:one");
-    if (!candidate) return;
-
-    const admission = await resolveAdmission(
-      {
-        policyEngine: createPolicyEngine({ allowAsserted: true }),
-        ownerOverrideAuthorityPort: {
-          validate: () =>
-            ({
-              ok: true,
-              receiptRef: "owner-receipt:one",
-              requestRoot: completionRequestRoot(candidate),
-              expectedHead: candidate.expectedHead - 2,
-            }) as const,
-        },
-        now: () => 10,
-      },
-      itemWithOwnerReservation(candidate),
-      candidate,
-    );
-
-    expect(admission?.decision).not.toBe("owner_override");
-    expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
-  });
-
-  test("does not honor an Owner candidate without an injected authority port", async () => {
+  test("does not honor an Owner candidate without an injected validator", async () => {
     const candidate = requestWithOwnerReceipt("owner-receipt:one");
     if (!candidate) return;
 
@@ -902,16 +900,9 @@ describe("completion admission authority resolver", () => {
     const admission = await resolveAdmission(
       {
         policyEngine: createPolicyEngine({ allowAsserted: true }),
-        ownerOverrideAuthorityPort: {
-          validate: () => {
-            validations += 1;
-            return {
-              ok: true,
-              receiptRef: "owner-receipt:stale",
-              requestRoot: completionRequestRoot(candidate),
-              expectedHead: candidate.expectedHead,
-            } as const;
-          },
+        ownerOverrideValidator: () => {
+          validations += 1;
+          return true;
         },
         now: () => 10,
       },
@@ -962,55 +953,6 @@ describe("completion admission authority resolver", () => {
 
     expect(code).toBe("unsupported_fact");
     expect(policyCalls).toBe(0);
-  });
-
-  test("accepts invalidation only through its exact trusted authority binding", async () => {
-    const refuted = {
-      ...verifiedResult("refuted"),
-      id: "result:durable-refuted",
-    };
-    const currentItem = item({
-      completionFacts: {
-        ...WorkItem.emptyCompletionFacts(),
-        revision: 2,
-        criteria: [criterion],
-        observations: [observation()],
-        results: [refuted],
-      },
-    });
-    const invalidation = {
-      id: "invalidation:trusted-refuted",
-      resultId: refuted.id,
-      basisRef: "basis:v1",
-      reason: "trusted verifier withdrew its result",
-      createdAt: 3,
-    };
-    let validatedCandidate: unknown;
-
-    const admission = await resolveAdmission(
-      {
-        policyEngine: createPolicyEngine(),
-        invalidationAuthorityPort: {
-          validate(input: unknown) {
-            validatedCandidate = input;
-            return { ok: true } as const;
-          },
-        },
-      },
-      currentItem,
-      request({ invalidations: [invalidation] }),
-    );
-
-    expect(validatedCandidate).toEqual({
-      workItemHash: currentItem.hash,
-      requestId: "request:completion",
-      contractRevision: "contract:v1",
-      basisRef: "basis:v1",
-      expectedHead: 2,
-      invalidation,
-      result: refuted,
-    });
-    expect(admission?.requestSnapshot.invalidations).toEqual([invalidation]);
   });
 
   test("rejects requester verification errors without trusted verifier authority", async () => {
@@ -1119,8 +1061,8 @@ describe("completion admission authority resolver", () => {
     ],
     ["result basis", "stale_basis", { results: [{ ...assertedResult(), basisRef: "basis:old" }] }],
     [
-      "invalidation basis",
-      "stale_basis",
+      "invalidation without authority",
+      "unsupported_fact",
       {
         invalidations: [
           {
@@ -1383,7 +1325,7 @@ describe("completion admission authority resolver", () => {
   });
 
   test("keeps completion authority and fold exports kernel internal", () => {
-    expect(Reflect.get(WorkItemPublic, "createCompletionAuthorityResolver")).toBeUndefined();
+    expect(Reflect.get(WorkItemPublic, "createCompletionDecision")).toBeUndefined();
     expect(Reflect.get(WorkItemPublic, "evaluateCompletion")).toBeUndefined();
   });
 
@@ -1392,7 +1334,7 @@ describe("completion admission authority resolver", () => {
     const foldInput = {
       admissionId: "admission:pure",
       requestId: "request:pure",
-      requestSnapshot: request({ id: "request:pure" }),
+      requestRoot: "request-root:pure",
       origin: "worker",
       workItemHash: "wi_authority",
       contractRevision: "contract:v1",

@@ -23,7 +23,6 @@ export type ToolDispatchHandler = (
 export type CoordinatorConfig = {
   workerScript: string;
   workerManagerFactory?: WorkerManagerFactory;
-  workerCount?: number;
   maxWorkers?: number;
   workerIdleTimeoutMs?: number;
   socketDir?: string;
@@ -74,7 +73,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
   const workerManager: WorkerManager = workerManagerFactory(
     {
       workerScript: config.workerScript,
-      maxActiveWorkers: config.maxWorkers ?? config.workerCount,
+      maxActiveWorkers: config.maxWorkers,
       idleShutdownMs: config.workerIdleTimeoutMs,
       socketDir: config.socketDir,
       bootstrap: config.bootstrap,

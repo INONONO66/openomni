@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
+import { sha256JsonRef } from "./hash.js";
 
 const Reference = z.string().min(1);
 const Timestamp = z.number().finite();
@@ -121,8 +121,7 @@ export const VerificationErrorFact = z
   .strict();
 export type VerificationErrorFact = z.infer<typeof VerificationErrorFact>;
 
-export const EffectOutcome = z.enum(["unknown", "confirmed", "failed"]);
-export type EffectOutcome = z.infer<typeof EffectOutcome>;
+const EffectOutcome = z.enum(["unknown", "confirmed", "failed"]);
 
 export const EffectRecord = z
   .object({
@@ -144,26 +143,108 @@ export const CompletionOrigin = z.enum([
 ]);
 export type CompletionOrigin = z.infer<typeof CompletionOrigin>;
 
-const CompletionIdentity = z
+export const CompletionIdentity = z
   .object({
     kind: z.enum(["resident", "worker", "external_actor"]),
     id: Reference,
   })
   .strict();
+export type CompletionIdentity = z.infer<typeof CompletionIdentity>;
 
-export const CompletionSourceIdentity = z.discriminatedUnion("source", [
-  z.object({ source: z.literal("internal_worker"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("connector_worker"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("replay"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("recovery"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("api"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("a2a"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("human"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("resident"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("sdk"), identity: CompletionIdentity }).strict(),
-  z.object({ source: z.literal("internal"), identity: CompletionIdentity }).strict(),
+const FixedCompletionSource = z.enum(["internal_worker", "connector_worker", "replay", "recovery"]);
+export const CompletionSource = z.enum([
+  ...FixedCompletionSource.options,
+  "api",
+  "a2a",
+  "human",
+  "resident",
+  "sdk",
+  "internal",
 ]);
+export type CompletionSource = z.infer<typeof CompletionSource>;
+
+const CompletionSourceShape = z
+  .object({
+    source: CompletionSource,
+    identity: CompletionIdentity.optional(),
+  })
+  .strict();
+
+/** Dispatch-surface input: fixed worker/replay/recovery sources arrive without
+ *  identity (it is synthesized from the execution result); qualified sources
+ *  must carry caller-authenticated identity. */
+export const CompletionSourceOrigin = CompletionSourceShape.superRefine((origin, ctx) => {
+  if (!isFixedCompletionSource(origin.source) && origin.identity === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "qualified completion sources require identity",
+      path: ["identity"],
+    });
+  }
+});
+export type CompletionSourceOrigin = z.infer<typeof CompletionSourceOrigin>;
+
+/** Durable form: identity always present. Replaces the 10-arm union. */
+export const CompletionSourceIdentity = CompletionSourceShape.required({ identity: true });
 export type CompletionSourceIdentity = z.infer<typeof CompletionSourceIdentity>;
+
+function isFixedCompletionSource(
+  source: CompletionSource,
+): source is z.infer<typeof FixedCompletionSource> {
+  return (FixedCompletionSource.options as readonly string[]).includes(source);
+}
+
+export function projectCompletionOrigin(
+  input: CompletionSourceOrigin | CompletionSourceIdentity,
+): CompletionOrigin {
+  if (isFixedCompletionSource(input.source)) {
+    return input.source === "replay" || input.source === "recovery" ? input.source : "worker";
+  }
+  const kind = input.identity?.kind;
+  if (kind === undefined) {
+    throw new Error(`qualified completion source requires identity: ${input.source}`);
+  }
+  return kind; // resident | worker | external_actor map 1:1
+}
+
+export function projectCompletionSourceIdentity(
+  input: CompletionSourceOrigin,
+): CompletionSourceIdentity | undefined {
+  return input.identity === undefined ? undefined : CompletionSourceIdentity.parse(input);
+}
+
+/** Shared origin-consistency refinement used by CompletionRequest AND CompletionAdmission. */
+function validateSourceIdentityOrigin(
+  origin: CompletionOrigin,
+  sourceIdentity: CompletionSourceIdentity | undefined,
+  ctx: z.RefinementCtx,
+): void {
+  if (sourceIdentity === undefined) return;
+  if (isFixedCompletionSource(sourceIdentity.source)) {
+    if (origin !== projectCompletionOrigin(sourceIdentity)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "sourceIdentity source must match completion origin",
+        path: ["sourceIdentity", "source"],
+      });
+    }
+    if (sourceIdentity.identity.kind !== "worker") {
+      ctx.addIssue({
+        code: "custom",
+        message: "fixed Worker source requires worker identity",
+        path: ["sourceIdentity", "identity", "kind"],
+      });
+    }
+    return;
+  }
+  if (origin !== sourceIdentity.identity.kind) {
+    ctx.addIssue({
+      code: "custom",
+      message: "sourceIdentity kind must match completion origin",
+      path: ["sourceIdentity", "identity", "kind"],
+    });
+  }
+}
 
 export const CompletionDecision = z.enum(["admit", "block", "escalate", "owner_override"]);
 export type CompletionDecision = z.infer<typeof CompletionDecision>;
@@ -218,60 +299,35 @@ const CompletionRequestShape = z
         factIds.add(fact.id);
       }
     }
-    const fixedSource = request.sourceIdentity?.source;
-    const fixedOrigin =
-      fixedSource === "internal_worker" || fixedSource === "connector_worker"
-        ? "worker"
-        : fixedSource === "replay" || fixedSource === "recovery"
-          ? fixedSource
-          : undefined;
-    if (fixedOrigin !== undefined) {
-      if (request.origin !== fixedOrigin) {
-        ctx.addIssue({
-          code: "custom",
-          message: "sourceIdentity source must match completion origin",
-          path: ["sourceIdentity", "source"],
-        });
-      }
-      if (request.sourceIdentity?.identity.kind !== "worker") {
-        ctx.addIssue({
-          code: "custom",
-          message: "fixed Worker source requires worker identity",
-          path: ["sourceIdentity", "identity", "kind"],
-        });
-      }
-      return;
-    }
-    const sourceKind = request.sourceIdentity?.identity.kind;
-    const sourceOrigin =
-      sourceKind === "resident"
-        ? "resident"
-        : sourceKind === "worker"
-          ? "worker"
-          : sourceKind === "external_actor"
-            ? "external_actor"
-            : undefined;
-    if (sourceOrigin !== undefined && sourceOrigin !== request.origin) {
-      ctx.addIssue({
-        code: "custom",
-        message: "sourceIdentity kind must match completion origin",
-        path: ["sourceIdentity", "identity", "kind"],
-      });
-    }
+    validateSourceIdentityOrigin(request.origin, request.sourceIdentity, ctx);
   });
 
 export const CompletionRequest = CompletionRequestShape;
 export type CompletionRequest = z.infer<typeof CompletionRequest>;
+
+const ProposedFactIds = z
+  .object({
+    claims: z.array(Reference),
+    observations: z.array(Reference),
+    results: z.array(Reference),
+    invalidations: z.array(Reference),
+    verificationErrors: z.array(Reference),
+    effects: z.array(Reference),
+  })
+  .strict();
 
 const CompletionAdmissionShape = z
   .object({
     version: CurrentVersion,
     id: Reference,
     requestId: Reference,
-    requestSnapshot: CompletionRequestShape,
+    workItemHash: Reference,
     origin: CompletionOrigin,
+    sourceIdentity: CompletionSourceIdentity.optional(),
     contractRevision: Reference,
     basisRef: Reference,
+    requestRoot: Reference,
+    proposedFactIds: ProposedFactIds,
     effectiveResultIds: z.array(Reference),
     unresolvedCriterionIds: z.array(Reference),
     decision: CompletionDecision,
@@ -289,19 +345,7 @@ const CompletionAdmissionShape = z
   .strict();
 
 export const CompletionAdmission = CompletionAdmissionShape.superRefine((admission, ctx) => {
-  if (
-    admission.requestSnapshot.id !== admission.requestId ||
-    admission.requestSnapshot.origin !== admission.origin ||
-    admission.requestSnapshot.contractRevision !== admission.contractRevision ||
-    admission.requestSnapshot.basisRef !== admission.basisRef ||
-    admission.requestSnapshot.expectedHead !== admission.expectedHead
-  ) {
-    ctx.addIssue({
-      code: "custom",
-      message: "requestSnapshot must match the admission subject",
-      path: ["requestSnapshot"],
-    });
-  }
+  validateSourceIdentityOrigin(admission.origin, admission.sourceIdentity, ctx);
   if (
     (admission.completionReportSnapshot === undefined) !==
     (admission.completionReportRef === undefined)
@@ -347,16 +391,6 @@ export const CompletionAdmission = CompletionAdmissionShape.superRefine((admissi
     ctx.addIssue({
       code: "custom",
       message: "ownerOverrideReceiptRef is valid only for owner_override",
-      path: ["ownerOverrideReceiptRef"],
-    });
-  }
-  if (
-    admission.decision === "owner_override" &&
-    admission.ownerOverrideReceiptRef !== admission.requestSnapshot.ownerOverrideReceiptRef
-  ) {
-    ctx.addIssue({
-      code: "custom",
-      message: "owner_override receipt must match the request snapshot candidate",
       path: ["ownerOverrideReceiptRef"],
     });
   }
@@ -434,7 +468,7 @@ const CompletionFactsShape = z
     invalidations: z.array(ResultInvalidation),
     verificationErrors: z.array(VerificationErrorFact),
     effects: z.array(EffectRecord),
-    requestReservations: z.array(CompletionRequestReservation).default([]),
+    requestReservations: z.array(CompletionRequestReservation),
     admissions: z.array(CompletionAdmission),
   })
   .strict()
@@ -510,6 +544,5 @@ export function canonicalCompletionReport(input: CompletionReport): CompletionRe
 }
 
 export function completionReportReference(input: CompletionReport): string {
-  const canonical = canonicalCompletionReport(input);
-  return `sha256:${createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}`;
+  return sha256JsonRef(canonicalCompletionReport(input));
 }

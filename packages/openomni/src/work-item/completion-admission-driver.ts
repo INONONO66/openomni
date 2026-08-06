@@ -1,12 +1,11 @@
+import { Bus, Storage } from "@openomni/session";
 import {
   CompletionAdmissionDriverScenarios,
   type CompletionAdmissionDriverScenario,
   CompletionAdmissionDriverVersion,
-} from "./completion-admission-driver-contract.js";
-import { Bus, Storage } from "@openomni/session";
-import { runCompletionAdmissionScenario } from "./completion-admission-driver-scenarios.js";
+  runCompletionAdmissionScenario,
+} from "./completion-admission-driver-scenarios.js";
 
-const VERSION = CompletionAdmissionDriverVersion;
 const USAGE = `Usage: completion-admission-driver --self-test | --scenario <${CompletionAdmissionDriverScenarios.join("|")}> --json`;
 
 export type CompletionAdmissionDriverExecution = Readonly<{
@@ -39,7 +38,7 @@ export async function runCompletionAdmissionDriver(
     return argumentError();
   } catch (error) {
     return execution(false, {
-      version: VERSION,
+      version: CompletionAdmissionDriverVersion,
       mode: "driver_error",
       ok: false,
       resultCode: "driver_threw",
@@ -72,7 +71,7 @@ async function selfTest(): Promise<CompletionAdmissionDriverExecution> {
     });
   }
   return execution(allPassed, {
-    version: VERSION,
+    version: CompletionAdmissionDriverVersion,
     mode: "self_test",
     ok: allPassed,
     resultCode: allPassed ? "self_test_passed" : "self_test_failed",
@@ -94,7 +93,7 @@ function isScenario(value: string | undefined): value is CompletionAdmissionDriv
 
 function argumentError(): CompletionAdmissionDriverExecution {
   return execution(false, {
-    version: VERSION,
+    version: CompletionAdmissionDriverVersion,
     mode: "argument_error",
     ok: false,
     resultCode: "invalid_arguments",

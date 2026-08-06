@@ -1,6 +1,8 @@
 import { createDefaultDispatchRuntime } from "@openomni/openomni";
+import { PolicyEngine } from "@openomni/policy";
 import type { WorkItem } from "@openomni/protocol";
 import { type Storage, WorkItemStore } from "@openomni/session";
+import { createCompletionAdmissionService } from "../../../packages/openomni/src/work-item/completion-admission";
 
 export async function completeWorkItem(
   completionWriter: Storage.WorkItemCompletionWriter,
@@ -19,9 +21,12 @@ export async function completeWorkItem(
   const observationId = `observation:${hash}:${current.revision}:server-test`;
   const createdAt = current.timestamps.updated + 1;
   const result = await createDefaultDispatchRuntime({
-    completionWriter,
-    completionResultAuthorityPort: { validate: () => ({ ok: true }) },
-    now: () => createdAt + 1,
+    completionAdmissionService: createCompletionAdmissionService({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => createdAt + 1,
+    }),
   }).submitActorWorkItemCompletion({
     source: { source: "resident", identity: { kind: "resident", id: "resident:server-test" } },
     request: {

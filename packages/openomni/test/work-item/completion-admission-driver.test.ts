@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
 import * as OpenOmni from "../../src/index.js";
-import { completionAdmissionScenarioReceipt } from "../../src/work-item/completion-admission-driver-contract.js";
-import { runAllOriginsCompletionAdmissionScenario } from "../../src/work-item/completion-admission-driver-origin-scenarios.js";
+import {
+  completionAdmissionScenarioReceipt,
+  runAllOriginsCompletionAdmissionScenario,
+} from "../../src/work-item/completion-admission-driver-scenarios.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const SCENARIOS = [
@@ -13,7 +15,6 @@ const SCENARIOS = [
   "stale-basis",
   "restart-recovery",
   "bypass-refusal",
-  "legacy-archive",
 ] as const;
 
 type Scenario = (typeof SCENARIOS)[number];
@@ -96,7 +97,7 @@ describe("WorkItem completion admission driver", () => {
     expect(help).toEqual({
       exitCode: 0,
       stdout:
-        "Usage: completion-admission-driver --self-test | --scenario <known-bad|low-asserted-high-escalation|all-origins|stale-basis|restart-recovery|bypass-refusal|legacy-archive> --json",
+        "Usage: completion-admission-driver --self-test | --scenario <known-bad|low-asserted-high-escalation|all-origins|stale-basis|restart-recovery|bypass-refusal> --json",
     });
     expect(invalid.exitCode).toBe(1);
     expect(parseObject(invalid.stdout)).toEqual({
@@ -116,7 +117,7 @@ describe("WorkItem completion admission driver", () => {
       {
         version: "forged-version",
         mode: "forged-mode",
-        scenario: "legacy-archive",
+        scenario: "stale-basis",
         ok: false,
         resultCode: "forged-result",
         preservedField: "preserved",
@@ -271,24 +272,6 @@ describe("WorkItem completion admission driver", () => {
     });
   });
 
-  test("upcasts a legacy archive deterministically without rewriting its source", async () => {
-    expect(await scenarioReceipt("legacy-archive")).toMatchObject({
-      resultCode: "legacy_archive_upcast",
-      sourceUnchanged: true,
-      stableCriterionIds: true,
-      stableAdmissionIds: true,
-      stableReceiptIds: true,
-      allClaimsPreserved: true,
-      failedEvidencePreserved: true,
-      allRequiredCriteriaEvidenced: true,
-      archivedStatus: "completed",
-      admissionCount: 1,
-      terminalReceiptLinked: true,
-      verifiedResultCount: 0,
-      resultValues: ["asserted", "asserted"],
-    });
-  });
-
   test("self-test runs every scenario twice and compares deterministic receipts", async () => {
     const run = publicDriver();
     const first = await run(["--self-test"]);
@@ -301,7 +284,7 @@ describe("WorkItem completion admission driver", () => {
       mode: "self_test",
       ok: true,
       resultCode: "self_test_passed",
-      scenarioRuns: 14,
+      scenarioRuns: 12,
       deterministic: true,
       scenarios: SCENARIOS.map((scenario) => ({
         scenario,

@@ -7,6 +7,16 @@ import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
 import { resolveConnectorLogPath } from "../../src/connector/log-path.js";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
+import { PolicyEngine } from "@openomni/policy";
+import { createCompletionAdmissionService } from "../../../../packages/openomni/src/work-item/completion-admission";
+
+function testCompletionService(now: () => number = Date.now) {
+  return createCompletionAdmissionService({
+    completionWriter,
+    policyEngine: PolicyEngine.create(),
+    now,
+  });
+}
 
 const tempRoots: string[] = [];
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -1129,7 +1139,7 @@ describe("createConnectorEndpointProcessDriver", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
-      completionWriter,
+      completionService: testCompletionService(),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
     });
 

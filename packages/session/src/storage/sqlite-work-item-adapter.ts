@@ -66,18 +66,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
              source_channel = ?,
              time_updated = ?
            WHERE hash = ?
-             AND (
-               json_extract(data, '$.revision') = ?
-               OR (
-                 json_type(data, '$.revision') IS NULL
-                 AND json_type(data, '$.completionContract') IS NULL
-                 AND json_type(data, '$.completionFacts') IS NULL
-                 AND CASE
-                   WHEN json_type(data, '$.timestamps.completed') IN ('integer', 'real') THEN 2
-                   ELSE 0
-                 END = ?
-               )
-             )`,
+             AND json_extract(data, '$.revision') = ?`,
         )
         .run(
           JSON.stringify(parsed),
@@ -88,7 +77,6 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
           parsed.sourceChannel,
           Date.now(),
           hash,
-          expectedHead,
           expectedHead,
         );
       return result.changes === 1;
@@ -208,7 +196,7 @@ function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info)
 }
 
 function decodeWorkItem(data: string): WorkItem.Info {
-  return WorkItem.Info.parse(WorkItem.upcastLegacyCompletion(JSON.parse(data)));
+  return WorkItem.Info.parse(JSON.parse(data));
 }
 
 type WorkItemRow = Readonly<{ hash: string; data: string }>;

@@ -110,6 +110,10 @@ export const CompletionReport = z
   .object({
     finalMessage: z.enum(["stdout", "stderr", "log", "artifact"]),
     artifactGlobs: z.array(nonEmptyString).optional(),
+    // Deliberately NOT unified with WorkItem.ReadBackRequest
+    // (work-item/schemas.ts): targets here are templates that the server-side
+    // read-back builder renders into the resolved http(s) URLs that schema
+    // validates.
     readBackRequests: z
       .array(
         z

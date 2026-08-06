@@ -34,7 +34,7 @@ type TerminalLinkageItem = Readonly<{
     verificationErrors: readonly Readonly<{ id: string }>[];
     effects: readonly Readonly<{ id: string }>[];
     admissions: readonly CompletionAdmission[];
-    requestReservations?: readonly CompletionRequestReservation[];
+    requestReservations: readonly CompletionRequestReservation[];
   }>;
   completionReport?: CompletionReport;
   completionTerminalReceipt?: CompletionTerminalReceipt;
@@ -49,16 +49,10 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     evidenceIds.add(evidence.id);
   }
   const foreignAdmissionIndex = item.completionFacts.admissions.findIndex(
-    ({ requestSnapshot }) => requestSnapshot.workItemHash !== item.hash,
+    ({ workItemHash }) => workItemHash !== item.hash,
   );
   if (foreignAdmissionIndex !== -1) {
-    addIssue(ctx, [
-      "completionFacts",
-      "admissions",
-      foreignAdmissionIndex,
-      "requestSnapshot",
-      "workItemHash",
-    ]);
+    addIssue(ctx, ["completionFacts", "admissions", foreignAdmissionIndex, "workItemHash"]);
   }
   const receipt = item.completionTerminalReceipt;
   const completedAt = item.timestamps.completed;
@@ -93,16 +87,9 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     addIssue(ctx, ["completionTerminalReceipt", "admissionId"]);
     return;
   }
-  validateAdmissionFactSnapshot(item, admission, admissionIndex, ctx);
+  validateProposedFactIds(item, admission, admissionIndex, ctx);
   if (admission.decision !== "admit" && admission.decision !== "owner_override") {
     addIssue(ctx, ["completionFacts", "admissions", admissionIndex, "decision"]);
-  }
-  if (admission.decision === "admit" && admission.unresolvedCriterionIds.length > 0) {
-    addIssue(
-      ctx,
-      ["completionFacts", "admissions", admissionIndex, "unresolvedCriterionIds"],
-      "terminal admit cannot carry unresolved required criteria",
-    );
   }
   const criteriaById = new Map(
     item.completionFacts.criteria.map((criterion) => [criterion.id, criterion]),
@@ -196,17 +183,6 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
       );
     }
   }
-  if (
-    admission.decision === "owner_override" &&
-    (!admission.ownerOverrideReceiptRef ||
-      admission.ownerOverrideReceiptRef !== admission.requestSnapshot.ownerOverrideReceiptRef)
-  ) {
-    addIssue(
-      ctx,
-      ["completionFacts", "admissions", admissionIndex, "ownerOverrideReceiptRef"],
-      "terminal owner_override requires its request-bound receipt",
-    );
-  }
   if (admission.requestId !== receipt.requestId) {
     addIssue(ctx, ["completionTerminalReceipt", "requestId"]);
   }
@@ -238,24 +214,12 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     effectiveCriterionIds,
     ctx,
   );
-  const reservationBridges = (item.completionFacts.requestReservations ?? []).filter(
-    (reservation) =>
-      reservation.requestId === admission.requestId &&
-      reservation.recordedHead > admission.recordedHead &&
-      reservation.recordedHead < receipt.recordedHead,
+  const hasReservationBridge = hasContiguousReservationBridge(
+    item.completionFacts.requestReservations,
+    admission.requestId,
+    admission.recordedHead,
+    receipt.recordedHead,
   );
-  const expectedBridgeCount = receipt.recordedHead - admission.recordedHead - 1;
-  const reservationBridgeHeads = new Set(
-    reservationBridges.map(({ recordedHead }) => recordedHead),
-  );
-  const hasReservationBridge =
-    expectedBridgeCount > 0 &&
-    reservationBridges.length === expectedBridgeCount &&
-    reservationBridgeHeads.size === expectedBridgeCount &&
-    Array.from(
-      { length: expectedBridgeCount },
-      (_, index) => admission.recordedHead + index + 1,
-    ).every((head) => reservationBridgeHeads.has(head));
   if (
     admission.contractRevision !== receipt.contractRevision ||
     admission.basisRef !== receipt.basisRef ||
@@ -265,47 +229,59 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   }
 }
 
-function validateAdmissionFactSnapshot(
+export function hasContiguousReservationBridge(
+  reservations: readonly Pick<CompletionRequestReservation, "requestId" | "recordedHead">[],
+  requestId: string,
+  fromHead: number,
+  toHead: number,
+): boolean {
+  const expected = toHead - fromHead - 1;
+  if (expected <= 0) return false;
+  const bridging = reservations.filter(
+    (reservation) =>
+      reservation.requestId === requestId &&
+      reservation.recordedHead > fromHead &&
+      reservation.recordedHead < toHead,
+  );
+  if (bridging.length !== expected) return false;
+  const heads = new Set(bridging.map(({ recordedHead }) => recordedHead));
+  if (heads.size !== expected) return false;
+  for (let head = fromHead + 1; head < toHead; head += 1) {
+    if (!heads.has(head)) return false;
+  }
+  return true;
+}
+
+function validateProposedFactIds(
   item: TerminalLinkageItem,
   admission: CompletionAdmission,
   admissionIndex: number,
   ctx: RefinementCtx,
 ): void {
-  type IdentifiedFact = Readonly<{ id: string }>;
-  const collections: readonly (readonly [
-    string,
-    readonly IdentifiedFact[],
-    readonly IdentifiedFact[],
-  ])[] = [
-    ["claims", item.completionFacts.claims, admission.requestSnapshot.claims],
-    ["observations", item.completionFacts.observations, admission.requestSnapshot.observations],
-    ["results", item.completionFacts.results, admission.requestSnapshot.results],
-    ["invalidations", item.completionFacts.invalidations, admission.requestSnapshot.invalidations],
+  const collections = [
+    ["claims", item.completionFacts.claims, admission.proposedFactIds.claims],
+    ["observations", item.completionFacts.observations, admission.proposedFactIds.observations],
+    ["results", item.completionFacts.results, admission.proposedFactIds.results],
+    ["invalidations", item.completionFacts.invalidations, admission.proposedFactIds.invalidations],
     [
       "verificationErrors",
       item.completionFacts.verificationErrors,
-      admission.requestSnapshot.verificationErrors,
+      admission.proposedFactIds.verificationErrors,
     ],
-    ["effects", item.completionFacts.effects, admission.requestSnapshot.effects],
-  ];
-  for (const [collection, durableFacts, requestedFacts] of collections) {
-    const durableById = new Map(
-      durableFacts.map((fact, index) => [fact.id, { fact, index }] as const),
-    );
-    for (const [requestIndex, requestedFact] of requestedFacts.entries()) {
-      const durable = durableById.get(requestedFact.id);
-      if (!durable) {
+    ["effects", item.completionFacts.effects, admission.proposedFactIds.effects],
+  ] as const;
+  for (const [collection, durableFacts, proposedIds] of collections) {
+    const durableIds = new Set(durableFacts.map(({ id }) => id));
+    for (const [index, id] of proposedIds.entries()) {
+      if (!durableIds.has(id)) {
         addIssue(ctx, [
           "completionFacts",
           "admissions",
           admissionIndex,
-          "requestSnapshot",
+          "proposedFactIds",
           collection,
-          requestIndex,
-          "id",
+          index,
         ]);
-      } else if (JSON.stringify(durable.fact) !== JSON.stringify(requestedFact)) {
-        addIssue(ctx, ["completionFacts", collection, durable.index]);
       }
     }
   }
@@ -325,8 +301,9 @@ function validateCompletionReportEvidence(
       { index, observation },
     ]),
   );
+  const effectiveResultIdSet = new Set(admission.effectiveResultIds);
   const effectiveResults = item.completionFacts.results.filter((result) =>
-    admission.effectiveResultIds.includes(result.id),
+    effectiveResultIdSet.has(result.id),
   );
   const criteriaById = new Map(
     item.completionFacts.criteria.map((criterion) => [criterion.id, criterion]),

@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { AppConnector, Execution } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
+import { PolicyEngine } from "@openomni/policy";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
+import { createCompletionAdmissionService } from "../../src/work-item/completion-admission.js";
 import { command, workerSpawnPayload } from "./helpers";
 
 const TEST_CONNECTOR_ID = "app.test-telemetry";
@@ -85,7 +87,11 @@ function connectorEndpointWorkerCommand() {
 
 function createConnectorEndpointHandlers(dispatch: ConnectorEndpointDriverOwner["dispatch"]) {
   return createWorkerDispatchHandlers({
-    completionWriter,
+    completionService: createCompletionAdmissionService({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      now: Date.now,
+    }),
     connectorEndpointDriver: { dispatch },
   });
 }

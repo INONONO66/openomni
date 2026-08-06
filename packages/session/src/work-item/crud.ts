@@ -156,8 +156,7 @@ export async function updateWorkItem(
     }
   }
   if (fields.relations) {
-    const r = fields.relations as Record<string, unknown>;
-    if (r.parentHash !== undefined) {
+    if (fields.relations.parentHash !== undefined) {
       throw new Error("Cannot change parentHash after creation — create a new work item instead");
     }
     if (fields.relations.dependsOn) {
@@ -172,7 +171,6 @@ export async function updateWorkItem(
     hash,
     timestamps: {
       ...existing.timestamps,
-      ...(fields.timestamps ?? {}),
       updated: now,
     },
     relations: {

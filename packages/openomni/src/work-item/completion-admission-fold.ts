@@ -7,8 +7,6 @@ export type CompletionPolicy = Readonly<{
   reasonCodes: readonly string[];
 }>;
 
-export type CompletionCriterion = WorkItem.Criterion;
-export type CompletionDurableFacts = WorkItem.CompletionFacts;
 export type CompletionProposedFacts = Omit<
   WorkItem.CompletionFacts,
   "version" | "revision" | "criteria" | "requestReservations" | "admissions"
@@ -25,21 +23,21 @@ type OwnerOverride = Readonly<{
 export type CompletionEvaluationInput = Readonly<{
   admissionId: string;
   requestId: string;
-  requestSnapshot: WorkItem.CompletionRequest;
+  requestRoot: string;
+  sourceIdentity?: WorkItem.CompletionSourceIdentity;
   origin: WorkItem.CompletionOrigin;
   workItemHash: string;
   contractRevision: string;
   basisRef: string;
   expectedHead: number;
   createdAt: number;
-  durableFacts: CompletionDurableFacts;
+  durableFacts: WorkItem.CompletionFacts;
   proposedFacts: CompletionProposedFacts;
   blockers: readonly WorkItem.Blocker[];
   currentAttempt: number;
   policy: CompletionPolicy;
   stakes?: Readonly<{
     ref: string;
-    valueMilli: number;
     comparison: "below" | "at" | "above";
   }>;
   ownerOverride?: OwnerOverride;
@@ -66,7 +64,7 @@ class CompletionFoldError extends Error {
 }
 
 type FoldFacts = Readonly<{
-  criteria: readonly CompletionCriterion[];
+  criteria: readonly WorkItem.Criterion[];
   claims: readonly WorkItem.Claim[];
   observations: readonly WorkItem.Observation[];
   results: readonly WorkItem.CriterionResult[];
@@ -88,7 +86,12 @@ type FoldState = {
 export function evaluateCompletion(input: CompletionEvaluationInput): WorkItem.CompletionAdmission {
   const facts = mergeFacts(input);
   assertOwnerOverrideBinding(input);
-  assertFactGraph(input.durableFacts.requestReservations, input.durableFacts.admissions, facts);
+  assertFactGraph(
+    input.admissionId,
+    input.durableFacts.requestReservations,
+    input.durableFacts.admissions,
+    facts,
+  );
 
   const state = foldRequiredCriteria(input, facts);
   foldResolvedPolicy(input.policy, state);
@@ -117,7 +120,17 @@ export function evaluateCompletion(input: CompletionEvaluationInput): WorkItem.C
     version: 1,
     id: input.admissionId,
     requestId: input.requestId,
-    requestSnapshot: input.requestSnapshot,
+    workItemHash: input.workItemHash,
+    sourceIdentity: input.sourceIdentity,
+    requestRoot: input.requestRoot,
+    proposedFactIds: {
+      claims: input.proposedFacts.claims.map(({ id }) => id),
+      observations: input.proposedFacts.observations.map(({ id }) => id),
+      results: input.proposedFacts.results.map(({ id }) => id),
+      invalidations: input.proposedFacts.invalidations.map(({ id }) => id),
+      verificationErrors: input.proposedFacts.verificationErrors.map(({ id }) => id),
+      effects: input.proposedFacts.effects.map(({ id }) => id),
+    },
     origin: input.origin,
     contractRevision: input.contractRevision,
     basisRef: input.basisRef,
@@ -149,6 +162,7 @@ function mergeFacts(input: CompletionEvaluationInput): FoldFacts {
 }
 
 function assertFactGraph(
+  admissionId: string,
   reservations: readonly WorkItem.CompletionRequestReservation[],
   admissions: readonly WorkItem.CompletionAdmission[],
   facts: FoldFacts,
@@ -168,6 +182,9 @@ function assertFactGraph(
   for (const fact of identified) {
     if (ids.has(fact.id)) throw new CompletionFoldError("duplicate_fact_id", fact.id, fact.id);
     ids.add(fact.id);
+  }
+  if (ids.has(admissionId)) {
+    throw new CompletionFoldError("duplicate_fact_id", admissionId, admissionId);
   }
 
   const criterionIds = new Set(facts.criteria.map((criterion) => criterion.id));
@@ -292,7 +309,7 @@ function foldRequiredCriteria(input: CompletionEvaluationInput, facts: FoldFacts
 }
 
 function foldSelectedResult(
-  criterion: CompletionCriterion,
+  criterion: WorkItem.Criterion,
   result: WorkItem.CriterionResult,
   input: CompletionEvaluationInput,
   state: FoldState,

@@ -6,9 +6,57 @@ import type {
   CompletionResultAuthorityCandidate,
   CompletionResultAuthorityPort,
   CompletionStakesResolver,
-} from "./completion-admission-authority.js";
+} from "./completion-admission.js";
 
 export const CompletionAdmissionDriverNow = 4_900;
+
+export function completionAdmissionDriverObservation(
+  item: WorkItem.Info,
+  id: string,
+  overrides: Partial<
+    Pick<WorkItem.Observation, "producer" | "artifactRefs" | "provenanceRef">
+  > = {},
+): WorkItem.Observation {
+  // Field order mirrors the protocol schema: scenario ports compare observations
+  // against zod-parsed request facts via canonical JSON.stringify.
+  return {
+    id,
+    producer: overrides.producer ?? "completion-admission-driver",
+    subjectRef: item.hash,
+    basisRef: item.completionContract.basisRef,
+    artifactRefs: overrides.artifactRefs ?? [`evidence:${item.hash}:report`],
+    ...(overrides.provenanceRef === undefined ? {} : { provenanceRef: overrides.provenanceRef }),
+    ancestryRefs: [],
+    observedAt: CompletionAdmissionDriverNow,
+  };
+}
+
+export function completionAdmissionDriverCriterionResult(
+  item: WorkItem.Info,
+  criterion: WorkItem.Criterion,
+  id: string,
+  fields: Readonly<{
+    value: WorkItem.CriterionResult["value"];
+    observationIds?: readonly string[];
+    checkedPredicate?: string;
+    verifierRef?: string;
+    assumptions?: readonly string[];
+    residualRisks?: readonly string[];
+  }>,
+): WorkItem.CriterionResult {
+  return WorkItem.CriterionResult.parse({
+    id,
+    criterionId: criterion.id,
+    value: fields.value,
+    ...(fields.checkedPredicate === undefined ? {} : { checkedPredicate: fields.checkedPredicate }),
+    observationIds: fields.observationIds ?? [],
+    ...(fields.verifierRef === undefined ? {} : { verifierRef: fields.verifierRef }),
+    assumptions: fields.assumptions ?? [],
+    basisRef: item.completionContract.basisRef,
+    residualRisks: fields.residualRisks ?? [],
+    createdAt: CompletionAdmissionDriverNow,
+  });
+}
 
 export function completionAdmissionDriverWorkItem(
   hash: string,
@@ -67,15 +115,10 @@ export function completionAdmissionDriverRequest(
   const observations = [...(facts.observations ?? [])];
   const results = (facts.results ?? []).map((result) => {
     if (result.observationIds.length > 0) return result;
-    const observation: WorkItem.Observation = {
-      id: `observation:${id}:${result.id}`,
-      producer: "completion-admission-driver",
-      subjectRef: item.hash,
-      basisRef: item.completionContract.basisRef,
-      artifactRefs: [`evidence:${item.hash}:report`],
-      ancestryRefs: [],
-      observedAt: CompletionAdmissionDriverNow,
-    };
+    const observation = completionAdmissionDriverObservation(
+      item,
+      `observation:${id}:${result.id}`,
+    );
     observations.push(observation);
     return { ...result, observationIds: [observation.id] };
   });
@@ -123,24 +166,6 @@ export function completionAdmissionDriverProposedFacts(request: WorkItem.Complet
   };
 }
 
-export function completionAdmissionDriverAssertedResult(
-  item: WorkItem.Info,
-  criterion: WorkItem.Criterion,
-  id: string,
-  residualRisks: readonly string[],
-): WorkItem.CriterionResult {
-  return WorkItem.CriterionResult.parse({
-    id,
-    criterionId: criterion.id,
-    value: "asserted",
-    observationIds: [],
-    assumptions: ["claimant supplied this assertion"],
-    basisRef: item.completionContract.basisRef,
-    residualRisks,
-    createdAt: CompletionAdmissionDriverNow,
-  });
-}
-
 export function completionAdmissionDriverAssertedPolicy(criterionId: string) {
   const engine = PolicyEngine.create();
   engine.register({
@@ -158,27 +183,34 @@ export function completionAdmissionDriverAssertedPolicy(criterionId: string) {
   return engine;
 }
 
-export function completionAdmissionDriverHighStakes() {
+export function completionAdmissionDriverStakes(level: "high" | "low") {
   const window = Stakes.createWindow({
     ownerKey: "owner:completion-admission-driver",
-    windowId: "window:completion-admission-driver",
+    windowId:
+      level === "high"
+        ? "window:completion-admission-driver"
+        : "window:completion-admission-driver-low",
     openedAt: 1,
     closesAt: 10_000,
   });
+  const magnitude = level === "high" ? 10 : 0;
+  const micros = level === "high" ? 100_000_000 : 0;
   return Stakes.compute(
     {
-      actionId: "action:completion-admission-driver-high",
+      actionId: `action:completion-admission-driver-${level}`,
       ownerKey: window.ownerKey,
       windowRef: window.windowRef,
       ledgerObservedAt: CompletionAdmissionDriverNow,
       facts: {
-        irreversibleChangeCount: 10,
-        externalSurfaceCount: 10,
-        spendMicros: 100_000_000,
-        budgetReservedMicros: 100_000_000,
-        outreachRecipientCount: 10,
+        irreversibleChangeCount: magnitude,
+        externalSurfaceCount: magnitude,
+        spendMicros: micros,
+        budgetReservedMicros: micros,
+        outreachRecipientCount: magnitude,
         contentFingerprints: [
-          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          level === "high"
+            ? "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            : "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         ],
       },
     },
@@ -186,35 +218,9 @@ export function completionAdmissionDriverHighStakes() {
   );
 }
 
-function completionAdmissionDriverLowStakes() {
-  const window = Stakes.createWindow({
-    ownerKey: "owner:completion-admission-driver",
-    windowId: "window:completion-admission-driver-low",
-    openedAt: 1,
-    closesAt: 10_000,
-  });
-  return Stakes.compute(
-    {
-      actionId: "action:completion-admission-driver-low",
-      ownerKey: window.ownerKey,
-      windowRef: window.windowRef,
-      ledgerObservedAt: CompletionAdmissionDriverNow,
-      facts: {
-        irreversibleChangeCount: 0,
-        externalSurfaceCount: 0,
-        spendMicros: 0,
-        budgetReservedMicros: 0,
-        outreachRecipientCount: 0,
-        contentFingerprints: [
-          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        ],
-      },
-    },
-    { window, actions: [], knownFingerprints: [] },
-  );
-}
-
-export function completionAdmissionDriverLowStakesResolver(): CompletionStakesResolver {
+export function completionAdmissionDriverStakesResolver(
+  stakes = completionAdmissionDriverStakes("low"),
+): CompletionStakesResolver {
   return {
     resolve(subject) {
       return {
@@ -226,7 +232,7 @@ export function completionAdmissionDriverLowStakesResolver(): CompletionStakesRe
           contractRevision: subject.contractRevision,
           basisRef: subject.basisRef,
           expectedHead: subject.expectedHead,
-          stakes: completionAdmissionDriverLowStakes(),
+          stakes,
         },
       };
     },

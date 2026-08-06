@@ -68,7 +68,7 @@ describe("ExecutionCoordinator", () => {
 
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
-      workerCount: 1,
+      maxWorkers: 1,
       workerManagerFactory: () => mockWorkerManager,
     });
 
@@ -96,7 +96,7 @@ describe("ExecutionCoordinator", () => {
     mockWorkerManager.shutdown = managerShutdown;
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
-      workerCount: 1,
+      maxWorkers: 1,
       workerManagerFactory: () => mockWorkerManager,
     });
 
@@ -143,7 +143,7 @@ describe("ExecutionCoordinator", () => {
   test("rejects a dispatch whose sessionTreeId diverges from request.sessionId", async () => {
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",
-      workerCount: 1,
+      maxWorkers: 1,
       workerManagerFactory: () => mockWorkerManager,
     });
 

@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkItem } from "@openomni/protocol";
-import {
-  completionReportReference,
-  completionReportsMatch,
-} from "../../src/work-item/completion-request-identity.js";
+import { WorkItem } from "@openomni/protocol";
+import { completionReportsMatch } from "../../src/work-item/completion-admission.js";
+
+const completionReportReference = WorkItem.completionReportReference;
 
 describe("completion report identity", () => {
   test("treats evidence references as an order-independent set", () => {

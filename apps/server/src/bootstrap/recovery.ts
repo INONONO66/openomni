@@ -50,19 +50,23 @@ export type BootstrapRecoveryInput = Readonly<{
   completionRuntime: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">;
 }>;
 
-export async function runBootstrapRecovery(
-  input: BootstrapRecoveryInput,
-  recovery: typeof runRecovery = runRecovery,
-): Promise<void> {
-  return recovery(input.handler, input.coordinator, input.traceId, input.completionRuntime);
+type InboundSurface = Readonly<{ start(): Promise<void> | void }>;
+
+export async function startInboundSurfacesAfterRecovery<T>(
+  input: Readonly<{
+    recover(): Promise<void>;
+    createServer(): T;
+    channels: readonly InboundSurface[];
+  }>,
+): Promise<T> {
+  await input.recover();
+  const server = input.createServer();
+  await Promise.all(input.channels.map((channel) => channel.start()));
+  return server;
 }
 
-export async function runRecovery(
-  handler: Adapter.MessageHandler | undefined,
-  coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> },
-  traceId?: string,
-  completionRecovery?: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">,
-): Promise<void> {
+export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> {
+  const { handler, coordinator, traceId, completionRuntime: completionRecovery } = input;
   const startTime = Date.now();
   const id = traceId ?? crypto.randomUUID();
 

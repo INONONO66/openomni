@@ -6,6 +6,16 @@ import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
+import { PolicyEngine } from "@openomni/policy";
+import { createCompletionAdmissionService } from "../../../../packages/openomni/src/work-item/completion-admission";
+
+function testCompletionService(now: () => number = Date.now) {
+  return createCompletionAdmissionService({
+    completionWriter,
+    policyEngine: PolicyEngine.create(),
+    now,
+  });
+}
 
 const tempRoots: string[] = [];
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -165,7 +175,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
-      completionWriter,
+      completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
       readBackRecorder: (_workItemHash, readBack) =>
@@ -246,7 +256,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const recordedReadBacks: unknown[] = [];
     const handlers = createWorkerDispatchHandlers({
-      completionWriter,
+      completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
       readBackRecorder: (_workItemHash, readBack) => {
@@ -327,7 +337,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     } satisfies AppConnector.Definition;
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
-      completionWriter,
+      completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
     });

@@ -8,12 +8,12 @@ import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ses
 import * as OpenOmni from "../../src/index.js";
 import {
   assertCompletionReservationLease,
-  CompletionAdmissionServiceError,
+  CompletionAdmissionError,
+  completionRequestRoot,
   createCompletionAdmissionService,
+  createWorkItemCompletionGateway,
   reserveCompletionRequest,
-} from "../../src/work-item/completion-admission-boundary.js";
-import { completionRequestRoot } from "../../src/work-item/completion-request-identity.js";
-import { createWorkItemCompletionGateway } from "../../src/work-item/completion-gateway.js";
+} from "../../src/work-item/completion-admission.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const NOW = 1_000;
@@ -63,14 +63,8 @@ function authority(decisions: readonly WorkItem.CompletionDecision[] = ["admit"]
           requestHead: request.expectedHead,
           requestId: request.id,
         });
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(item, request, {
           id: `admission:${request.id}:${item.revision + 1}:${decisionIndex}`,
-          requestId: request.id,
-          requestSnapshot: request,
-          origin: request.origin,
-          contractRevision: item.completionContract.revision,
-          basisRef: item.completionContract.basisRef,
           effectiveResultIds:
             decision === "admit"
               ? [...item.completionFacts.results, ...request.results].map(({ id }) => id)
@@ -79,11 +73,6 @@ function authority(decisions: readonly WorkItem.CompletionDecision[] = ["admit"]
             decision === "admit" ? [] : item.completionFacts.criteria.map(({ id }) => id),
           decision,
           reasonCodes: decision === "admit" ? [] : [`completion_${decision}`],
-          residualRisks: [],
-          policyRef: "policy:test",
-          expectedHead: item.revision,
-          recordedHead: item.revision + 1,
-          createdAt: NOW,
         });
       },
     },
@@ -95,23 +84,12 @@ function blockingAuthority() {
     resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
       const item = WorkItem.Info.parse(itemInput);
       const request = WorkItem.CompletionRequest.parse(requestInput);
-      return WorkItem.CompletionAdmission.parse({
-        version: 1,
+      return admissionFrom(item, request, {
         id: `admission:${request.id}:${item.revision + 1}:block`,
-        requestId: request.id,
-        requestSnapshot: request,
-        origin: request.origin,
-        contractRevision: item.completionContract.revision,
-        basisRef: item.completionContract.basisRef,
         effectiveResultIds: [],
         unresolvedCriterionIds: item.completionFacts.criteria.map(({ id }) => id),
         decision: "block",
         reasonCodes: ["completion_block"],
-        residualRisks: [],
-        policyRef: "policy:test",
-        expectedHead: item.revision,
-        recordedHead: item.revision + 1,
-        createdAt: NOW,
       });
     },
   };
@@ -131,7 +109,13 @@ function guardedService(
   const service = Reflect.apply(createCompletionAdmissionService, undefined, [
     {
       completionWriter: writer,
-      authorityResolver,
+      decision: (item: WorkItem.Info, request: WorkItem.CompletionRequest) =>
+        Promise.resolve(
+          Reflect.apply(Reflect.get(authorityResolver as object, "resolve"), authorityResolver, [
+            item,
+            request,
+          ]),
+        ),
       now,
       reservation,
     },
@@ -314,6 +298,49 @@ async function errorCode(operation: Promise<unknown>): Promise<unknown> {
     return Reflect.get(error, "code");
   }
   return undefined;
+}
+
+function admissionIdentity(request: WorkItem.CompletionRequest) {
+  return {
+    workItemHash: request.workItemHash,
+    sourceIdentity: request.sourceIdentity,
+    requestRoot: completionRequestRoot(request),
+    proposedFactIds: {
+      claims: request.claims.map(({ id }) => id),
+      observations: request.observations.map(({ id }) => id),
+      results: request.results.map(({ id }) => id),
+      invalidations: request.invalidations.map(({ id }) => id),
+      verificationErrors: request.verificationErrors.map(({ id }) => id),
+      effects: request.effects.map(({ id }) => id),
+    },
+  };
+}
+
+/** One canonical admit-shaped admission for (item, request); vary via overrides. */
+function admissionFrom(
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+  overrides: Readonly<Record<string, unknown>> = {},
+): WorkItem.CompletionAdmission {
+  return WorkItem.CompletionAdmission.parse({
+    version: 1,
+    id: `admission:${request.id}:${item.revision + 1}`,
+    requestId: request.id,
+    ...admissionIdentity(request),
+    origin: request.origin,
+    contractRevision: item.completionContract.revision,
+    basisRef: item.completionContract.basisRef,
+    effectiveResultIds: request.results.map(({ id }) => id),
+    unresolvedCriterionIds: [],
+    decision: "admit",
+    reasonCodes: [],
+    residualRisks: [],
+    policyRef: "policy:test",
+    expectedHead: item.revision,
+    recordedHead: item.revision + 1,
+    createdAt: NOW,
+    ...overrides,
+  });
 }
 
 afterEach(() => {
@@ -636,14 +663,20 @@ describe("WorkItem completion admission service", () => {
       envelopeDigest: "digest:one",
     });
 
-    for (const conflict of [
-      { requestRoot: "request-root:two", envelopeDigest: "digest:one" },
-      { requestRoot: "request-root:one", envelopeDigest: "digest:two" },
-    ]) {
-      expect(() => reserveCompletionRequest({ ...input, ...conflict })).toThrow(
-        "completion request conflicts with durable facts",
-      );
-    }
+    expect(() =>
+      reserveCompletionRequest({
+        ...input,
+        requestRoot: "request-root:two",
+        envelopeDigest: "digest:one",
+      }),
+    ).toThrow("completion request conflicts with durable facts");
+    expect(() =>
+      reserveCompletionRequest({
+        ...input,
+        requestRoot: "request-root:one",
+        envelopeDigest: "digest:two",
+      }),
+    ).toThrow("completion envelope changed for request");
   });
 
   test("binds pre-admission reservations to the authenticated request envelope", async () => {
@@ -696,26 +729,14 @@ describe("WorkItem completion admission service", () => {
         resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
           const item = WorkItem.Info.parse(itemInput);
           const candidate = WorkItem.CompletionRequest.parse(requestInput);
-          return WorkItem.CompletionAdmission.parse({
-            version: 1,
+          return admissionFrom(item, candidate, {
             id: `admission:${candidate.id}:${item.revision + 1}:owner`,
-            requestId: candidate.id,
-            requestSnapshot: candidate,
-            origin: candidate.origin,
-            contractRevision: item.completionContract.revision,
-            basisRef: item.completionContract.basisRef,
             effectiveResultIds: [...item.completionFacts.results, ...candidate.results].map(
               ({ id }) => id,
             ),
-            unresolvedCriterionIds: [],
             decision: "owner_override",
-            reasonCodes: [],
-            residualRisks: [],
             ownerOverrideReceiptRef,
             policyRef: "policy:owner-reservation",
-            expectedHead: item.revision,
-            recordedHead: item.revision + 1,
-            createdAt: NOW,
           });
         },
       },
@@ -729,7 +750,7 @@ describe("WorkItem completion admission service", () => {
       completed: true,
       admission: { decision: "owner_override", ownerOverrideReceiptRef },
     });
-    expect(result.admission.requestSnapshot.ownerOverrideReceiptRef).toBe(ownerOverrideReceiptRef);
+    expect(result.admission.ownerOverrideReceiptRef).toBe(ownerOverrideReceiptRef);
   });
 
   test("closes an Owner override without synthesizing a missing result", async () => {
@@ -744,21 +765,14 @@ describe("WorkItem completion admission service", () => {
     const gateway = createWorkItemCompletionGateway({
       completionWriter,
       policyEngine: PolicyEngine.create(),
-      ownerOverrideAuthorityPort: {
-        validate(candidate: unknown) {
-          expect(candidate).toMatchObject({
-            receiptRef: ownerOverrideReceiptRef,
-            workItemHash: item.hash,
-            requestId: ownerRequest.id,
-            requestRoot: completionRequestRoot(ownerRequest),
-          });
-          return {
-            ok: true,
-            receiptRef: ownerOverrideReceiptRef,
-            requestRoot: completionRequestRoot(ownerRequest),
-            expectedHead: ownerRequest.expectedHead,
-          } as const;
-        },
+      ownerOverrideValidator: (candidate: unknown) => {
+        expect(candidate).toMatchObject({
+          receiptRef: ownerOverrideReceiptRef,
+          workItemHash: item.hash,
+          requestId: ownerRequest.id,
+          requestRoot: completionRequestRoot(ownerRequest),
+        });
+        return true;
       },
       now: () => NOW,
     });
@@ -810,31 +824,19 @@ describe("WorkItem completion admission service", () => {
           const current = WorkItem.Info.parse(itemInput);
           const candidate = WorkItem.CompletionRequest.parse(requestInput);
           if (candidate.ownerOverrideReceiptRef !== ownerOverrideReceiptRef) {
-            throw new CompletionAdmissionServiceError(
+            throw new CompletionAdmissionError(
               "request_conflict",
               "Owner receipt changed after external head drift",
             );
           }
-          return WorkItem.CompletionAdmission.parse({
-            version: 1,
+          return admissionFrom(current, candidate, {
             id: `admission:${candidate.id}:${current.revision + 1}:owner`,
-            requestId: candidate.id,
-            requestSnapshot: candidate,
-            origin: candidate.origin,
-            contractRevision: current.completionContract.revision,
-            basisRef: current.completionContract.basisRef,
             effectiveResultIds: [...current.completionFacts.results, ...candidate.results].map(
               ({ id }) => id,
             ),
-            unresolvedCriterionIds: [],
             decision: "owner_override",
-            reasonCodes: [],
-            residualRisks: [],
             ownerOverrideReceiptRef,
             policyRef: "policy:owner-stale-drift",
-            expectedHead: current.revision,
-            recordedHead: current.revision + 1,
-            createdAt: NOW,
           });
         },
       },
@@ -1005,24 +1007,11 @@ describe("WorkItem completion admission service", () => {
       expectedHead: reservedItem.revision,
     });
     const report = WorkItem.canonicalCompletionReport(first.report);
-    const admission = WorkItem.CompletionAdmission.parse({
-      version: 1,
+    const admission = admissionFrom(reservedItem, requestSnapshot, {
       id: `admission:${first.request.id}:takeover`,
-      requestId: first.request.id,
-      requestSnapshot,
-      origin: first.request.origin,
-      contractRevision: reservedItem.completionContract.revision,
-      basisRef: reservedItem.completionContract.basisRef,
-      effectiveResultIds: requestSnapshot.results.map(({ id }) => id),
-      unresolvedCriterionIds: [],
-      decision: "admit",
-      reasonCodes: [],
-      residualRisks: [],
       policyRef: "policy:admitted-takeover",
       completionReportSnapshot: report,
       completionReportRef: WorkItem.completionReportReference(report),
-      expectedHead: reservedItem.revision,
-      recordedHead: reservedItem.revision + 1,
       createdAt: 101,
     });
     const admittedItem = WorkItem.Info.parse({
@@ -1410,23 +1399,10 @@ describe("WorkItem completion admission service", () => {
       resolve(currentInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
         const current = WorkItem.Info.parse(currentInput);
         const request = WorkItem.CompletionRequest.parse(requestInput);
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(current, request, {
           id: `admission:${request.id}:${current.revision + 1}:verified-only`,
-          requestId: request.id,
-          requestSnapshot: request,
-          origin: request.origin,
-          contractRevision: current.completionContract.revision,
-          basisRef: current.completionContract.basisRef,
           effectiveResultIds: [verifiedResult.id],
-          unresolvedCriterionIds: [],
-          decision: "admit",
-          reasonCodes: [],
-          residualRisks: [],
           policyRef: "policy:verified-only",
-          expectedHead: current.revision,
-          recordedHead: current.revision + 1,
-          createdAt: NOW,
         });
       },
     };
@@ -1499,23 +1475,9 @@ describe("WorkItem completion admission service", () => {
       resolve(itemInput: unknown, requestInput: unknown) {
         const item = WorkItem.Info.parse(itemInput);
         const request = WorkItem.CompletionRequest.parse(requestInput);
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(item, request, {
           id: collisionId,
-          requestId: request.id,
-          requestSnapshot: request,
-          origin: request.origin,
-          contractRevision: item.completionContract.revision,
-          basisRef: item.completionContract.basisRef,
-          effectiveResultIds: request.results.map(({ id }) => id),
-          unresolvedCriterionIds: [],
-          decision: "admit",
-          reasonCodes: [],
-          residualRisks: [],
           policyRef: "policy:collision",
-          expectedHead: item.revision,
-          recordedHead: item.revision + 1,
-          createdAt: NOW,
         });
       },
     });
@@ -1540,7 +1502,7 @@ describe("WorkItem completion admission service", () => {
           version: 1,
           id: `admission:${candidate.id}:${current.revision + 1}:hostile-unresolved`,
           requestId: candidate.id,
-          requestSnapshot: candidate,
+          ...admissionIdentity(candidate),
           origin: candidate.origin,
           contractRevision: current.completionContract.revision,
           basisRef: current.completionContract.basisRef,
@@ -1560,10 +1522,11 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     const events = completionEvents(item.hash);
 
-    const code = await errorCode(service.requestCompletion(request, report));
+    await expect(service.requestCompletion(request, report)).rejects.toMatchObject({
+      name: "ZodError",
+    });
     events.stop();
 
-    expect(code).toBe("admission_required");
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
     expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
@@ -1577,23 +1540,13 @@ describe("WorkItem completion admission service", () => {
       resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
         const current = WorkItem.Info.parse(itemInput);
         const candidate = WorkItem.CompletionRequest.parse(requestInput);
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(current, candidate, {
           id: `admission:${candidate.id}:${current.revision + 1}:unknown-criterion`,
-          requestId: candidate.id,
-          requestSnapshot: candidate,
-          origin: candidate.origin,
-          contractRevision: current.completionContract.revision,
-          basisRef: current.completionContract.basisRef,
           effectiveResultIds: [],
           unresolvedCriterionIds: ["criterion:missing"],
           decision: "block",
           reasonCodes: ["criterion_missing"],
-          residualRisks: [],
           policyRef: "policy:hostile-unknown-criterion",
-          expectedHead: current.revision,
-          recordedHead: current.revision + 1,
-          createdAt: NOW,
         });
       },
     });
@@ -1610,23 +1563,13 @@ describe("WorkItem completion admission service", () => {
       resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
         const current = WorkItem.Info.parse(itemInput);
         const candidate = WorkItem.CompletionRequest.parse(requestInput);
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(current, candidate, {
           id: `admission:${candidate.id}:${current.revision + 1}:missing-result`,
-          requestId: candidate.id,
-          requestSnapshot: candidate,
-          origin: candidate.origin,
-          contractRevision: current.completionContract.revision,
-          basisRef: current.completionContract.basisRef,
           effectiveResultIds: ["result:missing"],
           unresolvedCriterionIds: [current.completionFacts.criteria[0]?.id],
           decision: "block",
           reasonCodes: ["result_missing"],
-          residualRisks: [],
           policyRef: "policy:hostile-missing-result",
-          expectedHead: current.revision,
-          recordedHead: current.revision + 1,
-          createdAt: NOW,
         });
       },
     });
@@ -1647,23 +1590,9 @@ describe("WorkItem completion admission service", () => {
       resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
         const current = WorkItem.Info.parse(itemInput);
         const candidate = WorkItem.CompletionRequest.parse(requestInput);
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(current, candidate, {
           id: `admission:${candidate.id}:${current.revision + 1}:hostile-refuted`,
-          requestId: candidate.id,
-          requestSnapshot: candidate,
-          origin: candidate.origin,
-          contractRevision: current.completionContract.revision,
-          basisRef: current.completionContract.basisRef,
-          effectiveResultIds: candidate.results.map(({ id }) => id),
-          unresolvedCriterionIds: [],
-          decision: "admit",
-          reasonCodes: [],
-          residualRisks: [],
           policyRef: "policy:hostile-refuted",
-          expectedHead: current.revision,
-          recordedHead: current.revision + 1,
-          createdAt: NOW,
         });
       },
     });
@@ -1979,26 +1908,16 @@ describe("WorkItem completion admission service", () => {
         const candidate = WorkItem.CompletionRequest.parse(requestInput);
         observedReceiptRefs.push(candidate.ownerOverrideReceiptRef);
         const hasOwnerReceipt = candidate.ownerOverrideReceiptRef === ownerOverrideReceiptRef;
-        return WorkItem.CompletionAdmission.parse({
-          version: 1,
+        return admissionFrom(current, candidate, {
           id: `admission:${candidate.id}:${current.revision + 1}:owner-recovery`,
-          requestId: candidate.id,
-          requestSnapshot: candidate,
-          origin: candidate.origin,
-          contractRevision: current.completionContract.revision,
-          basisRef: current.completionContract.basisRef,
           effectiveResultIds: hasOwnerReceipt ? candidate.results.map(({ id }) => id) : [],
           unresolvedCriterionIds: hasOwnerReceipt
             ? []
             : current.completionFacts.criteria.map(({ id }) => id),
           decision: hasOwnerReceipt ? "owner_override" : "block",
           reasonCodes: hasOwnerReceipt ? [] : ["owner_override_receipt_missing"],
-          residualRisks: [],
           policyRef: "policy:owner-recovery",
           ...(hasOwnerReceipt ? { ownerOverrideReceiptRef } : {}),
-          expectedHead: current.revision,
-          recordedHead: current.revision + 1,
-          createdAt: NOW,
         });
       },
     };
@@ -2030,7 +1949,7 @@ describe("WorkItem completion admission service", () => {
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("pending");
     expect(stored?.completionFacts.admissions).toHaveLength(2);
     expect(stored?.completionFacts.admissions[1]).toMatchObject({ decision: "block" });
-    expect(stored?.completionFacts.admissions[1]?.requestSnapshot.sourceIdentity).toEqual(
+    expect(stored?.completionFacts.admissions[1]?.sourceIdentity).toEqual(
       requestWithOverride.sourceIdentity,
     );
     expect(stored?.completionFacts.admissions[1]?.ownerOverrideReceiptRef).toBeUndefined();
@@ -2270,9 +2189,8 @@ describe("WorkItem completion admission service", () => {
     expect(changedMembershipCode).toBe("request_conflict");
     expect(WorkItemStore.get(first.item.hash)).toEqual(beforeReplay);
     expect(
-      WorkItemStore.get(
-        first.item.hash,
-      )?.completionFacts.admissions[0]?.requestSnapshot.observations.map(({ id }) => id),
+      WorkItemStore.get(first.item.hash)?.completionFacts.admissions[0]?.proposedFactIds
+        .observations,
     ).toEqual(observations.map(({ id }) => id).sort());
   });
 
@@ -2537,7 +2455,9 @@ describe("WorkItem completion admission service", () => {
     const resumed = await service.resumeCompletion(item.hash, admissionId, report);
 
     expect(terminalContended).toBe(true);
-    expect(WorkItem.deriveStatus(WorkItem.Info.parse(resumed))).toBe("completed");
+    expect(
+      WorkItem.deriveStatus(WorkItem.Info.parse(Reflect.get(resumed as object, "workItem"))),
+    ).toBe("completed");
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(2);
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt?.admissionId).toBe(
       WorkItemStore.get(item.hash)?.completionFacts.admissions.at(-1)?.id,
