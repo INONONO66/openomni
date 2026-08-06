@@ -21,7 +21,7 @@ export namespace Storage {
   };
 
   export interface Adapter {
-    transaction?<T>(operation: () => T): T;
+    transaction<T>(operation: () => T): T;
     session: {
       get(id: string): SessionInfo | undefined;
       set(id: string, info: SessionInfo): void;

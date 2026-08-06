@@ -23,8 +23,7 @@ import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { createServerDispatchOwners } from "./dispatch-owners";
 import { connectMcpServers } from "./mcp";
-import { runBootstrapRecovery } from "./recovery";
-import { createBootstrapDispatchRuntime, startInboundSurfacesAfterRecovery } from "./startup";
+import { createBootstrapDispatchContext, startInboundSurfacesAfterRecovery } from "./startup";
 import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
 import { installShutdownHandlers } from "./shutdown";
 import { registerAgent } from "../agents";
@@ -140,10 +139,11 @@ export async function main(): Promise<void> {
     completionWriter,
     dispatchOwners,
   });
-  const sharedDispatchRuntime = createBootstrapDispatchRuntime({
+  const bootstrapDispatch = createBootstrapDispatchContext({
     completionWriter,
     owners: dispatchOwners,
   });
+  const sharedDispatchRuntime = bootstrapDispatch.runtime;
   dispatchRuntimeRef.current = sharedDispatchRuntime;
   IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
   IngressEngine.setAgentResolver(residentAgentResolver);
@@ -196,11 +196,10 @@ export async function main(): Promise<void> {
   });
   const server = await startInboundSurfacesAfterRecovery({
     recover: () =>
-      runBootstrapRecovery({
+      bootstrapDispatch.recover({
         handler: routingHandler,
         coordinator,
         traceId,
-        completionRuntime: sharedDispatchRuntime,
       }),
     createServer: () =>
       Bun.serve({

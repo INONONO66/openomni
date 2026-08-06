@@ -198,6 +198,32 @@ describe("worker completion read-back deadline", () => {
     expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
   });
 
+  test("observes a recorder rejection produced after synchronous deadline exhaustion", async () => {
+    const workItem = await createStartedWorkItem();
+    let clock = 0;
+
+    const reflection = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/late-rejection")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 10,
+        now: () => clock,
+        readBackRecorder() {
+          clock = 20;
+          return Promise.reject(new Error("late read-back rejection"));
+        },
+      },
+    );
+
+    expect(reflection).toMatchObject({
+      workItemStatus: "blocked",
+      completionBlocked: true,
+      completionBlocker: "read-back envelope deadline exceeded",
+    });
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
   test("rounds fractional envelope timeouts up to one millisecond", async () => {
     const workItem = await createStartedWorkItem();
 
@@ -259,6 +285,7 @@ describe("worker completion read-back deadline", () => {
 
     expect(replay).toMatchObject({
       completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
     });
   });
 
@@ -283,6 +310,7 @@ describe("worker completion read-back deadline", () => {
 
     expect(replay).toMatchObject({
       completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
     });
   });
 

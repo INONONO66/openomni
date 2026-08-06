@@ -32,9 +32,6 @@ export function removeWorkItem(hash: string): boolean {
   const adapter = Storage.get();
   const workItem = adapter.workItem;
   if (!workItem) return false;
-  if (!adapter.transaction) {
-    throw new Error("WorkItem removal requires transactional storage");
-  }
 
   let removal: RemovalResult | undefined;
   try {

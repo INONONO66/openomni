@@ -13,7 +13,7 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     intent: "archive",
     goal: "Preserve the historical completion",
     constraints: [],
-    acceptanceCriteria: ["Passed legacy claim", "Failed legacy claim"],
+    acceptanceCriteria: ["Repeated legacy claim", "Repeated legacy claim"],
     changedFiles: [],
     blockers: [],
     evidence: [
@@ -42,9 +42,12 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     completionReport: {
       summary: "Historical completion report",
       claims: [
-        { statement: "Passed legacy claim", evidenceIds: ["evidence:legacy-driver-pass"] },
         {
-          statement: "Failed legacy claim",
+          statement: "Repeated legacy claim",
+          evidenceIds: ["evidence:legacy-driver-pass", "evidence:legacy-driver-pass"],
+        },
+        {
+          statement: "Repeated legacy claim",
           evidenceIds: ["evidence:legacy-driver-second-pass"],
         },
       ],
@@ -74,20 +77,31 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
   const observationsById = new Map(
     first.completionFacts.observations.map((observation) => [observation.id, observation]),
   );
-  const claimEvidenceProvenancePreserved = legacy.completionReport.claims.every((legacyClaim) => {
-    const claim = first.completionFacts.claims.find(
-      ({ statement }) => statement === legacyClaim.statement,
-    );
-    if (!claim) return false;
-    const artifactRefs = [
-      ...new Set(
-        claim.observationIds.flatMap(
-          (observationId) => observationsById.get(observationId)?.artifactRefs ?? [],
+  const claimEvidenceProvenancePreserved = legacy.completionReport.claims.every(
+    (legacyClaim, claimIndex) => {
+      const claim = first.completionFacts.claims[claimIndex];
+      if (!claim) return false;
+      const observations = claim.observationIds.map((observationId) =>
+        observationsById.get(observationId),
+      );
+      if (observations.some((observation) => observation === undefined)) return false;
+      const expectedEvidenceIds = [...new Set(legacyClaim.evidenceIds)].sort();
+      const artifactRefs = [
+        ...new Set(observations.flatMap((observation) => observation?.artifactRefs ?? [])),
+      ].sort();
+      const provenanceRefs = [
+        ...new Set(
+          observations.flatMap((observation) =>
+            observation?.provenanceRef === undefined ? [] : [observation.provenanceRef],
+          ),
         ),
-      ),
-    ].sort();
-    return JSON.stringify(artifactRefs) === JSON.stringify([...legacyClaim.evidenceIds].sort());
-  });
+      ].sort();
+      return (
+        JSON.stringify(artifactRefs) === JSON.stringify(expectedEvidenceIds) &&
+        JSON.stringify(provenanceRefs) === JSON.stringify(expectedEvidenceIds)
+      );
+    },
+  );
   const failedEvidencePreserved =
     first.evidence.some(({ id, passed }) => id === "evidence:legacy-driver-fail" && !passed) &&
     first.completionFacts.observations.some(({ artifactRefs }) =>

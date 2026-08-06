@@ -8,6 +8,7 @@ import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ses
 import * as OpenOmni from "../../src/index.js";
 import {
   assertCompletionReservationLease,
+  CompletionAdmissionServiceError,
   createCompletionAdmissionService,
   reserveCompletionRequest,
 } from "../../src/work-item/completion-admission-boundary.js";
@@ -808,6 +809,12 @@ describe("WorkItem completion admission service", () => {
         resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
           const current = WorkItem.Info.parse(itemInput);
           const candidate = WorkItem.CompletionRequest.parse(requestInput);
+          if (candidate.ownerOverrideReceiptRef !== ownerOverrideReceiptRef) {
+            throw new CompletionAdmissionServiceError(
+              "request_conflict",
+              "Owner receipt changed after external head drift",
+            );
+          }
           return WorkItem.CompletionAdmission.parse({
             version: 1,
             id: `admission:${candidate.id}:${current.revision + 1}:owner`,
@@ -2471,6 +2478,25 @@ describe("WorkItem completion admission service", () => {
     expect(admissionAuthority.calls).toHaveLength(8);
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("shares one retry budget with persistent reservation CAS contention", async () => {
+    configure();
+    const { item, request, report } = await fixture();
+    let reservationWrites = 0;
+    const service = guardedService(
+      authority().resolver,
+      () => {
+        reservationWrites += 1;
+        return false;
+      },
+      { ownerId: "process:contended", leaseDurationMs: 10 },
+    );
+    if (!service) return;
+
+    expect(await errorCode(service.requestCompletion(request, report))).toBe("stale_head");
+    expect(reservationWrites).toBe(8);
+    expect(WorkItemStore.get(item.hash)?.completionFacts.requestReservations).toEqual([]);
   });
 
   test("retries resume only after transient terminal stale-head contention", async () => {

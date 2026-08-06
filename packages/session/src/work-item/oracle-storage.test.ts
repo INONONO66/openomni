@@ -76,6 +76,32 @@ afterEach(() => {
 });
 
 describe("WorkItem oracle storage concurrency", () => {
+  test("rejects completed fixtures that omit a required criterion", async () => {
+    configureSqlite();
+    const item = await createItem("Incomplete completion fixture", {
+      acceptanceCriteria: ["First required criterion", "Second required criterion"],
+    });
+
+    expect(() =>
+      persistCompletedWorkItemFixture({
+        hash: item.hash,
+        report: {
+          summary: "Only the first criterion was claimed.",
+          claims: [
+            {
+              statement: "First required criterion",
+              evidenceIds: ["evidence:incomplete-fixture:first"],
+            },
+          ],
+          caveats: [],
+          followUps: [],
+        },
+        completionWriter,
+      }),
+    ).toThrow("completed fixture report omits required criterion");
+    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+  });
+
   test("records Owner outcome through one shared row CAS", async () => {
     const storage = configureSqlite();
     const item = await createItem("CAS outcome");

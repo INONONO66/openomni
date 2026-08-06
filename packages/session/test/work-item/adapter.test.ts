@@ -463,6 +463,10 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(() => adapter.workItem.list()).toThrow(
       `WorkItem hash mismatch: key=${rowKey} payload=${payload.hash}`,
     );
+    const incomingHash = "wi_incoming_payload_hash";
+    expect(() =>
+      adapter.workItem.compareAndSet(rowKey, -1, makeWorkItem({ hash: incomingHash })),
+    ).toThrow(`WorkItem hash mismatch: key=${rowKey} payload=${incomingHash}`);
     expect(() =>
       adapter.workItem.compareAndSet(rowKey, -1, makeWorkItem({ hash: rowKey })),
     ).toThrow(`WorkItem hash mismatch: key=${rowKey} payload=${payload.hash}`);

@@ -603,6 +603,7 @@ describe("WorkItemStore", () => {
 
   test("retry degrades gracefully when work item storage is missing", async () => {
     Storage.configure({
+      transaction: (operation) => operation(),
       session: {
         get: () => undefined,
         set: () => undefined,
@@ -630,6 +631,7 @@ describe("WorkItemStore", () => {
     const warnings: unknown[] = [];
     Bus.subscribe(Operational.Warn, (event) => warnings.push(event));
     Storage.configure({
+      transaction: (operation) => operation(),
       session: {
         get: () => undefined,
         set: () => undefined,

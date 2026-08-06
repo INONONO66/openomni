@@ -7,6 +7,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { Storage, WorkItemStore } from "@openomni/session";
 import { ReadBackExecutor } from "../../src/index";
+// Deliberate white-box seam: transport and clock injection belong to the private HTTP helper,
+// not the kernel package API, and are required for deterministic deadline coverage.
 import { loadReadBackUrl } from "../../src/evidence/read-back-http.js";
 import {
   cleanupReadBackFixtures,
@@ -93,6 +95,34 @@ describe("ReadBackExecutor", () => {
       bodyDigest: undefined,
       complete: false,
     });
+  });
+
+  test("passes the injected clock through the HTTP request lifecycle", async () => {
+    const currentTime = 10;
+    let transportTime: number | undefined;
+    const result = await loadReadBackUrl(
+      "https://example.com/document",
+      "HEAD",
+      100,
+      1_024,
+      false,
+      async () => ({
+        url: new URL("https://example.com/document"),
+        address: "203.0.113.1",
+        hostHeader: "example.com",
+        serverName: "example.com",
+      }),
+      (_target, _method, _deadlineAt, now) => {
+        transportTime = now();
+        const response = new IncomingMessage(new Socket());
+        response.statusCode = 200;
+        return Promise.resolve(response);
+      },
+      () => currentTime,
+    );
+
+    expect(transportTime).toBe(currentTime);
+    expect(result.complete).toBe(true);
   });
 
   test("returns a read-back check without persisting WorkItem evidence", async () => {

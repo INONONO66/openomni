@@ -44,12 +44,36 @@ export async function failWorkerSpawnExecutor(
   executorKind: WorkItem.ExecutorKind,
   reason: string,
 ): Promise<never> {
-  await WorkItemStore.addEvidence(workItemHash, {
-    kind: "custom",
-    description: reason,
-    passed: false,
-    detail: `executorKind=${executorKind}`,
-  });
-  await WorkItemStore.fail(workItemHash, reason);
-  throw new Error(reason);
+  const failure = new Error(reason);
+  try {
+    await WorkItemStore.addEvidence(workItemHash, {
+      kind: "custom",
+      description: reason,
+      passed: false,
+      detail: `executorKind=${executorKind}`,
+    });
+    await WorkItemStore.fail(workItemHash, reason);
+  } catch (reflectionFailure) {
+    throwWithWorkItemReflectionFailure(failure, reflectionFailure);
+  }
+  throw failure;
+}
+
+class WorkItemReflectionError extends Error {
+  readonly reflectionFailure: unknown;
+
+  constructor(primary: Error, reflectionFailure: unknown) {
+    super(primary.message, { cause: primary });
+    this.name = "WorkItemReflectionError";
+    this.reflectionFailure = reflectionFailure;
+  }
+}
+
+export function throwWithWorkItemReflectionFailure(
+  primaryFailure: unknown,
+  reflectionFailure: unknown,
+): never {
+  const primary =
+    primaryFailure instanceof Error ? primaryFailure : new Error(String(primaryFailure));
+  throw new WorkItemReflectionError(primary, reflectionFailure);
 }

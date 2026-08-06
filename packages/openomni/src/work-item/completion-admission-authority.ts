@@ -680,16 +680,17 @@ async function resolveOwnerOverride(
   const matchingReservations = item.completionFacts.requestReservations.filter(
     (candidate) => candidate.requestId === request.id && candidate.requestRoot === requestRoot,
   );
-  const reservation =
-    matchingReservations.find(({ recordedHead }) => recordedHead === request.expectedHead) ??
-    matchingReservations.at(-1);
+  const reservation = matchingReservations.find(
+    ({ recordedHead }) => recordedHead === request.expectedHead,
+  );
+  if (!reservation) return undefined;
   const candidate = {
     receiptRef,
     workItemHash: request.workItemHash,
     requestId: request.id,
     contractRevision: request.contractRevision,
     basisRef: request.basisRef,
-    expectedHead: reservation?.expectedHead ?? request.expectedHead,
+    expectedHead: reservation.expectedHead,
     requestRoot,
   } as const;
   const validation = await port.validate(candidate);

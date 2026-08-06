@@ -246,6 +246,33 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
     });
   });
 
+  test("preserves missing-driver failure when ledger reflection also fails", async () => {
+    seedConnectorInstallation("enabled");
+    const adapter = Storage.get().workItem;
+    if (!adapter) throw new Error("missing WorkItem adapter");
+    const compareAndSet = adapter.compareAndSet.bind(adapter);
+    adapter.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+      if (candidate.evidence.some(({ passed }) => !passed)) {
+        throw new Error("work item write failed");
+      }
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+    };
+
+    let caught: unknown;
+    try {
+      await dispatchConnectorEndpointWorkerSpawn(createWorkerDispatchHandlers());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) return;
+    expect(caught.name).toBe("WorkItemReflectionError");
+    expect(caught.message).toBe(missingConnectorDriverOwnerError);
+    expect(caught.cause).toEqual(new Error(missingConnectorDriverOwnerError));
+    expect(Reflect.get(caught, "reflectionFailure")).toEqual(new Error("work item write failed"));
+  });
+
   test("marks the WorkItem failed when the connector driver owner throws", async () => {
     seedConnectorInstallation("enabled");
     const handlers = createConnectorEndpointHandlers(async () => {
@@ -260,6 +287,36 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
       failureReason: "runtime exploded",
     });
     expect(workItem ? WorkItem.deriveStatus(workItem) : undefined).toBe("failed");
+  });
+
+  test("preserves connector dispatch failure when failure reflection also fails", async () => {
+    seedConnectorInstallation("enabled");
+    const adapter = Storage.get().workItem;
+    if (!adapter) throw new Error("missing WorkItem adapter");
+    const compareAndSet = adapter.compareAndSet.bind(adapter);
+    adapter.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+      if (candidate.failureReason === "runtime exploded") {
+        throw new Error("work item write failed");
+      }
+      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+    };
+    const handlers = createConnectorEndpointHandlers(async () => {
+      throw new Error("runtime exploded");
+    });
+
+    let caught: unknown;
+    try {
+      await dispatchConnectorEndpointWorkerSpawn(handlers);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) return;
+    expect(caught.name).toBe("WorkItemReflectionError");
+    expect(caught.message).toBe("runtime exploded");
+    expect(caught.cause).toEqual(new Error("runtime exploded"));
+    expect(Reflect.get(caught, "reflectionFailure")).toEqual(new Error("work item write failed"));
   });
 
   test("fails closed when no enabled matching installation exists", async () => {

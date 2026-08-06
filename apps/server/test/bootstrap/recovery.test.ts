@@ -6,9 +6,9 @@ import {
 } from "@openomni/openomni";
 import { PolicyEngine } from "@openomni/policy";
 import { Bus, PendingInteractionStore, Session, Storage, WorkerRun } from "@openomni/session";
-import { runBootstrapRecovery, runRecovery } from "../../src/bootstrap/recovery";
+import { runRecovery } from "../../src/bootstrap/recovery";
 import {
-  createBootstrapDispatchRuntime,
+  createBootstrapDispatchContext,
   startInboundSurfacesAfterRecovery,
 } from "../../src/bootstrap/startup";
 
@@ -59,11 +59,14 @@ describe("server recovery", () => {
     let runtimeOptions: DefaultDispatchRuntimeOptions | undefined;
     const completionPolicyEngine = PolicyEngine.create();
     const runtime = createDefaultDispatchRuntime({ completionWriter });
-    const sharedRuntime = createBootstrapDispatchRuntime(
+    const bootstrapDispatch = createBootstrapDispatchContext(
       { completionWriter, completionPolicyEngine },
       (options) => {
         runtimeOptions = options;
         return runtime;
+      },
+      async ({ completionRuntime }) => {
+        recoveredRuntime = completionRuntime;
       },
     );
     let recoveredRuntime:
@@ -74,16 +77,10 @@ describe("server recovery", () => {
     const server = await startInboundSurfacesAfterRecovery({
       recover: async () => {
         events.push("recovery");
-        await runBootstrapRecovery(
-          {
-            handler: undefined,
-            traceId: "trace-bootstrap-wiring",
-            completionRuntime: sharedRuntime,
-          },
-          async (_handler, _coordinator, _traceId, completionRuntime) => {
-            recoveredRuntime = completionRuntime;
-          },
-        );
+        await bootstrapDispatch.recover({
+          handler: undefined,
+          traceId: "trace-bootstrap-wiring",
+        });
       },
       createServer: () => {
         events.push("server");
@@ -99,7 +96,7 @@ describe("server recovery", () => {
     });
 
     expect(runtimeOptions?.completionPolicyEngine).toBe(completionPolicyEngine);
-    expect(recoveredRuntime).toBe(sharedRuntime);
+    expect(recoveredRuntime).toBe(bootstrapDispatch.runtime);
     expect(events).toEqual(["recovery", "server", "channel"]);
     expect(server).toEqual({ close: expect.any(Function) });
   });
@@ -115,6 +112,21 @@ describe("server recovery", () => {
     });
 
     expect(completionRecoveryCalls).toBe(1);
+  });
+
+  it("continues pending-interaction cleanup when completion recovery fails", async () => {
+    const pendingId = "pending:completion-recovery-failure";
+    await createPendingInteractionFixture(pendingId, Date.now() - 100);
+
+    await expect(
+      runRecovery(undefined, undefined, "trace-completion-recovery-failure", {
+        recoverRecordedWorkItemCompletions: async () => {
+          throw new Error("completion recovery failed");
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(PendingInteractionStore.get(pendingId)?.status).toBe("expired");
   });
 
   it("expires stale PendingInteractions during boot recovery", async () => {

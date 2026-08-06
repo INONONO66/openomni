@@ -1,8 +1,8 @@
 {
   "apps/server": {
-    "linesFound": 4711,
-    "linesHit": 4143,
-    "pct": 87.94
+    "linesFound": 4731,
+    "linesHit": 4159,
+    "pct": 87.91
   },
   "packages/agent": {
     "linesFound": 2594,
@@ -20,9 +20,9 @@
     "pct": 89.19
   },
   "packages/openomni": {
-    "linesFound": 15811,
-    "linesHit": 15111,
-    "pct": 95.57
+    "linesFound": 15848,
+    "linesHit": 15150,
+    "pct": 95.6
   },
   "packages/policy": {
     "linesFound": 1775,
@@ -35,8 +35,8 @@
     "pct": 97.27
   },
   "packages/session": {
-    "linesFound": 4072,
-    "linesHit": 3784,
-    "pct": 92.93
+    "linesFound": 4069,
+    "linesHit": 3782,
+    "pct": 92.95
   }
 }

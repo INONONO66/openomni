@@ -76,17 +76,27 @@ export async function runRecovery(
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
     if (completionRecovery) {
-      const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
-      Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
-        traceId: id,
-        time: Date.now(),
-        component: "server",
-        msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
-        context: {
-          skipped: receipt.skipped,
-          failures: receipt.failures,
-        },
-      });
+      try {
+        const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
+        Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
+          traceId: id,
+          time: Date.now(),
+          component: "server",
+          msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
+          context: {
+            skipped: receipt.skipped,
+            failures: receipt.failures,
+          },
+        });
+      } catch (error) {
+        Bus.publish(Operational.Error, {
+          traceId: id,
+          time: Date.now(),
+          component: "server",
+          msg: "recovery failed to resume recorded WorkItem completions",
+          context: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
     }
     const expiredPendingInteractions = PendingInteractionStore.cleanupExpired();
     if (expiredPendingInteractions.length > 0) {

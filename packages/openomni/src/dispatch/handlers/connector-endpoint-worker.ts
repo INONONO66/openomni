@@ -5,7 +5,11 @@ import {
   projectConnectorCompletion,
   type ConnectorCompletionOptions,
 } from "./connector-completion-projector.js";
-import { createWorkerSpawnWorkItem, failWorkerSpawnExecutor } from "./worker-work-item.js";
+import {
+  createWorkerSpawnWorkItem,
+  failWorkerSpawnExecutor,
+  throwWithWorkItemReflectionFailure,
+} from "./worker-work-item.js";
 
 const CONNECTOR_ENDPOINT_EXECUTOR_KIND = "connector_endpoint" satisfies WorkItem.ExecutorKind;
 
@@ -141,7 +145,11 @@ export async function handleConnectorEndpointWorkerSpawn(
       installation,
     });
   } catch (err) {
-    await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+    try {
+      await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+    } catch (reflectionFailure) {
+      throwWithWorkItemReflectionFailure(err, reflectionFailure);
+    }
     throw err;
   }
   const projection = await projectConnectorCompletion(workItemHash, result, options);

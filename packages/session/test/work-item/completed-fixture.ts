@@ -94,6 +94,15 @@ export function persistCompletedWorkItemFixture(input: {
       }),
     );
   });
+  const resolvedCriterionIds = new Set(results.map(({ criterionId }) => criterionId));
+  const unresolvedRequiredCriterion = current.completionFacts.criteria.find(
+    ({ id, required }) => required && !resolvedCriterionIds.has(id),
+  );
+  if (unresolvedRequiredCriterion) {
+    throw new Error(
+      `completed fixture report omits required criterion: ${unresolvedRequiredCriterion.statement}`,
+    );
+  }
   const completionReportRef = WorkItem.completionReportReference(completionReport);
   const requestId = `completion-request:${input.hash}:${current.revision}:session-fixture`;
   const admission = WorkItem.CompletionAdmission.parse({

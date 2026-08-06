@@ -105,8 +105,15 @@ const CompletionCasRetryLimit = 8;
 export function reserveCompletionRequest(
   input: CompletionRequestReservationInput,
 ): CompletionRequestReservationOutcome {
+  return reserveCompletionRequestWithLimit(input, CompletionCasRetryLimit);
+}
+
+function reserveCompletionRequestWithLimit(
+  input: CompletionRequestReservationInput,
+  retryLimit: number,
+): CompletionRequestReservationOutcome {
   const adapter = requiredAdapter(input.workItemHash);
-  for (let attempt = 0; attempt < CompletionCasRetryLimit; attempt += 1) {
+  for (let attempt = 0; attempt < retryLimit; attempt += 1) {
     const current = requiredItem(adapter.get(input.workItemHash), input.workItemHash);
     const reservation = current.completionFacts.requestReservations
       .filter(({ requestId }) => requestId === input.requestId)
@@ -400,17 +407,20 @@ function reserveCompletionLease(
   const requestRoot = reservation.requestRoot ?? completionRequestRoot(request);
   const envelopeDigest =
     reservation.envelopeDigest ?? completionRequestEnvelopeDigest(request, completionReport);
-  const acquired = reserveCompletionRequest({
-    completionWriter: options.completionWriter,
-    workItemHash: item.hash,
-    requestId: request.id,
-    requestRoot,
-    envelopeDigest,
-    ownerId: reservation.ownerId,
-    leaseDurationMs: reservation.leaseDurationMs,
-    now: options.now(),
-    forceTakeover,
-  });
+  const acquired = reserveCompletionRequestWithLimit(
+    {
+      completionWriter: options.completionWriter,
+      workItemHash: item.hash,
+      requestId: request.id,
+      requestRoot,
+      envelopeDigest,
+      ownerId: reservation.ownerId,
+      leaseDurationMs: reservation.leaseDurationMs,
+      now: options.now(),
+      forceTakeover,
+    },
+    1,
+  );
   if (acquired.state === "busy") {
     throw new CompletionAdmissionServiceError(
       "request_conflict",

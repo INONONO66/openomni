@@ -32,7 +32,7 @@ export async function loadReadBackUrl(
     const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) return failedReadBackHttpResult();
     const response = await settleBeforeDeadline(
-      requestResponse(validated, method, deadlineAt),
+      requestResponse(validated, method, deadlineAt, now),
       deadlineAt,
       now,
     );
@@ -135,11 +135,12 @@ function requestReadBackResponse(
   target: Awaited<ReturnType<typeof validateNetworkTarget>>,
   method: ReadBackHttpMethod,
   deadlineAt: number,
+  now: () => number,
 ): Promise<IncomingMessage | undefined> {
   return new Promise((resolve) => {
     let settled = false;
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    const timeoutMs = Math.max(0, deadlineAt - Date.now());
+    const timeoutMs = Math.max(0, deadlineAt - now());
     const options = createRequestOptions(target, method, timeoutMs);
     const finish = (response: IncomingMessage | undefined): void => {
       if (settled) return;

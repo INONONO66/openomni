@@ -4,8 +4,9 @@ import {
   type DefaultDispatchRuntime,
   type DefaultDispatchRuntimeOptions,
 } from "@openomni/openomni";
+import { runBootstrapRecovery, type BootstrapRecoveryInput } from "./recovery";
 
-export function createBootstrapDispatchRuntime(
+function createBootstrapDispatchRuntime(
   options: DefaultDispatchRuntimeOptions,
   createRuntime: typeof createDefaultDispatchRuntime = createDefaultDispatchRuntime,
 ): DefaultDispatchRuntime {
@@ -13,6 +14,21 @@ export function createBootstrapDispatchRuntime(
     ...options,
     completionPolicyEngine: options.completionPolicyEngine ?? PolicyEngine.create(),
   });
+}
+
+export function createBootstrapDispatchContext(
+  options: DefaultDispatchRuntimeOptions,
+  createRuntime: typeof createDefaultDispatchRuntime = createDefaultDispatchRuntime,
+  recover: typeof runBootstrapRecovery = runBootstrapRecovery,
+): Readonly<{
+  runtime: DefaultDispatchRuntime;
+  recover(input: Omit<BootstrapRecoveryInput, "completionRuntime">): Promise<void>;
+}> {
+  const runtime = createBootstrapDispatchRuntime(options, createRuntime);
+  return {
+    runtime,
+    recover: (input) => recover({ ...input, completionRuntime: runtime }),
+  };
 }
 
 type InboundSurface = Readonly<{ start(): Promise<void> | void }>;

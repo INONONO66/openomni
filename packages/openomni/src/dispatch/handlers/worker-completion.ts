@@ -403,12 +403,13 @@ async function prepareCompletionReport(
       applySharedDeadline(readBack.request, remainingMs),
       options.readBack,
     );
+    const operationPromise = Promise.resolve(operation);
     const remainingAfterStartMs = deadlineAt - now();
-    if (remainingAfterStartMs <= 0) throw new Error("read-back envelope deadline exceeded");
-    const check = await settleReadBackBeforeDeadline(
-      Promise.resolve(operation),
-      remainingAfterStartMs,
-    );
+    if (remainingAfterStartMs <= 0) {
+      void operationPromise.catch(() => undefined);
+      throw new Error("read-back envelope deadline exceeded");
+    }
+    const check = await settleReadBackBeforeDeadline(operationPromise, remainingAfterStartMs);
     assertLease();
     if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
     const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {

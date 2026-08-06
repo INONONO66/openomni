@@ -137,6 +137,35 @@ function requestWithOwnerReceipt(receiptRef: string): WorkItem.CompletionRequest
   return parsed.data;
 }
 
+function itemWithOwnerReservation(
+  candidate: WorkItem.CompletionRequest,
+  recordedHead = candidate.expectedHead,
+): WorkItem.Info {
+  const current = item();
+  return item({
+    completionFacts: {
+      ...current.completionFacts,
+      requestReservations: [
+        WorkItem.CompletionRequestReservation.parse({
+          version: 1,
+          id: `completion-reservation:${candidate.id}:${recordedHead}`,
+          requestId: candidate.id,
+          requestRoot: completionRequestRoot(candidate),
+          attempt: current.attempt,
+          basisRef: current.completionContract.basisRef,
+          envelopeDigest: "sha256:owner-authority-test",
+          expectedHead: recordedHead - 1,
+          recordedHead,
+          createdAt: 1,
+          ownerId: "process:owner-authority-test",
+          fence: 1,
+          leaseExpiresAt: 100,
+        }),
+      ],
+    },
+  });
+}
+
 function policyContext() {
   return {
     workItemHash: "wi_authority",
@@ -772,13 +801,13 @@ describe("completion admission authority resolver", () => {
               ok: true,
               receiptRef: "owner-receipt:one",
               requestRoot,
-              expectedHead: candidate.expectedHead,
+              expectedHead: candidate.expectedHead - 1,
             } as const;
           },
         },
         now: () => 10,
       },
-      item(),
+      itemWithOwnerReservation(candidate),
       candidate,
     );
 
@@ -788,7 +817,7 @@ describe("completion admission authority resolver", () => {
       requestId: "request:completion",
       contractRevision: "contract:v1",
       basisRef: "basis:v1",
-      expectedHead: 2,
+      expectedHead: 1,
       requestRoot,
     });
     expect(admission?.decision).toBe("owner_override");
@@ -813,7 +842,7 @@ describe("completion admission authority resolver", () => {
         },
         now: () => 10,
       },
-      item(),
+      itemWithOwnerReservation(candidate),
       candidate,
     );
 
@@ -834,12 +863,12 @@ describe("completion admission authority resolver", () => {
               ok: true,
               receiptRef: "owner-receipt:one",
               requestRoot: completionRequestRoot(candidate),
-              expectedHead: candidate.expectedHead - 1,
+              expectedHead: candidate.expectedHead - 2,
             }) as const,
         },
         now: () => 10,
       },
-      item(),
+      itemWithOwnerReservation(candidate),
       candidate,
     );
 
@@ -857,11 +886,41 @@ describe("completion admission authority resolver", () => {
         stakesResolver: { resolve: () => stakesInjection({}, false) },
         now: () => 10,
       },
-      item(),
+      itemWithOwnerReservation(candidate),
       candidate,
     );
 
     expect(admission?.decision).toBe("admit");
+    expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
+  });
+
+  test("does not validate an Owner receipt without an exact current-head reservation", async () => {
+    const candidate = requestWithOwnerReceipt("owner-receipt:stale");
+    if (!candidate) return;
+    let validations = 0;
+
+    const admission = await resolveAdmission(
+      {
+        policyEngine: createPolicyEngine({ allowAsserted: true }),
+        ownerOverrideAuthorityPort: {
+          validate: () => {
+            validations += 1;
+            return {
+              ok: true,
+              receiptRef: "owner-receipt:stale",
+              requestRoot: completionRequestRoot(candidate),
+              expectedHead: candidate.expectedHead,
+            } as const;
+          },
+        },
+        now: () => 10,
+      },
+      itemWithOwnerReservation(candidate, candidate.expectedHead - 1),
+      candidate,
+    );
+
+    expect(validations).toBe(0);
+    expect(admission?.decision).not.toBe("owner_override");
     expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
   });
 
