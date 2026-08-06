@@ -44,7 +44,30 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     })),
   };
   if (item.timestamps.completed === undefined) return item;
-  const results = completedFixtureResults(item, "adapter-fixture");
+  const criterion = item.completionFacts.criteria[0];
+  if (!criterion) throw new Error("completed adapter fixture requires one criterion");
+  const evidenceId = `evidence:${item.hash}:adapter-fixture`;
+  const observation = WorkItem.Observation.parse({
+    id: `observation:${item.hash}:adapter-fixture`,
+    producer: "adapter-fixture",
+    subjectRef: item.hash,
+    basisRef: item.completionContract.basisRef,
+    artifactRefs: [evidenceId],
+    provenanceRef: evidenceId,
+    ancestryRefs: [],
+    observedAt: item.timestamps.completed,
+  });
+  const claim = WorkItem.Claim.parse({
+    id: `claim:${item.hash}:adapter-fixture`,
+    criterionId: criterion.id,
+    statement: criterion.statement,
+    observationIds: [observation.id],
+    basisRef: item.completionContract.basisRef,
+    createdAt: item.timestamps.completed,
+  });
+  const results = completedFixtureResults(item, "adapter-fixture").map((result, index) =>
+    index === 0 ? { ...result, observationIds: [observation.id] } : result,
+  );
 
   const completionReport = WorkItem.canonicalCompletionReport({
     summary: "Storage adapter fixture completed.",
@@ -52,7 +75,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
       {
         statement:
           item.completionFacts.criteria[0]?.statement ?? "Storage adapter fixture completed.",
-        evidenceIds: [`evidence:${item.hash}:adapter-fixture`],
+        evidenceIds: [evidenceId],
       },
     ],
     caveats: [],
@@ -71,8 +94,8 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
       contractRevision: item.completionContract.revision,
       basisRef: item.completionContract.basisRef,
       expectedHead: item.revision,
-      claims: [],
-      observations: [],
+      claims: [claim],
+      observations: [observation],
       results,
       invalidations: [],
       verificationErrors: [],
@@ -96,9 +119,23 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
   return {
     ...item,
     revision: admission.recordedHead + 1,
+    evidence: [
+      ...item.evidence,
+      {
+        id: evidenceId,
+        kind: "verification",
+        description: "Storage adapter fixture evidence",
+        passed: true,
+        attempt: item.attempt,
+        basisRef: item.completionContract.basisRef,
+        createdAt: item.timestamps.completed,
+      },
+    ],
     completionFacts: {
       ...item.completionFacts,
       revision: item.completionFacts.revision + 1,
+      claims: [...item.completionFacts.claims, claim],
+      observations: [...item.completionFacts.observations, observation],
       results: [...item.completionFacts.results, ...results],
       admissions: [admission],
     },

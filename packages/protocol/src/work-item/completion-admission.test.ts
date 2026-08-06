@@ -793,10 +793,28 @@ describe("WorkItem completion admission contracts", () => {
       basisRef: "basis:v1",
     };
     const terminalCriterionId = WorkItem.criterionId(baseItem.hash, 0, "publish the artifact");
+    const terminalObservation = WorkItem.Observation.parse({
+      id: "observation:terminal",
+      producer: "verifier:terminal",
+      subjectRef: baseItem.hash,
+      basisRef: completionContract.basisRef,
+      artifactRefs: ["evidence:terminal"],
+      provenanceRef: "evidence:terminal",
+      ancestryRefs: [],
+      observedAt: 6,
+    });
+    const terminalClaim = WorkItem.Claim.parse({
+      id: "claim:terminal",
+      criterionId: terminalCriterionId,
+      statement: "publish the artifact",
+      observationIds: [terminalObservation.id],
+      basisRef: completionContract.basisRef,
+      createdAt: 6,
+    });
     const terminalResult = WorkItem.CriterionResult.parse({
       id: "result:terminal",
       criterionId: terminalCriterionId,
-      observationIds: [],
+      observationIds: [terminalObservation.id],
       value: "asserted",
       assumptions: [],
       residualRisks: [],
@@ -810,6 +828,9 @@ describe("WorkItem completion admission contracts", () => {
       requestSnapshot: completionRequestSnapshot({
         id: "completion-request:terminal",
         expectedHead: 0,
+        claims: [terminalClaim],
+        observations: [terminalObservation],
+        results: [terminalResult],
       }),
       origin: "worker",
       contractRevision: completionContract.revision,
@@ -837,6 +858,8 @@ describe("WorkItem completion admission contracts", () => {
           required: true,
         },
       ],
+      claims: [terminalClaim],
+      observations: [terminalObservation],
       results: [terminalResult],
       admissions: [admission],
     };
@@ -854,6 +877,17 @@ describe("WorkItem completion admission contracts", () => {
       ...baseItem,
       revision: 2,
       timestamps: { ...baseItem.timestamps, completed: 8 },
+      evidence: [
+        {
+          id: "evidence:terminal",
+          kind: "verification" as const,
+          description: "Terminal publication evidence",
+          passed: true,
+          attempt: baseItem.attempt,
+          basisRef: completionContract.basisRef,
+          createdAt: 6,
+        },
+      ],
       completionContract,
       completionFacts,
       completionReport,
@@ -1099,6 +1133,20 @@ describe("WorkItem completion admission contracts", () => {
         "admissions",
         0,
         "unresolvedCriterionIds",
+      ]);
+    }
+    const missingTerminalEvidence = WorkItem.Info.safeParse({
+      ...validInput,
+      evidence: [],
+    });
+    expect(missingTerminalEvidence.success).toBe(false);
+    if (!missingTerminalEvidence.success) {
+      expect(missingTerminalEvidence.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionReport",
+        "claims",
+        0,
+        "evidenceIds",
+        0,
       ]);
     }
   });
@@ -1481,10 +1529,14 @@ describe("WorkItem completion admission contracts", () => {
       {
         hash: baseItem.hash,
         revision: 2,
+        attempt: 1,
         timestamps: { completed: 8 },
+        evidence: [],
         completionContract: { version: 1, revision: "contract:v1", basisRef: "basis:v1" },
         completionFacts: {
           criteria: [],
+          claims: [],
+          observations: [],
           results: [],
           admissions: [malformedAdmission as WorkItem.CompletionAdmission],
         },

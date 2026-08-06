@@ -67,7 +67,7 @@ async function addPassingEvidence(hash: string): Promise<string> {
 function completionReport(evidenceId: string): WorkItem.CompletionReport {
   return {
     summary: "Completed with ledger evidence.",
-    claims: [{ statement: "The work happened.", evidenceIds: [evidenceId] }],
+    claims: [{ statement: "the requested behavior is verified", evidenceIds: [evidenceId] }],
     caveats: [],
     followUps: [],
   };

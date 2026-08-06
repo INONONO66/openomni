@@ -37,7 +37,7 @@ async function addEvidenceBackedReport(hash: string): Promise<WorkItem.Completio
   if (!evidenceId) throw new Error("expected evidence id");
   return {
     summary: "Completed with integration evidence.",
-    claims: [{ statement: "Integration path completed.", evidenceIds: [evidenceId] }],
+    claims: [{ statement: "the WorkItem pipeline is verified", evidenceIds: [evidenceId] }],
     caveats: [],
     followUps: [],
   };

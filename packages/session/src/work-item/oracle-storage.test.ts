@@ -3,7 +3,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
-import { completedFixtureResults } from "../../test/work-item/completed-fixture.js";
+import { persistCompletedWorkItemFixture } from "../../test/work-item/completed-fixture.js";
 import { WorkItemStore } from "./index.js";
 
 const baseInput = {
@@ -32,7 +32,6 @@ async function createItem(
 }
 
 function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
-  const results = completedFixtureResults(item, "oracle-storage");
   const completionReport = WorkItem.canonicalCompletionReport({
     summary: "Oracle storage fixture completed.",
     claims: [
@@ -45,84 +44,12 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
     caveats: [],
     followUps: [],
   });
-  const completionReportRef = WorkItem.completionReportReference(completionReport);
-  const admission = WorkItem.CompletionAdmission.parse({
-    version: 1,
-    id: `admission:${item.hash}:oracle-storage`,
-    requestId: `completion-request:${item.hash}:oracle-storage`,
-    requestSnapshot: WorkItem.CompletionRequest.parse({
-      version: 1,
-      id: `completion-request:${item.hash}:oracle-storage`,
-      origin: "recovery",
-      workItemHash: item.hash,
-      contractRevision: item.completionContract.revision,
-      basisRef: item.completionContract.basisRef,
-      expectedHead: item.revision,
-      claims: [],
-      observations: [],
-      results,
-      invalidations: [],
-      verificationErrors: [],
-      effects: [],
-    }),
-    origin: "recovery",
-    contractRevision: item.completionContract.revision,
-    basisRef: item.completionContract.basisRef,
-    effectiveResultIds: results.map(({ id }) => id),
-    unresolvedCriterionIds: [],
-    decision: "admit",
-    reasonCodes: ["oracle_storage_fixture"],
-    residualRisks: [],
-    policyRef: "policy:oracle-storage",
-    completionReportSnapshot: completionReport,
-    completionReportRef,
-    expectedHead: item.revision,
-    recordedHead: item.revision + 1,
-    createdAt: item.timestamps.updated + 1,
+  const completed = persistCompletedWorkItemFixture({
+    hash: item.hash,
+    report: completionReport,
+    completionWriter,
   });
-  const completed = WorkItem.Info.parse({
-    ...item,
-    revision: admission.recordedHead + 1,
-    timestamps: {
-      ...item.timestamps,
-      updated: admission.createdAt + 1,
-      completed: admission.createdAt + 1,
-    },
-    completionFacts: {
-      ...item.completionFacts,
-      revision: item.completionFacts.revision + 1,
-      results: [...item.completionFacts.results, ...results],
-      admissions: [admission],
-    },
-    completionReport,
-    completionTerminalReceipt: {
-      version: 1,
-      hash: item.hash,
-      requestId: admission.requestId,
-      admissionId: admission.id,
-      contractRevision: admission.contractRevision,
-      basisRef: admission.basisRef,
-      completionReportRef,
-      recordedHead: admission.recordedHead + 1,
-    },
-  });
-  const admitted = WorkItem.Info.parse({
-    ...item,
-    revision: admission.recordedHead,
-    timestamps: { ...item.timestamps, updated: admission.createdAt },
-    completionFacts: {
-      ...item.completionFacts,
-      revision: item.completionFacts.revision + 1,
-      results: [...item.completionFacts.results, ...results],
-      admissions: [admission],
-    },
-  });
-  if (!completionWriter(item.hash, item.revision, admitted)) {
-    throw new Error("failed to persist completed fixture admission");
-  }
-  if (!completionWriter(item.hash, admitted.revision, completed)) {
-    throw new Error("failed to persist completed fixture terminal record");
-  }
+  if (!completed) throw new Error("failed to persist completed fixture");
   return completed;
 }
 

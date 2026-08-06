@@ -30,8 +30,70 @@ export function persistCompletedWorkItemFixture(input: {
   const workItemAdapter = Storage.get().workItem;
   const current = workItemAdapter?.get(input.hash);
   if (!workItemAdapter || !current) return undefined;
-  const results = completedFixtureResults(current, "session-fixture");
   const completionReport = WorkItem.canonicalCompletionReport(input.report);
+  const matchedCriterionIds = new Set<string>();
+  const evidenceIds = new Set(current.evidence.map(({ id }) => id));
+  const evidenceAdditions: WorkItem.Evidence[] = [];
+  const observations: WorkItem.Observation[] = [];
+  const claims: WorkItem.Claim[] = [];
+  const results: WorkItem.CriterionResult[] = [];
+  completionReport.claims.forEach((reportClaim, claimIndex) => {
+    const criterion = current.completionFacts.criteria.find(
+      (candidate) =>
+        !matchedCriterionIds.has(candidate.id) && candidate.statement === reportClaim.statement,
+    );
+    if (!criterion) {
+      throw new Error(`completed fixture report claim has no criterion: ${reportClaim.statement}`);
+    }
+    matchedCriterionIds.add(criterion.id);
+    const claimObservationIds = reportClaim.evidenceIds.map((evidenceId, evidenceIndex) => {
+      if (!evidenceIds.has(evidenceId)) {
+        evidenceIds.add(evidenceId);
+        evidenceAdditions.push({
+          id: evidenceId,
+          kind: "verification",
+          description: `Completed fixture evidence for ${reportClaim.statement}`,
+          passed: true,
+          attempt: current.attempt,
+          basisRef: current.completionContract.basisRef,
+          createdAt: current.timestamps.updated + 1,
+        });
+      }
+      const observation = WorkItem.Observation.parse({
+        id: `observation:${current.hash}:session-fixture:${claimIndex}:${evidenceIndex}`,
+        producer: "session-completed-fixture",
+        subjectRef: current.hash,
+        basisRef: current.completionContract.basisRef,
+        artifactRefs: [evidenceId],
+        provenanceRef: evidenceId,
+        ancestryRefs: [],
+        observedAt: current.timestamps.updated + 1,
+      });
+      observations.push(observation);
+      return observation.id;
+    });
+    const claim = WorkItem.Claim.parse({
+      id: `claim:${current.hash}:session-fixture:${claimIndex}`,
+      criterionId: criterion.id,
+      statement: reportClaim.statement,
+      observationIds: claimObservationIds,
+      basisRef: current.completionContract.basisRef,
+      createdAt: current.timestamps.updated + 1,
+    });
+    claims.push(claim);
+    results.push(
+      WorkItem.CriterionResult.parse({
+        id: `result:${current.hash}:session-fixture:${claimIndex}`,
+        criterionId: criterion.id,
+        observationIds: claimObservationIds,
+        value: "asserted",
+        assumptions: [],
+        residualRisks: [],
+        basisRef: current.completionContract.basisRef,
+        createdAt: current.timestamps.updated + 1,
+      }),
+    );
+  });
   const completionReportRef = WorkItem.completionReportReference(completionReport);
   const requestId = `completion-request:${input.hash}:${current.revision}:session-fixture`;
   const admission = WorkItem.CompletionAdmission.parse({
@@ -46,8 +108,8 @@ export function persistCompletedWorkItemFixture(input: {
       contractRevision: current.completionContract.revision,
       basisRef: current.completionContract.basisRef,
       expectedHead: current.revision,
-      claims: [],
-      observations: [],
+      claims,
+      observations,
       results,
       invalidations: [],
       verificationErrors: [],
@@ -71,9 +133,12 @@ export function persistCompletedWorkItemFixture(input: {
   const admitted = WorkItem.Info.parse({
     ...current,
     revision: admission.recordedHead,
+    evidence: [...current.evidence, ...evidenceAdditions],
     completionFacts: {
       ...current.completionFacts,
       revision: current.completionFacts.revision + 1,
+      claims: [...current.completionFacts.claims, ...claims],
+      observations: [...current.completionFacts.observations, ...observations],
       results: [...current.completionFacts.results, ...results],
       admissions: [...current.completionFacts.admissions, admission],
     },

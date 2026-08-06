@@ -20,6 +20,8 @@ const LegacyEvidence = z
     id: z.string().min(1),
     description: z.string(),
     passed: z.boolean(),
+    attempt: z.number().int().positive().optional(),
+    basisRef: z.string().min(1).optional(),
     createdAt: z.number().finite(),
   })
   .passthrough();
@@ -44,6 +46,7 @@ const LegacyWorkItem = z
     name: z.string(),
     goal: z.string(),
     acceptanceCriteria: z.array(z.string()).default([]),
+    attempt: z.number().int().positive().default(1),
     timestamps: z.object({ completed: z.number().finite().optional() }).passthrough(),
     evidence: z.array(LegacyEvidence).default([]),
     completionReport: LegacyCompletionReport.optional(),
@@ -88,19 +91,26 @@ export function upcastLegacyCompletion(input: unknown): unknown {
         }
       : undefined;
   const criteria = legacyCriteria(parsed.data.hash, acceptanceCriteria);
+  const normalizedPersistedEvidence = parsed.data.evidence.map((evidence) => ({
+    ...evidence,
+    attempt: evidence.attempt ?? parsed.data.attempt,
+    basisRef: evidence.basisRef ?? contract.basisRef,
+  }));
   const persistedEvidence = needsArchiveReport
     ? [
-        ...parsed.data.evidence,
+        ...normalizedPersistedEvidence,
         {
           id: archiveEvidenceId,
           kind: "custom" as const,
           description: "Historical completion archive marker",
           passed: true,
           detail: LegacyArchiveEvidenceDetail,
+          attempt: parsed.data.attempt,
+          basisRef: contract.basisRef,
           createdAt: completedAt,
         },
       ]
-    : parsed.data.evidence;
+    : normalizedPersistedEvidence;
   const evidenceIds = new Set<string>();
   for (const { id } of persistedEvidence) {
     if (evidenceIds.has(id)) throw new Error(`duplicate legacy evidence id: ${id}`);

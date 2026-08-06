@@ -6,17 +6,29 @@ import {
   type CompletionReport,
   type CompletionRequestReservation,
   type CompletionTerminalReceipt,
+  type Claim,
   type Criterion,
   type CriterionResult,
+  type Observation,
 } from "./completion-admission.js";
 
 type TerminalLinkageItem = Readonly<{
   hash: string;
   revision: number;
+  attempt: number;
   timestamps: Readonly<{ completed?: number }>;
+  evidence: readonly Readonly<{
+    id: string;
+    passed: boolean;
+    attempt?: number;
+    basisRef?: string;
+    readBack?: Readonly<{ passed: boolean }>;
+  }>[];
   completionContract: CompletionContract;
   completionFacts: Readonly<{
     criteria: readonly Criterion[];
+    claims: readonly Claim[];
+    observations: readonly Observation[];
     results: readonly CriterionResult[];
     admissions: readonly CompletionAdmission[];
     requestReservations?: readonly CompletionRequestReservation[];
@@ -183,6 +195,13 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   ) {
     addIssue(ctx, ["completionTerminalReceipt", "completionReportRef"]);
   }
+  validateCompletionReportEvidence(
+    item,
+    admission,
+    item.completionReport,
+    effectiveCriterionIds,
+    ctx,
+  );
   const reservationBridges = (item.completionFacts.requestReservations ?? []).filter(
     (reservation) =>
       reservation.requestId === admission.requestId &&
@@ -207,6 +226,71 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     (admission.recordedHead + 1 !== receipt.recordedHead && !hasReservationBridge)
   ) {
     addIssue(ctx, ["completionFacts", "admissions", admissionIndex]);
+  }
+}
+
+function validateCompletionReportEvidence(
+  item: TerminalLinkageItem,
+  admission: CompletionAdmission,
+  report: CompletionReport,
+  effectiveCriterionIds: ReadonlySet<string>,
+  ctx: RefinementCtx,
+): void {
+  const evidenceById = new Map(item.evidence.map((evidence) => [evidence.id, evidence]));
+  const observationsById = new Map(
+    item.completionFacts.observations.map((observation) => [observation.id, observation]),
+  );
+  const effectiveResults = item.completionFacts.results.filter((result) =>
+    admission.effectiveResultIds.includes(result.id),
+  );
+  for (const [claimIndex, reportClaim] of report.claims.entries()) {
+    const admittedClaims = item.completionFacts.claims.filter(
+      (claim) =>
+        claim.statement === reportClaim.statement &&
+        claim.basisRef === admission.basisRef &&
+        (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
+    );
+    if (admittedClaims.length === 0) {
+      addIssue(ctx, ["completionReport", "claims", claimIndex, "statement"]);
+      continue;
+    }
+    const criterionIds = new Set(admittedClaims.map(({ criterionId }) => criterionId));
+    const effectiveObservationIds = new Set(
+      effectiveResults
+        .filter(({ criterionId }) => criterionIds.has(criterionId))
+        .flatMap(({ observationIds }) => observationIds),
+    );
+    const admittedEvidenceIds = new Set(
+      admittedClaims.flatMap(({ observationIds }) =>
+        observationIds.flatMap((observationId) => {
+          if (
+            admission.decision !== "owner_override" &&
+            !effectiveObservationIds.has(observationId)
+          ) {
+            return [];
+          }
+          const observation = observationsById.get(observationId);
+          if (!observation) return [];
+          return [
+            ...observation.artifactRefs,
+            ...(observation.provenanceRef === undefined ? [] : [observation.provenanceRef]),
+          ];
+        }),
+      ),
+    );
+    for (const [evidenceIndex, evidenceId] of reportClaim.evidenceIds.entries()) {
+      const evidence = evidenceById.get(evidenceId);
+      if (
+        evidence === undefined ||
+        evidence.attempt !== item.attempt ||
+        evidence.basisRef !== admission.basisRef ||
+        !evidence.passed ||
+        evidence.readBack?.passed === false ||
+        !admittedEvidenceIds.has(evidenceId)
+      ) {
+        addIssue(ctx, ["completionReport", "claims", claimIndex, "evidenceIds", evidenceIndex]);
+      }
+    }
   }
 }
 
