@@ -71,6 +71,23 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     legacy.completionReport.claims.every((claim) =>
       first.completionFacts.claims.some(({ statement }) => statement === claim.statement),
     );
+  const observationsById = new Map(
+    first.completionFacts.observations.map((observation) => [observation.id, observation]),
+  );
+  const claimEvidenceProvenancePreserved = legacy.completionReport.claims.every((legacyClaim) => {
+    const claim = first.completionFacts.claims.find(
+      ({ statement }) => statement === legacyClaim.statement,
+    );
+    if (!claim) return false;
+    const artifactRefs = [
+      ...new Set(
+        claim.observationIds.flatMap(
+          (observationId) => observationsById.get(observationId)?.artifactRefs ?? [],
+        ),
+      ),
+    ].sort();
+    return JSON.stringify(artifactRefs) === JSON.stringify([...legacyClaim.evidenceIds].sort());
+  });
   const failedEvidencePreserved =
     first.evidence.some(({ id, passed }) => id === "evidence:legacy-driver-fail" && !passed) &&
     first.completionFacts.observations.some(({ artifactRefs }) =>
@@ -107,6 +124,7 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
     stableAdmissionIds &&
     stableReceiptIds &&
     allClaimsPreserved &&
+    claimEvidenceProvenancePreserved &&
     failedEvidencePreserved &&
     resultValues.includes("asserted") &&
     verifiedResultCount === 0 &&
@@ -129,6 +147,7 @@ export function runLegacyArchiveCompletionAdmissionScenario() {
       admissionIds: first.completionFacts.admissions.map(({ id }) => id),
       terminalReceipt: first.completionTerminalReceipt,
       allClaimsPreserved,
+      claimEvidenceProvenancePreserved,
       claimCount: first.completionFacts.claims.length,
       failedEvidencePreserved,
       resultValues,

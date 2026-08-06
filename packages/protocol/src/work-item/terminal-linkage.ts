@@ -59,18 +59,25 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     addIssue(ctx, ["completionTerminalReceipt", "recordedHead"]);
   }
 
-  const admission = item.completionFacts.admissions.find(({ id }) => id === receipt.admissionId);
-  if (!admission) {
+  const admissionIndex = item.completionFacts.admissions.findIndex(
+    ({ id }) => id === receipt.admissionId,
+  );
+  if (admissionIndex === -1) {
+    addIssue(ctx, ["completionTerminalReceipt", "admissionId"]);
+    return;
+  }
+  const admission = item.completionFacts.admissions[admissionIndex];
+  if (admission === undefined) {
     addIssue(ctx, ["completionTerminalReceipt", "admissionId"]);
     return;
   }
   if (admission.decision !== "admit" && admission.decision !== "owner_override") {
-    addIssue(ctx, ["completionFacts", "admissions"]);
+    addIssue(ctx, ["completionFacts", "admissions", admissionIndex, "decision"]);
   }
   if (admission.decision === "admit" && admission.unresolvedCriterionIds.length > 0) {
     addIssue(
       ctx,
-      ["completionFacts", "admissions", "unresolvedCriterionIds"],
+      ["completionFacts", "admissions", admissionIndex, "unresolvedCriterionIds"],
       "terminal admit cannot carry unresolved required criteria",
     );
   }
@@ -85,7 +92,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     if (!criteriaById.has(criterionId)) {
       addIssue(
         ctx,
-        ["completionFacts", "admissions", "unresolvedCriterionIds", index],
+        ["completionFacts", "admissions", admissionIndex, "unresolvedCriterionIds", index],
         "terminal admission references an unknown unresolved criterion",
       );
     }
@@ -95,7 +102,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     if (!effective) {
       addIssue(
         ctx,
-        ["completionFacts", "admissions", "effectiveResultIds", index],
+        ["completionFacts", "admissions", admissionIndex, "effectiveResultIds", index],
         "terminal admission references a missing effective result",
       );
       continue;
@@ -148,7 +155,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   ) {
     addIssue(
       ctx,
-      ["completionFacts", "admissions", "ownerOverrideReceiptRef"],
+      ["completionFacts", "admissions", admissionIndex, "ownerOverrideReceiptRef"],
       "terminal owner_override requires its request-bound receipt",
     );
   }
@@ -199,7 +206,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     admission.basisRef !== receipt.basisRef ||
     (admission.recordedHead + 1 !== receipt.recordedHead && !hasReservationBridge)
   ) {
-    addIssue(ctx, ["completionFacts", "admissions"]);
+    addIssue(ctx, ["completionFacts", "admissions", admissionIndex]);
   }
 }
 

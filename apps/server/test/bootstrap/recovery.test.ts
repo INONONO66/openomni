@@ -4,6 +4,7 @@ import {
   type DefaultDispatchRuntime,
   type DefaultDispatchRuntimeOptions,
 } from "@openomni/openomni";
+import { PolicyEngine } from "@openomni/policy";
 import { Bus, PendingInteractionStore, Session, Storage, WorkerRun } from "@openomni/session";
 import { runBootstrapRecovery, runRecovery } from "../../src/bootstrap/recovery";
 import {
@@ -56,11 +57,15 @@ async function createPendingInteractionFixture(
 describe("server recovery", () => {
   it("injects the public default runtime into recovery before inbound surfaces start", async () => {
     let runtimeOptions: DefaultDispatchRuntimeOptions | undefined;
+    const completionPolicyEngine = PolicyEngine.create();
     const runtime = createDefaultDispatchRuntime({ completionWriter });
-    const sharedRuntime = createBootstrapDispatchRuntime({ completionWriter }, (options) => {
-      runtimeOptions = options;
-      return runtime;
-    });
+    const sharedRuntime = createBootstrapDispatchRuntime(
+      { completionWriter, completionPolicyEngine },
+      (options) => {
+        runtimeOptions = options;
+        return runtime;
+      },
+    );
     let recoveredRuntime:
       | Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">
       | undefined;
@@ -93,7 +98,7 @@ describe("server recovery", () => {
       ],
     });
 
-    expect(runtimeOptions?.completionPolicyEngine).toBeDefined();
+    expect(runtimeOptions?.completionPolicyEngine).toBe(completionPolicyEngine);
     expect(recoveredRuntime).toBe(sharedRuntime);
     expect(events).toEqual(["recovery", "server", "channel"]);
     expect(server).toEqual({ close: expect.any(Function) });

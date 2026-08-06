@@ -11,7 +11,7 @@ export function createBootstrapDispatchRuntime(
 ): DefaultDispatchRuntime {
   return createRuntime({
     ...options,
-    completionPolicyEngine: PolicyEngine.create(),
+    completionPolicyEngine: options.completionPolicyEngine ?? PolicyEngine.create(),
   });
 }
 

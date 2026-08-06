@@ -1085,6 +1085,22 @@ describe("WorkItem completion admission contracts", () => {
       false,
       false,
     ]);
+    const unresolvedAdmission = WorkItem.Info.safeParse({
+      ...validInput,
+      completionFacts: {
+        ...completionFacts,
+        admissions: [{ ...admission, unresolvedCriterionIds: ["criterion:missing"] }],
+      },
+    });
+    expect(unresolvedAdmission.success).toBe(false);
+    if (!unresolvedAdmission.success) {
+      expect(unresolvedAdmission.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionFacts",
+        "admissions",
+        0,
+        "unresolvedCriterionIds",
+      ]);
+    }
   });
 
   test("preserves the explicit legacy upcast above the former boundary", () => {
