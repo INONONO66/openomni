@@ -63,6 +63,7 @@ describe("Processor tool result projection", () => {
             toolName: "weather",
             input: { city: "Seoul" },
           };
+          await Bun.sleep(10);
           yield {
             type: "tool-result",
             toolCallId: "call-weather",
@@ -90,6 +91,17 @@ describe("Processor tool result projection", () => {
       tool: "weather",
       state: { status: "completed", output: "sunny" },
     });
+
+    // The tool runs between tool-call and tool-result: start is recorded at
+    // the call event, so the part reports a real duration.
+    const state = toolPart?.type === "tool" ? toolPart.state : undefined;
+    if (state?.status !== "completed") throw new Error("expected completed tool state");
+    expect(state.time.end - state.time.start).toBeGreaterThanOrEqual(5);
+
+    const runningSnapshot = messages
+      .flatMap((message) => message.parts)
+      .find((part) => part.type === "tool" && part.state.status === "running");
+    expect(runningSnapshot).toBeDefined();
   });
 
   test("ignores unmatched AI SDK tool-result stream parts", async () => {

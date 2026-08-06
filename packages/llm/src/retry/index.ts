@@ -71,11 +71,31 @@ export namespace Retry {
       return undefined;
     }
 
-    const message = error.data.message;
+    const sniffed =
+      classifyErrorPayload(error.data.message) ?? classifyErrorPayload(error.data.responseBody);
+    if (sniffed !== undefined) {
+      return sniffed;
+    }
+
+    const status = error.data.statusCode;
+    if (status === 429) {
+      return "Rate Limited";
+    }
+    if (status !== undefined && status >= 500) {
+      return "Provider Server Error";
+    }
+
+    // The provider marked this retryable (408/409, x-should-retry, …) even
+    // though the payload carries no recognizable detail.
+    return "Provider Error";
+  }
+
+  function classifyErrorPayload(payload: string | undefined): string | undefined {
+    if (!payload) return undefined;
 
     let json: unknown;
     try {
-      json = JSON.parse(message);
+      json = JSON.parse(payload);
     } catch {
       return undefined;
     }

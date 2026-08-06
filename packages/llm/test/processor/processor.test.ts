@@ -482,6 +482,66 @@ describe("Processor", () => {
       }
     });
 
+    test("retries raw AI SDK provider errors (AI_APICallError shape)", async () => {
+      // Regression: production errors come from the AI SDK, whose name is
+      // AI_APICallError and whose retry fields live on the error object, not
+      // under .data. Without coercion, no real provider error ever retried.
+      let attemptCount = 0;
+      const sdkError = Object.assign(new Error("Overloaded"), {
+        name: "AI_APICallError",
+        isRetryable: true,
+        statusCode: 529,
+        responseHeaders: { "Retry-After-Ms": "1" },
+      });
+
+      const processor = createProcessor({
+        createStream: async () => ({
+          fullStream: (async function* () {
+            attemptCount++;
+            if (attemptCount === 1) {
+              throw sdkError;
+            }
+            yield { type: "finish" };
+          })(),
+        }),
+      });
+
+      await processor.process({ system: "" });
+
+      expect(attemptCount).toBe(2);
+    });
+
+    test("published part snapshots are frozen at publish time", async () => {
+      // Regression: parts are copy-on-write; a consumer that stores an early
+      // snapshot must not observe later mutations through shared references.
+      const snapshots: Message.WithParts[] = [];
+      const sink: Sink = {
+        onMessage: (message) => snapshots.push(message),
+        onToolCall: () => undefined,
+        onToolResult: () => undefined,
+        onSnapshot: () => undefined,
+      };
+
+      const processor = createProcessor({
+        sink,
+        createStream: streamOf([
+          { type: "text-start", providerMetadata: {} },
+          { type: "text-delta", text: "Hello" },
+          { type: "text-delta", text: " World" },
+          { type: "text-end", providerMetadata: {} },
+          { type: "finish" },
+        ]),
+      });
+
+      await processor.process({ system: "" });
+
+      const textAt = (index: number) =>
+        snapshots[index]?.parts.find((part): part is Message.TextPart => part.type === "text")
+          ?.text;
+      expect(textAt(1)).toBe("Hello");
+      expect(textAt(2)).toBe("Hello World");
+    });
+
     test("handles retryable errors with retry logic", async () => {
       let attemptCount = 0;
 

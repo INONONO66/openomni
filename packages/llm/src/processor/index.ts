@@ -7,7 +7,7 @@ import {
   type Tool,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { APIError } from "../error";
+import { coerceApiError } from "../error";
 import { Retry } from "../retry";
 import type { Provider } from "../provider";
 import {
@@ -107,7 +107,8 @@ export namespace Processor {
               assistantMessage.time.completed = Date.now();
               return;
             } catch (e: unknown) {
-              const retryReason = Retry.isRetryable(e);
+              const apiError = coerceApiError(e);
+              const retryReason = Retry.isRetryable(apiError ?? e);
 
               if (retryReason === undefined || ++attempt > retryAttemptLimit) {
                 if (!(e instanceof DOMException && e.name === "AbortError")) {
@@ -116,7 +117,7 @@ export namespace Processor {
                 throw e;
               }
 
-              const delayMs = Retry.delay(attempt, APIError.isInstance(e) ? e : undefined);
+              const delayMs = Retry.delay(attempt, apiError);
               if (trace) {
                 Bus.publish(LlmCall.RetryDecided, {
                   traceId: trace.traceId,

@@ -103,17 +103,24 @@ function startText(event: StreamEvent, state: StreamEventState, context: StreamE
   context.messagePartWriter.add(state.currentText);
 }
 
+// Handlers publish copy-on-write part objects: a published part is never
+// mutated afterwards, so sink consumers holding earlier snapshots see the
+// state at publish time, not the final state.
 function appendText(
   event: StreamEvent,
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
   if (!state.currentText) return;
-  state.currentText.text += String(event.text || "");
-  if (event.providerMetadata) {
-    state.currentText.metadata = event.providerMetadata as Record<string, unknown>;
-  }
-  context.messagePartWriter.update(state.currentText);
+  const updated: Message.TextPart = {
+    ...state.currentText,
+    text: state.currentText.text + String(event.text || ""),
+    ...(event.providerMetadata !== undefined && {
+      metadata: event.providerMetadata as Record<string, unknown>,
+    }),
+  };
+  state.currentText = updated;
+  context.messagePartWriter.update(updated);
 }
 
 function finishText(
@@ -121,16 +128,17 @@ function finishText(
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
-  if (state.currentText?.time) {
-    state.currentText.text = state.currentText.text.trimEnd();
-    state.currentText.time = {
-      start: state.currentText.time.start,
-      end: Date.now(),
+  const current = state.currentText;
+  if (current?.time) {
+    const updated: Message.TextPart = {
+      ...current,
+      text: current.text.trimEnd(),
+      time: { start: current.time.start, end: Date.now() },
+      ...(event.providerMetadata !== undefined && {
+        metadata: event.providerMetadata as Record<string, unknown>,
+      }),
     };
-    if (event.providerMetadata) {
-      state.currentText.metadata = event.providerMetadata as Record<string, unknown>;
-    }
-    context.messagePartWriter.update(state.currentText);
+    context.messagePartWriter.update(updated);
   }
   state.currentText = undefined;
 }
@@ -160,13 +168,18 @@ function appendReasoning(
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
-  const part = state.reasoningMap[String(event.id)];
+  const reasoningId = String(event.id);
+  const part = state.reasoningMap[reasoningId];
   if (part == null) return;
-  part.text += String(event.text || "");
-  if (event.providerMetadata) {
-    part.metadata = event.providerMetadata as Record<string, unknown>;
-  }
-  context.messagePartWriter.update(part);
+  const updated: Message.ReasoningPart = {
+    ...part,
+    text: part.text + String(event.text || ""),
+    ...(event.providerMetadata !== undefined && {
+      metadata: event.providerMetadata as Record<string, unknown>,
+    }),
+  };
+  state.reasoningMap[reasoningId] = updated;
+  context.messagePartWriter.update(updated);
 }
 
 function finishReasoning(
@@ -177,15 +190,18 @@ function finishReasoning(
   const reasoningId = String(event.id);
   const part = state.reasoningMap[reasoningId];
   if (part == null) return;
-  part.text = part.text.trimEnd();
-  part.time = {
-    start: part.time?.start ?? Date.now(),
-    end: Date.now(),
+  const updated: Message.ReasoningPart = {
+    ...part,
+    text: part.text.trimEnd(),
+    time: {
+      start: part.time?.start ?? Date.now(),
+      end: Date.now(),
+    },
+    ...(event.providerMetadata !== undefined && {
+      metadata: event.providerMetadata as Record<string, unknown>,
+    }),
   };
-  if (event.providerMetadata) {
-    part.metadata = event.providerMetadata as Record<string, unknown>;
-  }
-  context.messagePartWriter.update(part);
+  context.messagePartWriter.update(updated);
   delete state.reasoningMap[reasoningId];
 }
 
@@ -198,9 +214,13 @@ function handleToolCall(event: StreamEvent, context: StreamEventContext): void {
     type: "tool",
     callID: String(event.toolCallId),
     tool: String(event.toolName),
+    // The AI SDK executes the tool between tool-call and tool-result, so the
+    // call event is the execution start: record it here so the result can
+    // report a real duration.
     state: {
-      status: "pending",
+      status: "running",
       input,
+      time: { start: Date.now() },
     },
   };
   context.messagePartWriter.add(toolPart);
@@ -219,32 +239,28 @@ function handleToolResult(event: StreamEvent, context: StreamEventContext): void
 
   const outputPayload = normalizeOutputPayload(event);
   const isError = event.isError === true || outputPayload.isError;
+  const start = toolPart.state.status === "running" ? toolPart.state.time.start : Date.now();
 
-  if (isError) {
-    toolPart.state = {
-      status: "error",
-      input: toolPart.state.input,
-      error: outputPayload.output,
-      time: {
-        start: Date.now(),
-        end: Date.now(),
-      },
-    };
-  } else {
-    toolPart.state = {
-      status: "completed",
-      input: toolPart.state.input,
-      output: outputPayload.output,
-      title: String(event.toolName ?? toolPart.tool),
-      metadata: {},
-      time: {
-        start: Date.now(),
-        end: Date.now(),
-      },
-    };
-  }
+  const updated: Message.ToolPart = {
+    ...toolPart,
+    state: isError
+      ? {
+          status: "error",
+          input: toolPart.state.input,
+          error: outputPayload.output,
+          time: { start, end: Date.now() },
+        }
+      : {
+          status: "completed",
+          input: toolPart.state.input,
+          output: outputPayload.output,
+          title: String(event.toolName ?? toolPart.tool),
+          metadata: {},
+          time: { start, end: Date.now() },
+        },
+  };
 
-  context.messagePartWriter.update(toolPart);
+  context.messagePartWriter.update(updated);
   context.sink.onToolResult({
     id: crypto.randomUUID(),
     toolCallId,
@@ -278,17 +294,17 @@ export function cleanupPendingTools(
   sink: Sink,
 ): void {
   for (const tool of pendingTools) {
-    if (tool.state.status !== "pending") continue;
-    tool.state = {
-      status: "error",
-      input: tool.state.input,
-      error: "Processing was interrupted",
-      time: {
-        start: Date.now(),
-        end: Date.now(),
+    if (tool.state.status !== "pending" && tool.state.status !== "running") continue;
+    const start = tool.state.status === "running" ? tool.state.time.start : Date.now();
+    updateMessagePart({
+      ...tool,
+      state: {
+        status: "error",
+        input: tool.state.input,
+        error: "Processing was interrupted",
+        time: { start, end: Date.now() },
       },
-    };
-    updateMessagePart(tool);
+    });
     sink.onToolResult({
       id: crypto.randomUUID(),
       toolCallId: tool.callID,

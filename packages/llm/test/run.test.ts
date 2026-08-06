@@ -2,7 +2,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import { LlmCall, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
 
@@ -137,6 +138,37 @@ describe("run", () => {
       expect(outcome.error.message).toContain("no-auth-provider-xyz");
     }
     expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("publishes LlmCall.Failed on error so every Started call terminates", async () => {
+    const failures: Array<{ error: string; aborted: boolean; traceId: string }> = [];
+    const unsub = Bus.subscribe(LlmCall.Failed, (event) => {
+      failures.push(event);
+    });
+
+    const outcome = await run(
+      {
+        messages: [],
+        tools: [],
+        model: {
+          id: "claude-3-haiku",
+          providerID: "no-auth-provider-failed-event",
+          name: "Test Model",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        trace: { traceId: "trace-run-failed" },
+      },
+      mockSink,
+    );
+    unsub();
+
+    expect(outcome.type).toBe("error");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      traceId: "trace-run-failed",
+      aborted: false,
+    });
+    expect(failures[0]?.error).toContain("no-auth-provider-failed-event");
   });
 
   test("does not read stored auth when fallback is disabled", async () => {

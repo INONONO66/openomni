@@ -212,11 +212,25 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
     return { type: "stop" };
   } catch (error) {
-    if (abortSignal.aborted) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const aborted = abortSignal.aborted;
+
+    Bus.publish(LlmCall.Failed, {
+      traceId,
+      sessionId: sessionID,
+      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+      provider,
+      model: modelId,
+      durationMs: Date.now() - startMs,
+      error: err.message,
+      aborted,
+      time: Date.now(),
+    });
+
+    if (aborted) {
       return { type: "aborted" };
     }
 
-    const err = error instanceof Error ? error : new Error(String(error));
     return {
       type: "error",
       error: {

@@ -228,15 +228,37 @@ describe("Retry", () => {
       expect(result).toBeUndefined();
     });
 
-    test("returns undefined if APIError.isRetryable is true but message is not JSON", () => {
+    test("falls back to status classification when message is not JSON", () => {
       const error = new APIError({
         message: "Server error",
         statusCode: 500,
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBeUndefined();
+      expect(Retry.isRetryable(error)).toBe("Provider Server Error");
+    });
+
+    test("classifies 429 by status when payload is opaque", () => {
+      const error = new APIError({
+        message: "<html>rate limited</html>",
+        statusCode: 429,
+        isRetryable: true,
+      });
+
+      expect(Retry.isRetryable(error)).toBe("Rate Limited");
+    });
+
+    test("classifies from responseBody when message is opaque", () => {
+      const error = new APIError({
+        message: "Overloaded",
+        isRetryable: true,
+        responseBody: JSON.stringify({
+          type: "error",
+          error: { type: "too_many_requests" },
+        }),
+      });
+
+      expect(Retry.isRetryable(error)).toBe("Too Many Requests");
     });
 
     test("detects too_many_requests in JSON response", () => {
@@ -314,24 +336,20 @@ describe("Retry", () => {
       expect(result).toBe("Provider Server Error");
     });
 
-    test("returns undefined for non-JSON message", () => {
-      const error = new APIError({
+    test("trusts the provider retryable flag when payload and status are opaque", () => {
+      // The SDK only sets isRetryable for transient failures (408/409/429/5xx,
+      // x-should-retry); an unparseable payload must not veto that signal.
+      const plainText = new APIError({
         message: "Plain text error",
         isRetryable: true,
       });
-
-      const result = Retry.isRetryable(error);
-      expect(result).toBeUndefined();
-    });
-
-    test("returns undefined for invalid JSON", () => {
-      const error = new APIError({
+      const invalidJson = new APIError({
         message: "{ invalid json",
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBeUndefined();
+      expect(Retry.isRetryable(plainText)).toBe("Provider Error");
+      expect(Retry.isRetryable(invalidJson)).toBe("Provider Error");
     });
   });
 

@@ -50,8 +50,14 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
   }),
 };
 
+// Auth material is hashed into cache keys so credentials never sit in Map
+// keys (visible in heap dumps, debugger key listings, or accidental logs).
+function authFingerprint(auth: Auth.Info): string {
+  return Bun.hash(JSON.stringify(auth)).toString(16);
+}
+
 export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}`;
   const cached = getCached(SDK_CACHE, cacheKey);
   if (cached) return cached;
 
@@ -100,7 +106,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
 
 export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
   const modelID = model.api?.id ?? model.id;
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${authFingerprint(auth)}`;
   const cached = getCached(LANGUAGE_CACHE, cacheKey);
   if (cached) return cached;
 
