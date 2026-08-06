@@ -20,9 +20,9 @@
     "pct": 89.19
   },
   "packages/openomni": {
-    "linesFound": 15799,
-    "linesHit": 15100,
-    "pct": 95.58
+    "linesFound": 15811,
+    "linesHit": 15111,
+    "pct": 95.57
   },
   "packages/policy": {
     "linesFound": 1775,
@@ -35,8 +35,8 @@
     "pct": 97.27
   },
   "packages/session": {
-    "linesFound": 4081,
-    "linesHit": 3781,
-    "pct": 92.65
+    "linesFound": 4072,
+    "linesHit": 3784,
+    "pct": 92.93
   }
 }

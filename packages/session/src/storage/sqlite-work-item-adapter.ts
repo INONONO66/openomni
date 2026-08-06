@@ -137,6 +137,11 @@ function assertCompletionLedgerExtension(current: WorkItem.Info, next: WorkItem.
       next.completionFacts.verificationErrors,
     ],
     ["effects", current.completionFacts.effects, next.completionFacts.effects],
+    [
+      "request reservations",
+      current.completionFacts.requestReservations,
+      next.completionFacts.requestReservations,
+    ],
     ["admissions", current.completionFacts.admissions, next.completionFacts.admissions],
   ] as const;
   for (const [name, previous, candidate] of collections) {
@@ -144,22 +149,6 @@ function assertCompletionLedgerExtension(current: WorkItem.Info, next: WorkItem.
   }
   if (next.completionFacts.revision < current.completionFacts.revision) {
     throw new Error("completion facts revision cannot move backward");
-  }
-  for (const reservation of current.completionFacts.requestReservations) {
-    const candidate = next.completionFacts.requestReservations.find(
-      ({ id }) => id === reservation.id,
-    );
-    if (!candidate) continue;
-    const { ownerId: _owner, fence: _fence, leaseExpiresAt: _lease, ...identity } = reservation;
-    const {
-      ownerId: _nextOwner,
-      fence: _nextFence,
-      leaseExpiresAt: _nextLease,
-      ...candidateIdentity
-    } = candidate;
-    if (JSON.stringify(identity) !== JSON.stringify(candidateIdentity)) {
-      throw new Error("completion reservation identity is immutable");
-    }
   }
   if (
     current.completionReport !== undefined &&

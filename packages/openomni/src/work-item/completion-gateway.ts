@@ -225,26 +225,23 @@ function releasePreAdmissionReservation(
   completionWriter: Storage.WorkItemCompletionWriter,
   recoveryOwnerId: string,
 ): boolean {
+  const releasedReservation = WorkItem.CompletionRequestReservation.parse({
+    ...reservation,
+    id: `${reservation.id}:recovery:${reservation.fence + 1}`,
+    expectedHead: item.revision,
+    recordedHead: item.revision + 1,
+    createdAt: releasedAt,
+    ownerId: recoveryOwnerId,
+    fence: reservation.fence + 1,
+    leaseExpiresAt: releasedAt,
+  });
   const candidate = WorkItem.Info.parse({
     ...item,
     revision: item.revision + 1,
     completionFacts: {
       ...item.completionFacts,
       revision: item.completionFacts.revision + 1,
-      requestReservations: item.completionFacts.requestReservations.map((current) =>
-        current.id === reservation.id
-          ? {
-              ...current,
-              id: `${current.id}:recovery:${current.fence + 1}`,
-              expectedHead: item.revision,
-              recordedHead: item.revision + 1,
-              createdAt: releasedAt,
-              ownerId: recoveryOwnerId,
-              fence: current.fence + 1,
-              leaseExpiresAt: releasedAt,
-            }
-          : current,
-      ),
+      requestReservations: [...item.completionFacts.requestReservations, releasedReservation],
     },
     timestamps: { ...item.timestamps, updated: Math.max(item.timestamps.updated, releasedAt) },
   });

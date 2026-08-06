@@ -677,9 +677,12 @@ async function resolveOwnerOverride(
   const receiptRef = request.ownerOverrideReceiptRef;
   if (!port || receiptRef === undefined) return undefined;
   const requestRoot = completionRequestRoot(request);
-  const reservation = item.completionFacts.requestReservations.find(
+  const matchingReservations = item.completionFacts.requestReservations.filter(
     (candidate) => candidate.requestId === request.id && candidate.requestRoot === requestRoot,
   );
+  const reservation =
+    matchingReservations.find(({ recordedHead }) => recordedHead === request.expectedHead) ??
+    matchingReservations.at(-1);
   const candidate = {
     receiptRef,
     workItemHash: request.workItemHash,

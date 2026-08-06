@@ -704,6 +704,7 @@ async function appendAdmission(
   admissionInput: WorkItem.CompletionAdmission,
 ): Promise<WorkItem.Info> {
   const admission = WorkItem.CompletionAdmission.parse(admissionInput);
+  const proposed = admission.requestSnapshot;
   const conflictingAdmission = existing.completionFacts.admissions.find(
     ({ id }) => id === admission.id,
   );
@@ -714,30 +715,30 @@ async function appendAdmission(
     completionFacts: {
       ...existing.completionFacts,
       revision: existing.completionFacts.revision + 1,
-      claims: appendFacts(existing.completionFacts.claims, request.claims, WorkItem.Claim),
+      claims: appendFacts(existing.completionFacts.claims, proposed.claims, WorkItem.Claim),
       observations: appendFacts(
         existing.completionFacts.observations,
-        request.observations,
+        proposed.observations,
         WorkItem.Observation,
       ),
       results: appendFacts(
         existing.completionFacts.results,
-        request.results,
+        proposed.results,
         WorkItem.CriterionResult,
       ),
       invalidations: appendFacts(
         existing.completionFacts.invalidations,
-        request.invalidations,
+        proposed.invalidations,
         WorkItem.ResultInvalidation,
       ),
       verificationErrors: appendFacts(
         existing.completionFacts.verificationErrors,
-        request.verificationErrors,
+        proposed.verificationErrors,
         WorkItem.VerificationErrorFact,
       ),
       effects: appendFacts(
         existing.completionFacts.effects,
-        request.effects,
+        proposed.effects,
         WorkItem.EffectRecord,
       ),
       admissions: [...existing.completionFacts.admissions, admission],

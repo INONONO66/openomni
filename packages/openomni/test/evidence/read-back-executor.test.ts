@@ -1,6 +1,8 @@
 /// <reference types="bun" />
 
 import { createHash } from "node:crypto";
+import { IncomingMessage } from "node:http";
+import { Socket } from "node:net";
 import { afterEach, describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { Storage, WorkItemStore } from "@openomni/session";
@@ -52,6 +54,37 @@ describe("ReadBackExecutor", () => {
         new Promise<never>(() => {
           // Intentionally never settles: active transport cannot extend the wall-clock deadline.
         }),
+    );
+
+    expect(result).toEqual({
+      statusCode: undefined,
+      body: "",
+      bodyDigest: undefined,
+      complete: false,
+    });
+  });
+
+  test("rejects response headers fulfilled after the wall-clock deadline", async () => {
+    let currentTime = 0;
+    const result = await loadReadBackUrl(
+      "https://example.com/document",
+      "HEAD",
+      100,
+      1_024,
+      false,
+      async () => ({
+        url: new URL("https://example.com/document"),
+        address: "203.0.113.1",
+        hostHeader: "example.com",
+        serverName: "example.com",
+      }),
+      () => {
+        currentTime = 101;
+        const response = new IncomingMessage(new Socket());
+        response.statusCode = 200;
+        return Promise.resolve(response);
+      },
+      () => currentTime,
     );
 
     expect(result).toEqual({
