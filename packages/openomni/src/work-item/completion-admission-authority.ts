@@ -148,7 +148,11 @@ export function createCompletionAuthorityResolver(
       assertUniqueFactIds(item, request);
       await assertDurableResultAuthority(dependencies.resultAuthorityPort, item, request);
       await assertProposedResultAuthority(dependencies.resultAuthorityPort, item, request);
-      assertProposedClaimAuthority(item, request);
+      const ownerOverride = await resolveOwnerOverride(
+        dependencies.ownerOverrideAuthorityPort,
+        request,
+      );
+      assertProposedClaimAuthority(item, request, ownerOverride !== undefined);
       await assertProposedInvalidationAuthority(
         dependencies.invalidationAuthorityPort,
         item,
@@ -186,11 +190,6 @@ export function createCompletionAuthorityResolver(
           effects: [],
         },
       });
-      const ownerOverride = await resolveOwnerOverride(
-        dependencies.ownerOverrideAuthorityPort,
-        request,
-      );
-
       return foldWithAuthorityErrors({
         ...foldInput,
         policy: completionPolicy(policyDecision),
@@ -453,6 +452,7 @@ async function assertProposedResultAuthority(
 function assertProposedClaimAuthority(
   item: WorkItem.Info,
   request: WorkItem.CompletionRequest,
+  ownerOverrideAuthorized: boolean,
 ): void {
   const results = [...item.completionFacts.results, ...request.results].filter(
     (result) => result.basisRef === request.basisRef,
@@ -466,9 +466,16 @@ function assertProposedClaimAuthority(
       );
     }
     const authoritativeObservationIds = new Set(
-      results
-        .filter((result) => result.criterionId === claim.criterionId)
-        .flatMap((result) => result.observationIds),
+      ownerOverrideAuthorized
+        ? [...item.completionFacts.observations, ...request.observations]
+            .filter(
+              (observation) =>
+                observation.subjectRef === item.hash && observation.basisRef === request.basisRef,
+            )
+            .map(({ id }) => id)
+        : results
+            .filter((result) => result.criterionId === claim.criterionId)
+            .flatMap((result) => result.observationIds),
     );
     const unboundObservationId = claim.observationIds.find(
       (observationId) => !authoritativeObservationIds.has(observationId),

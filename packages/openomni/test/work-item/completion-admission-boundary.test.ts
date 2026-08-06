@@ -739,40 +739,23 @@ describe("WorkItem completion admission service", () => {
       ownerOverrideReceiptRef,
       results: [],
     });
-    const service = guardedService(
-      {
-        resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
-          const current = WorkItem.Info.parse(itemInput);
-          const candidate = WorkItem.CompletionRequest.parse(requestInput);
-          const criterion = current.completionFacts.criteria[0];
-          if (!criterion) throw new Error("missing Owner override criterion");
-          return WorkItem.CompletionAdmission.parse({
-            version: 1,
-            id: `admission:${candidate.id}:${current.revision + 1}:owner-direct`,
-            requestId: candidate.id,
-            requestSnapshot: candidate,
-            origin: candidate.origin,
-            contractRevision: current.completionContract.revision,
-            basisRef: current.completionContract.basisRef,
-            effectiveResultIds: [],
-            unresolvedCriterionIds: [criterion.id],
-            decision: "owner_override",
-            reasonCodes: ["owner_override_missing_result"],
-            residualRisks: ["Owner accepted the missing result"],
-            ownerOverrideReceiptRef,
-            policyRef: "policy:owner-missing-result",
-            expectedHead: current.revision,
-            recordedHead: current.revision + 1,
-            createdAt: NOW,
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      ownerOverrideAuthorityPort: {
+        validate(candidate: unknown) {
+          expect(candidate).toMatchObject({
+            receiptRef: ownerOverrideReceiptRef,
+            workItemHash: item.hash,
+            requestId: ownerRequest.id,
           });
+          return { ok: true, receiptRef: ownerOverrideReceiptRef } as const;
         },
       },
-      completionWriter,
-      { ownerId: "process:owner", leaseDurationMs: 10_000 },
-    );
-    if (!service) return;
+      now: () => NOW,
+    });
 
-    const result = await service.requestCompletion(ownerRequest, report);
+    const result = await gateway.requestCompletion(ownerRequest, report);
     expect(result).toMatchObject({
       completed: true,
       admission: {
