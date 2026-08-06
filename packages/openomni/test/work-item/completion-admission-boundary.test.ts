@@ -730,6 +730,64 @@ describe("WorkItem completion admission service", () => {
     expect(result.admission.requestSnapshot.ownerOverrideReceiptRef).toBe(ownerOverrideReceiptRef);
   });
 
+  test("closes an Owner override without synthesizing a missing result", async () => {
+    configure();
+    const { item, request, report } = await fixture("resident");
+    const ownerOverrideReceiptRef = "owner-receipt:missing-result";
+    const ownerRequest = WorkItem.CompletionRequest.parse({
+      ...request,
+      ownerOverrideReceiptRef,
+      claims: [],
+      observations: [],
+      results: [],
+    });
+    const service = guardedService(
+      {
+        resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+          const current = WorkItem.Info.parse(itemInput);
+          const candidate = WorkItem.CompletionRequest.parse(requestInput);
+          const criterion = current.completionFacts.criteria[0];
+          if (!criterion) throw new Error("missing Owner override criterion");
+          return WorkItem.CompletionAdmission.parse({
+            version: 1,
+            id: `admission:${candidate.id}:${current.revision + 1}:owner-direct`,
+            requestId: candidate.id,
+            requestSnapshot: candidate,
+            origin: candidate.origin,
+            contractRevision: current.completionContract.revision,
+            basisRef: current.completionContract.basisRef,
+            effectiveResultIds: [],
+            unresolvedCriterionIds: [criterion.id],
+            decision: "owner_override",
+            reasonCodes: ["owner_override_missing_result"],
+            residualRisks: ["Owner accepted the missing result"],
+            ownerOverrideReceiptRef,
+            policyRef: "policy:owner-missing-result",
+            expectedHead: current.revision,
+            recordedHead: current.revision + 1,
+            createdAt: NOW,
+          });
+        },
+      },
+      completionWriter,
+      { ownerId: "process:owner", leaseDurationMs: 10_000 },
+    );
+    if (!service) return;
+
+    const result = await service.requestCompletion(ownerRequest, report);
+    expect(result).toMatchObject({
+      completed: true,
+      admission: {
+        decision: "owner_override",
+        unresolvedCriterionIds: [item.completionFacts.criteria[0]?.id],
+      },
+    });
+    const completed = WorkItemStore.get(item.hash);
+    expect(completed?.completionFacts.results).toEqual([]);
+    expect(completed?.completionFacts.claims).toEqual([]);
+    expect(completed?.completionFacts.observations).toEqual([]);
+  });
+
   test("does not preserve an Owner receipt across external one-head drift", async () => {
     configure();
     const { item, request, report } = await fixture("resident");

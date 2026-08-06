@@ -1096,6 +1096,63 @@ describe("WorkItem completion admission contracts", () => {
 
     expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
     expect(WorkItem.Info.safeParse(ownerOverrideInput).success).toBe(true);
+    const missingCriterionClaim = {
+      ...terminalClaim,
+      criterionId: "criterion:missing",
+    };
+    const invalidOwnerClaim = WorkItem.Info.safeParse({
+      ...ownerOverrideInput,
+      completionFacts: {
+        ...ownerOverrideInput.completionFacts,
+        claims: [missingCriterionClaim],
+        admissions: [
+          {
+            ...ownerAdmission,
+            requestSnapshot: {
+              ...ownerAdmission.requestSnapshot,
+              claims: [missingCriterionClaim],
+            },
+          },
+        ],
+      },
+    });
+    expect(invalidOwnerClaim.success).toBe(false);
+    if (!invalidOwnerClaim.success) {
+      expect(invalidOwnerClaim.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionFacts",
+        "claims",
+        0,
+        "criterionId",
+      ]);
+    }
+    const directOwnerAdmission = WorkItem.CompletionAdmission.parse({
+      ...ownerAdmission,
+      id: "admission:owner-direct",
+      effectiveResultIds: [],
+      unresolvedCriterionIds: [terminalCriterionId],
+      requestSnapshot: {
+        ...ownerAdmission.requestSnapshot,
+        claims: [],
+        observations: [],
+        results: [],
+      },
+    });
+    expect(
+      WorkItem.Info.safeParse({
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          claims: [],
+          observations: [],
+          results: [],
+          admissions: [directOwnerAdmission],
+        },
+        completionTerminalReceipt: {
+          ...completionTerminalReceipt,
+          admissionId: directOwnerAdmission.id,
+        },
+      }).success,
+    ).toBe(true);
     expect(
       WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);

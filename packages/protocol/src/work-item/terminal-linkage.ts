@@ -278,6 +278,17 @@ function validateCompletionReportEvidence(
   const effectiveResults = item.completionFacts.results.filter((result) =>
     admission.effectiveResultIds.includes(result.id),
   );
+  const criteriaById = new Map(
+    item.completionFacts.criteria.map((criterion) => [criterion.id, criterion]),
+  );
+  for (const [claimIndex, claim] of item.completionFacts.claims.entries()) {
+    const criterion = criteriaById.get(claim.criterionId);
+    if (!criterion) {
+      addIssue(ctx, ["completionFacts", "claims", claimIndex, "criterionId"]);
+    } else if (criterion.statement !== claim.statement) {
+      addIssue(ctx, ["completionFacts", "claims", claimIndex, "statement"]);
+    }
+  }
   for (const [claimIndex, reportClaim] of report.claims.entries()) {
     const admittedClaims = item.completionFacts.claims
       .map((claim, index) => ({ claim, index }))
@@ -285,9 +296,18 @@ function validateCompletionReportEvidence(
         ({ claim }) =>
           claim.statement === reportClaim.statement &&
           claim.basisRef === admission.basisRef &&
+          criteriaById.get(claim.criterionId)?.statement === claim.statement &&
           (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
       );
+    const ownerOverrideDirectCriterion =
+      admission.decision === "owner_override" &&
+      item.completionFacts.criteria.some(
+        (criterion) =>
+          admission.unresolvedCriterionIds.includes(criterion.id) &&
+          criterion.statement === reportClaim.statement,
+      );
     if (admittedClaims.length === 0) {
+      if (ownerOverrideDirectCriterion) continue;
       addIssue(ctx, ["completionReport", "claims", claimIndex, "statement"]);
       continue;
     }
