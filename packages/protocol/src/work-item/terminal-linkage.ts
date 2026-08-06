@@ -299,15 +299,7 @@ function validateCompletionReportEvidence(
           criteriaById.get(claim.criterionId)?.statement === claim.statement &&
           (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
       );
-    const ownerOverrideDirectCriterion =
-      admission.decision === "owner_override" &&
-      item.completionFacts.criteria.some(
-        (criterion) =>
-          admission.unresolvedCriterionIds.includes(criterion.id) &&
-          criterion.statement === reportClaim.statement,
-      );
     if (admittedClaims.length === 0) {
-      if (ownerOverrideDirectCriterion) continue;
       addIssue(ctx, ["completionReport", "claims", claimIndex, "statement"]);
       continue;
     }

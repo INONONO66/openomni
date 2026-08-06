@@ -1046,15 +1046,7 @@ function verifyCompletionReport(
         claim.basisRef === admission.basisRef &&
         (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
     );
-    const ownerOverrideDirectCriterion =
-      admission.decision === "owner_override" &&
-      item.completionFacts.criteria.some(
-        (criterion) =>
-          admission.unresolvedCriterionIds.includes(criterion.id) &&
-          criterion.statement === reportClaim.statement,
-      );
     if (admittedClaims.length === 0) {
-      if (ownerOverrideDirectCriterion) continue;
       throw new Error(`completion report claim is not admitted: ${reportClaim.statement}`);
     }
     const criterionIds = new Set(admittedClaims.map(({ criterionId }) => criterionId));

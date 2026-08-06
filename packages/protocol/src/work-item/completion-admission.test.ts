@@ -1132,8 +1132,6 @@ describe("WorkItem completion admission contracts", () => {
       unresolvedCriterionIds: [terminalCriterionId],
       requestSnapshot: {
         ...ownerAdmission.requestSnapshot,
-        claims: [],
-        observations: [],
         results: [],
       },
     });
@@ -1142,8 +1140,6 @@ describe("WorkItem completion admission contracts", () => {
         ...validInput,
         completionFacts: {
           ...completionFacts,
-          claims: [],
-          observations: [],
           results: [],
           admissions: [directOwnerAdmission],
         },

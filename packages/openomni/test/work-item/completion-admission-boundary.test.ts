@@ -737,8 +737,6 @@ describe("WorkItem completion admission service", () => {
     const ownerRequest = WorkItem.CompletionRequest.parse({
       ...request,
       ownerOverrideReceiptRef,
-      claims: [],
-      observations: [],
       results: [],
     });
     const service = guardedService(
@@ -784,8 +782,8 @@ describe("WorkItem completion admission service", () => {
     });
     const completed = WorkItemStore.get(item.hash);
     expect(completed?.completionFacts.results).toEqual([]);
-    expect(completed?.completionFacts.claims).toEqual([]);
-    expect(completed?.completionFacts.observations).toEqual([]);
+    expect(completed?.completionFacts.claims).toHaveLength(1);
+    expect(completed?.completionFacts.observations).toHaveLength(1);
   });
 
   test("does not preserve an Owner receipt across external one-head drift", async () => {
