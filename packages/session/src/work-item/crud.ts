@@ -65,6 +65,9 @@ function removeWorkItemGraph(
 ): RemovalResult | undefined {
   const existing = workItem.get(hash);
   if (!existing) return undefined;
+  if (existing.revision !== 0) {
+    throw new Error("Cannot remove WorkItem after durable history exists");
+  }
 
   const time = Date.now();
   const staged = new Map<string, GraphMutation>();

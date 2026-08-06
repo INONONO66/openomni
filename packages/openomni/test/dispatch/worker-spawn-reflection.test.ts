@@ -144,7 +144,7 @@ describe("worker.spawn result reflection", () => {
     expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("failed");
   });
 
-  test("worker.spawn returns the durable reflection failure when recording dispatch failure throws", async () => {
+  test("worker.spawn preserves the coordinator failure when failure reflection also throws", async () => {
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
       owners: {
@@ -161,17 +161,21 @@ describe("worker.spawn result reflection", () => {
       },
     });
 
-    await expectRejectsWithMessage(
-      () =>
-        registry.get("worker.spawn")?.(
-          command(
-            "worker.spawn",
-            { kind: "worker", name: "coder" },
-            workerSpawnPayload("build it"),
-          ),
-        ),
-      "work item write failed",
-    );
+    let caught: unknown;
+    try {
+      await registry.get("worker.spawn")?.(
+        command("worker.spawn", { kind: "worker", name: "coder" }, workerSpawnPayload("build it")),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) return;
+    expect(caught.name).toBe("WorkItemReflectionError");
+    expect(caught.message).toBe("coordinator unavailable");
+    expect(caught.cause).toEqual(new Error("coordinator unavailable"));
+    expect(Reflect.get(caught, "reflectionFailure")).toEqual(new Error("work item write failed"));
   });
 
   test("worker.spawn marks terminal coordinator results on the work item", async () => {

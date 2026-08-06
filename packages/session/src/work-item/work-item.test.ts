@@ -697,6 +697,18 @@ describe("WorkItemStore", () => {
     expect(events).toEqual([item.hash]);
   });
 
+  test("rejects removing a WorkItem after durable completion history exists", async () => {
+    configureSqlite();
+    const item = await createItem("completed-history");
+    const evidenceId = await addPassingEvidence(item.hash);
+    const completed = persistCompletedFixture(item.hash, completionReport(evidenceId));
+
+    expect(() => WorkItemStore.remove(item.hash)).toThrow(
+      "Cannot remove WorkItem after durable history exists",
+    );
+    expect(WorkItemStore.get(item.hash)).toEqual(completed);
+  });
+
   test("rejects starting a failed item without retry", async () => {
     configureSqlite();
     const item = await createItem("start-failed");

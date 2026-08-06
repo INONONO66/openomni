@@ -14,7 +14,10 @@ import {
 import { projectConnectorCompletion } from "./connector-completion-projector.js";
 import { reflectCoordinatorResult, type WorkerCompletionOptions } from "./worker-completion.js";
 import { buildWorkerSpawnRequest, parseWorkerSpawnPayload } from "./worker-spawn-payload.js";
-import { createWorkerSpawnWorkItem } from "./worker-work-item.js";
+import {
+  createWorkerSpawnWorkItem,
+  throwWithWorkItemReflectionFailure,
+} from "./worker-work-item.js";
 import { extractText } from "./shared.js";
 
 export interface WorkerDispatchHandlerOptions
@@ -181,7 +184,11 @@ export function createWorkerDispatchHandlers(
       try {
         result = await coordinator.dispatch(request.sessionId, request);
       } catch (err) {
-        await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+        try {
+          await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+        } catch (reflectionFailure) {
+          throwWithWorkItemReflectionFailure(err, reflectionFailure);
+        }
         throw err;
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
