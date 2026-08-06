@@ -1189,6 +1189,35 @@ describe("WorkItem completion admission contracts", () => {
         ]);
       }
     }
+    const danglingClaim = {
+      ...terminalClaim,
+      observationIds: [...terminalClaim.observationIds, "observation:missing"],
+    };
+    const danglingAdmission = WorkItem.CompletionAdmission.parse({
+      ...admission,
+      requestSnapshot: {
+        ...admission.requestSnapshot,
+        claims: [danglingClaim],
+      },
+    });
+    const danglingClaimObservation = WorkItem.Info.safeParse({
+      ...validInput,
+      completionFacts: {
+        ...completionFacts,
+        claims: [danglingClaim],
+        admissions: [danglingAdmission],
+      },
+    });
+    expect(danglingClaimObservation.success).toBe(false);
+    if (!danglingClaimObservation.success) {
+      expect(danglingClaimObservation.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionFacts",
+        "claims",
+        0,
+        "observationIds",
+        1,
+      ]);
+    }
   });
 
   test("preserves the explicit legacy upcast above the former boundary", () => {

@@ -279,33 +279,44 @@ function validateCompletionReportEvidence(
     admission.effectiveResultIds.includes(result.id),
   );
   for (const [claimIndex, reportClaim] of report.claims.entries()) {
-    const admittedClaims = item.completionFacts.claims.filter(
-      (claim) =>
-        claim.statement === reportClaim.statement &&
-        claim.basisRef === admission.basisRef &&
-        (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
-    );
+    const admittedClaims = item.completionFacts.claims
+      .map((claim, index) => ({ claim, index }))
+      .filter(
+        ({ claim }) =>
+          claim.statement === reportClaim.statement &&
+          claim.basisRef === admission.basisRef &&
+          (admission.decision === "owner_override" || effectiveCriterionIds.has(claim.criterionId)),
+      );
     if (admittedClaims.length === 0) {
       addIssue(ctx, ["completionReport", "claims", claimIndex, "statement"]);
       continue;
     }
-    const criterionIds = new Set(admittedClaims.map(({ criterionId }) => criterionId));
+    const criterionIds = new Set(admittedClaims.map(({ claim }) => claim.criterionId));
     const effectiveObservationIds = new Set(
       effectiveResults
         .filter(({ criterionId }) => criterionIds.has(criterionId))
         .flatMap(({ observationIds }) => observationIds),
     );
     const admittedEvidenceIds = new Set(
-      admittedClaims.flatMap(({ observationIds }) =>
-        observationIds.flatMap((observationId) => {
+      admittedClaims.flatMap(({ claim, index: durableClaimIndex }) =>
+        claim.observationIds.flatMap((observationId, observationIndex) => {
+          const resolved = observationsById.get(observationId);
+          if (!resolved) {
+            addIssue(ctx, [
+              "completionFacts",
+              "claims",
+              durableClaimIndex,
+              "observationIds",
+              observationIndex,
+            ]);
+            return [];
+          }
           if (
             admission.decision !== "owner_override" &&
             !effectiveObservationIds.has(observationId)
           ) {
             return [];
           }
-          const resolved = observationsById.get(observationId);
-          if (!resolved) return [];
           const { index, observation } = resolved;
           if (observation.subjectRef !== item.hash) {
             addIssue(ctx, ["completionFacts", "observations", index, "subjectRef"]);
