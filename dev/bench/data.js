@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785859402919,
+  "lastUpdate": 1786002904669,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -35937,6 +35937,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 522240,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2cdf28cc5b74a431213bafe99e23469aca654087",
+          "message": "refactor(llm): collapse processor split, fix streaming/retry bugs (#518)\n\n* refactor(llm): collapse processor split, fix streaming/retry bugs\n\nStructural (roadmap file-boundary contract):\n- merge processor 6-file split (contracts/sink-projection/step-accounting/\n  tool-projection) into index.ts + stream-events.ts; drop ceremony\n  re-export interfaces, pass-through flush(), defaultStream, generateId\n- remove dead onToolCall/runToolCall executor path (no production\n  consumer; run() executes tools via the AI SDK execute callback)\n- remove unreachable \"continue\"/\"compact\" ProcessResult vocabulary;\n  process() now resolves/throws and run() maps to Run.Outcome\n\nBug fixes:\n- stream deltas now update part.text, so sinks receive accumulated text\n  during streaming instead of empty parts until block end\n- error paths no longer double-run pending-tool cleanup or publish two\n  idle snapshots; exactly one busy-to-idle transition per process()\n- reasoning blocks precede text/tool-call blocks in assistant replay\n  (Anthropic rejects thinking blocks after other content)\n- run() onError reuses the run traceId instead of minting a new one\n- retry backoff is capped at 30s even when response headers are present\n- Retry.isRetryable no longer throws on non-string error code fields\n\nTest hygiene: replace assert-only-stop processor tests with real part\nassertions (incl. streaming-delta regression), drop RunInput\nself-assertions, the switch-copy outcome test, and constants-equal-\nthemselves tests.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): coerce ai sdk errors for retry, adopt upstream hardening\n\nThe retry loop was dead in production: nothing constructs the protocol\nAPIError, and AI SDK errors are named AI_APICallError with retry fields\non the error object, so APIError.isInstance never matched and every\ntransient 429/5xx killed the run on the first attempt. coerceApiError()\nnow normalizes AI SDK-shaped errors at the classification boundary\n(regression test included).\n\nUpstream-informed hardening (opencode/pi comparison):\n- Retry.isRetryable classifies by payload sniffing (message, then\n  responseBody), then statusCode (429/>=500), then trusts the provider\n  isRetryable flag instead of vetoing on unparseable payloads\n- new LlmCall.Failed protocol event published from run() on error and\n  abort, so every LlmCall.Started gets a terminal event\n- tool parts enter running state with time.start at tool-call and close\n  with a real duration at tool-result (was start==end at result time)\n- stream parts are published copy-on-write: consumers holding earlier\n  snapshots no longer observe later mutations through shared references\n- SDK/language-model cache keys carry a hash of the auth material\n  instead of plaintext JSON.stringify(auth)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): settle orphaned tool calls, review-feedback hardening\n\nAddress verified AI-review findings on PR #518:\n- unresolved tool calls are now settled (error + onToolResult) when the\n  stream ends cleanly — stepCountIs can stop after tool-call events\n  whose results never arrive — and before each retry attempt, so no\n  ToolPart stays pending forever\n- bundled provider lookup uses an own-property check; a prototype-key\n  api.npm (toString/constructor) no longer resolves Object.prototype\n  members as SDK factories\n- projected sink telemetry carries the run traceId instead of reusing\n  sessionID, so sink.* diagnostics join llm.call.* events\n- structured tool-result outputs are JSON-serialized instead of\n  collapsing to \"[object Object]\"\n- tsconfig lib/target ES2020 -> ES2022 (Object.hasOwn; Bun runtime)\n\nRejected findings (documented in PR): the 30s retry cap with headers\npresent is the intended fix from this PR, not a regression; the\nsnapshot-mutation finding was already fixed by copy-on-write parts.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): map-based provider lookup, sync side-effect lint rule\n\nObject.hasOwn broke consumers that compile llm as source under ES2020\nlib (agent check-types/build); a Map lookup avoids prototype keys\nwithout any lib requirement. The side-effect lint rule's exact-match\nstring is updated for the createProjectedSink trace parameter.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): sha-256 auth fingerprint, preserve Error tool output\n\n- cache-key auth fingerprint uses SHA-256 instead of a 64-bit\n  non-cryptographic hash: a collision would hand one credential's\n  cached SDK instance to a different credential\n- Error values in tool-error events keep their message instead of\n  JSON-serializing to {}\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-06T16:53:44+09:00",
+          "tree_id": "e9e8afa84c667ff949ebaf53e4c831b6934c2bbf",
+          "url": "https://github.com/INONONO66/openomni/commit/2cdf28cc5b74a431213bafe99e23469aca654087"
+        },
+        "date": 1786002904384,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5895,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10502,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3020,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8137,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1428,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 711,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2309,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11000,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 104022,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 527965,
             "unit": "ns/op"
           }
         ]
