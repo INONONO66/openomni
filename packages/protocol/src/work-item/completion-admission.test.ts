@@ -1149,6 +1149,46 @@ describe("WorkItem completion admission contracts", () => {
         0,
       ]);
     }
+    const terminalEvidence = validInput.evidence[0];
+    if (!terminalEvidence) throw new Error("terminal evidence fixture is missing");
+    for (const evidence of [
+      [{ ...terminalEvidence, passed: false }, terminalEvidence],
+      [terminalEvidence, { ...terminalEvidence, passed: false }],
+    ]) {
+      const duplicateTerminalEvidence = WorkItem.Info.safeParse({
+        ...validInput,
+        evidence,
+      });
+      expect(duplicateTerminalEvidence.success).toBe(false);
+      if (!duplicateTerminalEvidence.success) {
+        expect(duplicateTerminalEvidence.error.issues.map(({ path }) => path)).toContainEqual([
+          "evidence",
+          1,
+          "id",
+        ]);
+      }
+    }
+    for (const [field, value] of [
+      ["subjectRef", "wi_other"],
+      ["basisRef", "basis:other"],
+    ] as const) {
+      const foreignObservation = WorkItem.Info.safeParse({
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          observations: [{ ...terminalObservation, [field]: value }],
+        },
+      });
+      expect(foreignObservation.success).toBe(false);
+      if (!foreignObservation.success) {
+        expect(foreignObservation.error.issues.map(({ path }) => path)).toContainEqual([
+          "completionFacts",
+          "observations",
+          0,
+          field,
+        ]);
+      }
+    }
   });
 
   test("preserves the explicit legacy upcast above the former boundary", () => {

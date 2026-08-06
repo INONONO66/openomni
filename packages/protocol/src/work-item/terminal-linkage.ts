@@ -38,6 +38,13 @@ type TerminalLinkageItem = Readonly<{
 }>;
 
 export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: RefinementCtx): void {
+  const evidenceIds = new Set<string>();
+  for (const [index, evidence] of item.evidence.entries()) {
+    if (evidenceIds.has(evidence.id)) {
+      addIssue(ctx, ["evidence", index, "id"]);
+    }
+    evidenceIds.add(evidence.id);
+  }
   const foreignAdmissionIndex = item.completionFacts.admissions.findIndex(
     ({ requestSnapshot }) => requestSnapshot.workItemHash !== item.hash,
   );
@@ -99,6 +106,12 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   const resultsById = new Map(
     item.completionFacts.results.map((result, index) => [result.id, { index, result }]),
   );
+  const observationsById = new Map(
+    item.completionFacts.observations.map((observation, index) => [
+      observation.id,
+      { index, observation },
+    ]),
+  );
   const effectiveCriterionIds = new Set<string>();
   for (const [index, criterionId] of admission.unresolvedCriterionIds.entries()) {
     if (!criteriaById.has(criterionId)) {
@@ -133,6 +146,25 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
         ["completionFacts", "results", effective.index, "basisRef"],
         "terminal admission effective result uses a different basis",
       );
+    }
+    for (const [observationIndex, observationId] of result.observationIds.entries()) {
+      const resolved = observationsById.get(observationId);
+      if (!resolved) {
+        addIssue(ctx, [
+          "completionFacts",
+          "results",
+          effective.index,
+          "observationIds",
+          observationIndex,
+        ]);
+        continue;
+      }
+      if (resolved.observation.subjectRef !== item.hash) {
+        addIssue(ctx, ["completionFacts", "observations", resolved.index, "subjectRef"]);
+      }
+      if (resolved.observation.basisRef !== result.basisRef) {
+        addIssue(ctx, ["completionFacts", "observations", resolved.index, "basisRef"]);
+      }
     }
     if (
       admission.decision === "admit" &&
@@ -238,7 +270,10 @@ function validateCompletionReportEvidence(
 ): void {
   const evidenceById = new Map(item.evidence.map((evidence) => [evidence.id, evidence]));
   const observationsById = new Map(
-    item.completionFacts.observations.map((observation) => [observation.id, observation]),
+    item.completionFacts.observations.map((observation, index) => [
+      observation.id,
+      { index, observation },
+    ]),
   );
   const effectiveResults = item.completionFacts.results.filter((result) =>
     admission.effectiveResultIds.includes(result.id),
@@ -269,8 +304,17 @@ function validateCompletionReportEvidence(
           ) {
             return [];
           }
-          const observation = observationsById.get(observationId);
-          if (!observation) return [];
+          const resolved = observationsById.get(observationId);
+          if (!resolved) return [];
+          const { index, observation } = resolved;
+          if (observation.subjectRef !== item.hash) {
+            addIssue(ctx, ["completionFacts", "observations", index, "subjectRef"]);
+            return [];
+          }
+          if (observation.basisRef !== admission.basisRef) {
+            addIssue(ctx, ["completionFacts", "observations", index, "basisRef"]);
+            return [];
+          }
           return [
             ...observation.artifactRefs,
             ...(observation.provenanceRef === undefined ? [] : [observation.provenanceRef]),
