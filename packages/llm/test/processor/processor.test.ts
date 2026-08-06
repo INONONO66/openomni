@@ -374,6 +374,72 @@ describe("Processor", () => {
       expect(reasoningParts[0]?.text).toBe("test");
     });
 
+    test("settles unresolved tool calls when the stream ends cleanly", async () => {
+      // stepCountIs can stop the stream after tool-call events whose results
+      // will never arrive; those parts must not stay pending forever.
+      const capture = capturingSink();
+      const processor = createProcessor({
+        sink: capture.sink,
+        createStream: streamOf([
+          { type: "tool-call", toolCallId: "call-orphan", toolName: "lookup", args: { q: "x" } },
+          { type: "finish" },
+        ]),
+      });
+
+      await processor.process({ system: "" });
+
+      const toolPart = capture
+        .finalParts()
+        .find((part): part is Message.ToolPart => part.type === "tool");
+      expect(toolPart?.state.status).toBe("error");
+      expect(capture.toolResults).toHaveLength(1);
+      expect(capture.toolResults[0]).toMatchObject({
+        toolCallId: "call-orphan",
+        output: "Processing was interrupted",
+        isError: true,
+      });
+    });
+
+    test("settles the failed attempt's tool calls before retrying", async () => {
+      let attemptCount = 0;
+      const capture = capturingSink();
+      const processor = createProcessor({
+        sink: capture.sink,
+        createStream: async () => ({
+          fullStream: (async function* () {
+            attemptCount++;
+            if (attemptCount === 1) {
+              yield {
+                type: "tool-call",
+                toolCallId: "call-attempt-1",
+                toolName: "lookup",
+                args: {},
+              };
+              throw new APIError({
+                message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
+                isRetryable: true,
+                responseHeaders: { "retry-after-ms": "1" },
+              });
+            }
+            yield { type: "finish" };
+          })(),
+        }),
+      });
+
+      await processor.process({ system: "" });
+
+      expect(attemptCount).toBe(2);
+      const toolPart = capture
+        .finalParts()
+        .find((part): part is Message.ToolPart => part.type === "tool");
+      expect(toolPart?.state.status).toBe("error");
+      expect(capture.toolResults).toHaveLength(1);
+      expect(capture.toolResults[0]).toMatchObject({
+        toolCallId: "call-attempt-1",
+        isError: true,
+      });
+    });
+
     test("publishes exactly one busy and one idle snapshot on success", async () => {
       const capture = capturingSink();
       const processor = createProcessor({ sink: capture.sink });
@@ -420,6 +486,7 @@ describe("Processor", () => {
 
       const processor = createProcessor({
         sink,
+        trace: { traceId: "trace-projection", sessionId: "session-456" },
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello" },
@@ -446,6 +513,8 @@ describe("Processor", () => {
 
       expect(busEvents.every((event) => event.component === "llm.processor")).toBe(true);
       expect(busEvents.every((event) => event.sessionId === "session-456")).toBe(true);
+      // sink.* diagnostics must join to llm.call.* events via the run traceId.
+      expect(busEvents.every((event) => event.traceId === "trace-projection")).toBe(true);
       expect(busEvents.every((event) => typeof event.time === "number")).toBe(true);
 
       const messageEvents = busEvents.filter((event) => event.msg === "sink.message");

@@ -62,8 +62,11 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   if (cached) return cached;
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
-  const factory =
-    npm in BUNDLED_PROVIDERS ? BUNDLED_PROVIDERS[npm as keyof typeof BUNDLED_PROVIDERS] : undefined;
+  // Own-property check: `in` would resolve Object.prototype keys such as
+  // "toString" to prototype members and invoke them as SDK factories.
+  const factory = Object.hasOwn(BUNDLED_PROVIDERS, npm)
+    ? BUNDLED_PROVIDERS[npm as keyof typeof BUNDLED_PROVIDERS]
+    : undefined;
 
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];

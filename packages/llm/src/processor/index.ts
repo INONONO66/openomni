@@ -59,7 +59,7 @@ export namespace Processor {
     const retryAttemptLimit = Number.isFinite(maxRetryAttempts)
       ? Math.max(0, Math.floor(maxRetryAttempts))
       : DEFAULT_MAX_RETRY_ATTEMPTS;
-    const sink = createProjectedSink(configuredSink, sessionID);
+    const sink = createProjectedSink(configuredSink, sessionID, trace?.traceId);
     const messageParts: Message.Part[] = [];
 
     function addMessagePart(part: Message.Part): void {
@@ -86,6 +86,11 @@ export namespace Processor {
         publishStatus(sink, sessionID, { type: "busy" });
         const pendingTools: Message.ToolPart[] = [];
         let attempt = 0;
+
+        function settlePendingTools(): void {
+          cleanupPendingTools(pendingTools, updateMessagePart, sink);
+          pendingTools.length = 0;
+        }
 
         try {
           while (true) {
@@ -116,6 +121,10 @@ export namespace Processor {
                 }
                 throw e;
               }
+
+              // Tool calls from the failed attempt will never receive a
+              // result from the next attempt's stream — settle them now.
+              settlePendingTools();
 
               const delayMs = Retry.delay(attempt, apiError);
               if (trace) {
@@ -152,21 +161,21 @@ export namespace Processor {
               await Retry.sleep(delayMs, abort);
             }
           }
-        } catch (e) {
-          cleanupPendingTools(pendingTools, updateMessagePart, sink);
-          throw e;
         } finally {
+          // Also covers clean stream end: the AI SDK can stop (stepCountIs)
+          // after emitting tool-call events whose results will never arrive.
+          settlePendingTools();
           publishStatus(sink, sessionID, { type: "idle" });
         }
       },
     };
   }
 
-  function createProjectedSink(sink: Sink, sessionID: string): Sink {
+  function createProjectedSink(sink: Sink, sessionID: string, traceId?: string): Sink {
     function publish(message: string, data?: Record<string, unknown>): void {
       if (!sessionID) return;
       Bus.publish(Operational.Info, {
-        traceId: sessionID,
+        traceId: traceId ?? sessionID,
         time: Date.now(),
         sessionId: sessionID,
         component: "llm.processor",

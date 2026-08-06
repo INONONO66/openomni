@@ -234,3 +234,50 @@ describe("Processor tool result projection", () => {
     });
   });
 });
+
+describe("Processor tool output normalization", () => {
+  test("serializes structured tool-result output instead of String coercion", async () => {
+    const toolResults: Tool.Result[] = [];
+    const messages: Message.WithParts[] = [];
+    const sink: Sink = {
+      onMessage: (message) => messages.push(message),
+      onToolCall: () => undefined,
+      onToolResult: (result) => toolResults.push(result),
+      onSnapshot: () => undefined,
+    };
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: new AbortController().signal,
+      sink,
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-structured",
+            toolName: "search",
+            input: {},
+          };
+          yield {
+            type: "tool-result",
+            toolCallId: "call-structured",
+            toolName: "search",
+            output: { content: [{ type: "text", text: "hit" }] },
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+    });
+
+    await processor.process({ system: "" });
+
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0]?.output).toBe('{"content":[{"type":"text","text":"hit"}]}');
+    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
+    expect(toolPart).toMatchObject({
+      state: { status: "completed", output: '{"content":[{"type":"text","text":"hit"}]}' },
+    });
+  });
+});

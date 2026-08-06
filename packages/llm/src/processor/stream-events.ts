@@ -281,11 +281,24 @@ function normalizeOutputPayload(event: StreamEvent): { output: string; isError: 
       isError: payload.isError === true,
     };
   }
-  const fallback = event.error ?? event.message ?? "";
+  const value = raw ?? event.error ?? event.message ?? "";
   return {
-    output: String(raw ?? fallback),
+    output: stringifyOutput(value),
     isError: false,
   };
+}
+
+function stringifyOutput(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 export function cleanupPendingTools(
