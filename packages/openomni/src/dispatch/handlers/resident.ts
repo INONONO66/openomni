@@ -1,7 +1,7 @@
 import type { Dispatch, Ingress, Model } from "@openomni/protocol";
-import { PendingAskStore } from "@openomni/session";
 import type { ResidentRuntime } from "../../resident/runtime.js";
 import { type AgentResolver, IngressEngine } from "../../ingress/engine.js";
+import { WaitService } from "../../wait/index.js";
 import type { DispatchHandler } from "../registry.js";
 
 export interface ResidentDispatchHandlerOptions {
@@ -59,23 +59,19 @@ function eventFromCommand(
   };
 }
 
-function originActorKind(actor: Dispatch.ActorContext): "resident" | "worker" | "system" {
-  if (actor.kind === "resident" || actor.kind === "worker") return actor.kind;
-  return "system";
-}
-
-function openPendingAsk(command: Dispatch.Command, fallbackSessionId: string): void {
-  const tokenHash = typeof command.correlation === "string" ? command.correlation : undefined;
-  PendingAskStore.create({
-    id: command.dispatchId,
-    originSessionId: command.actor.sessionId ?? command.sessionId ?? fallbackSessionId,
-    ...((command.actor.runId ?? command.runId)
-      ? { originRunId: command.actor.runId ?? command.runId }
-      : {}),
-    originActorKind: originActorKind(command.actor),
-    targetKind: "resident",
-    ...(command.target.id ? { targetActorId: command.target.id } : {}),
-    correlation: tokenHash ? { tokenHash } : {},
+// The synchronous resident.ask path resolves inside this one dispatch, so it
+// records Wait.Events.SyncAsk audit events only and never writes a PendingAsk
+// or Wait row (#215 owner decision 2). Historical PendingAsk rows stay
+// readable through the wait/upcast read path.
+function auditSyncAsk(
+  command: Dispatch.Command,
+  fallbackSessionId: string,
+  phase: "opened" | "answered" | "failed",
+): void {
+  WaitService.auditSyncAsk({
+    dispatchId: command.dispatchId,
+    sessionId: command.actor.sessionId ?? command.sessionId ?? fallbackSessionId,
+    phase,
   });
 }
 
@@ -92,7 +88,7 @@ export function createResidentDispatchHandlers(
       const sessionId = command.target.sessionId ?? command.sessionId ?? context?.sessionId;
       if (!sessionId)
         throw new Error("resident.ask requires target.sessionId or runtime sessionId");
-      openPendingAsk(command, sessionId);
+      auditSyncAsk(command, sessionId, "opened");
       try {
         const result = await IngressEngine.ingestInternal(eventFromCommand(command, context), {
           residentRuntime,
@@ -101,7 +97,7 @@ export function createResidentDispatchHandlers(
         if (result.kind === "dropped") {
           throw new Error(`resident.ask ingress was dropped: ${result.reason}`);
         }
-        PendingAskStore.answer(command.dispatchId);
+        auditSyncAsk(command, sessionId, "answered");
         return {
           output: {
             output: result.result.output,
@@ -109,7 +105,7 @@ export function createResidentDispatchHandlers(
           },
         };
       } catch (error) {
-        PendingAskStore.expire(command.dispatchId);
+        auditSyncAsk(command, sessionId, "failed");
         throw error;
       }
     },

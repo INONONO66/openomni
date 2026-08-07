@@ -31,8 +31,11 @@ const terminalCases = [
   {
     stage: "wait_correlation",
     outcome: "ambiguous",
-    candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2"],
+    candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2", "wait:wait-3"],
   },
+  // Fail-closed wait stage (#215): a matched wait whose owner has no ingress
+  // delivery path blocks instead of falling through to surface routing.
+  { stage: "wait_correlation", outcome: "block" },
   { stage: "channel_ceiling", outcome: "block", inboundTreatment: "drop" },
   { stage: "actor_identity", outcome: "block", actorId: "actor-2", trustTier: "observer" },
   {
@@ -51,7 +54,6 @@ const invalidTerminalPairs = [
   ["blacklist", "block"],
   ["blacklist", "ambiguous"],
   ["wait_correlation", "drop"],
-  ["wait_correlation", "block"],
   ["channel_ceiling", "route"],
   ["channel_ceiling", "drop"],
   ["channel_ceiling", "ambiguous"],

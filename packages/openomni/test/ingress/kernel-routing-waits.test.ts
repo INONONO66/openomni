@@ -13,14 +13,16 @@ import {
   PendingInteractionStore,
   Session,
   Storage,
+  WaitStore,
   WorkerRun,
   WorkItemStore,
 } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createDefaultDispatchRuntime } from "../../src/dispatch/setup";
-import { applySelectedWaitEffect, IngressEngine } from "../../src/ingress/engine";
+import { IngressEngine } from "../../src/ingress/engine";
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { IngressRoutingError } from "../../src/ingress/routing-execution";
+import { WaitService } from "../../src/wait/index";
 import {
   resetKernelRoutingState,
   residentExecutions,
@@ -547,11 +549,13 @@ describe("IngressEngine wait routing", () => {
       outcome: "ambiguous",
       candidateInteractionIds: ["pending_ask:ask-combined", "pending_interaction:pi-combined"],
     });
-    expect(PendingAskStore.get("ask-combined")?.status).toBe("ambiguous");
+    // Frozen legacy rows: correlation records ambiguity via the typed
+    // decision only and never mutates candidates (#215).
+    expect(PendingAskStore.get("ask-combined")?.status).toBe("open");
     expect(PendingInteractionStore.get("pi-combined")?.status).toBe("open");
   });
 
-  test("publishes selected wait ambiguity before marking both asks", async () => {
+  test("publishes selected wait ambiguity without mutating the frozen asks", async () => {
     createPendingAsk("ask-selected-a", "session-selected-a", {
       tokenHash: correlation.tokenHash,
     });
@@ -566,24 +570,13 @@ describe("IngressEngine wait routing", () => {
     });
     IngressEngine.setDispatchRuntime(runtime);
     const observed = routingDecisions();
-    const order: string[] = [];
-    const actualPublish = Bus.publish;
-    const publish = spyOn(Bus, "publish").mockImplementation((event, data) => {
-      if (event === IngressEvent.RoutingDecision) order.push("publish");
-      actualPublish(event, data);
-    });
-    const actualMarkAmbiguous = PendingAskStore.markAmbiguous;
-    const mark = spyOn(PendingAskStore, "markAmbiguous").mockImplementation((id) => {
-      order.push(`mark:${id}`);
-      return actualMarkAmbiguous(id);
-    });
+    const mark = spyOn(PendingAskStore, "markAmbiguous");
 
     let error: Error | undefined;
     try {
       error = await captureError(IngressEngine.ingest(replyEvent("inbound-selected-ambiguity")));
     } finally {
       observed.unsubscribe();
-      publish.mockRestore();
       mark.mockRestore();
     }
 
@@ -600,9 +593,11 @@ describe("IngressEngine wait routing", () => {
         "wait.candidate:pending_ask:ask-selected-b",
       ],
     });
-    expect(order).toEqual(["publish", "mark:ask-selected-a", "mark:ask-selected-b"]);
-    expect(PendingAskStore.get("ask-selected-a")?.status).toBe("ambiguous");
-    expect(PendingAskStore.get("ask-selected-b")?.status).toBe("ambiguous");
+    // The published typed decision is the sole record of ambiguity; frozen
+    // legacy asks stay untouched (#215 — correlation never writes).
+    expect(mark).not.toHaveBeenCalled();
+    expect(PendingAskStore.get("ask-selected-a")?.status).toBe("open");
+    expect(PendingAskStore.get("ask-selected-b")?.status).toBe("open");
     expect(residentExecutions).toEqual([]);
     expect(dispatchExecutions).toBe(0);
   });
@@ -804,35 +799,10 @@ describe("IngressEngine wait routing", () => {
     expect(dispatchExecutions).toBe(0);
   });
 
-  test("rejects a non-selected executable wait effect before mutation", () => {
-    const decision = IngressEvent.RoutingDecision.schema.parse({
-      traceId: "trace-non-selected-effect",
-      time: 1,
-      inboundId: "inbound-non-selected-effect",
-      surface: "telegram",
-      mode: "direct",
-      stage: "blacklist",
-      outcome: "drop",
-      reason: "Inbound principal matched the blacklist",
-      factsUsed: ["blacklist:blacklist-test", "blacklist.kind:endpoint"],
-    });
-    const mark = spyOn(PendingAskStore, "markAmbiguous");
-
-    try {
-      expect(() =>
-        applySelectedWaitEffect({
-          decision,
-          waitEffect: {
-            kind: "mark_pending_asks_ambiguous",
-            pendingAskIds: ["ask-must-not-change"],
-          },
-        }),
-      ).toThrow("non-wait-ambiguous decision carried an executable wait effect");
-      expect(mark).not.toHaveBeenCalled();
-    } finally {
-      mark.mockRestore();
-    }
-  });
+  // The legacy mark-ambiguous wait effect is deleted (#215): correlation is
+  // read-only by construction, pinned in test/wait/correlation.test.ts
+  // ("executes exact ordered queries across all backings and stays read-only")
+  // and by the frozen-ask assertions in the two ambiguity tests above.
 
   test("leaves an authorized exact interaction open when no handler is selected", async () => {
     const sessionId = await createPending("pi-no-handler", "run-no-handler");
@@ -891,5 +861,179 @@ describe("IngressEngine wait routing", () => {
       outcome: "route",
       pendingInteractionId: "pi-primitive-output",
     });
+  });
+});
+
+describe("IngressEngine durable wait routing", () => {
+  beforeEach(() => {
+    resetKernelRoutingState();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
+  function registerResponder(actorId: string, externalId: string): void {
+    ActorRegistry.registerIdentity({
+      id: actorId,
+      kind: "human",
+      trustTier: "assigned_worker",
+      relationship: "external_agent",
+    });
+    ActorRegistry.registerEndpoint({
+      id: `telegram:${externalId}`,
+      actorId,
+      channel: "telegram",
+      externalId,
+    });
+  }
+
+  function openSessionWait(
+    id: string,
+    overrides: Partial<Parameters<typeof WaitService.open>[0]> = {},
+  ) {
+    const session = Session.create({
+      title: id,
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    return WaitService.open({
+      id,
+      ownerRef: { kind: "session", id: session.id },
+      originMessageId: `out-${id}`,
+      correlation: { channelId: correlation.channelId, tokenHash: correlation.tokenHash },
+      allowedActions: ["report_result"],
+      expectedResponders: ["actor-external-worker"],
+      resolutionPolicy: "first_reply",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      followUpWindow: 60_000,
+      ...overrides,
+    });
+  }
+
+  test("attaches a matched reply to the durable wait and routes it to the owner session", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    const wait = openSessionWait("wait-session-owner");
+    const observed = routingDecisions();
+
+    let result: Ingress.IngressResult;
+    try {
+      result = await IngressEngine.ingest(replyEvent("inbound-wait-reply"));
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: wait.ownerRef.id,
+      factsUsed: [
+        "wait:wait:wait-session-owner",
+        "wait.action:report_result",
+        `wait.owner:session:${wait.ownerRef.id}`,
+      ],
+    });
+    expect(result.sessionId).toBe(wait.ownerRef.id);
+    expect(residentExecutions).toEqual(["executed"]);
+    const record = WaitStore.get("wait-session-owner");
+    expect(record).toMatchObject({ status: "resolved", partial: false });
+    expect(record?.replies).toEqual([
+      expect.objectContaining({
+        replyKey: "inbound-wait-reply",
+        responderId: "actor-external-worker",
+      }),
+    ]);
+  });
+
+  test("keeps a 2-of-3 wait open after the first reply and still delivers to the owner", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    const wait = openSessionWait("wait-quorum", {
+      expectedResponders: ["actor-external-worker", "actor-b", "actor-c"],
+      resolutionPolicy: "quorum",
+      quorum: { expected: 3, threshold: 2 },
+    });
+
+    const result = await IngressEngine.ingest(replyEvent("inbound-wait-quorum-first"));
+
+    expect(result.sessionId).toBe(wait.ownerRef.id);
+    const record = WaitStore.get("wait-quorum");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(1);
+  });
+
+  test("rejects a duplicate reply key with a typed wait_reply_rejected error", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-duplicate", {
+      expectedResponders: ["actor-external-worker", "actor-b"],
+      resolutionPolicy: "quorum",
+      quorum: { expected: 2, threshold: 2 },
+    });
+
+    await IngressEngine.ingest(replyEvent("inbound-wait-duplicate"));
+    const error = await captureError(IngressEngine.ingest(replyEvent("inbound-wait-duplicate")));
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
+    expect(error?.message).toBe("wait reply rejected: duplicate_reply");
+    const record = WaitStore.get("wait-duplicate");
+    expect(record?.replies).toHaveLength(1);
+  });
+
+  test("rejects a sender outside the expected responders with unknown_responder", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    registerResponder("actor-intruder", "intruder-2");
+    openSessionWait("wait-intruder", { expectedResponders: ["actor-someone-else"] });
+
+    const error = await captureError(
+      IngressEngine.ingest({ ...replyEvent("inbound-wait-intruder"), userId: "intruder-2" }),
+    );
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
+    expect(error?.message).toBe("wait reply rejected: unknown_responder");
+    const record = WaitStore.get("wait-intruder");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(0);
+  });
+
+  test("fails closed for a workItem-owned wait: no ingress delivery path yet", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-work-item", { ownerRef: { kind: "workItem", id: "wi-1" } });
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(IngressEngine.ingest(replyEvent("inbound-wait-work-item")));
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait owner has no ingress delivery path");
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "block",
+      factsUsed: [
+        "wait:wait:wait-work-item",
+        "wait.action:report_result",
+        "wait.owner:workItem:wi-1",
+        "wait.owner:unsupported_ingress_delivery",
+      ],
+    });
+    const record = WaitStore.get("wait-work-item");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(0);
+  });
+
+  test("fails closed when a durable wait and a frozen legacy row collide at one level", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    // The wait table is the first tier: a durable wait shadows same-token
+    // frozen legacy rows instead of guessing between backings.
+    await createPending("pi-shadowed", "run-shadowed");
+    const wait = openSessionWait("wait-tier-first");
+
+    const result = await IngressEngine.ingest(replyEvent("inbound-wait-tier"));
+
+    expect(result.sessionId).toBe(wait.ownerRef.id);
+    expect(PendingInteractionStore.get("pi-shadowed")?.status).toBe("open");
   });
 });

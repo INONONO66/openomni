@@ -1,6 +1,13 @@
 import { Dispatch, type Ingress, type RoutingDecisionPayload } from "@openomni/protocol";
 import type { TraceContext } from "@openomni/protocol";
 import { submitPinnedPendingInteraction, type DispatchRuntime } from "../dispatch/runtime.js";
+import {
+  WaitService,
+  ingressEvidence,
+  responderCandidates,
+  targetsOfPendingInteraction,
+  targetsOfWait,
+} from "../wait/index.js";
 import type { KernelRouteResolution } from "./routing-runtime.js";
 
 type RoutedDecision = Extract<RoutingDecisionPayload, { readonly outcome: "route" }>;
@@ -17,7 +24,8 @@ export type IngressRoutingErrorCode =
   | "dispatch_runtime_missing"
   | "dispatch_route_invalid"
   | "dispatch_failed"
-  | "dispatch_output_unsupported";
+  | "dispatch_output_unsupported"
+  | "wait_reply_rejected";
 
 export class IngressRoutingError extends Error {
   readonly code: IngressRoutingErrorCode;
@@ -95,6 +103,20 @@ function projectDispatchOutput(output: unknown, decision: RoutedDecision): strin
   );
 }
 
+function projectWaitOwnerEvent<Event extends Ingress.InboundEvent>(
+  event: Event,
+  ownerSessionId: string,
+): Omit<Event, "target"> & { readonly target?: never } {
+  const { target: _target, ...withoutTarget } = event;
+  const { target: _metaTarget, ...meta } = event.meta ?? {};
+  const { runId: _runId, ...runtime } = event.runtime ?? {};
+  return {
+    ...withoutTarget,
+    meta,
+    runtime: { ...runtime, durableSessionId: ownerSessionId },
+  } as Omit<Event, "target"> & { readonly target?: never };
+}
+
 function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
   event: Event,
   resolution: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_ask" }>,
@@ -125,48 +147,18 @@ function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
   } as Omit<Event, "target"> & { readonly target?: never };
 }
 
-function hasMatchingBearerToken(
-  correlation: Dispatch.Correlation,
-  record: Extract<
-    KernelRouteResolution["waitExecution"],
-    { kind: "pending_interaction" }
-  >["record"],
-): boolean {
-  return (
-    record.targetActorId === undefined &&
-    record.correlation.tokenHash !== undefined &&
-    correlation.tokenHash === record.correlation.tokenHash
-  );
-}
-
+// Sender matching is owned by wait/matcher.ts (the single core for ingress and
+// dispatch); this module only converts its candidate count into the pinned
+// dispatch_route_invalid rejection.
 function senderMatchesPendingInteraction(
   event: Ingress.InboundEvent,
   wait: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_interaction" }>,
 ): boolean {
-  if (hasMatchingBearerToken(wait.correlation, wait.record)) return true;
-  if (wait.correlation.endpointId !== wait.record.endpointId) return false;
-
-  if (wait.record.targetActorId !== undefined && typeof event.meta?.actor?.actorId !== "string") {
-    return false;
-  }
-  const actor = event.meta?.actor;
-  if (typeof actor?.actorId !== "string") {
-    if (event.mode !== "direct" || typeof event.userId !== "string") return false;
-    return (
-      event.userId === wait.record.endpointId || wait.record.endpointId.endsWith(`:${event.userId}`)
-    );
-  }
-  if (wait.record.targetActorId !== undefined && actor.actorId !== wait.record.targetActorId) {
-    return false;
-  }
-
-  const endpoint = actor.endpoint;
-  if (endpoint === undefined) return actor.endpointId === wait.record.endpointId;
-  return (
-    endpoint.id === wait.record.endpointId ||
-    endpoint.externalId === wait.record.endpointId ||
-    `${endpoint.channel}:${endpoint.externalId}` === wait.record.endpointId
+  const candidates = responderCandidates(
+    targetsOfPendingInteraction(wait.record),
+    ingressEvidence(event, wait.correlation),
   );
+  return candidates.length === 1;
 }
 
 async function executePendingInteractionRoute<Event extends Ingress.InboundEvent>(
@@ -273,6 +265,41 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
   switch (wait.kind) {
     case "none":
       return { kind: "continue", event: resolution.event, authority: "required" };
+    case "wait": {
+      if (decision.stage !== "wait_correlation") {
+        throw new IngressRoutingError(
+          "dispatch_route_invalid",
+          "wait route is incomplete",
+          decision,
+        );
+      }
+      // The matcher only returns candidates; the protocol fold decides
+      // (duplicate / late / unknown / ambiguous / attach / resolve) and the
+      // store persists the outcome before the owner session sees the reply.
+      const outcome = WaitService.attachReply(wait.record.id, {
+        replyKey: resolution.event.id,
+        responderCandidates: responderCandidates(
+          targetsOfWait(wait.record),
+          ingressEvidence(resolution.event, wait.correlation),
+        ),
+        messageId: resolution.event.id,
+        at: Date.now(),
+      });
+      if (outcome.kind === "rejected") {
+        throw new IngressRoutingError(
+          "wait_reply_rejected",
+          `wait reply rejected: ${outcome.code}`,
+          decision,
+        );
+      }
+      // resolve-route routed this decision, so the owner is a session
+      // (workItem owners fail closed at the wait_correlation stage).
+      return {
+        kind: "continue",
+        event: projectWaitOwnerEvent(resolution.event, wait.record.ownerRef.id),
+        authority: "wait_precedence",
+      };
+    }
     case "pending_interaction":
       if (decision.stage !== "wait_correlation") {
         return { kind: "continue", event: resolution.event, authority: "required" };

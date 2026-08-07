@@ -41,4 +41,19 @@ export const Events = {
     }),
     { visibility: "internal" },
   ),
+  /**
+   * Audit trail for the synchronous in-process resident.ask path (#215 owner
+   * decision 2): the ask resolves inside one dispatch, so it records audit
+   * events only and never opens a durable Wait row.
+   */
+  SyncAsk: BusEvent.define(
+    "wait.sync_ask",
+    z.object({
+      dispatchId: z.string().min(1),
+      sessionId: z.string().min(1),
+      phase: z.enum(["opened", "answered", "failed"]),
+      time: z.number(),
+    }),
+    { visibility: "internal" },
+  ),
 } as const;

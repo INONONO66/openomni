@@ -21,10 +21,11 @@ export const ReplyInput = z
     replyKey: z.string().min(1),
     /**
      * Expected-responder ids the sender matcher resolved the inbound sender
-     * to. Zero matches is unknown; more than one is ambiguous — the fold
-     * never guesses.
+     * to. Zero candidates (no evidence at all) folds to unknown_responder;
+     * more than one surviving match is ambiguous — the fold never guesses
+     * and is the single owner of both rules.
      */
-    responderCandidates: z.array(z.string().min(1)).min(1),
+    responderCandidates: z.array(z.string().min(1)),
     messageId: z.string().min(1).optional(),
     at: z.number(),
   })

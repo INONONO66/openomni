@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChatAgentConfig, ChatAgentInput } from "@openomni/agent";
-import { PendingAskStore, Session, Storage, SurfaceKey } from "@openomni/session";
+import { Bus, PendingAskStore, Session, Storage, SurfaceKey, WaitStore } from "@openomni/session";
 import { IngressEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
 import { DispatchRegistry } from "../../src/dispatch/registry";
@@ -139,11 +139,18 @@ describe("built-in dispatch handlers", () => {
     registerBuiltInDispatchHandlers(registry, {
       owners: { residentRuntime },
     });
+    const syncAskPhases: string[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name !== "wait.sync_ask") return;
+      syncAskPhases.push((payload as { phase: string }).phase);
+    });
 
     const output = await registry.get("resident.ask")?.(
       command("resident.ask", { kind: "resident", sessionId: "resident-session" }, "question"),
       { workspaceRoot: "/workspace/resident" },
     );
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    unsubscribe();
 
     expect(resolvedWorkspace).toBe("/workspace/resident");
     expect(executorWorkspace).toBe("/workspace/resident");
@@ -158,10 +165,11 @@ describe("built-in dispatch handlers", () => {
     });
     expect(runConfig?.toolExecutor).toBeFunction();
     expect(runConfig?.middleware).toBeDefined();
-    expect(PendingAskStore.get("dispatch-resident.ask")).toMatchObject({
-      status: "answered",
-      targetKind: "resident",
-    });
+    // The synchronous ask records audit events only — no PendingAsk and no
+    // durable Wait row (#215 owner decision 2).
+    expect(syncAskPhases).toEqual(["opened", "answered"]);
+    expect(PendingAskStore.get("dispatch-resident.ask")).toBeUndefined();
+    expect(WaitStore.list()).toHaveLength(0);
     expect(output).toEqual({
       output: { output: "answer", finishReason: "stop" },
     });

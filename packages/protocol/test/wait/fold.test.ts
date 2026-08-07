@@ -146,6 +146,18 @@ describe("Wait fold — duplicate and responder identity rules", () => {
     if (outcome.kind !== "rejected") throw new Error("expected rejected");
     expect(outcome.code).toBe("unknown_responder");
   });
+
+  test("a sender with zero matcher candidates is unknown — the fold owns the rule", () => {
+    const outcome = Wait.attachReply(
+      buildWaitRecord(),
+      buildReplyInput({ responderCandidates: [] }),
+    );
+
+    expect(outcome.kind).toBe("rejected");
+    if (outcome.kind !== "rejected") throw new Error("expected rejected");
+    expect(outcome.code).toBe("unknown_responder");
+    expect(outcome.record.replies).toHaveLength(0);
+  });
 });
 
 describe("Wait fold — expiry, cancellation, late replies", () => {
