@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, Policy } from "@openomni/protocol";
+import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
+import { IngressEngine } from "../../src/ingress/engine";
 import {
   applyChannelGrantTreatment,
   IngressAuthorityMiddleware,
@@ -202,5 +204,62 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     expect(policyIds).toContain("ingress.schema");
     expect(policyIds).not.toContain("ingress.blacklist");
     expect(policyIds).not.toContain("ingress.channel_grant");
+  });
+});
+
+describe("IngressEngine channel default tier composite (e2e)", () => {
+  beforeEach(() => {
+    IngressEngine.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
+  afterEach(() => {
+    IngressEngine.reset();
+  });
+
+  test("trusted_channel defaultTier observer admits an unregistered actor at the channel ceiling, then the authority check denies", async () => {
+    ChannelGrantStore.put({
+      id: "grant-public-observer",
+      surface: "test",
+      channel: "public",
+      kind: "trusted_channel",
+      defaultTier: "observer",
+      createdBy: "act_owner",
+    });
+    const decisions: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === "ingress.routing.decision") decisions.push(payload);
+    });
+    const event = {
+      id: "evt-observer-default",
+      surface: "test",
+      channel: "public",
+      mode: "direct",
+      payload: "hello",
+      meta: { actor: { role: "user", id: "external-user-1" } },
+      agent: { model: { provider: "test", id: "test-model" } },
+    } satisfies Ingress.DirectEvent;
+
+    try {
+      // The grant admits the message at the channel ceiling (routing decision
+      // routes with the channel default tier), but the unregistered actor is
+      // then denied by the ingress authority check — the composite that keeps
+      // defaultTier a routing fact, never a work-creation authorization.
+      await expect(IngressEngine.ingest(event)).rejects.toThrow(
+        "actor is not authorized to create top-level inbound work",
+      );
+    } finally {
+      unsubscribe();
+    }
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
+      stage: "surface_default",
+      outcome: "route",
+      trustTier: "observer",
+    });
+    expect((decisions[0] as { factsUsed: string[] }).factsUsed).toContain(
+      "channel.default-tier:observer",
+    );
   });
 });

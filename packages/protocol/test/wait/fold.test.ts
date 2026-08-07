@@ -93,16 +93,35 @@ describe("Wait fold — duplicate and responder identity rules", () => {
     expect(duplicate.record.status).toBe("open");
   });
 
-  test("duplicate replyKey stays idempotent even after the wait resolved", () => {
+  test("duplicate replyKey on a RESOLVED wait short-circuits to already_resolved", () => {
     const record = buildWaitRecord({ resolutionPolicy: "first_reply", quorum: undefined });
     const resolved = Wait.attachReply(record, buildReplyInput());
     if (resolved.kind !== "resolved") throw new Error("expected resolved");
 
-    const duplicate = Wait.attachReply(resolved.record, buildReplyInput({ at: 1_100 }));
+    // Channel redelivery of the resolving reply: the caller repeats the owner
+    // delivery idempotently from this outcome — no state change, no revision bump.
+    const redelivered = Wait.attachReply(resolved.record, buildReplyInput({ at: 1_100 }));
 
-    expect(duplicate.kind).toBe("rejected");
-    if (duplicate.kind !== "rejected") throw new Error("expected rejected");
-    expect(duplicate.code).toBe("duplicate_reply");
+    expect(redelivered.kind).toBe("already_resolved");
+    if (redelivered.kind !== "already_resolved") throw new Error("expected already_resolved");
+    expect(redelivered.record).toEqual(resolved.record);
+    expect(redelivered.reply).toEqual(resolved.reply);
+  });
+
+  test("duplicate replyKey on expired and cancelled waits keeps rejecting duplicate_reply", () => {
+    const first = Wait.attachReply(buildWaitRecord(), buildReplyInput());
+    if (first.kind !== "attached") throw new Error("expected attached");
+    const expired = Wait.expire(first.record, { at: 10_001 });
+    if (expired.kind !== "expired") throw new Error("expected expired");
+    const cancelled = Wait.cancel(first.record, { at: 5_000 });
+    if (cancelled.kind !== "cancelled") throw new Error("expected cancelled");
+
+    for (const record of [expired.record, cancelled.record]) {
+      const duplicate = Wait.attachReply(record, buildReplyInput({ at: 10_500 }));
+      expect(duplicate.kind).toBe("rejected");
+      if (duplicate.kind !== "rejected") throw new Error("expected rejected");
+      expect(duplicate.code).toBe("duplicate_reply");
+    }
   });
 
   test("a second reply from an already-counted responder attaches without advancing quorum", () => {

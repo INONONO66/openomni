@@ -28,12 +28,21 @@ export namespace WaitService {
     return WaitStore.cancel(id, at);
   }
 
+  /**
+   * Lazy expiry entry: a late reply is often the first observer of a passed
+   * deadline — the route folds the wait to expired (partial when replies had
+   * attached) before returning the typed rejection.
+   */
+  export function expire(id: string, at = Date.now()): Wait.Outcome {
+    return WaitStore.expire(id, at);
+  }
+
   /** Expiry sweep entry (boot recovery): folds every deadline-passed open wait to expired (partial when replies attached). */
   export function sweepExpired(now = Date.now()): Wait.Record[] {
     const expired: Wait.Record[] = [];
     for (const record of WaitStore.list(["open"])) {
       if (now <= record.expiresAt) continue;
-      const outcome = WaitStore.expire(record.id, now);
+      const outcome = expire(record.id, now);
       if (outcome.kind === "expired") expired.push(outcome.record);
     }
     return expired;

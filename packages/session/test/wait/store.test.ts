@@ -80,7 +80,19 @@ describe("WaitStore", () => {
         1_000,
       ),
     ).toHaveLength(0);
-    expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 10_001)).toHaveLength(0);
+  });
+
+  test("surfaces open-but-expired rows so the kernel can lazily expire them", () => {
+    WaitStore.create(buildWaitCreate());
+
+    // Deadline judgment is NOT a read-time filter: an open row past its
+    // expiresAt still correlates, the fold rejects the reply as
+    // deadline_passed, and the kernel folds the wait to expired. Silently
+    // dropping it here would leak late replies into surface routing.
+    const matches = WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 10_001);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ id: "wait-1", status: "open" });
   });
 
   test("keeps resolved waits correlatable only inside the follow-up window", () => {

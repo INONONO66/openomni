@@ -46,12 +46,16 @@ export type SenderTargetGrant = z.infer<typeof SenderTargetGrant>;
  * Typed denial taxonomy — callers branch on `code`, never message text.
  * Ungranted, missing, stale, and ambiguous targets all fail closed with an
  * unchanged allocation/authority surface (nothing is created or guessed).
+ * `wait_duplicate` is the awaited-delivery exactly-once rule surfacing as a
+ * denial: a Wait already exists for the message (or wait id), so nothing is
+ * delivered and nothing changes.
  */
 export const MessageDenialCode = z.enum([
   "ungranted",
   "target_missing",
   "target_stale",
   "target_ambiguous",
+  "wait_duplicate",
 ]);
 export type MessageDenialCode = z.infer<typeof MessageDenialCode>;
 

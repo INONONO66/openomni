@@ -64,9 +64,10 @@ type ScenarioReceipt = Readonly<{
 // ---------------------------------------------------------------------------
 
 // Fixed injected epoch (year 2128). Deliberately far past any real wall
-// clock: WaitStore.findByCorrelation applies a Date.now() liveness filter in
-// production, and the fixture deadline (DriverNow + 600s) must stay in that
-// filter's future so the wall clock can never flip a receipt.
+// clock: WaitStore.findByCorrelation ages RESOLVED rows out with a Date.now()
+// follow-up-window filter in production, and the fixture timeline must stay
+// in that filter's future so the wall clock can never flip a receipt. (Open
+// rows always surface — the deadline rule lives in the fold, not the read.)
 const DriverNow = 5_000_000_000_000;
 const Sender = "actor:qa-owner";
 const TargetActor = "actor:qa-collab";

@@ -8,7 +8,10 @@ import type * as Schema from "./schema.js";
  * `kind`/`code`, never on message text.
  *
  * attachReply rule order is pinned (each earlier rule wins):
- *   1. duplicate replyKey       -> rejected duplicate_reply (idempotent, any status)
+ *   1. duplicate replyKey       -> already_resolved when the wait is RESOLVED
+ *                                  (channel redelivery: the caller repeats the
+ *                                  owner delivery idempotently), else rejected
+ *                                  duplicate_reply (open/expired/cancelled)
  *   2. terminal status          -> follow-up attach when resolved and inside
  *                                  the follow-up window, else rejected late_reply
  *   3. deadline passed          -> rejected deadline_passed (open, at > expiresAt)
@@ -62,6 +65,17 @@ export type Outcome =
     }
   | { kind: "expired"; record: Schema.Record; partial: boolean }
   | { kind: "cancelled"; record: Schema.Record }
+  | {
+      /**
+       * Redelivery short-circuit: a replyKey already recorded on a RESOLVED
+       * wait returns the recorded resolution unchanged — no state change, no
+       * revision bump — so a crashed owner delivery can be repeated
+       * idempotently from the channel's redelivery.
+       */
+      kind: "already_resolved";
+      record: Schema.Record;
+      reply: Schema.Reply;
+    }
   | { kind: "rejected"; code: RejectionCode; record: Schema.Record; at: number };
 
 export function effectiveThreshold(record: Schema.Record): number {
@@ -89,7 +103,11 @@ function respondedCount(replies: readonly Schema.Reply[]): number {
 }
 
 export function attachReply(record: Schema.Record, input: ReplyInput): Outcome {
-  if (record.replies.some((reply) => reply.replyKey === input.replyKey)) {
+  const recorded = record.replies.find((reply) => reply.replyKey === input.replyKey);
+  if (recorded !== undefined) {
+    if (record.status === "resolved") {
+      return { kind: "already_resolved", record, reply: recorded };
+    }
     return { kind: "rejected", code: "duplicate_reply", record, at: input.at };
   }
   if (record.status !== "open") {

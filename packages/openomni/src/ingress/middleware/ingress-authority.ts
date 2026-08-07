@@ -26,14 +26,14 @@ interface PreRunState {
   target?: Ingress.Target;
 }
 
-export interface PreRunContext {
+interface PreRunContext {
   readonly event: unknown;
   readonly coordinator?: CoordinatorLike;
   readonly traceContext?: TraceContext.Type;
   readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
 }
 
-export interface PreRunResult {
+interface PreRunResult {
   readonly event: Ingress.DirectEvent;
   readonly coordinator?: CoordinatorLike;
   readonly mode: Ingress.DirectEvent["mode"];

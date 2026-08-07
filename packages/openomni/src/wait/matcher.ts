@@ -39,7 +39,7 @@ export type SenderEvidence = Readonly<{
  * 4. an expected endpoint must be proven by phase evidence; without an
  *    expected endpoint the resolved identity match alone carries.
  */
-export function matchesTarget(target: ResponderTarget, evidence: SenderEvidence): boolean {
+function matchesTarget(target: ResponderTarget, evidence: SenderEvidence): boolean {
   const bearerMatch =
     target.targetActorId === undefined &&
     target.tokenHash !== undefined &&

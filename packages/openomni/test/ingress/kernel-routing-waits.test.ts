@@ -977,6 +977,53 @@ describe("IngressEngine durable wait routing", () => {
     expect(record?.replies).toHaveLength(1);
   });
 
+  test("lazily expires an open wait on a late reply and returns the typed rejection", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-late-reply", {
+      expectedResponders: ["actor-external-worker", "actor-b"],
+      resolutionPolicy: "quorum",
+      quorum: { expected: 2, threshold: 2 },
+      expiresAt: 10_000,
+    });
+    // An in-deadline reply recorded partial progress before the wait ran out.
+    const early = WaitService.attachReply("wait-late-reply", {
+      replyKey: "reply-early",
+      responderCandidates: ["actor-b"],
+      at: 1_000,
+    });
+    expect(early.kind).toBe("attached");
+
+    const error = await captureError(IngressEngine.ingest(replyEvent("inbound-wait-late")));
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
+    expect(error?.message).toBe("wait reply rejected: deadline_passed");
+    // Lazy expiry folded the wait: expired with the partial progress recorded.
+    const record = WaitStore.get("wait-late-reply");
+    expect(record).toMatchObject({ status: "expired", partial: true });
+    expect(record?.replies).toHaveLength(1);
+    expect(residentExecutions).toEqual([]);
+  });
+
+  test("redelivers a resolved reply to the owner idempotently without a ledger change", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    const wait = openSessionWait("wait-redelivery");
+
+    const first = await IngressEngine.ingest(replyEvent("inbound-wait-redelivery"));
+    const resolvedRow = WaitStore.get("wait-redelivery");
+    expect(resolvedRow).toMatchObject({ status: "resolved" });
+    // Channel redelivery of the SAME reply (e.g. the owner delivery crashed
+    // mid-projection): the fold short-circuits to already_resolved and the
+    // owner receives the recorded resolution again.
+    const second = await IngressEngine.ingest(replyEvent("inbound-wait-redelivery"));
+
+    expect(first.sessionId).toBe(wait.ownerRef.id);
+    expect(second.sessionId).toBe(wait.ownerRef.id);
+    expect(residentExecutions).toEqual(["executed", "executed"]);
+    // Ledger row unchanged: same revision, same single reply, no new state.
+    expect(WaitStore.get("wait-redelivery")).toEqual(resolvedRow);
+  });
+
   test("rejects a sender outside the expected responders with unknown_responder", async () => {
     registerResponder("actor-external-worker", "seller-1");
     registerResponder("actor-intruder", "intruder-2");
@@ -990,6 +1037,42 @@ describe("IngressEngine durable wait routing", () => {
     expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
     expect(error?.message).toBe("wait reply rejected: unknown_responder");
     const record = WaitStore.get("wait-intruder");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(0);
+  });
+
+  test("blocks a disallowed action on a matched durable wait instead of surface routing", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-disallowed-action");
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(
+        IngressEngine.ingest(
+          replyEvent("inbound-wait-disallowed", { action: "ask_clarification", question: "Why?" }),
+        ),
+      );
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait does not allow the requested action");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "block",
+      factsUsed: [
+        "wait:wait:wait-disallowed-action",
+        "wait.action:ask_clarification",
+        "wait.action:disallowed",
+      ],
+    });
+    // No surface routing happened: the resident runtime never executed.
+    expect(residentExecutions).toEqual([]);
+    const record = WaitStore.get("wait-disallowed-action");
     expect(record).toMatchObject({ status: "open" });
     expect(record?.replies).toHaveLength(0);
   });

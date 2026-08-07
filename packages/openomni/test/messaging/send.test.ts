@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Wait } from "@openomni/protocol";
 import { ActorRegistry, Bus, Storage, WaitStore } from "@openomni/session";
 import {
   SendInput,
@@ -240,28 +239,29 @@ describe("awaited delivery", () => {
     expect(deliveries[0]?.waitId).toBe("wait:test-awaited");
   });
 
-  test("a second awaited send for the same message fails closed as a typed duplicate", () => {
+  test("a second awaited send for the same message is denied wait_duplicate with an audit event", async () => {
+    const audits: string[] = [];
+    Bus.observe((event, payload) => {
+      if (event.name !== "messaging.denied") return;
+      audits.push((payload as { code: string }).code);
+    });
     messaging().send(buildAwaitedSendInput());
 
     const secondSpec = buildAwaitedSendInput().waitSpec;
     if (secondSpec === undefined) throw new Error("awaited fixture must carry a waitSpec");
-    const duplicate = (() => {
-      try {
-        messaging().send(
-          buildAwaitedSendInput({
-            waitSpec: { ...secondSpec, waitId: "wait:test-awaited-2" },
-          }),
-        );
-      } catch (error) {
-        if (Wait.StoreError.isInstance(error)) return error;
-        throw error;
-      }
-      throw new Error("expected duplicate WaitStoreError");
-    })();
+    const duplicate = messaging().send(
+      buildAwaitedSendInput({
+        waitSpec: { ...secondSpec, waitId: "wait:test-awaited-2" },
+      }),
+    );
 
-    expect(duplicate.data.code).toBe("duplicate");
+    expect(duplicate.kind).toBe("denied");
+    if (duplicate.kind !== "denied") throw new Error("expected denial");
+    expect(duplicate.code).toBe("wait_duplicate");
     expect(WaitStore.list()).toHaveLength(1);
     expect(deliveries).toHaveLength(1);
+    await flushBus();
+    expect(audits).toEqual(["wait_duplicate"]);
   });
 
   test("awaited without a waitSpec is a schema violation owned by the SendInput refinement", () => {

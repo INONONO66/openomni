@@ -276,6 +276,7 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
       // The matcher only returns candidates; the protocol fold decides
       // (duplicate / late / unknown / ambiguous / attach / resolve) and the
       // store persists the outcome before the owner session sees the reply.
+      const at = Date.now();
       const outcome = WaitService.attachReply(wait.record.id, {
         replyKey: resolution.event.id,
         responderCandidates: responderCandidates(
@@ -283,15 +284,25 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
           ingressEvidence(resolution.event, wait.correlation),
         ),
         messageId: resolution.event.id,
-        at: Date.now(),
+        at,
       });
       if (outcome.kind === "rejected") {
+        if (outcome.code === "deadline_passed") {
+          // Lazy expiry: this late reply is the first observer of the passed
+          // deadline — fold the wait to expired (recording partial progress)
+          // before rejecting, so the ledger never keeps a dead open wait that
+          // the boot sweep alone would have to find.
+          WaitService.expire(wait.record.id, at);
+        }
         throw new IngressRoutingError(
           "wait_reply_rejected",
           `wait reply rejected: ${outcome.code}`,
           decision,
         );
       }
+      // "already_resolved" (channel redelivery of the resolving reply) falls
+      // through on purpose: the owner delivery repeats idempotently with the
+      // recorded resolution — no state change, no revision bump.
       // resolve-route routed this decision, so the owner is a session
       // (workItem owners fail closed at the wait_correlation stage).
       return {

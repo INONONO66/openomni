@@ -16,7 +16,7 @@ import { waitViewOfPendingAsk, waitViewOfPendingInteraction } from "./upcast.js"
  *   externalMessageId lookup in the legacy tier).
  */
 
-export type WaitCandidate =
+type WaitCandidate =
   | Readonly<{ source: "wait"; key: `wait:${string}`; wait: Wait.Record }>
   | Readonly<{
       source: "pending_interaction";
@@ -31,7 +31,7 @@ export type WaitCandidate =
       record: Communication.PendingAsk.Record;
     }>;
 
-export type WaitCorrelationInput = Readonly<{
+type WaitCorrelationInput = Readonly<{
   correlation?: Dispatch.Correlation;
   externalMessageId?: string;
 }>;

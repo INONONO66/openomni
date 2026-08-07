@@ -28,14 +28,21 @@ function eventBase(record: Wait.Record, time: number) {
 }
 
 function stillCorrelatable(record: Wait.Record, now: number): boolean {
-  if (record.status === "open") return now <= record.expiresAt;
+  // Open rows surface even past their deadline: pre-filtering expired-open
+  // waits here would silently drop late replies into surface routing. The
+  // deadline rule is owned by the fold (deadline_passed) plus the kernel's
+  // lazy expiry; only resolved rows age out of correlation here (follow-up
+  // window), because a resolved wait has already been delivered.
+  if (record.status === "open") return true;
   if (record.status === "resolved" && record.resolvedAt !== undefined) {
     return now <= record.resolvedAt + record.followUpWindow;
   }
   return false;
 }
 
-function publishChange(outcome: Exclude<Wait.Outcome, { kind: "rejected" }>): void {
+function publishChange(
+  outcome: Exclude<Wait.Outcome, { kind: "rejected" } | { kind: "already_resolved" }>,
+): void {
   const base = eventBase(outcome.record, outcome.record.updatedAt);
   switch (outcome.kind) {
     case "attached":
@@ -128,7 +135,10 @@ export namespace WaitStore {
       });
     }
     const outcome = step(current);
-    if (outcome.kind === "rejected") return outcome;
+    // No-write outcomes: rejections never persist; already_resolved returns
+    // the recorded resolution unchanged (redelivery short-circuit — no state
+    // change, no revision bump, no event).
+    if (outcome.kind === "rejected" || outcome.kind === "already_resolved") return outcome;
     if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
       throw new Wait.StoreError({
         message: `Wait revision conflict: ${id} expected=${current.revision}`,

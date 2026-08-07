@@ -1,4 +1,4 @@
-import type { Actor, Wait } from "@openomni/protocol";
+import { Wait as WaitProtocol, type Actor, type Wait } from "@openomni/protocol";
 import { ActorRegistry, Bus } from "@openomni/session";
 import { WaitService } from "../wait/index.js";
 import { Events } from "./events.js";
@@ -169,24 +169,39 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       // Record-before-act: the durable Wait lands before the delivery effect.
       // A delivery failure then leaves an open Wait that expires on schedule;
       // the reverse order could deliver a message the ledger never awaits.
-      wait = WaitService.open({
-        id: spec.waitId,
-        ownerRef: spec.ownerRef,
-        originMessageId: input.messageId,
-        correlation: {
-          ...spec.correlation,
-          endpointId: resolution.target.endpointId,
-          replyToMessageId: input.messageId,
-        },
-        allowedActions: spec.allowedActions,
-        expectedResponders: spec.expectedResponders,
-        resolutionPolicy: spec.resolutionPolicy,
-        ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
-        expiresAt: spec.expiresAt,
-        followUpWindow: spec.followUpWindow,
-        createdAt: input.at,
-        updatedAt: input.at,
-      });
+      try {
+        wait = WaitService.open({
+          id: spec.waitId,
+          ownerRef: spec.ownerRef,
+          originMessageId: input.messageId,
+          correlation: {
+            ...spec.correlation,
+            endpointId: resolution.target.endpointId,
+            replyToMessageId: input.messageId,
+          },
+          allowedActions: spec.allowedActions,
+          expectedResponders: spec.expectedResponders,
+          resolutionPolicy: spec.resolutionPolicy,
+          ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
+          expiresAt: spec.expiresAt,
+          followUpWindow: spec.followUpWindow,
+          createdAt: input.at,
+          updatedAt: input.at,
+        });
+      } catch (error) {
+        // Exactly-once awaited delivery surfacing as a typed denial: the
+        // ledger already awaits this message (or wait id), so this send
+        // delivers nothing and changes nothing. Every other StoreError
+        // (adapter_absent, ...) stays a thrown fail-closed error.
+        if (WaitProtocol.StoreError.isInstance(error) && error.data.code === "duplicate") {
+          return deny(
+            input,
+            "wait_duplicate",
+            `a Wait already exists for message ${input.messageId} or wait ${spec.waitId} — awaited delivery is exactly-once`,
+          );
+        }
+        throw error;
+      }
     }
 
     ports.deliver({

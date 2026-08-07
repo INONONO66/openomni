@@ -129,12 +129,21 @@ export function resolveRoute(inbound: RouteInbound, state: RouteState): RoutingD
         case "wait": {
           const action = inbound.requestedAction;
           if (action === undefined || !state.wait.allowed.includes(action)) {
-            waitFacts.push(
-              `wait:${state.wait.key}`,
-              `wait.action:${action ?? "missing"}`,
-              "wait.action:disallowed",
-            );
-            break;
+            // Fail closed: a matched durable wait never falls through to
+            // surface routing — a disallowed action is a typed block, mirroring
+            // the owner gate below. (Frozen legacy PendingInteraction matches
+            // keep their historical surface fallthrough.)
+            return {
+              ...common,
+              stage: "wait_correlation",
+              outcome: "block",
+              reason: "Matched wait does not allow the requested action",
+              factsUsed: [
+                `wait:${state.wait.key}`,
+                `wait.action:${action ?? "missing"}`,
+                "wait.action:disallowed",
+              ],
+            };
           }
           if (state.wait.owner.kind !== "session") {
             // Fail closed: a matched wait must never fall through to surface
