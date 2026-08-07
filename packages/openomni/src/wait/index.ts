@@ -6,4 +6,4 @@ export {
   targetsOfPendingInteraction,
   targetsOfWait,
 } from "./matcher.js";
-export { WaitService } from "./service.js";
+export { WaitService } from "./lifecycle.js";
