@@ -1,52 +1,238 @@
-import { PolicyEngine } from "@openomni/policy";
 import type { PolicyRegistration } from "@openomni/agent";
-import { PolicyDecision } from "@openomni/protocol";
-import { resolveTarget } from "../target";
-import { targetRequiresCoordinator } from "./ingress-authority-actor";
-import { throwAbort } from "./ingress-authority-decisions";
-import { IngressAuthorityDefinitions } from "./ingress-authority-definitions";
+import { PolicyEngine } from "@openomni/policy";
+import { type Actor, Ingress, Policy, PolicyDecision, type TraceContext } from "@openomni/protocol";
+import type { ChannelGrantStore } from "@openomni/session";
+import type { ZodError } from "zod";
+import type { CoordinatorLike } from "../coordinator-like";
+import { resolveTarget, targetKey } from "../target";
 import {
-  registrations as createRegistrations,
-  routedRegistrations as createRoutedRegistrations,
-} from "./ingress-authority-registrations";
-import {
-  emptyUsage,
-  type PreRunContext,
-  type PreRunResult,
-  type PreRunState,
-} from "./ingress-authority-types";
+  actionLabels,
+  actorRole,
+  actorTrustTier,
+  getActor,
+  getEventAction,
+  isAuthorizedTopLevelActor,
+  targetRequiresCoordinator,
+} from "./ingress-authority-actor";
+
+const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+interface PreRunState {
+  readonly input: unknown;
+  readonly coordinator?: CoordinatorLike;
+  parsedEvent?: Ingress.DirectEvent;
+  schemaError?: ZodError;
+  mode?: Ingress.DirectEvent["mode"];
+  target?: Ingress.Target;
+}
+
+export interface PreRunContext {
+  readonly event: unknown;
+  readonly coordinator?: CoordinatorLike;
+  readonly traceContext?: TraceContext.Type;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
+export interface PreRunResult {
+  readonly event: Ingress.DirectEvent;
+  readonly coordinator?: CoordinatorLike;
+  readonly mode: Ingress.DirectEvent["mode"];
+  readonly target: Ingress.Target;
+}
+
+function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
+  return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
+}
+
+function abortDecision(policyId: string, reason: string): Policy.PolicyDecision {
+  return PolicyDecision.deny({
+    policyId,
+    reasonCodes: [reason],
+    effects: [{ type: "run.abort", reason }],
+  });
+}
+
+function requireParsedEvent(state: PreRunState): Ingress.DirectEvent {
+  if (!state.parsedEvent) {
+    throw new Error("ingress event must be schema-validated before authority middleware");
+  }
+  return state.parsedEvent;
+}
+
+function throwAbort(decision: Policy.PolicyDecision, state: PreRunState): never {
+  if (state.schemaError) throw state.schemaError;
+  throw new Error(PolicyDecision.reason(decision, "ingress run.start middleware aborted"));
+}
+
+// Blacklist and channel-grant enforcement is owned by the routing pipeline
+// (routing-runtime + resolve-route); this middleware only covers the routed
+// pre-run checks that run after routing has admitted the event.
+const authorityInputRules = [
+  {
+    toolPattern: "",
+    field: "actionPermission",
+    pattern: "^worker\\.spawn$",
+    action: "deny",
+    reason: "worker cannot spawn workers",
+    priority: 4,
+  },
+  {
+    toolPattern: "",
+    field: "actionPermission",
+    pattern: "^worker\\.cancel$",
+    action: "deny",
+    reason: "worker cannot cancel workers",
+    priority: 4,
+  },
+  {
+    toolPattern: "",
+    field: "actionPermission",
+    pattern: "^worker\\.resume$",
+    action: "deny",
+    reason: "worker cannot resume workers",
+    priority: 4,
+  },
+  {
+    toolPattern: "",
+    field: "actionPermission",
+    pattern: "^worker\\.schedule$",
+    action: "deny",
+    reason: "worker cannot schedule workers",
+    priority: 4,
+  },
+  {
+    toolPattern: "",
+    field: "actionPermission",
+    pattern: "^resident\\.(spawn|send|cancel|resume|schedule)$",
+    action: "allow",
+    reason: "resident authorized for worker control action",
+    priority: 3,
+  },
+  {
+    toolPattern: "",
+    field: "actionPermission",
+    pattern: "^worker\\.send$",
+    action: "allow",
+    reason: "worker authorized to send worker messages",
+    priority: 3,
+  },
+  {
+    toolPattern: "",
+    field: "authorized",
+    pattern: "^true$",
+    action: "allow",
+    reason: "actor authorized for top-level inbound work",
+    priority: 2,
+  },
+  {
+    toolPattern: "",
+    field: "authorized",
+    pattern: "^false$",
+    action: "deny",
+    reason: "actor is not authorized to create top-level inbound work",
+    priority: 1,
+  },
+] as const satisfies readonly Policy.InputRule[];
+
+function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDecision {
+  const target = resolveTarget(event);
+  const actor = getActor(event);
+  const role = actorRole(actor);
+  const trustTier = actorTrustTier(actor);
+  const permissionActor = trustTier ?? role;
+  const eventAction = getEventAction(event);
+  const action = target.kind === "worker" ? "ingress.worker.deliver" : "ingress.top_level.create";
+  const resource = `ingress.${event.surface}.${targetKey(target)}`;
+  const resourceLabels = [
+    `surface.${event.surface}`,
+    `target.${target.kind}`,
+    ...(role ? [`actor.${role}`] : []),
+    ...(trustTier ? [`trust.${trustTier}`] : []),
+    ...(eventAction ? [actionLabels[eventAction]] : []),
+  ];
+  const decision = PolicyDecision.fromEvaluation(
+    Policy.evaluate(
+      {
+        action,
+        inputRules: authorityInputRules.map((rule) => ({ ...rule, toolPattern: resource })),
+      },
+      {
+        action,
+        resource,
+        resourceLabels,
+        actor,
+        input: {
+          actionPermission: eventAction ? `${permissionActor}.${eventAction}` : "",
+          authorized: String(isAuthorizedTopLevelActor(event)),
+        },
+        metadata: { action: eventAction, mode: event.mode, surface: event.surface, target },
+      },
+    ),
+  );
+
+  return { ...decision, factsUsed: resourceLabels };
+}
+
+export function applyChannelGrantTreatment(
+  event: Ingress.DirectEvent,
+  grant: ChannelGrantStore.Grant,
+  inboundTreatment: Actor.InboundTreatment,
+): Ingress.DirectEvent {
+  const actor = getActor(event);
+  const actorWithChannelDefault =
+    !actorTrustTier(actor) && grant.defaultTier
+      ? { ...(actor ?? { role: "user" }), trustTier: grant.defaultTier }
+      : actor;
+
+  return {
+    ...event,
+    meta: {
+      ...event.meta,
+      ...(actorWithChannelDefault ? { actor: actorWithChannelDefault } : {}),
+      channelGrantId: grant.id,
+      channelGrantKind: grant.kind,
+      inboundTreatment,
+    },
+  };
+}
 
 export namespace IngressAuthorityMiddleware {
-  export const CoordinatorPresence = IngressAuthorityDefinitions.CoordinatorPresence;
-  export const SchemaValidation = IngressAuthorityDefinitions.SchemaValidation;
-  export const BlacklistCheck = IngressAuthorityDefinitions.BlacklistCheck;
-  export const ChannelGrantCheck = IngressAuthorityDefinitions.ChannelGrantCheck;
-  export const AuthorityCheck = IngressAuthorityDefinitions.AuthorityCheck;
-  export const ModeDispatch = IngressAuthorityDefinitions.ModeDispatch;
+  export const CoordinatorPresence = {
+    name: "ingress:coordinator-presence",
+    timing: "run.start",
+    priority: 10,
+    failPolicy: "fail-closed",
+  } as const satisfies Policy.Definition;
 
-  export function registrations(state: PreRunState): PolicyRegistration[] {
-    return createRegistrations(state);
-  }
+  export const SchemaValidation = {
+    name: "ingress:schema-validation",
+    timing: "run.start",
+    priority: 0,
+    failPolicy: "fail-closed",
+  } as const satisfies Policy.Definition;
 
-  export async function runPreRun(ctx: PreRunContext): Promise<PreRunResult> {
-    return run(ctx, createRegistrations);
-  }
+  export const AuthorityCheck = {
+    name: "ingress:authority",
+    timing: "run.start",
+    priority: 20,
+    failPolicy: "fail-closed",
+  } as const satisfies Policy.Definition;
+
+  export const ModeDispatch = {
+    name: "ingress:mode-dispatch",
+    timing: "run.start",
+    priority: 35,
+    failPolicy: "fail-closed",
+  } as const satisfies Policy.Definition;
 
   export async function runRoutedPreRun(ctx: PreRunContext): Promise<PreRunResult> {
-    return run(ctx, createRoutedRegistrations);
-  }
-
-  async function run(
-    ctx: PreRunContext,
-    create: (state: PreRunState) => PolicyRegistration[],
-  ): Promise<PreRunResult> {
     const state: PreRunState = { input: ctx.event, coordinator: ctx.coordinator };
     const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
     });
 
-    for (const registration of create(state)) {
+    for (const registration of routedRegistrations(state)) {
       engine.register(registration);
     }
 
@@ -75,6 +261,90 @@ export namespace IngressAuthorityMiddleware {
       coordinator: state.coordinator,
       mode: state.mode,
       target,
+    };
+  }
+
+  function routedRegistrations(state: PreRunState): PolicyRegistration[] {
+    return [
+      createSchemaValidation(state),
+      createCoordinatorPresence(state),
+      createAuthorityCheck(state),
+      createModeDispatch(state),
+    ];
+  }
+
+  function createSchemaValidation(state: PreRunState): PolicyRegistration {
+    return {
+      ...SchemaValidation,
+      failPolicy: "fail-closed",
+      fn: () => {
+        const parsed = Ingress.DirectEventSchema.safeParse(state.input);
+        if (!parsed.success) {
+          state.schemaError = parsed.error;
+          return abortDecision("ingress.schema", "invalid ingress event");
+        }
+
+        state.parsedEvent = parsed.data;
+        return allowDecision("ingress.schema", "ingress event schema valid");
+      },
+    };
+  }
+
+  function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
+    return {
+      ...CoordinatorPresence,
+      failPolicy: "fail-closed",
+      fn: () => {
+        const event = requireParsedEvent(state);
+        const target = resolveTarget(event);
+        state.target = target;
+
+        if (!targetRequiresCoordinator(target)) {
+          return allowDecision(
+            "ingress.coordinator",
+            "coordinator not required for resident target",
+          );
+        }
+        if (state.coordinator === undefined) {
+          return abortDecision(
+            "ingress.coordinator",
+            `coordinator is required for ${target.kind} target`,
+          );
+        }
+        return allowDecision(
+          "ingress.coordinator",
+          `coordinator available for ${target.kind} target`,
+        );
+      },
+    };
+  }
+
+  function createAuthorityCheck(state: PreRunState): PolicyRegistration {
+    return {
+      ...AuthorityCheck,
+      failPolicy: "fail-closed",
+      fn: () => {
+        const event = requireParsedEvent(state);
+
+        return evaluateIngressAuthority(event);
+      },
+    };
+  }
+
+  function createModeDispatch(state: PreRunState): PolicyRegistration {
+    return {
+      ...ModeDispatch,
+      failPolicy: "fail-closed",
+      fn: () => {
+        const event = requireParsedEvent(state);
+        if (event.mode !== "direct") {
+          const unknownMode: unknown = event.mode;
+          return abortDecision("ingress.mode", `unknown ingress mode: ${unknownMode}`);
+        }
+
+        state.mode = event.mode;
+        return allowDecision("ingress.mode", `dispatch mode ${event.mode}`);
+      },
     };
   }
 }

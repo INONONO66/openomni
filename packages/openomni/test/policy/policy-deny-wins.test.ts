@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { PolicyEngine, type PolicyContext, type PolicyRegistration } from "@openomni/agent";
 import { PolicyDecision, type Ingress, type RuntimeResource } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/session";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
 
@@ -46,21 +45,6 @@ const stubCoordinator = {
 };
 
 describe("cross-middleware deny-wins", () => {
-  beforeEach(() => {
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    ChannelGrantStore.put({
-      id: "grant-test",
-      surface: "test",
-      kind: "trusted_channel",
-      createdBy: "act_owner",
-    });
-  });
-
-  afterEach(() => {
-    Storage.reset();
-  });
-
   test("deny-wins across policy engine boundaries with mixed verdicts", async () => {
     const engine = PolicyEngine.create({ audit: false });
 
@@ -125,16 +109,11 @@ describe("cross-middleware deny-wins", () => {
       meta: { actor: { role: "sub_persona" } },
     });
 
-    let ingressFailed = false;
-    try {
-      await IngressAuthorityMiddleware.runPreRun({
+    await expect(
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
-      });
-    } catch {
-      ingressFailed = true;
-    }
-
-    expect(ingressFailed).toBe(true);
+      }),
+    ).rejects.toThrow("actor is not authorized to create top-level inbound work");
   });
 });

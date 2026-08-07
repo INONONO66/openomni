@@ -12,7 +12,7 @@ import {
   SurfaceKey,
 } from "@openomni/session";
 import { requestedPendingInteractionAction } from "../dispatch/pending-interaction-routing.js";
-import { applyChannelGrantTreatment } from "./middleware/ingress-authority-channel-grant.js";
+import { applyChannelGrantTreatment } from "./middleware/ingress-authority.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { IngressSessionResolver } from "./session-resolver.js";
 import { resolveTarget, targetKey } from "./target.js";
