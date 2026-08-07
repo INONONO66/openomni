@@ -150,6 +150,52 @@ Operating rules live in this file and the tracked `docs/` — gitignored `*.loca
 
 Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, `PolicyEngine` for agent-loop extension, OpenOmni kernel for messaging/orchestration decisions.
 
+### Module & file structure
+
+These rules exist because the 2026-08 repo-wide audit traced real defects (a dead
+policy path kept alive by its own tests, two Discord gateway bugs caused directly by
+a satellite split) to violations of each one.
+
+1. **A file is named for what it owns, not for its layer.** Role-noun suffixes that
+   could be swapped without changing meaning (`-manager`/`-service`/`-authority`/
+   `-boundary`/`-gateway`/`-coordinator`/`-helper`/`-util`) are a confession the seam
+   is fake. If two sibling files could trade names, merge them.
+2. **Split a module only when one of these is true**: (a) a second consumer exists
+   (abstraction is earned by the second consumer, never in advance); (b) a real trust
+   boundary separates the halves; (c) the halves have independent lifecycles (one can
+   change without the other). "The file is getting long" is not on this list — line
+   count is a review signal, never a split criterion.
+3. **Sub-30-LOC single-importer files get folded back** into their importer (#453
+   hygiene). A file that exists only to break an import cycle the split itself
+   created is the same defect — fix the shape instead.
+4. **One enforcement layer per invariant per phase.** Pick the owner (zod schema,
+   pure fold, service entry, or write time) and delete the other copies.
+   Re-validation is legitimate only across a real `await` or a trust boundary —
+   in-process re-checking of a value the same factory produced is slop. When deleting
+   a duplicated check, name the surviving layer in a comment and keep/add a pinning
+   test that fails if that layer regresses (assert the specific reason/error, not
+   just "it rejects").
+5. **One exported owner per convention.** Digest/canonical-JSON, reason-code strings,
+   idempotency keys, event-name literals, error base classes (`NamedError` across
+   package boundaries): defined once, imported everywhere. Two spellings of the same
+   convention in different packages is a bug seed even while all tests pass.
+6. **No smuggled fields, no unreachable fallbacks.** If a consumer needs a field, it
+   goes in the schema — never `as`-cast around it. `?? default` where the left side
+   cannot be nullish, defensive re-checks of what the type system already guarantees,
+   and `default:` branches after an exhaustive `never` check are deletions, not style.
+7. **Durable writes fail closed.** A storage seam that silently skips persistence
+   when an adapter is absent (warn-and-return) is forbidden; absence of the adapter
+   is an error. Optional sub-adapters exist for test fakes only and must never guard
+   a production write path.
+8. **Test structure mirrors these rules.** One shared fixture builder per package
+   (`test/helpers/`), no per-file clones; every invariant is tested at exactly its
+   owning layer; no bare `.toThrow()` (assert the message or typed code); no
+   parse-echo tests that feed a literal through zod and read the same literal back.
+9. **Vocabulary**: forbidden nouns `runtime`, `task`, `envelope` in new protocol/
+   kernel surfaces (#497 convergence); reserved single-meaning nouns `Outcome`,
+   `CompletionReport`, `Grant`, `Wait`. Korean names are path-level only (driver
+   band); exported symbols and protocol nouns stay English.
+
 ## CODING BOUNDARY RULES
 
 - Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, or choose worker/resident targets except through an OpenOmni kernel API.
