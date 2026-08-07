@@ -21,7 +21,10 @@ export class AgentToolProvider implements ToolProvider {
 
   constructor(options?: AgentToolProviderOptions) {
     const dispatchRuntime =
-      options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
+      options?.dispatchRuntime ??
+      createDefaultDispatchRuntime({
+        owners: options?.dispatchOwners,
+      });
     this.register(
       options?.dispatchToolMode === "worker-resident-ask"
         ? createWorkerResidentAskDispatchTool(dispatchRuntime)

@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  CompletionContract,
+  CompletionFacts,
+  CompletionReport,
+  CompletionTerminalReceipt,
+} from "./completion-admission.js";
+import { criterionId } from "./hash.js";
+import { validateTerminalLinkage } from "./terminal-linkage.js";
 const HttpMethod = z.enum(["GET", "HEAD"]);
 const HttpUrl = z.string().url().refine(isHttpUrl, "read-back target must use http or https");
 
@@ -27,6 +35,10 @@ const ReadBackRequestBase = z.object({
   maxBodyBytes: z.number().int().positive().default(1_000_000),
 });
 
+// Deliberately NOT unified with AppConnector's CompletionReport.readBackRequests
+// mirror (app-connector/definition.ts): that schema carries unresolved target
+// templates rendered by the server-side read-back builder, while this one
+// validates fully resolved http(s) URLs.
 export const ReadBackRequest = z.discriminatedUnion("kind", [
   ReadBackRequestBase.extend({
     kind: z.literal("url_fetch"),
@@ -45,10 +57,13 @@ export const ReadBackRequest = z.discriminatedUnion("kind", [
 ]);
 export type ReadBackRequest = z.infer<typeof ReadBackRequest>;
 
-export const ReadBackRequestEnvelope = z.object({
-  claimIndex: z.number().int().nonnegative(),
-  request: ReadBackRequest,
-});
+export const ReadBackRequestEnvelope = z
+  .object({
+    claimIndex: z.number().int().nonnegative(),
+    criterionIndex: z.number().int().nonnegative(),
+    request: ReadBackRequest,
+  })
+  .strict();
 export type ReadBackRequestEnvelope = z.infer<typeof ReadBackRequestEnvelope>;
 
 export const ReadBackCheck = z
@@ -96,6 +111,9 @@ export const Evidence = z
     passed: z.boolean(),
     detail: z.string().optional(),
     readBack: ReadBackCheck.optional(),
+    attempt: z.number().int().positive().optional(),
+    basisRef: z.string().min(1).optional(),
+    criterionId: z.string().min(1).optional(),
     createdAt: z.number(),
   })
   .superRefine((evidence, ctx) => {
@@ -120,21 +138,6 @@ export type ExecutorKind = z.infer<typeof ExecutorKind>;
 
 export const Outcome = z.enum(["adopted", "corrected", "redone", "ignored"]);
 export type Outcome = z.infer<typeof Outcome>;
-
-export const CompletionReport = z.object({
-  summary: z.string().min(1),
-  claims: z
-    .array(
-      z.object({
-        statement: z.string().min(1),
-        evidenceIds: z.array(z.string().min(1)).min(1),
-      }),
-    )
-    .min(1),
-  caveats: z.array(z.string().min(1)).default([]),
-  followUps: z.array(z.string().min(1)).default([]),
-});
-export type CompletionReport = z.infer<typeof CompletionReport>;
 
 export const VerificationGate = z.object({
   automated: z
@@ -172,8 +175,9 @@ export const VerificationGate = z.object({
 });
 export type VerificationGate = z.infer<typeof VerificationGate>;
 
-export const Info = z.object({
+const InfoShape = z.object({
   hash: z.string(),
+  revision: z.number().int().nonnegative(),
   name: z.string(),
   sourceMessageId: z.string(),
   sourceChannel: z.string(),
@@ -203,16 +207,64 @@ export const Info = z.object({
   goal: z.string(),
   context: z.string().optional(),
   constraints: z.array(z.string()).default([]),
-  acceptanceCriteria: z.array(z.string()).default([]),
+  acceptanceCriteria: z.array(z.string().refine((value) => value.trim().length > 0)).min(1),
   changedFiles: z.array(z.string()).default([]),
   failureReason: z.string().optional(),
   blockers: z.array(Blocker).default([]),
   evidence: z.array(Evidence).default([]),
+  completionContract: CompletionContract,
+  completionFacts: CompletionFacts.refine((facts) => facts.criteria.length > 0),
   completionReport: CompletionReport.optional(),
   verificationGate: VerificationGate.optional(),
+  completionTerminalReceipt: CompletionTerminalReceipt.optional(),
   outcome: Outcome.optional(),
 });
+
+export const Info = Object.assign(
+  InfoShape.superRefine((item, ctx) => {
+    validateCompletionContract(item, ctx);
+    validateTerminalLinkage(item, ctx);
+  }),
+  { shape: InfoShape.shape },
+);
 export type Info = z.infer<typeof Info>;
+
+function validateCompletionContract(item: z.infer<typeof InfoShape>, ctx: z.RefinementCtx): void {
+  const criteria = item.completionFacts.criteria;
+  if (criteria.length !== item.acceptanceCriteria.length) {
+    ctx.addIssue({
+      code: "custom",
+      message: "completion criteria must match acceptance criteria",
+      path: ["completionFacts", "criteria"],
+    });
+    return;
+  }
+  for (const [index, statement] of item.acceptanceCriteria.entries()) {
+    const criterion = criteria[index];
+    if (!criterion) continue;
+    if (criterion.statement !== statement) {
+      ctx.addIssue({
+        code: "custom",
+        message: "criterion statement must match acceptance criterion",
+        path: ["completionFacts", "criteria", index, "statement"],
+      });
+    }
+    if (criterion.id !== criterionId(item.hash, index, statement)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "criterion id must be deterministic for its WorkItem and acceptance criterion",
+        path: ["completionFacts", "criteria", index, "id"],
+      });
+    }
+    if (!criterion.required) {
+      ctx.addIssue({
+        code: "custom",
+        message: "persisted acceptance criteria must be required",
+        path: ["completionFacts", "criteria", index, "required"],
+      });
+    }
+  }
+}
 
 // merged from http.ts (#453 hygiene: sub-30-LOC single-importer)
 export function isHttpUrl(target: string): boolean {

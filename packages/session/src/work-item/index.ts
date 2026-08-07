@@ -5,6 +5,7 @@ import {
   addWorkItemBlocker,
   addWorkItemEvidence,
   addWorkItemReadBackEvidence,
+  assignWorkItemExecution,
   areDependenciesMet as areStoredDependenciesMet,
   cancelWorkItem,
   completeWorkItem,
@@ -44,6 +45,17 @@ export namespace WorkItemStore {
     return startWorkItem(hash);
   }
 
+  export async function assignExecution(
+    hash: string,
+    assignment: Readonly<{
+      executorKind: WorkItem.ExecutorKind;
+      workerRunId: string;
+      workSessionId: string;
+    }>,
+  ): Promise<WorkItem.Info | undefined> {
+    return assignWorkItemExecution(hash, assignment);
+  }
+
   export async function complete(
     hash: string,
     completionReport: WorkItem.CompletionReport,
@@ -61,7 +73,7 @@ export namespace WorkItemStore {
 
   export async function addBlocker(
     hash: string,
-    blocker: Omit<WorkItem.Blocker, "id" | "createdAt">,
+    blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
   ): Promise<WorkItem.Info | undefined> {
     return addWorkItemBlocker(hash, blocker);
   }
@@ -75,16 +87,23 @@ export namespace WorkItemStore {
 
   export async function addEvidence(
     hash: string,
-    evidence: Omit<WorkItem.Evidence, "id" | "createdAt">,
+    evidence: Parameters<typeof addWorkItemEvidence>[1],
+    expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemEvidence(hash, evidence);
+    return addWorkItemEvidence(hash, evidence, expectedScope);
   }
 
   export async function addReadBackEvidence(
     hash: string,
     check: WorkItem.ReadBackCheck,
+    expectedScope?: Readonly<{
+      expectedAttempt: number;
+      expectedBasisRef: string;
+      criterionId: string;
+      evidenceId?: string;
+    }>,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemReadBackEvidence(hash, check);
+    return addWorkItemReadBackEvidence(hash, check, expectedScope);
   }
 
   export const recordOutcome = recordWorkItemOutcome;

@@ -26,7 +26,9 @@ export const CompletionBinding = snapshotFirstJsonSchema(
       ...bindingFields,
       surface: z.literal("work.complete.pre"),
       workItemHash: identifier,
-      contractRevision: sequence,
+      requestId: identifier,
+      contractRevision: identifier,
+      expectedHead: sequence,
     })
     .strict()
     .readonly(),
@@ -86,6 +88,10 @@ export type StakesInjectionDenial = {
 export type CompletionStakesContext = {
   readonly surface: "work.complete.pre";
   readonly workItemHash: string;
+  readonly requestId: string;
+  readonly contractRevision: string;
+  readonly basisRef: string;
+  readonly expectedHead: number;
   readonly stakes: StakesValue;
 };
 export type VoiceStakesContext = {

@@ -9,10 +9,10 @@ import {
   Storage,
   WorkItemStore,
 } from "../../src";
-
-const flushBusPersistence = () => new Promise((resolve) => setTimeout(resolve, 10));
+import { persistCompletedWorkItemFixture } from "./completed-fixture.js";
 
 type WorkItemInput = Parameters<typeof WorkItemStore.create>[0];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function createInput(overrides: Partial<WorkItemInput> = {}): WorkItemInput {
   return {
@@ -22,6 +22,7 @@ function createInput(overrides: Partial<WorkItemInput> = {}): WorkItemInput {
     intent: "verification",
     goal: "Verify WorkItem storage and observability plumbing",
     sessionId: "session-work-item-1",
+    acceptanceCriteria: ["the WorkItem pipeline is verified"],
     ...overrides,
   };
 }
@@ -36,10 +37,23 @@ async function addEvidenceBackedReport(hash: string): Promise<WorkItem.Completio
   if (!evidenceId) throw new Error("expected evidence id");
   return {
     summary: "Completed with integration evidence.",
-    claims: [{ statement: "Integration path completed.", evidenceIds: [evidenceId] }],
+    claims: [{ statement: "the WorkItem pipeline is verified", evidenceIds: [evidenceId] }],
     caveats: [],
     followUps: [],
   };
+}
+
+function persistCompletedFixture(
+  hash: string,
+  report: WorkItem.CompletionReport,
+  options: Readonly<{ publishTerminalEvents: boolean }>,
+): WorkItem.Info | undefined {
+  return persistCompletedWorkItemFixture({
+    hash,
+    report,
+    completionWriter,
+    publishTerminalEvents: options.publishTerminalEvents,
+  });
 }
 
 function resolveSessionId(_event: Bus.PublishedDescriptor, payload: unknown): string | undefined {
@@ -55,7 +69,7 @@ describe("WorkItem integration", () => {
 
   beforeEach(() => {
     adapter = new SqliteStorageAdapter(":memory:");
-    Storage.configure(adapter);
+    completionWriter = Storage.configure(adapter);
   });
 
   afterEach(() => {
@@ -79,19 +93,18 @@ describe("WorkItem integration", () => {
     const unsubscribeStatusChanged = Bus.subscribe(WorkItem.Events.StatusChanged, () => {
       emittedEvents.push(WorkItem.Events.StatusChanged.name);
     });
-    const unsubscribeCompleted = Bus.subscribe(WorkItem.Events.Completed, () => {
-      emittedEvents.push(WorkItem.Events.Completed.name);
+    const unsubscribeCompleted = Bus.subscribe(WorkItem.Events.CompletedV2, () => {
+      emittedEvents.push(WorkItem.Events.CompletedV2.name);
     });
 
     stop = BusPersistence.start({ resolveSessionId });
 
     const item = await WorkItemStore.create(createInput({ sessionId }));
-    const completed = await WorkItemStore.complete(
-      item.hash,
-      await addEvidenceBackedReport(item.hash),
-    );
+    const completed = persistCompletedFixture(item.hash, await addEvidenceBackedReport(item.hash), {
+      publishTerminalEvents: true,
+    });
 
-    await flushBusPersistence();
+    await BusPersistence.flush();
     unsubscribeCreated();
     unsubscribeStatusChanged();
     unsubscribeCompleted();
@@ -99,14 +112,14 @@ describe("WorkItem integration", () => {
     expect(completed).toBeDefined();
     expect(emittedEvents).toContain(WorkItem.Events.Created.name);
     expect(emittedEvents).toContain(WorkItem.Events.StatusChanged.name);
-    expect(emittedEvents).toContain(WorkItem.Events.Completed.name);
+    expect(emittedEvents).toContain(WorkItem.Events.CompletedV2.name);
 
     const events = await BusQuery.listBySession(sessionId, { limit: 100 });
     const eventTypes = events.map((event) => event.eventType);
 
     expect(eventTypes).toContain(WorkItem.Events.Created.name);
     expect(eventTypes).toContain(WorkItem.Events.StatusChanged.name);
-    expect(eventTypes).toContain(WorkItem.Events.Completed.name);
+    expect(eventTypes).toContain(WorkItem.Events.CompletedV2.name);
     expect(events.every((event) => event.category === "work_item")).toBe(true);
     expect(events.every((event) => event.sessionId === sessionId)).toBe(true);
   });
@@ -140,7 +153,9 @@ describe("WorkItem integration", () => {
       reason: "pending",
     });
 
-    await WorkItemStore.complete(child1.hash, await addEvidenceBackedReport(child1.hash));
+    persistCompletedFixture(child1.hash, await addEvidenceBackedReport(child1.hash), {
+      publishTerminalEvents: false,
+    });
 
     expect(WorkItemStore.areDependenciesMet(child2.hash)).toEqual({
       met: true,

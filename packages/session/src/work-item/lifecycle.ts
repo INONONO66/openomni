@@ -14,27 +14,20 @@ export async function startWorkItem(hash: string): Promise<WorkItem.Info | undef
   }));
 }
 
+class CompletionAdmissionRequiredError extends Error {
+  readonly name = "CompletionAdmissionRequiredError";
+  readonly code = "admission_required";
+
+  constructor() {
+    super("completion admission is required before closing a WorkItem");
+  }
+}
+
 export async function completeWorkItem(
-  hash: string,
-  completionReport: WorkItem.CompletionReport,
+  _hash: string,
+  _completionReport: WorkItem.CompletionReport,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
-    changedFields: ["timestamps", "completionReport"],
-    target: "completed",
-    updated: {
-      ...existing,
-      completionReport: verifyCompletionReport(existing, completionReport),
-      timestamps: { ...existing.timestamps, completed: now, updated: now },
-    },
-    afterPublish: (updated) => {
-      Bus.publish(WorkItem.Events.Completed, {
-        traceId: crypto.randomUUID(),
-        time: now,
-        sessionId: updated.sessionId,
-        payload: { hash, sessionId: updated.sessionId },
-      });
-    },
-  }));
+  throw new CompletionAdmissionRequiredError();
 }
 
 export async function failWorkItem(
@@ -68,15 +61,45 @@ export async function cancelWorkItem(hash: string): Promise<WorkItem.Info | unde
   }));
 }
 
+export async function assignWorkItemExecution(
+  hash: string,
+  assignment: Readonly<{
+    executorKind: WorkItem.ExecutorKind;
+    workerRunId: string;
+    workSessionId: string;
+  }>,
+): Promise<WorkItem.Info | undefined> {
+  return mutate(hash, (existing, now) => {
+    const status = WorkItem.deriveStatus(existing);
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      throw new Error(`Cannot assign execution to a ${status} work item`);
+    }
+    if (existing.workerRunId || existing.workSessionId || existing.executorKind) {
+      throw new Error(`WorkItem already has an execution assignment: ${hash}`);
+    }
+    return {
+      changedFields: ["executorKind", "workerRunId", "workSessionId"],
+      updated: {
+        ...existing,
+        ...assignment,
+        timestamps: { ...existing.timestamps, updated: now },
+      },
+    };
+  });
+}
+
 export async function addWorkItemBlocker(
   hash: string,
-  blocker: Omit<WorkItem.Blocker, "id" | "createdAt">,
+  blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
 ): Promise<WorkItem.Info | undefined> {
   return mutate(hash, (existing, now) => ({
     changedFields: ["blockers"],
     updated: {
       ...existing,
-      blockers: [...existing.blockers, { id: crypto.randomUUID(), ...blocker, createdAt: now }],
+      blockers: [
+        ...existing.blockers,
+        { ...blocker, id: blocker.id ?? crypto.randomUUID(), createdAt: now },
+      ],
       timestamps: { ...existing.timestamps, updated: now },
     },
   }));
@@ -100,33 +123,89 @@ export async function resolveWorkItemBlocker(
 
 export async function addWorkItemEvidence(
   hash: string,
-  evidence: Omit<WorkItem.Evidence, "id" | "createdAt">,
+  evidence: Omit<WorkItem.Evidence, "id" | "createdAt" | "attempt" | "basisRef"> &
+    Readonly<{ id?: string }>,
+  expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
-    changedFields: ["evidence"],
-    updated: {
-      ...existing,
-      evidence: [
-        ...existing.evidence,
-        WorkItem.Evidence.parse({ id: crypto.randomUUID(), ...evidence, createdAt: now }),
-      ],
-      timestamps: { ...existing.timestamps, updated: now },
-    },
-  }));
+  const explicitId = evidence.id;
+  if (explicitId !== undefined) {
+    const existing = Storage.get().workItem?.get(hash);
+    assertEvidenceScope(existing, expectedScope);
+    const recorded = existing?.evidence.find(({ id }) => id === explicitId);
+    if (existing && recorded) {
+      const candidate = WorkItem.Evidence.parse({
+        ...evidence,
+        id: explicitId,
+        attempt: recorded.attempt,
+        basisRef: recorded.basisRef,
+        createdAt: recorded.createdAt,
+      });
+      if (JSON.stringify(recorded) !== JSON.stringify(candidate)) {
+        throw new Error(`WorkItem evidence identity conflict: ${explicitId}`);
+      }
+      return existing;
+    }
+  }
+  return mutate(hash, (existing, now) => {
+    assertEvidenceScope(existing, expectedScope);
+    return {
+      changedFields: ["evidence"],
+      updated: {
+        ...existing,
+        evidence: [
+          ...existing.evidence,
+          WorkItem.Evidence.parse({
+            ...evidence,
+            id: explicitId ?? crypto.randomUUID(),
+            attempt: existing.attempt,
+            basisRef: existing.completionContract.basisRef,
+            createdAt: now,
+          }),
+        ],
+        timestamps: { ...existing.timestamps, updated: now },
+      },
+    };
+  });
+}
+
+function assertEvidenceScope(
+  existing: WorkItem.Info | undefined,
+  expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }> | undefined,
+): void {
+  if (
+    existing &&
+    expectedScope &&
+    (existing.attempt !== expectedScope.expectedAttempt ||
+      existing.completionContract.basisRef !== expectedScope.expectedBasisRef)
+  ) {
+    throw new Error("WorkItem attempt changed before evidence recording");
+  }
 }
 
 export async function addWorkItemReadBackEvidence(
   hash: string,
   check: WorkItem.ReadBackCheck,
+  expectedScope?: Readonly<{
+    expectedAttempt: number;
+    expectedBasisRef: string;
+    criterionId: string;
+    evidenceId?: string;
+  }>,
 ): Promise<WorkItem.Info | undefined> {
   const readBack = WorkItem.ReadBackCheck.parse(check);
-  return addWorkItemEvidence(hash, {
-    kind: "verification",
-    description: `${readBack.kind} read-back ${readBack.passed ? "passed" : "failed"} for ${readBack.target}`,
-    passed: readBack.passed,
-    detail: JSON.stringify(readBack),
-    readBack,
-  });
+  return addWorkItemEvidence(
+    hash,
+    {
+      kind: "verification",
+      description: `${readBack.kind} read-back ${readBack.passed ? "passed" : "failed"} for ${readBack.target}`,
+      passed: readBack.passed,
+      detail: JSON.stringify(readBack),
+      readBack,
+      criterionId: expectedScope?.criterionId,
+      id: expectedScope?.evidenceId,
+    },
+    expectedScope,
+  );
 }
 
 export const recordOutcome = recordWorkItemOutcome;
@@ -134,30 +213,4 @@ export const areDependenciesMet = areWorkItemDependenciesMet;
 
 export async function retryStoredWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
   return retryWorkItem(hash, Storage.get().workItem, persistMutation);
-}
-
-// merged from completion-report.ts (#453 hygiene: sub-30-LOC single-importer)
-
-export function verifyCompletionReport(
-  item: WorkItem.Info,
-  completionReport: WorkItem.CompletionReport,
-): WorkItem.CompletionReport {
-  const report = WorkItem.CompletionReport.parse(completionReport);
-  const evidenceById = new Map(item.evidence.map((evidence) => [evidence.id, evidence]));
-  const missing = report.claims.flatMap((claim) =>
-    claim.evidenceIds.filter((evidenceId) => !evidenceById.has(evidenceId)),
-  );
-  if (missing.length > 0) {
-    throw new Error(`completion report references missing evidence: ${missing.join(", ")}`);
-  }
-  const failed = report.claims.flatMap((claim) =>
-    claim.evidenceIds.filter((evidenceId) => {
-      const evidence = evidenceById.get(evidenceId);
-      return evidence?.passed === false || evidence?.readBack?.passed === false;
-    }),
-  );
-  if (failed.length > 0) {
-    throw new Error(`completion report references failed evidence: ${failed.join(", ")}`);
-  }
-  return report;
 }

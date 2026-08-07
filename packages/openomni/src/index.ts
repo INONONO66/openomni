@@ -91,6 +91,18 @@ export type {
   VerifierRegistryDriverScenario,
 } from "./evidence";
 
+export {
+  CompletionAdmissionDriverScenarios,
+  CompletionSourceOrigin,
+  projectCompletionOrigin,
+  runCompletionAdmissionDriver,
+} from "./work-item";
+export type {
+  CompletionAdmissionDriverExecution,
+  CompletionAdmissionDriverScenario,
+  WorkItemCompletionRecoveryReceipt,
+} from "./work-item";
+
 // Dispatch runtime
 export {
   DEFAULT_DISPATCH_MODEL,
@@ -109,6 +121,7 @@ export type {
   BuiltInDispatchOptions,
   ConnectorEndpointDriverOwner,
   DefaultDispatchRuntimeOptions,
+  DefaultDispatchRuntime,
   DeviceDispatchHandlerOptions,
   DeviceDispatchOwner,
   DeviceDispatchOwnerInput,

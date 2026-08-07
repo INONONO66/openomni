@@ -1,5 +1,4 @@
 import { WorkItem } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
 import { digestObservedBody, isCompleteSuccess, loadReadBackUrl } from "./read-back-http.js";
 import {
   ReadBackRequest,
@@ -25,15 +24,6 @@ export namespace ReadBackExecutor {
       case "citation_match":
         return executeCitationMatch(request, options);
     }
-  }
-
-  export async function record(
-    workItemHash: string,
-    input: ReadBackRequestInput,
-    options: Options = {},
-  ): Promise<WorkItem.Info | undefined> {
-    const check = await execute(input, options);
-    return WorkItemStore.addReadBackEvidence(workItemHash, check);
   }
 }
 

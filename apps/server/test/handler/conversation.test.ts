@@ -5,6 +5,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage, WorkItemStore } from "@openomni/session";
 import { createMessageHandler } from "../../src/handler/conversation";
 import type { BridgeDeps } from "../../src/ingress/bridge";
+import { completeWorkItem } from "../work-item-completion-fixture";
 
 function makeTool(name: string): NativeTool {
   return {
@@ -54,23 +55,8 @@ async function createWorkItem(
     sourceChannel: "discord",
     intent: "test",
     goal: `handle ${name}`,
+    acceptanceCriteria: [`${name} is handled`],
     ...extra,
-  });
-}
-
-async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  const updated = await WorkItemStore.addEvidence(hash, {
-    kind: "verification",
-    description: "conversation ledger fixture evidence",
-    passed: true,
-  });
-  const evidenceId = updated?.evidence.at(-1)?.id;
-  if (!evidenceId) throw new Error("expected evidence id");
-  return WorkItemStore.complete(hash, {
-    summary: "Completed with fixture evidence.",
-    claims: [{ statement: "The item is complete.", evidenceIds: [evidenceId] }],
-    caveats: [],
-    followUps: [],
   });
 }
 
@@ -84,10 +70,11 @@ const deps: BridgeDeps = {
 };
 
 const originalIngest = IngressEngine.ingest;
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
   IngressEngine.ingest = originalIngest;
 });
 
@@ -215,7 +202,7 @@ describe("conversation task ledger command", () => {
       intent: "verify",
       goal: "verify complete items are hidden",
     });
-    const completedResult = await completeWorkItem(completed.hash);
+    const completedResult = await completeWorkItem(completionWriter, completed.hash);
     const failed = await createWorkItem("Failed thing", {
       intent: "verify",
       goal: "verify failed items are hidden",

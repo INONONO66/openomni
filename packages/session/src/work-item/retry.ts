@@ -35,6 +35,10 @@ export function retryWorkItem(
     "attempt",
     "timestamps",
     "failureReason",
+    "completionContract",
+    "executorKind",
+    "workerRunId",
+    "workSessionId",
   ]);
 }
 
@@ -73,9 +77,17 @@ function exhaustedItem(existing: WorkItem.Info, now: number): WorkItem.Info {
 }
 
 function retryableItem(existing: WorkItem.Info, now: number): WorkItem.Info {
+  const nextAttempt = existing.attempt + 1;
   return {
     ...existing,
-    attempt: existing.attempt + 1,
+    attempt: nextAttempt,
+    completionContract: {
+      ...existing.completionContract,
+      basisRef: `${existing.hash}:attempt:${nextAttempt}`,
+    },
+    workerRunId: undefined,
+    workSessionId: undefined,
+    executorKind: undefined,
     failureReason: undefined,
     timestamps: {
       ...existing.timestamps,

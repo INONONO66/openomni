@@ -1,6 +1,5 @@
 import type { Dispatch, WorkItem } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
-import { ignoreWorkItemReflectionFailure } from "./worker-completion.js";
 
 export type WorkerWorkItemRequest = {
   readonly prompt: string;
@@ -45,14 +44,36 @@ export async function failWorkerSpawnExecutor(
   executorKind: WorkItem.ExecutorKind,
   reason: string,
 ): Promise<never> {
-  await ignoreWorkItemReflectionFailure(() =>
-    WorkItemStore.addEvidence(workItemHash, {
+  const failure = new Error(reason);
+  try {
+    await WorkItemStore.addEvidence(workItemHash, {
       kind: "custom",
       description: reason,
       passed: false,
       detail: `executorKind=${executorKind}`,
-    }),
-  );
-  await ignoreWorkItemReflectionFailure(() => WorkItemStore.fail(workItemHash, reason));
-  throw new Error(reason);
+    });
+    await WorkItemStore.fail(workItemHash, reason);
+  } catch (reflectionFailure) {
+    throwWithWorkItemReflectionFailure(failure, reflectionFailure);
+  }
+  throw failure;
+}
+
+class WorkItemReflectionError extends Error {
+  readonly reflectionFailure: unknown;
+
+  constructor(primary: Error, reflectionFailure: unknown) {
+    super(primary.message, { cause: primary });
+    this.name = "WorkItemReflectionError";
+    this.reflectionFailure = reflectionFailure;
+  }
+}
+
+export function throwWithWorkItemReflectionFailure(
+  primaryFailure: unknown,
+  reflectionFailure: unknown,
+): never {
+  const primary =
+    primaryFailure instanceof Error ? primaryFailure : new Error(String(primaryFailure));
+  throw new WorkItemReflectionError(primary, reflectionFailure);
 }

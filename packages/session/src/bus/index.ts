@@ -1,29 +1,43 @@
 import { BusEvent } from "@openomni/protocol";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export { BusEvent };
 
-export namespace Bus {
-  type Handler = (data: unknown) => void;
+type Handler = (data: unknown) => void;
+type Observer = (event: Bus.PublishedDescriptor, data: unknown) => void;
 
+interface Subscription {
+  handler: Handler;
+  match?: Record<string, unknown>;
+}
+
+type BusState = {
+  subscribers: Map<string, Set<Subscription>>;
+  observers: Set<Observer>;
+};
+
+const rootState = createState();
+const busScope = new AsyncLocalStorage<BusState>();
+
+function createState(): BusState {
+  return { subscribers: new Map(), observers: new Set() };
+}
+
+function currentState(): BusState {
+  return busScope.getStore() ?? rootState;
+}
+
+export namespace Bus {
   export interface PublishedDescriptor {
     readonly name: string;
     readonly schema: unknown;
     readonly visibility?: BusEvent.Visibility;
   }
 
-  type Observer = (event: PublishedDescriptor, data: unknown) => void;
-
-  interface Subscription {
-    handler: Handler;
-    match?: Record<string, unknown>;
-  }
-
-  const subscribers = new Map<string, Set<Subscription>>();
-  const observers = new Set<Observer>();
-
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    const subs = subscribers.get(event.name);
-    const observerSnapshot = [...observers];
+    const state = currentState();
+    const subs = state.subscribers.get(event.name);
+    const observerSnapshot = [...state.observers];
 
     if (observerSnapshot.length > 0) {
       for (const observer of observerSnapshot) {
@@ -58,10 +72,11 @@ export namespace Bus {
     handler: (data: T) => void,
     options?: { match?: Partial<T> },
   ): () => void {
-    let subs = subscribers.get(event.name);
+    const state = currentState();
+    let subs = state.subscribers.get(event.name);
     if (!subs) {
       subs = new Set();
-      subscribers.set(event.name, subs);
+      state.subscribers.set(event.name, subs);
     }
     const subscription: Subscription = {
       handler: handler as Handler,
@@ -72,22 +87,24 @@ export namespace Bus {
     const eventName = event.name;
     return () => {
       captured.delete(subscription);
-      if (captured.size === 0 && subscribers.get(eventName) === captured) {
-        subscribers.delete(eventName);
+      if (captured.size === 0 && state.subscribers.get(eventName) === captured) {
+        state.subscribers.delete(eventName);
       }
     };
   }
 
   export function observe(handler: Observer): () => void {
-    observers.add(handler);
+    const state = currentState();
+    state.observers.add(handler);
     return () => {
-      observers.delete(handler);
+      state.observers.delete(handler);
     };
   }
 
   export function reset(): void {
-    subscribers.clear();
-    observers.clear();
+    const state = currentState();
+    state.subscribers.clear();
+    state.observers.clear();
   }
 
   /** Diagnostic counters for tests and runtime observability; not control-flow state. */
@@ -96,16 +113,21 @@ export namespace Bus {
     readonly subscriberCount: number;
     readonly observerCount: number;
   } {
+    const state = currentState();
     let subscriberCount = 0;
-    for (const subs of subscribers.values()) {
+    for (const subs of state.subscribers.values()) {
       subscriberCount += subs.size;
     }
 
     return {
-      subscriberEventCount: subscribers.size,
+      subscriberEventCount: state.subscribers.size,
       subscriberCount,
-      observerCount: observers.size,
+      observerCount: state.observers.size,
     };
+  }
+
+  export function withIsolation<T>(operation: () => T): T {
+    return busScope.run(createState(), operation);
   }
 
   function matches(data: unknown, match: Record<string, unknown>): boolean {

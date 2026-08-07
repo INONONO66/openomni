@@ -18,6 +18,7 @@ const pointIds = [
   "delegation.worker.post",
   "run.turn.post",
   "run.completion.pre",
+  "work.complete.pre",
   "session.writeback.pre",
   "run.lifecycle.post",
   "run.error.error",
@@ -62,6 +63,15 @@ const validInputs = {
   "delegation.worker.post": { sessionId, runId, workerRunId: "worker-1", workerResult: {} },
   "run.turn.post": { sessionId, runId, turnIndex: 0, turnResult: {} },
   "run.completion.pre": { sessionId, runId, completionCandidate: {} },
+  "work.complete.pre": {
+    workItemHash: "wi_admission",
+    requestId: "request:completion",
+    contractRevision: "contract:v1",
+    basisRef: "basis:v1",
+    expectedHead: 7,
+    completionCandidate: { effectiveResultIds: ["result:publish"] },
+    unresolvedBlockerIds: ["blocker:effect-pending"],
+  },
   "session.writeback.pre": { sessionId, runId, writebackPayload: {} },
   "run.lifecycle.post": { sessionId, runId, runOutcome: { type: "stop" } },
   "run.error.error": { sessionId, runId, errorCode: "error", errorPhase: "turn" },
@@ -83,6 +93,9 @@ describe("PolicyPoint executable input schemas", () => {
       const schema = Policy.PolicyPoint.InputSchemas[pointId];
       const validInput = validInputs[pointId];
 
+      expect(contract).toBeDefined();
+      expect(schema).toBeDefined();
+      if (contract === undefined || schema === undefined) continue;
       expect(schema.safeParse(validInput).success).toBe(true);
 
       for (const requiredKey of contract.requiredContext) {
@@ -198,6 +211,27 @@ describe("PolicyPoint executable input schemas", () => {
     expect(missingRunIdAccepted).toBe(false);
     expect(mapMutated).toBe(false);
     expect(validStopAccepted).toBe(true);
+  });
+
+  test("requires exact WorkItem completion admission identity and fold inputs", () => {
+    const schema = Policy.PolicyPoint.InputSchemas["work.complete.pre"];
+    const input = validInputs["work.complete.pre"];
+
+    expect(schema).toBeDefined();
+    if (schema === undefined) return;
+    expect(schema.parse(input)).toEqual(input);
+    for (const malformed of [
+      { ...input, workItemHash: "" },
+      { ...input, requestId: "" },
+      { ...input, contractRevision: "" },
+      { ...input, basisRef: "" },
+      { ...input, expectedHead: "7" },
+      { ...input, completionCandidate: undefined },
+      { ...input, unresolvedBlockerIds: [""] },
+      { sessionId, runId, completionCandidate: {} },
+    ]) {
+      expect(schema.safeParse(malformed).success).toBe(false);
+    }
   });
 
   test("accepts canonical dispatch input and preserves generic context", () => {

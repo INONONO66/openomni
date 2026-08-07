@@ -1,9 +1,15 @@
 /// <reference types="bun" />
 
 import { createHash } from "node:crypto";
+import { IncomingMessage } from "node:http";
+import { Socket } from "node:net";
 import { afterEach, describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
+import { Storage, WorkItemStore } from "@openomni/session";
 import { ReadBackExecutor } from "../../src/index";
+// Deliberate white-box seam: transport and clock injection belong to the private HTTP helper,
+// not the kernel package API, and are required for deterministic deadline coverage.
+import { loadReadBackUrl } from "../../src/evidence/read-back-http.js";
 import {
   cleanupReadBackFixtures,
   closeFixtureServers,
@@ -17,6 +23,129 @@ afterEach(async () => {
 });
 
 describe("ReadBackExecutor", () => {
+  test("bounds unresolved target validation by the read-back timeout", async () => {
+    const result = await loadReadBackUrl(
+      "https://example.com/document",
+      "GET",
+      5,
+      1_024,
+      false,
+      async () =>
+        new Promise<never>(() => {
+          // Intentionally never settles: the wall-clock deadline must resolve the read-back.
+        }),
+    );
+
+    expect(result).toEqual({
+      statusCode: undefined,
+      body: "",
+      bodyDigest: undefined,
+      complete: false,
+    });
+  });
+
+  test("bounds unresolved response headers by the read-back timeout", async () => {
+    const result = await loadReadBackUrl(
+      "http://127.0.0.1/document",
+      "GET",
+      5,
+      1_024,
+      true,
+      undefined,
+      async () =>
+        new Promise<never>(() => {
+          // Intentionally never settles: active transport cannot extend the wall-clock deadline.
+        }),
+    );
+
+    expect(result).toEqual({
+      statusCode: undefined,
+      body: "",
+      bodyDigest: undefined,
+      complete: false,
+    });
+  });
+
+  test("rejects response headers fulfilled after the wall-clock deadline", async () => {
+    let currentTime = 0;
+    const result = await loadReadBackUrl(
+      "https://example.com/document",
+      "HEAD",
+      100,
+      1_024,
+      false,
+      async () => ({
+        url: new URL("https://example.com/document"),
+        address: "203.0.113.1",
+        hostHeader: "example.com",
+        serverName: "example.com",
+      }),
+      () => {
+        currentTime = 101;
+        const response = new IncomingMessage(new Socket());
+        response.statusCode = 200;
+        return Promise.resolve(response);
+      },
+      () => currentTime,
+    );
+
+    expect(result).toEqual({
+      statusCode: undefined,
+      body: "",
+      bodyDigest: undefined,
+      complete: false,
+    });
+  });
+
+  test("passes the injected clock through the HTTP request lifecycle", async () => {
+    const currentTime = 10;
+    let transportTime: number | undefined;
+    const result = await loadReadBackUrl(
+      "https://example.com/document",
+      "HEAD",
+      100,
+      1_024,
+      false,
+      async () => ({
+        url: new URL("https://example.com/document"),
+        address: "203.0.113.1",
+        hostHeader: "example.com",
+        serverName: "example.com",
+      }),
+      (_target, _method, _deadlineAt, now) => {
+        transportTime = now();
+        const response = new IncomingMessage(new Socket());
+        response.statusCode = 200;
+        return Promise.resolve(response);
+      },
+      () => currentTime,
+    );
+
+    expect(transportTime).toBe(currentTime);
+    expect(result.complete).toBe(true);
+  });
+
+  test("returns a read-back check without persisting WorkItem evidence", async () => {
+    Storage.initialize({ dbPath: ":memory:" });
+    const item = await WorkItemStore.create({
+      name: "Read-back execution isolation",
+      sourceMessageId: "read-back-execution-isolation",
+      sourceChannel: "test",
+      intent: "verify",
+      goal: "keep read-back execution free of storage side effects",
+      acceptanceCriteria: ["the executor returns a check without recording evidence"],
+    });
+    const origin = await startFixtureServer();
+
+    const check = await ReadBackExecutor.execute(
+      { kind: "url_fetch", target: `${origin}/document` },
+      LOCAL_READ_BACK,
+    );
+
+    expect(check.passed).toBe(true);
+    expect(WorkItemStore.get(item.hash)?.evidence).toEqual([]);
+  });
+
   test("re-fetches a URL and records status plus content digest", async () => {
     const origin = await startFixtureServer();
 

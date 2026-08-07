@@ -81,6 +81,7 @@ function renderReadBackBuilder(
 
   const base = {
     claimIndex: builder.claimIndex,
+    criterionIndex: builder.criterionIndex,
     request: {
       kind: builder.request.kind,
       target: target.value,

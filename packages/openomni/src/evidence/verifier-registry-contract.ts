@@ -1,3 +1,4 @@
+import { WorkItem } from "@openomni/protocol";
 import { z } from "zod";
 import {
   type JsonValue as CanonicalJsonValue,
@@ -128,13 +129,8 @@ export function createVerifierRegistrySchemas(
         });
       }
     });
-  const VerificationErrorCode = z.enum([
-    "malformed_input",
-    "malformed_output",
-    "verifier_crash",
-    "prohibited_capability",
-    "forbidden_action",
-  ]);
+  // Single source of truth: the protocol's WorkItem completion-admission enum.
+  const VerificationErrorCode = WorkItem.VerificationErrorCode;
   const VerificationError = z
     .object({
       type: z.literal("verification_error"),

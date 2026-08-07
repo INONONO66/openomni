@@ -23,7 +23,6 @@
     "exports packages/protocol/src/work-item/schemas.ts isHttpUrl",
     "exports packages/session/src/bus-persistence/event-query.ts toEventRecord",
     "exports packages/session/src/storage/sqlite-part-adapter.ts getPartStartTime",
-    "exports packages/session/src/work-item/lifecycle.ts verifyCompletionReport",
     "files packages/agent/src/runtime/index.ts",
     "files packages/openomni/test/dispatch/policy-registration.contract-test.ts",
     "types packages/agent/src/core/policy/index.ts AuditDispatchContextGeneric",

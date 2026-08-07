@@ -13,6 +13,7 @@ export namespace RuntimeResource {
     "session",
     "policy",
     "dispatch",
+    "work",
   ]);
   export type Kind = z.infer<typeof Kind>;
 

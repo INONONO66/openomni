@@ -1,9 +1,49 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { WorkItem } from "@openomni/protocol";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { PolicyEngine } from "@openomni/policy";
+import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
-import { reflectCoordinatorResult } from "../../src/dispatch/handlers/worker-completion";
+import {
+  reflectCoordinatorResult as reflectCoordinatorResultProduction,
+  type WorkerCompletionOptions,
+} from "../../src/dispatch/handlers/worker-completion";
+import {
+  createCompletionAdmissionService,
+  type CompletionAdmissionService,
+} from "../../src/work-item/completion-admission.js";
 
-function completionResult(readBackRequests: unknown[]) {
+const COMPLETION_POLICY_ENGINE = PolicyEngine.create();
+let completionWriter: Storage.WorkItemCompletionWriter;
+
+function completionService(
+  overrides: Readonly<{
+    policyEngine?: ReturnType<typeof PolicyEngine.create>;
+    now?: () => number;
+  }> = {},
+): CompletionAdmissionService {
+  return createCompletionAdmissionService({
+    completionWriter,
+    policyEngine: overrides.policyEngine ?? COMPLETION_POLICY_ENGINE,
+    now: overrides.now ?? Date.now,
+  });
+}
+
+function reflectCoordinatorResult(
+  workItemHash: string,
+  result: Parameters<typeof reflectCoordinatorResultProduction>[1],
+  options: Omit<WorkerCompletionOptions, "completionService"> &
+    Readonly<{ completionService?: CompletionAdmissionService }>,
+) {
+  return reflectCoordinatorResultProduction(workItemHash, result, {
+    ...options,
+    completionService:
+      options.completionService ??
+      completionService(options.now === undefined ? {} : { now: options.now }),
+  });
+}
+
+function completionResult(item: WorkItem.Info, readBackRequests: unknown[]) {
+  const criterion = item.completionFacts.criteria[0];
+  if (!criterion) throw new Error("missing completion criterion");
   return {
     runId: "run_1",
     sessionId: "session_1",
@@ -11,8 +51,15 @@ function completionResult(readBackRequests: unknown[]) {
     output: JSON.stringify({
       completionReport: {
         summary: "Published the requested update.",
-        claims: [{ statement: "The deployed page includes the expected marker." }],
+        claims: [{ statement: criterion.statement }],
       },
+      criterionFacts: [
+        {
+          criterionIndex: 0,
+          evidenceRefs: [{ source: "read_back", requestIndex: 0 }],
+          verification: { kind: "archived_quote_match" },
+        },
+      ],
       readBackRequests,
     }),
   } as const;
@@ -26,7 +73,9 @@ async function createStartedWorkItem(): Promise<WorkItem.Info> {
     intent: "worker.spawn",
     goal: "publish it",
     executorKind: "internal_chat_agent",
-    acceptanceCriteria: ["publish the marker"],
+    workSessionId: "session_1",
+    workerRunId: "run_1",
+    acceptanceCriteria: ["archived source contains the recorded quote exactly"],
   });
   const started = await WorkItemStore.start(workItem.hash);
   if (!started) throw new Error("missing started work item");
@@ -36,6 +85,7 @@ async function createStartedWorkItem(): Promise<WorkItem.Info> {
 function citationRequest(target: string) {
   return {
     claimIndex: 0,
+    criterionIndex: 0,
     request: {
       kind: "citation_match",
       target,
@@ -44,30 +94,44 @@ function citationRequest(target: string) {
   } as const;
 }
 
+function successfulReadBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+  if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+  return WorkItem.ReadBackCheck.parse({
+    kind: "citation_match",
+    target: request.target,
+    quotedText: request.quotedText,
+    matchedText: request.quotedText,
+    passed: true,
+    observedAt: 1,
+    statusCode: 200,
+  });
+}
+
 describe("worker completion read-back deadline", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("applies one shared deadline across all read-back requests", async () => {
     const workItem = await createStartedWorkItem();
     let recorderCalls = 0;
-    const clock = [0, 0, 11];
+    const clock = [0, 0, 0, 0, 11];
 
     const reflection = await reflectCoordinatorResult(
       workItem.hash,
-      completionResult([
+      completionResult(workItem, [
         citationRequest("http://example.com/first"),
         citationRequest("http://example.com/second"),
       ]),
       {
+        sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 10,
         now: () => clock.shift() ?? 11,
-        async readBackRecorder(hash, request) {
+        async readBackRecorder(_hash, request) {
           recorderCalls += 1;
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
-          return WorkItemStore.addReadBackEvidence(hash, {
+          return WorkItem.ReadBackCheck.parse({
             kind: "citation_match",
             target: request.target,
             quotedText: request.quotedText,
@@ -83,7 +147,7 @@ describe("worker completion read-back deadline", () => {
     const blocked = WorkItemStore.get(workItem.hash);
     expect(recorderCalls).toBe(1);
     expect(blocked ? WorkItem.deriveStatus(blocked) : undefined).toBe("blocked");
-    expect(blocked?.evidence).toHaveLength(1);
+    expect(blocked?.evidence).toHaveLength(0);
     expect(blocked?.blockers[0]?.description).toBe("read-back envelope deadline exceeded");
     expect(reflection).toMatchObject({
       workItemStatus: "blocked",
@@ -92,20 +156,162 @@ describe("worker completion read-back deadline", () => {
     });
   });
 
+  test("bounds a non-settling read-back recorder by the shared deadline", async () => {
+    const workItem = await createStartedWorkItem();
+
+    const reflection = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/pending")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 5,
+        now: () => 0,
+        async readBackRecorder() {
+          return new Promise<never>(() => {
+            // Intentionally never settles: the envelope deadline must end the completion attempt.
+          });
+        },
+      },
+    );
+
+    expect(reflection).toMatchObject({
+      workItemStatus: "blocked",
+      completionBlocked: true,
+      completionBlocker: "read-back envelope deadline exceeded",
+    });
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
+  test("does not persist a recorder result produced after the shared deadline", async () => {
+    const workItem = await createStartedWorkItem();
+    let clock = 0;
+
+    const reflection = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/late")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 10,
+        now: () => clock,
+        readBackRecorder(_hash, request) {
+          if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
+          clock = 20;
+          return WorkItem.ReadBackCheck.parse({
+            kind: "citation_match",
+            target: request.target,
+            quotedText: request.quotedText,
+            matchedText: request.quotedText,
+            passed: true,
+            observedAt: clock,
+            statusCode: 200,
+          });
+        },
+      },
+    );
+
+    expect(reflection).toMatchObject({
+      workItemStatus: "blocked",
+      completionBlocked: true,
+      completionBlocker: "read-back envelope deadline exceeded",
+    });
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
+  test("observes a recorder rejection produced after synchronous deadline exhaustion", async () => {
+    const workItem = await createStartedWorkItem();
+    let clock = 0;
+
+    const reflection = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/late-rejection")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 10,
+        now: () => clock,
+        readBackRecorder() {
+          clock = 20;
+          return Promise.reject(new Error("late read-back rejection"));
+        },
+      },
+    );
+
+    expect(reflection).toMatchObject({
+      workItemStatus: "blocked",
+      completionBlocked: true,
+      completionBlocker: "read-back envelope deadline exceeded",
+    });
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
+  test("blocks when the deadline expires during the final evidence persist", async () => {
+    const workItem = await createStartedWorkItem();
+    let clock = 0;
+    const persistEvidence = WorkItemStore.addReadBackEvidence;
+    const persistSpy = spyOn(WorkItemStore, "addReadBackEvidence").mockImplementation(
+      async (hash, check, options) => {
+        const updated = await persistEvidence(hash, check, options);
+        clock = 20; // the deadline passes while the final persist settles
+        return updated;
+      },
+    );
+
+    try {
+      const reflection = await reflectCoordinatorResult(
+        workItem.hash,
+        completionResult(workItem, [citationRequest("http://example.com/final-persist")]),
+        {
+          sourceOrigin: { source: "internal_worker" },
+          readBackEnvelopeTimeoutMs: 10,
+          now: () => clock,
+          readBackRecorder: successfulReadBackRecorder,
+        },
+      );
+
+      expect(reflection).toMatchObject({
+        workItemStatus: "blocked",
+        completionBlocked: true,
+        completionBlocker: "read-back envelope deadline exceeded",
+      });
+    } finally {
+      persistSpy.mockRestore();
+    }
+    // The evidence stayed durable, so once the blocker is resolved a fresh
+    // attempt completes without re-executing the read-back.
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toHaveLength(1);
+    const blockerId = WorkItemStore.get(workItem.hash)?.blockers[0]?.id;
+    if (!blockerId) throw new Error("missing deadline blocker");
+    await WorkItemStore.resolveBlocker(workItem.hash, blockerId);
+    clock = 6_000;
+    const retry = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/final-persist")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 10,
+        now: () => clock,
+        readBackRecorder() {
+          throw new Error("read-back must not re-execute for durable evidence");
+        },
+      },
+    );
+    expect(retry).toMatchObject({ workItemStatus: "completed", completionBlocked: false });
+  });
+
   test("rounds fractional envelope timeouts up to one millisecond", async () => {
     const workItem = await createStartedWorkItem();
 
     const reflection = await reflectCoordinatorResult(
       workItem.hash,
-      completionResult([citationRequest("http://example.com/source")]),
+      completionResult(workItem, [citationRequest("http://example.com/source")]),
       {
+        sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 0.25,
         now: () => 0,
-        async readBackRecorder(hash, request) {
+        async readBackRecorder(_hash, request) {
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
           expect(request.timeoutMs).toBe(1);
           expect(request.maxBodyBytes).toBe(1_000_000);
-          return WorkItemStore.addReadBackEvidence(hash, {
+          return WorkItem.ReadBackCheck.parse({
             kind: "citation_match",
             target: request.target,
             quotedText: request.quotedText,
@@ -120,9 +326,118 @@ describe("worker completion read-back deadline", () => {
 
     const completed = WorkItemStore.get(workItem.hash);
     expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
+    expect(completed?.completionFacts.admissions).toHaveLength(1);
+    expect(completed?.completionFacts.admissions[0]).toMatchObject({
+      origin: "worker",
+      decision: "admit",
+    });
     expect(reflection).toMatchObject({
       workItemStatus: "completed",
       completionBlocked: false,
     });
+  });
+
+  test("rejects replay with changed criterion facts", async () => {
+    const workItem = await createStartedWorkItem();
+    const result = completionResult(workItem, [citationRequest("http://example.com/source")]);
+    await reflectCoordinatorResult(workItem.hash, result, {
+      sourceOrigin: { source: "internal_worker" },
+      readBackRecorder: successfulReadBackRecorder,
+    });
+    const changedEnvelope = JSON.parse(result.output);
+    changedEnvelope.criterionFacts[0].verification.kind = "numeric_recheck";
+
+    const replay = await reflectCoordinatorResult(
+      workItem.hash,
+      { ...result, output: JSON.stringify(changedEnvelope) },
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackRecorder: successfulReadBackRecorder,
+      },
+    );
+
+    expect(replay).toMatchObject({
+      completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
+    });
+  });
+
+  test("rejects replay with changed read-back request content", async () => {
+    const workItem = await createStartedWorkItem();
+    const result = completionResult(workItem, [citationRequest("http://example.com/source")]);
+    await reflectCoordinatorResult(workItem.hash, result, {
+      sourceOrigin: { source: "internal_worker" },
+      readBackRecorder: successfulReadBackRecorder,
+    });
+    const changedEnvelope = JSON.parse(result.output);
+    changedEnvelope.readBackRequests[0].request.target = "http://example.com/other-source";
+
+    const replay = await reflectCoordinatorResult(
+      workItem.hash,
+      { ...result, output: JSON.stringify(changedEnvelope) },
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackRecorder: successfulReadBackRecorder,
+      },
+    );
+
+    expect(replay).toMatchObject({
+      completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
+    });
+  });
+
+  test("redelivers an unchanged blocked completion without writes", async () => {
+    const workItem = await createStartedWorkItem();
+    const check = await successfulReadBackRecorder(
+      workItem.hash,
+      citationRequest("http://example.com/source").request,
+    );
+    const criterionId = workItem.completionFacts.criteria[0]?.id;
+    if (!criterionId) throw new Error("missing read-back criterion");
+    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check, {
+      expectedAttempt: workItem.attempt,
+      expectedBasisRef: workItem.completionContract.basisRef,
+      criterionId,
+    });
+    const evidenceId = evidence?.evidence.at(-1)?.id;
+    if (!evidenceId) throw new Error("missing completion evidence");
+    const result = completionResult(workItem, []);
+    const envelope = JSON.parse(result.output);
+    envelope.criterionFacts[0].evidenceRefs = [{ source: "work_item", evidenceId }];
+    envelope.completionReport.claims[0].evidenceIds = [evidenceId];
+    const blockedResult = { ...result, output: JSON.stringify(envelope) };
+    const policyEngine = PolicyEngine.create();
+    policyEngine.register({
+      kind: "point",
+      name: "deny-completion",
+      pointIds: ["work.complete.pre"],
+      effectCapabilities: { "work.complete.pre": [] },
+      priority: 100,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "test:deny-completion",
+          reasonCodes: ["completion_denied"],
+        }),
+    });
+
+    const denyingService = completionService({ policyEngine });
+    await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
+      completionService: denyingService,
+      sourceOrigin: { source: "internal_worker" },
+    });
+    const blocked = WorkItemStore.get(workItem.hash);
+    if (!blocked) throw new Error("missing blocked WorkItem");
+
+    const replay = await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
+      completionService: denyingService,
+      sourceOrigin: { source: "internal_worker" },
+    });
+
+    expect(replay).toMatchObject({ completionBlocked: true, workItemStatus: "blocked" });
+    expect(WorkItemStore.get(workItem.hash)).toEqual(blocked);
+    expect(WorkItemStore.get(workItem.hash)?.revision).toBe(blocked.revision);
+    expect(WorkItemStore.get(workItem.hash)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(workItem.hash)?.blockers).toHaveLength(1);
   });
 });

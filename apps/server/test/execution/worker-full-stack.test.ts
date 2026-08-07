@@ -1,9 +1,12 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import * as realCoordinator from "@openomni/coordinator";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import type { Execution, Ingress, Tool } from "@openomni/protocol";
+import {
+  createExecutionCoordinator,
+  type WorkerManagerFactory,
+} from "../../src/execution/coordinator";
 
 let capturedOnToolCall:
   | ((
@@ -22,52 +25,26 @@ let mockPoolDispatch: (
   params: Record<string, unknown>,
 ) => Promise<unknown>;
 
-// bun's mock.module leaks process-wide across test files (mock.restore does
-// not undo it), so the factory must self-neutralize: it intercepts only while
-// this file's suite is running and delegates to the real module otherwise —
-// later test files (e.g. the openomni gate→IPC e2e) get the real pool.
-let interceptWorkerManager = false;
-
-mock.module("@openomni/coordinator", () => ({
-  ...realCoordinator,
-  createWorkerManager: (
-    config: Parameters<typeof realCoordinator.createWorkerManager>[0],
-    ports: Parameters<typeof realCoordinator.createWorkerManager>[1] & {
-      toolRelay?: typeof capturedOnToolCall;
-    },
-  ) => {
-    if (!interceptWorkerManager) return realCoordinator.createWorkerManager(config, ports);
-    capturedOnToolCall = ports.toolRelay;
-    return {
-      deliver: (runId: string, task: { sessionId: string } & Record<string, unknown>) =>
-        mockPoolDispatch(task.sessionId, runId, task),
-      cancel: async () => ({ cancelled: true }),
-      killWorker: () => undefined,
-      stats: () => ({
-        workers: 1,
-        active: 0,
-        idle: 1,
-        ready: 1,
-        activeRuns: 0,
-        maxActiveWorkers: 10,
-      }),
-      waitUntilReady: async () => undefined,
-      shutdown: async () => undefined,
-    };
-  },
-}));
-
-let createExecutionCoordinator: typeof import("../../src/execution/coordinator").createExecutionCoordinator;
-
-beforeAll(async () => {
-  interceptWorkerManager = true;
-  ({ createExecutionCoordinator } = await import("../../src/execution/coordinator"));
-});
-
-afterAll(() => {
-  interceptWorkerManager = false;
-  mock.restore();
-});
+const mockWorkerManagerFactory: WorkerManagerFactory = (_config, ports) => {
+  capturedOnToolCall = ports.toolRelay;
+  return {
+    deliver: (runId: string, task: { sessionId: string } & Record<string, unknown>) =>
+      mockPoolDispatch(task.sessionId, runId, task),
+    send: async () => ({ sent: true }),
+    cancel: async () => ({ cancelled: true }),
+    killWorker: () => undefined,
+    stats: () => ({
+      workers: 1,
+      active: 0,
+      idle: 1,
+      ready: 1,
+      activeRuns: 0,
+      maxActiveWorkers: 10,
+    }),
+    waitUntilReady: async () => undefined,
+    shutdown: async () => undefined,
+  };
+};
 
 const noopCoordinator = {
   async dispatch(_sessionId: string, request: Execution.Request): Promise<Execution.Result> {
@@ -212,7 +189,11 @@ describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
       };
     });
 
-    createExecutionCoordinator({ workerScript: "unused", toolDispatcher });
+    createExecutionCoordinator({
+      workerScript: "unused",
+      workerManagerFactory: mockWorkerManagerFactory,
+      toolDispatcher,
+    });
 
     expect(capturedOnToolCall).toBeDefined();
     if (!capturedOnToolCall) throw new Error("onToolCall not captured by mock");
@@ -250,7 +231,10 @@ describe("bus bridge — worker lifecycle events reach server Bus", () => {
       events.push(data);
     });
 
-    const coordinator = createExecutionCoordinator({ workerScript: "unused" });
+    const coordinator = createExecutionCoordinator({
+      workerScript: "unused",
+      workerManagerFactory: mockWorkerManagerFactory,
+    });
     const request = makeRequest({ runId: "run-bus-test", sessionId: "session-bus-test" });
 
     await coordinator.dispatch("session-bus-test", request);

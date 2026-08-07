@@ -51,7 +51,9 @@ export function sameCompletionBinding(
   return (
     sameBaseBinding(left, right) &&
     left.workItemHash === right.workItemHash &&
-    left.contractRevision === right.contractRevision
+    left.requestId === right.requestId &&
+    left.contractRevision === right.contractRevision &&
+    left.expectedHead === right.expectedHead
   );
 }
 export function sameVoiceBinding(left: VoiceStakesBinding, right: VoiceStakesBinding): boolean {

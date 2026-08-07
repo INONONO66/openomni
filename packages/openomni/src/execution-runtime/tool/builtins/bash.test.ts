@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashTool } from "./bash";
@@ -41,8 +41,24 @@ describe("bashTool", () => {
 
   test("kills the subprocess when execution context is aborted", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-abort-"));
-    const marker = join(workspace, "late-write.txt");
+    const childPidFile = join(workspace, "child.pid");
+    const readyFile = join(workspace, "ready");
     const controller = new AbortController();
+    let resolveReady: (() => void) | undefined;
+    let rejectReady: ((error: Error) => void) | undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    const watcher = watch(workspace, () => {
+      if (existsSync(readyFile)) resolveReady?.();
+    });
+    const readyPoll = setInterval(() => {
+      if (existsSync(readyFile)) resolveReady?.();
+    }, 100);
+    const readyTimeout = setTimeout(() => {
+      rejectReady?.(new Error("bash child process did not become ready"));
+    }, 15_000);
 
     try {
       const tool = bashTool(workspace);
@@ -50,19 +66,39 @@ describe("bashTool", () => {
         {
           id: "call-abort",
           tool: "bash",
-          input: { command: "(sleep 0.2; touch late-write.txt) & wait" },
+          input: {
+            command:
+              'trap \'wait "$child_pid" 2>/dev/null; exit 143\' TERM; sleep 1000 & child_pid=$!; printf \'%s\\n\' "$child_pid" > child.pid; touch ready; wait "$child_pid"',
+          },
         },
         { signal: controller.signal },
       );
 
-      setTimeout(() => controller.abort(), 20);
+      await ready;
+      clearInterval(readyPoll);
+      const childPid = Number.parseInt(readFileSync(childPidFile, "utf8").trim(), 10);
+      controller.abort();
       const result = await resultPromise;
-      await Bun.sleep(300);
+      clearTimeout(readyTimeout);
+      let childAlive = true;
+      try {
+        process.kill(childPid, 0);
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "ESRCH") {
+          childAlive = false;
+        } else {
+          throw error;
+        }
+      }
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("Command aborted");
-      expect(existsSync(marker)).toBe(false);
+      expect(childAlive).toBe(false);
     } finally {
+      clearInterval(readyPoll);
+      clearTimeout(readyTimeout);
+      controller.abort();
+      watcher.close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });
@@ -70,7 +106,23 @@ describe("bashTool", () => {
   test("allows TERM cleanup before escalating an aborted process group", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-term-"));
     const marker = join(workspace, "term-handled.txt");
+    const readyMarkerName = "term-ready.txt";
     const controller = new AbortController();
+    let resolveReady: (() => void) | undefined;
+    let rejectReady: ((error: Error) => void) | undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    const watcher = watch(workspace, (_eventType, filename) => {
+      if (filename?.toString() === readyMarkerName) resolveReady?.();
+    });
+    const readyPoll = setInterval(() => {
+      if (existsSync(join(workspace, readyMarkerName))) resolveReady?.();
+    }, 100);
+    const readyTimeout = setTimeout(() => {
+      rejectReady?.(new Error("bash TERM handler did not become ready"));
+    }, 5_000);
 
     try {
       const tool = bashTool(workspace);
@@ -79,19 +131,26 @@ describe("bashTool", () => {
           id: "call-term",
           tool: "bash",
           input: {
-            command: "trap 'touch term-handled.txt; exit 0' TERM; while :; do sleep 1; done",
+            command:
+              "trap 'touch term-handled.txt; exit 0' TERM; touch term-ready.txt; while :; do sleep 1; done",
           },
         },
         { signal: controller.signal },
       );
 
-      setTimeout(() => controller.abort(), 20);
+      await ready;
+      clearInterval(readyPoll);
+      clearTimeout(readyTimeout);
+      controller.abort();
       const result = await resultPromise;
-      await Bun.sleep(150);
 
       expect(result.isError).toBe(true);
       expect(existsSync(marker)).toBe(true);
     } finally {
+      clearInterval(readyPoll);
+      clearTimeout(readyTimeout);
+      controller.abort();
+      watcher.close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });

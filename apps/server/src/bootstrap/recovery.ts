@@ -1,5 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
+import type { DefaultDispatchRuntime } from "@openomni/openomni";
 import { Bus, PendingInteractionStore } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
@@ -42,11 +43,30 @@ async function processRetryQueue(
   });
 }
 
-export async function runRecovery(
-  handler: Adapter.MessageHandler | undefined,
-  coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> },
-  traceId?: string,
-): Promise<void> {
+export type BootstrapRecoveryInput = Readonly<{
+  handler: Adapter.MessageHandler | undefined;
+  coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> };
+  traceId?: string;
+  completionRuntime: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">;
+}>;
+
+type InboundSurface = Readonly<{ start(): Promise<void> | void }>;
+
+export async function startInboundSurfacesAfterRecovery<T>(
+  input: Readonly<{
+    recover(): Promise<void>;
+    createServer(): T;
+    channels: readonly InboundSurface[];
+  }>,
+): Promise<T> {
+  await input.recover();
+  const server = input.createServer();
+  await Promise.all(input.channels.map((channel) => channel.start()));
+  return server;
+}
+
+export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> {
+  const { handler, coordinator, traceId, completionRuntime: completionRecovery } = input;
   const startTime = Date.now();
   const id = traceId ?? crypto.randomUUID();
 
@@ -59,6 +79,29 @@ export async function runRecovery(
   try {
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
+    if (completionRecovery) {
+      try {
+        const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
+        Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
+          traceId: id,
+          time: Date.now(),
+          component: "server",
+          msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
+          context: {
+            skipped: receipt.skipped,
+            failures: receipt.failures,
+          },
+        });
+      } catch (error) {
+        Bus.publish(Operational.Error, {
+          traceId: id,
+          time: Date.now(),
+          component: "server",
+          msg: "recovery failed to resume recorded WorkItem completions",
+          context: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }
     const expiredPendingInteractions = PendingInteractionStore.cleanupExpired();
     if (expiredPendingInteractions.length > 0) {
       Bus.publish(Operational.Info, {

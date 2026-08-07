@@ -33,6 +33,7 @@ export {
   createDefaultDispatchRuntime,
   registerBuiltInDispatchHandlers,
   type BuiltInDispatchOptions,
+  type DefaultDispatchRuntime,
   type DefaultDispatchRuntimeOptions,
 } from "./setup.js";
 export {

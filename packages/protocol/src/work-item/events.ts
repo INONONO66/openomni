@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import {
+  CompletionDecision,
+  CompletionRequest,
+  CompletionTerminalReceipt,
+} from "./completion-admission.js";
 import { Outcome, Status } from "./schemas.js";
 
 const BaseEvent = z.object({
@@ -57,6 +62,35 @@ const Completed = BusEvent.define(
   { visibility: "llm_reason" },
 );
 
+const CompletedV2 = BusEvent.define(
+  "work_item.completed.v2",
+  BaseEvent.extend({
+    payload: CompletionTerminalReceipt.extend({
+      sessionId: z.string().optional(),
+    }),
+  }),
+  { visibility: "llm_reason" },
+);
+
+const CompletionRequested = BusEvent.define(
+  "work.complete.requested",
+  BaseEvent.extend({ payload: CompletionRequest }),
+  { visibility: "internal" },
+);
+
+const CompletionAdmissionRecorded = BusEvent.define(
+  "work_item.completion_admission_recorded",
+  BaseEvent.extend({
+    payload: z.object({
+      hash: z.string(),
+      admissionId: z.string(),
+      decision: CompletionDecision,
+      recordedHead: z.number().int().positive(),
+    }),
+  }),
+  { visibility: "llm_reason" },
+);
+
 const Failed = BusEvent.define(
   "work_item.failed",
   BaseEvent.extend({
@@ -96,7 +130,10 @@ export const Events = {
   Created,
   Updated,
   StatusChanged,
+  CompletionRequested,
+  CompletionAdmissionRecorded,
   Completed,
+  CompletedV2,
   Failed,
   OutcomeRecorded,
   Removed,

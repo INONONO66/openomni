@@ -1,13 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AppConnector, Dispatch } from "@openomni/protocol";
+import { type AppConnector, type Dispatch, WorkItem } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
+import { PolicyEngine } from "@openomni/policy";
+import { createCompletionAdmissionService } from "../../../../packages/openomni/src/work-item/completion-admission";
+
+function testCompletionService(now: () => number = Date.now) {
+  return createCompletionAdmissionService({
+    completionWriter,
+    policyEngine: PolicyEngine.create(),
+    now,
+  });
+}
 
 const tempRoots: string[] = [];
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 const CompletedConnectorDispatchOutput = z
   .object({
@@ -48,7 +59,7 @@ const FailedConnectorDispatchOutput = z
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  completionWriter = Storage.initialize({ dbPath: ":memory:" });
 });
 
 afterEach(() => {
@@ -121,7 +132,10 @@ function command(): Dispatch.Command {
     dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
-    payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
+    payload: {
+      prompt: "ship it",
+      acceptanceCriteria: ["archived source contains the recorded quote exactly"],
+    },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
   };
@@ -139,10 +153,16 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
         "console.log(JSON.stringify({",
         "  completionReport: {",
         "    summary: 'Completed the delegated work.',",
-        "    claims: [{ statement: 'Read-back passed.' }],",
+        "    claims: [{ statement: 'archived source contains the recorded quote exactly' }],",
         "  },",
+        "  criterionFacts: [{",
+        "    criterionIndex: 0,",
+        "    evidenceRefs: [{ source: 'read_back', requestIndex: 0 }],",
+        "    verification: { kind: 'archived_quote_match' },",
+        "  }],",
         "  readBackRequests: [{",
         "    claimIndex: 0,",
+        "    criterionIndex: 0,",
         "    request: {",
         "      kind: 'citation_match',",
         "      target: 'https://example.com/result',",
@@ -155,9 +175,11 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
+      completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
-      readBackRecorder: (workItemHash, readBack) =>
-        WorkItemStore.addReadBackEvidence(workItemHash, {
+      now: () => 1,
+      readBackRecorder: (_workItemHash, readBack) =>
+        WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: readBack.target,
           quotedText: readBack.kind === "citation_match" ? readBack.quotedText : "expected marker",
@@ -197,10 +219,17 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
         "console.log(JSON.stringify({",
         "  completionReport: {",
         "    summary: 'Published the requested page.',",
-        "    claims: [{ statement: 'The published page contains the expected marker.' }],",
+        "    claims: [{ statement: 'archived source contains the recorded quote exactly' }],",
         "  },",
-        "  url: 'https://example.com/result',",
-        "  marker: 'expected marker',",
+        "  criterionFacts: [{",
+        "    criterionIndex: 0,",
+        "    evidenceRefs: [{ source: 'read_back', requestIndex: 0 }],",
+        "    verification: { kind: 'archived_quote_match' },",
+        "  }],",
+        "  deliverable: {",
+        "    url: 'https://example.com/result',",
+        "    marker: 'expected marker',",
+        "  },",
         "}));",
       ].join("\n"),
     );
@@ -213,10 +242,11 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
           readBackRequests: [
             {
               claimIndex: 0,
+              criterionIndex: 0,
               request: {
                 kind: "citation_match",
-                target: "{{output.url}}",
-                quotedText: "{{output.marker}}",
+                target: "{{output.deliverable.url}}",
+                quotedText: "{{output.deliverable.marker}}",
               },
             },
           ],
@@ -226,10 +256,12 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const recordedReadBacks: unknown[] = [];
     const handlers = createWorkerDispatchHandlers({
+      completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
-      readBackRecorder: (workItemHash, readBack) => {
+      now: () => 1,
+      readBackRecorder: (_workItemHash, readBack) => {
         recordedReadBacks.push(readBack);
-        return WorkItemStore.addReadBackEvidence(workItemHash, {
+        return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: readBack.target,
           quotedText: readBack.kind === "citation_match" ? readBack.quotedText : "expected marker",
@@ -292,6 +324,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
           readBackRequests: [
             {
               claimIndex: 0,
+              criterionIndex: 0,
               request: {
                 kind: "citation_match",
                 target: "{{output.url}}",
@@ -304,7 +337,9 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
     } satisfies AppConnector.Definition;
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
+      completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
+      now: () => 1,
     });
 
     // When

@@ -1,6 +1,6 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { expect } from "bun:test";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage } from "@openomni/session";
 import type { ReadBackExecutor } from "../../src/index";
 
 const servers: Server[] = [];
@@ -81,17 +81,6 @@ export async function expectRejects(operation: Promise<unknown>): Promise<void> 
     return;
   }
   throw new Error("expected operation to reject");
-}
-
-export function createWorkItem() {
-  return WorkItemStore.create({
-    name: "read-back executor test",
-    sourceMessageId: "msg-readback",
-    sourceChannel: "test",
-    intent: "verify",
-    goal: "persist runtime read-back evidence",
-    acceptanceCriteria: ["The executor records external read-back evidence."],
-  });
 }
 
 function closeServer(server: Server): Promise<void> {

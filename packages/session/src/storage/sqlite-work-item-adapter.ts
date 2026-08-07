@@ -1,43 +1,85 @@
 import type { Database } from "bun:sqlite";
 import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { isAuthorizedCompletionWriter } from "../work-item/completion-writer.js";
 
 export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkItemSubAdapter {
-  return {
-    get: (hash: string): WorkItem.Info | undefined => {
-      const row = db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
-        data: string;
-      } | null;
-      return row ? (JSON.parse(row.data) as WorkItem.Info) : undefined;
+  const adapter: ProtocolStorage.WorkItemSubAdapter = {
+    create: (hash: string, item: WorkItem.Info): boolean => {
+      const parsed = WorkItem.Info.parse(item);
+      assertMatchingHash(hash, parsed.hash);
+      assertPendingCompletionBaseline(parsed);
+      const result = db
+        .query(
+          `INSERT OR IGNORE INTO work_item
+             (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          hash,
+          JSON.stringify(parsed),
+          WorkItem.deriveStatus(parsed),
+          parsed.assigneeId ?? null,
+          parsed.sessionId ?? null,
+          parsed.relations.parentHash ?? null,
+          parsed.sourceChannel,
+          parsed.timestamps.created,
+          parsed.timestamps.updated,
+        );
+      return result.changes === 1;
     },
 
-    set: (hash: string, item: WorkItem.Info): void => {
-      if (hash !== item.hash) {
-        throw new Error(`WorkItem hash mismatch: key=${hash} payload=${item.hash}`);
+    get: (hash: string): WorkItem.Info | undefined => {
+      const row = db
+        .query("SELECT hash, data FROM work_item WHERE hash = ?")
+        .get(hash) as WorkItemRow | null;
+      return row ? decodeWorkItemRow(row) : undefined;
+    },
+
+    compareAndSet: (hash: string, expectedHead: number, item: WorkItem.Info): boolean => {
+      const parsed = WorkItem.Info.parse(item);
+      assertMatchingHash(hash, parsed.hash);
+      if (parsed.revision !== expectedHead + 1) {
+        throw new Error(
+          `WorkItem revision must advance once: expected=${expectedHead} payload=${parsed.revision}`,
+        );
       }
-      const now = Date.now();
-      const status = WorkItem.deriveStatus(item);
-      db.query(
-        `INSERT INTO work_item (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(hash) DO UPDATE SET
-           data = excluded.data,
-           status = excluded.status,
-           assignee_id = excluded.assignee_id,
-           session_id = excluded.session_id,
-           parent_hash = excluded.parent_hash,
-           source_channel = excluded.source_channel,
-           time_updated = excluded.time_updated`,
-      ).run(
-        hash,
-        JSON.stringify(item),
-        status,
-        item.assigneeId ?? null,
-        item.sessionId ?? null,
-        item.relations.parentHash ?? null,
-        item.sourceChannel,
-        item.timestamps.created,
-        now,
-      );
+      const currentRow = db
+        .query("SELECT hash, data FROM work_item WHERE hash = ?")
+        .get(hash) as WorkItemRow | null;
+      const current = currentRow ? decodeWorkItemRow(currentRow) : undefined;
+      if (current?.revision === expectedHead) assertCompletionLedgerExtension(current, parsed);
+      if (
+        current &&
+        changesCompletionAuthority(current, parsed) &&
+        !isAuthorizedCompletionWriter()
+      ) {
+        throw new Error("WorkItem completion fact writes are restricted to the OpenOmni boundary");
+      }
+      const result = db
+        .query(
+          `UPDATE work_item SET
+             data = ?,
+             status = ?,
+             assignee_id = ?,
+             session_id = ?,
+             parent_hash = ?,
+             source_channel = ?,
+             time_updated = ?
+           WHERE hash = ?
+             AND json_extract(data, '$.revision') = ?`,
+        )
+        .run(
+          JSON.stringify(parsed),
+          WorkItem.deriveStatus(parsed),
+          parsed.assigneeId ?? null,
+          parsed.sessionId ?? null,
+          parsed.relations.parentHash ?? null,
+          parsed.sourceChannel,
+          Date.now(),
+          hash,
+          expectedHead,
+        );
+      return result.changes === 1;
     },
 
     list: (filter?: ProtocolStorage.WorkItemListFilter): WorkItem.Info[] => {
@@ -56,9 +98,9 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const rows = db
-        .query(`SELECT data FROM work_item ${where} ORDER BY time_created ASC`)
-        .all(...params) as Array<{ data: string }>;
-      return rows.map((r) => JSON.parse(r.data) as WorkItem.Info);
+        .query(`SELECT hash, data FROM work_item ${where} ORDER BY time_created ASC`)
+        .all(...params) as WorkItemRow[];
+      return rows.map(decodeWorkItemRow);
     },
 
     remove: (hash: string): boolean => {
@@ -66,6 +108,109 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       return result.changes > 0;
     },
   };
+  return adapter;
+}
+
+function assertCompletionLedgerExtension(current: WorkItem.Info, next: WorkItem.Info): void {
+  assertAppendOnly("evidence", current.evidence, next.evidence);
+  const collections = [
+    ["criteria", current.completionFacts.criteria, next.completionFacts.criteria],
+    ["claims", current.completionFacts.claims, next.completionFacts.claims],
+    ["observations", current.completionFacts.observations, next.completionFacts.observations],
+    ["results", current.completionFacts.results, next.completionFacts.results],
+    ["invalidations", current.completionFacts.invalidations, next.completionFacts.invalidations],
+    [
+      "verification errors",
+      current.completionFacts.verificationErrors,
+      next.completionFacts.verificationErrors,
+    ],
+    ["effects", current.completionFacts.effects, next.completionFacts.effects],
+    [
+      "request reservations",
+      current.completionFacts.requestReservations,
+      next.completionFacts.requestReservations,
+    ],
+    ["admissions", current.completionFacts.admissions, next.completionFacts.admissions],
+  ] as const;
+  for (const [name, previous, candidate] of collections) {
+    assertAppendOnly(`completion ${name}`, previous, candidate);
+  }
+  if (next.completionFacts.revision < current.completionFacts.revision) {
+    throw new Error("completion facts revision cannot move backward");
+  }
+  if (
+    current.completionReport !== undefined &&
+    JSON.stringify(current.completionReport) !== JSON.stringify(next.completionReport)
+  ) {
+    throw new Error("completion report is immutable");
+  }
+  if (
+    current.completionTerminalReceipt !== undefined &&
+    JSON.stringify(current.completionTerminalReceipt) !==
+      JSON.stringify(next.completionTerminalReceipt)
+  ) {
+    throw new Error("completion terminal receipt is immutable");
+  }
+}
+
+function assertAppendOnly(
+  name: string,
+  previous: readonly unknown[],
+  candidate: readonly unknown[],
+): void {
+  if (
+    candidate.length < previous.length ||
+    previous.some((entry, index) => JSON.stringify(entry) !== JSON.stringify(candidate[index]))
+  ) {
+    throw new Error(`${name} are append-only`);
+  }
+}
+
+function assertPendingCompletionBaseline(item: WorkItem.Info): void {
+  const facts = item.completionFacts;
+  if (
+    WorkItem.deriveStatus(item) !== "pending" ||
+    facts.revision !== 0 ||
+    facts.claims.length > 0 ||
+    facts.observations.length > 0 ||
+    facts.results.length > 0 ||
+    facts.invalidations.length > 0 ||
+    facts.verificationErrors.length > 0 ||
+    facts.effects.length > 0 ||
+    facts.requestReservations.length > 0 ||
+    facts.admissions.length > 0 ||
+    item.completionReport !== undefined ||
+    item.completionTerminalReceipt !== undefined
+  ) {
+    throw new Error("WorkItem create accepts pending completion baselines only");
+  }
+}
+
+function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info): boolean {
+  return (
+    JSON.stringify(current.completionFacts) !== JSON.stringify(next.completionFacts) ||
+    JSON.stringify(current.completionReport) !== JSON.stringify(next.completionReport) ||
+    JSON.stringify(current.completionTerminalReceipt) !==
+      JSON.stringify(next.completionTerminalReceipt)
+  );
+}
+
+function decodeWorkItem(data: string): WorkItem.Info {
+  return WorkItem.Info.parse(JSON.parse(data));
+}
+
+type WorkItemRow = Readonly<{ hash: string; data: string }>;
+
+function decodeWorkItemRow(row: WorkItemRow): WorkItem.Info {
+  const item = decodeWorkItem(row.data);
+  assertMatchingHash(row.hash, item.hash);
+  return item;
+}
+
+function assertMatchingHash(key: string, payload: string): void {
+  if (key !== payload) {
+    throw new Error(`WorkItem hash mismatch: key=${key} payload=${payload}`);
+  }
 }
 
 function addNullableCondition(

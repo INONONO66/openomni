@@ -1,7 +1,13 @@
 import { Events as EventDescriptors } from "./events.js";
-import { generateHash as createHash } from "./hash.js";
+import {
+  criterionId as createCriterionId,
+  generateHash as createHash,
+  sha256JsonRef as createSha256JsonRef,
+} from "./hash.js";
 import * as Schema from "./schemas.js";
 import { deriveStatus as resolveStatus } from "./status.js";
+import * as Completion from "./completion-admission.js";
+import { hasContiguousReservationBridge as hasReservationBridge } from "./terminal-linkage.js";
 
 export namespace WorkItem {
   export const Status = Schema.Status;
@@ -28,8 +34,74 @@ export namespace WorkItem {
   export const Outcome = Schema.Outcome;
   export type Outcome = Schema.Outcome;
 
-  export const CompletionReport = Schema.CompletionReport;
-  export type CompletionReport = Schema.CompletionReport;
+  export const CompletionReport = Completion.CompletionReport;
+  export type CompletionReport = Completion.CompletionReport;
+  export const canonicalCompletionReport = Completion.canonicalCompletionReport;
+  export const completionReportReference = Completion.completionReportReference;
+
+  export const Criterion = Completion.Criterion;
+  export type Criterion = Completion.Criterion;
+
+  export const Claim = Completion.Claim;
+  export type Claim = Completion.Claim;
+
+  export const Observation = Completion.Observation;
+  export type Observation = Completion.Observation;
+
+  export const ResultValue = Completion.ResultValue;
+  export type ResultValue = Completion.ResultValue;
+
+  export const CriterionResult = Completion.CriterionResult;
+  export type CriterionResult = Completion.CriterionResult;
+
+  export const ResultInvalidation = Completion.ResultInvalidation;
+  export type ResultInvalidation = Completion.ResultInvalidation;
+
+  export const VerificationErrorCode = Completion.VerificationErrorCode;
+  export type VerificationErrorCode = Completion.VerificationErrorCode;
+
+  export const VerificationErrorFact = Completion.VerificationErrorFact;
+  export type VerificationErrorFact = Completion.VerificationErrorFact;
+
+  export const EffectRecord = Completion.EffectRecord;
+  export type EffectRecord = Completion.EffectRecord;
+
+  export const CompletionOrigin = Completion.CompletionOrigin;
+  export type CompletionOrigin = Completion.CompletionOrigin;
+
+  export type CompletionIdentity = Completion.CompletionIdentity;
+
+  export const CompletionSource = Completion.CompletionSource;
+  export type CompletionSource = Completion.CompletionSource;
+
+  export const CompletionSourceOrigin = Completion.CompletionSourceOrigin;
+  export type CompletionSourceOrigin = Completion.CompletionSourceOrigin;
+
+  export const CompletionSourceIdentity = Completion.CompletionSourceIdentity;
+  export type CompletionSourceIdentity = Completion.CompletionSourceIdentity;
+
+  export const projectCompletionOrigin = Completion.projectCompletionOrigin;
+  export const projectCompletionSourceIdentity = Completion.projectCompletionSourceIdentity;
+
+  export const CompletionDecision = Completion.CompletionDecision;
+  export type CompletionDecision = Completion.CompletionDecision;
+
+  export const CompletionRequest = Completion.CompletionRequest;
+  export type CompletionRequest = Completion.CompletionRequest;
+
+  export const CompletionAdmission = Completion.CompletionAdmission;
+  export type CompletionAdmission = Completion.CompletionAdmission;
+
+  export const CompletionRequestReservation = Completion.CompletionRequestReservation;
+  export type CompletionRequestReservation = Completion.CompletionRequestReservation;
+
+  export const CompletionTerminalReceipt = Completion.CompletionTerminalReceipt;
+  export type CompletionTerminalReceipt = Completion.CompletionTerminalReceipt;
+
+  export const CompletionFacts = Completion.CompletionFacts;
+  export type CompletionFacts = Completion.CompletionFacts;
+  export const emptyCompletionFacts = Completion.emptyCompletionFacts;
+  export const hasContiguousReservationBridge = hasReservationBridge;
 
   export const VerificationGate = Schema.VerificationGate;
   export type VerificationGate = Schema.VerificationGate;
@@ -38,6 +110,8 @@ export namespace WorkItem {
   export type Info = Schema.Info;
 
   export const deriveStatus = resolveStatus;
+  export const criterionId = createCriterionId;
   export const generateHash = createHash;
+  export const sha256JsonRef = createSha256JsonRef;
   export const Events = EventDescriptors;
 }

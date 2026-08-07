@@ -2,8 +2,8 @@ import { Policy, type RuntimeResource } from "@openomni/protocol";
 import type { PolicyPointId } from "./types";
 
 class PolicyPointTimingError extends Error {
-  constructor(pointId: PolicyPointId) {
-    super(`No legacy timing maps to registered policy point: ${pointId}`);
+  constructor(pointId: string) {
+    super(`Registered policy point has no canonical timing: ${pointId}`);
     this.name = "PolicyPointTimingError";
   }
 }
@@ -37,20 +37,38 @@ export function resolvePolicyPoints(
   );
 }
 
-const timingByPointId: ReadonlyMap<PolicyPointId, Policy.Timing> = (() => {
-  const inverse = new Map<PolicyPointId, Policy.Timing>();
-  for (const timing of Object.values(Policy.Timing)) {
-    for (const pointId of resolvePolicyPoints(timing)) {
-      if (!inverse.has(pointId)) inverse.set(pointId, timing);
-    }
-  }
-  return inverse;
-})();
+const canonicalTimingEntries = {
+  "session.inbound.pre": Policy.Timing.INBOUND_RECEIVE,
+  "dispatch.action.pre": Policy.Timing.DISPATCH_AUTHORIZE,
+  "run.lifecycle.pre": Policy.Timing.RUN_START,
+  "run.turn.pre": Policy.Timing.TURN_START,
+  "prompt.context.pre": Policy.Timing.CONTEXT_PREPARE,
+  "tool.catalog.pre": Policy.Timing.RESOURCES_PREPARE,
+  "connection.llm.pre": Policy.Timing.MODEL_REQUEST,
+  "connection.llm.post": Policy.Timing.MODEL_RESPONSE,
+  "tool.native.pre": Policy.Timing.INVOKE_PREPARE,
+  "tool.mcp.pre": Policy.Timing.INVOKE_PREPARE,
+  "delegation.worker.pre": Policy.Timing.INVOKE_PREPARE,
+  "tool.native.post": Policy.Timing.INVOKE_RESULT,
+  "tool.mcp.post": Policy.Timing.INVOKE_RESULT,
+  "delegation.worker.post": Policy.Timing.INVOKE_RESULT,
+  "run.turn.post": Policy.Timing.TURN_FINISH,
+  "run.completion.pre": Policy.Timing.COMPLETION_PREPARE,
+  "work.complete.pre": Policy.Timing.COMPLETION_PREPARE,
+  "session.writeback.pre": Policy.Timing.WRITEBACK_COMMIT,
+  "run.lifecycle.post": Policy.Timing.RUN_FINISH,
+  "run.error.error": Policy.Timing.ERROR,
+} satisfies Readonly<Record<PolicyPointId, Policy.Timing>>;
+const canonicalTimingByPointId: ReadonlyMap<string, Policy.Timing> = new Map(
+  Object.entries(canonicalTimingEntries),
+);
 
 export function timingForPolicyPoint(pointId: PolicyPointId): Policy.Timing {
-  const timing = timingByPointId.get(pointId);
+  const contract = Policy.PolicyPoint.Registry[pointId];
+  if (contract === undefined) throw new PolicyPointTimingError(pointId);
+  const timing = canonicalTimingByPointId.get(contract.id);
   if (timing !== undefined) return timing;
-  throw new PolicyPointTimingError(pointId);
+  throw new PolicyPointTimingError(contract.id);
 }
 
 export function policyPointIdsForDescriptor(

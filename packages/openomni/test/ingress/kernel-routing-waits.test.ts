@@ -12,6 +12,7 @@ import {
   PendingAskStore,
   PendingInteractionStore,
   Session,
+  Storage,
   WorkerRun,
   WorkItemStore,
 } from "@openomni/session";
@@ -31,6 +32,7 @@ const correlation = {
   channelId: "telegram:dm",
   tokenHash: "token-hash-1",
 } satisfies DispatchProtocol.Correlation;
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 function replyEvent(
   id: string,
@@ -80,7 +82,11 @@ async function createPending(
     runId,
     title: runId,
     prompt: "complete assigned work",
+    executorKind: "connector_endpoint",
   });
+  await WorkerRun.updateStatus(session.id, runId, "starting");
+  await WorkerRun.updateStatus(session.id, runId, "running");
+  await WorkerRun.updateStatus(session.id, runId, "waiting_input");
   PendingInteractionStore.create({
     id,
     workerRunId: runId,
@@ -129,7 +135,10 @@ async function captureError(action: Promise<unknown>): Promise<Error | undefined
 }
 
 describe("IngressEngine wait routing", () => {
-  beforeEach(resetKernelRoutingState);
+  beforeEach(() => {
+    resetKernelRoutingState();
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
+  });
 
   test("dispatches one exact reply through the injected shared DispatchRuntime", async () => {
     const sessionId = await createPending("pi-exact", "run-exact");
@@ -189,7 +198,7 @@ describe("IngressEngine wait routing", () => {
       workerRunId: "run-plain-text",
     });
     await WorkItemStore.start(workItem.hash);
-    IngressEngine.setDispatchRuntime(createDefaultDispatchRuntime());
+    IngressEngine.setDispatchRuntime(createDefaultDispatchRuntime({ completionWriter }));
 
     const result = await IngressEngine.ingest(
       replyEvent("inbound-plain-text", "completed successfully"),

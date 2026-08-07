@@ -27,6 +27,7 @@ export namespace PolicyPointContractModule {
     "delegation.worker.post",
     "run.turn.post",
     "run.completion.pre",
+    "work.complete.pre",
     "session.writeback.pre",
     "run.lifecycle.post",
     "run.error.error",
@@ -46,7 +47,7 @@ export namespace PolicyPointContractModule {
   export const PolicyPointId = z
     .string()
     .regex(
-      /^(tool|prompt|delegation|session|credential|connection|run|dispatch)\.[a-z][a-z0-9-]*\.(pre|post|error)$/,
+      /^(tool|prompt|delegation|session|credential|connection|run|dispatch|work)\.[a-z][a-z0-9-]*\.(pre|post|error)$/,
     );
   export const PolicyPointContract = z.object({
     id: PolicyPointId,

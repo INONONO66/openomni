@@ -1,5 +1,5 @@
-import { Execution, type Dispatch, type Model } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
+import { WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
 import { PolicyResolver, type PolicyResolverInstance } from "../../policy/index.js";
@@ -11,16 +11,16 @@ import {
   isConnectorEndpointTarget,
 } from "./connector-endpoint-worker.js";
 import { projectConnectorCompletion } from "./connector-completion-projector.js";
-import {
-  ignoreWorkItemReflectionFailure,
-  reflectCoordinatorResult,
-  type WorkerCompletionOptions,
-} from "./worker-completion.js";
+import { reflectCoordinatorResult, type WorkerCompletionOptions } from "./worker-completion.js";
 import { buildWorkerSpawnRequest, parseWorkerSpawnPayload } from "./worker-spawn-payload.js";
-import { createWorkerSpawnWorkItem } from "./worker-work-item.js";
+import {
+  createWorkerSpawnWorkItem,
+  throwWithWorkItemReflectionFailure,
+} from "./worker-work-item.js";
 import { extractText } from "./shared.js";
 
-export interface WorkerDispatchHandlerOptions extends WorkerCompletionOptions {
+export interface WorkerDispatchHandlerOptions
+  extends Omit<WorkerCompletionOptions, "sourceOrigin"> {
   readonly coordinator?: CoordinatorLike;
   readonly connectorEndpointDriver?: ConnectorEndpointDriverOwner;
   readonly defaultModel?: Model.Ref;
@@ -58,17 +58,84 @@ function parseWorkerCompletePayload(payload: unknown): WorkerCompletePayload {
   return parsed.data;
 }
 
-function resolveCompletedWorkItemHash(
+function resolveCompletedWorkItem(
   command: Dispatch.Command,
   payload: WorkerCompletePayload,
-): string {
-  if (payload.workItemHash !== undefined) return payload.workItemHash;
-  const workerRunId = command.target.runId ?? payload.result.runId;
-  const workItem = WorkItemStore.list().find((item) => item.workerRunId === workerRunId);
-  if (workItem === undefined) {
-    throw new Error(`worker.complete could not resolve WorkItem for run ${workerRunId}`);
+): WorkItem.Info {
+  const targetRunId = command.target.runId;
+  if (!targetRunId) throw new Error("worker.complete requires target.runId");
+  if (targetRunId !== payload.result.runId) {
+    throw new Error(
+      `worker.complete run mismatch: target=${targetRunId} result=${payload.result.runId}`,
+    );
   }
-  return workItem.hash;
+
+  if (payload.workItemHash !== undefined) {
+    const workItem = WorkItemStore.get(payload.workItemHash);
+    if (!workItem) throw new Error(`worker.complete WorkItem not found: ${payload.workItemHash}`);
+    if (workItem.workerRunId !== targetRunId) {
+      throw new Error(
+        `worker.complete run mismatch: workItem=${workItem.workerRunId ?? "missing"} target=${targetRunId}`,
+      );
+    }
+    return workItem;
+  }
+
+  const matches = WorkItemStore.list().filter((item) => item.workerRunId === targetRunId);
+  if (matches.length !== 1) {
+    throw new Error(
+      `worker.complete requires exactly one WorkItem for run ${targetRunId}: found ${matches.length}`,
+    );
+  }
+  const workItem = matches[0];
+  if (!workItem) throw new Error(`worker.complete WorkItem not found for run ${targetRunId}`);
+  return workItem;
+}
+
+function assertWorkerCompletionActorAuthority(
+  command: Dispatch.Command,
+  payload: WorkerCompletePayload,
+): void {
+  const actor = command.actor;
+  if (
+    actor.kind !== "worker" ||
+    actor.trustTier !== "assigned_worker" ||
+    actor.workerRunId !== payload.result.runId ||
+    actor.sessionId !== payload.result.sessionId
+  ) {
+    throw new Error("worker.complete actor is not authorized for this Worker result");
+  }
+  if (
+    command.target.sessionId !== undefined &&
+    command.target.sessionId !== payload.result.sessionId
+  ) {
+    throw new Error("worker.complete actor is not authorized for this Worker result");
+  }
+}
+
+function assertWorkerCompletionWorkItemAuthority(
+  payload: WorkerCompletePayload,
+  workItem: WorkItem.Info,
+): void {
+  if (
+    workItem.executorKind !== "connector_endpoint" ||
+    workItem.workSessionId !== payload.result.sessionId
+  ) {
+    throw new Error("worker.complete actor is not authorized for this Worker result");
+  }
+  const workerRun = WorkerRunStateStore.get(payload.result.sessionId, payload.result.runId);
+  if (!workerRun) {
+    throw new Error(`worker.complete WorkerRun not found: ${payload.result.runId}`);
+  }
+  if (
+    (workerRun.executorKind !== undefined && workerRun.executorKind !== workItem.executorKind) ||
+    (workerRun.assignedStepId !== undefined && workerRun.assignedStepId !== workItem.hash) ||
+    (workerRun.status !== "running" && workerRun.status !== "waiting_input")
+  ) {
+    throw new Error(
+      `worker.complete WorkerRun is not assigned to this active WorkItem: executor=${workerRun.executorKind ?? "missing"} assignedStep=${workerRun.assignedStepId ?? "missing"} status=${workerRun.status}`,
+    );
+  }
 }
 
 export function createWorkerDispatchHandlers(
@@ -89,6 +156,7 @@ export function createWorkerDispatchHandlers(
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
+          completionService: options.completionService,
           driver: options.connectorEndpointDriver,
           readBack: options.readBack,
           readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
@@ -115,14 +183,20 @@ export function createWorkerDispatchHandlers(
       try {
         result = await coordinator.dispatch(request.sessionId, request);
       } catch (err) {
-        await ignoreWorkItemReflectionFailure(() =>
-          WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err)),
-        );
+        try {
+          await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+        } catch (reflectionFailure) {
+          throwWithWorkItemReflectionFailure(err, reflectionFailure);
+        }
         throw err;
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
+        completionService: options.completionService,
+        sourceOrigin: { source: "internal_worker" },
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+        readBackRecorder: options.readBackRecorder,
+        now: options.now,
       });
       return {
         output: {
@@ -137,8 +211,12 @@ export function createWorkerDispatchHandlers(
 
     async "worker.complete"(command) {
       const payload = parseWorkerCompletePayload(command.payload);
-      const workItemHash = resolveCompletedWorkItemHash(command, payload);
+      assertWorkerCompletionActorAuthority(command, payload);
+      const workItem = resolveCompletedWorkItem(command, payload);
+      assertWorkerCompletionWorkItemAuthority(payload, workItem);
+      const workItemHash = workItem.hash;
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
+        completionService: options.completionService,
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
         readBackRecorder: options.readBackRecorder,

@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { AppConnector, Execution } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
+import { PolicyEngine } from "@openomni/policy";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
+import { createCompletionAdmissionService } from "../../src/work-item/completion-admission.js";
 import { command, workerSpawnPayload } from "./helpers";
 
 const TEST_CONNECTOR_ID = "app.test-telemetry";
 const TEST_INSTALLATION_ID = "install:test-telemetry";
 const TEST_ENDPOINT_ID = `endpoint:${TEST_INSTALLATION_ID}`;
+let completionWriter: Storage.WorkItemCompletionWriter;
 
 type WorkerDispatchHandlerOptions = NonNullable<Parameters<typeof createWorkerDispatchHandlers>[0]>;
 type ConnectorEndpointDriverOwner = NonNullable<
@@ -83,7 +86,14 @@ function connectorEndpointWorkerCommand() {
 }
 
 function createConnectorEndpointHandlers(dispatch: ConnectorEndpointDriverOwner["dispatch"]) {
-  return createWorkerDispatchHandlers({ connectorEndpointDriver: { dispatch } });
+  return createWorkerDispatchHandlers({
+    completionService: createCompletionAdmissionService({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      now: Date.now,
+    }),
+    connectorEndpointDriver: { dispatch },
+  });
 }
 
 function resultWithTelemetry(request: Execution.Request): Execution.Result {
@@ -115,7 +125,7 @@ function resultWithTelemetry(request: Execution.Request): Execution.Result {
 describe("worker.spawn connector endpoint telemetry evidence", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    completionWriter = Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("records connector token usage and tool calls as WorkItem evidence", async () => {
@@ -136,5 +146,21 @@ describe("worker.spawn connector endpoint telemetry evidence", () => {
       "connector tool call recorded",
     );
     expect(workItem?.evidence.map((evidence) => evidence.detail).join("\n")).toContain("call-1");
+  });
+
+  test("rejects a foreign connector session before projecting telemetry", async () => {
+    seedConnectorInstallation();
+    const handlers = createConnectorEndpointHandlers(async (request) => ({
+      ...resultWithTelemetry(request.executionRequest),
+      sessionId: "session:foreign",
+    }));
+
+    await expect(handlers["worker.spawn"](connectorEndpointWorkerCommand())).rejects.toThrow(
+      "Worker completion identity mismatch",
+    );
+
+    const workItem = WorkItemStore.list()[0];
+    expect(workItem?.evidence).toEqual([]);
+    expect(workItem?.completionFacts.admissions).toEqual([]);
   });
 });

@@ -21,6 +21,7 @@ const NumericInstruction = z
     right: z.number().finite(),
   })
   .strict();
+
 const CodeInstruction = z
   .object({
     op: z.literal("code_arithmetic"),

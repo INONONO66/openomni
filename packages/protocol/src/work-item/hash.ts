@@ -1,3 +1,21 @@
+import { createHash } from "node:crypto";
+
+export function criterionId(workItemHash: string, index: number, statement: string): string {
+  return `criterion:${workItemHash}:${index}:${stableToken(statement)}`;
+}
+
+export function sha256JsonRef(value: unknown): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
+}
+
+function stableToken(input: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = Math.imul(hash ^ input.charCodeAt(index), 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function generateHash(): string {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);

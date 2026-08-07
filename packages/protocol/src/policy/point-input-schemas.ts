@@ -184,6 +184,19 @@ export const policyPointInputSchemas = Object.freeze({
   "run.completion.pre": validator(
     z.object({ sessionId: id, runId: id, completionCandidate: requiredValue }).passthrough(),
   ),
+  "work.complete.pre": validator(
+    z
+      .object({
+        workItemHash: id,
+        requestId: id,
+        contractRevision: id,
+        basisRef: id,
+        expectedHead: z.number().int().nonnegative(),
+        completionCandidate: requiredValue,
+        unresolvedBlockerIds: z.array(id),
+      })
+      .passthrough(),
+  ),
   "session.writeback.pre": validator(
     z.object({ sessionId: id, runId: id, writebackPayload: requiredValue }).passthrough(),
   ),
