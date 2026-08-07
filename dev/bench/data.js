@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786002904669,
+  "lastUpdate": 1786071024954,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -36061,6 +36061,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 527965,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98900f7a3d37846d682c73b0ff3c68b2f39e47bb",
+          "message": "feat(openomni): add completion admission boundary (#516)\n\n* feat(openomni): enforce WorkItem completion admission\n\n* test(openomni): remove TERM abort timing race\n\n* fix(openomni): harden completion admission replay\n\n* test(openomni): abort TERM child on readiness failure\n\n* fix(openomni): close completion admission review gaps\n\n* fix(openomni): secure completion admission boundaries\n\n* fix(openomni): harden completion authority sources\n\n* fix(openomni): fence completion replay authority\n\n* fix(openomni): isolate completion retry generations\n\n* fix(openomni): fence completion attempts and claims\n\n* fix(openomni): bind verifier artifacts exactly\n\n* fix(openomni): close completion provenance graph\n\n* fix(openomni): scope completion evidence to attempts\n\n* fix(openomni): fence read-back evidence at write\n\n* fix(openomni): close completion crash replay gaps\n\n* fix(openomni): enforce admission boundary invariants\n\n* fix(openomni): bind retries to fresh execution\n\n* fix(openomni): fence terminal and recovery projections\n\n* fix(openomni): require stakes and terminal linkage\n\n* fix(openomni): fence assertion scope and lease takeover\n\n* fix(openomni): validate durable assertion observations\n\n* fix(openomni): converge completion on head drift\n\n* fix(openomni): bound completion CAS convergence\n\n* fix(openomni): checkpoint completion read backs\n\n* fix(openomni): recover pre-admission checkpoints\n\n* fix(openomni): fence recovery generations and fact ids\n\n* fix(openomni): preserve deterministic fold errors\n\n* fix(openomni): bind terminal subjects and raw creates\n\n* fix(openomni): allow TERM cleanup before escalation\n\n* fix(openomni): await process group cleanup\n\n* fix(openomni): preserve process group cleanup grace\n\n* fix(openomni): settle detached process groups\n\n* chore(openomni): restore issue 490 reviewed tree\n\n* fix(openomni): resolve completion admission review findings\n\n* fix(protocol): harden legacy archive migration\n\n* fix(protocol): validate terminal completion facts\n\n* fix(openomni): validate admission fact references\n\n* fix(openomni): reject dangling admission references\n\n* fix(protocol): preserve owner terminal overrides\n\n* test(session): link completed fixture results\n\n* fix(openomni): bind reservations to request envelopes\n\n* fix(openomni): preserve reservation identity in recovery\n\n* fix(openomni): fence recovery reservation takeover\n\n* fix(openomni): bridge fenced recovery terminals\n\n* fix(openomni): make fenced recovery idempotent\n\n* fix(openomni): reuse live recovery fences\n\n* fix(openomni): reuse admissions during request replay\n\n* fix(openomni): bind worker replay identity\n\n* fix(openomni): bind worker reservation source\n\n* fix(openomni): stabilize worker completion correlation\n\n* fix(openomni): canonicalize worker replay identity\n\n* fix(openomni): bound read-back target resolution\n\n* fix(openomni): bound response header waits\n\n* fix(openomni): bound recorder replay identity\n\n* fix(openomni): reject late read-back evidence\n\n* fix(openomni): snapshot completion provenance\n\n* fix(protocol): admit fixed worker provenance\n\n* fix(protocol): validate fixed completion sources\n\n* fix(protocol): reject duplicate request facts\n\n* fix(protocol): archive reportless legacy completions\n\n* fix(protocol): preserve legacy archive provenance\n\n* fix(protocol): bind generated archive evidence\n\n* fix(session): bind WorkItem rows to hashes\n\n* fix(protocol): preserve completion diagnostics\n\n* fix(protocol): validate terminal evidence graphs\n\n* fix(protocol): bind terminal observations\n\n* fix(protocol): close terminal claim graphs\n\n* fix(openomni): honor direct Owner overrides\n\n* fix(openomni): bind Owner override evidence\n\n* fix(openomni): authorize Owner claim evidence\n\n* fix(openomni): bind Owner receipts to requests\n\n* fix(openomni): seal completion receipt ledger\n\n* fix(openomni): preserve completion reservation history\n\n* fix(openomni): resolve completion review findings\n\n* fix(session): preserve durable completion history\n\n* refactor(openomni,protocol): one-trust-domain completion admission\n\n- merge work-item boundary/authority/gateway/request-identity/origin into a\n  single completion-admission module beside the pure fold; delete the mutual\n  in-process re-validation, the unwired invalidation port, dead exports, and\n  the third sha256 digest convention (protocol-owned sha256JsonRef is the one)\n- protocol: CompletionAdmission now stores requestRoot + proposedFactIds\n  instead of a full JSON-identical requestSnapshot fact copy; collapse the\n  10-arm CompletionSourceIdentity union to one object; export the origin\n  taxonomy/projectors so openomni stops redefining them; export\n  hasContiguousReservationBridge; schema snapshot 195 -> 186\n- remove the legacy completion upcast and legacy CAS shims (Owner ruling: no\n  deployment, no persisted data); WorkItem.Info.parse is the only read path;\n  driver drops the legacy-archive scenario (6 mandated scenarios remain)\n- dispatch/server: one admission service per runtime (was 3 constructions plus\n  a hidden second runtime in AgentToolProvider); worker replay pre-pass moves\n  into the service; single blocker-description helper; delete\n  worker-completion-admission.ts and bootstrap/startup.ts pass-throughs\n- driver cluster 8 -> 3 files with shared observation/result/stakes/service\n  builders; collapse cloned test resolvers/policy blocks; sync\n  implementation-status.md\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni,protocol): harden admission seams from adversarial review\n\n- protocol: fixed completion sources (worker/replay/recovery) now reject\n  caller-supplied identity at parse time, restoring the structural rejection\n  the old 10-arm union provided; hand-written CompletionSourceOrigin union\n  restores compile-time narrowing (identity?: never on fixed arms)\n- service: assertAppendableAdmission pins the denormalized admission\n  sourceIdentity to the authenticated request (hostile-decision forge test)\n- dispatch: byte-identical redelivery of an admitted completion returns\n  success from the durable envelope digest without re-running verifiers\n  (replay idempotency no longer coupled to verifier evolution); post-persist\n  read-back deadline check restored; injected completion services without\n  recovery get a truthful error\n- driver: all-origins receipts assert persisted sourceIdentity per origin\n- tests: pin terminal-linkage required-coverage/admissibility/unknown-\n  unresolved branches and reservation in-place-rewrite append-only guard\n- de-flake bashTool ready waits for loaded hosted runners (5s->15s, 1s->5s)\n- docs: drop stale upcast-decoder/seven-scenario/resolver claims in AGENTS.md\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(openomni): poll for bash ready markers alongside fs.watch\n\nfs.watch drops events under hosted-runner load, leaving the abort/TERM\ntests waiting on a marker file that already exists; a 100ms existsSync\npoll makes readiness detection deterministic.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T02:49:18Z",
+          "tree_id": "b5e547a21b68f8cb58e89671fe935599e33e2cac",
+          "url": "https://github.com/INONONO66/openomni/commit/98900f7a3d37846d682c73b0ff3c68b2f39e47bb"
+        },
+        "date": 1786071024126,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 644,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6241,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9478,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2905,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15824,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 821,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1385,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19382,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2237,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10849,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103236,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 533132,
             "unit": "ns/op"
           }
         ]
