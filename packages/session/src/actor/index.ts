@@ -53,6 +53,10 @@ export namespace ActorRegistry {
     return requireAdapter().getEndpoint(id);
   }
 
+  export function listEndpoints(actorId?: string, workspace?: string): Actor.Endpoint[] {
+    return requireAdapter().listEndpoints(actorId, workspace);
+  }
+
   export function resolveEndpoint(
     channel: string,
     externalId: string,

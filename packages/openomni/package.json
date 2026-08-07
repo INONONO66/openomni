@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./ledger": "./src/ledger/index.ts"
+    "./ledger": "./src/ledger/index.ts",
+    "./messaging": "./src/messaging/index.ts"
   },
   "scripts": {
     "build": "tsc",
