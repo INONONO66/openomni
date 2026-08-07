@@ -360,6 +360,75 @@ const invalidTerminalInputs: readonly [string, unknown][] = [
   ],
 ];
 
+const uncoveredCriterion = {
+  id: WorkItem.criterionId(baseItem.hash, 1, "verify the artifact"),
+  revision: 1,
+  statement: "verify the artifact",
+  required: true,
+};
+const refutedResult = WorkItem.CriterionResult.parse({
+  ...terminalResult,
+  id: "result:terminal-refuted",
+  value: "refuted",
+  checkedPredicate: "the artifact publication was checked and failed",
+});
+// Each row trips exactly one terminal-linkage defense; the expected message
+// pins that layer instead of accepting any rejection.
+const terminalLinkageDefenses: readonly [string, unknown, string][] = [
+  [
+    // The CompletionAdmission schema only forbids admit+unresolved; it never
+    // checks coverage, so only terminal-linkage rejects this forged admit.
+    "admit-uncovered-required-criterion",
+    {
+      ...validInput,
+      acceptanceCriteria: [...validInput.acceptanceCriteria, uncoveredCriterion.statement],
+      completionFacts: {
+        ...completionFacts,
+        criteria: [...completionFacts.criteria, uncoveredCriterion],
+      },
+    },
+    "does not cover a required criterion",
+  ],
+  [
+    "admit-refuted-effective-result",
+    {
+      ...validInput,
+      completionFacts: {
+        ...completionFacts,
+        results: [refutedResult],
+        admissions: [
+          {
+            ...admission,
+            proposedFactIds: { ...admission.proposedFactIds, results: [refutedResult.id] },
+            effectiveResultIds: [refutedResult.id],
+          },
+        ],
+      },
+    },
+    "effective result is not admissible",
+  ],
+  [
+    // Terminal linkage returns early without a receipt and only inspects the
+    // receipt's admission, so the unknown-unresolved check is reachable only
+    // through a receipt-referenced blocked admission.
+    "blocked-admission-unknown-unresolved-criterion",
+    {
+      ...validInput,
+      completionFacts: {
+        ...completionFacts,
+        admissions: [
+          {
+            ...admission,
+            decision: "block",
+            unresolvedCriterionIds: ["criterion:unknown"],
+          },
+        ],
+      },
+    },
+    "references an unknown unresolved criterion",
+  ],
+];
+
 describe("WorkItem completion admission contracts", () => {
   test("rejects duplicate fact ids across request-local arrays", () => {
     const duplicateId = "fact:request-local-duplicate";
@@ -531,6 +600,47 @@ describe("WorkItem completion admission contracts", () => {
           },
         }).success,
       ).toBe(false);
+    }
+  });
+
+  test("rejects caller-supplied identity on fixed completion source origins", () => {
+    for (const source of ["internal_worker", "connector_worker", "replay", "recovery"] as const) {
+      expect(WorkItem.CompletionSourceOrigin.safeParse({ source }).success).toBe(true);
+      const forged = WorkItem.CompletionSourceOrigin.safeParse({
+        source,
+        identity: { kind: "worker", id: "worker:forged" },
+      });
+      expect(forged.success).toBe(false);
+      if (!forged.success) {
+        expect(forged.error.issues[0]?.message).toBe(
+          "fixed completion sources reject caller-supplied identity",
+        );
+      }
+      // The durable form is unaffected: identity stays required for every source.
+      expect(
+        WorkItem.CompletionSourceIdentity.safeParse({
+          source,
+          identity: { kind: "worker", id: "worker:assigned" },
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  test("requires caller-authenticated identity on qualified completion source origins", () => {
+    for (const source of ["api", "a2a", "human", "resident", "sdk", "internal"] as const) {
+      const missing = WorkItem.CompletionSourceOrigin.safeParse({ source });
+      expect(missing.success).toBe(false);
+      if (!missing.success) {
+        expect(missing.error.issues[0]?.message).toBe(
+          "qualified completion sources require identity",
+        );
+      }
+      expect(
+        WorkItem.CompletionSourceOrigin.safeParse({
+          source,
+          identity: { kind: "external_actor", id: "actor:assigned" },
+        }).success,
+      ).toBe(true);
     }
   });
 
@@ -733,6 +843,17 @@ describe("WorkItem completion admission contracts", () => {
 
   test.each(invalidTerminalInputs)("rejects broken terminal linkage: %s", (_label, input) => {
     expect(WorkItem.Info.safeParse(input).success).toBe(false);
+  });
+
+  test.each(
+    terminalLinkageDefenses,
+  )("pins the terminal-linkage defense: %s", (_label, input, message) => {
+    const parsed = WorkItem.Info.safeParse(input);
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((issue) => issue.message.includes(message))).toBe(true);
+    }
   });
 
   test("requires checked predicates only for decisive criterion results", () => {

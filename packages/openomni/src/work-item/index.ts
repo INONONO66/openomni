@@ -10,7 +10,8 @@ export type {
 } from "./completion-admission-driver.js";
 export type { WorkItemCompletionRecoveryReceipt } from "./completion-admission.js";
 
-export const CompletionSourceOrigin = WorkItem.CompletionSourceOrigin;
+export const CompletionSourceOrigin: typeof WorkItem.CompletionSourceOrigin =
+  WorkItem.CompletionSourceOrigin;
 export type CompletionSourceOrigin = WorkItem.CompletionSourceOrigin;
 
 export function projectCompletionOrigin(input: unknown): WorkItem.CompletionOrigin {

@@ -349,6 +349,7 @@ type OriginAdmissionReceipt = Readonly<{
   source: string;
   origin: WorkItem.CompletionOrigin;
   admissionOrigin: WorkItem.CompletionOrigin;
+  sourceIdentityPersisted: boolean;
   boundaryTraversed: boolean;
   terminalReceiptLinked: boolean;
 }>;
@@ -412,6 +413,7 @@ export async function runAllOriginsCompletionAdmissionScenario(
     const sourceReceipts: OriginAdmissionReceipt[] = [];
     for (const [index, expectation] of OriginExpectations.entries()) {
       const origin = project(expectation.source);
+      const expectedSourceIdentity = WorkItem.projectCompletionSourceIdentity(expectation.source);
       const item = completionAdmissionDriverWorkItem(`wi_driver_origin_${index}`, [
         `Origin ${index} traverses admission`,
       ]);
@@ -421,6 +423,7 @@ export async function runAllOriginsCompletionAdmissionScenario(
           source: sourceLabel(expectation.source),
           origin,
           admissionOrigin: origin,
+          sourceIdentityPersisted: false,
           boundaryTraversed: false,
           terminalReceiptLinked: false,
         });
@@ -477,10 +480,16 @@ export async function runAllOriginsCompletionAdmissionScenario(
             })
           : await service.requestCompletion(request, completionReport);
       const stored = requiredCompletionAdmissionDriverItem(item.hash);
+      const persistedAdmission = stored.completionFacts.admissions.find(
+        ({ id }) => id === outcome.admission.id,
+      );
       sourceReceipts.push({
         source: sourceLabel(expectation.source),
         origin,
         admissionOrigin: outcome.admission.origin,
+        sourceIdentityPersisted:
+          persistedAdmission !== undefined &&
+          sameSourceIdentity(persistedAdmission.sourceIdentity, expectedSourceIdentity),
         boundaryTraversed: outcome.completed && outcome.admission.decision === "admit",
         terminalReceiptLinked:
           stored.completionTerminalReceipt?.admissionId === outcome.admission.id,
@@ -490,10 +499,13 @@ export async function runAllOriginsCompletionAdmissionScenario(
       ({ origin, admissionOrigin }, index) =>
         origin === OriginExpectations[index]?.origin && admissionOrigin === origin,
     );
+    const sourceIdentitiesExact = sourceReceipts.every(
+      ({ sourceIdentityPersisted }) => sourceIdentityPersisted,
+    );
     const allTraversedAdmissionBoundary = sourceReceipts.every(
       ({ boundaryTraversed, terminalReceiptLinked }) => boundaryTraversed && terminalReceiptLinked,
     );
-    const ok = sourceMappingsExact && allTraversedAdmissionBoundary;
+    const ok = sourceMappingsExact && sourceIdentitiesExact && allTraversedAdmissionBoundary;
 
     return completionAdmissionScenarioReceipt(
       "all-origins",
@@ -503,11 +515,25 @@ export async function runAllOriginsCompletionAdmissionScenario(
       {
         canonicalOrigins: CanonicalOrigins,
         sourceMappingsExact,
+        sourceIdentitiesExact,
         allTraversedAdmissionBoundary,
         sourceReceipts,
       },
     );
   });
+}
+
+/** Persisted denormalized identity must match the projection exactly — including both absent. */
+function sameSourceIdentity(
+  left: WorkItem.CompletionSourceIdentity | undefined,
+  right: WorkItem.CompletionSourceIdentity | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return (
+    left.source === right.source &&
+    left.identity.kind === right.identity.kind &&
+    left.identity.id === right.identity.id
+  );
 }
 
 function sourceLabel(source: WorkItem.CompletionSourceOrigin): string {

@@ -13,7 +13,7 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 | `src/policy/` | Gate-side policy resolution: actor/target labels → stamped `policyPlan` on spawn requests (production-wired by #479) | `PolicyResolver` |
 | `src/evidence/` | Read-back executors plus scoped deterministic verifier-registry and replay-conformance primitives | `ReadBackExecutor`, `VerifierRegistry`, `VerifierConformance`, `runVerifierRegistryDriver` |
 | `src/ledger/` | Deterministic windowed Stakes calculator, replay driver, criterion treatment, and host capability seams | `Stakes`, `runStakesDriver` |
-| `src/work-item/` | WorkItem completion fold, trusted authority, origin projection, atomic admission/terminal boundary, and public Manual QA driver | Public `projectCompletionOrigin`, `runCompletionAdmissionDriver`; internal `evaluateCompletion`, `createCompletionAuthorityResolver`, `createCompletionAdmissionService` |
+| `src/work-item/` | WorkItem completion fold, trusted authority, origin projection, atomic admission/terminal boundary, and public Manual QA driver | Public `projectCompletionOrigin`, `runCompletionAdmissionDriver`; internal `evaluateCompletion`, `createCompletionDecision`, `createCompletionAdmissionService` |
 | `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
@@ -83,7 +83,7 @@ Consumers should only use `@openomni/openomni` exports:
 
 - Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
 - Scoped verifier-registry and replay-conformance library surfaces from `src/evidence/`; archived replay stays outside these primitives
-- The WorkItem completion origin projector and deterministic seven-scenario Manual QA driver; the authority, fold, and terminal service stay kernel-internal
+- The WorkItem completion origin projector and deterministic six-scenario Manual QA driver; the authority, fold, and terminal service stay kernel-internal
 - Windowed Stakes primitive and driver from the dedicated `@openomni/openomni/ledger` subpath; completion consumes its resolver seam while durable-ledger and Voice consumers remain separate work
 
 If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain. The dormant

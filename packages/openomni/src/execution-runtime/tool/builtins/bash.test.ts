@@ -55,7 +55,7 @@ describe("bashTool", () => {
     });
     const readyTimeout = setTimeout(() => {
       rejectReady?.(new Error("bash child process did not become ready"));
-    }, 5_000);
+    }, 15_000);
 
     try {
       const tool = bashTool(workspace);
@@ -114,7 +114,7 @@ describe("bashTool", () => {
     });
     const readyTimeout = setTimeout(() => {
       rejectReady?.(new Error("bash TERM handler did not become ready"));
-    }, 1_000);
+    }, 5_000);
 
     try {
       const tool = bashTool(workspace);

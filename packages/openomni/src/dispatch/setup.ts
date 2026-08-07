@@ -136,10 +136,14 @@ export function createDefaultDispatchRuntime(
         submission.completionReport,
       );
     },
-    recoverRecordedWorkItemCompletions:
-      completionService?.recoverRecordedCompletions ??
-      (async () => {
-        throw new Error("completion writer is unavailable");
-      }),
+    // Closure (not a detached method reference) so an injected service whose
+    // recoverRecordedCompletions relies on `this` keeps its receiver.
+    recoverRecordedWorkItemCompletions: async () => {
+      if (!completionService) throw new Error("completion writer is unavailable");
+      if (!completionService.recoverRecordedCompletions) {
+        throw new Error("injected completion service does not implement recovery");
+      }
+      return completionService.recoverRecordedCompletions();
+    },
   });
 }

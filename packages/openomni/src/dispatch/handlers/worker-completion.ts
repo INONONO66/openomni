@@ -197,6 +197,16 @@ export async function reflectCoordinatorResult(
         leaseDurationMs,
       });
       if (reservation.state === "admitted") {
+        if (reservation.reservation.envelopeDigest === completionEnvelopeDigest) {
+          // Byte-identical redelivery of an envelope whose admission already
+          // reached the durable terminal receipt: reply from durable state
+          // without re-projecting facts (registry.verify) or re-entering the
+          // admission service, so the retry stays idempotent even if verifier
+          // behavior evolves or verification throws.
+          return completionReflection(workItemHash, false);
+        }
+        // Digest mismatch: fall through to the full path so conflict
+        // detection (completion envelope changed) is preserved.
         const replayed = replayPreparedReport(requestRoot, parsed.envelope);
         const outcome = await admitWorkerCompletion({
           completionService,
@@ -821,6 +831,9 @@ async function prepareCompletionReport(
       criterionIndex: readBack.criterionIndex,
     });
   }
+  // A deadline that expires while the final evidence persist settles must
+  // still block this attempt: the evidence is durable, so a retry completes.
+  if (now() >= deadlineAt) throw new Error("read-back envelope deadline exceeded");
 
   return {
     report: WorkItem.CompletionReport.parse({

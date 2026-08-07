@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
@@ -241,6 +241,60 @@ describe("worker completion read-back deadline", () => {
       completionBlocker: "read-back envelope deadline exceeded",
     });
     expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+  });
+
+  test("blocks when the deadline expires during the final evidence persist", async () => {
+    const workItem = await createStartedWorkItem();
+    let clock = 0;
+    const persistEvidence = WorkItemStore.addReadBackEvidence;
+    const persistSpy = spyOn(WorkItemStore, "addReadBackEvidence").mockImplementation(
+      async (hash, check, options) => {
+        const updated = await persistEvidence(hash, check, options);
+        clock = 20; // the deadline passes while the final persist settles
+        return updated;
+      },
+    );
+
+    try {
+      const reflection = await reflectCoordinatorResult(
+        workItem.hash,
+        completionResult(workItem, [citationRequest("http://example.com/final-persist")]),
+        {
+          sourceOrigin: { source: "internal_worker" },
+          readBackEnvelopeTimeoutMs: 10,
+          now: () => clock,
+          readBackRecorder: successfulReadBackRecorder,
+        },
+      );
+
+      expect(reflection).toMatchObject({
+        workItemStatus: "blocked",
+        completionBlocked: true,
+        completionBlocker: "read-back envelope deadline exceeded",
+      });
+    } finally {
+      persistSpy.mockRestore();
+    }
+    // The evidence stayed durable, so once the blocker is resolved a fresh
+    // attempt completes without re-executing the read-back.
+    expect(WorkItemStore.get(workItem.hash)?.evidence).toHaveLength(1);
+    const blockerId = WorkItemStore.get(workItem.hash)?.blockers[0]?.id;
+    if (!blockerId) throw new Error("missing deadline blocker");
+    await WorkItemStore.resolveBlocker(workItem.hash, blockerId);
+    clock = 6_000;
+    const retry = await reflectCoordinatorResult(
+      workItem.hash,
+      completionResult(workItem, [citationRequest("http://example.com/final-persist")]),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        readBackEnvelopeTimeoutMs: 10,
+        now: () => clock,
+        readBackRecorder() {
+          throw new Error("read-back must not re-execute for durable evidence");
+        },
+      },
+    );
+    expect(retry).toMatchObject({ workItemStatus: "completed", completionBlocked: false });
   });
 
   test("rounds fractional envelope timeouts up to one millisecond", async () => {

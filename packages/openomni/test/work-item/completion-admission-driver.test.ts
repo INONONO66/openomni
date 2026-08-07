@@ -190,11 +190,13 @@ describe("WorkItem completion admission driver", () => {
       resultCode: "all_origins_admitted",
       canonicalOrigins: ["resident", "worker", "external_actor", "replay", "recovery"],
       sourceMappingsExact: true,
+      sourceIdentitiesExact: true,
       allTraversedAdmissionBoundary: true,
     });
     expect(receipt.sourceReceipts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          sourceIdentityPersisted: true,
           boundaryTraversed: true,
           terminalReceiptLinked: true,
         }),

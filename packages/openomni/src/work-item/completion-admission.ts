@@ -1661,6 +1661,19 @@ function assertRequestAtHead(item: WorkItem.Info, request: WorkItem.CompletionRe
   }
 }
 
+/** Exact denormalized-identity match: both absent, or field-for-field equal. */
+function sameSourceIdentity(
+  left: WorkItem.CompletionSourceIdentity | undefined,
+  right: WorkItem.CompletionSourceIdentity | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return (
+    left.source === right.source &&
+    left.identity.kind === right.identity.kind &&
+    left.identity.id === right.identity.id
+  );
+}
+
 // Documented residual: a forged admit that omits a required criterion while
 // reporting empty unresolvedCriterionIds is rejected at commitTerminal's
 // Info.parse (post-append terminal linkage) instead of pre-append here.
@@ -1674,6 +1687,7 @@ function assertAppendableAdmission(
     admission.workItemHash !== item.hash ||
     admission.requestRoot !== completionRequestRoot(request) ||
     admission.origin !== request.origin ||
+    !sameSourceIdentity(admission.sourceIdentity, request.sourceIdentity) ||
     admission.contractRevision !== item.completionContract.revision ||
     admission.basisRef !== item.completionContract.basisRef
   ) {

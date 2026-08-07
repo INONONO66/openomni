@@ -407,6 +407,53 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(item.hash)).toEqual(reserved);
   });
 
+  test("authorized completion writes cannot rewrite reservation fences in place", () => {
+    const item = makeWorkItem({ hash: "wi_append_only_fence" });
+    const reservation = WorkItem.CompletionRequestReservation.parse({
+      version: 1,
+      id: "completion-reservation:fence-rewrite:1",
+      requestId: "completion-request:fence-rewrite",
+      requestRoot: "sha256:fence-rewrite",
+      attempt: item.attempt,
+      basisRef: item.completionContract.basisRef,
+      envelopeDigest: "sha256:fence-rewrite-envelope",
+      expectedHead: 0,
+      recordedHead: 1,
+      createdAt: 2,
+      ownerId: "process:fence-rewrite",
+      fence: 1,
+      leaseExpiresAt: 100,
+    });
+    const reserved = WorkItem.Info.parse({
+      ...item,
+      revision: 1,
+      completionFacts: {
+        ...item.completionFacts,
+        revision: 1,
+        requestReservations: [reservation],
+      },
+      timestamps: { ...item.timestamps, updated: 2 },
+    });
+    const rewritten = WorkItem.Info.parse({
+      ...reserved,
+      revision: 2,
+      completionFacts: {
+        ...reserved.completionFacts,
+        revision: 2,
+        requestReservations: [{ ...reservation, fence: reservation.fence + 1 }],
+      },
+      timestamps: { ...reserved.timestamps, updated: 3 },
+    });
+    const completionWriter = Storage.configure(adapter);
+    expect(adapter.workItem?.create(item.hash, item)).toBe(true);
+    expect(completionWriter(item.hash, item.revision, reserved)).toBe(true);
+
+    expect(() => completionWriter(item.hash, reserved.revision, rewritten)).toThrow(
+      "completion request reservations are append-only",
+    );
+    expect(adapter.workItem?.get(item.hash)).toEqual(reserved);
+  });
+
   test("list filters by status and sessionId", () => {
     const pending = makeWorkItem({
       hash: "wi_00000pending",

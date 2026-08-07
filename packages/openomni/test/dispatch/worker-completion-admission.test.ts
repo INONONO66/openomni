@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { PolicyEngine } from "@openomni/policy";
 import { type Execution, PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 import {
   type ConnectorCompletionOptions,
   projectConnectorCompletion as projectConnectorCompletionProduction,
@@ -389,6 +390,58 @@ describe("worker completion admission convergence", () => {
     expect(WorkItemStore.get(item.hash)?.completionFacts.requestReservations.at(-1)).toEqual(
       beforeReplay,
     );
+  });
+
+  test("replays an admitted byte-identical envelope without re-running verification", async () => {
+    const item = await startedItem("internal_chat_agent");
+    const output = await evidenceBackedEnvelope(item.hash);
+    const first = await reflectCoordinatorResult(item.hash, succeeded(output), {
+      sourceOrigin: { source: "internal_worker" },
+      now: () => NOW,
+    });
+    expect(first).toMatchObject({ completionBlocked: false, workItemStatus: "completed" });
+
+    const registrySpy = spyOn(VerifierRegistry, "create").mockImplementation(
+      () =>
+        ({
+          verify() {
+            throw new Error("verifier must not re-run on byte-identical replay");
+          },
+        }) as unknown as ReturnType<typeof VerifierRegistry.create>,
+    );
+    const throwingService: CompletionAdmissionService = {
+      ...completionService({ now: () => NOW + 1 }),
+      requestCompletion() {
+        throw new Error("admission service must not re-admit a byte-identical replay");
+      },
+    };
+    try {
+      const replay = await reflectCoordinatorResult(item.hash, succeeded(output), {
+        completionService: throwingService,
+        sourceOrigin: { source: "internal_worker" },
+        now: () => NOW + 1,
+      });
+
+      expect(replay).toMatchObject({ completionBlocked: false, workItemStatus: "completed" });
+    } finally {
+      registrySpy.mockRestore();
+    }
+
+    const mutatedEnvelope = JSON.parse(output) as { completionReport: { summary: string } };
+    mutatedEnvelope.completionReport.summary = "Mutated after terminal admission.";
+    const conflict = await reflectCoordinatorResult(
+      item.hash,
+      succeeded(JSON.stringify(mutatedEnvelope)),
+      {
+        sourceOrigin: { source: "internal_worker" },
+        now: () => NOW + 2,
+      },
+    );
+
+    expect(conflict).toMatchObject({
+      completionBlocked: true,
+      completionBlocker: expect.stringContaining("completion envelope changed"),
+    });
   });
 
   test("persists a qualified completion identity in the durable request", async () => {

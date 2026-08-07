@@ -170,19 +170,43 @@ const CompletionSourceShape = z
   })
   .strict();
 
+type FixedCompletionSourceValue = z.infer<typeof FixedCompletionSource>;
+type QualifiedCompletionSource = Exclude<CompletionSource, FixedCompletionSourceValue>;
+
 /** Dispatch-surface input: fixed worker/replay/recovery sources arrive without
- *  identity (it is synthesized from the execution result); qualified sources
- *  must carry caller-authenticated identity. */
-export const CompletionSourceOrigin = CompletionSourceShape.superRefine((origin, ctx) => {
-  if (!isFixedCompletionSource(origin.source) && origin.identity === undefined) {
-    ctx.addIssue({
-      code: "custom",
-      message: "qualified completion sources require identity",
-      path: ["identity"],
-    });
-  }
-});
-export type CompletionSourceOrigin = z.infer<typeof CompletionSourceOrigin>;
+ *  identity (it is synthesized from the execution result, so a caller-supplied
+ *  identity is rejected as forgery); qualified sources must carry
+ *  caller-authenticated identity. The type-predicate refinement narrows the
+ *  inferred type to the conditional union below so `{ source: "api" }` and
+ *  `{ source: "internal_worker", identity }` are rejected at compile time as
+ *  well as by parse. */
+export const CompletionSourceOrigin = CompletionSourceShape.superRefine(
+  (origin, ctx): origin is CompletionSourceOrigin => {
+    if (isFixedCompletionSource(origin.source)) {
+      if (origin.identity !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "fixed completion sources reject caller-supplied identity",
+          path: ["identity"],
+        });
+        return false;
+      }
+      return true;
+    }
+    if (origin.identity === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "qualified completion sources require identity",
+        path: ["identity"],
+      });
+      return false;
+    }
+    return true;
+  },
+);
+export type CompletionSourceOrigin =
+  | { source: FixedCompletionSourceValue; identity?: never }
+  | { source: QualifiedCompletionSource; identity: CompletionIdentity };
 
 /** Durable form: identity always present. Replaces the 10-arm union. */
 export const CompletionSourceIdentity = CompletionSourceShape.required({ identity: true });

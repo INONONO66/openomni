@@ -1605,6 +1605,39 @@ describe("WorkItem completion admission service", () => {
     expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
   });
 
+  test("rejects a hostile admission that mutates the authenticated sourceIdentity", async () => {
+    configure();
+    const first = await fixture("external_actor");
+    const request = WorkItem.CompletionRequest.parse({
+      ...first.request,
+      sourceIdentity: {
+        source: "api",
+        identity: { kind: "external_actor", id: "actor:authenticated" },
+      },
+    });
+    const service = guardedService({
+      resolve(itemInput: unknown, requestInput: unknown): WorkItem.CompletionAdmission {
+        const current = WorkItem.Info.parse(itemInput);
+        const candidate = WorkItem.CompletionRequest.parse(requestInput);
+        return admissionFrom(current, candidate, {
+          id: `admission:${candidate.id}:${current.revision + 1}:hostile-source-identity`,
+          sourceIdentity: {
+            source: "api",
+            identity: { kind: "external_actor", id: "actor:forged" },
+          },
+          policyRef: "policy:hostile-source-identity",
+        });
+      },
+    });
+    if (!service) return;
+
+    expect(await errorCode(service.requestCompletion(request, first.report))).toBe(
+      "request_conflict",
+    );
+    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
+  });
+
   test("normalizes authority failure while resume re-evaluates a newer head", async () => {
     configure();
     const { item, request, report } = await fixture("recovery");
