@@ -74,27 +74,12 @@ raw channel event
 
 `apps/server` must not decide whether an inbound message is a PendingInteraction/PendingAsk reply versus a normal conversation; it should pass normalized transport facts to `openomni`. `session` may expose indexed lookups such as correlation queries, but match precedence and lifecycle transitions are kernel decisions. `coordinator` may deliver an input frame to a live run, but it must not decide why that run is the target.
 
-### OpenOmni Internal Split
-
-`packages/openomni` is allowed to be the product kernel, but it should be internally split by ownership:
-
-| Kernel area | Responsibility |
-| --- | --- |
-| Messaging | Canonical inbound/internal/outbound envelope entry, correlation, target/session resolution, response/writeback routing |
-| Access | Principal facts, blocklist/channel access/delegation grant/effective access decisions |
-| Orchestration | Resident runtime, Worker run orchestration, session-backed worker runtime, async run scheduler |
-| Ledger | Work item orchestration, completion reports, evidence, verification/read-back gates |
-| Tools | Tool providers, tool executor, workspace lock, injection queue, schedule bridge; no high-level routing policy |
-| Projection | Session message projection, Bus audit events, distilled writeback |
-
-Existing `ingress/` and `dispatch/` are implementation stages of this kernel, not independent product surfaces. New cross-boundary behavior should prefer a central `messaging/` + `access/` facade and only then delegate to legacy ingress/dispatch handlers.
-
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
 | --- | --- | --- |
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
-| Add/modify bus events | `packages/protocol/src/event/index.ts` + `event/agent-execution.ts` | `BusEvent.define()` pattern |
+| Add/modify bus events | `packages/protocol/src/event/` (per-domain files) | `BusEvent.define()` pattern |
 | Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
 | Add policy point | `packages/protocol/src/policy/point-registry.ts` | 20 registered points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
@@ -110,7 +95,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Windowed Stakes primitive | `packages/openomni/src/ledger/` | Deterministic consequence calculator, replay driver, criterion treatment, and per-host capability seams; WorkItem completion now consumes the Stakes resolver seam while authorized Voice remains unwired |
 | Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
 | WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
-| Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
+| Add LLM provider | `packages/llm/src/provider/` (`index.ts` + `sdk.ts`) + auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
 | Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
