@@ -182,19 +182,15 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
       decision,
     );
   }
+  // resolve-route is the only producer of wait_correlation route decisions and
+  // copies target/session/run/interaction ids from the matched record, so those
+  // fields are not re-compared here. Only the executable-action gate is ours:
+  // resolve-route admits every allowed action, while this route can execute
+  // report_result and ask_clarification alone.
   const wait = resolution.waitExecution;
-  const executableAction =
-    wait.kind === "pending_interaction" &&
-    (wait.requestedAction === "report_result" || wait.requestedAction === "ask_clarification");
   if (
-    !executableAction ||
     wait.kind !== "pending_interaction" ||
-    decision.stage !== "wait_correlation" ||
-    decision.target !== `worker-session:${wait.record.sessionId}` ||
-    decision.sessionId !== wait.record.sessionId ||
-    decision.runId !== wait.record.workerRunId ||
-    decision.pendingInteractionId !== wait.record.id ||
-    !wait.record.allowedActions.includes(wait.requestedAction)
+    (wait.requestedAction !== "report_result" && wait.requestedAction !== "ask_clarification")
   ) {
     throw new IngressRoutingError(
       "dispatch_route_invalid",
@@ -239,8 +235,8 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
   }
   return {
     mode: event.mode,
-    target: { kind: "worker", sessionId: decision.sessionId },
-    sessionId: decision.sessionId,
+    target: { kind: "worker", sessionId: wait.record.sessionId },
+    sessionId: wait.record.sessionId,
     result: { output: projectDispatchOutput(result.output, decision), finishReason: "stop" },
   };
 }
@@ -286,12 +282,9 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
         result: await executePendingInteractionRoute(runtime, trace, resolution, decision),
       };
     case "pending_ask":
-      if (
-        decision.stage !== "wait_correlation" ||
-        decision.target !== "resident" ||
-        decision.sessionId !== wait.record.originSessionId ||
-        decision.runId !== wait.record.originRunId
-      ) {
+      // resolve-route copies the resident target and origin session/run into the
+      // decision from this same record; only the stage gate is checked here.
+      if (decision.stage !== "wait_correlation") {
         throw new IngressRoutingError(
           "dispatch_route_invalid",
           "pending ask route is incomplete",
