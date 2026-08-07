@@ -53,6 +53,9 @@ describe("bashTool", () => {
     const watcher = watch(workspace, () => {
       if (existsSync(readyFile)) resolveReady?.();
     });
+    const readyPoll = setInterval(() => {
+      if (existsSync(readyFile)) resolveReady?.();
+    }, 100);
     const readyTimeout = setTimeout(() => {
       rejectReady?.(new Error("bash child process did not become ready"));
     }, 15_000);
@@ -72,6 +75,7 @@ describe("bashTool", () => {
       );
 
       await ready;
+      clearInterval(readyPoll);
       const childPid = Number.parseInt(readFileSync(childPidFile, "utf8").trim(), 10);
       controller.abort();
       const result = await resultPromise;
@@ -91,6 +95,7 @@ describe("bashTool", () => {
       expect(result.output).toContain("Command aborted");
       expect(childAlive).toBe(false);
     } finally {
+      clearInterval(readyPoll);
       clearTimeout(readyTimeout);
       controller.abort();
       watcher.close();
@@ -112,6 +117,9 @@ describe("bashTool", () => {
     const watcher = watch(workspace, (_eventType, filename) => {
       if (filename?.toString() === readyMarkerName) resolveReady?.();
     });
+    const readyPoll = setInterval(() => {
+      if (existsSync(join(workspace, readyMarkerName))) resolveReady?.();
+    }, 100);
     const readyTimeout = setTimeout(() => {
       rejectReady?.(new Error("bash TERM handler did not become ready"));
     }, 5_000);
@@ -131,6 +139,7 @@ describe("bashTool", () => {
       );
 
       await ready;
+      clearInterval(readyPoll);
       clearTimeout(readyTimeout);
       controller.abort();
       const result = await resultPromise;
@@ -138,6 +147,7 @@ describe("bashTool", () => {
       expect(result.isError).toBe(true);
       expect(existsSync(marker)).toBe(true);
     } finally {
+      clearInterval(readyPoll);
       clearTimeout(readyTimeout);
       controller.abort();
       watcher.close();
