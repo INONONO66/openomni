@@ -45,12 +45,16 @@ export namespace Wait {
   export const ReplyInput = Fold.ReplyInput;
   export type ReplyInput = Fold.ReplyInput;
 
+  export const DeliveryReceiptInput = Fold.DeliveryReceiptInput;
+  export type DeliveryReceiptInput = Fold.DeliveryReceiptInput;
+
   export const RejectionCode = Fold.RejectionCode;
   export type RejectionCode = Fold.RejectionCode;
 
   export type Outcome = Fold.Outcome;
 
   export const attachReply = Fold.attachReply;
+  export const recordDeliveryReceipt = Fold.recordDeliveryReceipt;
   export const expire = Fold.expire;
   export const cancel = Fold.cancel;
   export const effectiveThreshold = Fold.effectiveThreshold;

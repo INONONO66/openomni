@@ -32,19 +32,29 @@ export type OutboundMessage = Readonly<{
   waitId?: string;
 }>;
 
+/**
+ * What the concrete delivery owner reports back: the platform message id,
+ * when the channel API returns one. Returning nothing is valid (channels
+ * without message ids) — the wait correlation then keeps the internal id.
+ */
+export type DeliveryReceipt = Readonly<{ externalMessageId?: string }>;
+
 export type MessagingPorts = Readonly<{
   /**
    * Concrete delivery owner (server channel / API / connector). Required at
    * construction — there is no ownerless send path, so "no owner" cannot be
    * silently skipped (fail-closed, rule 7).
    */
-  deliver: (message: OutboundMessage) => void;
+  deliver: (
+    message: OutboundMessage,
+    // biome-ignore lint/suspicious/noConfusingVoidType: `void` admits receipt-less synchronous owners (e.g. test collectors) without forcing a dummy `return undefined`
+  ) => void | DeliveryReceipt | Promise<DeliveryReceipt | undefined>;
   /** Policy-plane grant source; evaluated fresh on every send. */
   grants: () => readonly SenderTargetGrant[];
 }>;
 
 export type ExistingAgentMessaging = Readonly<{
-  send: (input: SendInput) => SendReceipt;
+  send: (input: SendInput) => Promise<SendReceipt>;
 }>;
 
 type TargetDenialCode = Extract<
@@ -138,7 +148,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     };
   }
 
-  function send(rawInput: SendInput): SendReceipt {
+  async function send(rawInput: SendInput): Promise<SendReceipt> {
     const input = SendInput.parse(rawInput);
     const grant = resolveSenderTargetGrant(ports.grants(), {
       senderId: input.senderId,
@@ -204,7 +214,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       }
     }
 
-    ports.deliver({
+    const delivery = await ports.deliver({
       messageId: input.messageId,
       senderId: input.senderId,
       operation: input.operation,
@@ -212,6 +222,18 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       target: resolution.target,
       ...(wait === undefined ? {} : { waitId: wait.id }),
     });
+    if (wait !== undefined && delivery !== undefined && delivery.externalMessageId !== undefined) {
+      // The channel returned the platform message id: re-key the wait's
+      // correlation.replyToMessageId to it so real platform replies (which
+      // reference the platform id, not our internal one) correlate. A wait
+      // that turned terminal while the delivery was in flight rejects the
+      // receipt (wait_terminal) and keeps its recorded correlation.
+      const receipt = WaitService.recordDeliveryReceipt(wait.id, {
+        externalMessageId: delivery.externalMessageId,
+        at: input.at,
+      });
+      if (receipt.kind === "delivery_recorded") wait = receipt.record;
+    }
     Bus.publish(Events.Sent, {
       messageId: input.messageId,
       senderId: input.senderId,

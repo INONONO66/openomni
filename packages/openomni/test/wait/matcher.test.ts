@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Dispatch, Ingress } from "@openomni/protocol";
+import { ActorRegistry, Storage } from "@openomni/session";
 import {
   dispatchEvidence,
   ingressEvidence,
@@ -144,6 +145,76 @@ describe("wait matcher — ingress evidence", () => {
         ingressEvidence(wrongEndpoint, claim),
       ),
     ).toEqual([]);
+  });
+
+  test("pins the delivery endpoint only on the delivery-target responder", () => {
+    // Registry-anchored: the wait's correlation.endpointId is the DELIVERY
+    // endpoint; only the responder registered at it keeps the endpoint pin.
+    Storage.initialize({ dbPath: ":memory:" });
+    ActorRegistry.registerIdentity({
+      id: "actor-target",
+      kind: "ai_agent",
+      trustTier: "collaborator",
+      relationship: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "endpoint-target",
+      actorId: "actor-target",
+      channel: "telegram",
+      externalId: "target-1",
+    });
+    ActorRegistry.registerIdentity({
+      id: "actor-r2",
+      kind: "ai_agent",
+      trustTier: "collaborator",
+      relationship: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "endpoint-r2",
+      actorId: "actor-r2",
+      channel: "telegram",
+      externalId: "responder-2",
+    });
+    const record = buildWaitRecord("wait-delivery-pin", {
+      correlation: { endpointId: "endpoint-target", channelId: correlation.channelId },
+      expectedResponders: ["actor-target", "actor-r2"],
+    });
+    const evidenceFor = (actorId: string, endpointId: string, externalId: string) =>
+      ingressEvidence(
+        directEvent({
+          meta: {
+            correlation: { endpointId, channelId: correlation.channelId },
+            actor: {
+              actorId,
+              endpoint: { id: endpointId, actorId, channel: "telegram", externalId },
+            },
+          },
+        }),
+        { endpointId, channelId: correlation.channelId },
+      );
+
+    // A non-delivery responder replying from their OWN endpoint matches on
+    // resolved identity alone — the delivery pin no longer excludes them.
+    expect(
+      responderCandidates(
+        targetsOfWait(record),
+        evidenceFor("actor-r2", "endpoint-r2", "responder-2"),
+      ),
+    ).toEqual(["actor-r2"]);
+    // The delivery-target responder still has to prove the delivery endpoint.
+    expect(
+      responderCandidates(
+        targetsOfWait(record),
+        evidenceFor("actor-target", "endpoint-target", "target-1"),
+      ),
+    ).toEqual(["actor-target"]);
+    expect(
+      responderCandidates(
+        targetsOfWait(record),
+        evidenceFor("actor-target", "endpoint-elsewhere", "elsewhere-9"),
+      ),
+    ).toEqual([]);
+    Storage.reset();
   });
 
   test("returns every credited expected responder of a wait row and never decides", () => {

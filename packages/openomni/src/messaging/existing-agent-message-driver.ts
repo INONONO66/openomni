@@ -217,11 +217,13 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
     registerDriverActors();
     const baseline = allocationCount();
     const messaging = createExistingAgentMessaging({
-      deliver: (message) => deliveries.push(message),
+      deliver: (message) => {
+        deliveries.push(message);
+      },
       grants: () => DriverGrants,
     });
 
-    const fireAndForget = messaging.send({
+    const fireAndForget = await messaging.send({
       messageId: "message:qa:notify",
       senderId: Sender,
       target: { actorId: TargetActor },
@@ -231,7 +233,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
     });
     const waitCountAfterFireAndForget = WaitStore.list().length;
 
-    const awaited = messaging.send({
+    const awaited = await messaging.send({
       messageId: AwaitedMessageId,
       senderId: Sender,
       target: { actorId: TargetActor },
@@ -370,11 +372,13 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
   ]);
   const baseline = allocationCount();
   const messaging = createExistingAgentMessaging({
-    deliver: (message) => deliveries.push(message),
+    deliver: (message) => {
+      deliveries.push(message);
+    },
     grants: () => DriverGrants,
   });
 
-  const awaited = messaging.send({
+  const awaited = await messaging.send({
     messageId: AwaitedMessageId,
     senderId: Sender,
     target: { actorId: TargetActor },
@@ -406,7 +410,7 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
   });
   // Messaging-plane ambiguity: the target actor is reachable at two
   // endpoints and the sender pinned none — resolution fails closed.
-  const ambiguousTarget = messaging.send({
+  const ambiguousTarget = await messaging.send({
     messageId: "message:qa:multi",
     senderId: Sender,
     target: { actorId: MultiEndpointActor },

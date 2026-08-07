@@ -46,6 +46,20 @@ export const RejectionCode = z.enum([
 ]);
 export type RejectionCode = z.infer<typeof RejectionCode>;
 
+/**
+ * Outbound delivery receipt for the awaited message that opened the Wait:
+ * the platform message id the channel API returned. Recording it re-keys
+ * `correlation.replyToMessageId` from the internal message id to the platform
+ * id, so real platform replies (which reference the platform id) correlate.
+ */
+export const DeliveryReceiptInput = z
+  .object({
+    externalMessageId: z.string().min(1),
+    at: z.number(),
+  })
+  .strict();
+export type DeliveryReceiptInput = z.infer<typeof DeliveryReceiptInput>;
+
 export type Outcome =
   | {
       kind: "attached";
@@ -65,6 +79,17 @@ export type Outcome =
     }
   | { kind: "expired"; record: Schema.Record; partial: boolean }
   | { kind: "cancelled"; record: Schema.Record }
+  | {
+      /**
+       * Delivery receipt recorded: correlation now carries the platform
+       * message id as replyToMessageId. Valid only on open waits (the
+       * receipt of an already-terminal wait cannot change what replies
+       * would have correlated).
+       */
+      kind: "delivery_recorded";
+      record: Schema.Record;
+      externalMessageId: string;
+    }
   | {
       /**
        * Redelivery short-circuit: a replyKey already recorded on a RESOLVED
@@ -208,6 +233,22 @@ export function expire(record: Schema.Record, input: { at: number }): Outcome {
       updatedAt: input.at,
     },
     partial,
+  };
+}
+
+export function recordDeliveryReceipt(record: Schema.Record, input: DeliveryReceiptInput): Outcome {
+  if (record.status !== "open") {
+    return { kind: "rejected", code: "wait_terminal", record, at: input.at };
+  }
+  return {
+    kind: "delivery_recorded",
+    record: {
+      ...record,
+      correlation: { ...record.correlation, replyToMessageId: input.externalMessageId },
+      revision: record.revision + 1,
+      updatedAt: input.at,
+    },
+    externalMessageId: input.externalMessageId,
   };
 }
 

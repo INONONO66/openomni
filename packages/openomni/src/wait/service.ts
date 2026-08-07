@@ -24,6 +24,19 @@ export namespace WaitService {
     return WaitStore.attachReply(id, input);
   }
 
+  /**
+   * Records the platform message id returned by the concrete delivery owner
+   * after a successful awaited delivery: correlation.replyToMessageId re-keys
+   * from the internal message id to the platform id so real platform replies
+   * correlate. No receipt leaves the correlation unchanged (internal id).
+   */
+  export function recordDeliveryReceipt(
+    id: string,
+    input: Wait.DeliveryReceiptInput,
+  ): Wait.Outcome {
+    return WaitStore.recordDeliveryReceipt(id, input);
+  }
+
   export function cancel(id: string, at = Date.now()): Wait.Outcome {
     return WaitStore.cancel(id, at);
   }

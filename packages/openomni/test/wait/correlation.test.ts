@@ -110,6 +110,43 @@ describe("findWaitCandidates", () => {
     });
   });
 
+  test("keeps a multi-responder wait claimable from a responder's own endpoint, channel scope enforced", () => {
+    // The endpoint pin on a multi-responder wait is the DELIVERY endpoint;
+    // expected responders reply from their OWN endpoints in the same channel,
+    // so the pin must not exclude the row at lookup. Identity stays gated by
+    // the matcher + fold. Channel scope still excludes.
+    const multiResponder = buildWaitRecord("wait-multi", {
+      correlation: {
+        endpointId: "endpoint-delivery-target",
+        channelId: correlation.channelId,
+        tokenHash: correlation.tokenHash,
+      },
+      expectedResponders: ["actor-r1", "actor-r2", "actor-r3"],
+      resolutionPolicy: "quorum",
+      quorum: { expected: 3, threshold: 2 },
+    });
+    const otherChannel = buildWaitRecord("wait-multi-other-channel", {
+      correlation: {
+        endpointId: "endpoint-delivery-target",
+        channelId: "channel-elsewhere",
+        tokenHash: correlation.tokenHash,
+      },
+      expectedResponders: ["actor-r1", "actor-r2"],
+    });
+    spyOn(WaitStore, "findByCorrelation").mockImplementation((query) =>
+      query.tokenHash === correlation.tokenHash ? [multiResponder, otherChannel] : [],
+    );
+    spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([]);
+    spyOn(PendingAskStore, "findByCorrelation").mockReturnValue([]);
+
+    const resolution = findWaitCandidates({ correlation });
+
+    expect(resolution).toEqual({
+      kind: "match",
+      candidate: { source: "wait", key: "wait:wait-multi", wait: multiResponder },
+    });
+  });
+
   test("matches a PendingAsk by the private external message ID", () => {
     const record = buildAsk("ask-external-message");
     spyOn(WaitStore, "findByCorrelation").mockReturnValue([]);

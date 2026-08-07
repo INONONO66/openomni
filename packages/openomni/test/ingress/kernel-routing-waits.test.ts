@@ -22,6 +22,7 @@ import { createDefaultDispatchRuntime } from "../../src/dispatch/setup";
 import { IngressEngine } from "../../src/ingress/engine";
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { IngressRoutingError } from "../../src/ingress/routing-execution";
+import { createExistingAgentMessaging } from "../../src/messaging/index";
 import { WaitService } from "../../src/wait/index";
 import {
   resetKernelRoutingState,
@@ -1105,6 +1106,89 @@ describe("IngressEngine durable wait routing", () => {
     const record = WaitStore.get("wait-work-item");
     expect(record).toMatchObject({ status: "open" });
     expect(record?.replies).toHaveLength(0);
+  });
+
+  test("resolves an awaited 2-of-3 send through ingress replies from two distinct responder endpoints", async () => {
+    // Wired N-of-M proof (#215 Phase E): the awaited message is DELIVERED to
+    // a third target actor, while the expected responders answer from their
+    // OWN registered endpoints in the same channel, through the full ingress
+    // engine path (ingressEvidence — no dispatch-phase shortcut).
+    registerResponder("actor-r1", "responder-1");
+    registerResponder("actor-r2", "responder-2");
+    registerResponder("actor-quorum-target", "quorum-target-1");
+    const session = Session.create({
+      title: "wired-2-of-3",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    const messaging = createExistingAgentMessaging({
+      // Concrete-owner shape: the channel API returned a platform message id.
+      deliver: () => ({ externalMessageId: "platform-quorum-msg" }),
+      grants: () => [
+        {
+          id: "grant-owner->quorum-target",
+          senderId: "actor-owner",
+          targetActorId: "actor-quorum-target",
+          operations: ["awaited"],
+        },
+      ],
+    });
+
+    const sent = await messaging.send({
+      messageId: "out-wired-quorum",
+      senderId: "actor-owner",
+      target: { actorId: "actor-quorum-target" },
+      operation: "awaited",
+      body: "reply with your verdict (2-of-3)",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "wait-wired-quorum",
+        ownerRef: { kind: "session", id: session.id },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-r1", "actor-r2", "actor-r3"],
+        resolutionPolicy: "quorum",
+        quorum: { expected: 3, threshold: 2 },
+        expiresAt: Number.MAX_SAFE_INTEGER,
+        followUpWindow: 60_000,
+        correlation: { channelId: correlation.channelId },
+      },
+    });
+    expect(sent.kind).toBe("sent");
+    if (sent.kind !== "sent" || sent.operation !== "awaited") {
+      throw new Error("expected awaited sent receipt");
+    }
+    // Delivery pinned the third target's endpoint; the receipt re-keyed the
+    // correlation to the platform message id real replies will reference.
+    expect(sent.wait.correlation.endpointId).toBe("telegram:quorum-target-1");
+    expect(sent.wait.correlation.replyToMessageId).toBe("platform-quorum-msg");
+
+    const responderReply = (id: string, externalId: string): Ingress.DirectEvent => ({
+      ...replyEvent(id),
+      userId: externalId,
+      meta: {
+        correlation: {
+          endpointId: `telegram:${externalId}`,
+          channelId: correlation.channelId,
+          replyToMessageId: "platform-quorum-msg",
+        },
+      },
+    });
+
+    const first = await IngressEngine.ingest(responderReply("inbound-wired-r1", "responder-1"));
+    const afterFirst = WaitStore.get("wait-wired-quorum");
+    expect(afterFirst).toMatchObject({ status: "open" });
+    expect(afterFirst?.replies).toHaveLength(1);
+
+    const second = await IngressEngine.ingest(responderReply("inbound-wired-r2", "responder-2"));
+
+    expect(first.sessionId).toBe(session.id);
+    expect(second.sessionId).toBe(session.id);
+    expect(residentExecutions).toEqual(["executed", "executed"]);
+    const record = WaitStore.get("wait-wired-quorum");
+    expect(record).toMatchObject({ status: "resolved", partial: false });
+    expect(record?.replies.map((reply) => reply.responderId).sort()).toEqual([
+      "actor-r1",
+      "actor-r2",
+    ]);
   });
 
   test("fails closed when a durable wait and a frozen legacy row collide at one level", async () => {

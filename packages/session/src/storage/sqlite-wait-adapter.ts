@@ -93,6 +93,9 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
           `Wait revision must advance exactly once: expected=${expectedRevision} payload=${record.revision}`,
         );
       }
+      // Correlation projection columns move with the record: the
+      // recordDeliveryReceipt transition re-keys reply_to_message_id to the
+      // platform message id, and findByCorrelation reads these columns.
       const result = db
         .query(
           `UPDATE wait SET
@@ -100,6 +103,12 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
              revision = ?,
              status = ?,
              partial = ?,
+             endpoint_id = ?,
+             channel_id = ?,
+             reply_to_message_id = ?,
+             thread_id = ?,
+             token_hash = ?,
+             external_conversation_id = ?,
              follow_up_until = ?,
              time_updated = ?
            WHERE id = ? AND revision = ?`,
@@ -109,6 +118,12 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
           record.revision,
           record.status,
           record.partial ? 1 : 0,
+          record.correlation.endpointId ?? null,
+          record.correlation.channelId ?? null,
+          record.correlation.replyToMessageId ?? null,
+          record.correlation.threadId ?? null,
+          record.correlation.tokenHash ?? null,
+          record.correlation.externalConversationId ?? null,
           followUpUntil(record),
           record.updatedAt,
           id,

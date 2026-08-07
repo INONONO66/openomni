@@ -21,7 +21,9 @@ let grants: SenderTargetGrant[];
 
 function messaging() {
   return createExistingAgentMessaging({
-    deliver: (message) => deliveries.push(message),
+    deliver: (message) => {
+      deliveries.push(message);
+    },
     grants: () => grants,
   });
 }
@@ -51,7 +53,7 @@ describe("sender-target grant (policy plane)", () => {
       audits.push({ code: data.code, time: data.time });
     });
 
-    const receipt = messaging().send(buildSendInput());
+    const receipt = await messaging().send(buildSendInput());
 
     expect(receipt.kind).toBe("denied");
     if (receipt.kind !== "denied") throw new Error("expected denial");
@@ -62,10 +64,10 @@ describe("sender-target grant (policy plane)", () => {
     expect(audits).toEqual([{ code: "ungranted", time: messagingNow }]);
   });
 
-  test("a grant bounds the operation: fire_and_forget-only grant denies awaited delivery", () => {
+  test("a grant bounds the operation: fire_and_forget-only grant denies awaited delivery", async () => {
     grants = [buildGrant("grant:notify-only", { operations: ["fire_and_forget"] })];
 
-    const receipt = messaging().send(buildAwaitedSendInput());
+    const receipt = await messaging().send(buildAwaitedSendInput());
 
     expect(receipt.kind).toBe("denied");
     if (receipt.kind !== "denied") throw new Error("expected denial");
@@ -73,10 +75,10 @@ describe("sender-target grant (policy plane)", () => {
     expect(WaitStore.list()).toHaveLength(0);
   });
 
-  test("an expired grant is not active — time is an input, denial is ungranted", () => {
+  test("an expired grant is not active — time is an input, denial is ungranted", async () => {
     grants = [buildGrant("grant:expired", { expiresAt: messagingNow - 1 })];
 
-    const receipt = messaging().send(buildSendInput());
+    const receipt = await messaging().send(buildSendInput());
 
     expect(receipt.kind).toBe("denied");
     if (receipt.kind !== "denied") throw new Error("expected denial");
@@ -85,18 +87,18 @@ describe("sender-target grant (policy plane)", () => {
 });
 
 describe("explicit target resolution (fail closed)", () => {
-  test("grant evaluation precedes target resolution: an ungranted sender learns nothing from the registry", () => {
-    const receipt = messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
+  test("grant evaluation precedes target resolution: an ungranted sender learns nothing from the registry", async () => {
+    const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
 
     expect(receipt.kind).toBe("denied");
     if (receipt.kind !== "denied") throw new Error("expected denial");
     expect(receipt.code).toBe("ungranted");
   });
 
-  test("granted but unregistered target actor is denied target_missing", () => {
+  test("granted but unregistered target actor is denied target_missing", async () => {
     grants = [buildGrant("grant:ghost", { targetActorId: "actor:ghost" })];
 
-    const receipt = messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
+    const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
 
     expect(receipt.kind).toBe("denied");
     if (receipt.kind !== "denied") throw new Error("expected denial");
@@ -104,19 +106,21 @@ describe("explicit target resolution (fail closed)", () => {
     expect(deliveries).toHaveLength(0);
   });
 
-  test("actor without any allocated endpoint is denied target_stale", () => {
+  test("actor without any allocated endpoint is denied target_stale", async () => {
     grants = [buildGrant("grant:endpointless", { targetActorId: "actor:endpointless" })];
     registerAgentFixture("actor:endpointless");
 
-    const receipt = messaging().send(buildSendInput({ target: { actorId: "actor:endpointless" } }));
+    const receipt = await messaging().send(
+      buildSendInput({ target: { actorId: "actor:endpointless" } }),
+    );
 
     expect(receipt.kind).toBe("denied");
     if (receipt.kind !== "denied") throw new Error("expected denial");
     expect(receipt.code).toBe("target_stale");
   });
 
-  test("pinned endpoint that no longer exists is denied target_stale", () => {
-    const receipt = messaging().send(
+  test("pinned endpoint that no longer exists is denied target_stale", async () => {
+    const receipt = await messaging().send(
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:gone" } }),
     );
 
@@ -125,10 +129,10 @@ describe("explicit target resolution (fail closed)", () => {
     expect(receipt.code).toBe("target_stale");
   });
 
-  test("pinned endpoint re-bound to another actor is denied target_stale", () => {
+  test("pinned endpoint re-bound to another actor is denied target_stale", async () => {
     registerAgentFixture("actor:other", [{ id: "endpoint:other", externalId: "other-1" }]);
 
-    const receipt = messaging().send(
+    const receipt = await messaging().send(
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:other" } }),
     );
 
@@ -137,7 +141,7 @@ describe("explicit target resolution (fail closed)", () => {
     expect(receipt.code).toBe("target_stale");
   });
 
-  test("multi-endpoint actor without a pin is denied target_ambiguous; a pin resolves it", () => {
+  test("multi-endpoint actor without a pin is denied target_ambiguous; a pin resolves it", async () => {
     ActorRegistry.registerEndpoint({
       id: "endpoint:target-b",
       actorId: "actor:target",
@@ -147,8 +151,8 @@ describe("explicit target resolution (fail closed)", () => {
       updatedAt: messagingNow,
     });
 
-    const unpinned = messaging().send(buildSendInput());
-    const pinned = messaging().send(
+    const unpinned = await messaging().send(buildSendInput());
+    const pinned = await messaging().send(
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:target-b" } }),
     );
 
@@ -175,7 +179,7 @@ describe("fire-and-forget delivery", () => {
       });
     });
 
-    const receipt = messaging().send(buildSendInput());
+    const receipt = await messaging().send(buildSendInput());
 
     expect(receipt.kind).toBe("sent");
     if (receipt.kind !== "sent") throw new Error("expected sent");
@@ -200,7 +204,7 @@ describe("fire-and-forget delivery", () => {
     expect(audits).toEqual([{ operation: "fire_and_forget", grantId: "grant:sender->target" }]);
   });
 
-  test("fire_and_forget carrying a waitSpec is a schema violation, not a silent Wait", () => {
+  test("fire_and_forget carrying a waitSpec is a schema violation, not a silent Wait", async () => {
     const result = SendInput.safeParse(buildAwaitedSendInput({ operation: "fire_and_forget" }));
 
     expect(result.success).toBe(false);
@@ -212,8 +216,8 @@ describe("fire-and-forget delivery", () => {
 });
 
 describe("awaited delivery", () => {
-  test("appends exactly one owner-correct Wait with correlation, responders, policy, and deadline", () => {
-    const receipt = messaging().send(buildAwaitedSendInput());
+  test("appends exactly one owner-correct Wait with correlation, responders, policy, and deadline", async () => {
+    const receipt = await messaging().send(buildAwaitedSendInput());
 
     expect(receipt.kind).toBe("sent");
     if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
@@ -245,11 +249,11 @@ describe("awaited delivery", () => {
       if (event.name !== "messaging.denied") return;
       audits.push((payload as { code: string }).code);
     });
-    messaging().send(buildAwaitedSendInput());
+    await messaging().send(buildAwaitedSendInput());
 
     const secondSpec = buildAwaitedSendInput().waitSpec;
     if (secondSpec === undefined) throw new Error("awaited fixture must carry a waitSpec");
-    const duplicate = messaging().send(
+    const duplicate = await messaging().send(
       buildAwaitedSendInput({
         waitSpec: { ...secondSpec, waitId: "wait:test-awaited-2" },
       }),
@@ -264,7 +268,7 @@ describe("awaited delivery", () => {
     expect(audits).toEqual(["wait_duplicate"]);
   });
 
-  test("awaited without a waitSpec is a schema violation owned by the SendInput refinement", () => {
+  test("awaited without a waitSpec is a schema violation owned by the SendInput refinement", async () => {
     const result = SendInput.safeParse(buildSendInput({ operation: "awaited" }));
 
     expect(result.success).toBe(false);
@@ -272,5 +276,57 @@ describe("awaited delivery", () => {
     expect(result.error.issues.map((issue) => issue.message)).toContain(
       "awaited operation requires a waitSpec",
     );
+  });
+});
+
+describe("delivery receipt", () => {
+  test("a platform message id from the owner re-keys the wait correlation to it", async () => {
+    const withReceipt = createExistingAgentMessaging({
+      deliver: () => ({ externalMessageId: "platform:msg-77" }),
+      grants: () => grants,
+    });
+
+    const receipt = await withReceipt.send(buildAwaitedSendInput());
+
+    expect(receipt.kind).toBe("sent");
+    if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
+      throw new Error("expected awaited sent receipt");
+    }
+    // The send receipt carries the receipt-updated record (revision bumped).
+    expect(receipt.wait.correlation.replyToMessageId).toBe("platform:msg-77");
+    expect(receipt.wait.revision).toBe(1);
+    const stored = WaitStore.get("wait:test-awaited");
+    expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
+    // Correlation now answers the platform id, not the internal message id.
+    expect(
+      WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-77" }, messagingNow),
+    ).toHaveLength(1);
+    expect(
+      WaitStore.findByCorrelation({ replyToMessageId: "message:test-awaited" }, messagingNow),
+    ).toHaveLength(0);
+  });
+
+  test("no receipt from the owner leaves the internal-id correlation unchanged", async () => {
+    const receipt = await messaging().send(buildAwaitedSendInput());
+
+    expect(receipt.kind).toBe("sent");
+    if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
+      throw new Error("expected awaited sent receipt");
+    }
+    expect(receipt.wait.correlation.replyToMessageId).toBe("message:test-awaited");
+    expect(receipt.wait.revision).toBe(0);
+    expect(WaitStore.get("wait:test-awaited")?.revision).toBe(0);
+  });
+
+  test("a fire-and-forget receipt records nothing — there is no wait to re-key", async () => {
+    const withReceipt = createExistingAgentMessaging({
+      deliver: () => ({ externalMessageId: "platform:msg-88" }),
+      grants: () => grants,
+    });
+
+    const receipt = await withReceipt.send(buildSendInput());
+
+    expect(receipt.kind).toBe("sent");
+    expect(WaitStore.list()).toHaveLength(0);
   });
 });

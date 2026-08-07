@@ -179,6 +179,51 @@ describe("Wait fold — duplicate and responder identity rules", () => {
   });
 });
 
+describe("Wait fold — delivery receipt", () => {
+  test("recordDeliveryReceipt re-keys correlation.replyToMessageId and bumps the revision once", () => {
+    const record = buildWaitRecord();
+
+    const outcome = Wait.recordDeliveryReceipt(record, {
+      externalMessageId: "platform:msg-1",
+      at: 500,
+    });
+
+    expect(outcome.kind).toBe("delivery_recorded");
+    if (outcome.kind !== "delivery_recorded") throw new Error("expected delivery_recorded");
+    expect(outcome.externalMessageId).toBe("platform:msg-1");
+    expect(outcome.record.correlation.replyToMessageId).toBe("platform:msg-1");
+    // Every other correlation field is untouched — only the reply key moves.
+    expect(outcome.record.correlation).toMatchObject({
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      tokenHash: "tok-1",
+    });
+    expect(outcome.record.revision).toBe(record.revision + 1);
+    expect(outcome.record.updatedAt).toBe(500);
+    expect(outcome.record.status).toBe("open");
+  });
+
+  test("a delivery receipt on a non-open wait is rejected as wait_terminal", () => {
+    for (const status of ["resolved", "expired", "cancelled"] as const) {
+      const record = buildWaitRecord({
+        status,
+        ...(status === "resolved" ? { resolvedAt: 900 } : {}),
+        ...(status === "cancelled" ? { cancelledAt: 900 } : {}),
+      });
+
+      const outcome = Wait.recordDeliveryReceipt(record, {
+        externalMessageId: "platform:msg-late",
+        at: 1_000,
+      });
+
+      expect(outcome.kind).toBe("rejected");
+      if (outcome.kind !== "rejected") throw new Error("expected rejected");
+      expect(outcome.code).toBe("wait_terminal");
+      expect(outcome.record).toEqual(record);
+    }
+  });
+});
+
 describe("Wait fold — expiry, cancellation, late replies", () => {
   test("2-of-3 with one reply expires partial: true", () => {
     const first = Wait.attachReply(buildWaitRecord(), buildReplyInput());

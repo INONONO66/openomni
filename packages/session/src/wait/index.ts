@@ -72,6 +72,11 @@ function publishChange(
     case "cancelled":
       Bus.publish(Wait.Events.Cancelled, { ...base, cancelledAt: outcome.record.updatedAt });
       return;
+    case "delivery_recorded":
+      // Correlation projection update only (replyToMessageId re-keys to the
+      // platform message id). The delivery itself is already audited by the
+      // messaging Sent event; no separate wait ledger event.
+      return;
   }
 }
 
@@ -161,6 +166,20 @@ export namespace WaitStore {
       });
     }
     return outcome;
+  }
+
+  /**
+   * Records the platform message id of the awaited outbound delivery on an
+   * open wait (fold recordDeliveryReceipt): correlation.replyToMessageId
+   * re-keys to the platform id under the same revision CAS as every other
+   * transition.
+   */
+  export function recordDeliveryReceipt(
+    id: string,
+    input: Wait.DeliveryReceiptInput,
+  ): Wait.Outcome {
+    const parsed = Wait.DeliveryReceiptInput.parse(input);
+    return transition(id, (record) => Wait.recordDeliveryReceipt(record, parsed));
   }
 
   export function expire(id: string, at = Date.now()): Wait.Outcome {

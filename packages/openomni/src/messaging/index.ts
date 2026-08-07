@@ -21,4 +21,9 @@ export {
 } from "./schema.js";
 export type { DeliveryTarget, SendReceipt } from "./schema.js";
 export { createExistingAgentMessaging } from "./send.js";
-export type { ExistingAgentMessaging, MessagingPorts, OutboundMessage } from "./send.js";
+export type {
+  DeliveryReceipt,
+  ExistingAgentMessaging,
+  MessagingPorts,
+  OutboundMessage,
+} from "./send.js";

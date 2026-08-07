@@ -1,4 +1,5 @@
 import type { Communication, Dispatch, Ingress, Wait } from "@openomni/protocol";
+import { ActorRegistry } from "@openomni/session";
 
 /**
  * THE sender matcher (#215): one core rule set — bearer tokenHash match plus
@@ -131,14 +132,26 @@ export function targetsOfPendingInteraction(
   ];
 }
 
-/** Matcher targets for a durable Wait row: every expected responder is an actor pin. */
+/**
+ * Matcher targets for a durable Wait row: every expected responder is an
+ * actor pin. The wait's correlation.endpointId is the DELIVERY endpoint, so
+ * it pins ONLY the responder who is the delivery target (resolved through
+ * the ActorRegistry — registry-anchored, not sender-claimed). Every other
+ * expected responder replies from their OWN endpoint, and their identity
+ * proof is the resolved-actor evidence alone.
+ */
 export function targetsOfWait(record: Wait.Record): ResponderTarget[] {
+  const deliveryEndpointId = record.correlation.endpointId;
+  const deliveryActorId =
+    deliveryEndpointId === undefined
+      ? undefined
+      : ActorRegistry.getEndpoint(deliveryEndpointId)?.actorId;
   return record.expectedResponders.map((responderId) => ({
     responderId,
     targetActorId: responderId,
-    ...(record.correlation.endpointId === undefined
-      ? {}
-      : { endpointId: record.correlation.endpointId }),
+    ...(deliveryEndpointId !== undefined && responderId === deliveryActorId
+      ? { endpointId: deliveryEndpointId }
+      : {}),
     ...(record.correlation.tokenHash === undefined
       ? {}
       : { tokenHash: record.correlation.tokenHash }),

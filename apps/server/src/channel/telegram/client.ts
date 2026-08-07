@@ -11,8 +11,14 @@ export class TelegramClient implements ChannelClient {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
 
-  async send(channelId: string, text: string): Promise<void> {
-    await this.api("sendMessage", { chat_id: channelId, text });
+  async send(channelId: string, text: string): Promise<string | undefined> {
+    const message = await this.api<{ message_id?: unknown }>("sendMessage", {
+      chat_id: channelId,
+      text,
+    });
+    return typeof message.message_id === "number" || typeof message.message_id === "string"
+      ? String(message.message_id)
+      : undefined;
   }
 
   async sendTyping(channelId: string): Promise<void> {

@@ -52,16 +52,24 @@ function resolveLevel(rawCandidates: readonly WaitCandidate[]): WaitResolution |
 }
 
 /**
- * A wait row that pins an endpoint or channel only answers inbound claims of
- * that same endpoint/channel; unpinned rows (multi-responder waits) match on
- * the distinguishing field alone.
+ * Channel scope is always enforced: a wait pinned to a channel only answers
+ * claims of that channel. The endpoint pin is stricter only for a
+ * single-responder wait — on a multi-responder wait the pinned endpoint is
+ * the DELIVERY endpoint, while the other expected responders reply from
+ * their OWN endpoints, so an endpoint mismatch must not exclude the row at
+ * lookup. The matcher + fold remain the identity gate either way.
  */
 function waitPinsAllowClaim(record: Wait.Record, correlation: Dispatch.Correlation): boolean {
+  if (
+    record.correlation.channelId !== undefined &&
+    record.correlation.channelId !== correlation.channelId
+  ) {
+    return false;
+  }
+  if (record.expectedResponders.length > 1) return true;
   return (
-    (record.correlation.endpointId === undefined ||
-      record.correlation.endpointId === correlation.endpointId) &&
-    (record.correlation.channelId === undefined ||
-      record.correlation.channelId === correlation.channelId)
+    record.correlation.endpointId === undefined ||
+    record.correlation.endpointId === correlation.endpointId
   );
 }
 

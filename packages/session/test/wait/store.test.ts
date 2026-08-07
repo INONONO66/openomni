@@ -180,6 +180,46 @@ describe("WaitStore", () => {
     expect(events).toContain("wait.expired");
   });
 
+  test("recordDeliveryReceipt persists the re-keyed correlation projection through the CAS", async () => {
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+    WaitStore.create(buildWaitCreate());
+
+    const outcome = WaitStore.recordDeliveryReceipt("wait-1", {
+      externalMessageId: "platform:msg-1",
+      at: 500,
+    });
+    const persisted = WaitStore.get("wait-1");
+
+    expect(outcome.kind).toBe("delivery_recorded");
+    expect(persisted?.correlation.replyToMessageId).toBe("platform:msg-1");
+    expect(persisted?.revision).toBe(1);
+    // The adapter's correlation projection columns moved with the record:
+    // lookups answer the platform id and no longer the internal one.
+    expect(WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-1" }, 1_000)).toHaveLength(
+      1,
+    );
+    expect(WaitStore.findByCorrelation({ replyToMessageId: "reply-1" }, 1_000)).toHaveLength(0);
+    await flushBus();
+    // Projection-only transition: no wait ledger event beyond wait.opened.
+    expect(events).toEqual(["wait.opened"]);
+  });
+
+  test("a delivery receipt on a terminal wait rejects wait_terminal and writes nothing", () => {
+    WaitStore.create(buildWaitCreate());
+    WaitStore.cancel("wait-1", 400);
+
+    const outcome = WaitStore.recordDeliveryReceipt("wait-1", {
+      externalMessageId: "platform:msg-late",
+      at: 500,
+    });
+
+    expect(outcome.kind).toBe("rejected");
+    if (outcome.kind !== "rejected") throw new Error("expected rejected");
+    expect(outcome.code).toBe("wait_terminal");
+    expect(WaitStore.get("wait-1")?.correlation.replyToMessageId).toBe("reply-1");
+  });
+
   test("a concurrent write between read and CAS raises a typed revision_conflict", () => {
     WaitStore.create(buildWaitCreate());
 
