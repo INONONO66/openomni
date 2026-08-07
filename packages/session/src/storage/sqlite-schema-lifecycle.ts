@@ -16,10 +16,12 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0009_pending_interaction/migration.sql" },
   { name: "0010_app_connector_installation/migration.sql" },
   { name: "0011_bus_event_visibility/migration.sql" },
+  { name: "0012_wait/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
   "event_chain",
+  "wait",
   "app_connector_installation",
   "channel_grant",
   "blacklist",

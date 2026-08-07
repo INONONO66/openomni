@@ -2,6 +2,7 @@ import type { Actor } from "../actor/index.js";
 import type { AppConnector } from "../app-connector/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
+import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 
 export namespace Storage {
@@ -18,6 +19,16 @@ export namespace Storage {
     compareAndSet(hash: string, expectedHead: number, item: WorkItem.Info): boolean;
     list(filter?: WorkItemListFilter): WorkItem.Info[];
     remove(hash: string): boolean;
+  }
+
+  export interface WaitSubAdapter {
+    /** INSERT receipt: false when id or originMessageId already exists. */
+    create(record: Wait.Record): boolean;
+    get(id: string): Wait.Record | undefined;
+    list(status?: Wait.Status[]): Wait.Record[];
+    findByCorrelation(query: Wait.CorrelationQuery): Wait.Record[];
+    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
+    compareAndSet(id: string, expectedRevision: number, record: Wait.Record): boolean;
   }
 
   export interface PendingAskSubAdapter {

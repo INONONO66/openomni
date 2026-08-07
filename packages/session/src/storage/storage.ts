@@ -59,6 +59,10 @@ export namespace Storage {
       delete(id: string): void;
     };
     workItem?: ProtocolStorage.WorkItemSubAdapter;
+    // Optional here for test fakes only — WaitStore fails closed (typed
+    // adapter_absent error) when it is missing; production adapters wire it
+    // as required (SqliteStorageAdapter).
+    wait?: ProtocolStorage.WaitSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
     pendingAsk?: ProtocolStorage.PendingAskSubAdapter;
     pendingInteraction?: ProtocolStorage.PendingInteractionSubAdapter;
