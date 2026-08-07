@@ -63,6 +63,7 @@ describe("Processor tool result projection", () => {
             toolName: "weather",
             input: { city: "Seoul" },
           };
+          await Bun.sleep(10);
           yield {
             type: "tool-result",
             toolCallId: "call-weather",
@@ -75,7 +76,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     expect(toolCalls).toEqual([{ id: "call-weather", tool: "weather", input: { city: "Seoul" } }]);
     expect(toolResults).toHaveLength(1);
@@ -90,6 +91,17 @@ describe("Processor tool result projection", () => {
       tool: "weather",
       state: { status: "completed", output: "sunny" },
     });
+
+    // The tool runs between tool-call and tool-result: start is recorded at
+    // the call event, so the part reports a real duration.
+    const state = toolPart?.type === "tool" ? toolPart.state : undefined;
+    if (state?.status !== "completed") throw new Error("expected completed tool state");
+    expect(state.time.end - state.time.start).toBeGreaterThanOrEqual(5);
+
+    const runningSnapshot = messages
+      .flatMap((message) => message.parts)
+      .find((part) => part.type === "tool" && part.state.status === "running");
+    expect(runningSnapshot).toBeDefined();
   });
 
   test("ignores unmatched AI SDK tool-result stream parts", async () => {
@@ -122,7 +134,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     expect(toolCalls).toEqual([]);
     expect(toolResults).toEqual([]);
@@ -163,7 +175,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     expect(toolResults).toHaveLength(1);
     expect(toolResults[0]).toMatchObject({
@@ -213,12 +225,105 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ messages: [], model, system: "" });
+    await processor.process({ system: "" });
 
     const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
     expect(toolPart).toMatchObject({
       callID: "call-weather",
       state: { status: "completed", input: { city: "Seoul" }, output: "sunny" },
+    });
+  });
+});
+
+describe("Processor tool output normalization", () => {
+  test("serializes structured tool-result output instead of String coercion", async () => {
+    const toolResults: Tool.Result[] = [];
+    const messages: Message.WithParts[] = [];
+    const sink: Sink = {
+      onMessage: (message) => messages.push(message),
+      onToolCall: () => undefined,
+      onToolResult: (result) => toolResults.push(result),
+      onSnapshot: () => undefined,
+    };
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: new AbortController().signal,
+      sink,
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-structured",
+            toolName: "search",
+            input: {},
+          };
+          yield {
+            type: "tool-result",
+            toolCallId: "call-structured",
+            toolName: "search",
+            output: { content: [{ type: "text", text: "hit" }] },
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+    });
+
+    await processor.process({ system: "" });
+
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0]?.output).toBe('{"content":[{"type":"text","text":"hit"}]}');
+    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
+    expect(toolPart).toMatchObject({
+      state: { status: "completed", output: '{"content":[{"type":"text","text":"hit"}]}' },
+    });
+  });
+});
+
+describe("Processor tool error normalization", () => {
+  test("preserves Error messages in tool-error stream parts", async () => {
+    const toolResults: Tool.Result[] = [];
+    const sink: Sink = {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => toolResults.push(result),
+      onSnapshot: () => undefined,
+    };
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: new AbortController().signal,
+      sink,
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-error-object",
+            toolName: "search",
+            input: {},
+          };
+          yield {
+            type: "tool-error",
+            toolCallId: "call-error-object",
+            error: new Error("network down"),
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+    });
+
+    await processor.process({ system: "" });
+
+    expect(toolResults).toHaveLength(1);
+    // Error objects must not JSON-serialize to "{}".
+    expect(toolResults[0]).toMatchObject({
+      toolCallId: "call-error-object",
+      output: "network down",
+      isError: true,
     });
   });
 });

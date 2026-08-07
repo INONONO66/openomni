@@ -72,6 +72,16 @@ describe("Provider Registry", () => {
         "No bundled provider for npm package: unknown-npm-pkg",
       );
     });
+
+    it("treats Object.prototype keys as unknown npm packages", () => {
+      // `in`-style lookups would resolve "toString"/"constructor" to
+      // Object.prototype members and invoke them as SDK factories.
+      const auth: Auth.Info = { type: "api", key: "test-api-key" };
+      for (const npm of ["toString", "constructor", "valueOf"]) {
+        const model = makeModel("unknown", npm);
+        expect(() => getSDK(model, auth)).toThrow(`No bundled provider for npm package: ${npm}`);
+      }
+    });
   });
 
   describe("listModels", () => {

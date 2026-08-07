@@ -32,14 +32,12 @@ export interface RunInput {
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
-  const abortController = signal ? null : new AbortController();
-  const abortSignal = signal ?? abortController?.signal;
-  if (!abortSignal) {
-    throw new Error("Failed to initialize abort signal");
-  }
+  const abortSignal = signal ?? new AbortController().signal;
   if (abortSignal.aborted) {
     return { type: "aborted" };
   }
+
+  const traceId = input.trace?.traceId ?? crypto.randomUUID();
 
   const sessionID = messages[0]?.info.sessionID || `session-${crypto.randomUUID()}`;
   const messageID = `msg-${crypto.randomUUID()}`;
@@ -85,11 +83,12 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
     const sdkTools: Record<string, unknown> = {};
     for (const spec of input.tools) {
-      if (input.toolExecutor) {
-        sdkTools[spec.name] = {
-          type: "function" as const,
-          description: spec.description,
-          inputSchema: ai.jsonSchema(spec.inputSchema),
+      const executor = input.toolExecutor;
+      sdkTools[spec.name] = {
+        type: "function" as const,
+        description: spec.description,
+        inputSchema: ai.jsonSchema(spec.inputSchema),
+        ...(executor && {
           execute: async (
             args: Record<string, unknown>,
             options?: { toolCallId?: string; abortSignal?: AbortSignal },
@@ -99,7 +98,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
               tool: spec.name,
               input: args,
             };
-            const result = await input.toolExecutor?.(call, {
+            const result = await executor(call, {
               signal: options?.abortSignal ?? abortSignal,
             });
             return {
@@ -107,14 +106,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
               ...(result?.isError === true && { isError: true }),
             };
           },
-        };
-      } else {
-        sdkTools[spec.name] = {
-          type: "function" as const,
-          description: spec.description,
-          inputSchema: ai.jsonSchema(spec.inputSchema),
-        };
-      }
+        }),
+      };
     }
 
     const streamArgs = {
@@ -126,7 +119,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       stopWhen: ai.stepCountIs(input.maxSteps ?? 24),
       onError: ({ error }: { error: unknown }) => {
         Bus.publish(Operational.Error, {
-          traceId: input.trace?.traceId ?? crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           sessionId: sessionID,
           component: "llm.stream",
@@ -163,7 +156,6 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
     return { fullStream: adaptStream() };
   };
-  const traceId = input.trace?.traceId ?? crypto.randomUUID();
   const provider = model.providerID;
   const modelId = model.id;
 
@@ -196,11 +188,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const startMs = Date.now();
 
   try {
-    const result = await processor.process({
-      messages: messages.map((m) => m.info),
-      model,
-      system,
-    });
+    await processor.process({ system });
 
     const durationMs = Date.now() - startMs;
     const finalTokens = processor.message.tokens;
@@ -222,22 +210,27 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       time: Date.now(),
     });
 
-    switch (result) {
-      case "stop":
-        return { type: "stop" };
-      case "continue":
-        return { type: "continue" };
-      case "compact":
-        return { type: "compact" };
-      default:
-        return { type: "stop" };
-    }
+    return { type: "stop" };
   } catch (error) {
-    if (abortSignal.aborted) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const aborted = abortSignal.aborted;
+
+    Bus.publish(LlmCall.Failed, {
+      traceId,
+      sessionId: sessionID,
+      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+      provider,
+      model: modelId,
+      durationMs: Date.now() - startMs,
+      error: err.message,
+      aborted,
+      time: Date.now(),
+    });
+
+    if (aborted) {
       return { type: "aborted" };
     }
 
-    const err = error instanceof Error ? error : new Error(String(error));
     return {
       type: "error",
       error: {

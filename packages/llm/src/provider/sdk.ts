@@ -14,10 +14,13 @@ type SdkOptions = {
 type BundledProviderSDK = AnthropicProvider | OpenAIProvider;
 type ProviderSDK = BundledProviderSDK;
 
-const BUNDLED_PROVIDERS = {
-  "@ai-sdk/anthropic": (options) => createAnthropic(options),
-  "@ai-sdk/openai": (options) => createOpenAI(options),
-} satisfies Record<string, (options: SdkOptions) => BundledProviderSDK>;
+// A Map keeps the lookup free of Object.prototype keys ("toString",
+// "constructor", …) that an object literal would resolve via `in`/index
+// access and invoke as SDK factories.
+const BUNDLED_PROVIDERS = new Map<string, (options: SdkOptions) => BundledProviderSDK>([
+  ["@ai-sdk/anthropic", (options) => createAnthropic(options)],
+  ["@ai-sdk/openai", (options) => createOpenAI(options)],
+]);
 
 const SDK_CACHE = new Map<string, ProviderSDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
@@ -50,13 +53,21 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
   }),
 };
 
+// Auth material is hashed into cache keys so credentials never sit in Map
+// keys (visible in heap dumps, debugger key listings, or accidental logs).
+// SHA-256 (not a fast non-cryptographic hash): a key collision would hand
+// one credential's cached SDK instance to a different credential.
+function authFingerprint(auth: Auth.Info): string {
+  return new Bun.CryptoHasher("sha256").update(JSON.stringify(auth)).digest("hex");
+}
+
 export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}`;
   const cached = getCached(SDK_CACHE, cacheKey);
   if (cached) return cached;
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
-  const factory = getBundledProviderFactory(npm);
+  const factory = BUNDLED_PROVIDERS.get(npm);
 
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
@@ -99,7 +110,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
 
 export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
   const modelID = model.api?.id ?? model.id;
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${authFingerprint(auth)}`;
   const cached = getCached(LANGUAGE_CACHE, cacheKey);
   if (cached) return cached;
 
@@ -152,19 +163,6 @@ function resolveLanguageModel(
 
 function isOpenAIProvider(sdk: ProviderSDK): sdk is OpenAIProvider {
   return "responses" in sdk;
-}
-
-function getBundledProviderFactory(
-  npm: string,
-): ((options: SdkOptions) => BundledProviderSDK) | undefined {
-  switch (npm) {
-    case "@ai-sdk/anthropic":
-      return BUNDLED_PROVIDERS["@ai-sdk/anthropic"];
-    case "@ai-sdk/openai":
-      return BUNDLED_PROVIDERS["@ai-sdk/openai"];
-    default:
-      return undefined;
-  }
 }
 
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {

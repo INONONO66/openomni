@@ -35,6 +35,19 @@ describe("LlmCall BusEvents", () => {
     });
   });
 
+  test("Failed parses and defaults aborted to false", () => {
+    const parsed = LlmCall.Failed.schema.parse({
+      ...base,
+      provider: "anthropic",
+      model: "claude-3-5-sonnet",
+      durationMs: 42,
+      error: "No authentication found",
+    });
+
+    expect(parsed).toMatchObject({ aborted: false, error: "No authentication found" });
+    expect(LlmCall.Failed.name).toBe("llm.call.failed");
+  });
+
   test("Completed rejects negative and fractional token counts", () => {
     const valid = {
       ...base,

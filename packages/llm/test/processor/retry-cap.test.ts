@@ -80,7 +80,7 @@ describe("Processor retry cap", () => {
     });
 
     try {
-      await processor.process({ messages: [], model, system: "" });
+      await processor.process({ system: "" });
       expect.unreachable("Should have thrown the retry error that exceeded the cap");
     } catch (e) {
       expect(e).toBe(retryErrors[2]);
