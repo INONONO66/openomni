@@ -21,6 +21,7 @@ type AcceptedDecision = RoutedDecision | BlacklistDropDecision;
 export type IngressRoutingErrorCode =
   | "route_blocked"
   | "route_ambiguous"
+  | "route_record_failed"
   | "dispatch_runtime_missing"
   | "dispatch_route_invalid"
   | "dispatch_failed"

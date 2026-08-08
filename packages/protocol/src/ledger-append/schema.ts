@@ -57,6 +57,23 @@ export const Outcome = z.discriminatedUnion("kind", [
 ]);
 export type Outcome = z.infer<typeof Outcome>;
 
+/**
+ * One stored fact as the append core's minimal read API returns it (#510
+ * C3): the replay path of a single-fact decision stream re-executes from the
+ * recorded fact instead of re-deciding. `data` is the parsed JSON object the
+ * writer appended; `timeCreated` is the writer-assigned append time.
+ */
+export const RecordedFact = z
+  .object({
+    streamId: z.string().min(1),
+    seq: z.number().int().positive(),
+    type: z.string().min(1),
+    data: z.record(z.string(), z.unknown()),
+    timeCreated: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RecordedFact = z.infer<typeof RecordedFact>;
+
 export const ChainBreakCode = z.enum([
   /** Recomputed event hash differs from the stored `event_hash`. */
   "hash_mismatch",

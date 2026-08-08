@@ -3,15 +3,20 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Wait, WorkItem } from "../../packages/protocol/src/index";
+import { LedgerAppend, PolicyDecision, Wait, WorkItem } from "../../packages/protocol/src/index";
 import {
   createCompletionAdmissionService,
   completionRequestRoot,
 } from "../../packages/openomni/src/work-item/completion-admission";
 import { DispatchRegistry } from "../../packages/openomni/src/dispatch/registry";
+import { CommandRecordError, DispatchRuntime } from "../../packages/openomni/src/dispatch/runtime";
 import { registerBuiltInDispatchHandlers } from "../../packages/openomni/src/dispatch/setup";
+import { IngressEngine } from "../../packages/openomni/src/ingress/engine";
+import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing-execution";
 import {
   Bus,
+  ChannelGrantStore,
+  Session,
   SqliteStorageAdapter,
   Storage,
   WaitStore,
@@ -22,8 +27,9 @@ import {
 import { Ledger } from "../../packages/session/src/ledger-core/index";
 
 /**
- * #510 phase B/C1 conformance — the Wait and WorkItem decision classes
- * against the clean ledger baseline ("no record, no action"):
+ * #510 phase B/C1/C2/C3 conformance — the Wait, WorkItem, routing, and
+ * dispatch-authorization decision classes against the clean ledger baseline
+ * ("no record, no action"):
  *
  *   (a) append-before-act: every committed transition has its
  *       decision-class fact on the owner stream (`wait:<id>` /
@@ -38,7 +44,17 @@ import { Ledger } from "../../packages/session/src/ledger-core/index";
  *       facts, with the accept verdict recorded before the terminal
  *       projection;
  *   (e) boot tail verification covers wait: and work: streams and detects
- *       tampered rows.
+ *       tampered rows;
+ *   (f) C3: `route.decided` lands on the single-fact `route:<inboundEventId>`
+ *       stream before the routed action's effects are observable — for
+ *       terminal (blocked) decisions before the typed rejection returns; a
+ *       redelivered inbound id replays the RECORDED decision (accepted
+ *       routes re-execute idempotently, terminal decisions repeat their
+ *       rejection) with no second fact, while a failing append fails closed
+ *       with the action never proceeding;
+ *   (g) C3: `command.authorized` lands on `command:<dispatchId>` before the
+ *       handler is invoked, `command.denied` before the denial result
+ *       returns, and a failing append blocks the dispatch.
  *
  * Ledger and session sources are imported by path (not the package entry)
  * so every module — including the non-exported ledger core — resolves to
@@ -754,5 +770,370 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
         'nondeterminism input "random" is neither recorded nor declared absent with a reason — missing manifest input fails loudly',
       );
     }
+  });
+});
+
+function grantConformanceChannel(): void {
+  ChannelGrantStore.put({
+    id: "grant-conformance",
+    surface: "conformance",
+    kind: "trusted_channel",
+    defaultTier: "owner",
+    createdBy: "act_owner",
+  });
+}
+
+function routedIngressEvent(id: string, workerSessionId: string) {
+  return {
+    id,
+    surface: "conformance",
+    workspace: "team-conformance",
+    channel: "C1",
+    mode: "direct",
+    payload: "prove append-before-act for the route class",
+    target: { kind: "worker", sessionId: workerSessionId },
+    meta: { actor: { role: "user" } },
+    agent: { model: { provider: "test", id: "test-model" } },
+  };
+}
+
+// Replaces the ledger sub-adapter with one whose connection is gone, keeping
+// every projection sub-adapter live — the decision-class append is the ONLY
+// thing that fails, so a passing action would prove a record-less act.
+function configureFailingLedger(): void {
+  const adapter = Storage.getAdapter();
+  Storage.configure({
+    ...adapter,
+    transaction: adapter.transaction.bind(adapter),
+    ledger: {
+      append: () => {
+        throw new Error("ledger connection closed");
+      },
+      headFact: () => {
+        throw new Error("ledger connection closed");
+      },
+    },
+  });
+}
+
+describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
+  afterEach(() => {
+    IngressEngine.clearCoordinator();
+    IngressEngine.clearResidentRuntime();
+    IngressEngine.clearDispatchRuntime();
+  });
+
+  test("route.decided is durable before the routed action's effects are observable", async () => {
+    grantConformanceChannel();
+    const workerSession = Session.create({
+      title: "route conformance",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    const observed: { factTypes: string[]; parsedOutcome?: string }[] = [];
+    IngressEngine.setCoordinator({
+      dispatch: async (sessionId, request) => {
+        const facts = factsOfStream("route:inbound-route-1");
+        const first = facts[0] ? (JSON.parse(facts[0].data) as Record<string, unknown>) : undefined;
+        const decided = first === undefined ? undefined : LedgerAppend.RouteDecided.parse(first);
+        observed.push({
+          factTypes: facts.map((fact) => fact.type),
+          ...(decided === undefined ? {} : { parsedOutcome: decided.outcome }),
+        });
+        return {
+          runId: request.runId,
+          sessionId,
+          status: "succeeded" as const,
+          output: "routed",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    const result = await IngressEngine.ingest(
+      routedIngressEvent("inbound-route-1", workerSession.id),
+    );
+
+    // The executor saw the durable route.decided fact BEFORE it acted.
+    expect(observed).toEqual([{ factTypes: ["route.decided"], parsedOutcome: "route" }]);
+    expect(result.result.output).toBe("routed");
+    // Single-fact stream discipline: expectedHead 0, seq 1, head 1.
+    const facts = factsOfStream("route:inbound-route-1");
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
+    expect(headOfStream("route:inbound-route-1")).toBe(1);
+    // The writer and the protocol stream registry agree on the vocabulary.
+    for (const fact of facts) {
+      expect(LedgerAppend.StreamRegistry.route.factTypes).toContain(fact.type);
+    }
+  });
+
+  test("a terminal (blocked) decision lands its fact before the typed rejection returns", async () => {
+    // No channel grant for this surface: resolve-route blocks at the channel
+    // ceiling. The block is a decision — it must be recorded like a route.
+    let thrown: unknown;
+    try {
+      await IngressEngine.ingest({
+        id: "inbound-route-blocked-1",
+        surface: "conformance",
+        workspace: "team-conformance",
+        channel: "C1",
+        mode: "direct",
+        payload: "blocked inbound",
+        meta: { actor: { role: "user" } },
+        agent: { model: { provider: "test", id: "test-model" } },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IngressRoutingError);
+    expect((thrown as IngressRoutingError).code).toBe("route_blocked");
+    const facts = factsOfStream("route:inbound-route-blocked-1");
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
+    const decided = LedgerAppend.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    expect(decided.outcome).toBe("block");
+    expect(decided.inboundId).toBe("inbound-route-blocked-1");
+  });
+
+  test("a redelivered inbound replays the recorded decision: no second fact, the action re-executes", async () => {
+    grantConformanceChannel();
+    const workerSession = Session.create({
+      title: "route replay conformance",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    let dispatches = 0;
+    IngressEngine.setCoordinator({
+      dispatch: async (sessionId, request) => {
+        dispatches += 1;
+        return {
+          runId: request.runId,
+          sessionId,
+          status: "succeeded" as const,
+          output: "routed",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    const first = await IngressEngine.ingest(
+      routedIngressEvent("inbound-route-replay-1", workerSession.id),
+    );
+    // Channel redelivery of the SAME inbound (e.g. the delivery crashed after
+    // the decision committed): the recorded route.decided fact governs and
+    // the routed action re-executes idempotently — the #519 crash-window
+    // recovery path, not a refusal.
+    const second = await IngressEngine.ingest(
+      routedIngressEvent("inbound-route-replay-1", workerSession.id),
+    );
+
+    expect(first.result.output).toBe("routed");
+    expect(second.result.output).toBe("routed");
+    expect(dispatches).toBe(2);
+    // Replay appended nothing: the stream still holds exactly the one fact.
+    expect(factsOfStream("route:inbound-route-replay-1")).toHaveLength(1);
+    expect(headOfStream("route:inbound-route-replay-1")).toBe(1);
+  });
+
+  test("a terminal recorded decision replays its own rejection even after conditions change", async () => {
+    // First delivery: no channel grant — the block is decided and recorded.
+    let firstThrown: unknown;
+    try {
+      await IngressEngine.ingest({
+        id: "inbound-route-replay-blocked-1",
+        surface: "conformance",
+        workspace: "team-conformance",
+        channel: "C1",
+        mode: "direct",
+        payload: "blocked inbound",
+        meta: { actor: { role: "user" } },
+        agent: { model: { provider: "test", id: "test-model" } },
+      });
+    } catch (error) {
+      firstThrown = error;
+    }
+    expect(firstThrown).toBeInstanceOf(IngressRoutingError);
+    expect((firstThrown as IngressRoutingError).code).toBe("route_blocked");
+
+    // A grant lands between deliveries: a fresh resolve would now route, but
+    // the redelivery replays the RECORDED terminal decision — the same typed
+    // rejection it originally produced.
+    grantConformanceChannel();
+    let secondThrown: unknown;
+    try {
+      await IngressEngine.ingest({
+        id: "inbound-route-replay-blocked-1",
+        surface: "conformance",
+        workspace: "team-conformance",
+        channel: "C1",
+        mode: "direct",
+        payload: "blocked inbound",
+        meta: { actor: { role: "user" } },
+        agent: { model: { provider: "test", id: "test-model" } },
+      });
+    } catch (error) {
+      secondThrown = error;
+    }
+
+    expect(secondThrown).toBeInstanceOf(IngressRoutingError);
+    expect((secondThrown as IngressRoutingError).code).toBe("route_blocked");
+    const replayed = (secondThrown as IngressRoutingError).decision;
+    expect(replayed.outcome).toBe("block");
+    expect(replayed.inboundId).toBe("inbound-route-replay-blocked-1");
+    expect(factsOfStream("route:inbound-route-replay-blocked-1")).toHaveLength(1);
+  });
+
+  test("a failing ledger append blocks the routed action: typed error, no publish, no act", async () => {
+    grantConformanceChannel();
+    const workerSession = Session.create({
+      title: "route fail-closed conformance",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    let dispatches = 0;
+    IngressEngine.setCoordinator({
+      dispatch: async (sessionId, request) => {
+        dispatches += 1;
+        return {
+          runId: request.runId,
+          sessionId,
+          status: "succeeded" as const,
+          output: "routed",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+    configureFailingLedger();
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      await IngressEngine.ingest(routedIngressEvent("inbound-route-fail-1", workerSession.id));
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IngressRoutingError);
+    expect((thrown as IngressRoutingError).code).toBe("route_record_failed");
+    expect(dispatches).toBe(0);
+    await flushBus();
+    // The observe-only RoutingDecision projection fires strictly AFTER the
+    // append — a failed append publishes nothing.
+    expect(events).not.toContain("ingress.routing.decision");
+  });
+});
+
+describe("p2 ledger baseline — dispatch authorization decision-class facts (C3)", () => {
+  const allowPolicy = {
+    kind: "point",
+    name: "conformance-allow",
+    pointIds: ["dispatch.action.pre"],
+    effectCapabilities: { "dispatch.action.pre": [] },
+    priority: 0,
+    fn: () =>
+      PolicyDecision.allow({ policyId: "conformance.allow", reasonCodes: ["conformance_allowed"] }),
+  } as const;
+
+  const denyPolicy = {
+    kind: "point",
+    name: "conformance-deny",
+    pointIds: ["dispatch.action.pre"],
+    effectCapabilities: { "dispatch.action.pre": [] },
+    priority: 0,
+    fn: () =>
+      PolicyDecision.deny({ policyId: "conformance.deny", reasonCodes: ["conformance_denied"] }),
+  } as const;
+
+  test("command.authorized is durable before the handler is invoked", async () => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    const observed: { order: string[]; factTypes: string[] }[] = [];
+    const order: string[] = [];
+    runtime.register("conformance.act", (command) => {
+      order.push("handler");
+      const facts = factsOfStream(`command:${command.dispatchId}`);
+      observed.push({ order: [...order], factTypes: facts.map((fact) => fact.type) });
+      return { output: "acted" };
+    });
+
+    const result = await runtime.submit(
+      { action: "conformance.act", target: { kind: "system" }, payload: "go" },
+      { actorKind: "resident", actorId: "resident:main", policies: [allowPolicy] },
+    );
+
+    expect(result.status).toBe("completed");
+    // The handler ran with the authorization fact already durable.
+    expect(observed).toEqual([{ order: ["handler"], factTypes: ["command.authorized"] }]);
+    const facts = factsOfStream(`command:${result.dispatchId}`);
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "command.authorized"]]);
+    const authorized = LedgerAppend.CommandAuthorized.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    expect(authorized).toEqual({
+      verdict: "allow",
+      // The dispatch point composes registered policies into one decision;
+      // the composed policyId is what the runtime acted on.
+      policyId: "agent.policy.composed",
+      reason: "conformance_allowed",
+      actorKind: "resident",
+      action: "conformance.act",
+      targetKind: "system",
+    });
+    expect(headOfStream(`command:${result.dispatchId}`)).toBe(1);
+    for (const fact of facts) {
+      expect(LedgerAppend.StreamRegistry.command.factTypes).toContain(fact.type);
+    }
+  });
+
+  test("a denied dispatch lands command.denied before the denial result returns", async () => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    let handlerCalls = 0;
+    runtime.register("conformance.act", () => {
+      handlerCalls += 1;
+      return { output: "acted" };
+    });
+
+    const result = await runtime.submit(
+      { action: "conformance.act", target: { kind: "system" }, payload: "go" },
+      { actorKind: "user", actorId: "user:conformance", policies: [denyPolicy] },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(handlerCalls).toBe(0);
+    const facts = factsOfStream(`command:${result.dispatchId}`);
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "command.denied"]]);
+    const denied = LedgerAppend.CommandDenied.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    expect(denied).toEqual({
+      verdict: "deny",
+      policyId: "agent.policy.composed",
+      reason: "conformance_denied",
+      actorKind: "user",
+      action: "conformance.act",
+      targetKind: "system",
+    });
+  });
+
+  test("a failing ledger append blocks the dispatch: typed error, handler never invoked", async () => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    let handlerCalls = 0;
+    runtime.register("conformance.act", () => {
+      handlerCalls += 1;
+      return { output: "acted" };
+    });
+    configureFailingLedger();
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      await runtime.submit(
+        { action: "conformance.act", target: { kind: "system" }, payload: "go" },
+        { actorKind: "resident", actorId: "resident:main", policies: [allowPolicy] },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandRecordError);
+    expect((thrown as CommandRecordError).code).toBe("command_record_failed");
+    expect(handlerCalls).toBe(0);
+    await flushBus();
+    // The observe-only Authorized projection fires strictly AFTER the append.
+    expect(events).not.toContain("dispatch.authorized");
   });
 });

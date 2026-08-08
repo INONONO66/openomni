@@ -1,5 +1,6 @@
 import * as AppendCore from "./append";
 import * as Chain from "./chain";
+import * as Read from "./read";
 
 /**
  * #510 Phase A append core. No production writer is cut over yet — later
@@ -10,5 +11,6 @@ import * as Chain from "./chain";
  */
 export namespace Ledger {
   export const append = AppendCore.append;
+  export const headFact = Read.headFact;
   export const verifyTail = Chain.verifyTail;
 }

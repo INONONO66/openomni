@@ -35,6 +35,12 @@ export namespace Storage {
       event: LedgerAppend.Input,
       expectedHead: LedgerAppend.ExpectedHead,
     ): LedgerAppend.Outcome;
+    /**
+     * Newest recorded fact of one stream (undefined for an empty stream) —
+     * the #510 C3 replay read: on a single-fact stream append conflict the
+     * caller re-executes from the recorded decision instead of re-deciding.
+     */
+    headFact(streamId: string): LedgerAppend.RecordedFact | undefined;
   }
 
   export interface WaitSubAdapter {

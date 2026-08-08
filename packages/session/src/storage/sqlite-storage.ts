@@ -63,6 +63,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     // owning the SQL (raw prepared statements) — this is wiring only.
     this.ledger = {
       append: (event, expectedHead) => Ledger.append(this.db, event, expectedHead),
+      headFact: (streamId) => Ledger.headFact(this.db, streamId),
     };
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
     this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);

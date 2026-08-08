@@ -6,6 +6,7 @@ import {
   type Policy,
   IngressEvent,
   PolicyDecision as Decision,
+  type RoutingDecisionPayload,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
@@ -19,6 +20,7 @@ import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
 import {
   executeWaitRoute,
+  IngressRoutingError,
   pinRouteSession,
   pinSelectedTarget,
   requireRoutedDecision,
@@ -46,18 +48,73 @@ function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
 }
 
+// #510 C3 ruling 1 — the routing decision is a decision-class fact on the
+// single-fact owner stream `route:<inboundEventId>` (expectedHead 0), awaited
+// durably BEFORE anything acts on the decision: the observe-only Bus publish,
+// the typed terminal rejection, and wait/handler execution all follow the
+// append. No record, no action — with one deliberate replay carve-out: a
+// cas_conflict means this inbound id was ALREADY decided, and a redelivered
+// inbound is not a new decision to refuse but the same recorded decision to
+// replay (#519 attach/deliver crash-window recovery). The recorded
+// route.decided fact is read back and re-executed: an accepted route re-runs
+// the routed action idempotently (the wait fold's already_resolved
+// short-circuit re-delivers to the owner), a terminal decision repeats the
+// same typed rejection it originally produced. Only append INFRASTRUCTURE
+// failure (missing sub-adapter, failed append/read, foreign or unparsable
+// recorded fact) fails closed as route_record_failed.
+function recordRouteDecided(decision: RoutingDecisionPayload): RoutingDecisionPayload {
+  const ledger = Storage.get().ledger;
+  if (!ledger) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      "Storage adapter does not implement ledger append — routing decisions fail closed",
+      decision,
+    );
+  }
+  const streamId = `route:${decision.inboundId}`;
+  let appended: ReturnType<typeof ledger.append>;
+  try {
+    appended = ledger.append({ streamId, type: "route.decided", data: decision }, 0);
+  } catch (error) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      `routing decision append failed: ${error instanceof Error ? error.message : String(error)}`,
+      decision,
+    );
+  }
+  if (appended.kind === "appended") return decision;
+  try {
+    const recorded = ledger.headFact(streamId);
+    if (recorded === undefined || recorded.type !== "route.decided") {
+      throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
+    }
+    return IngressEvent.RoutingDecision.schema.parse(recorded.data);
+  } catch (error) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      `recorded routing decision read failed: ${error instanceof Error ? error.message : String(error)}`,
+      decision,
+    );
+  }
+}
+
 // Correlation is read-only (#215): wait ambiguity is recorded solely by the
-// published RoutingDecision and the typed route_ambiguous rejection — frozen
-// legacy rows are never mutated on lookup.
-function resolveAndPublishRoute<Event extends Ingress.InboundEvent>(
+// appended route.decided fact, its published RoutingDecision projection, and
+// the typed route_ambiguous rejection — frozen legacy rows are never mutated
+// on lookup.
+function resolveAndRecordRoute<Event extends Ingress.InboundEvent>(
   event: Event,
   traceId: string,
 ): KernelRouteResolution<Event> {
   const resolution = resolveKernelRoute(event, traceId);
   const decision = IngressEvent.RoutingDecision.schema.parse(resolution.decision);
-  const validated = { ...resolution, decision };
-  Bus.publish(IngressEvent.RoutingDecision, decision);
-  return validated;
+  // On replay the RECORDED decision governs execution, not the fresh resolve —
+  // conditions that changed between deliveries cannot flip a decided route.
+  const effective = recordRouteDecided(decision);
+  // Observe-only projection of the recorded fact — strictly after the append
+  // (or its replay read); lossy by contract.
+  Bus.publish(IngressEvent.RoutingDecision, effective);
+  return { ...resolution, decision: effective };
 }
 
 export namespace IngressEngine {
@@ -122,7 +179,7 @@ export namespace IngressEngine {
       throw new TypeError("external ingress actor resolution changed event mode");
     }
     const trace = TraceContext.create();
-    const route = resolveAndPublishRoute(resolvedActorEvent, trace.traceId);
+    const route = resolveAndRecordRoute(resolvedActorEvent, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
@@ -156,7 +213,7 @@ export namespace IngressEngine {
     }>,
   ): Promise<Ingress.IngressResult> {
     const trace = TraceContext.create();
-    const route = resolveAndPublishRoute(event, trace.traceId);
+    const route = resolveAndRecordRoute(event, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
