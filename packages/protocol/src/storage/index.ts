@@ -42,6 +42,13 @@ export namespace Storage {
      */
     headFact(streamId: string): LedgerAppend.RecordedFact | undefined;
     /**
+     * Every recorded fact of one type across all streams, ordered by
+     * (streamId, seq) — the #510 D3 read-only admin inspection surface
+     * (`/admin/ledger/*`). Never a decision input: decision replay reads go
+     * through {@link headFact} on the owner stream.
+     */
+    factsByType(type: string): LedgerAppend.RecordedFact[];
+    /**
      * Boot chain tail verification (#510 D1): walks the newest events of
      * every stream and RETURNS chain-break facts — it never throws on a
      * broken chain and never refuses boot. Recording the breaks (Operational

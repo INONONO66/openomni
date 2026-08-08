@@ -829,6 +829,9 @@ function configureFailingLedger(): void {
       headFact: () => {
         throw new Error("ledger connection closed");
       },
+      factsByType: () => {
+        throw new Error("ledger connection closed");
+      },
       verifyTail: () => {
         throw new Error("ledger connection closed");
       },

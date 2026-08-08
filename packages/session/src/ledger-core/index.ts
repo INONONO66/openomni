@@ -12,5 +12,6 @@ import * as Read from "./read";
 export namespace Ledger {
   export const append = AppendCore.append;
   export const headFact = Read.headFact;
+  export const factsByType = Read.factsByType;
   export const verifyTail = Chain.verifyTail;
 }

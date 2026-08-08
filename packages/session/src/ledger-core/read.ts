@@ -27,3 +27,31 @@ export function headFact(db: Database, streamId: string): LedgerAppend.RecordedF
     timeCreated: row.time_created,
   });
 }
+
+/**
+ * Every recorded fact of ONE type across all streams, ordered by
+ * (streamId, seq) — the #510 D3 admin inspection read (`/admin/ledger/*`).
+ * Read-only: same prepared-SELECT discipline as {@link headFact}.
+ */
+export function factsByType(db: Database, type: string): LedgerAppend.RecordedFact[] {
+  const rows = db
+    .query(
+      "SELECT stream_id, seq, type, data, time_created FROM ledger_event WHERE type = ? ORDER BY stream_id ASC, seq ASC",
+    )
+    .all(type) as {
+    stream_id: string;
+    seq: number;
+    type: string;
+    data: string;
+    time_created: number;
+  }[];
+  return rows.map((row) =>
+    LedgerAppend.RecordedFact.parse({
+      streamId: row.stream_id,
+      seq: row.seq,
+      type: row.type,
+      data: JSON.parse(row.data),
+      timeCreated: row.time_created,
+    }),
+  );
+}

@@ -91,6 +91,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.ledger = {
       append: (event, expectedHead) => Ledger.append(this.db, event, expectedHead),
       headFact: (streamId) => Ledger.headFact(this.db, streamId),
+      factsByType: (type) => Ledger.factsByType(this.db, type),
       verifyTail: () => Ledger.verifyTail(this.db),
     };
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);

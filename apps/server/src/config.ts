@@ -25,6 +25,7 @@ interface RawConfig {
     port?: number;
     host?: string;
     wsToken?: string;
+    adminToken?: string;
   };
   storage?: {
     dbPath?: string;
@@ -52,7 +53,8 @@ export interface ServerConfig {
   workspace?: { root: string };
   model?: { provider: string; id: string; providerOptions?: Record<string, unknown> };
   mcp: { servers: McpServerConfig[] };
-  server: { port: number; host: string; wsToken?: string };
+  /** `adminToken` guards `/admin/ledger/*` (#510 D3); the surface fails closed (401) while it is unset. */
+  server: { port: number; host: string; wsToken?: string; adminToken?: string };
   storage: { dbPath: string };
   telegram: { token?: string; allowedUsers: string[] };
   github: { secret?: string; token?: string; botUsername?: string; allowedUsers: string[] };
@@ -131,6 +133,7 @@ function resolve(raw: RawConfig, configPath: string): ServerConfig {
       port: raw.server?.port ?? 3000,
       host: raw.server?.host ?? "127.0.0.1",
       wsToken: process.env.WS_AUTH_TOKEN?.trim() || raw.server?.wsToken,
+      adminToken: process.env.OPENOMNI_ADMIN_TOKEN?.trim() || raw.server?.adminToken,
     },
     storage: {
       dbPath: raw.storage?.dbPath ?? defaultDbPath,
