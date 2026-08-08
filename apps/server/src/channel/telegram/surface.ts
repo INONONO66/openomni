@@ -101,6 +101,16 @@ export class TelegramAdapter implements Adapter.Surface {
     await this.sendOutbound(chatId, message);
   }
 
+  /**
+   * Existing-agent delivery: a registered ActorEndpoint's externalId is a
+   * Telegram chat id — deliver there and report the platform message id of
+   * the final chunk (the message a reply would reference).
+   */
+  async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
+    const externalMessageId = await this.sendOutbound(externalId, { text: body });
+    return externalMessageId === undefined ? {} : { externalMessageId };
+  }
+
   private async handleMessage(message: TelegramMessage): Promise<void> {
     if (!this.normalizer) return;
     const text = message.text;
@@ -164,11 +174,15 @@ export class TelegramAdapter implements Adapter.Surface {
     return this.handler;
   }
 
-  private async sendOutbound(chatId: string, message: Adapter.OutboundMessage): Promise<void> {
-    if (!message.text) return;
-    const chunks = splitText(message.text, TELEGRAM_MESSAGE_LIMIT);
-    for (const chunk of chunks) {
-      await this.client.send(chatId, chunk);
+  private async sendOutbound(
+    chatId: string,
+    message: Adapter.OutboundMessage,
+  ): Promise<string | undefined> {
+    if (!message.text) return undefined;
+    let lastMessageId: string | undefined;
+    for (const chunk of splitText(message.text, TELEGRAM_MESSAGE_LIMIT)) {
+      lastMessageId = (await this.client.send(chatId, chunk)) ?? lastMessageId;
     }
+    return lastMessageId;
   }
 }

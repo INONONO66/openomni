@@ -50,7 +50,6 @@ type PinnedInteractionValidation =
 function revalidatePinnedInteraction(
   pinned: PendingInteractionStore.Record,
   requestedAction: PendingInteractionStore.Record["allowedActions"][number],
-  resolvedSince?: number,
   now = Date.now(),
 ): PinnedInteractionValidation {
   const current = PendingInteractionStore.get(pinned.id);
@@ -60,8 +59,7 @@ function revalidatePinnedInteraction(
     (current.status === "open" && now <= current.expiresAt) ||
     ((current.status === "resolved" || current.status === "follow_up") &&
       current.resolvedAt !== undefined &&
-      (now <= current.resolvedAt + current.followUpWindow ||
-        (resolvedSince !== undefined && current.resolvedAt >= resolvedSince)));
+      now <= current.resolvedAt + current.followUpWindow);
   if (!active) return { reason: "dispatch.pending_interaction.inactive" };
 
   if (
@@ -267,20 +265,11 @@ export class DispatchRuntime {
       });
     }
 
-    const routingStartedAt = Date.now();
+    // No await sits between the post-policy revalidation above and this point;
+    // markRoutedPendingInteraction is our own deterministic transition, so a
+    // third re-validation here would only re-check our own mutation.
     markRoutedPendingInteraction(command);
     Bus.publish(DispatchProtocol.Events.Routed, { ...eventBase(command), handler: command.action });
-
-    if (pendingInteraction) {
-      const validation = revalidatePinnedInteraction(
-        pendingInteraction,
-        requestedPendingAction,
-        routingStartedAt,
-      );
-      if ("reason" in validation) {
-        return denyStalePinnedInteraction(command, start, validation.reason);
-      }
-    }
 
     try {
       const raw = await handler(command, {

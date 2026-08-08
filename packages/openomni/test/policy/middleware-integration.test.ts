@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { Ingress, Policy } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/session";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
 
 type WorkerControlTestAction = "cancel" | "resume" | "schedule";
@@ -28,23 +27,12 @@ const stubCoordinator = {
 };
 
 describe("IngressAuthorityMiddleware integration", () => {
-  beforeEach(() => {
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    ChannelGrantStore.put({
-      id: "grant-test",
-      surface: "test",
-      kind: "trusted_channel",
-      createdBy: "act_owner",
-    });
-  });
-
   test("allows user actor to create top-level inbound work", async () => {
     const event = makeInboundEvent({
       meta: { actor: { role: "user" } },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
     });
@@ -58,7 +46,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "resident" } },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
     });
@@ -72,7 +60,7 @@ describe("IngressAuthorityMiddleware integration", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
       }),
@@ -84,7 +72,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "resident" }, action: "spawn" },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
     });
@@ -98,7 +86,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "worker" }, action: "send" },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
     });
@@ -112,7 +100,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "worker" }, action: "send" },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({ event });
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
 
     expect(result.target.kind).toBe("resident");
   });
@@ -127,7 +115,7 @@ describe("IngressAuthorityMiddleware integration", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
       }),
@@ -143,7 +131,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "resident" }, action },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
     });
@@ -158,7 +146,7 @@ describe("IngressAuthorityMiddleware integration", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
         onDecision: (decision) => {
@@ -176,7 +164,7 @@ describe("IngressAuthorityMiddleware integration", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
       }),
@@ -189,7 +177,7 @@ describe("IngressAuthorityMiddleware integration", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
       }),
@@ -201,7 +189,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "manager", trusted: true } },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
     });
@@ -215,7 +203,7 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { actorId: "act_manager", trustTier: "manager" } },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
       onDecision: (decision) => {

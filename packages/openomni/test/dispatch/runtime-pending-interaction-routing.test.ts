@@ -87,6 +87,111 @@ describe("DispatchRuntime", () => {
     expect(authority?.factsUsed).toContain("pending_interaction.pi-dispatch-1");
   });
 
+  test("scoped fallback routes a token-mismatch correlation whose sender proves the endpoint", async () => {
+    // INTENTIONAL (#215 single-lookup cutover): the unified correlation
+    // lookup widened the legacy dispatch path — a correlation whose tokenHash
+    // matches nothing no longer dead-ends; it falls back to the scoped
+    // endpoint+channel level and still finds the row. The bearer token is one
+    // correlation precedence level, not a credential gate: authorization for
+    // legacy PendingInteraction rows is carried by the sender matcher
+    // (endpoint proof / pinned actor identity), which this sender satisfies.
+    const runtime = new DispatchRuntime();
+    let routedCommand: DispatchProtocol.Command | undefined;
+    runtime.register("worker.complete", (command) => {
+      routedCommand = command;
+      return { output: "accepted" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-token-mismatch");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-token-mismatch",
+      workerRunId: "run-pi-token-mismatch",
+      sessionId: session.id,
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      correlation: { tokenHash: "token-right" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: {
+          action: "report_result",
+          result: {
+            runId: "run-pi-token-mismatch",
+            sessionId: session.id,
+            status: "succeeded",
+            output: "SN-B7710",
+            finishReason: "stop",
+          },
+        },
+        correlation: {
+          endpointId: "telegram:seller-1",
+          channelId: "telegram:dm",
+          tokenHash: "token-wrong",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:seller-1",
+      },
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.handler).toBe("worker.complete");
+    expect(routedCommand?.action).toBe("worker.complete");
+    expect(PendingInteractionStore.get("pi-dispatch-token-mismatch")?.status).toBe("resolved");
+  });
+
+  test("token mismatch with no endpoint or actor proof stays unrouted and is denied", async () => {
+    const runtime = new DispatchRuntime();
+    let routed = false;
+    runtime.register("worker.complete", () => {
+      routed = true;
+      return { output: "accepted" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-no-proof");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-no-proof",
+      workerRunId: "run-pi-no-proof",
+      sessionId: session.id,
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      correlation: { tokenHash: "token-right" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: { action: "report_result", output: "SN-FORGED" },
+        correlation: {
+          endpointId: "telegram:seller-1",
+          channelId: "telegram:dm",
+          tokenHash: "token-wrong",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:intruder-9",
+      },
+    );
+
+    expect(routed).toBe(false);
+    expect(result.status).toBe("denied");
+    expect(PendingInteractionStore.get("pi-dispatch-no-proof")?.status).toBe("open");
+  });
+
   test("routes PendingInteraction clarification messages to resident.ask", async () => {
     const runtime = new DispatchRuntime();
     let routedCommand: DispatchProtocol.Command | undefined;

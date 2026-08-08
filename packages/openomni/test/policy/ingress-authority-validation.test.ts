@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, Policy } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/session";
-import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
+import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
+import { IngressEngine } from "../../src/ingress/engine";
+import {
+  applyChannelGrantTreatment,
+  IngressAuthorityMiddleware,
+} from "../../src/ingress/middleware/ingress-authority";
 
 type RestrictedTrustTier = "observer" | "collaborator" | "assigned_worker";
 
@@ -28,20 +32,6 @@ const stubCoordinator = {
 };
 
 describe("IngressAuthorityMiddleware trust and validation", () => {
-  beforeEach(() => {
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    ChannelGrantStore.put({
-      id: "grant-test",
-      surface: "test",
-      kind: "trusted_channel",
-      createdBy: "act_owner",
-    });
-  });
-
-  afterEach(() => {
-    Storage.reset();
-  });
   test("canonical observer trust tier overrides legacy user role", async () => {
     const decisions: Policy.PolicyDecision[] = [];
     const event = makeInboundEvent({
@@ -49,7 +39,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
         onDecision: (decision) => {
@@ -81,33 +71,55 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     });
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
       }),
     ).rejects.toThrow("actor is not authorized to create top-level inbound work");
   });
 
-  test("uses channel default trust tier for unregistered actors", async () => {
-    ChannelGrantStore.put({
-      id: "grant-public-observer",
-      surface: "test",
-      channel: "public",
-      kind: "trusted_channel",
-      defaultTier: "observer",
-      createdBy: "act_owner",
-    });
+  test("channel grant treatment applies default trust tier to unregistered actors", () => {
     const event = makeInboundEvent({
       channel: "public",
       meta: { actor: { role: "user", id: "external-user-1" } },
     });
 
-    await expect(
-      IngressAuthorityMiddleware.runPreRun({
-        event,
-        coordinator: stubCoordinator,
-      }),
-    ).rejects.toThrow("actor is not authorized to create top-level inbound work");
+    const treated = applyChannelGrantTreatment(
+      event as Ingress.DirectEvent,
+      {
+        id: "grant-public-observer",
+        surface: "test",
+        channel: "public",
+        kind: "trusted_channel",
+        defaultTier: "observer",
+        createdBy: "act_owner",
+      },
+      "normal",
+    );
+
+    expect(treated.meta?.actor).toMatchObject({ role: "user", trustTier: "observer" });
+    expect(treated.meta?.channelGrantId).toBe("grant-public-observer");
+    expect(treated.meta?.inboundTreatment).toBe("normal");
+  });
+
+  test("channel grant treatment never overrides an explicit trust tier", () => {
+    const event = makeInboundEvent({
+      meta: { actor: { role: "user", actorId: "act_manager", trustTier: "manager" } },
+    });
+
+    const treated = applyChannelGrantTreatment(
+      event as Ingress.DirectEvent,
+      {
+        id: "grant-default-observer",
+        surface: "test",
+        kind: "trusted_channel",
+        defaultTier: "observer",
+        createdBy: "act_owner",
+      },
+      "normal",
+    );
+
+    expect(treated.meta?.actor).toMatchObject({ trustTier: "manager" });
   });
 
   test("allows explicit resident target when coordinator is missing", async () => {
@@ -116,7 +128,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
       meta: { actor: { role: "user" } },
     });
 
-    const result = await IngressAuthorityMiddleware.runPreRun({ event });
+    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
 
     expect(result.target.kind).toBe("resident");
     expect(result.coordinator).toBeUndefined();
@@ -125,7 +137,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
   test("aborts when coordinator is missing for worker creation target", async () => {
     const event = makeInboundEvent({ target: { kind: "worker" } });
 
-    await expect(IngressAuthorityMiddleware.runPreRun({ event })).rejects.toThrow(
+    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
       "coordinator is required for worker target",
     );
   });
@@ -134,7 +146,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     const badEvent = { not: "valid" };
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event: badEvent,
         coordinator: stubCoordinator,
       }),
@@ -146,20 +158,20 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     (event as Record<string, unknown>).mode = "fork";
 
     await expect(
-      IngressAuthorityMiddleware.runPreRun({
+      IngressAuthorityMiddleware.runRoutedPreRun({
         event,
         coordinator: stubCoordinator,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("invalid_literal");
   });
 
   test("collects policy decisions via onDecision callback", async () => {
-    const decisions: unknown[] = [];
+    const decisions: Policy.PolicyDecision[] = [];
     const event = makeInboundEvent({
       meta: { actor: { role: "user" } },
     });
 
-    await IngressAuthorityMiddleware.runPreRun({
+    await IngressAuthorityMiddleware.runRoutedPreRun({
       event,
       coordinator: stubCoordinator,
       onDecision: (d) => {
@@ -174,20 +186,80 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     }
   });
 
-  test("registrations produce all six middleware steps", () => {
-    const state = {
-      input: makeInboundEvent(),
-      coordinator: stubCoordinator,
-    } satisfies Parameters<typeof IngressAuthorityMiddleware.registrations>[0];
-    const regs = IngressAuthorityMiddleware.registrations(state);
+  test("routed pre-run never re-runs blacklist or channel-grant checks", async () => {
+    const decisions: Policy.PolicyDecision[] = [];
+    const event = makeInboundEvent({
+      meta: { actor: { role: "user" } },
+    });
 
-    expect(regs).toHaveLength(6);
-    const names = regs.map((r) => r.name);
-    expect(names).toContain(IngressAuthorityMiddleware.CoordinatorPresence.name);
-    expect(names).toContain(IngressAuthorityMiddleware.SchemaValidation.name);
-    expect(names).toContain(IngressAuthorityMiddleware.BlacklistCheck.name);
-    expect(names).toContain(IngressAuthorityMiddleware.ChannelGrantCheck.name);
-    expect(names).toContain(IngressAuthorityMiddleware.AuthorityCheck.name);
-    expect(names).toContain(IngressAuthorityMiddleware.ModeDispatch.name);
+    await IngressAuthorityMiddleware.runRoutedPreRun({
+      event,
+      coordinator: stubCoordinator,
+      onDecision: (d) => {
+        decisions.push(d);
+      },
+    });
+
+    const policyIds = decisions.map((d) => d.policyId);
+    expect(policyIds).toContain("ingress.schema");
+    expect(policyIds).not.toContain("ingress.blacklist");
+    expect(policyIds).not.toContain("ingress.channel_grant");
+  });
+});
+
+describe("IngressEngine channel default tier composite (e2e)", () => {
+  beforeEach(() => {
+    IngressEngine.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
+  afterEach(() => {
+    IngressEngine.reset();
+  });
+
+  test("trusted_channel defaultTier observer admits an unregistered actor at the channel ceiling, then the authority check denies", async () => {
+    ChannelGrantStore.put({
+      id: "grant-public-observer",
+      surface: "test",
+      channel: "public",
+      kind: "trusted_channel",
+      defaultTier: "observer",
+      createdBy: "act_owner",
+    });
+    const decisions: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === "ingress.routing.decision") decisions.push(payload);
+    });
+    const event = {
+      id: "evt-observer-default",
+      surface: "test",
+      channel: "public",
+      mode: "direct",
+      payload: "hello",
+      meta: { actor: { role: "user", id: "external-user-1" } },
+      agent: { model: { provider: "test", id: "test-model" } },
+    } satisfies Ingress.DirectEvent;
+
+    try {
+      // The grant admits the message at the channel ceiling (routing decision
+      // routes with the channel default tier), but the unregistered actor is
+      // then denied by the ingress authority check — the composite that keeps
+      // defaultTier a routing fact, never a work-creation authorization.
+      await expect(IngressEngine.ingest(event)).rejects.toThrow(
+        "actor is not authorized to create top-level inbound work",
+      );
+    } finally {
+      unsubscribe();
+    }
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
+      stage: "surface_default",
+      outcome: "route",
+      trustTier: "observer",
+    });
+    expect((decisions[0] as { factsUsed: string[] }).factsUsed).toContain(
+      "channel.default-tier:observer",
+    );
   });
 });

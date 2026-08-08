@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import type { DefaultDispatchRuntime } from "@openomni/openomni";
+import { WaitService, type DefaultDispatchRuntime } from "@openomni/openomni";
 import { Bus, PendingInteractionStore } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
@@ -109,6 +109,15 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
         time: Date.now(),
         component: "server",
         msg: `recovery expired ${expiredPendingInteractions.length} pending interaction(s)`,
+      });
+    }
+    const expiredWaits = WaitService.sweepExpired();
+    if (expiredWaits.length > 0) {
+      Bus.publish(Operational.Info, {
+        traceId: id,
+        time: Date.now(),
+        component: "server",
+        msg: `recovery expired ${expiredWaits.length} wait(s)`,
       });
     }
 

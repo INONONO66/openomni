@@ -8,8 +8,11 @@ const BASE_URL = "https://discord.com/api/v10";
 export class DiscordClient implements ChannelClient {
   constructor(private readonly token: string) {}
 
-  async send(channelId: string, text: string): Promise<void> {
-    await this.api(`/channels/${channelId}/messages`, { content: text });
+  async send(channelId: string, text: string): Promise<string | undefined> {
+    const message = (await this.api(`/channels/${channelId}/messages`, { content: text })) as {
+      id?: unknown;
+    };
+    return typeof message.id === "string" ? message.id : undefined;
   }
 
   async sendTyping(channelId: string): Promise<void> {

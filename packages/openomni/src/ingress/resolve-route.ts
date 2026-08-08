@@ -1,4 +1,4 @@
-import type { Actor, RoutingDecisionPayload } from "@openomni/protocol";
+import type { Actor, RoutingDecisionPayload, Wait } from "@openomni/protocol";
 
 export type RouteInbound = {
   readonly traceId: string;
@@ -12,6 +12,14 @@ export type RouteInbound = {
 
 type RouteWait =
   | Readonly<{ kind: "none" }>
+  | Readonly<{
+      kind: "match";
+      backing: "wait";
+      key: string;
+      recordId: string;
+      owner: Wait.OwnerRef;
+      allowed: readonly string[];
+    }>
   | Readonly<{
       kind: "match";
       backing: "pending_interaction";
@@ -118,6 +126,56 @@ export function resolveRoute(inbound: RouteInbound, state: RouteState): RoutingD
       };
     case "match": {
       switch (state.wait.backing) {
+        case "wait": {
+          const action = inbound.requestedAction;
+          if (action === undefined || !state.wait.allowed.includes(action)) {
+            // Fail closed: a matched durable wait never falls through to
+            // surface routing — a disallowed action is a typed block, mirroring
+            // the owner gate below. (Frozen legacy PendingInteraction matches
+            // keep their historical surface fallthrough.)
+            return {
+              ...common,
+              stage: "wait_correlation",
+              outcome: "block",
+              reason: "Matched wait does not allow the requested action",
+              factsUsed: [
+                `wait:${state.wait.key}`,
+                `wait.action:${action ?? "missing"}`,
+                "wait.action:disallowed",
+              ],
+            };
+          }
+          if (state.wait.owner.kind !== "session") {
+            // Fail closed: a matched wait must never fall through to surface
+            // routing, and workItem-owned resumption has no ingress delivery
+            // path yet (#216/#217 wire it).
+            return {
+              ...common,
+              stage: "wait_correlation",
+              outcome: "block",
+              reason: "Matched wait owner has no ingress delivery path",
+              factsUsed: [
+                `wait:${state.wait.key}`,
+                `wait.action:${action}`,
+                `wait.owner:${state.wait.owner.kind}:${state.wait.owner.id}`,
+                "wait.owner:unsupported_ingress_delivery",
+              ],
+            };
+          }
+          return {
+            ...common,
+            stage: "wait_correlation",
+            outcome: "route",
+            target: "resident",
+            sessionId: state.wait.owner.id,
+            reason: "Inbound message matched an open wait",
+            factsUsed: [
+              `wait:${state.wait.key}`,
+              `wait.action:${action}`,
+              `wait.owner:session:${state.wait.owner.id}`,
+            ],
+          };
+        }
         case "pending_ask":
           return {
             ...common,

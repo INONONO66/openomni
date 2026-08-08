@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { SenderTargetGrant } from "@openomni/openomni/messaging";
+import { z } from "zod";
 import { parseMcpServerConfigs, type McpServerConfig } from "./config/mcp-server-config";
 
 const DEFAULT_CONFIG_PATH = join(homedir(), ".openomni", "config.json");
@@ -41,6 +43,9 @@ interface RawConfig {
     token?: string;
     allowedUsers?: string[];
   };
+  messaging?: {
+    grants?: unknown;
+  };
 }
 
 export interface ServerConfig {
@@ -52,6 +57,8 @@ export interface ServerConfig {
   telegram: { token?: string; allowedUsers: string[] };
   github: { secret?: string; token?: string; botUsername?: string; allowedUsers: string[] };
   discord: { token?: string; allowedUsers: string[] };
+  /** Existing-agent messaging grants: default EMPTY — every send is denied `ungranted` until a grant is explicitly configured. */
+  messaging: { grants: SenderTargetGrant[] };
 }
 
 let _config: ServerConfig | null = null;
@@ -71,6 +78,21 @@ function loadRaw(configPath: string): RawConfig {
     });
     return {};
   }
+}
+
+function resolveMessagingGrants(raw: RawConfig, configPath: string): SenderTargetGrant[] {
+  if (raw.messaging?.grants === undefined) return [];
+  const parsed = z.array(SenderTargetGrant).safeParse(raw.messaging.grants);
+  if (parsed.success) return parsed.data;
+  // Fail closed: a malformed grant list grants nothing.
+  Bus.publish(Operational.Warn, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "invalid messaging.grants config ignored; all existing-agent sends stay denied",
+    context: { configPath, error: parsed.error.message },
+  });
+  return [];
 }
 
 function resolve(raw: RawConfig, configPath: string): ServerConfig {
@@ -126,6 +148,9 @@ function resolve(raw: RawConfig, configPath: string): ServerConfig {
     discord: {
       token: process.env.DISCORD_BOT_TOKEN?.trim() || raw.discord?.token,
       allowedUsers: raw.discord?.allowedUsers ?? [],
+    },
+    messaging: {
+      grants: resolveMessagingGrants(raw, configPath),
     },
   };
 }

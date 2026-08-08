@@ -87,6 +87,17 @@ export class DiscordAdapter implements Adapter.Surface {
     await sendDiscordMessage(this.client, channelId, message);
   }
 
+  /**
+   * Existing-agent delivery: a registered ActorEndpoint's externalId is a
+   * Discord user id — deliver by DM and report the platform message id of
+   * the final chunk (the message a reply would reference).
+   */
+  async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
+    const channelId = await this.client.createDmChannel(externalId);
+    const externalMessageId = await sendDiscordMessage(this.client, channelId, { text: body });
+    return externalMessageId === undefined ? {} : { externalMessageId };
+  }
+
   private handleMessageCreate(message: DiscordMessage): void {
     if (!this.normalizer) return;
     if (this.dedupe.isDuplicate(message.id)) return;
@@ -173,9 +184,11 @@ export async function sendDiscordMessage(
   client: ChannelClient,
   channelId: string,
   message: Adapter.OutboundMessage,
-): Promise<void> {
-  if (!message.text) return;
+): Promise<string | undefined> {
+  if (!message.text) return undefined;
+  let lastMessageId: string | undefined;
   for (const chunk of splitText(message.text, DISCORD_MESSAGE_LIMIT)) {
-    await client.send(channelId, chunk);
+    lastMessageId = (await client.send(channelId, chunk)) ?? lastMessageId;
   }
+  return lastMessageId;
 }

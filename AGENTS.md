@@ -67,34 +67,19 @@ All durable messaging should flow through an OpenOmni-owned kernel surface. Targ
 ```
 raw channel event
   -> server channel adapter normalizes transport payload
-  -> openomni messaging kernel receives a canonical MessageEnvelope/command
+  -> openomni messaging kernel receives a canonical inbound message/command
   -> kernel resolves principal, access, correlation, session, target, execution path
   -> kernel projects messages/events and returns response/writeback instructions
 ```
 
 `apps/server` must not decide whether an inbound message is a PendingInteraction/PendingAsk reply versus a normal conversation; it should pass normalized transport facts to `openomni`. `session` may expose indexed lookups such as correlation queries, but match precedence and lifecycle transitions are kernel decisions. `coordinator` may deliver an input frame to a live run, but it must not decide why that run is the target.
 
-### OpenOmni Internal Split
-
-`packages/openomni` is allowed to be the product kernel, but it should be internally split by ownership:
-
-| Kernel area | Responsibility |
-| --- | --- |
-| Messaging | Canonical inbound/internal/outbound envelope entry, correlation, target/session resolution, response/writeback routing |
-| Access | Principal facts, blocklist/channel access/delegation grant/effective access decisions |
-| Orchestration | Resident runtime, Worker run orchestration, session-backed worker runtime, async run scheduler |
-| Ledger | Work item orchestration, completion reports, evidence, verification/read-back gates |
-| Tools | Tool providers, tool executor, workspace lock, injection queue, schedule bridge; no high-level routing policy |
-| Projection | Session message projection, Bus audit events, distilled writeback |
-
-Existing `ingress/` and `dispatch/` are implementation stages of this kernel, not independent product surfaces. New cross-boundary behavior should prefer a central `messaging/` + `access/` facade and only then delegate to legacy ingress/dispatch handlers.
-
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
 | --- | --- | --- |
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
-| Add/modify bus events | `packages/protocol/src/event/index.ts` + `event/agent-execution.ts` | `BusEvent.define()` pattern |
+| Add/modify bus events | legacy families in `packages/protocol/src/event/`; new domains colocate `events.ts` beside their schema (e.g. `packages/protocol/src/wait/events.ts`) | `BusEvent.define()` pattern |
 | Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
 | Add policy point | `packages/protocol/src/policy/point-registry.ts` | 20 registered points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
@@ -110,7 +95,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Windowed Stakes primitive | `packages/openomni/src/ledger/` | Deterministic consequence calculator, replay driver, criterion treatment, and per-host capability seams; WorkItem completion now consumes the Stakes resolver seam while authorized Voice remains unwired |
 | Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
 | WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
-| Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
+| Add LLM provider | `packages/llm/src/provider/` (`index.ts` + `sdk.ts`) + auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
 | Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
@@ -150,9 +135,55 @@ Operating rules live in this file and the tracked `docs/` — gitignored `*.loca
 
 Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, `PolicyEngine` for agent-loop extension, OpenOmni kernel for messaging/orchestration decisions.
 
+### Module & file structure
+
+These rules exist because the 2026-08 repo-wide audit traced real defects (a dead
+policy path kept alive by its own tests, two Discord gateway bugs caused directly by
+a satellite split) to violations of each one.
+
+1. **A file is named for what it owns, not for its layer.** Role-noun suffixes that
+   could be swapped without changing meaning (`-manager`/`-service`/`-authority`/
+   `-boundary`/`-gateway`/`-coordinator`/`-helper`/`-util`) are a confession the seam
+   is fake. If two sibling files could trade names, merge them.
+2. **Split a module only when one of these is true**: (a) a second consumer exists
+   (abstraction is earned by the second consumer, never in advance); (b) a real trust
+   boundary separates the halves; (c) the halves have independent lifecycles (one can
+   change without the other). "The file is getting long" is not on this list — line
+   count is a review signal, never a split criterion.
+3. **Sub-30-LOC single-importer files get folded back** into their importer (#453
+   hygiene). A file that exists only to break an import cycle the split itself
+   created is the same defect — fix the shape instead.
+4. **One enforcement layer per invariant per phase.** Pick the owner (zod schema,
+   pure fold, service entry, or write time) and delete the other copies.
+   Re-validation is legitimate only across a real `await` or a trust boundary —
+   in-process re-checking of a value the same factory produced is slop. When deleting
+   a duplicated check, name the surviving layer in a comment and keep/add a pinning
+   test that fails if that layer regresses (assert the specific reason/error, not
+   just "it rejects").
+5. **One exported owner per convention.** Digest/canonical-JSON, reason-code strings,
+   idempotency keys, event-name literals, error base classes (`NamedError` across
+   package boundaries): defined once, imported everywhere. Two spellings of the same
+   convention in different packages is a bug seed even while all tests pass.
+6. **No smuggled fields, no unreachable fallbacks.** If a consumer needs a field, it
+   goes in the schema — never `as`-cast around it. `?? default` where the left side
+   cannot be nullish, defensive re-checks of what the type system already guarantees,
+   and `default:` branches after an exhaustive `never` check are deletions, not style.
+7. **Durable writes fail closed.** A storage seam that silently skips persistence
+   when an adapter is absent (warn-and-return) is forbidden; absence of the adapter
+   is an error. Optional sub-adapters exist for test fakes only and must never guard
+   a production write path.
+8. **Test structure mirrors these rules.** One shared fixture builder per package
+   (`test/helpers/`), no per-file clones; every invariant is tested at exactly its
+   owning layer; no bare `.toThrow()` (assert the message or typed code); no
+   parse-echo tests that feed a literal through zod and read the same literal back.
+9. **Vocabulary**: forbidden nouns `runtime`, `task`, `envelope` in new protocol/
+   kernel surfaces (#497 convergence); reserved single-meaning nouns `Outcome`,
+   `CompletionReport`, `Grant`, `Wait`. Korean names are path-level only (driver
+   band); exported symbols and protocol nouns stay English.
+
 ## CODING BOUNDARY RULES
 
-- Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, or choose worker/resident targets except through an OpenOmni kernel API.
+- Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WaitStore`, `WorkerGrantStore`, `ChannelGrantStore`, `BlacklistStore`, or choose worker/resident targets except through an OpenOmni kernel API.
 - Do not add authority decisions to `packages/session`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
 - Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Session-backed worker/background execution belongs in `packages/openomni`.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.

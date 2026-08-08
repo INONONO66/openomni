@@ -1,6 +1,7 @@
 import type { Adapter } from "@openomni/protocol";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "../channel";
 import type { ServerConfig } from "../config";
+import type { ChannelDeliveryRoute } from "./messaging";
 
 type Surface = {
   start(): Promise<void> | void;
@@ -11,6 +12,14 @@ export interface ChannelSetup {
   channels: Surface[];
   wsHandler: WebSocketHandler | undefined;
   githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
+  /**
+   * Existing-agent delivery routes, keyed by ActorEndpoint channel: the
+   * concrete owners behind the messaging kernel's injected-delivery seam.
+   * Only channels whose surface can address an endpoint's externalId and
+   * report a platform message id register here (Discord DM, Telegram chat);
+   * GitHub comments need an issue context an ActorEndpoint does not carry.
+   */
+  deliveryRoutes: Map<string, ChannelDeliveryRoute>;
 }
 
 export function createChannelAdapters(
@@ -18,6 +27,7 @@ export function createChannelAdapters(
   routingHandler: Adapter.MessageHandler | undefined,
 ): ChannelSetup {
   const channels: Surface[] = [];
+  const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
   let wsHandler: WebSocketHandler | undefined;
   let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
 
@@ -36,6 +46,7 @@ export function createChannelAdapters(
     });
     telegram.onMessage(routingHandler);
     channels.push(telegram);
+    deliveryRoutes.set(telegram.id, (externalId, body) => telegram.deliver(externalId, body));
   }
 
   if (config.github.secret && routingHandler) {
@@ -70,7 +81,8 @@ export function createChannelAdapters(
     });
     discord.onMessage(routingHandler);
     channels.push(discord);
+    deliveryRoutes.set(discord.id, (externalId, body) => discord.deliver(externalId, body));
   }
 
-  return { channels, wsHandler, githubWebhookHandler };
+  return { channels, wsHandler, githubWebhookHandler, deliveryRoutes };
 }

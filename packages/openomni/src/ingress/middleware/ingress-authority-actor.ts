@@ -1,6 +1,7 @@
 import { Actor, type Ingress } from "@openomni/protocol";
 import { resolveTarget } from "../target";
-import type { ActorRecord } from "./ingress-authority-types";
+
+export type ActorRecord = Record<string, unknown>;
 
 const workerControlActions = ["spawn", "send", "cancel", "resume", "schedule"] as const;
 export type WorkerControlAction = (typeof workerControlActions)[number];

@@ -23,6 +23,7 @@ import { McpToolProvider } from "../tool/mcp";
 import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { createServerDispatchOwners } from "./dispatch-owners";
+import { registerServerMessaging } from "./messaging";
 import { connectMcpServers } from "./mcp";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "./recovery";
 import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
@@ -174,10 +175,15 @@ export async function main(): Promise<void> {
     });
   }
 
-  const { channels, wsHandler, githubWebhookHandler } = createChannelAdapters(
+  const { channels, wsHandler, githubWebhookHandler, deliveryRoutes } = createChannelAdapters(
     config,
     routingHandler,
   );
+  // Existing-agent messaging (#215): the concrete channel delivery owner is
+  // composed here, behind the kernel's injected-owner fail-closed seam.
+  // Grants default to the empty list — granting requires explicit
+  // `messaging.grants` configuration.
+  registerServerMessaging({ deliveryRoutes, grants: config.messaging.grants });
 
   if (hasAnyChannel && !routingHandler) {
     Bus.publish(Operational.Warn, {

@@ -1,42 +1,24 @@
 import { Dispatch, Execution } from "@openomni/protocol";
 import { PendingInteractionStore } from "@openomni/session";
+import {
+  dispatchEvidence,
+  findWaitCandidates,
+  responderCandidates,
+  targetsOfPendingInteraction,
+} from "../wait/index.js";
 
-function correlationQueries(correlation: Dispatch.Correlation): Dispatch.Correlation[] {
-  const base = {
-    endpointId: correlation.endpointId,
-    channelId: correlation.channelId,
-  };
-  const queries: Dispatch.Correlation[] = [];
-  if (correlation.replyToMessageId) {
-    queries.push({ ...base, replyToMessageId: correlation.replyToMessageId });
-  }
-  if (correlation.threadId) {
-    queries.push({ ...base, threadId: correlation.threadId });
-  }
-  if (correlation.tokenHash) {
-    queries.push({ ...base, tokenHash: correlation.tokenHash });
-  }
-  if (correlation.externalConversationId) {
-    queries.push({ ...base, externalConversationId: correlation.externalConversationId });
-  }
-  if (queries.length === 0) queries.push(base);
-  return queries;
-}
-
-export function findPendingInteractions(
+// Correlation lookup is owned by wait/correlation.ts (THE single lookup);
+// this module only routes a single legacy PendingInteraction match into the
+// canonical dispatch command. Ambiguity or a non-interaction match leaves the
+// command unrouted, so the default dispatch authority denies it fail-closed
+// (dispatch.pending_interaction.required / dispatch.actor.required).
+function findPendingInteractionMatch(
   correlation: Dispatch.Correlation,
-): readonly PendingInteractionStore.Record[] {
-  const seen = new Set<string>();
-  const matches: PendingInteractionStore.Record[] = [];
-  for (const query of correlationQueries(correlation)) {
-    for (const match of PendingInteractionStore.findByCorrelation(query)) {
-      if (seen.has(match.id)) continue;
-      seen.add(match.id);
-      matches.push(match);
-    }
-    if (matches.length > 0) break;
-  }
-  return matches;
+): PendingInteractionStore.Record | undefined {
+  const resolution = findWaitCandidates({ correlation });
+  return resolution.kind === "match" && resolution.candidate.source === "pending_interaction"
+    ? resolution.candidate.record
+    : undefined;
 }
 
 function markMatched(record: PendingInteractionStore.Record): PendingInteractionStore.Record {
@@ -109,23 +91,19 @@ function canonicalWorkerCompletePayload(
   return { result: result.data };
 }
 
+// Sender matching is owned by wait/matcher.ts (one core, dispatch actor
+// context as the phase evidence); exactly one credited responder routes.
+// Endpoint proof (or a pinned actor identity) is the SOLE authorization for
+// legacy PendingInteraction rows: correlation.tokenHash is a lookup
+// precedence level, never a credential — a wrong token still reaches the
+// scoped level, and only the sender matcher admits or refuses the command.
 function pendingInteractionSenderMatches(
   command: Dispatch.Command,
   match: PendingInteractionStore.Record,
 ): boolean {
-  const correlation = command.correlation;
-  if (correlation !== undefined && typeof correlation !== "string") {
-    const bearerTokenMatches =
-      match.targetActorId === undefined &&
-      match.correlation.tokenHash !== undefined &&
-      correlation.tokenHash === match.correlation.tokenHash;
-    if (bearerTokenMatches) return true;
-    if (correlation.endpointId !== match.endpointId) return false;
-  }
-  if (command.actor.kind === "unknown") {
-    return match.targetActorId === undefined && command.actor.actorId === match.endpointId;
-  }
-  return match.targetActorId === undefined || command.actor.actorId === match.targetActorId;
+  return (
+    responderCandidates(targetsOfPendingInteraction(match), dispatchEvidence(command)).length === 1
+  );
 }
 
 export function routePendingInteraction(
@@ -133,11 +111,11 @@ export function routePendingInteraction(
   pinned?: PendingInteractionStore.Record,
 ): Dispatch.Command {
   if (command.action !== Dispatch.Actions.ActorMessage) return command;
-  const matches =
-    pinned === undefined && command.correlation && typeof command.correlation !== "string"
-      ? findPendingInteractions(command.correlation)
-      : [];
-  const match = pinned ?? (matches.length === 1 ? matches[0] : undefined);
+  const match =
+    pinned ??
+    (command.correlation && typeof command.correlation !== "string"
+      ? findPendingInteractionMatch(command.correlation)
+      : undefined);
   if (!match) return command;
   if (!pendingInteractionSenderMatches(command, match)) return command;
   const action = requestedPendingInteractionAction(command.payload);

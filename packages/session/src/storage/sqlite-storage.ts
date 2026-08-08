@@ -13,6 +13,7 @@ import { createSqlitePendingInteractionAdapter } from "./sqlite-pending-interact
 import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
+import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
 import { createSqliteWorkerGrantAdapter } from "./sqlite-worker-grant-adapter";
@@ -28,6 +29,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly artifact: NonNullable<Storage.Adapter["artifact"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
+  readonly wait: NonNullable<Storage.Adapter["wait"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
   readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
   readonly workerGrant: NonNullable<Storage.Adapter["workerGrant"]>;
@@ -53,6 +55,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.artifact = createSqliteArtifactAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
+    this.wait = createSqliteWaitAdapter(this.db);
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
     this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);
     this.workerGrant = createSqliteWorkerGrantAdapter(this.db);

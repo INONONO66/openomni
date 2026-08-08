@@ -1,6 +1,13 @@
 import { Dispatch, type Ingress, type RoutingDecisionPayload } from "@openomni/protocol";
 import type { TraceContext } from "@openomni/protocol";
 import { submitPinnedPendingInteraction, type DispatchRuntime } from "../dispatch/runtime.js";
+import {
+  WaitService,
+  ingressEvidence,
+  responderCandidates,
+  targetsOfPendingInteraction,
+  targetsOfWait,
+} from "../wait/index.js";
 import type { KernelRouteResolution } from "./routing-runtime.js";
 
 type RoutedDecision = Extract<RoutingDecisionPayload, { readonly outcome: "route" }>;
@@ -17,7 +24,8 @@ export type IngressRoutingErrorCode =
   | "dispatch_runtime_missing"
   | "dispatch_route_invalid"
   | "dispatch_failed"
-  | "dispatch_output_unsupported";
+  | "dispatch_output_unsupported"
+  | "wait_reply_rejected";
 
 export class IngressRoutingError extends Error {
   readonly code: IngressRoutingErrorCode;
@@ -95,6 +103,20 @@ function projectDispatchOutput(output: unknown, decision: RoutedDecision): strin
   );
 }
 
+function projectWaitOwnerEvent<Event extends Ingress.InboundEvent>(
+  event: Event,
+  ownerSessionId: string,
+): Omit<Event, "target"> & { readonly target?: never } {
+  const { target: _target, ...withoutTarget } = event;
+  const { target: _metaTarget, ...meta } = event.meta ?? {};
+  const { runId: _runId, ...runtime } = event.runtime ?? {};
+  return {
+    ...withoutTarget,
+    meta,
+    runtime: { ...runtime, durableSessionId: ownerSessionId },
+  } as Omit<Event, "target"> & { readonly target?: never };
+}
+
 function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
   event: Event,
   resolution: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_ask" }>,
@@ -125,48 +147,18 @@ function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
   } as Omit<Event, "target"> & { readonly target?: never };
 }
 
-function hasMatchingBearerToken(
-  correlation: Dispatch.Correlation,
-  record: Extract<
-    KernelRouteResolution["waitExecution"],
-    { kind: "pending_interaction" }
-  >["record"],
-): boolean {
-  return (
-    record.targetActorId === undefined &&
-    record.correlation.tokenHash !== undefined &&
-    correlation.tokenHash === record.correlation.tokenHash
-  );
-}
-
+// Sender matching is owned by wait/matcher.ts (the single core for ingress and
+// dispatch); this module only converts its candidate count into the pinned
+// dispatch_route_invalid rejection.
 function senderMatchesPendingInteraction(
   event: Ingress.InboundEvent,
   wait: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_interaction" }>,
 ): boolean {
-  if (hasMatchingBearerToken(wait.correlation, wait.record)) return true;
-  if (wait.correlation.endpointId !== wait.record.endpointId) return false;
-
-  if (wait.record.targetActorId !== undefined && typeof event.meta?.actor?.actorId !== "string") {
-    return false;
-  }
-  const actor = event.meta?.actor;
-  if (typeof actor?.actorId !== "string") {
-    if (event.mode !== "direct" || typeof event.userId !== "string") return false;
-    return (
-      event.userId === wait.record.endpointId || wait.record.endpointId.endsWith(`:${event.userId}`)
-    );
-  }
-  if (wait.record.targetActorId !== undefined && actor.actorId !== wait.record.targetActorId) {
-    return false;
-  }
-
-  const endpoint = actor.endpoint;
-  if (endpoint === undefined) return actor.endpointId === wait.record.endpointId;
-  return (
-    endpoint.id === wait.record.endpointId ||
-    endpoint.externalId === wait.record.endpointId ||
-    `${endpoint.channel}:${endpoint.externalId}` === wait.record.endpointId
+  const candidates = responderCandidates(
+    targetsOfPendingInteraction(wait.record),
+    ingressEvidence(event, wait.correlation),
   );
+  return candidates.length === 1;
 }
 
 async function executePendingInteractionRoute<Event extends Ingress.InboundEvent>(
@@ -182,19 +174,15 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
       decision,
     );
   }
+  // resolve-route is the only producer of wait_correlation route decisions and
+  // copies target/session/run/interaction ids from the matched record, so those
+  // fields are not re-compared here. Only the executable-action gate is ours:
+  // resolve-route admits every allowed action, while this route can execute
+  // report_result and ask_clarification alone.
   const wait = resolution.waitExecution;
-  const executableAction =
-    wait.kind === "pending_interaction" &&
-    (wait.requestedAction === "report_result" || wait.requestedAction === "ask_clarification");
   if (
-    !executableAction ||
     wait.kind !== "pending_interaction" ||
-    decision.stage !== "wait_correlation" ||
-    decision.target !== `worker-session:${wait.record.sessionId}` ||
-    decision.sessionId !== wait.record.sessionId ||
-    decision.runId !== wait.record.workerRunId ||
-    decision.pendingInteractionId !== wait.record.id ||
-    !wait.record.allowedActions.includes(wait.requestedAction)
+    (wait.requestedAction !== "report_result" && wait.requestedAction !== "ask_clarification")
   ) {
     throw new IngressRoutingError(
       "dispatch_route_invalid",
@@ -239,8 +227,8 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
   }
   return {
     mode: event.mode,
-    target: { kind: "worker", sessionId: decision.sessionId },
-    sessionId: decision.sessionId,
+    target: { kind: "worker", sessionId: wait.record.sessionId },
+    sessionId: wait.record.sessionId,
     result: { output: projectDispatchOutput(result.output, decision), finishReason: "stop" },
   };
 }
@@ -277,6 +265,60 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
   switch (wait.kind) {
     case "none":
       return { kind: "continue", event: resolution.event, authority: "required" };
+    case "wait": {
+      if (decision.stage !== "wait_correlation") {
+        throw new IngressRoutingError(
+          "dispatch_route_invalid",
+          "wait route is incomplete",
+          decision,
+        );
+      }
+      // The matcher only returns candidates; the protocol fold decides
+      // (duplicate / late / unknown / ambiguous / attach / resolve) and the
+      // store persists the outcome before the owner session sees the reply.
+      const at = Date.now();
+      const outcome = WaitService.attachReply(wait.record.id, {
+        replyKey: resolution.event.id,
+        responderCandidates: responderCandidates(
+          targetsOfWait(wait.record),
+          ingressEvidence(resolution.event, wait.correlation),
+        ),
+        messageId: resolution.event.id,
+        at,
+      });
+      if (outcome.kind === "rejected") {
+        if (outcome.code === "deadline_passed") {
+          // Lazy expiry: this late reply is the first observer of the passed
+          // deadline — fold the wait to expired (recording partial progress)
+          // before rejecting, so the ledger never keeps a dead open wait that
+          // the boot sweep alone would have to find. A concurrent ingest may
+          // have already folded the wait terminal (revision CAS conflict);
+          // the expiry is an optimization, so it must never replace the typed
+          // rejection below.
+          try {
+            WaitService.expire(wait.record.id, at);
+          } catch {
+            // Already folded by a concurrent transition — the typed rejection
+            // below is still the correct outcome for this reply.
+          }
+        }
+        throw new IngressRoutingError(
+          "wait_reply_rejected",
+          `wait reply rejected: ${outcome.code}`,
+          decision,
+        );
+      }
+      // "already_resolved" (channel redelivery of the resolving reply) falls
+      // through on purpose: the owner delivery repeats idempotently with the
+      // recorded resolution — no state change, no revision bump.
+      // resolve-route routed this decision, so the owner is a session
+      // (workItem owners fail closed at the wait_correlation stage).
+      return {
+        kind: "continue",
+        event: projectWaitOwnerEvent(resolution.event, wait.record.ownerRef.id),
+        authority: "wait_precedence",
+      };
+    }
     case "pending_interaction":
       if (decision.stage !== "wait_correlation") {
         return { kind: "continue", event: resolution.event, authority: "required" };
@@ -286,12 +328,9 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
         result: await executePendingInteractionRoute(runtime, trace, resolution, decision),
       };
     case "pending_ask":
-      if (
-        decision.stage !== "wait_correlation" ||
-        decision.target !== "resident" ||
-        decision.sessionId !== wait.record.originSessionId ||
-        decision.runId !== wait.record.originRunId
-      ) {
+      // resolve-route copies the resident target and origin session/run into the
+      // decision from this same record; only the stage gate is checked here.
+      if (decision.stage !== "wait_correlation") {
         throw new IngressRoutingError(
           "dispatch_route_invalid",
           "pending ask route is incomplete",

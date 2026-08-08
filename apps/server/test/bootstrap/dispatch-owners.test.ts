@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   Dispatch as DispatchProtocol,
+  Wait,
   type AppConnector,
   type Dispatch,
   type Execution,
@@ -258,8 +259,12 @@ describe("createServerDispatchOwners", () => {
 
   test("routes connector question bridge requests through resident.ask", async () => {
     const eventNames: string[] = [];
-    const unsubscribe = Bus.observe((event) => {
+    const syncAskPhases: string[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
       if (event.name.startsWith("dispatch.")) eventNames.push(event.name);
+      if (event.name === Wait.Events.SyncAsk.name) {
+        syncAskPhases.push(Wait.Events.SyncAsk.schema.parse(payload).phase);
+      }
     });
     const residentCalls: ResidentRuntimeCall[] = [];
     const workspaceRoot = tempDir("server-dispatch-owner-question-bridge");
@@ -330,14 +335,10 @@ describe("createServerDispatchOwners", () => {
       expect(eventNames).toContain(DispatchProtocol.Events.Authorized.name);
       expect(eventNames).toContain(DispatchProtocol.Events.Routed.name);
       expect(eventNames).toContain(DispatchProtocol.Events.Completed.name);
-      const asks = PendingAskStore.list(["answered"]);
-      expect(asks).toHaveLength(1);
-      expect(asks[0]).toMatchObject({
-        originSessionId: "ses_fake",
-        originRunId: "run_fake",
-        originActorKind: "worker",
-        targetKind: "resident",
-      });
+      // The synchronous resident.ask path records wait.sync_ask audit events
+      // only and writes no PendingAsk row (#215 owner decision 2).
+      expect(syncAskPhases).toEqual(["opened", "answered"]);
+      expect(PendingAskStore.list()).toHaveLength(0);
     } finally {
       unsubscribe();
     }

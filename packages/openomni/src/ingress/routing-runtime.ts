@@ -4,6 +4,7 @@ import {
   type Communication,
   type Ingress,
   type RoutingDecisionPayload,
+  type Wait,
 } from "@openomni/protocol";
 import {
   BlacklistStore,
@@ -12,18 +13,23 @@ import {
   SurfaceKey,
 } from "@openomni/session";
 import { requestedPendingInteractionAction } from "../dispatch/pending-interaction-routing.js";
-import { applyChannelGrantTreatment } from "./middleware/ingress-authority-channel-grant.js";
+import { findWaitCandidates, type WaitResolution } from "../wait/index.js";
+import { applyChannelGrantTreatment } from "./middleware/ingress-authority.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { IngressSessionResolver } from "./session-resolver.js";
 import { resolveTarget, targetKey } from "./target.js";
-import {
-  resolveWaitCorrelation,
-  type WaitCorrelationEffect,
-  type WaitCorrelationResolution,
-} from "./wait-correlation.js";
 
 export type KernelWaitExecution =
   | Readonly<{ kind: "none" }>
+  | Readonly<{
+      kind: "wait";
+      // Optional: after recordDeliveryReceipt re-keys a wait to the platform
+      // message id, a channel may deliver the reply matched on
+      // externalMessageId alone, with no correlation envelope.
+      correlation?: Dispatch.Correlation;
+      requestedAction: PendingInteractionStore.Record["allowedActions"][number];
+      record: Wait.Record;
+    }>
   | Readonly<{
       kind: "pending_interaction";
       correlation: Dispatch.Correlation;
@@ -41,7 +47,6 @@ export type KernelRouteResolution<Event extends Ingress.InboundEvent = Ingress.I
     decision: RoutingDecisionPayload;
     event: Event;
     waitExecution: KernelWaitExecution;
-    waitEffect: WaitCorrelationEffect;
     selectedTarget: Ingress.Target;
   }>;
 
@@ -50,7 +55,7 @@ function parseCorrelation(event: Ingress.InboundEvent): Dispatch.Correlation | u
   return value === undefined ? undefined : Dispatch.Correlation.parse(value);
 }
 
-function routeWaitState(resolution: WaitCorrelationResolution): RouteState["wait"] {
+function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
   switch (resolution.kind) {
     case "none":
       return { kind: "none" };
@@ -60,7 +65,18 @@ function routeWaitState(resolution: WaitCorrelationResolution): RouteState["wait
         candidateInteractionIds: resolution.candidates.map((candidate) => candidate.key),
       };
     case "match":
-      switch (resolution.candidate.kind) {
+      switch (resolution.candidate.source) {
+        case "wait": {
+          const record = resolution.candidate.wait;
+          return {
+            kind: "match",
+            backing: "wait",
+            key: resolution.candidate.key,
+            recordId: record.id,
+            owner: record.ownerRef,
+            allowed: record.allowedActions,
+          };
+        }
         case "pending_interaction": {
           const record = resolution.candidate.record;
           return {
@@ -90,7 +106,7 @@ function routeWaitState(resolution: WaitCorrelationResolution): RouteState["wait
 }
 
 function kernelWaitExecution(
-  resolution: WaitCorrelationResolution,
+  resolution: WaitResolution,
   correlation: Dispatch.Correlation | undefined,
   requestedAction: PendingInteractionStore.Record["allowedActions"][number],
 ): KernelWaitExecution {
@@ -100,9 +116,16 @@ function kernelWaitExecution(
     case "ambiguous":
       return { kind: "ambiguous" };
     case "match":
-      switch (resolution.candidate.kind) {
+      switch (resolution.candidate.source) {
         case "pending_ask":
           return { kind: "pending_ask", record: resolution.candidate.record };
+        case "wait":
+          return {
+            kind: "wait",
+            ...(correlation === undefined ? {} : { correlation }),
+            requestedAction,
+            record: resolution.candidate.wait,
+          };
         case "pending_interaction":
           if (correlation === undefined) {
             throw new TypeError("pending interaction match requires correlation");
@@ -117,15 +140,6 @@ function kernelWaitExecution(
   }
 }
 
-function selectWaitEffect(
-  decision: RoutingDecisionPayload,
-  gathered: WaitCorrelationEffect,
-): WaitCorrelationEffect {
-  return decision.stage === "wait_correlation" && decision.outcome === "ambiguous"
-    ? gathered
-    : { kind: "none" };
-}
-
 function selectedRouteTarget(
   decision: RoutingDecisionPayload,
   waitExecution: KernelWaitExecution,
@@ -134,7 +148,9 @@ function selectedRouteTarget(
   if (decision.outcome !== "route" || decision.stage !== "wait_correlation") {
     return surfaceDefault;
   }
-  if (waitExecution.kind === "pending_ask") return { kind: "resident" };
+  if (waitExecution.kind === "pending_ask" || waitExecution.kind === "wait") {
+    return { kind: "resident" };
+  }
   if (waitExecution.kind === "pending_interaction") {
     return { kind: "worker", sessionId: waitExecution.record.sessionId };
   }
@@ -264,7 +280,7 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
   const requestedAction = requestedPendingInteractionAction(event.payload);
-  const gatheredWait = resolveWaitCorrelation({
+  const gatheredWait = findWaitCandidates({
     ...(correlation === undefined ? {} : { correlation }),
     externalMessageId: event.id,
   });
@@ -318,6 +334,5 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
     event: routedEvent(event, channelResolution, channel),
     waitExecution,
     selectedTarget: selectedRouteTarget(decision, waitExecution, surfaceDefaultTarget),
-    waitEffect: selectWaitEffect(decision, gatheredWait.effect),
   };
 }

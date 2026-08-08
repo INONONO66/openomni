@@ -30,6 +30,10 @@ export type {
   ResidentPromptVariant,
 } from "./agents";
 
+// Kernel wait service (#215): the durable Wait entry (open / attach / sweep)
+// plus the sync-ask audit. Correlation and matching stay kernel-internal.
+export { WaitService } from "./wait";
+
 export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,

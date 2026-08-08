@@ -24,7 +24,6 @@ import {
   requireRoutedDecision,
 } from "./routing-execution";
 import { resolveKernelRoute, type KernelRouteResolution } from "./routing-runtime";
-import { applyWaitCorrelationEffect } from "./wait-correlation";
 import { targetKey } from "./target";
 
 export type { CoordinatorLike };
@@ -47,18 +46,10 @@ function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
 }
 
-export function applySelectedWaitEffect(
-  resolution: Pick<KernelRouteResolution, "decision" | "waitEffect">,
-): void {
-  const selected =
-    resolution.decision.stage === "wait_correlation" && resolution.decision.outcome === "ambiguous";
-  if (!selected && resolution.waitEffect.kind !== "none") {
-    throw new TypeError("non-wait-ambiguous decision carried an executable wait effect");
-  }
-  if (selected) applyWaitCorrelationEffect(resolution.waitEffect);
-}
-
-function resolvePublishAndApplyWaitEffect<Event extends Ingress.InboundEvent>(
+// Correlation is read-only (#215): wait ambiguity is recorded solely by the
+// published RoutingDecision and the typed route_ambiguous rejection — frozen
+// legacy rows are never mutated on lookup.
+function resolveAndPublishRoute<Event extends Ingress.InboundEvent>(
   event: Event,
   traceId: string,
 ): KernelRouteResolution<Event> {
@@ -66,8 +57,6 @@ function resolvePublishAndApplyWaitEffect<Event extends Ingress.InboundEvent>(
   const decision = IngressEvent.RoutingDecision.schema.parse(resolution.decision);
   const validated = { ...resolution, decision };
   Bus.publish(IngressEvent.RoutingDecision, decision);
-
-  applySelectedWaitEffect(validated);
   return validated;
 }
 
@@ -133,7 +122,7 @@ export namespace IngressEngine {
       throw new TypeError("external ingress actor resolution changed event mode");
     }
     const trace = TraceContext.create();
-    const route = resolvePublishAndApplyWaitEffect(resolvedActorEvent, trace.traceId);
+    const route = resolveAndPublishRoute(resolvedActorEvent, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
@@ -167,7 +156,7 @@ export namespace IngressEngine {
     }>,
   ): Promise<Ingress.IngressResult> {
     const trace = TraceContext.create();
-    const route = resolvePublishAndApplyWaitEffect(event, trace.traceId);
+    const route = resolveAndPublishRoute(event, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;

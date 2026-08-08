@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-export type SqliteJsonDataTable = "pending_ask" | "pending_interaction";
+export type SqliteJsonDataTable = "pending_ask" | "pending_interaction" | "wait";
 
 export type SqliteStringEqualityColumn =
   | "endpoint_id"
