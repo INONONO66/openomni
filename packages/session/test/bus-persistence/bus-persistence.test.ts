@@ -217,6 +217,55 @@ describe("BusPersistence", () => {
     expect(persisted.map((row) => row.id)).toEqual([1, 2, 3, 4, 5]);
   });
 
+  test("group-commits a synchronous burst as one telemetry transaction", async () => {
+    const session = createSession();
+    const event = BusEvent.define(
+      "custom.batched",
+      z.object({ sessionId: z.string(), traceId: z.string(), time: z.number(), index: z.number() }),
+    );
+
+    BusPersistence.start();
+    const transactionSpy = spyOn(db(), "transaction");
+    try {
+      for (let index = 0; index < 5; index += 1) {
+        Bus.publish(event, {
+          sessionId: session.id,
+          traceId: `trace-batch-${index}`,
+          time: Date.UTC(2026, 4, 10, 3, 0, index),
+          index,
+        });
+      }
+      // Rows are queued, not written per event — the batch commits on the
+      // scheduled microtask flush (#510 D1 group commit).
+      expect(rows()).toHaveLength(0);
+      await BusPersistence.flush();
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      transactionSpy.mockRestore();
+    }
+
+    const persisted = rows();
+    expect(persisted).toHaveLength(5);
+    expect(persisted.map((row) => JSON.parse(row.data).index)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  test("flush drains the queued batch on demand (shutdown drain)", async () => {
+    const session = createSession();
+    const event = BusEvent.define(
+      "custom.drained",
+      z.object({ sessionId: z.string(), traceId: z.string(), time: z.number() }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(event, { sessionId: session.id, traceId: "trace-drain", time: Date.now() });
+    expect(rows()).toHaveLength(0);
+
+    await BusPersistence.flush();
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ trace_id: "trace-drain" });
+  });
+
   test("sanitizes non-finite trace timing fields before persistence", async () => {
     const session = createSession();
     const fallbackTime = Date.UTC(2026, 4, 10, 1, 2, 7);

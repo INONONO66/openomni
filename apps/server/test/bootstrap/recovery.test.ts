@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
 import { createDefaultDispatchRuntime, type DefaultDispatchRuntime } from "@openomni/openomni";
 import { Bus, PendingInteractionStore, Session, Storage, WorkerRun } from "@openomni/session";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "../../src/bootstrap/recovery";
@@ -115,6 +116,60 @@ describe("server recovery", () => {
     ).resolves.toBeUndefined();
 
     expect(PendingInteractionStore.get(pendingId)?.status).toBe("expired");
+  });
+
+  it("records a ledger chain-break at boot and continues (does not refuse boot)", async () => {
+    const adapter = Storage.getAdapter();
+    const outcome = adapter.ledger?.append(
+      { streamId: "wait:boot-tamper", type: "wait.created", data: { note: "boot" } },
+      0,
+    );
+    expect(outcome?.kind).toBe("appended");
+
+    // Tamper with the stored fact on the storage connection: the recomputed
+    // hash no longer matches the recorded event_hash.
+    const descriptor = Object.getOwnPropertyDescriptor(adapter, "db");
+    if (!(descriptor?.value instanceof Database)) {
+      throw new Error("expected a SQLite-backed storage adapter");
+    }
+    descriptor.value
+      .query("UPDATE ledger_event SET data = ? WHERE stream_id = ?")
+      .run(JSON.stringify({ note: "tampered" }), "wait:boot-tamper");
+
+    const errorPayloads: Array<Record<string, unknown>> = [];
+    const events: string[] = [];
+    Bus.observe((event, payload) => {
+      events.push(event.name);
+      if (event.name === "operational.error") {
+        errorPayloads.push(payload as Record<string, unknown>);
+      }
+    });
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-chain-break",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [],
+        }),
+      },
+    });
+
+    const chainBreakError = errorPayloads.find((payload) =>
+      String(payload.msg).includes("ledger chain-break detected at boot"),
+    );
+    expect(chainBreakError?.msg).toBe(
+      "ledger chain-break detected at boot: wait:boot-tamper seq 1 (hash_mismatch)",
+    );
+    expect(chainBreakError?.context).toMatchObject({
+      streamId: "wait:boot-tamper",
+      seq: 1,
+      code: "hash_mismatch",
+    });
+    // Boot proceeds: recovery completed despite the recorded break.
+    expect(events).toContain("operational.recovery.completed");
   });
 
   it("expires stale PendingInteractions during boot recovery", async () => {

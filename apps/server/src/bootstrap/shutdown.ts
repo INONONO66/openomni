@@ -3,15 +3,12 @@ import { Storage, Bus, BusPersistence } from "@openomni/session";
 import type { McpToolProvider } from "../tool/mcp";
 
 interface ClosableStorage {
-  transaction(fn: () => void): void;
   close(): void;
-  sqlite: { exec(sql: string): void };
 }
 
 function isClosableStorage(storage: unknown): storage is ClosableStorage {
   if (storage == null || typeof storage !== "object") return false;
-  const s = storage as Record<string, unknown>;
-  return typeof s.close === "function" && typeof s.transaction === "function" && s.sqlite != null;
+  return typeof (storage as Record<string, unknown>).close === "function";
 }
 
 interface ShutdownDeps {
@@ -55,13 +52,19 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
       deps.server.stop(true);
       await deps.mcpProvider.disconnectAll();
       await new Promise((resolve) => setTimeout(resolve, 5_000));
+      // Accepted-append drain (#510 D1). Decision-class appends need no
+      // drain of their own: they run inside synchronous bun:sqlite
+      // transactions, which the event loop cannot interleave — reaching
+      // this line proves no decision transaction is mid-flight. The drain
+      // is therefore (1) flushing the queued NORMAL/group-commit telemetry
+      // batch while the observer is still attached, then (2) the final
+      // WAL checkpoint (TRUNCATE), which SqliteStorageAdapter.close() runs
+      // after closing the telemetry connection.
+      await BusPersistence.flush();
       BusPersistence.stop();
 
       const storage = Storage.get();
       if (isClosableStorage(storage)) {
-        storage.transaction(() => {
-          storage.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-        });
         storage.close();
       }
     } catch (err) {

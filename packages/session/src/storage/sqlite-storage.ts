@@ -11,7 +11,11 @@ import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
 import { createSqlitePendingAskAdapter } from "./sqlite-pending-ask-adapter";
 import { createSqlitePendingInteractionAdapter } from "./sqlite-pending-interaction-adapter";
-import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
+import {
+  clearSqliteStorage,
+  initializeSqliteDatabase,
+  initializeTelemetryConnection,
+} from "./sqlite-schema-lifecycle";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
@@ -22,6 +26,16 @@ import type { Storage } from "./storage";
 
 export class SqliteStorageAdapter implements Storage.Adapter {
   private readonly db: Database;
+  /**
+   * #510 D1 durability split: NORMAL/group-commit telemetry connection on
+   * the SAME database file. bus-persistence writes ride this connection so
+   * a telemetry write can never join a decision-class transaction — the
+   * decision path stays synchronous=FULL on `db`. Writer serialization
+   * between the two connections is WAL + per-connection busy_timeout.
+   * For `:memory:` this IS `db` (an in-memory database cannot be shared
+   * across connections), so the split degrades to the single connection.
+   */
+  private readonly telemetryDb: Database;
 
   readonly session: Storage.Adapter["session"];
   readonly message: Storage.Adapter["message"];
@@ -50,6 +64,19 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       throw err;
     }
 
+    if (dbPath === ":memory:") {
+      this.telemetryDb = this.db;
+    } else {
+      this.telemetryDb = new Database(dbPath);
+      try {
+        initializeTelemetryConnection(this.telemetryDb);
+      } catch (err) {
+        this.telemetryDb.close();
+        this.db.close();
+        throw err;
+      }
+    }
+
     this.session = createSqliteSessionAdapter(this.db);
     this.message = createSqliteMessageAdapter(this.db);
     this.part = createSqlitePartAdapter(this.db);
@@ -64,6 +91,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.ledger = {
       append: (event, expectedHead) => Ledger.append(this.db, event, expectedHead),
       headFact: (streamId) => Ledger.headFact(this.db, streamId),
+      verifyTail: () => Ledger.verifyTail(this.db),
     };
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
     this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);
@@ -89,6 +117,14 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   }
 
   close(): void {
+    if (this.telemetryDb !== this.db) {
+      this.telemetryDb.close();
+    }
+    // Shutdown checkpoint (#510 D1 accepted-append drain): fold the WAL back
+    // into the main file so a cold start reads a clean baseline. Runs after
+    // the telemetry connection closed (no reader pins the WAL) and is a
+    // no-op for `:memory:` (never in WAL mode).
+    this.db.query("PRAGMA wal_checkpoint(TRUNCATE)").get();
     this.db.close();
   }
 }

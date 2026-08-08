@@ -41,6 +41,14 @@ export namespace Storage {
      * caller re-executes from the recorded decision instead of re-deciding.
      */
     headFact(streamId: string): LedgerAppend.RecordedFact | undefined;
+    /**
+     * Boot chain tail verification (#510 D1): walks the newest events of
+     * every stream and RETURNS chain-break facts — it never throws on a
+     * broken chain and never refuses boot. Recording the breaks (Operational
+     * event, Governor incident later) is the boot caller's job. Full-chain
+     * verification stays the #226 offline restore drill.
+     */
+    verifyTail(): LedgerAppend.ChainBreak[];
   }
 
   export interface WaitSubAdapter {

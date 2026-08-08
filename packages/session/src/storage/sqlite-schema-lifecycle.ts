@@ -50,8 +50,24 @@ const CLEAR_ORDER = [
 ] as const;
 
 export function initializeSqliteDatabase(db: Database): void {
-  applyPragmas(db);
+  // The primary connection owns every decision-class write (ledger appends +
+  // projections share its transactions), so it runs at synchronous=FULL: a
+  // committed append survives power loss, which is what "no record, no
+  // action" durably means (#510 D1).
+  applyConnectionPragmas(db, "FULL");
   Migration.applyOrdered(db, MIGRATION_DIR, ORDERED_MIGRATIONS);
+}
+
+/**
+ * Telemetry connection setup (#510 D1 durability split): a SECOND connection
+ * on the SAME database file, synchronous=NORMAL with group-commit batching
+ * (bus-persistence). `synchronous` is a per-connection setting, so the split
+ * costs nothing on the decision path; every other pragma is re-applied
+ * because busy_timeout/cache/mmap/foreign_keys are per-connection too.
+ * No migrations here — the primary connection owns the schema.
+ */
+export function initializeTelemetryConnection(db: Database): void {
+  applyConnectionPragmas(db, "NORMAL");
 }
 
 export function clearSqliteStorage(db: Database): void {
@@ -60,9 +76,9 @@ export function clearSqliteStorage(db: Database): void {
   }
 }
 
-function applyPragmas(db: Database): void {
+function applyConnectionPragmas(db: Database, synchronous: "FULL" | "NORMAL"): void {
   db.query("PRAGMA journal_mode = WAL").get();
-  db.query("PRAGMA synchronous = NORMAL").get();
+  db.query(`PRAGMA synchronous = ${synchronous}`).get();
   db.query("PRAGMA busy_timeout = 5000").get();
   db.query("PRAGMA cache_size = -64000").get();
   db.query("PRAGMA mmap_size = 268435456").get();
