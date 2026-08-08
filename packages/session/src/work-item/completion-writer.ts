@@ -1,7 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { WorkItem } from "@openomni/protocol";
 import type { Storage } from "../storage/storage.js";
-import { appendTransitionFactReceipt, requireWorkItemLedger, type WorkItemFact } from "./facts.js";
+import {
+  appendTransitionFactReceipt,
+  requireWorkItemLedger,
+  runWorkItemTransaction,
+  type WorkItemFact,
+} from "./facts.js";
 
 const writerAuthority = Symbol("work-item-completion-writer");
 const authorizedWriter = new AsyncLocalStorage<symbol>();
@@ -27,7 +32,7 @@ export function createWorkItemCompletionWriter(
     if (!adapter) throw new Error("WorkItem storage is unavailable");
     const ledger = requireWorkItemLedger(storage);
     return authorizedWriter.run(writerAuthority, () =>
-      storage.transaction(() => {
+      runWorkItemTransaction(storage, hash, () => {
         const existing = adapter.get(hash);
         if (!existing || existing.revision !== expectedHead) return false;
         if (!appendTransitionFactReceipt(ledger, existing, completionFactOf(existing, item))) {

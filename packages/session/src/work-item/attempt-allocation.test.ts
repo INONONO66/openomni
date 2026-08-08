@@ -53,7 +53,10 @@ function identity(workInput = "verify attempt allocation") {
         id: "claude-test",
         parameters: { absent: true, reason: "no model parameters configured" },
       },
-      upstreamFingerprints: [],
+      upstreamFingerprints: {
+        absent: true,
+        reason: "no upstream attempts are consumed in this test",
+      },
       dependencyLock: { absent: true, reason: "not read in this test" },
     }),
     environmentFingerprint: WorkItem.environmentFingerprintOf({

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NamedError } from "../error/index.js";
 
 /**
  * Durability class of a ledger write connection (#510). Decision-class
@@ -56,6 +57,28 @@ export const Outcome = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 export type Outcome = z.infer<typeof Outcome>;
+
+/**
+ * Genesis fact for {@link AdoptError adopting} a pre-cutover stream: the
+ * append-input shape without a streamId (the adopt call names the stream).
+ */
+export const AdoptGenesis = Input.omit({ streamId: true });
+export type AdoptGenesis = z.infer<typeof AdoptGenesis>;
+
+/**
+ * Typed failure of `Ledger.adoptStream` (#510 review fix F3): adoption is
+ * legal ONLY on an empty stream — a non-empty stream means the row already
+ * has durable history and adopting it would fabricate a second genesis.
+ * `currentHead` reports the head that refused the adoption.
+ */
+export const AdoptError = NamedError.create(
+  "LedgerAdoptError",
+  z.object({
+    message: z.string(),
+    streamId: z.string().min(1),
+    currentHead: z.number().int().nonnegative(),
+  }),
+);
 
 /**
  * One stored fact as the append core's minimal read API returns it (#510

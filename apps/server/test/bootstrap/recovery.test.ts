@@ -1,7 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
-import { createDefaultDispatchRuntime, type DefaultDispatchRuntime } from "@openomni/openomni";
-import { Bus, PendingInteractionStore, Session, Storage, WorkerRun } from "@openomni/session";
+import type { Wait } from "@openomni/protocol";
+import {
+  createDefaultDispatchRuntime,
+  WaitService,
+  type DefaultDispatchRuntime,
+} from "@openomni/openomni";
+import {
+  Bus,
+  PendingInteractionStore,
+  Session,
+  Storage,
+  WaitStore,
+  WorkerRun,
+} from "@openomni/session";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "../../src/bootstrap/recovery";
 
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -116,6 +128,101 @@ describe("server recovery", () => {
     ).resolves.toBeUndefined();
 
     expect(PendingInteractionStore.get(pendingId)?.status).toBe("expired");
+  });
+
+  it("surfaces each failed WorkItem completion resume as its own loud Operational.Error", async () => {
+    const errorPayloads: Array<Record<string, unknown>> = [];
+    Bus.observe((event, payload) => {
+      if (event.name === "operational.error") {
+        errorPayloads.push(payload as Record<string, unknown>);
+      }
+    });
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-completion-failure-loud",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [
+            {
+              workItemHash: "wi_stale_head",
+              admissionId: "admission-1",
+              error: "completion admission head does not match 3",
+            },
+          ],
+        }),
+      },
+    });
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+    const failure = errorPayloads.find((payload) => String(payload.msg).includes("wi_stale_head"));
+    expect(failure?.msg).toBe(
+      "recovery failed to resume recorded WorkItem completion: wi_stale_head",
+    );
+    expect(failure?.context).toMatchObject({
+      workItemHash: "wi_stale_head",
+      admissionId: "admission-1",
+      error: "completion admission head does not match 3",
+    });
+  });
+
+  it("completes boot recovery when the expiry sweep meets one corrupt wait", async () => {
+    const buildWaitCreate = (id: string): Wait.Create => ({
+      id,
+      ownerRef: { kind: "session", id: `session-${id}` },
+      originMessageId: `out-${id}`,
+      correlation: { tokenHash: `tok-${id}` },
+      allowedActions: ["report_result"],
+      expectedResponders: ["actor-a"],
+      resolutionPolicy: "first_reply",
+      expiresAt: Date.now() - 1,
+      followUpWindow: 1_000,
+    });
+    WaitService.open(buildWaitCreate("wait-boot-corrupt"));
+    WaitService.open(buildWaitCreate("wait-boot-healthy"));
+    // Corrupt one wait's owner stream: an extra fact advances the head past
+    // the projected revision, so its expiry transition conflicts forever.
+    const appended = Storage.getAdapter().ledger?.append(
+      { streamId: "wait:wait-boot-corrupt", type: "wait.tampered", data: {} },
+      1,
+    );
+    expect(appended?.kind).toBe("appended");
+
+    const events: string[] = [];
+    const errorPayloads: Array<Record<string, unknown>> = [];
+    Bus.observe((event, payload) => {
+      events.push(event.name);
+      if (event.name === "operational.error") {
+        errorPayloads.push(payload as Record<string, unknown>);
+      }
+    });
+
+    await expect(
+      runRecovery({
+        handler: undefined,
+        traceId: "trace-corrupt-wait",
+        completionRuntime: {
+          recoverRecordedWorkItemCompletions: async () => ({
+            recovered: 0,
+            skipped: 0,
+            failures: [],
+          }),
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    // One bad wait never kills boot (#510 review fix F3): recovery completed,
+    // the healthy wait expired, and the corrupt one was recorded loudly.
+    expect(events).toContain("operational.recovery.completed");
+    expect(WaitStore.get("wait-boot-healthy")?.status).toBe("expired");
+    expect(WaitStore.get("wait-boot-corrupt")?.status).toBe("open");
+    expect(
+      errorPayloads.some((payload) =>
+        String(payload.msg).includes("wait expiry sweep failed for wait-boot-corrupt"),
+      ),
+    ).toBe(true);
   });
 
   it("records a ledger chain-break at boot and continues (does not refuse boot)", async () => {

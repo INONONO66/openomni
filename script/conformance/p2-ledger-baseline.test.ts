@@ -37,6 +37,11 @@ import {
   isRetryExhausted,
 } from "../../packages/session/src/work-item/retry-policy";
 import { waitViewOfPendingAsk } from "../../packages/openomni/src/wait/upcast";
+import {
+  buildReplyInput,
+  buildWaitCreate as buildSessionWaitCreate,
+  captureStoreError,
+} from "../../packages/session/test/helpers/wait";
 import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
 
 /**
@@ -58,13 +63,16 @@ import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest"
  *       projection;
  *   (e) boot tail verification covers wait: and work: streams and detects
  *       tampered rows;
- *   (f) C3: `route.decided` lands on the single-fact `route:<inboundEventId>`
- *       stream before the routed action's effects are observable — for
- *       terminal (blocked) decisions before the typed rejection returns; a
- *       redelivered inbound id replays the RECORDED decision (accepted
- *       routes re-execute idempotently, terminal decisions repeat their
- *       rejection) with no second fact, while a failing append fails closed
- *       with the action never proceeding;
+ *   (f) C3: `route.decided` lands on the single-fact channel-scoped stream
+ *       `route:<surface>:<workspace>:<channel>:<inboundEventId>` before the
+ *       routed action's effects are observable — for terminal (blocked)
+ *       decisions before the typed rejection returns; replay is
+ *       EQUIVALENCE-GATED (review fix F2): a redelivered inbound proceeds
+ *       with its FRESH resolution only when the fresh decision matches the
+ *       recorded one (accepted routes re-execute idempotently, terminal
+ *       decisions repeat their rejection — no second fact), a divergent
+ *       redelivery fails closed as route_replay_divergent with no action,
+ *       and a failing append fails closed with the action never proceeding;
  *   (g) C3: `command.authorized` lands on `command:<dispatchId>` before the
  *       handler is invoked, `command.denied` before the denial result
  *       returns, and a failing append blocks the dispatch.
@@ -98,31 +106,19 @@ afterEach(() => {
 
 const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
+// Fixture dedup (review fix minor): the session test helper owns the base
+// Wait fixture shape; this wrapper only pins the conformance defaults
+// (single-responder first_reply wait owned by workItem wi-1).
 function buildWaitCreate(overrides: Partial<Wait.Create> = {}): Wait.Create {
-  return {
-    id: "wait-1",
+  return buildSessionWaitCreate({
     ownerRef: { kind: "workItem", id: "wi-1" },
-    originMessageId: "out-msg-1",
     correlation: { tokenHash: "tok-1" },
     allowedActions: ["report_result"],
     expectedResponders: ["actor-a"],
     resolutionPolicy: "first_reply",
-    expiresAt: 10_000,
-    followUpWindow: 1_000,
-    createdAt: 100,
-    updatedAt: 100,
+    quorum: undefined,
     ...overrides,
-  };
-}
-
-function buildReplyInput(overrides: Partial<Wait.ReplyInput> = {}): Wait.ReplyInput {
-  return {
-    replyKey: "reply-key-1",
-    responderCandidates: ["actor-a"],
-    messageId: "in-msg-1",
-    at: 1_000,
-    ...overrides,
-  };
+  });
 }
 
 interface FactRow {
@@ -158,16 +154,6 @@ function workFactsOf(hash: string): FactRow[] {
 
 function workHeadOf(hash: string): number | undefined {
   return headOfStream(`work:${hash}`);
-}
-
-function captureStoreError(fn: () => unknown): InstanceType<typeof Wait.StoreError> {
-  try {
-    fn();
-  } catch (error) {
-    if (Wait.StoreError.isInstance(error)) return error;
-    throw error;
-  }
-  throw new Error("expected WaitStoreError, but nothing was thrown");
 }
 
 describe("p2 ledger baseline — Wait decision-class facts", () => {
@@ -268,6 +254,39 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
     expect(WaitStore.get("wait-1")?.originMessageId).toBe("out-msg-1");
     await flushBus();
     expect(events).not.toContain("wait.opened");
+  });
+
+  test("a pre-cutover wait row (revision >= 1, empty stream) is adopted lazily before its first transition", () => {
+    WaitStore.create(buildWaitCreate());
+    // Simulate an old-DB wait: the projection row exists at revision >= 1
+    // but its owner stream is empty (every write predates the phase-B
+    // cutover). Without adoption this row would brick every transition
+    // (append at expectedHead 1 against head 0 = permanent conflict).
+    inspect.query("DELETE FROM ledger_event WHERE stream_id = ?").run("wait:wait-1");
+    inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run("wait:wait-1");
+    expect(factsOf("wait-1")).toHaveLength(0);
+
+    const outcome = WaitStore.attachReply("wait-1", buildReplyInput());
+
+    expect(outcome.kind).toBe("resolved");
+    const facts = factsOf("wait-1");
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([
+      [1, "wait.adopted"],
+      [2, "wait.resolved"],
+    ]);
+    expect(headOf("wait-1")).toBe(2);
+    expect(WaitStore.get("wait-1")?.revision).toBe(2);
+    const adopted = JSON.parse(facts[0]?.data ?? "{}") as {
+      snapshot?: { id?: string; revision?: number };
+      revision?: number;
+    };
+    // The genesis fact records the observed snapshot at seq === revision —
+    // pre-cutover history is adopted, never fabricated.
+    expect(adopted.revision).toBe(1);
+    expect(adopted.snapshot?.id).toBe("wait-1");
+    expect(adopted.snapshot?.revision).toBe(1);
+    // The adopted stream verifies clean at boot.
+    expect(Ledger.verifyTail(inspect)).toEqual([]);
   });
 
   test("boot tail verification passes after a normal run and detects a tampered row", () => {
@@ -499,33 +518,38 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
     expect(events).not.toContain("work_item.status_changed");
   });
 
-  test("a pre-cutover row is adopted lazily: genesis fact carries the observed snapshot", async () => {
+  test("a pre-cutover row is adopted lazily at ITS revision: genesis fact carries the observed snapshot", async () => {
     const item = await createConformanceWorkItem("lazy-adoption");
-    // Simulate a migration-backfilled pre-cutover row: projection at
-    // revision 1 with an EMPTY owner stream (0014 backfills every existing
-    // row to revision 1).
+    const started = await WorkItemStore.start(item.hash);
+    if (started?.revision !== 2) throw new Error("expected revision 2 after start");
+    // Simulate a migration-shifted pre-cutover row: 0014 backfills every
+    // existing row to old json revision + 1, so a row with prior transitions
+    // sits at revision > 1 with an EMPTY owner stream. Adoption must land at
+    // the row's OWN revision, not at 1 (review fix F4).
     inspect.query("DELETE FROM ledger_event WHERE stream_id = ?").run(`work:${item.hash}`);
     inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run(`work:${item.hash}`);
     expect(workFactsOf(item.hash)).toHaveLength(0);
 
-    const started = await WorkItemStore.start(item.hash);
+    const failed = await WorkItemStore.fail(item.hash, "post-adoption transition");
 
-    expect(started?.revision).toBe(2);
+    expect(failed?.revision).toBe(3);
     const facts = workFactsOf(item.hash);
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([
-      [1, "work_item.adopted"],
-      [2, "work_item.started"],
+      [2, "work_item.adopted"],
+      [3, "work_item.failed"],
     ]);
-    expect(workHeadOf(item.hash)).toBe(2);
+    expect(workHeadOf(item.hash)).toBe(3);
     const adopted = JSON.parse(facts[0]?.data ?? "{}") as {
       snapshot?: { hash?: string; revision?: number };
       revision?: number;
     };
-    // The genesis fact records the observed state at seq 1 == revision 1 —
+    // The genesis fact records the observed state at seq === revision —
     // pre-cutover history is adopted, never fabricated.
-    expect(adopted.revision).toBe(1);
+    expect(adopted.revision).toBe(2);
     expect(adopted.snapshot?.hash).toBe(item.hash);
-    expect(adopted.snapshot?.revision).toBe(1);
+    expect(adopted.snapshot?.revision).toBe(2);
+    // The adopted stream verifies clean at boot.
+    expect(Ledger.verifyTail(inspect)).toEqual([]);
   });
 
   test("completion admission verdicts are appended facts: refuse is recorded, accept precedes the terminal projection", async () => {
@@ -643,7 +667,10 @@ function conformanceAttemptIdentity(workInput: string) {
         id: "claude-conformance",
         parameters: { absent: true, reason: "no model parameters configured" },
       },
-      upstreamFingerprints: [],
+      upstreamFingerprints: {
+        absent: true,
+        reason: "no upstream attempts in the conformance suite",
+      },
       dependencyLock: { absent: true, reason: "not read by the conformance suite" },
     }),
     environmentFingerprint: WorkItem.environmentFingerprintOf({
@@ -814,6 +841,13 @@ function routedIngressEvent(id: string, workerSessionId: string) {
   };
 }
 
+// Review fix F1: the route owner stream is channel-scoped — normalizer ids
+// are only unique within a channel, so surface + workspace + channel are
+// part of the stream identity.
+function routeStreamOf(inboundId: string): string {
+  return `route:conformance:team-conformance:C1:${inboundId}`;
+}
+
 // Replaces the ledger sub-adapter with one whose connection is gone, keeping
 // every projection sub-adapter live — the decision-class append is the ONLY
 // thing that fails, so a passing action would prove a record-less act.
@@ -824,6 +858,9 @@ function configureFailingLedger(): void {
     transaction: adapter.transaction.bind(adapter),
     ledger: {
       append: () => {
+        throw new Error("ledger connection closed");
+      },
+      adoptStream: () => {
         throw new Error("ledger connection closed");
       },
       headFact: () => {
@@ -855,7 +892,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     const observed: { factTypes: string[]; parsedOutcome?: string }[] = [];
     IngressEngine.setCoordinator({
       dispatch: async (sessionId, request) => {
-        const facts = factsOfStream("route:inbound-route-1");
+        const facts = factsOfStream(routeStreamOf("inbound-route-1"));
         const first = facts[0] ? (JSON.parse(facts[0].data) as Record<string, unknown>) : undefined;
         const decided = first === undefined ? undefined : LedgerAppend.RouteDecided.parse(first);
         observed.push({
@@ -879,10 +916,11 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // The executor saw the durable route.decided fact BEFORE it acted.
     expect(observed).toEqual([{ factTypes: ["route.decided"], parsedOutcome: "route" }]);
     expect(result.result.output).toBe("routed");
-    // Single-fact stream discipline: expectedHead 0, seq 1, head 1.
-    const facts = factsOfStream("route:inbound-route-1");
+    // Single-fact stream discipline: expectedHead 0, seq 1, head 1, on the
+    // channel-scoped stream key (review fix F1).
+    const facts = factsOfStream(routeStreamOf("inbound-route-1"));
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
-    expect(headOfStream("route:inbound-route-1")).toBe(1);
+    expect(headOfStream(routeStreamOf("inbound-route-1"))).toBe(1);
     // The writer and the protocol stream registry agree on the vocabulary.
     for (const fact of facts) {
       expect(LedgerAppend.StreamRegistry.route.factTypes).toContain(fact.type);
@@ -910,17 +948,84 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
 
     expect(thrown).toBeInstanceOf(IngressRoutingError);
     expect((thrown as IngressRoutingError).code).toBe("route_blocked");
-    const facts = factsOfStream("route:inbound-route-blocked-1");
+    const facts = factsOfStream(routeStreamOf("inbound-route-blocked-1"));
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
     const decided = LedgerAppend.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
     expect(decided.outcome).toBe("block");
     expect(decided.inboundId).toBe("inbound-route-blocked-1");
   });
 
-  test("a redelivered inbound replays the recorded decision: no second fact, the action re-executes", async () => {
+  test("an equivalent redelivered inbound replays: no second fact, the owner re-receives the action", async () => {
     grantConformanceChannel();
     const workerSession = Session.create({
       title: "route replay conformance",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    let dispatches = 0;
+    const dispatchedSessions: string[] = [];
+    IngressEngine.setCoordinator({
+      dispatch: async (sessionId, request) => {
+        dispatches += 1;
+        dispatchedSessions.push(sessionId);
+        return {
+          runId: request.runId,
+          sessionId,
+          status: "succeeded" as const,
+          output: "routed",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    const first = await IngressEngine.ingest(
+      routedIngressEvent("inbound-route-replay-1", workerSession.id),
+    );
+    // Channel redelivery of the SAME inbound (e.g. the delivery crashed
+    // after the decision committed): the fresh decision matches the recorded
+    // one, so the equivalence gate lets the redelivery proceed with its
+    // FRESH resolution and the owner receives the action again — the #519
+    // crash-window recovery path, not a refusal (review fix F2).
+    const second = await IngressEngine.ingest(
+      routedIngressEvent("inbound-route-replay-1", workerSession.id),
+    );
+
+    expect(first.result.output).toBe("routed");
+    expect(second.result.output).toBe("routed");
+    expect(dispatches).toBe(2);
+    expect(dispatchedSessions).toEqual([workerSession.id, workerSession.id]);
+    // Replay appended nothing: the stream still holds exactly the one fact.
+    expect(factsOfStream(routeStreamOf("inbound-route-replay-1"))).toHaveLength(1);
+    expect(headOfStream(routeStreamOf("inbound-route-replay-1"))).toBe(1);
+  });
+
+  test("a divergent redelivery fails closed as route_replay_divergent: no action, no second fact", async () => {
+    // First delivery: no channel grant — the block is decided and recorded.
+    let firstThrown: unknown;
+    try {
+      await IngressEngine.ingest({
+        id: "inbound-route-replay-divergent-1",
+        surface: "conformance",
+        workspace: "team-conformance",
+        channel: "C1",
+        mode: "direct",
+        payload: "blocked inbound",
+        meta: { actor: { role: "user" } },
+        agent: { model: { provider: "test", id: "test-model" } },
+      });
+    } catch (error) {
+      firstThrown = error;
+    }
+    expect(firstThrown).toBeInstanceOf(IngressRoutingError);
+    expect((firstThrown as IngressRoutingError).code).toBe("route_blocked");
+
+    // A grant lands between deliveries: the fresh resolve now ROUTES while
+    // the recorded decision BLOCKED — the equivalence gate refuses to mix a
+    // recorded decision with a fresh resolution (review fix F2): typed
+    // route_replay_divergent, no execution, no second fact, nothing new
+    // published.
+    grantConformanceChannel();
+    const workerSession = Session.create({
+      title: "route divergent replay conformance",
       model: { providerID: "test", modelID: "test-model" },
     });
     let dispatches = 0;
@@ -936,62 +1041,54 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
         };
       },
     });
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
 
-    const first = await IngressEngine.ingest(
-      routedIngressEvent("inbound-route-replay-1", workerSession.id),
-    );
-    // Channel redelivery of the SAME inbound (e.g. the delivery crashed after
-    // the decision committed): the recorded route.decided fact governs and
-    // the routed action re-executes idempotently — the #519 crash-window
-    // recovery path, not a refusal.
-    const second = await IngressEngine.ingest(
-      routedIngressEvent("inbound-route-replay-1", workerSession.id),
-    );
+    let secondThrown: unknown;
+    try {
+      await IngressEngine.ingest(
+        routedIngressEvent("inbound-route-replay-divergent-1", workerSession.id),
+      );
+    } catch (error) {
+      secondThrown = error;
+    }
 
-    expect(first.result.output).toBe("routed");
-    expect(second.result.output).toBe("routed");
-    expect(dispatches).toBe(2);
-    // Replay appended nothing: the stream still holds exactly the one fact.
-    expect(factsOfStream("route:inbound-route-replay-1")).toHaveLength(1);
-    expect(headOfStream("route:inbound-route-replay-1")).toBe(1);
+    expect(secondThrown).toBeInstanceOf(IngressRoutingError);
+    expect((secondThrown as IngressRoutingError).code).toBe("route_replay_divergent");
+    expect(dispatches).toBe(0);
+    expect(factsOfStream(routeStreamOf("inbound-route-replay-divergent-1"))).toHaveLength(1);
+    await flushBus();
+    // The divergent replay published no new RoutingDecision projection.
+    expect(events).not.toContain("ingress.routing.decision");
   });
 
-  test("a terminal recorded decision replays its own rejection even after conditions change", async () => {
-    // First delivery: no channel grant — the block is decided and recorded.
+  test("a terminal-equivalent redelivery repeats its recorded rejection with no second fact", async () => {
+    // No channel grant on EITHER delivery: the fresh decision on redelivery
+    // is the same block the recorded fact holds — equivalent, so the same
+    // typed rejection repeats (the terminal analogue of the accepted-route
+    // replay).
+    const blockedEvent = () => ({
+      id: "inbound-route-replay-blocked-1",
+      surface: "conformance",
+      workspace: "team-conformance",
+      channel: "C1",
+      mode: "direct",
+      payload: "blocked inbound",
+      meta: { actor: { role: "user" } },
+      agent: { model: { provider: "test", id: "test-model" } },
+    });
     let firstThrown: unknown;
     try {
-      await IngressEngine.ingest({
-        id: "inbound-route-replay-blocked-1",
-        surface: "conformance",
-        workspace: "team-conformance",
-        channel: "C1",
-        mode: "direct",
-        payload: "blocked inbound",
-        meta: { actor: { role: "user" } },
-        agent: { model: { provider: "test", id: "test-model" } },
-      });
+      await IngressEngine.ingest(blockedEvent());
     } catch (error) {
       firstThrown = error;
     }
     expect(firstThrown).toBeInstanceOf(IngressRoutingError);
     expect((firstThrown as IngressRoutingError).code).toBe("route_blocked");
 
-    // A grant lands between deliveries: a fresh resolve would now route, but
-    // the redelivery replays the RECORDED terminal decision — the same typed
-    // rejection it originally produced.
-    grantConformanceChannel();
     let secondThrown: unknown;
     try {
-      await IngressEngine.ingest({
-        id: "inbound-route-replay-blocked-1",
-        surface: "conformance",
-        workspace: "team-conformance",
-        channel: "C1",
-        mode: "direct",
-        payload: "blocked inbound",
-        meta: { actor: { role: "user" } },
-        agent: { model: { provider: "test", id: "test-model" } },
-      });
+      await IngressEngine.ingest(blockedEvent());
     } catch (error) {
       secondThrown = error;
     }
@@ -1001,7 +1098,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     const replayed = (secondThrown as IngressRoutingError).decision;
     expect(replayed.outcome).toBe("block");
     expect(replayed.inboundId).toBe("inbound-route-replay-blocked-1");
-    expect(factsOfStream("route:inbound-route-replay-blocked-1")).toHaveLength(1);
+    expect(factsOfStream(routeStreamOf("inbound-route-replay-blocked-1"))).toHaveLength(1);
   });
 
   test("a failing ledger append blocks the routed action: typed error, no publish, no act", async () => {

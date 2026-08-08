@@ -1,5 +1,6 @@
-import { Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { LedgerAppend, Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "../bus";
+import { isSqliteBusyError } from "../storage/sqlite-busy";
 import { Storage } from "../storage/storage";
 import { withCreateTimestamps } from "../storage/timestamped-store";
 
@@ -28,7 +29,12 @@ function requireAdapter(): ProtocolStorage.WaitSubAdapter {
  *     (create appends wait.opened at expectedHead 0 and projects revision 1);
  *   - append and projection CAS commit inside ONE sync immediate storage
  *     transaction; a projection CAS failure rolls the appended fact back, so
- *     the CAS receipt and the ledger head can never disagree.
+ *     the CAS receipt and the ledger head can never disagree;
+ *   - a PRE-CUTOVER row (revision >= 1, empty owner stream — its writes
+ *     predate phase B) is adopted lazily on its first transition: a
+ *     wait.adopted genesis fact with the record snapshot lands at seq ===
+ *     revision via Ledger.adoptStream, then the transition proceeds (#510
+ *     review fix F3).
  */
 function requireLedger(): ProtocolStorage.LedgerSubAdapter {
   const ledger = Storage.get().ledger;
@@ -51,6 +57,28 @@ function revisionConflict(waitId: string, expected: number): InstanceType<typeof
     code: "revision_conflict",
     waitId,
   });
+}
+
+/**
+ * Store transaction entry (#510 review fix minor): a SQLITE_BUSY at the
+ * write unit (see storage/sqlite-busy.ts for how bun:sqlite surfaces it)
+ * means nothing committed — mapped to the typed `unavailable` store error so
+ * callers branch on the taxonomy, never on driver message text. Every other
+ * error passes through unchanged.
+ */
+function runWaitTransaction<T>(waitId: string, write: () => T): T {
+  try {
+    return Storage.get().transaction(write);
+  } catch (error) {
+    if (isSqliteBusyError(error)) {
+      throw new Wait.StoreError({
+        message: `Wait storage busy: ${waitId} — ${error instanceof Error ? error.message : String(error)}`,
+        code: "unavailable",
+        waitId,
+      });
+    }
+    throw error;
+  }
 }
 
 type CommittedOutcome = Exclude<Wait.Outcome, { kind: "rejected" } | { kind: "already_resolved" }>;
@@ -194,7 +222,7 @@ export namespace WaitStore {
         code: "duplicate",
         waitId: record.id,
       });
-    Storage.get().transaction(() => {
+    runWaitTransaction(record.id, () => {
       const appended = ledger.append(
         {
           streamId: waitStreamId(record.id),
@@ -263,11 +291,30 @@ export namespace WaitStore {
     // change, no revision bump, no event).
     if (outcome.kind === "rejected" || outcome.kind === "already_resolved") return outcome;
     const fact = factOf(outcome);
-    Storage.get().transaction(() => {
-      const appended = ledger.append(
-        { streamId: waitStreamId(id), type: fact.type, data: fact.data },
-        current.revision,
-      );
+    runWaitTransaction(id, () => {
+      const event = { streamId: waitStreamId(id), type: fact.type, data: fact.data };
+      let appended = ledger.append(event, current.revision);
+      if (appended.kind === "cas_conflict" && appended.currentHead === 0 && current.revision >= 1) {
+        // Lazy adoption (#510 review fix F3): a pre-cutover wait row exists
+        // at revision >= 1 with an EMPTY owner stream (its writes predate the
+        // phase-B cutover). Adopt the stream at the observed revision — the
+        // wait.adopted genesis carries the record snapshot at seq ===
+        // revision — then retry the transition append at the same head. A
+        // concurrent adopter throws the typed AdoptError, which surfaces as
+        // the same revision_conflict any lost race produces.
+        try {
+          ledger.adoptStream(waitStreamId(id), current.revision, {
+            type: "wait.adopted",
+            data: { snapshot: current, revision: current.revision },
+          });
+        } catch (error) {
+          if (LedgerAppend.AdoptError.isInstance(error)) {
+            throw revisionConflict(id, current.revision);
+          }
+          throw error;
+        }
+        appended = ledger.append(event, current.revision);
+      }
       if (appended.kind === "cas_conflict") throw revisionConflict(id, current.revision);
       if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
         // Unreachable while every writer goes through this transaction (the

@@ -114,14 +114,31 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     if (completionRecovery) {
       try {
         const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
-        Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
+        // Loud per-failure surfacing (#510 review fix F4): a completion
+        // resume that fails (e.g. a staleHead against a 0014-shifted
+        // recorded head) names its work item in its own Operational.Error —
+        // never buried in an aggregate context blob. Boot stays alive.
+        for (const failure of receipt.failures) {
+          Bus.publish(Operational.Error, {
+            traceId: id,
+            time: Date.now(),
+            component: "server",
+            msg: `recovery failed to resume recorded WorkItem completion: ${failure.workItemHash}`,
+            context: {
+              workItemHash: failure.workItemHash,
+              admissionId: failure.admissionId,
+              error: failure.error,
+            },
+          });
+        }
+        Bus.publish(Operational.Info, {
           traceId: id,
           time: Date.now(),
           component: "server",
           msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
           context: {
             skipped: receipt.skipped,
-            failures: receipt.failures,
+            failures: receipt.failures.length,
           },
         });
       } catch (error) {

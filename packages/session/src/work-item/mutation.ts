@@ -4,6 +4,7 @@ import { Storage } from "../storage/storage.js";
 import {
   appendTransitionFact,
   requireWorkItemLedger,
+  runWorkItemTransaction,
   WorkItemRevisionError,
   type WorkItemFact,
 } from "./facts.js";
@@ -63,7 +64,7 @@ export function persistMutation(
 ): WorkItem.Info {
   const storage = Storage.get();
   const ledger = requireWorkItemLedger(storage);
-  const versioned = storage.transaction(() =>
+  const versioned = runWorkItemTransaction(storage, existing.hash, () =>
     commitMutation(adapter, ledger, existing, updated, fact),
   );
 

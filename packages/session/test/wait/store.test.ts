@@ -106,6 +106,36 @@ describe("WaitStore", () => {
     expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 2_001)).toHaveLength(0);
   });
 
+  test("adopts a pre-cutover row (revision >= 1, empty stream) at ITS revision before the first transition", () => {
+    // Simulate an old-DB wait: the projection row exists at revision 3 but
+    // its owner stream is empty (every write predates the #510 phase-B
+    // cutover). Seeded at the adapter layer, exactly as such rows persist.
+    const adapter = Storage.get().wait;
+    if (!adapter) throw new Error("wait sub-adapter missing");
+    const record = Wait.Record.parse({
+      ...buildWaitCreate(),
+      status: "open",
+      partial: false,
+      replies: [],
+      revision: 3,
+    });
+    expect(adapter.create(record)).toBe(true);
+
+    const outcome = WaitStore.attachReply("wait-1", buildReplyInput());
+
+    expect(outcome.kind).toBe("attached");
+    expect(WaitStore.get("wait-1")?.revision).toBe(4);
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    // The wait.adopted genesis landed at seq === the observed revision and
+    // the transition fact followed at revision + 1 (head↔revision intact).
+    const adopted = ledger.factsByType("wait.adopted");
+    expect(adopted).toHaveLength(1);
+    expect(adopted[0]).toMatchObject({ streamId: "wait:wait-1", seq: 3 });
+    expect(adopted[0]?.data).toMatchObject({ revision: 3 });
+    expect(ledger.headFact("wait:wait-1")).toMatchObject({ seq: 4, type: "wait.attached" });
+  });
+
   test("persists fold outcomes through the revision CAS and publishes reply events", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));

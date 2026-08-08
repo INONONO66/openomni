@@ -52,7 +52,10 @@ function attemptIdentity(workInput: string, attemptSeq: number): WorkItem.Attemp
         id: "claude-test",
         parameters: { absent: true, reason: "no model parameters configured" },
       },
-      upstreamFingerprints: [],
+      upstreamFingerprints: {
+        absent: true,
+        reason: "no upstream attempts are consumed in this test",
+      },
       dependencyLock: { absent: true, reason: "not read in this test" },
     }),
     environmentFingerprint: WorkItem.environmentFingerprintOf({
@@ -306,6 +309,9 @@ describe("admin ledger routes", () => {
         verifyTail: () => ledger.verifyTail(),
         append: () => {
           throw new Error("read-only violation: admin surface appended to the ledger");
+        },
+        adoptStream: () => {
+          throw new Error("read-only violation: admin surface adopted a ledger stream");
         },
       },
     });

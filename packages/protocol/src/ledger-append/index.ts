@@ -32,6 +32,12 @@ export namespace LedgerAppend {
   export const RecordedFact = Schema.RecordedFact;
   export type RecordedFact = Schema.RecordedFact;
 
+  export const AdoptGenesis = Schema.AdoptGenesis;
+  export type AdoptGenesis = Schema.AdoptGenesis;
+
+  export const AdoptError = Schema.AdoptError;
+  export type AdoptError = InstanceType<typeof Schema.AdoptError>;
+
   export const StreamRegistry = Streams.StreamRegistry;
 
   export const RouteDecided = Streams.RouteDecided;

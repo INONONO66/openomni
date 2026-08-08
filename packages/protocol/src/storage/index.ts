@@ -36,6 +36,16 @@ export namespace Storage {
       expectedHead: LedgerAppend.ExpectedHead,
     ): LedgerAppend.Outcome;
     /**
+     * Adopts a PRE-CUTOVER stream (#510 review fix F3): inserts the genesis
+     * fact at seq === `headRevision` and sets the stream head to
+     * `headRevision`, in one unit, ONLY while the stream is empty — a
+     * non-empty stream throws the typed `LedgerAppend.AdoptError`. Used by
+     * revision-bound stores whose projection row predates its owner stream
+     * (row revision >= 1, empty stream) so the head↔revision equation holds
+     * without fabricating per-transition history.
+     */
+    adoptStream(streamId: string, headRevision: number, genesis: LedgerAppend.AdoptGenesis): void;
+    /**
      * Newest recorded fact of one stream (undefined for an empty stream) —
      * the #510 C3 replay read: on a single-fact stream append conflict the
      * caller re-executes from the recorded decision instead of re-deciding.

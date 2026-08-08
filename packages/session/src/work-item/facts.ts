@@ -1,4 +1,5 @@
-import type { Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
+import { LedgerAppend, type Storage as ProtocolStorage, type WorkItem } from "@openomni/protocol";
+import { isSqliteBusyError } from "../storage/sqlite-busy.js";
 
 /**
  * #510 C1 — every WorkItem lifecycle write is a decision-class fact on the
@@ -13,11 +14,12 @@ import type { Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
  *   - append and projection CAS commit inside ONE sync immediate storage
  *     transaction; a projection failure rolls the appended fact back.
  *
- * Pre-cutover rows (migration 0014 backfills them to revision 1 with an
- * empty stream) are adopted lazily: their first post-cutover transition
- * first appends a `work_item.adopted` genesis fact at seq 1 carrying the
- * observed snapshot, keeping expectedHead semantics sound without
- * fabricating history.
+ * Pre-cutover rows (migration 0014 shifts them to old json revision + 1, so
+ * any revision >= 1 with an EMPTY stream) are adopted lazily: their first
+ * post-cutover transition adopts the stream at the observed revision via
+ * `Ledger.adoptStream` — a `work_item.adopted` genesis fact carrying the
+ * observed snapshot at seq === revision — keeping expectedHead semantics
+ * sound without fabricating per-transition history (#510 review fix F4).
  */
 export type WorkItemFact = Readonly<{ type: string; data: Record<string, unknown> }>;
 
@@ -36,6 +38,40 @@ export class WorkItemDuplicateError extends Error {
 
   constructor(readonly hash: string) {
     super(`WorkItem already exists: ${hash}`);
+  }
+}
+
+export class WorkItemUnavailableError extends Error {
+  readonly name = "WorkItemUnavailableError";
+  readonly code = "unavailable";
+
+  constructor(
+    readonly hash: string,
+    cause: unknown,
+  ) {
+    super(
+      `WorkItem storage busy: ${hash} — ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
+}
+
+/**
+ * Store transaction entry (#510 review fix minor): a SQLITE_BUSY at the
+ * write unit (see storage/sqlite-busy.ts for how bun:sqlite surfaces it)
+ * means nothing committed — mapped to the typed `unavailable` error so
+ * callers branch on the taxonomy, never on driver message text. Every other
+ * error passes through unchanged.
+ */
+export function runWorkItemTransaction<T>(
+  storage: { transaction<R>(operation: () => R): R },
+  hash: string,
+  write: () => T,
+): T {
+  try {
+    return storage.transaction(write);
+  } catch (error) {
+    if (isSqliteBusyError(error)) throw new WorkItemUnavailableError(hash, error);
+    throw error;
   }
 }
 
@@ -98,19 +134,21 @@ export function appendTransitionFactReceipt(
   };
   const appended = ledger.append(event, existing.revision);
   if (appended.kind !== "cas_conflict") return true;
-  if (appended.currentHead !== 0 || existing.revision !== 1) return false;
-  // Lazy adoption: a backfilled pre-cutover row sits at revision 1 with an
-  // empty stream. Its genesis fact records the observed state at seq 1, then
-  // the transition fact lands at seq 2 == revision 2.
-  const adopted = ledger.append(
-    {
-      streamId: workItemStreamId(existing.hash),
+  if (appended.currentHead !== 0 || existing.revision < 1) return false;
+  // Lazy adoption: a pre-cutover row sits at revision >= 1 (0014 shifts old
+  // json revisions by +1) with an empty stream. Adopt the stream at the
+  // observed revision — the genesis fact records the observed state at
+  // seq === revision — then the transition fact lands at revision + 1. A
+  // concurrent adopter loses as the same stale-head receipt (false).
+  try {
+    ledger.adoptStream(workItemStreamId(existing.hash), existing.revision, {
       type: "work_item.adopted",
       data: { snapshot: existing, revision: existing.revision },
-    },
-    0,
-  );
-  if (adopted.kind === "cas_conflict") return false;
+    });
+  } catch (error) {
+    if (LedgerAppend.AdoptError.isInstance(error)) return false;
+    throw error;
+  }
   return ledger.append(event, existing.revision).kind !== "cas_conflict";
 }
 

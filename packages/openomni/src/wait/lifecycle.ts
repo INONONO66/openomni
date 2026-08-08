@@ -1,4 +1,4 @@
-import { Wait } from "@openomni/protocol";
+import { Operational, Wait } from "@openomni/protocol";
 import { Bus, WaitStore } from "@openomni/session";
 
 /**
@@ -50,13 +50,32 @@ export namespace WaitService {
     return WaitStore.expire(id, at);
   }
 
-  /** Expiry sweep entry (boot recovery): folds every deadline-passed open wait to expired (partial when replies attached). */
+  /**
+   * Expiry sweep entry (boot recovery): folds every deadline-passed open
+   * wait to expired (partial when replies attached). Per-wait fault
+   * isolation (#510 review fix F3): one corrupt wait (e.g. a stream whose
+   * head disagrees with its row) records an Operational.Error and the sweep
+   * continues — a single bad row must never kill boot recovery.
+   */
   export function sweepExpired(now = Date.now()): Wait.Record[] {
     const expired: Wait.Record[] = [];
     for (const record of WaitStore.list(["open"])) {
       if (now <= record.expiresAt) continue;
-      const outcome = expire(record.id, now);
-      if (outcome.kind === "expired") expired.push(outcome.record);
+      try {
+        const outcome = expire(record.id, now);
+        if (outcome.kind === "expired") expired.push(outcome.record);
+      } catch (error) {
+        Bus.publish(Operational.Error, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "wait",
+          msg: `wait expiry sweep failed for ${record.id}`,
+          context: {
+            waitId: record.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
     }
     return expired;
   }

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
@@ -16,6 +17,20 @@ type EventSummary = {
   traceId: string;
   timeCreated: number;
 };
+
+/**
+ * Constant-time bearer check (#510 review fix minor): `timingSafeEqual`
+ * refuses unequal-length buffers, so the length guard rejects first — the
+ * length itself leaks (unavoidable with any string compare) but no byte
+ * content does. Both authenticated read surfaces (observability + admin
+ * ledger) share this one owner.
+ */
+function bearerAuthorized(header: string | undefined, token: string): boolean {
+  const expected = Buffer.from(`Bearer ${token}`);
+  const provided = Buffer.from(header ?? "");
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
+}
 
 type RouterOptions = {
   observabilityToken?: string;
@@ -73,7 +88,7 @@ export function createRouter(
 
   if (options.observabilityToken) {
     app.get("/observability/sessions/:sessionId/events", async (c) => {
-      if (c.req.header("Authorization") !== `Bearer ${options.observabilityToken}`) {
+      if (!bearerAuthorized(c.req.header("Authorization"), options.observabilityToken ?? "")) {
         return c.json({ error: "Unauthorized" }, 401);
       }
 
@@ -132,7 +147,7 @@ export function createRouter(
 function registerAdminLedgerRoutes(app: Hono<Env>, options: RouterOptions): void {
   app.use("/admin/*", async (c, next) => {
     const token = options.adminToken;
-    if (!token || c.req.header("Authorization") !== `Bearer ${token}`) {
+    if (!token || !bearerAuthorized(c.req.header("Authorization"), token)) {
       return c.json({ error: "Unauthorized" }, 401);
     }
     return next();

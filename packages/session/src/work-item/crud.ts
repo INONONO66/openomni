@@ -2,7 +2,7 @@ import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { detectCycles } from "./dependency.js";
-import { appendTransitionFact, requireWorkItemLedger } from "./facts.js";
+import { appendTransitionFact, requireWorkItemLedger, runWorkItemTransaction } from "./facts.js";
 import { commitMutation, persistMutation } from "./mutation.js";
 import type { WorkItemListFilter } from "./types.js";
 
@@ -35,7 +35,9 @@ export function removeWorkItem(hash: string): boolean {
 
   let removal: RemovalResult | undefined;
   try {
-    removal = adapter.transaction(() => removeWorkItemGraph(workItem, ledger, hash));
+    removal = runWorkItemTransaction(adapter, hash, () =>
+      removeWorkItemGraph(workItem, ledger, hash),
+    );
   } catch (error) {
     if (error instanceof WorkItemRemoveFailedError) return false;
     throw error;

@@ -90,6 +90,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     // owning the SQL (raw prepared statements) — this is wiring only.
     this.ledger = {
       append: (event, expectedHead) => Ledger.append(this.db, event, expectedHead),
+      adoptStream: (streamId, headRevision, genesis) =>
+        Ledger.adoptStream(this.db, streamId, headRevision, genesis),
       headFact: (streamId) => Ledger.headFact(this.db, streamId),
       factsByType: (type) => Ledger.factsByType(this.db, type),
       verifyTail: () => Ledger.verifyTail(this.db),

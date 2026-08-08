@@ -160,8 +160,13 @@ export const ContentFingerprintInputs = z
         parameters: declared(z.record(z.string().min(1), JsonValue)),
       })
       .strict(),
-    /** Fingerprints of upstream attempts this attempt consumes. */
-    upstreamFingerprints: z.array(Digest),
+    /**
+     * Fingerprints of upstream attempts this attempt consumes: a NON-EMPTY
+     * list, or absent-but-listed with a reason. A bare `[]` is rejected — a
+     * caller that consumed nothing declares that fact instead of leaving a
+     * silently-empty slot indistinguishable from "not captured".
+     */
+    upstreamFingerprints: declared(z.array(Digest).min(1)),
     /** Dependency-lock identity. */
     dependencyLock: declared(ReferenceId),
   })

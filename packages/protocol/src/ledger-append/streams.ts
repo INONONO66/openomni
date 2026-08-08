@@ -64,10 +64,15 @@ export const StreamRegistry = {
     status: "shipped",
   },
   route: {
-    stream: "route:<inboundEventId>",
+    // Channel-scoped key (#510 review fix F1): normalizer-minted inbound ids
+    // are only unique WITHIN a channel (Telegram per-chat counters, GitHub
+    // per-issue fallback ids), so the surface + workspace + channel scope is
+    // part of the stream identity — a colliding id from another channel can
+    // never preempt or replay a foreign decision.
+    stream: 'route:<surface>:<workspace ?? "">:<channel ?? "">:<inboundEventId>',
     heads: "single-fact (expectedHead 0, seq 1)",
     conflictMeans:
-      "inbound event id already routed — redelivery replays the recorded decision (accepted routes re-execute idempotently, terminal decisions repeat their rejection)",
+      "inbound event id already routed — replay is EQUIVALENCE-GATED (F2): the fresh decision must match the recorded one on stage/outcome/target/sessionId/runId/pendingInteractionId; equivalent redelivery proceeds with the fresh resolution (accepted routes re-execute idempotently, terminal decisions repeat their rejection), divergent fails closed as route_replay_divergent",
     factTypes: ["route.decided"],
     status: "shipped",
   },

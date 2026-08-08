@@ -51,7 +51,9 @@ export async function allocateWorkerSpawnAttempt(
       id: materials.model.id,
       parameters: absent("no model parameters are configured at dispatch"),
     },
-    upstreamFingerprints: [],
+    upstreamFingerprints: absent(
+      "upstream attempt consumption is not tracked at the spawn site (#510 phase D)",
+    ),
     dependencyLock: absent("dependency-lock identity is not read at the spawn site (#510 phase D)"),
   });
   const environmentFingerprint = WorkItem.environmentFingerprintOf({

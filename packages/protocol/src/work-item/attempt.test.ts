@@ -11,7 +11,10 @@ function contentInputs(): Parameters<typeof WorkItem.contentFingerprintOf>[0] {
       id: "claude-test",
       parameters: { absent: true, reason: "no model parameters are configured" },
     },
-    upstreamFingerprints: [],
+    upstreamFingerprints: {
+      absent: true,
+      reason: "no upstream attempts are consumed in this test",
+    },
     dependencyLock: { absent: true, reason: "dependency lock is not read in this test" },
   };
 }

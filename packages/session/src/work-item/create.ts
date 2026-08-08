@@ -3,7 +3,12 @@ import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { buildWorkItem } from "./builder.js";
 import { detectCycles } from "./dependency.js";
-import { appendCreatedFact, requireWorkItemLedger, WorkItemDuplicateError } from "./facts.js";
+import {
+  appendCreatedFact,
+  requireWorkItemLedger,
+  runWorkItemTransaction,
+  WorkItemDuplicateError,
+} from "./facts.js";
 import { commitMutation } from "./mutation.js";
 import type { CreateWorkItemInput } from "./types.js";
 
@@ -37,7 +42,7 @@ export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkIt
   // child-link rides the SAME transaction, so a stale parent head rolls the
   // whole create back — no compensating remove.
   let linkedParent: WorkItem.Info | undefined;
-  storage.transaction(() => {
+  runWorkItemTransaction(storage, item.hash, () => {
     appendCreatedFact(ledger, item, {
       name: item.name,
       sourceMessageId: item.sourceMessageId,
