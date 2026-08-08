@@ -87,7 +87,9 @@ Consumers should only use `@openomni/openomni` exports:
 - Windowed Stakes primitive and driver from the dedicated `@openomni/openomni/ledger` subpath; completion consumes its resolver seam while durable-ledger and Voice consumers remain separate work
 
 If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain. The dormant
-`./ledger` subpath is the one exception: `src/ledger/index.ts` exports `Stakes` and
+`./ledger` and `./messaging` are the two subpath exceptions (`./messaging` is
+mandated by #215 Manual QA: the existing-agent message driver must be runnable
+from `@openomni/openomni/messaging`): `src/ledger/index.ts` exports `Stakes` and
 `runStakesDriver` without widening the root barrel.
 
 ## Extension Points

@@ -75,6 +75,12 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
         "external_conversation_id",
         query.externalConversationId,
       );
+      if (conditions.length === 0) {
+        // Fail closed: a query with no correlation field would otherwise be a
+        // SQL syntax error today and an unbounded match over every live wait
+        // if the WHERE clause were ever restructured.
+        throw new Error("Wait correlation query must carry at least one correlation field");
+      }
       const rows = db
         .query(
           `SELECT data FROM wait

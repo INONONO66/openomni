@@ -162,7 +162,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
         event,
         coordinator: stubCoordinator,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("invalid_literal");
   });
 
   test("collects policy decisions via onDecision callback", async () => {

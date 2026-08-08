@@ -18,8 +18,8 @@ Every piece of code answers exactly one question:
 Support tiers: `policy` (pure decision engine), `llm`, `agent` (loop), `ipc` (#496),
 `coordinator` (local-process Execution.Driver), driver band `naru`/`chasa`/`masil`/
 `dokkaebi` ({protocol, ipc} deps only), `gantaek` (deferred until a second execution
-target kind exists). `apps/server` is the composition root (bootstrap-only ledger,
-#503) plus userland (`agents/`, `worker/` — recorded #504 exception).
+target kind exists). `apps/server` is the composition root (bootstrap-only
+ledger, see #503) plus userland (`agents/`, `worker/` — recorded #504 exception).
 `@openomni/core` is REJECTED: every candidate util already has a natural owner.
 
 ## Target domain lists

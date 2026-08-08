@@ -148,6 +148,50 @@ describe("DispatchRuntime", () => {
     expect(PendingInteractionStore.get("pi-dispatch-token-mismatch")?.status).toBe("resolved");
   });
 
+  test("token mismatch with no endpoint or actor proof stays unrouted and is denied", async () => {
+    const runtime = new DispatchRuntime();
+    let routed = false;
+    runtime.register("worker.complete", () => {
+      routed = true;
+      return { output: "accepted" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-no-proof");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-no-proof",
+      workerRunId: "run-pi-no-proof",
+      sessionId: session.id,
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      correlation: { tokenHash: "token-right" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: { action: "report_result", output: "SN-FORGED" },
+        correlation: {
+          endpointId: "telegram:seller-1",
+          channelId: "telegram:dm",
+          tokenHash: "token-wrong",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:intruder-9",
+      },
+    );
+
+    expect(routed).toBe(false);
+    expect(result.status).toBe("denied");
+    expect(PendingInteractionStore.get("pi-dispatch-no-proof")?.status).toBe("open");
+  });
+
   test("routes PendingInteraction clarification messages to resident.ask", async () => {
     const runtime = new DispatchRuntime();
     let routedCommand: DispatchProtocol.Command | undefined;

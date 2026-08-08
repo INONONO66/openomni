@@ -179,6 +179,13 @@ export function applyChannelGrantTreatment(
   inboundTreatment: Actor.InboundTreatment,
 ): Ingress.DirectEvent {
   const actor = getActor(event);
+  // A channel defaultTier materializes a principal for senders on the granted
+  // channel — including fully anonymous ones. That is Owner-authored channel
+  // policy, not a sender claim: grant rows are written by the Owner, scoped to
+  // surface/workspace/channel, and the transport was authenticated by the
+  // channel adapter. Pinned by kernel-routing-access "materializes a
+  // default-tier stranger". Tier-range validation at grant-write time is a
+  // #498 Grant-convergence candidate, not a treatment-time concern.
   const actorWithChannelDefault =
     !actorTrustTier(actor) && grant.defaultTier
       ? { ...(actor ?? { role: "user" }), trustTier: grant.defaultTier }

@@ -93,7 +93,9 @@ export function ingressEvidence(
         );
       }
       if (event.mode !== "direct" || typeof event.userId !== "string") return false;
-      return event.userId === expected || expected.endsWith(`:${event.userId}`);
+      // The prefixed form is bound to the event surface: a same-named user id
+      // on a different surface must not prove this endpoint.
+      return event.userId === expected || expected === `${event.surface}:${event.userId}`;
     },
   };
 }
@@ -138,7 +140,10 @@ export function targetsOfPendingInteraction(
  * it pins ONLY the responder who is the delivery target (resolved through
  * the ActorRegistry — registry-anchored, not sender-claimed). Every other
  * expected responder replies from their OWN endpoint, and their identity
- * proof is the resolved-actor evidence alone.
+ * proof is the resolved-actor evidence alone. Because every target carries
+ * an actor pin, wait rows never accept bearer-only replies. A delivery
+ * endpoint that no longer resolves in the registry fails closed: no
+ * candidates, rather than a weaker unpinned target set.
  */
 export function targetsOfWait(record: Wait.Record): ResponderTarget[] {
   const deliveryEndpointId = record.correlation.endpointId;
@@ -146,14 +151,14 @@ export function targetsOfWait(record: Wait.Record): ResponderTarget[] {
     deliveryEndpointId === undefined
       ? undefined
       : ActorRegistry.getEndpoint(deliveryEndpointId)?.actorId;
+  if (deliveryEndpointId !== undefined && deliveryActorId === undefined) {
+    return [];
+  }
   return record.expectedResponders.map((responderId) => ({
     responderId,
     targetActorId: responderId,
     ...(deliveryEndpointId !== undefined && responderId === deliveryActorId
       ? { endpointId: deliveryEndpointId }
       : {}),
-    ...(record.correlation.tokenHash === undefined
-      ? {}
-      : { tokenHash: record.correlation.tokenHash }),
   }));
 }

@@ -67,7 +67,7 @@ All durable messaging should flow through an OpenOmni-owned kernel surface. Targ
 ```
 raw channel event
   -> server channel adapter normalizes transport payload
-  -> openomni messaging kernel receives a canonical MessageEnvelope/command
+  -> openomni messaging kernel receives a canonical inbound message/command
   -> kernel resolves principal, access, correlation, session, target, execution path
   -> kernel projects messages/events and returns response/writeback instructions
 ```
@@ -79,7 +79,7 @@ raw channel event
 | Task | Location | Notes |
 | --- | --- | --- |
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
-| Add/modify bus events | `packages/protocol/src/event/` (per-domain files) | `BusEvent.define()` pattern |
+| Add/modify bus events | legacy families in `packages/protocol/src/event/`; new domains colocate `events.ts` beside their schema (e.g. `packages/protocol/src/wait/events.ts`) | `BusEvent.define()` pattern |
 | Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
 | Add policy point | `packages/protocol/src/policy/point-registry.ts` | 20 registered points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
@@ -183,7 +183,7 @@ a satellite split) to violations of each one.
 
 ## CODING BOUNDARY RULES
 
-- Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WaitStore`, `WorkerGrantStore`, or choose worker/resident targets except through an OpenOmni kernel API.
+- Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WaitStore`, `WorkerGrantStore`, `ChannelGrantStore`, `BlacklistStore`, or choose worker/resident targets except through an OpenOmni kernel API.
 - Do not add authority decisions to `packages/session`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
 - Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Session-backed worker/background execution belongs in `packages/openomni`.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.

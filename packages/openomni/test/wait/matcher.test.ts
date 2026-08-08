@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { Dispatch, Ingress } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "@openomni/session";
 import {
@@ -42,6 +42,10 @@ function command(overrides: Partial<Dispatch.Command> = {}): Dispatch.Command {
 }
 
 describe("wait matcher — ingress evidence", () => {
+  afterEach(() => {
+    Storage.reset();
+  });
+
   test("credits a bearer token only when no actor is pinned", () => {
     const bearer = buildInteraction("pi-bearer", {
       correlation: { tokenHash: correlation.tokenHash },
@@ -214,7 +218,6 @@ describe("wait matcher — ingress evidence", () => {
         evidenceFor("actor-target", "endpoint-elsewhere", "elsewhere-9"),
       ),
     ).toEqual([]);
-    Storage.reset();
   });
 
   test("returns every credited expected responder of a wait row and never decides", () => {

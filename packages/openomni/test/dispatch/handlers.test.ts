@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChatAgentConfig, ChatAgentInput } from "@openomni/agent";
+import { Wait } from "@openomni/protocol";
 import { Bus, PendingAskStore, Session, Storage, SurfaceKey, WaitStore } from "@openomni/session";
 import { IngressEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
@@ -141,8 +142,8 @@ describe("built-in dispatch handlers", () => {
     });
     const syncAskPhases: string[] = [];
     const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name !== "wait.sync_ask") return;
-      syncAskPhases.push((payload as { phase: string }).phase);
+      if (event.name !== Wait.Events.SyncAsk.name) return;
+      syncAskPhases.push(Wait.Events.SyncAsk.schema.parse(payload).phase);
     });
 
     const output = await registry.get("resident.ask")?.(

@@ -93,6 +93,10 @@ function canonicalWorkerCompletePayload(
 
 // Sender matching is owned by wait/matcher.ts (one core, dispatch actor
 // context as the phase evidence); exactly one credited responder routes.
+// Endpoint proof (or a pinned actor identity) is the SOLE authorization for
+// legacy PendingInteraction rows: correlation.tokenHash is a lookup
+// precedence level, never a credential — a wrong token still reaches the
+// scoped level, and only the sender matcher admits or refuses the command.
 function pendingInteractionSenderMatches(
   command: Dispatch.Command,
   match: PendingInteractionStore.Record,

@@ -291,8 +291,16 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
           // Lazy expiry: this late reply is the first observer of the passed
           // deadline — fold the wait to expired (recording partial progress)
           // before rejecting, so the ledger never keeps a dead open wait that
-          // the boot sweep alone would have to find.
-          WaitService.expire(wait.record.id, at);
+          // the boot sweep alone would have to find. A concurrent ingest may
+          // have already folded the wait terminal (revision CAS conflict);
+          // the expiry is an optimization, so it must never replace the typed
+          // rejection below.
+          try {
+            WaitService.expire(wait.record.id, at);
+          } catch {
+            // Already folded by a concurrent transition — the typed rejection
+            // below is still the correct outcome for this reply.
+          }
         }
         throw new IngressRoutingError(
           "wait_reply_rejected",

@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   Dispatch as DispatchProtocol,
+  Wait,
   type AppConnector,
   type Dispatch,
   type Execution,
@@ -261,8 +262,8 @@ describe("createServerDispatchOwners", () => {
     const syncAskPhases: string[] = [];
     const unsubscribe = Bus.observe((event, payload) => {
       if (event.name.startsWith("dispatch.")) eventNames.push(event.name);
-      if (event.name === "wait.sync_ask") {
-        syncAskPhases.push((payload as { phase: string }).phase);
+      if (event.name === Wait.Events.SyncAsk.name) {
+        syncAskPhases.push(Wait.Events.SyncAsk.schema.parse(payload).phase);
       }
     });
     const residentCalls: ResidentRuntimeCall[] = [];
