@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LedgerAppend, PolicyDecision, Wait, WorkItem } from "../../packages/protocol/src/index";
+import {
+  Communication,
+  LedgerAppend,
+  PolicyDecision,
+  Wait,
+  WorkItem,
+} from "../../packages/protocol/src/index";
 import {
   createCompletionAdmissionService,
   completionRequestRoot,
@@ -16,6 +22,7 @@ import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing
 import {
   Bus,
   ChannelGrantStore,
+  PendingAskStore,
   Session,
   SqliteStorageAdapter,
   Storage,
@@ -25,6 +32,12 @@ import {
   WorkItemStore,
 } from "../../packages/session/src/index";
 import { Ledger } from "../../packages/session/src/ledger-core/index";
+import {
+  hasRetryExhaustionBlocker,
+  isRetryExhausted,
+} from "../../packages/session/src/work-item/retry-policy";
+import { waitViewOfPendingAsk } from "../../packages/openomni/src/wait/upcast";
+import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
 
 /**
  * #510 phase B/C1/C2/C3 conformance — the Wait, WorkItem, routing, and
@@ -279,7 +292,10 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
   });
 });
 
-async function createConformanceWorkItem(name: string): Promise<WorkItem.Info> {
+async function createConformanceWorkItem(
+  name: string,
+  options: Readonly<{ maxAttempts?: number }> = {},
+): Promise<WorkItem.Info> {
   return WorkItemStore.create({
     name,
     sourceMessageId: `msg_${name}`,
@@ -288,6 +304,7 @@ async function createConformanceWorkItem(name: string): Promise<WorkItem.Info> {
     goal: "prove no record, no action for the WorkItem class",
     sessionId: "session_conformance",
     acceptanceCriteria: ["the transition is recorded before it acts"],
+    ...options,
   });
 }
 
@@ -1138,5 +1155,159 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
     await flushBus();
     // The observe-only Authorized projection fires strictly AFTER the append.
     expect(events).not.toContain("dispatch.authorized");
+  });
+});
+
+describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)", () => {
+  function seedFrozenPendingAsk(
+    id: string,
+    overrides: Partial<Communication.PendingAsk.Record> = {},
+  ): Communication.PendingAsk.Record {
+    const storage = Storage.getAdapter();
+    const adapter = storage.pendingAsk;
+    if (!adapter) throw new Error("conformance storage misses the pendingAsk sub-adapter");
+    // pending_ask.origin_session_id references session(id).
+    storage.session.set("session_conformance", {
+      id: "session_conformance",
+      title: "session_conformance",
+      model: { providerID: "test", modelID: "test-model" },
+      time: { created: 1, updated: 1 },
+      spawnDepth: 0,
+    });
+    // Historical rows predate the freeze — seeded at the adapter layer,
+    // exactly as pre-freeze rows persist on disk.
+    const record = Communication.PendingAsk.Record.parse({
+      id,
+      originSessionId: "session_conformance",
+      originActorKind: "worker",
+      targetKind: "external_actor",
+      endpointId: "telegram:conformance",
+      channelId: "telegram:dm",
+      status: "open",
+      correlation: { tokenHash: `tok-${id}` },
+      createdAt: 100,
+      updatedAt: 100,
+      ...overrides,
+    });
+    adapter.create(record);
+    return record;
+  }
+
+  test("frozen writer: PendingAskStore writes throw the typed frozen error; archived rows stay readable", async () => {
+    const record = seedFrozenPendingAsk("ask-frozen");
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      PendingAskStore.answer("ask-frozen", { answeredAt: 5 });
+    } catch (error) {
+      thrown = error;
+    }
+
+    if (!Communication.PendingAsk.FrozenError.isInstance(thrown)) {
+      throw new Error("expected the typed PendingAskFrozenError");
+    }
+    expect(thrown.data.code).toBe("pending_ask_frozen");
+    expect(thrown.data.method).toBe("answer");
+    await flushBus();
+    expect(events).toEqual([]);
+    // The frozen row is untouched and still served by every read surface.
+    expect(PendingAskStore.get("ask-frozen")?.updatedAt).toBe(record.updatedAt);
+    expect(PendingAskStore.findByCorrelation({ tokenHash: "tok-ask-frozen" })).toHaveLength(1);
+  });
+
+  test("archive manifest: deterministic range hash over frozen rows in id order; a tampered row mismatches", () => {
+    // Insertion order differs from id order on purpose: the manifest hash is
+    // defined over canonical row JSON in id order, not arrival order.
+    seedFrozenPendingAsk("ask-b");
+    seedFrozenPendingAsk("ask-c", { status: "answered", answeredAt: 200 });
+    seedFrozenPendingAsk("ask-a", { status: "cancelled" });
+
+    const manifest = buildLedgerArchiveManifest(inspect);
+    expect(manifest.manifestVersion).toBe(1);
+    const entry = manifest.tables.find((table) => table.table === "pending_ask");
+    if (!entry) throw new Error("manifest misses the frozen pending_ask table");
+    expect(entry).toMatchObject({
+      table: "pending_ask",
+      sourceSchemaVersion: "0014_work_item_revision/migration.sql",
+      rowCount: 3,
+      idRange: { first: "ask-a", last: "ask-c" },
+    });
+    expect(entry.integrityHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    // Regenerating over the same rows reproduces the hash byte-for-byte.
+    const regenerated = buildLedgerArchiveManifest(inspect).tables.find(
+      (table) => table.table === "pending_ask",
+    );
+    expect(regenerated?.integrityHash).toBe(entry.integrityHash);
+
+    // A tampered archived row breaks the range hash.
+    inspect.query("UPDATE pending_ask SET status = 'answered' WHERE id = 'ask-b'").run();
+    const tampered = buildLedgerArchiveManifest(inspect).tables.find(
+      (table) => table.table === "pending_ask",
+    );
+    expect(tampered?.integrityHash).not.toBe(entry.integrityHash);
+    expect(tampered?.rowCount).toBe(3);
+  });
+
+  test("upcast-on-read is deterministic and never materializes archive rows as active rows", () => {
+    const record = seedFrozenPendingAsk("ask-upcast", { status: "ambiguous" });
+
+    const first = waitViewOfPendingAsk(record);
+    const reread = PendingAskStore.get("ask-upcast");
+    if (!reread) throw new Error("frozen row must stay readable");
+    const second = waitViewOfPendingAsk(reread);
+
+    // Deterministic: the same archived row always upcasts to the same view.
+    expect(second).toEqual(first);
+    // Legacy "ambiguous" stays answerable through the Wait vocabulary.
+    expect(first.status).toBe("open");
+    expect(first.revision).toBe(0);
+
+    // The read wrote nothing: no active wait row appeared and the archived
+    // row's stored bytes are unchanged.
+    expect(inspect.query("SELECT COUNT(*) AS n FROM wait").get()).toEqual({ n: 0 });
+    expect(
+      inspect.query("SELECT data, time_updated FROM pending_ask WHERE id = 'ask-upcast'").get(),
+    ).toEqual({ data: JSON.stringify(record), time_updated: 100 });
+  });
+
+  test("retry-policy reads the fact-bound WorkItem projection: retry and exhaustion decisions are recorded facts", async () => {
+    const item = await createConformanceWorkItem("retry-policy-receipt", { maxAttempts: 2 });
+    await WorkItemStore.start(item.hash);
+    await WorkItemStore.fail(item.hash, "first failure");
+
+    const retried = await WorkItemStore.retry(item.hash);
+    if (!retried) throw new Error("retry must return the updated projection");
+
+    // The attempt count retry-policy evaluates is carried by the head fact
+    // at seq === revision — the projection is the fold of the work: stream,
+    // never a WorkerRun read.
+    const facts = workFactsOf(item.hash);
+    const retriedFact = facts.at(-1);
+    expect(retriedFact?.type).toBe("work_item.retried");
+    expect(JSON.parse(retriedFact?.data ?? "{}")).toMatchObject({
+      attempt: retried.attempt,
+      revision: retried.revision,
+    });
+    expect(workHeadOf(item.hash)).toBe(retried.revision);
+    expect(retried.attempt).toBe(2);
+    expect(isRetryExhausted(retried)).toBe(true);
+
+    // Exhaustion is itself a recorded decision: the blocker fact lands
+    // before the typed throw, and the projection the policy reads agrees.
+    await WorkItemStore.fail(item.hash, "second failure");
+    let thrown: unknown;
+    try {
+      await WorkItemStore.retry(item.hash);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(String(thrown)).toContain("retry attempts exhausted");
+    expect(workFactsOf(item.hash).at(-1)?.type).toBe("work_item.blocker_added");
+    const exhausted = WorkItemStore.get(item.hash);
+    if (!exhausted) throw new Error("exhausted projection must exist");
+    expect(hasRetryExhaustionBlocker(exhausted)).toBe(true);
   });
 });

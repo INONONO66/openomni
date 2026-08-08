@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
+  Communication,
   IngressEvent,
-  type Communication,
   type Dispatch as DispatchProtocol,
   type Ingress,
 } from "@openomni/protocol";
@@ -105,6 +105,8 @@ async function createPending(
   return session.id;
 }
 
+// PendingAskStore writes are frozen (#510 D2a) — historical rows are seeded
+// at the adapter layer, exactly as pre-freeze rows persist on disk.
 function createPendingAsk(
   id: string,
   sessionId: string,
@@ -115,7 +117,7 @@ function createPendingAsk(
     title: sessionId,
     model: { providerID: "test", modelID: "test-model" },
   });
-  return PendingAskStore.create({
+  const record = Communication.PendingAsk.Record.parse({
     id,
     originSessionId: session.id,
     ...(originRunId === null ? {} : { originRunId }),
@@ -124,7 +126,14 @@ function createPendingAsk(
     endpointId: correlation.endpointId,
     channelId: correlation.channelId,
     correlation: askCorrelation,
+    status: "open",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   });
+  const adapter = Storage.getAdapter().pendingAsk;
+  if (!adapter) throw new Error("pendingAsk adapter missing");
+  adapter.create(record);
+  return record;
 }
 
 async function captureError(action: Promise<unknown>): Promise<Error | undefined> {
