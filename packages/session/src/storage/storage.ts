@@ -63,6 +63,11 @@ export namespace Storage {
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     wait?: ProtocolStorage.WaitSubAdapter;
+    // #510 phase B: decision-class ledger append on the SAME connection as
+    // the projection sub-adapters, so a decision-class store can commit
+    // append + projection inside one `transaction()` call. Optional for test
+    // fakes only — decision-class writers fail closed without it.
+    ledger?: ProtocolStorage.LedgerSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
     pendingAsk?: ProtocolStorage.PendingAskSubAdapter;
     pendingInteraction?: ProtocolStorage.PendingInteractionSubAdapter;

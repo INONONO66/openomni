@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { Ledger } from "../ledger-core/index";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
 import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connector-installation-adapter";
@@ -30,6 +31,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
+  readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
   readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
   readonly workerGrant: NonNullable<Storage.Adapter["workerGrant"]>;
@@ -56,6 +58,12 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
+    // Decision-class append rides the adapter's own connection so append +
+    // projection share one transaction (#510 phase B). The append core keeps
+    // owning the SQL (raw prepared statements) — this is wiring only.
+    this.ledger = {
+      append: (event, expectedHead) => Ledger.append(this.db, event, expectedHead),
+    };
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
     this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);
     this.workerGrant = createSqliteWorkerGrantAdapter(this.db);
@@ -71,7 +79,12 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   }
 
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    // BEGIN IMMEDIATE: every Adapter.transaction caller is a write unit
+    // (#510 decision-class discipline) — take the write lock up front
+    // instead of upgrading mid-transaction. Nested writers (e.g. the ledger
+    // append core's own transaction) degrade to savepoints on this one
+    // connection, so append + projection commit as a single fsync unit.
+    return this.db.transaction(fn).immediate();
   }
 
   close(): void {

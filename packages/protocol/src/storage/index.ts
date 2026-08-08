@@ -2,6 +2,7 @@ import type { Actor } from "../actor/index.js";
 import type { AppConnector } from "../app-connector/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
+import type { LedgerAppend } from "../ledger-append/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 
@@ -19,6 +20,21 @@ export namespace Storage {
     compareAndSet(hash: string, expectedHead: number, item: WorkItem.Info): boolean;
     list(filter?: WorkItemListFilter): WorkItem.Info[];
     remove(hash: string): boolean;
+  }
+
+  /**
+   * Decision-class ledger append on the storage-owned connection (#510
+   * phase B). Exposed as a sub-adapter so a decision-class store can bind
+   * `Ledger.append(event, expectedHead)` and its projection write into ONE
+   * `Adapter.transaction` fsync unit — no record, no action. `cas_conflict`
+   * guarantees nothing was written; retrying from the reported head is the
+   * caller's decision.
+   */
+  export interface LedgerSubAdapter {
+    append(
+      event: LedgerAppend.Input,
+      expectedHead: LedgerAppend.ExpectedHead,
+    ): LedgerAppend.Outcome;
   }
 
   export interface WaitSubAdapter {

@@ -30,7 +30,9 @@ describe("WaitStore", () => {
     const loaded = WaitStore.get("wait-1");
 
     expect(created.status).toBe("open");
-    expect(created.revision).toBe(0);
+    // Revision 1 at birth: the wait.opened fact is seq 1 on the owner
+    // stream `wait:<id>`, and head === revision from create onward (#510).
+    expect(created.revision).toBe(1);
     expect(created.partial).toBe(false);
     expect(loaded).toEqual(created);
     await flushBus();
@@ -119,7 +121,7 @@ describe("WaitStore", () => {
     expect(attached.kind).toBe("attached");
     expect(resolved.kind).toBe("resolved");
     expect(persisted?.status).toBe("resolved");
-    expect(persisted?.revision).toBe(2);
+    expect(persisted?.revision).toBe(3);
     expect(persisted?.replies).toHaveLength(2);
     expect(persisted?.resolvedAt).toBe(2_000);
     await flushBus();
@@ -153,8 +155,8 @@ describe("WaitStore", () => {
     expect(ambiguous.kind).toBe("rejected");
     if (ambiguous.kind !== "rejected") throw new Error("expected rejected");
     expect(ambiguous.code).toBe("ambiguous_responder");
-    // Quorum unchanged: still the single attached reply at revision 1.
-    expect(persisted?.revision).toBe(1);
+    // Quorum unchanged: still the single attached reply at revision 2.
+    expect(persisted?.revision).toBe(2);
     expect(persisted?.replies).toHaveLength(1);
     expect(persisted?.status).toBe("open");
     await flushBus();
@@ -193,7 +195,7 @@ describe("WaitStore", () => {
 
     expect(outcome.kind).toBe("delivery_recorded");
     expect(persisted?.correlation.replyToMessageId).toBe("platform:msg-1");
-    expect(persisted?.revision).toBe(1);
+    expect(persisted?.revision).toBe(2);
     // The adapter's correlation projection columns moved with the record:
     // lookups answer the platform id and no longer the internal one.
     expect(WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-1" }, 1_000)).toHaveLength(
@@ -201,7 +203,8 @@ describe("WaitStore", () => {
     );
     expect(WaitStore.findByCorrelation({ replyToMessageId: "reply-1" }, 1_000)).toHaveLength(0);
     await flushBus();
-    // Projection-only transition: no wait ledger event beyond wait.opened.
+    // No Bus projection for this transition: the durable
+    // wait.delivery_recorded fact lives on the owner stream only.
     expect(events).toEqual(["wait.opened"]);
   });
 
