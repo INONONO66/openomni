@@ -8,11 +8,15 @@ import {
   createCompletionAdmissionService,
   completionRequestRoot,
 } from "../../packages/openomni/src/work-item/completion-admission";
+import { DispatchRegistry } from "../../packages/openomni/src/dispatch/registry";
+import { registerBuiltInDispatchHandlers } from "../../packages/openomni/src/dispatch/setup";
 import {
   Bus,
   SqliteStorageAdapter,
   Storage,
   WaitStore,
+  WorkerRun,
+  WorkerRunStateStore,
   WorkItemStore,
 } from "../../packages/session/src/index";
 import { Ledger } from "../../packages/session/src/ledger-core/index";
@@ -592,5 +596,163 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
       seq: 2,
       code: "hash_mismatch",
     });
+  });
+});
+
+function conformanceAttemptIdentity(workInput: string) {
+  return {
+    contentFingerprint: WorkItem.contentFingerprintOf({
+      workInput,
+      handlerKind: "internal_chat_agent",
+      handlerCodeRef: { absent: true, reason: "not captured by the conformance suite" },
+      model: {
+        provider: "anthropic",
+        id: "claude-conformance",
+        parameters: { absent: true, reason: "no model parameters configured" },
+      },
+      upstreamFingerprints: [],
+      dependencyLock: { absent: true, reason: "not read by the conformance suite" },
+    }),
+    environmentFingerprint: WorkItem.environmentFingerprintOf({
+      os: process.platform,
+      arch: process.arch,
+      bunVersion: process.versions.bun ?? process.version,
+      workspaceRoot: { absent: true, reason: "no workspace in the conformance suite" },
+      schemaVersions: { policyKernel: 1 },
+      policy: { absent: true, reason: "no policy plan in the conformance suite" },
+      toolVersions: { absent: true, reason: "not enumerated by the conformance suite" },
+      verifierVersions: { absent: true, reason: "not enumerated by the conformance suite" },
+      providerParameters: { absent: true, reason: "no provider parameters configured" },
+      configRef: { absent: true, reason: "no config identity in the conformance suite" },
+    }),
+  };
+}
+
+describe("p2 ledger baseline — attempt identity decision-class facts (C2)", () => {
+  test("worker.spawn appends work_item.attempt_allocated before the WorkerRun record exists", async () => {
+    const observations: {
+      factTypes: string[];
+      factAttemptId?: string;
+      workerRunExisted: boolean;
+    }[] = [];
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          dispatch: async (sessionId, request) => {
+            const spawned = WorkItemStore.list().find(
+              (candidate) => candidate.workerRunId === request.runId,
+            );
+            if (!spawned) throw new Error("spawned WorkItem not found at dispatch time");
+            const facts = factsOfStream(`work:${spawned.hash}`);
+            const allocated = facts.find((fact) => fact.type === "work_item.attempt_allocated");
+            observations.push({
+              factTypes: facts.map((fact) => fact.type),
+              factAttemptId: allocated
+                ? (JSON.parse(allocated.data) as { attemptId?: string }).attemptId
+                : undefined,
+              workerRunExisted: WorkerRunStateStore.get(sessionId, request.runId) !== undefined,
+            });
+            // The executor acts only now — this is where the durable
+            // WorkerRun record is created today, strictly AFTER the
+            // appended attempt fact (append-before-act at the spawn site).
+            await WorkerRun.create(sessionId, {
+              runId: request.runId,
+              title: "conformance worker",
+              prompt: request.prompt,
+            });
+            return { runId: request.runId, sessionId, status: "succeeded", output: "done" };
+          },
+        },
+      },
+    });
+
+    const handler = registry.get("worker.spawn");
+    if (!handler) throw new Error("worker.spawn handler is not registered");
+    const result = (await handler({
+      dispatchId: "dispatch-worker-spawn-c2",
+      action: "worker.spawn",
+      target: { kind: "worker", name: "conformance-coder" },
+      payload: {
+        text: "prove attempt identity",
+        acceptanceCriteria: ["the attempt identity is recorded before the run exists"],
+      },
+      actor: { kind: "resident", actorId: "agent:resident", agentName: "resident" },
+      traceId: "trace-c2",
+      submittedAt: Date.now(),
+    })) as {
+      output: { workItemHash: string; attemptId: string; runId: string; sessionId: string };
+    };
+
+    expect(observations).toHaveLength(1);
+    const observed = observations[0];
+    expect(observed?.workerRunExisted).toBe(false);
+    expect(observed?.factTypes).toContain("work_item.attempt_allocated");
+    // attemptId is threaded alongside workerRunId and matches the appended fact.
+    expect(result.output.attemptId).toBeDefined();
+    expect(observed?.factAttemptId).toBe(result.output.attemptId);
+    expect(WorkerRunStateStore.get(result.output.sessionId, result.output.runId)).toBeDefined();
+    // Head↔revision binding holds through the allocation fact.
+    expect(workHeadOf(result.output.workItemHash)).toBe(
+      WorkItemStore.get(result.output.workItemHash)?.revision,
+    );
+  });
+
+  test("attemptSeq is allocated by the serialized append: monotonic, never reused", async () => {
+    const item = await createConformanceWorkItem("attempt-seq-monotonic");
+
+    const first = await WorkItemStore.allocateAttempt(
+      item.hash,
+      conformanceAttemptIdentity("first execution"),
+    );
+    const second = await WorkItemStore.allocateAttempt(
+      item.hash,
+      conformanceAttemptIdentity("second execution"),
+    );
+    if (!first || !second) throw new Error("expected two allocations");
+
+    expect(first.attempt.attemptSeq).toBe(1);
+    expect(second.attempt.attemptSeq).toBe(2);
+    expect(second.attempt.attemptId).not.toBe(first.attempt.attemptId);
+    // retryOf is lineage, never equivalence: the successor points at the
+    // recorded prior attempt; the first attempt has no prior.
+    expect(first.attempt.retryOf).toBeNull();
+    expect(second.attempt.retryOf).toBe(first.attempt.attemptId);
+
+    const allocationFacts = workFactsOf(item.hash).filter(
+      (fact) => fact.type === "work_item.attempt_allocated",
+    );
+    expect(
+      allocationFacts.map((fact) => (JSON.parse(fact.data) as { attemptSeq: number }).attemptSeq),
+    ).toEqual([1, 2]);
+    // Each allocation fact sits at seq === the revision it projected.
+    expect(allocationFacts.map((fact) => fact.seq)).toEqual([
+      first.item.revision,
+      second.item.revision,
+    ]);
+    expect(workHeadOf(item.hash)).toBe(second.item.revision);
+  });
+
+  test("fail-loud manifest: a category input without a declared reason rejects", () => {
+    const categories = WorkItem.NondeterminismCategory.options;
+    const covered = {
+      recorded: [{ category: "clock", identifier: "ref:clock/system", value: 1_700_000_000_000 }],
+      absent: categories
+        .filter((category) => category !== "clock")
+        .map((category) => ({ category, reason: `${category} input was not consumed` })),
+    };
+    expect(WorkItem.NondeterminismManifest.safeParse(covered).success).toBe(true);
+
+    const silentlyMissing = {
+      ...covered,
+      absent: covered.absent.filter((entry) => entry.category !== "random"),
+    };
+    const rejected = WorkItem.NondeterminismManifest.safeParse(silentlyMissing);
+    expect(rejected.success).toBe(false);
+    if (!rejected.success) {
+      expect(rejected.error.issues.map((issue) => issue.message)).toContain(
+        'nondeterminism input "random" is neither recorded nor declared absent with a reason — missing manifest input fails loudly',
+      );
+    }
   });
 });

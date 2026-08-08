@@ -5,6 +5,7 @@ import {
   addWorkItemBlocker,
   addWorkItemEvidence,
   addWorkItemReadBackEvidence,
+  allocateWorkItemAttempt,
   assignWorkItemExecution,
   areDependenciesMet as areStoredDependenciesMet,
   cancelWorkItem,
@@ -14,6 +15,7 @@ import {
   resolveWorkItemBlocker,
   retryStoredWorkItem,
   startWorkItem,
+  type AttemptAllocationInput,
 } from "./lifecycle.js";
 import type { CreateWorkItemInput, DependencyReadiness, WorkItemListFilter } from "./types.js";
 
@@ -114,5 +116,17 @@ export namespace WorkItemStore {
 
   export async function retry(hash: string): Promise<WorkItem.Info | undefined> {
     return retryStoredWorkItem(hash);
+  }
+
+  /**
+   * #510 C2 — appends `work_item.attempt_allocated` (full Attempt identity)
+   * on the owner stream before the projection advances; attemptSeq is
+   * allocated by that serialized append and never reused.
+   */
+  export async function allocateAttempt(
+    hash: string,
+    identity: AttemptAllocationInput,
+  ): Promise<Readonly<{ item: WorkItem.Info; attempt: WorkItem.Attempt }> | undefined> {
+    return allocateWorkItemAttempt(hash, identity);
   }
 }

@@ -114,6 +114,25 @@ export function appendTransitionFactReceipt(
   return ledger.append(event, existing.revision).kind !== "cas_conflict";
 }
 
+/**
+ * #510 C2 — the attempt-allocation fact. The full Attempt identity is the
+ * fact payload; `attemptSeq` is allocated by the work stream's serialized
+ * append: the projection's `lastAttemptSeq` watermark is bound to the
+ * stream head by the same fact-seq == revision equation, so each seq is
+ * minted exactly once and never reused.
+ */
+export function attemptAllocatedFact(
+  existing: WorkItem.Info,
+  attempt: WorkItem.Attempt,
+): WorkItemFact {
+  if (attempt.attemptSeq !== existing.lastAttemptSeq + 1) {
+    throw new Error(
+      `attemptSeq must advance once per serialized append: watermark=${existing.lastAttemptSeq} allocated=${attempt.attemptSeq}`,
+    );
+  }
+  return { type: "work_item.attempt_allocated", data: { ...attempt } };
+}
+
 /** Throwing form of {@link appendTransitionFactReceipt} for store writers. */
 export function appendTransitionFact(
   ledger: ProtocolStorage.LedgerSubAdapter,

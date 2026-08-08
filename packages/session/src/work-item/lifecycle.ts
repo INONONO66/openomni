@@ -2,6 +2,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { areWorkItemDependenciesMet } from "./dependency.js";
+import { attemptAllocatedFact } from "./facts.js";
 import { mutate, persistMutation } from "./mutation.js";
 import { recordWorkItemOutcome } from "./outcome.js";
 import { retryWorkItem } from "./retry.js";
@@ -99,6 +100,57 @@ export async function assignWorkItemExecution(
       },
     };
   });
+}
+
+export type AttemptAllocationInput = Readonly<{
+  contentFingerprint: WorkItem.ContentFingerprint;
+  environmentFingerprint: WorkItem.EnvironmentFingerprint;
+  /** Cache-hit reuse lineage — dormant in C2 (no lookup exists yet). */
+  reusedFromAttemptId?: string;
+}>;
+
+/**
+ * #510 C2 — allocates the next Attempt identity for a WorkItem. Fingerprint
+ * materials are supplied BY THE CALLER (the kernel spawn site owns model +
+ * environment); this store stays dumb and records what it is given. The
+ * store owns identity allocation: attemptId is minted here, attemptSeq is
+ * `lastAttemptSeq + 1` under the stream's serialized append, and retryOf is
+ * the recorded prior attemptId on this WorkItem (lineage, never
+ * equivalence) — pre-C2 retries recorded no attemptId, so their lineage
+ * surfaces as null (phase D closes that gap).
+ */
+export async function allocateWorkItemAttempt(
+  hash: string,
+  identity: AttemptAllocationInput,
+): Promise<Readonly<{ item: WorkItem.Info; attempt: WorkItem.Attempt }> | undefined> {
+  let allocated: WorkItem.Attempt | undefined;
+  const item = await mutate(hash, (existing, now) => {
+    const status = WorkItem.deriveStatus(existing);
+    if (status === "completed" || status === "cancelled" || status === "failed") {
+      throw new Error(`Cannot allocate an attempt on a ${status} work item`);
+    }
+    const attempt = WorkItem.Attempt.parse({
+      attemptId: WorkItem.generateAttemptId(),
+      attemptSeq: existing.lastAttemptSeq + 1,
+      retryOf: existing.currentAttemptId ?? null,
+      contentFingerprint: identity.contentFingerprint,
+      environmentFingerprint: identity.environmentFingerprint,
+      reusedFromAttemptId: identity.reusedFromAttemptId ?? null,
+    });
+    allocated = attempt;
+    return {
+      changedFields: ["lastAttemptSeq", "currentAttemptId", "timestamps"],
+      fact: attemptAllocatedFact(existing, attempt),
+      updated: {
+        ...existing,
+        lastAttemptSeq: attempt.attemptSeq,
+        currentAttemptId: attempt.attemptId,
+        timestamps: { ...existing.timestamps, updated: now },
+      },
+    };
+  });
+  if (!item || !allocated) return undefined;
+  return { item, attempt: allocated };
 }
 
 export async function addWorkItemBlocker(

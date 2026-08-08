@@ -6,6 +6,7 @@ import {
   type ConnectorCompletionOptions,
 } from "./connector-completion-projector.js";
 import {
+  allocateWorkerSpawnAttempt,
   createWorkerSpawnWorkItem,
   failWorkerSpawnExecutor,
   throwWithWorkItemReflectionFailure,
@@ -137,6 +138,15 @@ export async function handleConnectorEndpointWorkerSpawn(
     payload,
     CONNECTOR_ENDPOINT_EXECUTOR_KIND,
   );
+  // #510 C2: the attempt identity is appended on the work stream before the
+  // connector driver acts; attemptId travels alongside workerRunId. No
+  // policy plan is resolved at this gate — the fingerprint lists it absent.
+  const attemptId = await allocateWorkerSpawnAttempt(
+    workItemHash,
+    payload.prompt,
+    CONNECTOR_ENDPOINT_EXECUTOR_KIND,
+    { model, workspaceRoot: command.workspaceRoot },
+  );
   let result: Execution.Result;
   try {
     result = await options.driver.dispatch({
@@ -158,6 +168,7 @@ export async function handleConnectorEndpointWorkerSpawn(
       sessionId: request.sessionId,
       runId: request.runId,
       workItemHash,
+      attemptId,
       connectorEndpointId: installation.endpointId,
       connectorInstallationId: installation.id,
       connectorId: installation.connectorId,
