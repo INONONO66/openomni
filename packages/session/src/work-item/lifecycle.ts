@@ -2,15 +2,19 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { areWorkItemDependenciesMet } from "./dependency.js";
-import { mutate, mutateTimestamps, persistMutation } from "./mutation.js";
+import { mutate, persistMutation } from "./mutation.js";
 import { recordWorkItemOutcome } from "./outcome.js";
 import { retryWorkItem } from "./retry.js";
 
 export async function startWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  return mutateTimestamps(hash, "started", (timestamps, now) => ({
-    ...timestamps,
-    started: now,
-    updated: now,
+  return mutate(hash, (existing, now) => ({
+    changedFields: ["timestamps"],
+    target: "started",
+    fact: { type: "work_item.started", data: { startedAt: now } },
+    updated: {
+      ...existing,
+      timestamps: { ...existing.timestamps, started: now, updated: now },
+    },
   }));
 }
 
@@ -37,6 +41,10 @@ export async function failWorkItem(
   return mutate(hash, (existing, now) => ({
     changedFields: ["timestamps", "failureReason"],
     target: "failed",
+    fact: {
+      type: "work_item.failed",
+      data: { failedAt: now, ...(reason === undefined ? {} : { reason }) },
+    },
     updated: {
       ...existing,
       timestamps: { ...existing.timestamps, failed: now, updated: now },
@@ -54,10 +62,14 @@ export async function failWorkItem(
 }
 
 export async function cancelWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  return mutateTimestamps(hash, "cancelled", (timestamps, now) => ({
-    ...timestamps,
-    cancelled: now,
-    updated: now,
+  return mutate(hash, (existing, now) => ({
+    changedFields: ["timestamps"],
+    target: "cancelled",
+    fact: { type: "work_item.cancelled", data: { cancelledAt: now } },
+    updated: {
+      ...existing,
+      timestamps: { ...existing.timestamps, cancelled: now, updated: now },
+    },
   }));
 }
 
@@ -79,6 +91,7 @@ export async function assignWorkItemExecution(
     }
     return {
       changedFields: ["executorKind", "workerRunId", "workSessionId"],
+      fact: { type: "work_item.execution_assigned", data: { ...assignment } },
       updated: {
         ...existing,
         ...assignment,
@@ -92,17 +105,21 @@ export async function addWorkItemBlocker(
   hash: string,
   blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
-    changedFields: ["blockers"],
-    updated: {
-      ...existing,
-      blockers: [
-        ...existing.blockers,
-        { ...blocker, id: blocker.id ?? crypto.randomUUID(), createdAt: now },
-      ],
-      timestamps: { ...existing.timestamps, updated: now },
-    },
-  }));
+  return mutate(hash, (existing, now) => {
+    const added = { ...blocker, id: blocker.id ?? crypto.randomUUID(), createdAt: now };
+    return {
+      changedFields: ["blockers"],
+      fact: {
+        type: "work_item.blocker_added",
+        data: { blockerId: added.id, kind: added.kind, description: added.description },
+      },
+      updated: {
+        ...existing,
+        blockers: [...existing.blockers, added],
+        timestamps: { ...existing.timestamps, updated: now },
+      },
+    };
+  });
 }
 
 export async function resolveWorkItemBlocker(
@@ -111,6 +128,7 @@ export async function resolveWorkItemBlocker(
 ): Promise<WorkItem.Info | undefined> {
   return mutate(hash, (existing, now) => ({
     changedFields: ["blockers"],
+    fact: { type: "work_item.blocker_resolved", data: { blockerId, resolvedAt: now } },
     updated: {
       ...existing,
       blockers: existing.blockers.map((blocker) =>
@@ -148,20 +166,29 @@ export async function addWorkItemEvidence(
   }
   return mutate(hash, (existing, now) => {
     assertEvidenceScope(existing, expectedScope);
+    const appended = WorkItem.Evidence.parse({
+      ...evidence,
+      id: explicitId ?? crypto.randomUUID(),
+      attempt: existing.attempt,
+      basisRef: existing.completionContract.basisRef,
+      createdAt: now,
+    });
     return {
       changedFields: ["evidence"],
+      fact: {
+        type: "work_item.evidence_appended",
+        data: {
+          evidenceId: appended.id,
+          kind: appended.kind,
+          passed: appended.passed,
+          attempt: appended.attempt,
+          basisRef: appended.basisRef,
+          ...(appended.criterionId === undefined ? {} : { criterionId: appended.criterionId }),
+        },
+      },
       updated: {
         ...existing,
-        evidence: [
-          ...existing.evidence,
-          WorkItem.Evidence.parse({
-            ...evidence,
-            id: explicitId ?? crypto.randomUUID(),
-            attempt: existing.attempt,
-            basisRef: existing.completionContract.basisRef,
-            createdAt: now,
-          }),
-        ],
+        evidence: [...existing.evidence, appended],
         timestamps: { ...existing.timestamps, updated: now },
       },
     };

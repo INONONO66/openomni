@@ -190,10 +190,10 @@ describe("WorkItemStore completion admission storage boundary", () => {
 
     const recorded = authorizedCompareAndSet(adapter, item.hash, mutated.revision, candidate);
 
-    expect(mutated).toMatchObject({ revision: 1 });
+    expect(mutated).toMatchObject({ revision: 2 });
     expect(mutated.completionFacts.revision).toBe(0);
     expect(recorded).toBe(true);
-    expect(adapter.workItem.get(item.hash)).toMatchObject({ revision: 2 });
+    expect(adapter.workItem.get(item.hash)).toMatchObject({ revision: 3 });
     expect(adapter.workItem.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
   });
 

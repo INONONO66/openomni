@@ -5,6 +5,7 @@ import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
 import { persistCompletedWorkItemFixture } from "../../test/work-item/completed-fixture.js";
 import { WorkItemStore } from "./index.js";
+import { persistMutation } from "./mutation.js";
 
 const baseInput = {
   sourceMessageId: "msg_oracle_storage",
@@ -124,21 +125,29 @@ describe("WorkItem oracle storage concurrency", () => {
     const storage = configureSqlite();
     const item = await createItem("Stale outcome");
     const completed = persistCompletedFixture(item);
-    const originalCompareAndSet = storage.workItem.compareAndSet.bind(storage.workItem);
+    // The competing writer commits its own full append+CAS write between the
+    // outcome's read and its transaction (#510 C1: a raw projection write
+    // inside the loser's transaction would roll back with it).
+    const originalGet = storage.workItem.get.bind(storage.workItem);
     let injectedCompetingWrite = false;
-    storage.workItem.compareAndSet = (hash, expectedHead, candidate) => {
-      if (hash === item.hash && !injectedCompetingWrite) {
+    storage.workItem.get = (hash) => {
+      const current = originalGet(hash);
+      if (hash === item.hash && current && !injectedCompetingWrite) {
         injectedCompetingWrite = true;
-        expect(
-          originalCompareAndSet(hash, expectedHead, {
-            ...completed,
-            revision: expectedHead + 1,
+        persistMutation(
+          storage.workItem,
+          current,
+          {
+            ...current,
             name: "competing winner",
-            timestamps: { ...completed.timestamps, updated: completed.timestamps.updated + 1 },
-          }),
-        ).toBe(true);
+            timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
+          },
+          current.timestamps.updated + 1,
+          ["name"],
+          { type: "work_item.updated", data: { fields: ["name"] } },
+        );
       }
-      return originalCompareAndSet(hash, expectedHead, candidate);
+      return current;
     };
 
     await expectRejectsWithMessage(
@@ -157,21 +166,29 @@ describe("WorkItem oracle storage concurrency", () => {
   test("removes the inserted child when parent relation CAS loses", async () => {
     const storage = configureSqlite();
     const parent = await createItem("Raced parent");
-    const originalCompareAndSet = storage.workItem.compareAndSet.bind(storage.workItem);
+    // Competing full write to the parent lands between create's parent read
+    // and its transaction; the losing create rolls back child row, child
+    // created fact, and parent link together.
+    const originalGet = storage.workItem.get.bind(storage.workItem);
     let injectedCompetingWrite = false;
-    storage.workItem.compareAndSet = (hash, expectedHead, candidate) => {
-      if (hash === parent.hash && !injectedCompetingWrite) {
+    storage.workItem.get = (hash) => {
+      const current = originalGet(hash);
+      if (hash === parent.hash && current && !injectedCompetingWrite) {
         injectedCompetingWrite = true;
-        expect(
-          originalCompareAndSet(hash, expectedHead, {
-            ...parent,
-            revision: expectedHead + 1,
+        persistMutation(
+          storage.workItem,
+          current,
+          {
+            ...current,
             name: "parent race winner",
-            timestamps: { ...parent.timestamps, updated: parent.timestamps.updated + 1 },
-          }),
-        ).toBe(true);
+            timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
+          },
+          current.timestamps.updated + 1,
+          ["name"],
+          { type: "work_item.updated", data: { fields: ["name"] } },
+        );
       }
-      return originalCompareAndSet(hash, expectedHead, candidate);
+      return current;
     };
 
     await expectRejectsWithMessage(

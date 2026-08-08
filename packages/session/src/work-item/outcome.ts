@@ -15,6 +15,7 @@ export async function recordWorkItemOutcome(
     const parsedOutcome = WorkItem.Outcome.parse(outcome);
     return {
       changedFields: ["outcome"],
+      fact: { type: "work_item.outcome_recorded", data: { outcome: parsedOutcome } },
       updated: {
         ...existing,
         outcome: parsedOutcome,

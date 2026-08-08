@@ -18,6 +18,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0011_bus_event_visibility/migration.sql" },
   { name: "0012_wait/migration.sql" },
   { name: "0013_ledger/migration.sql" },
+  { name: "0014_work_item_revision/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

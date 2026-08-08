@@ -3,12 +3,14 @@ import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { buildWorkItem } from "./builder.js";
 import { detectCycles } from "./dependency.js";
-import { persistMutation } from "./mutation.js";
+import { appendCreatedFact, requireWorkItemLedger, WorkItemDuplicateError } from "./facts.js";
+import { commitMutation } from "./mutation.js";
 import type { CreateWorkItemInput } from "./types.js";
 
 export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkItem.Info> {
-  const adapter = Storage.get();
-  if (!adapter.workItem) {
+  const storage = Storage.get();
+  const workItem = storage.workItem;
+  if (!workItem) {
     Bus.publish(Operational.Warn, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
@@ -18,26 +20,40 @@ export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkIt
     });
     return buildWorkItem(input, Date.now());
   }
+  const ledger = requireWorkItemLedger(storage);
 
   if (input.dependsOn && input.dependsOn.length > 0) {
-    detectCycles(adapter.workItem, input.dependsOn, new Set());
+    detectCycles(workItem, input.dependsOn, new Set());
   }
 
   const now = Date.now();
-  const parent = input.parentHash ? adapter.workItem.get(input.parentHash) : undefined;
+  const parent = input.parentHash ? workItem.get(input.parentHash) : undefined;
   if (input.parentHash && !parent) {
     throw new Error(`Parent work item not found: ${input.parentHash}`);
   }
 
   const item = buildWorkItem(input, now);
-  if (!adapter.workItem.create(item.hash, item)) {
-    throw new Error(`WorkItem already exists: ${item.hash}`);
-  }
-
-  if (parent && !parent.relations.childHashes.includes(item.hash)) {
-    try {
-      persistMutation(
-        adapter.workItem,
+  // work_item.created is the birth fact (seq 1 == revision 1); the parent
+  // child-link rides the SAME transaction, so a stale parent head rolls the
+  // whole create back — no compensating remove.
+  let linkedParent: WorkItem.Info | undefined;
+  storage.transaction(() => {
+    appendCreatedFact(ledger, item, {
+      name: item.name,
+      sourceMessageId: item.sourceMessageId,
+      sourceChannel: item.sourceChannel,
+      dependsOn: item.relations.dependsOn,
+      maxAttempts: item.maxAttempts,
+      ...(item.sessionId === undefined ? {} : { sessionId: item.sessionId }),
+      ...(item.assigneeId === undefined ? {} : { assigneeId: item.assigneeId }),
+      ...(item.relations.parentHash === undefined ? {} : { parentHash: item.relations.parentHash }),
+      ...(item.executorKind === undefined ? {} : { executorKind: item.executorKind }),
+    });
+    if (!workItem.create(item.hash, item)) throw new WorkItemDuplicateError(item.hash);
+    if (parent && !parent.relations.childHashes.includes(item.hash)) {
+      linkedParent = commitMutation(
+        workItem,
+        ledger,
         parent,
         {
           ...parent,
@@ -47,15 +63,19 @@ export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkIt
           },
           timestamps: { ...parent.timestamps, updated: now },
         },
-        now,
-        ["relations"],
+        { type: "work_item.updated", data: { fields: ["relations"] } },
       );
-    } catch (error) {
-      adapter.workItem.remove(item.hash);
-      throw error;
     }
-  }
+  });
 
+  if (linkedParent) {
+    Bus.publish(WorkItem.Events.Updated, {
+      traceId: crypto.randomUUID(),
+      time: now,
+      sessionId: linkedParent.sessionId,
+      payload: { hash: linkedParent.hash, fields: ["relations"] },
+    });
+  }
   Bus.publish(WorkItem.Events.Created, {
     traceId: crypto.randomUUID(),
     time: now,

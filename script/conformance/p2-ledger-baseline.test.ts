@@ -3,22 +3,38 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Wait } from "../../packages/protocol/src/index";
-import { Bus, SqliteStorageAdapter, Storage, WaitStore } from "../../packages/session/src/index";
+import { Wait, WorkItem } from "../../packages/protocol/src/index";
+import {
+  createCompletionAdmissionService,
+  completionRequestRoot,
+} from "../../packages/openomni/src/work-item/completion-admission";
+import {
+  Bus,
+  SqliteStorageAdapter,
+  Storage,
+  WaitStore,
+  WorkItemStore,
+} from "../../packages/session/src/index";
 import { Ledger } from "../../packages/session/src/ledger-core/index";
 
 /**
- * #510 phase B conformance — the Wait decision class against the clean
- * ledger baseline ("no record, no action"):
+ * #510 phase B/C1 conformance — the Wait and WorkItem decision classes
+ * against the clean ledger baseline ("no record, no action"):
  *
- *   (a) append-before-act: every committed Wait transition has its
- *       decision-class fact on the owner stream `wait:<id>` at
- *       seq === projected revision, and a failed append leaves no
- *       projection change and no Bus event;
- *   (b) a stale expectedHead is a typed conflict (revision_conflict at the
- *       store, cas_conflict at the append core) that writes nothing;
- *   (c) boot tail verification over the wait streams reports no breaks
- *       after a normal run and detects a tampered row.
+ *   (a) append-before-act: every committed transition has its
+ *       decision-class fact on the owner stream (`wait:<id>` /
+ *       `work:<hash>`) at seq === projected revision, and a failed append
+ *       leaves no projection change and no Bus event;
+ *   (b) a stale expectedHead is a typed conflict (revision_conflict /
+ *       stale_revision at the store, cas_conflict at the append core) that
+ *       writes nothing;
+ *   (c) pre-cutover WorkItem rows (backfilled to revision 1 with an empty
+ *       stream) are adopted lazily by a work_item.adopted genesis fact;
+ *   (d) completion admission verdicts — accept AND refuse — are appended
+ *       facts, with the accept verdict recorded before the terminal
+ *       projection;
+ *   (e) boot tail verification covers wait: and work: streams and detects
+ *       tampered rows.
  *
  * Ledger and session sources are imported by path (not the package entry)
  * so every module — including the non-exported ledger core — resolves to
@@ -82,17 +98,33 @@ interface FactRow {
   readonly data: string;
 }
 
-function factsOf(waitId: string): FactRow[] {
+function factsOfStream(streamId: string): FactRow[] {
   return inspect
     .query("SELECT seq, type, data FROM ledger_event WHERE stream_id = ? ORDER BY seq ASC")
-    .all(`wait:${waitId}`) as FactRow[];
+    .all(streamId) as FactRow[];
+}
+
+function headOfStream(streamId: string): number | undefined {
+  const row = inspect.query("SELECT head FROM ledger_head WHERE stream_id = ?").get(streamId) as {
+    head: number;
+  } | null;
+  return row?.head;
+}
+
+function factsOf(waitId: string): FactRow[] {
+  return factsOfStream(`wait:${waitId}`);
 }
 
 function headOf(waitId: string): number | undefined {
-  const row = inspect
-    .query("SELECT head FROM ledger_head WHERE stream_id = ?")
-    .get(`wait:${waitId}`) as { head: number } | null;
-  return row?.head;
+  return headOfStream(`wait:${waitId}`);
+}
+
+function workFactsOf(hash: string): FactRow[] {
+  return factsOfStream(`work:${hash}`);
+}
+
+function workHeadOf(hash: string): number | undefined {
+  return headOfStream(`work:${hash}`);
 }
 
 function captureStoreError(fn: () => unknown): InstanceType<typeof Wait.StoreError> {
@@ -221,6 +253,342 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
     expect(breaks).toHaveLength(1);
     expect(breaks[0]).toMatchObject({
       streamId: "wait:wait-2",
+      seq: 2,
+      code: "hash_mismatch",
+    });
+  });
+});
+
+async function createConformanceWorkItem(name: string): Promise<WorkItem.Info> {
+  return WorkItemStore.create({
+    name,
+    sourceMessageId: `msg_${name}`,
+    sourceChannel: "conformance",
+    intent: "verify",
+    goal: "prove no record, no action for the WorkItem class",
+    sessionId: "session_conformance",
+    acceptanceCriteria: ["the transition is recorded before it acts"],
+  });
+}
+
+function buildCompletionRequest(item: WorkItem.Info): WorkItem.CompletionRequest {
+  const criterion = item.completionFacts.criteria[0];
+  const evidenceId = item.evidence[0]?.id;
+  if (!criterion || !evidenceId) throw new Error("missing completion criterion evidence");
+  const observationId = `observation:${item.hash}:${item.revision}`;
+  const basisRef = item.completionContract.basisRef;
+  return WorkItem.CompletionRequest.parse({
+    version: 1,
+    id: `completion-request:${item.hash}:${item.revision}:worker`,
+    origin: "worker",
+    workItemHash: item.hash,
+    contractRevision: item.completionContract.revision,
+    basisRef,
+    expectedHead: item.revision,
+    claims: [
+      {
+        id: `claim:${item.hash}:${item.revision}`,
+        criterionId: criterion.id,
+        statement: criterion.statement,
+        observationIds: [observationId],
+        basisRef,
+        createdAt: item.timestamps.updated,
+      },
+    ],
+    observations: [
+      {
+        id: observationId,
+        producer: "conformance:p2",
+        subjectRef: item.hash,
+        basisRef,
+        artifactRefs: [evidenceId],
+        provenanceRef: evidenceId,
+        ancestryRefs: [],
+        observedAt: item.timestamps.updated,
+      },
+    ],
+    results: [
+      {
+        id: `result:${item.hash}:${item.revision}`,
+        criterionId: criterion.id,
+        value: "verified",
+        checkedPredicate: criterion.statement,
+        observationIds: [observationId],
+        verifierRef: "verifier:conformance",
+        assumptions: [],
+        basisRef,
+        residualRisks: [],
+        createdAt: item.timestamps.updated,
+      },
+    ],
+    invalidations: [],
+    verificationErrors: [],
+    effects: [],
+  });
+}
+
+function buildAdmission(
+  item: WorkItem.Info,
+  request: WorkItem.CompletionRequest,
+  decision: "admit" | "block",
+): WorkItem.CompletionAdmission {
+  return WorkItem.CompletionAdmission.parse({
+    version: 1,
+    id: `admission:${request.id}:${item.revision + 1}:${decision}`,
+    requestId: request.id,
+    workItemHash: request.workItemHash,
+    requestRoot: completionRequestRoot(request),
+    proposedFactIds: {
+      claims: request.claims.map(({ id }) => id),
+      observations: request.observations.map(({ id }) => id),
+      results: request.results.map(({ id }) => id),
+      invalidations: [],
+      verificationErrors: [],
+      effects: [],
+    },
+    origin: request.origin,
+    contractRevision: item.completionContract.revision,
+    basisRef: item.completionContract.basisRef,
+    effectiveResultIds: decision === "admit" ? request.results.map(({ id }) => id) : [],
+    unresolvedCriterionIds:
+      decision === "admit" ? [] : item.completionFacts.criteria.map(({ id }) => id),
+    decision,
+    reasonCodes: decision === "admit" ? [] : ["completion_block"],
+    residualRisks: [],
+    policyRef: "policy:conformance",
+    expectedHead: item.revision,
+    recordedHead: item.revision + 1,
+    createdAt: item.timestamps.updated + 1,
+  });
+}
+
+describe("p2 ledger baseline — WorkItem decision-class facts", () => {
+  test("append-before-act: create and every lifecycle transition append their facts at seq === projected revision", async () => {
+    const item = await createConformanceWorkItem("append-before-act");
+    await WorkItemStore.start(item.hash);
+    const blocked = await WorkItemStore.addBlocker(item.hash, {
+      kind: "external",
+      description: "awaiting conformance reply",
+    });
+    const blockerId = blocked?.blockers[0]?.id;
+    if (!blockerId) throw new Error("missing conformance blocker");
+    await WorkItemStore.resolveBlocker(item.hash, blockerId);
+    await WorkItemStore.fail(item.hash, "conformance failure");
+
+    const facts = workFactsOf(item.hash);
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([
+      [1, "work_item.created"],
+      [2, "work_item.started"],
+      [3, "work_item.blocker_added"],
+      [4, "work_item.blocker_resolved"],
+      [5, "work_item.failed"],
+    ]);
+    // Head↔revision binding: the stream head IS the projected revision.
+    expect(item.revision).toBe(1);
+    expect(WorkItemStore.get(item.hash)?.revision).toBe(5);
+    expect(workHeadOf(item.hash)).toBe(5);
+
+    // Facts carry the typed transition payload plus the resulting revision —
+    // never the row snapshot (the projection row stays the read model).
+    const failed = JSON.parse(facts[4]?.data ?? "{}") as Record<string, unknown>;
+    expect(failed).toMatchObject({ reason: "conformance failure", revision: 5 });
+    expect(Object.keys(failed)).not.toContain("acceptanceCriteria");
+    expect(Object.keys(failed)).not.toContain("completionFacts");
+  });
+
+  test("a failed append leaves no projection change, no extra fact, and no Bus event", async () => {
+    const item = await createConformanceWorkItem("failed-append");
+    const storage = Storage.getAdapter();
+    const workItem = storage.workItem;
+    const ledger = storage.ledger;
+    if (!workItem || !ledger) throw new Error("conformance storage misses sub-adapters");
+
+    // A competing writer lands a FULL append+CAS write between the store's
+    // read and its transaction: the outer fail() must observe a stale head
+    // at the append, throw the typed stale_revision error, and write nothing.
+    const originalGet = workItem.get.bind(workItem);
+    let injected = false;
+    workItem.get = (hash: string) => {
+      const current = originalGet(hash);
+      if (hash === item.hash && current && !injected) {
+        injected = true;
+        storage.transaction(() => {
+          const appended = ledger.append(
+            {
+              streamId: `work:${item.hash}`,
+              type: "work_item.updated",
+              data: { fields: ["name"], revision: current.revision + 1 },
+            },
+            current.revision,
+          );
+          if (appended.kind !== "appended") throw new Error("competing append must win");
+          if (
+            !workItem.compareAndSet(item.hash, current.revision, {
+              ...current,
+              revision: current.revision + 1,
+              name: "competing winner",
+            })
+          ) {
+            throw new Error("competing projection must win");
+          }
+        });
+      }
+      return current;
+    };
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      await WorkItemStore.fail(item.hash, "loser");
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(injected).toBe(true);
+    expect(thrown).toMatchObject({ name: "WorkItemRevisionError", code: "stale_revision" });
+    const persisted = originalGet(item.hash);
+    expect(persisted?.name).toBe("competing winner");
+    expect(persisted?.revision).toBe(2);
+    expect(persisted?.failureReason).toBeUndefined();
+    // Only the competing write appended: the failed transition left no fact.
+    expect(workHeadOf(item.hash)).toBe(2);
+    expect(workFactsOf(item.hash).map((fact) => fact.type)).toEqual([
+      "work_item.created",
+      "work_item.updated",
+    ]);
+    await flushBus();
+    expect(events).not.toContain("work_item.failed");
+    expect(events).not.toContain("work_item.status_changed");
+  });
+
+  test("a pre-cutover row is adopted lazily: genesis fact carries the observed snapshot", async () => {
+    const item = await createConformanceWorkItem("lazy-adoption");
+    // Simulate a migration-backfilled pre-cutover row: projection at
+    // revision 1 with an EMPTY owner stream (0014 backfills every existing
+    // row to revision 1).
+    inspect.query("DELETE FROM ledger_event WHERE stream_id = ?").run(`work:${item.hash}`);
+    inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run(`work:${item.hash}`);
+    expect(workFactsOf(item.hash)).toHaveLength(0);
+
+    const started = await WorkItemStore.start(item.hash);
+
+    expect(started?.revision).toBe(2);
+    const facts = workFactsOf(item.hash);
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([
+      [1, "work_item.adopted"],
+      [2, "work_item.started"],
+    ]);
+    expect(workHeadOf(item.hash)).toBe(2);
+    const adopted = JSON.parse(facts[0]?.data ?? "{}") as {
+      snapshot?: { hash?: string; revision?: number };
+      revision?: number;
+    };
+    // The genesis fact records the observed state at seq 1 == revision 1 —
+    // pre-cutover history is adopted, never fabricated.
+    expect(adopted.revision).toBe(1);
+    expect(adopted.snapshot?.hash).toBe(item.hash);
+    expect(adopted.snapshot?.revision).toBe(1);
+  });
+
+  test("completion admission verdicts are appended facts: refuse is recorded, accept precedes the terminal projection", async () => {
+    const refused = await createConformanceWorkItem("admission-refused");
+    await WorkItemStore.addEvidence(refused.hash, {
+      kind: "verification",
+      description: "conformance evidence",
+      passed: true,
+    });
+    const refusedCurrent = WorkItemStore.get(refused.hash);
+    if (!refusedCurrent) throw new Error("missing refused conformance item");
+    const refusedRequest = buildCompletionRequest(refusedCurrent);
+    const report: WorkItem.CompletionReport = {
+      summary: "Completed through conformance admission.",
+      claims: [
+        {
+          statement: refusedCurrent.completionFacts.criteria[0]?.statement ?? "",
+          evidenceIds: [refusedCurrent.evidence[0]?.id ?? ""],
+        },
+      ],
+      caveats: [],
+      followUps: [],
+    };
+    // Re-initializing with the same dbPath returns the completion writer for
+    // the already-configured storage.
+    const completionWriter = Storage.initialize({ dbPath: join(tempDir, "openomni.db") });
+    const blockService = createCompletionAdmissionService({
+      completionWriter,
+      now: () => Date.now(),
+      decision: (item, request) => Promise.resolve(buildAdmission(item, request, "block")),
+    });
+
+    const refusal = await blockService.requestCompletion(refusedRequest, report);
+
+    expect(refusal.completed).toBe(false);
+    const refusedFacts = workFactsOf(refused.hash);
+    const refusalFact = refusedFacts.at(-1);
+    expect(refusalFact?.type).toBe("work_item.admission_refused");
+    expect(refusalFact?.seq).toBe(WorkItemStore.get(refused.hash)?.revision);
+    expect(JSON.parse(refusalFact?.data ?? "{}")).toMatchObject({
+      requestId: refusedRequest.id,
+      decision: "block",
+    });
+    expect(WorkItemStore.get(refused.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(refusedFacts.map((fact) => fact.type)).not.toContain("work_item.completed");
+
+    const admitted = await createConformanceWorkItem("admission-accepted");
+    await WorkItemStore.addEvidence(admitted.hash, {
+      kind: "verification",
+      description: "conformance evidence",
+      passed: true,
+    });
+    const admittedCurrent = WorkItemStore.get(admitted.hash);
+    if (!admittedCurrent) throw new Error("missing admitted conformance item");
+    const admittedRequest = buildCompletionRequest(admittedCurrent);
+    const admittedReport: WorkItem.CompletionReport = {
+      summary: "Completed through conformance admission.",
+      claims: [
+        {
+          statement: admittedCurrent.completionFacts.criteria[0]?.statement ?? "",
+          evidenceIds: [admittedCurrent.evidence[0]?.id ?? ""],
+        },
+      ],
+      caveats: [],
+      followUps: [],
+    };
+    const admitService = createCompletionAdmissionService({
+      completionWriter,
+      now: () => Date.now(),
+      decision: (item, request) => Promise.resolve(buildAdmission(item, request, "admit")),
+    });
+
+    const admission = await admitService.requestCompletion(admittedRequest, admittedReport);
+
+    expect(admission.completed).toBe(true);
+    // Record-before-terminal: the accept verdict fact precedes the terminal
+    // completion fact on the same owner stream.
+    const admittedFacts = workFactsOf(admitted.hash).map((fact) => fact.type);
+    const acceptedAt = admittedFacts.indexOf("work_item.admission_accepted");
+    const completedAt = admittedFacts.indexOf("work_item.completed");
+    expect(acceptedAt).toBeGreaterThan(-1);
+    expect(completedAt).toBe(acceptedAt + 1);
+    expect(workHeadOf(admitted.hash)).toBe(WorkItemStore.get(admitted.hash)?.revision);
+    expect(WorkItemStore.get(admitted.hash)?.completionTerminalReceipt).toBeDefined();
+  });
+
+  test("boot tail verification covers work: streams and detects a tampered row", async () => {
+    const item = await createConformanceWorkItem("tail-verify");
+    await WorkItemStore.start(item.hash);
+
+    expect(Ledger.verifyTail(inspect)).toEqual([]);
+
+    inspect
+      .query("UPDATE ledger_event SET data = ? WHERE stream_id = ? AND seq = ?")
+      .run('{"startedAt":0,"revision":2}', `work:${item.hash}`, 2);
+
+    const breaks = Ledger.verifyTail(inspect);
+    expect(breaks).toHaveLength(1);
+    expect(breaks[0]).toMatchObject({
+      streamId: `work:${item.hash}`,
       seq: 2,
       code: "hash_mismatch",
     });

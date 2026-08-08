@@ -1,4 +1,5 @@
 import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
+import type { WorkItemFact } from "./facts.js";
 import {
   hasRetryExhaustionBlocker,
   isRetryExhausted,
@@ -11,6 +12,7 @@ type PersistMutation = (
   updated: WorkItem.Info,
   time: number,
   changedFields: string[],
+  fact: WorkItemFact,
 ) => WorkItem.Info;
 
 export function retryWorkItem(
@@ -31,15 +33,26 @@ export function retryWorkItem(
   }
 
   const now = Date.now();
-  return persistMutation(adapter, existing, retryableItem(existing, now), now, [
-    "attempt",
-    "timestamps",
-    "failureReason",
-    "completionContract",
-    "executorKind",
-    "workerRunId",
-    "workSessionId",
-  ]);
+  const retryable = retryableItem(existing, now);
+  return persistMutation(
+    adapter,
+    existing,
+    retryable,
+    now,
+    [
+      "attempt",
+      "timestamps",
+      "failureReason",
+      "completionContract",
+      "executorKind",
+      "workerRunId",
+      "workSessionId",
+    ],
+    {
+      type: "work_item.retried",
+      data: { attempt: retryable.attempt, basisRef: retryable.completionContract.basisRef },
+    },
+  );
 }
 
 function recordRetryExhaustion(
@@ -50,10 +63,16 @@ function recordRetryExhaustion(
 ): never {
   const now = Date.now();
   if (!hasRetryExhaustionBlocker(existing)) {
-    persistMutation(adapter, existing, exhaustedItem(existing, now), now, [
-      "blockers",
-      "timestamps",
-    ]);
+    const exhausted = exhaustedItem(existing, now);
+    const blocker = exhausted.blockers.at(-1);
+    persistMutation(adapter, existing, exhausted, now, ["blockers", "timestamps"], {
+      type: "work_item.blocker_added",
+      data: {
+        blockerId: blocker?.id,
+        kind: blocker?.kind,
+        description: blocker?.description,
+      },
+    });
   }
   throw new Error(
     `retry attempts exhausted for work item ${hash}: attempt ${existing.attempt} of ${existing.maxAttempts}`,

@@ -98,11 +98,11 @@ export namespace Storage {
     if (scope) {
       scope.adapter = newAdapter;
       scope.initializedDbPath = "__configured__";
-      return createWorkItemCompletionWriter(() => Storage.get().workItem);
+      return createWorkItemCompletionWriter(() => Storage.get());
     }
     adapter = newAdapter;
     initializedDbPathValue = "__configured__";
-    return createWorkItemCompletionWriter(() => Storage.get().workItem);
+    return createWorkItemCompletionWriter(() => Storage.get());
   }
 
   export function getInitializedDbPath(): string | null {
