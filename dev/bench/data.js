@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786071024954,
+  "lastUpdate": 1786213789988,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -36185,6 +36185,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 533132,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8515390fb52d7cf43e4a4bce9095db2cbec50bae",
+          "message": "feat(openomni): Wait unification and existing-agent messaging (#519)\n\n* refactor(openomni): drop dead ingress pre-run path, merge middleware\n\nThe unrouted runPreRun chain (blacklist + channel-grant checks) had zero\nproduction callers; blacklist and channel-grant enforcement is owned by\nthe routing pipeline (routing-runtime + resolve-route), pinned by\ntest/ingress/blacklist.test.ts and channel-grant.test.ts. Middleware\nfolds from eight files into ingress-authority.ts plus the actor helpers,\nkeeping only the routed pre-run surface (schema/coordinator/authority/mode).\n\nRoadmap: #215 prep\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): single pinned-interaction revalidation layer\n\nDrop the third pinned-interaction revalidation in submitResolved: no await\nsits between the post-policy check and routing, so it only re-checked our\nown markRoutedPendingInteraction transition (resolvedSince existed solely\nto re-admit that self-mutation). Drop the decision-echo field comparisons\nin routing-execution: resolve-route is the only producer of\nwait_correlation route decisions and copies those fields from the same\nrecord, which is now used directly as the single source. Load-bearing\ngates stay: post-await revalidation, the executable-action gate, and\nresolve-route's allowed-action admission (pinned by kernel-routing-waits).\n\nRoadmap: #215 prep\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: codify module, naming, and enforcement-layer conventions\n\nPromotes the 2026-08 audit findings into normative structure rules:\nownership-based file naming, split criteria, single enforcement layer\nper invariant per phase, single convention owners, fail-closed durable\nwrites, and test-structure mirrors.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: drop stale refs and unbuilt facade section from AGENTS.md\n\nevent/index.ts and provider/provider.ts no longer exist; the\n'OpenOmni Internal Split' facade table described a target directory\nlayout that was never built (targets live in docs/architecture.md).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: add clean-room rebuild blueprint (transition plan)\n\nThree-layer rule (protocol=definition, ledger=record, kernel=effect),\ntarget domain lists, locked Owner rulings J1-J12, Drizzle storage\ndecisions, and the leaf-by-leaf execution order (#215 -> #510 -> P3).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(protocol,session): add Wait primitive schema, fold, and store\n\nWait is the single waiting representation (#215): protocol owns the zod\nschema and the pure deterministic fold (attach/quorum/expire/cancel with\ntyped outcomes; duplicate replyKey and repeat responders never advance\nquorum; ambiguity never guesses; time is an input), session owns the\nwait table (0012, replies inside the record JSON, revision CAS,\norigin_message_id UNIQUE) behind a required sub-adapter that fails\nclosed when absent. Legacy pending stores are untouched in this commit;\ncutover and upcast-on-read land next.\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(openomni,protocol,server): kernel wait service and cutover\n\nAdds packages/openomni/src/wait/ — the single correlation lookup (wait\ntable first, frozen legacy rows via read-only upcast), the single\nsender-matcher core with per-phase evidence extensions feeding\nresponderCandidates into the protocol fold, and WaitService (awaited\ndelivery only; sync resident.ask now records audit events instead of\nPendingAsk rows; boot expiry sweep wired into server recovery).\nDeletes ingress/wait-correlation.ts; dispatch pending-interaction\nrouting delegates lookup/match to wait/. Every deleted check maps to a\nsurviving layer with its deny reason pinned (kernel-routing-waits,\nruntime-pending-interaction suites pass unmodified where required).\nLegacy PendingInteraction status transitions stay until #510 archives\nthe rows; workItem-owned wait ingress is a typed block until #216/#217.\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(openomni): existing-agent messaging over the Wait primitive\n\nAdds the messaging surface (#215): policy-plane SenderTargetGrant that\ncan express only sender->target actor and operation set (no Worker\ncreation, delegation, budget, or authority vocabulary exists in the\nschema), fail-closed single-target resolution with typed denials\n(ungranted/target_missing/target_stale/target_ambiguous), deterministic\nsent/denied audit events, fire-and-forget with no Wait row, and awaited\ndelivery appending exactly one Wait before the send. Ships the\nissue-specified Manual QA driver: restart-quorum reopens the same\nsqlite file on a fresh adapter and resolves 2-of-3 through the shipped\nlookup/matcher/fold path with allocationDelta 0; duplicate-ambiguous\nobserves duplicate_reply, ambiguous_responder, and target_ambiguous\nwith quorum unchanged. implementation-status updated without overclaim\n(delivery owner still injected-only; WorkItem/WorkerRun waits remain\nfor #510/#216/#217).\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni,protocol,session): apply adversarial-review fix batch\n\nFixes from the three-lens adversarial review of the Wait delivery:\ndead-export ratchet back to green (new exports narrowed, stale baseline\nentry for the deleted wait-correlation module removed, 42->38 shrink);\ndisallowed-action durable-wait matches now emit the fail-closed\nwait_correlation block instead of falling through to surface routing\n(the published decision and execution no longer diverge); open-but-\nexpired waits are no longer silently pre-filtered — the kernel lazily\nfolds expiry (recording partial) and returns the typed\nwait_reply_rejected instead of letting stale replies become new\ntop-level work; duplicate replies on a resolved wait short-circuit to\nthe recorded resolution for idempotent owner redelivery (closing the\nattach/deliver crash window) while open-status duplicates keep\nrejecting. Duplicate awaited sends now produce a typed wait_duplicate\ndenial with audit instead of a bare store error. WaitStore joins the\nserver-forbidden store list; the N-of-M ingress reachability gap is\ndocumented; pin tests added for the dispatch scoped-fallback expansion,\nthe channel defaultTier->authority-deny composite, and WaitService\ncancel. Active boot resume of open Waits stays with #217.\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(openomni,server,protocol): wire N-of-M ingress replies and owner\n\nMulti-responder waits are now reachable through the wired ingress path:\ntargetsOfWait pins the delivery endpoint only on the responder that is\nthe delivery target (others carry an actor pin proven by registry-\nanchored resolution), correlation keeps channel scope but no longer\nexcludes multi-responder rows on an endpoint-pin mismatch, and a new\nrecordDeliveryReceipt fold transition re-keys the wait correlation to\nthe platform message id returned by the delivery owner. apps/server\nbootstrap now composes the concrete delivery owner (Telegram chat /\nDiscord DM surface deliver returning platform ids; unrouted channels\nand missing owner fail closed; grants come from server config and\ndefault to empty). Pinned wired proof: an awaited 2-of-3 send resolves\nthrough two ingress replies from distinct responder endpoints using\ningress evidence only.\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): rename wait service module to lifecycle\n\ndep-check golden-principle gate rejects catch-all filenames; the module\nowns the Wait lifecycle effect transitions, so it is named for that.\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni,session): apply CodeRabbit review round\n\nWait matched on externalMessageId alone (post-receipt re-key, no\ncorrelation envelope) no longer throws an untyped TypeError — the wait\nexecution accepts an absent correlation, which ingressEvidence already\nhandled. targetsOfWait fails closed to zero candidates when the\ndelivery endpoint no longer resolves in the registry, drops the\nunreachable bearer-token propagation (wait targets always carry an\nactor pin), and the direct-mode userId fallback now binds the prefixed\nendpoint form to the event surface. findByCorrelation rejects a query\nwith no correlation field. The lazy-expiry fold can no longer replace\nthe typed rejection when a concurrent transition already folded the\nwait. Docs and tests: typed Wait.Events.SyncAsk contract in tests,\nafterEach storage teardown, invalid_literal assertion for the mode\nabort, negative no-proof pending-interaction routing test, endpoint\nproof documented as the sole legacy-PI authorization, ./messaging\nsubpath recorded as the #215-mandated exception, server-forbidden store\nlist completed, wait_correlation block outcome and Wait row title\nreconciled in implementation-status, MD018 fix. The channel defaultTier\nfinding is refuted: materializing an Owner-authored default tier for\nanonymous senders on the granted channel is pinned intended behavior\n(kernel-routing-access), with tier-range validation noted for #498.\n\nRoadmap: #215\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T03:28:29+09:00",
+          "tree_id": "c085c8b4ec597914a3255f19f7c424d5ab949996",
+          "url": "https://github.com/INONONO66/openomni/commit/8515390fb52d7cf43e4a4bce9095db2cbec50bae"
+        },
+        "date": 1786213789583,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 616,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2833,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2393,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 817,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1333,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20389,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2270,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10938,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102814,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518999,
             "unit": "ns/op"
           }
         ]
