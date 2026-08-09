@@ -228,9 +228,11 @@ export class DiscordGateway {
     // The interval arrives from the gateway payload (network input). Clamp it
     // so a malformed HELLO can neither busy-loop the process (0/negative/NaN)
     // nor zombify the connection with a never-firing heartbeat (CodeQL
-    // js/resource-exhaustion). Discord's real value is ~41250ms.
+    // js/resource-exhaustion). Discord's real value is ~41250ms; the 100ms
+    // floor bounds timer pressure while keeping fake-gateway state-machine
+    // tests fast.
     const clampedMs = Math.min(
-      Math.max(Number.isFinite(intervalMs) ? intervalMs : 0, 1_000),
+      Math.max(Number.isFinite(intervalMs) ? intervalMs : 0, 100),
       300_000,
     );
     this.stopHeartbeat();
