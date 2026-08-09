@@ -364,3 +364,116 @@ describe("Retry", () => {
     });
   });
 });
+
+describe("Retry.delay ratelimit-reset parsing (#532 candidate 3)", () => {
+  function apiError(headers: Record<string, string>): InstanceType<typeof APIError> {
+    return new APIError({
+      name: "APIError",
+      message: "rate limited",
+      isRetryable: true,
+      statusCode: 429,
+      responseHeaders: headers,
+    });
+  }
+
+  test("x-ratelimit-reset-requests duration is used when retry-after is absent", () => {
+    expect(Retry.delay(1, apiError({ "x-ratelimit-reset-requests": "3s" }))).toBe(3000);
+  });
+
+  test("x-ratelimit-reset duration with compound units parses", () => {
+    expect(Retry.delay(1, apiError({ "x-ratelimit-reset-tokens": "1m30s" }))).toBe(90_000);
+  });
+
+  test("anthropic-ratelimit reset timestamp is used when retry-after is absent", () => {
+    const resetAt = new Date(Date.now() + 5000).toISOString();
+    const ms = Retry.delay(1, apiError({ "anthropic-ratelimit-requests-reset": resetAt }));
+    expect(ms).toBeGreaterThan(3500);
+    expect(ms).toBeLessThanOrEqual(5100);
+  });
+
+  test("retry-after still wins over ratelimit resets", () => {
+    expect(
+      Retry.delay(1, apiError({ "retry-after": "2", "x-ratelimit-reset-requests": "9s" })),
+    ).toBe(2000);
+  });
+});
+
+describe("Retry.decide (#532 candidate 3)", () => {
+  function apiError(headers?: Record<string, string>): InstanceType<typeof APIError> {
+    return new APIError({
+      name: "APIError",
+      message: "rate limited",
+      isRetryable: true,
+      statusCode: 429,
+      ...(headers && { responseHeaders: headers }),
+    });
+  }
+
+  test("non-retryable errors decide against retry", () => {
+    const decision = Retry.decide(1, new Error("plain"));
+    expect(decision.retryable).toBe(false);
+  });
+
+  test("header delay within the cap is honored", () => {
+    const decision = Retry.decide(1, apiError({ "retry-after": "45" }));
+    expect(decision).toEqual({
+      retryable: true,
+      reason: "Rate Limited",
+      delayMs: 45_000,
+      source: "header",
+    });
+  });
+
+  test("header delay above the cap fails fast instead of silently stalling", () => {
+    const decision = Retry.decide(1, apiError({ "retry-after": "3600" }));
+    expect(decision.retryable).toBe(false);
+    if (!decision.retryable) {
+      expect(decision.reason).toContain("3600000");
+    }
+  });
+
+  test("headless retry keeps the exponential backoff and its 30s cap", () => {
+    expect(Retry.decide(1, apiError())).toEqual({
+      retryable: true,
+      reason: "Rate Limited",
+      delayMs: Retry.RETRY_INITIAL_DELAY,
+      source: "backoff",
+    });
+    const late = Retry.decide(10, apiError());
+    if (late.retryable) {
+      expect(late.delayMs).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS);
+    }
+  });
+});
+
+describe("Retry.decide cap semantics for inferred resets", () => {
+  function apiError(headers: Record<string, string>): InstanceType<typeof APIError> {
+    return new APIError({
+      name: "APIError",
+      message: "rate limited",
+      isRetryable: true,
+      statusCode: 429,
+      responseHeaders: headers,
+    });
+  }
+
+  test("an out-of-range ratelimit reset demotes to backoff instead of failing", () => {
+    const decision = Retry.decide(1, apiError({ "x-ratelimit-reset-requests": "30m" }));
+    expect(decision).toEqual({
+      retryable: true,
+      reason: "Rate Limited",
+      delayMs: Retry.RETRY_INITIAL_DELAY,
+      source: "backoff",
+    });
+  });
+
+  test("bare numbers in reset headers are never parsed as years", () => {
+    const decision = Retry.decide(1, apiError({ "x-ratelimit-reset-requests": "2027" }));
+    expect(decision).toEqual({
+      retryable: true,
+      reason: "Rate Limited",
+      delayMs: Retry.RETRY_INITIAL_DELAY,
+      source: "backoff",
+    });
+  });
+});
