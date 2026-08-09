@@ -81,7 +81,8 @@ sub-adapter ever guards a production write.
 
 Known defects fixed en route: Discord heartbeat-ack never called + RESUME
 token:undefined (naru re-merge), empty `SurfaceKey.clear()` called by
-`ingress/engine.ts:76`, double tool pipeline (agent wraps kernel executor —
+`IngressEngine.reset()` (FIXED — #522: fake API deleted, `Storage.reset()`
+is the enforcement layer), double tool pipeline (agent wraps kernel executor —
 duplicate events + double policy pass; agent half loses emission/policy),
 `storage.ts` warn-and-auto-init `:memory:` (plus the test pinning it),
 ~3,400 LOC of test harnesses exported from src barrels (move to test/),

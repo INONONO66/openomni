@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Execution, type Message, type Ingress } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
-import { Bus, Session, Storage, SurfaceKey, WorkerRun } from "@openomni/session";
+import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
 
@@ -20,7 +20,6 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  SurfaceKey.clear();
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
   Bus.reset();
