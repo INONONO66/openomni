@@ -4,6 +4,7 @@ import type { SDKMessage } from "./message";
 import { Processor } from "./processor";
 import { toModelMessages } from "./message";
 import type { Provider } from "./provider";
+import { ProviderTransform } from "./provider/transform";
 import { getLanguage } from "./provider/sdk";
 import { Auth } from "./auth/storage";
 import { Bus } from "@openomni/session";
@@ -77,8 +78,18 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
     const normalizedMessages = toModelMessages(messages, model);
 
+    // #532 cache policy: breakpoints on the last tool definition and the
+    // system message (the latest-user breakpoint is placed inside
+    // toModelMessages). Namespaced under `anthropic`, absent for other providers.
+    const cacheOptions = ProviderTransform.anthropicCacheOptions(model);
     const systemMessages: SDKMessage[] = streamInput.system
-      ? [{ role: "system" as const, content: streamInput.system }]
+      ? [
+          {
+            role: "system" as const,
+            content: streamInput.system,
+            ...(cacheOptions && { providerOptions: cacheOptions }),
+          },
+        ]
       : [];
 
     const sdkTools: Record<string, unknown> = {};
@@ -108,6 +119,10 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
           },
         }),
       };
+    }
+    const lastToolName = input.tools[input.tools.length - 1]?.name;
+    if (cacheOptions && lastToolName !== undefined) {
+      (sdkTools[lastToolName] as Record<string, unknown>).providerOptions = cacheOptions;
     }
 
     const streamArgs = {

@@ -155,37 +155,49 @@ export namespace ProviderTransform {
     return applyAnthropicCaching(result);
   }
 
+  const CACHE_CONTROL = { type: "ephemeral" as const, ttl: "1h" as const };
+
+  /**
+   * Anthropic prompt-cache breakpoints (#532 upstream policy): last tool
+   * definition + last system message + latest user message, all 1h TTL —
+   * three of the four allowed breakpoints, placed at the stable→volatile
+   * seams so a per-turn system mutation (prompt.append_context effects)
+   * invalidates the system entry but not the tools entry. 1h over the 5m
+   * default because chat turns routinely arrive minutes apart; the 2x write
+   * premium amortizes after three reads. This function owns the message
+   * breakpoint; run.ts marks system and tools via anthropicCacheOptions
+   * (system never flows through normalizeMessages).
+   */
   export function applyAnthropicCaching(msgs: SDKMessage[]): SDKMessage[] {
-    if (msgs.length === 0) return msgs;
-
-    const targets = new Set<number>();
-    let found = 0;
-    for (let i = msgs.length - 1; i >= 0 && found < 2; i--) {
-      const msg = msgs[i];
-      if (msg == null) {
-        continue;
-      }
-      const role = msg.role;
-      if (role === "user" || role === "assistant") {
-        targets.add(i);
-        found++;
-      }
-    }
-
-    return msgs.map((msg, i) => {
-      if (msg.role === "system" || targets.has(i)) {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i]?.role !== "user") continue;
+      return msgs.map((msg, index) => {
+        if (index !== i) return msg;
         const existing = (msg as SDKMessageWithProviderOptions).providerOptions;
         const existingAnthropic = (existing?.anthropic ?? {}) as Record<string, unknown>;
         return {
           ...msg,
           providerOptions: {
             ...existing,
-            anthropic: { ...existingAnthropic, cacheControl: { type: "ephemeral" as const } },
+            anthropic: { ...existingAnthropic, cacheControl: CACHE_CONTROL },
           },
         };
-      }
-      return msg;
-    });
+      });
+    }
+    return msgs;
+  }
+
+  /**
+   * providerOptions carrying the Anthropic cache breakpoint, or undefined for
+   * non-Anthropic models. run.ts attaches this to the system message and the
+   * last tool definition (namespaced under `anthropic`, so it would be inert
+   * elsewhere — the gate just avoids advertising foreign vocabulary).
+   */
+  export function anthropicCacheOptions(
+    model: Provider.Model,
+  ): { anthropic: { cacheControl: typeof CACHE_CONTROL } } | undefined {
+    if (!isAnthropicPackage(model.api?.npm)) return undefined;
+    return { anthropic: { cacheControl: CACHE_CONTROL } };
   }
 
   function sanitizeAssistantContentPart(part: AssistantContentPart): AssistantContentPart {
