@@ -17,12 +17,10 @@ describe("SurfaceKey SQLite persistence", () => {
     dbPath = join(tmpDir, "test.db");
     Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(new SqliteStorageAdapter(dbPath));
-    SurfaceKey.clear();
   });
 
   afterEach(async () => {
     Storage.reset();
-    SurfaceKey.clear();
     await rm(tmpDir, { recursive: true });
   });
 
@@ -31,7 +29,6 @@ describe("SurfaceKey SQLite persistence", () => {
     SurfaceKey.register("telegram:bot:chat:123", session.id);
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
-    SurfaceKey.clear();
 
     expect(SurfaceKey.lookup("telegram:bot:chat:123")).toBe(session.id);
   });
@@ -43,7 +40,6 @@ describe("SurfaceKey SQLite persistence", () => {
     SurfaceKey.unregister("slack:ws:dm:U1");
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
-    SurfaceKey.clear();
 
     expect(SurfaceKey.lookup("slack:ws:dm:U1")).toBeUndefined();
   });
@@ -55,7 +51,6 @@ describe("SurfaceKey SQLite persistence", () => {
     SurfaceKey.register("slack:ws:channel:C1", session2.id);
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
-    SurfaceKey.clear();
 
     expect(SurfaceKey.lookup("slack:ws:channel:C1")).toBe(session2.id);
   });

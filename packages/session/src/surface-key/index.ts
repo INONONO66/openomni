@@ -173,8 +173,4 @@ export namespace SurfaceKey {
   export function listBySession(sessionId: string): string[] {
     return Storage.get().surfaceKey?.listBySession?.(sessionId) ?? [];
   }
-
-  export function clear(): void {
-    // Storage.reset() replaces the adapter with fresh state; nothing to clear here.
-  }
 }

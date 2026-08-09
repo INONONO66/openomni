@@ -17,7 +17,6 @@ describe("SurfaceKey", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
-    SurfaceKey.clear();
   });
 
   describe("create", () => {
@@ -443,8 +442,8 @@ describe("SurfaceKey", () => {
     });
   });
 
-  describe("clear", () => {
-    test("clears all mappings", () => {
+  describe("Storage.reset", () => {
+    test("adapter swap leaves no stale mappings", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
@@ -455,7 +454,6 @@ describe("SurfaceKey", () => {
 
       Storage.reset();
       Storage.initialize({ dbPath: ":memory:" });
-      SurfaceKey.clear();
 
       expect(SurfaceKey.lookup(key1)).toBeUndefined();
       expect(SurfaceKey.lookup(key2)).toBeUndefined();
