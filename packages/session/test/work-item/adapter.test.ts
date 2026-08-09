@@ -16,6 +16,7 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     sourceMessageId: "msg-1",
     sourceChannel: "discord",
     attempt: 1,
+    lastAttemptSeq: 0,
     timestamps: { created: 1, updated: 1 },
     relations: { childHashes: [], dependsOn: [] },
     intent: "test",

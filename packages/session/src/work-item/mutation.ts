@@ -1,31 +1,14 @@
-import { WorkItem } from "@openomni/protocol";
+import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
+import {
+  appendTransitionFact,
+  requireWorkItemLedger,
+  runWorkItemTransaction,
+  WorkItemRevisionError,
+  type WorkItemFact,
+} from "./facts.js";
 import type { WorkItemAdapter, WorkItemMutation, WorkItemTransitionTarget } from "./types.js";
-
-class WorkItemRevisionError extends Error {
-  readonly name = "WorkItemRevisionError";
-  readonly code = "stale_revision";
-
-  constructor(readonly hash: string) {
-    super(`stale WorkItem revision: ${hash}`);
-  }
-}
-
-export function mutateTimestamps(
-  hash: string,
-  target: "started" | "cancelled",
-  updateTimestamps: (
-    timestamps: WorkItem.Info["timestamps"],
-    now: number,
-  ) => WorkItem.Info["timestamps"],
-): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
-    changedFields: ["timestamps"],
-    updated: { ...existing, timestamps: updateTimestamps(existing.timestamps, now) },
-    target,
-  }));
-}
 
 export async function mutate(
   hash: string,
@@ -38,9 +21,36 @@ export async function mutate(
   if (!existing) return undefined;
 
   const now = Date.now();
-  const { updated, changedFields, target, afterPublish } = build(existing, now);
+  const { updated, changedFields, fact, target, afterPublish } = build(existing, now);
   if (target) assertTransition(existing, target);
-  return persistMutation(adapter, existing, updated, now, changedFields, afterPublish);
+  return persistMutation(adapter, existing, updated, now, changedFields, fact, afterPublish);
+}
+
+/**
+ * Write unit shared with callers that hold their own storage transaction
+ * (create's parent link, remove's graph unlinks): appends the decision-class
+ * fact, then lands the projection under the revision CAS — no publishes.
+ * MUST run inside a storage transaction.
+ */
+export function commitMutation(
+  adapter: WorkItemAdapter,
+  ledger: ProtocolStorage.LedgerSubAdapter,
+  existing: WorkItem.Info,
+  updated: WorkItem.Info,
+  fact: WorkItemFact,
+): WorkItem.Info {
+  const versioned: WorkItem.Info = {
+    ...updated,
+    revision: existing.revision + 1,
+  };
+  appendTransitionFact(ledger, existing, fact);
+  if (!adapter.compareAndSet(updated.hash, existing.revision, versioned)) {
+    // Unreachable while every writer appends first (the append CAS and the
+    // projection CAS guard the same head==revision); kept as the explosive
+    // backstop — the rollback discards the appended fact.
+    throw new WorkItemRevisionError(updated.hash);
+  }
+  return versioned;
 }
 
 export function persistMutation(
@@ -49,16 +59,18 @@ export function persistMutation(
   updated: WorkItem.Info,
   time: number,
   changedFields: string[],
+  fact: WorkItemFact,
   afterPublish?: (updated: WorkItem.Info) => void,
 ): WorkItem.Info {
-  const versioned: WorkItem.Info = {
-    ...updated,
-    revision: existing.revision + 1,
-  };
-  if (!adapter.compareAndSet(updated.hash, existing.revision, versioned)) {
-    throw new WorkItemRevisionError(updated.hash);
-  }
+  const storage = Storage.get();
+  const ledger = requireWorkItemLedger(storage);
+  const versioned = runWorkItemTransaction(storage, existing.hash, () =>
+    commitMutation(adapter, ledger, existing, updated, fact),
+  );
 
+  // Bus stays observe-only for the work-item decision class (#510): these
+  // publishes are lossy projections of the appended facts and fire only
+  // AFTER the append+projection transaction committed.
   const previousStatus = WorkItem.deriveStatus(existing);
   const nextStatus = WorkItem.deriveStatus(versioned);
   if (previousStatus !== nextStatus) {

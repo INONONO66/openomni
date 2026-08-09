@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Communication } from "@openomni/protocol";
 import { Bus, PendingAskStore, Storage } from "../../src/index";
 
 beforeEach(() => {
@@ -11,72 +12,112 @@ afterEach(() => {
   Storage.reset();
 });
 
-const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
-function createSessionFixture(id: string): void {
-  Storage.getAdapter().session.set(id, {
+function frozenRecord(
+  id: string,
+  overrides: Partial<Communication.PendingAsk.Record> = {},
+): Communication.PendingAsk.Record {
+  return Communication.PendingAsk.Record.parse({
     id,
-    title: id,
+    originSessionId: "session-1",
+    originActorKind: "worker",
+    targetKind: "resident",
+    status: "open",
+    correlation: {},
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  });
+}
+
+/**
+ * Historical rows predate the #510 D2a freeze; tests emulate them at the
+ * adapter layer because the store's write surface is frozen by design.
+ */
+function seedFrozenRow(record: Communication.PendingAsk.Record): void {
+  const storage = Storage.getAdapter();
+  const adapter = storage.pendingAsk;
+  if (!adapter) throw new Error("pendingAsk adapter missing");
+  // pending_ask.origin_session_id references session(id).
+  storage.session.set(record.originSessionId, {
+    id: record.originSessionId,
+    title: record.originSessionId,
     model: { providerID: "test", modelID: "test" },
     time: { created: 1, updated: 1 },
     spawnDepth: 0,
   });
+  adapter.create(record);
 }
 
-describe("PendingAskStore", () => {
-  test("creates, finds by correlation, and answers once", async () => {
+describe("PendingAskStore (frozen legacy writer, #510 D2a)", () => {
+  test("every write method throws the typed frozen error and persists/publishes nothing", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
+    seedFrozenRow(frozenRecord("ask-frozen", { correlation: { threadId: "thread-1" } }));
 
-    createSessionFixture("session-1");
-    PendingAskStore.create({
-      id: "ask-1",
-      originSessionId: "session-1",
-      originActorKind: "worker",
-      targetKind: "resident",
-      correlation: { externalMessageId: "m-1", threadId: "t-1" },
-    });
+    const attempts: ReadonlyArray<readonly [Communication.PendingAsk.WriteMethod, () => unknown]> =
+      [
+        [
+          "create",
+          () =>
+            PendingAskStore.create({
+              id: "ask-new",
+              originSessionId: "session-1",
+              originActorKind: "worker",
+              targetKind: "resident",
+              correlation: { externalMessageId: "m-new" },
+            }),
+        ],
+        ["answer", () => PendingAskStore.answer("ask-frozen", { answeredAt: 10 })],
+        ["markAmbiguous", () => PendingAskStore.markAmbiguous("ask-frozen")],
+        ["cancel", () => PendingAskStore.cancel("ask-frozen")],
+        ["expire", () => PendingAskStore.expire("ask-frozen")],
+      ];
 
+    for (const [method, attempt] of attempts) {
+      let thrown: unknown;
+      try {
+        attempt();
+      } catch (error) {
+        thrown = error;
+      }
+      if (!Communication.PendingAsk.FrozenError.isInstance(thrown)) {
+        throw new Error(`${method} did not throw the typed frozen error`);
+      }
+      expect(thrown.data.code).toBe("pending_ask_frozen");
+      expect(thrown.data.method).toBe(method);
+    }
+
+    await new Promise((resolve) => queueMicrotask(resolve));
+    expect(events).toEqual([]);
+    expect(PendingAskStore.get("ask-new")).toBeUndefined();
+    expect(PendingAskStore.get("ask-frozen")?.status).toBe("open");
+    expect(PendingAskStore.get("ask-frozen")?.updatedAt).toBe(1);
+  });
+
+  test("reads keep serving frozen rows exactly as persisted", () => {
+    seedFrozenRow(
+      frozenRecord("ask-open", { correlation: { externalMessageId: "m-1", threadId: "t-1" } }),
+    );
+    seedFrozenRow(
+      frozenRecord("ask-ambiguous", { status: "ambiguous", correlation: { threadId: "t-1" } }),
+    );
+    seedFrozenRow(frozenRecord("ask-answered", { status: "answered", answeredAt: 10 }));
+
+    expect(PendingAskStore.get("ask-answered")?.answeredAt).toBe(10);
+    expect(PendingAskStore.list()).toHaveLength(3);
+    expect(PendingAskStore.list(["open"])).toHaveLength(1);
+    // Correlation lookup (the #519 upcast read path) still matches open AND
+    // ambiguous frozen rows.
+    expect(PendingAskStore.findByCorrelation({ threadId: "t-1" })).toHaveLength(2);
     expect(PendingAskStore.findByCorrelation({ externalMessageId: "m-1" })).toHaveLength(1);
-
-    const answered = PendingAskStore.answer("ask-1", { answeredAt: 10 });
-    expect(answered.status).toBe("answered");
-    expect(answered.answeredAt).toBe(10);
-
-    const duplicate = PendingAskStore.answer("ask-1", { answeredAt: 20 });
-    await flushBus();
-
-    expect(duplicate.answeredAt).toBe(10);
-    expect(events.filter((event) => event === "pending_ask.answered")).toHaveLength(1);
   });
 
-  test("keeps ambiguous non-terminal until cancelled or expired", () => {
-    createSessionFixture("session-1");
-    PendingAskStore.create({
-      id: "ask-2",
-      originSessionId: "session-1",
-      originActorKind: "worker",
-      targetKind: "external_actor",
-      correlation: { threadId: "thread-1" },
-    });
-
-    expect(PendingAskStore.markAmbiguous("ask-2").status).toBe("ambiguous");
-    expect(PendingAskStore.findByCorrelation({ threadId: "thread-1" })).toHaveLength(1);
-    expect(PendingAskStore.cancel("ask-2").status).toBe("cancelled");
-  });
-
-  test("open asks survive adapter recreation", () => {
+  test("frozen rows survive adapter recreation", () => {
     const adapter = Storage.getAdapter();
-    createSessionFixture("session-1");
-    PendingAskStore.create({
-      id: "ask-3",
-      originSessionId: "session-1",
-      originActorKind: "worker",
-      targetKind: "resident",
-      correlation: { tokenHash: "token-3" },
-    });
+    seedFrozenRow(frozenRecord("ask-persisted", { correlation: { tokenHash: "token-3" } }));
 
     Storage.configure(adapter);
 
-    expect(PendingAskStore.get("ask-3")?.status).toBe("open");
+    expect(PendingAskStore.get("ask-persisted")?.status).toBe("open");
   });
 });

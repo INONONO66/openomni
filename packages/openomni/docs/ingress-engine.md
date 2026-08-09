@@ -2,7 +2,7 @@
 
 | API | Signature |
 | --- | --- |
-| `IngressEngine.reset` | `reset(): void` — clears `SurfaceKey` + `Session` state (test-only) |
+| `IngressEngine.reset` | `reset(): void` — resets `Storage`/`Bus` and engine wiring; storage-backed state (sessions, surface keys) is swapped by `Storage.reset()` (test-only) |
 | `IngressEngine.ingest` | `ingest(event: InboundEvent): Promise<IngressResult>` |
 
 ### Architecture
@@ -34,7 +34,7 @@ Authority checks run before projection. If accepted work requires an independent
 
 ```typescript
 namespace IngressEngine {
-  // Test cleanup only — clears SurfaceKey + Session state
+  // Test cleanup only — resets Storage/Bus and engine wiring
   function reset(): void;
 
   // Main entry point — fully stateless

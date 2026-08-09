@@ -5,8 +5,85 @@ import { categoryOf, getNumberTraceField, getTraceField } from "./record-helpers
 import { redactForPersistence } from "./redaction.js";
 import type { PersistInput } from "./types.js";
 
-export async function persist(input: PersistInput): Promise<void> {
-  const db = getDatabase();
+/**
+ * NORMAL/group-commit telemetry writer (#510 D1). Telemetry is observe-only
+ * and lossy-tolerant by contract: rows are queued and flushed on the next
+ * microtask as ONE transaction on the telemetry connection, so a burst of
+ * Bus events costs one commit (one WAL sync at most under
+ * synchronous=NORMAL) instead of one per event. bus_event/event_chain rows
+ * are never a decision or authorization fact.
+ */
+
+interface QueueEntry {
+  readonly db: Database;
+  readonly input: PersistInput;
+  readonly resolve: () => void;
+  readonly reject: (err: unknown) => void;
+}
+
+let queue: QueueEntry[] = [];
+let flushScheduled = false;
+
+export function persist(input: PersistInput): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    // Resolve the connection in the caller's Storage scope — a flush may run
+    // under a different AsyncLocalStorage isolation scope than the enqueue.
+    const db = getDatabase();
+    queue.push({ db, input, resolve, reject });
+    if (!flushScheduled) {
+      flushScheduled = true;
+      queueMicrotask(flushPersistQueue);
+    }
+  });
+}
+
+/**
+ * Drains the queued batch synchronously (group commit per connection, FIFO —
+ * the per-session hash chain reads its tip inside the same transaction).
+ * Exported for the shutdown drain; normally runs as the scheduled microtask.
+ */
+export function flushPersistQueue(): void {
+  flushScheduled = false;
+  while (queue.length > 0) {
+    const batch = queue;
+    queue = [];
+    let start = 0;
+    while (start < batch.length) {
+      let end = start;
+      while (end < batch.length && batch[end]?.db === batch[start]?.db) end += 1;
+      flushGroup(batch.slice(start, end));
+      start = end;
+    }
+  }
+}
+
+function flushGroup(entries: QueueEntry[]): void {
+  const first = entries[0];
+  if (first === undefined) return;
+  const db = first.db;
+  // BEGIN IMMEDIATE: the chain tip is read INSIDE the write transaction, so
+  // take the write lock up front — a deferred read-then-upgrade can hit an
+  // unretryable snapshot-invalidation busy against the other writer process.
+  try {
+    db.transaction(() => {
+      for (const entry of entries) writeRow(db, entry.input);
+    }).immediate();
+    for (const entry of entries) entry.resolve();
+  } catch {
+    // Group commit failed — retry each row alone so one bad event stays a
+    // single lossy drop instead of taking its batch-mates with it.
+    for (const entry of entries) {
+      try {
+        db.transaction(() => writeRow(db, entry.input)).immediate();
+        entry.resolve();
+      } catch (err) {
+        entry.reject(err);
+      }
+    }
+  }
+}
+
+function writeRow(db: Database, input: PersistInput): void {
   const visibility = input.event.visibility ?? "internal";
   const data = JSON.stringify(
     redactForPersistence(input.payload === undefined ? null : input.payload),
@@ -32,30 +109,28 @@ export async function persist(input: PersistInput): Promise<void> {
     timeCreated,
   });
 
-  db.transaction(() => {
-    db.query(
-      `INSERT INTO bus_event
-         (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      input.sessionId ?? null,
-      runId ?? null,
-      input.event.name,
-      categoryOf(input.event.name),
-      visibility,
-      data,
-      traceId,
-      durationMs ?? null,
-      timeCreated,
-      prevHash,
-      eventHash,
-    );
+  db.query(
+    `INSERT INTO bus_event
+       (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.sessionId ?? null,
+    runId ?? null,
+    input.event.name,
+    categoryOf(input.event.name),
+    visibility,
+    data,
+    traceId,
+    durationMs ?? null,
+    timeCreated,
+    prevHash,
+    eventHash,
+  );
 
-    db.query(
-      `INSERT INTO event_chain (session_id, event_type, event_hash, prev_hash, time_created)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(input.sessionId ?? null, input.event.name, eventHash, prevHash, timeCreated);
-  })();
+  db.query(
+    `INSERT INTO event_chain (session_id, event_type, event_hash, prev_hash, time_created)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(input.sessionId ?? null, input.event.name, eventHash, prevHash, timeCreated);
 }
 
 function resolveChainTip(db: Database, sessionId: string | undefined): string {

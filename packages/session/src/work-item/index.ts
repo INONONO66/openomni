@@ -1,10 +1,12 @@
 import type { WorkItem } from "@openomni/protocol";
 import { createWorkItem } from "./create.js";
+import { recordWorkItemEffect, type RecordEffectInput } from "./effect-link.js";
 import { getWorkItem, listWorkItems, removeWorkItem, updateWorkItem } from "./crud.js";
 import {
   addWorkItemBlocker,
   addWorkItemEvidence,
   addWorkItemReadBackEvidence,
+  allocateWorkItemAttempt,
   assignWorkItemExecution,
   areDependenciesMet as areStoredDependenciesMet,
   cancelWorkItem,
@@ -14,6 +16,7 @@ import {
   resolveWorkItemBlocker,
   retryStoredWorkItem,
   startWorkItem,
+  type AttemptAllocationInput,
 } from "./lifecycle.js";
 import type { CreateWorkItemInput, DependencyReadiness, WorkItemListFilter } from "./types.js";
 
@@ -108,11 +111,33 @@ export namespace WorkItemStore {
 
   export const recordOutcome = recordWorkItemOutcome;
 
+  /**
+   * #492 ↔ #490 — projects one effect intent's state onto the WorkItem's
+   * completion facts so admission blocks until the effect reaches a terminal
+   * outcome. Called by the OpenOmni effect service/reconciler; the durable
+   * effect audit lives on the `effect:<effectId>` stream.
+   */
+  export function recordEffect(hash: string, input: RecordEffectInput): WorkItem.Info | undefined {
+    return recordWorkItemEffect(hash, input);
+  }
+
   export function areDependenciesMet(hash: string): DependencyReadiness {
     return areStoredDependenciesMet(hash);
   }
 
   export async function retry(hash: string): Promise<WorkItem.Info | undefined> {
     return retryStoredWorkItem(hash);
+  }
+
+  /**
+   * #510 C2 — appends `work_item.attempt_allocated` (full Attempt identity)
+   * on the owner stream before the projection advances; attemptSeq is
+   * allocated by that serialized append and never reused.
+   */
+  export async function allocateAttempt(
+    hash: string,
+    identity: AttemptAllocationInput,
+  ): Promise<Readonly<{ item: WorkItem.Info; attempt: WorkItem.Attempt }> | undefined> {
+    return allocateWorkItemAttempt(hash, identity);
   }
 }

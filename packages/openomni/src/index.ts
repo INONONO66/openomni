@@ -34,6 +34,22 @@ export type {
 // plus the sync-ask audit. Correlation and matching stay kernel-internal.
 export { WaitService } from "./wait";
 
+// Kernel effect service (#492): the effect driver port, manifest boundary,
+// record-before-act service, and finish reconciler over the `effect:<id>`
+// class the ledger ships as vocabulary.
+export { EffectManifest, EffectRefusal, EffectService, EffectReconciler } from "./effect";
+export type {
+  EffectDriver,
+  EffectEscalation,
+  EffectExecution,
+  EffectIntent,
+  EffectRefusalCode,
+  EffectRequest,
+  EffectRunResult,
+  InputSanitizer,
+  ReconcileSummary,
+} from "./effect";
+
 export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,

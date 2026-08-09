@@ -16,9 +16,11 @@
   "dependencies": {
     "@openomni/protocol": "workspace:*",
 
+    "drizzle-orm": "0.45.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "drizzle-kit": "0.31.10"
   }
 }

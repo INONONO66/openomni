@@ -194,8 +194,8 @@ describe("WorkItemStore", () => {
 
     const updated = await WorkItemStore.update(item.hash, { name: "shared-row-revision-updated" });
 
-    expect(item).toMatchObject({ revision: 0 });
-    expect(updated).toMatchObject({ revision: 1 });
+    expect(item).toMatchObject({ revision: 1 });
+    expect(updated).toMatchObject({ revision: 2 });
     expect(updated?.completionFacts.revision).toBe(item.completionFacts.revision);
   });
 

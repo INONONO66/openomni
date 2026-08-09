@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
@@ -198,6 +198,11 @@ export async function main(): Promise<void> {
   const mode = "coordinator";
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,
+    // #510 D3: read-only ledger inspection; denies 401 until
+    // OPENOMNI_ADMIN_TOKEN (or server.adminToken) is configured.
+    adminToken: config.server.adminToken,
+    // D2a artifact convention: the manifest lives beside the database file.
+    ledgerArchiveManifestPath: join(dirname(config.storage.dbPath), "ledger-archive-manifest.json"),
   });
   const server = await startInboundSurfacesAfterRecovery({
     recover: () =>

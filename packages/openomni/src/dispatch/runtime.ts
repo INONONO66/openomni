@@ -1,6 +1,6 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
 import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
-import { Bus, PendingInteractionStore, TraceContext } from "@openomni/session";
+import { Bus, PendingInteractionStore, Storage, TraceContext } from "@openomni/session";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
 import {
   markRoutedPendingInteraction,
@@ -41,6 +41,84 @@ function collectPolicies(
     ...runtimePolicies,
     ...(submitPolicies ?? []),
   ];
+}
+
+export type CommandRecordErrorCode = "command_replayed" | "command_record_failed";
+
+/**
+ * #510 C3 ruling 2 — recording the dispatch verdict failed, so the verdict
+ * must not act (no record, no action). `command_replayed` is the meaningful
+ * duplicate: the `command:<dispatchId>` stream already holds a verdict for
+ * this id; `command_record_failed` covers a missing ledger sub-adapter or a
+ * failed append. Both fail closed before the handler or the denial result.
+ */
+export class CommandRecordError extends Error {
+  readonly code: CommandRecordErrorCode;
+  readonly dispatchId: string;
+
+  constructor(code: CommandRecordErrorCode, dispatchId: string, message: string) {
+    super(message);
+    this.name = "CommandRecordError";
+    this.code = code;
+    this.dispatchId = dispatchId;
+  }
+}
+
+type CommandVerdictFact = Readonly<{
+  type: "command.authorized" | "command.denied";
+  verdict: "allow" | "deny" | "pending";
+  policyId: string;
+  reason: string;
+}>;
+
+// The authorization verdict is a decision-class fact on the single-fact
+// owner stream `command:<dispatchId>` (expectedHead 0), appended durably
+// BEFORE the verdict acts: command.authorized precedes handler invocation,
+// command.denied precedes the denial result, and the observe-only Bus
+// Events.Authorized/Denied publishes follow the append. Fact data fields
+// come from the parsed Command and the policy decision — that parse is the
+// one enforcement layer; the payload vocabulary is
+// LedgerAppend.CommandAuthorized/CommandDenied (@openomni/protocol).
+function appendCommandVerdict(command: DispatchProtocol.Command, fact: CommandVerdictFact): void {
+  const ledger = Storage.get().ledger;
+  if (!ledger) {
+    throw new CommandRecordError(
+      "command_record_failed",
+      command.dispatchId,
+      "Storage adapter does not implement ledger append — dispatch verdicts fail closed",
+    );
+  }
+  let appended: ReturnType<typeof ledger.append>;
+  try {
+    appended = ledger.append(
+      {
+        streamId: `command:${command.dispatchId}`,
+        type: fact.type,
+        data: {
+          verdict: fact.verdict,
+          policyId: fact.policyId,
+          reason: fact.reason,
+          actorKind: command.actor.kind,
+          action: command.action,
+          targetKind: command.target.kind,
+        },
+      },
+      0,
+    );
+  } catch (error) {
+    throw new CommandRecordError(
+      "command_record_failed",
+      command.dispatchId,
+      `dispatch verdict append failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (appended.kind === "cas_conflict") {
+    throw new CommandRecordError(
+      "command_replayed",
+      command.dispatchId,
+      `dispatch ${command.dispatchId} already holds a verdict — replay fails closed`,
+    );
+  }
 }
 
 type PinnedInteractionValidation =
@@ -91,6 +169,12 @@ function denyStalePinnedInteraction(
   start: number,
   reason: string,
 ): DispatchProtocol.Result {
+  appendCommandVerdict(command, {
+    type: "command.denied",
+    verdict: "deny",
+    policyId: "dispatch.pending-interaction-revalidation",
+    reason,
+  });
   Bus.publish(DispatchProtocol.Events.Denied, {
     ...eventBase(command),
     verdict: "deny",
@@ -218,9 +302,16 @@ export class DispatchRuntime {
 
     if (Decision.isBlocking(decision)) {
       const reason = Decision.reason(decision, "dispatch.authorize denied");
+      const verdict = decision.verdict === "pending" ? "pending" : "deny";
+      appendCommandVerdict(command, {
+        type: "command.denied",
+        verdict,
+        policyId: decision.policyId,
+        reason,
+      });
       Bus.publish(DispatchProtocol.Events.Denied, {
         ...eventBase(command),
-        verdict: decision.verdict === "pending" ? "pending" : "deny",
+        verdict,
         reason,
         policyId: decision.policyId,
         effects: decision.effects,
@@ -241,6 +332,12 @@ export class DispatchRuntime {
       }
     }
 
+    appendCommandVerdict(command, {
+      type: "command.authorized",
+      verdict: "allow",
+      policyId: decision.policyId,
+      reason: Decision.reason(decision, "dispatch.authorize allowed"),
+    });
     Bus.publish(DispatchProtocol.Events.Authorized, {
       ...eventBase(command),
       verdict: "allow",

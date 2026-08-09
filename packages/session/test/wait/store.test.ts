@@ -30,7 +30,9 @@ describe("WaitStore", () => {
     const loaded = WaitStore.get("wait-1");
 
     expect(created.status).toBe("open");
-    expect(created.revision).toBe(0);
+    // Revision 1 at birth: the wait.opened fact is seq 1 on the owner
+    // stream `wait:<id>`, and head === revision from create onward (#510).
+    expect(created.revision).toBe(1);
     expect(created.partial).toBe(false);
     expect(loaded).toEqual(created);
     await flushBus();
@@ -104,6 +106,36 @@ describe("WaitStore", () => {
     expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 2_001)).toHaveLength(0);
   });
 
+  test("adopts a pre-cutover row (revision >= 1, empty stream) at ITS revision before the first transition", () => {
+    // Simulate an old-DB wait: the projection row exists at revision 3 but
+    // its owner stream is empty (every write predates the #510 phase-B
+    // cutover). Seeded at the adapter layer, exactly as such rows persist.
+    const adapter = Storage.get().wait;
+    if (!adapter) throw new Error("wait sub-adapter missing");
+    const record = Wait.Record.parse({
+      ...buildWaitCreate(),
+      status: "open",
+      partial: false,
+      replies: [],
+      revision: 3,
+    });
+    expect(adapter.create(record)).toBe(true);
+
+    const outcome = WaitStore.attachReply("wait-1", buildReplyInput());
+
+    expect(outcome.kind).toBe("attached");
+    expect(WaitStore.get("wait-1")?.revision).toBe(4);
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    // The wait.adopted genesis landed at seq === the observed revision and
+    // the transition fact followed at revision + 1 (head↔revision intact).
+    const adopted = ledger.factsByType("wait.adopted");
+    expect(adopted).toHaveLength(1);
+    expect(adopted[0]).toMatchObject({ streamId: "wait:wait-1", seq: 3 });
+    expect(adopted[0]?.data).toMatchObject({ revision: 3 });
+    expect(ledger.headFact("wait:wait-1")).toMatchObject({ seq: 4, type: "wait.attached" });
+  });
+
   test("persists fold outcomes through the revision CAS and publishes reply events", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
@@ -119,7 +151,7 @@ describe("WaitStore", () => {
     expect(attached.kind).toBe("attached");
     expect(resolved.kind).toBe("resolved");
     expect(persisted?.status).toBe("resolved");
-    expect(persisted?.revision).toBe(2);
+    expect(persisted?.revision).toBe(3);
     expect(persisted?.replies).toHaveLength(2);
     expect(persisted?.resolvedAt).toBe(2_000);
     await flushBus();
@@ -153,8 +185,8 @@ describe("WaitStore", () => {
     expect(ambiguous.kind).toBe("rejected");
     if (ambiguous.kind !== "rejected") throw new Error("expected rejected");
     expect(ambiguous.code).toBe("ambiguous_responder");
-    // Quorum unchanged: still the single attached reply at revision 1.
-    expect(persisted?.revision).toBe(1);
+    // Quorum unchanged: still the single attached reply at revision 2.
+    expect(persisted?.revision).toBe(2);
     expect(persisted?.replies).toHaveLength(1);
     expect(persisted?.status).toBe("open");
     await flushBus();
@@ -193,7 +225,7 @@ describe("WaitStore", () => {
 
     expect(outcome.kind).toBe("delivery_recorded");
     expect(persisted?.correlation.replyToMessageId).toBe("platform:msg-1");
-    expect(persisted?.revision).toBe(1);
+    expect(persisted?.revision).toBe(2);
     // The adapter's correlation projection columns moved with the record:
     // lookups answer the platform id and no longer the internal one.
     expect(WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-1" }, 1_000)).toHaveLength(
@@ -201,7 +233,8 @@ describe("WaitStore", () => {
     );
     expect(WaitStore.findByCorrelation({ replyToMessageId: "reply-1" }, 1_000)).toHaveLength(0);
     await flushBus();
-    // Projection-only transition: no wait ledger event beyond wait.opened.
+    // No Bus projection for this transition: the durable
+    // wait.delivery_recorded fact lives on the owner stream only.
     expect(events).toEqual(["wait.opened"]);
   });
 

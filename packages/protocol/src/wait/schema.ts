@@ -181,6 +181,8 @@ export const StoreErrorCode = z.enum([
   "duplicate",
   "not_found",
   "revision_conflict",
+  /** Storage was busy (SQLITE_BUSY at the transaction entry) — nothing was written; retrying is the caller's decision. */
+  "unavailable",
 ]);
 export type StoreErrorCode = z.infer<typeof StoreErrorCode>;
 
