@@ -4,7 +4,6 @@ import { IngressSessionResolver } from "../../src/ingress/session-resolver";
 
 describe("IngressSessionResolver", () => {
   beforeEach(() => {
-    SurfaceKey.clear();
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
   });

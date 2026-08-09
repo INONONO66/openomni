@@ -137,6 +137,45 @@ describe("WaitService", () => {
     expect(events).toContainEqual({ name: "wait.expired", partial: true });
   });
 
+  test("sweepExpired isolates one corrupt wait: records Operational.Error and keeps sweeping", async () => {
+    const events: { name: string; msg?: string }[] = [];
+    Bus.observe((event, payload) =>
+      events.push({
+        name: event.name,
+        ...(typeof payload === "object" && payload !== null && "msg" in payload
+          ? { msg: String((payload as { msg: unknown }).msg) }
+          : {}),
+      }),
+    );
+    WaitService.open(buildWaitCreate("wait-corrupt", { expiresAt: 10_000 }));
+    WaitService.open(
+      buildWaitCreate("wait-healthy", { originMessageId: "out-healthy", expiresAt: 10_000 }),
+    );
+    // Corrupt one wait's owner stream: an extra fact advances the head past
+    // the projected revision, so its expiry transition hits a permanent
+    // revision conflict.
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    const appended = ledger.append(
+      { streamId: "wait:wait-corrupt", type: "wait.tampered", data: {} },
+      1,
+    );
+    expect(appended.kind).toBe("appended");
+
+    const expired = WaitService.sweepExpired(10_001);
+
+    // One bad wait never kills the sweep (#510 review fix F3): the healthy
+    // wait still folds and the corrupt one is recorded as an error.
+    expect(expired.map((record) => record.id)).toEqual(["wait-healthy"]);
+    expect(WaitStore.get("wait-healthy")?.status).toBe("expired");
+    expect(WaitStore.get("wait-corrupt")?.status).toBe("open");
+    await flushBus();
+    expect(events).toContainEqual({
+      name: "operational.error",
+      msg: "wait expiry sweep failed for wait-corrupt",
+    });
+  });
+
   test("auditSyncAsk publishes the audit event and never writes a Wait row", async () => {
     const phases: string[] = [];
     Bus.observe((event, payload) => {

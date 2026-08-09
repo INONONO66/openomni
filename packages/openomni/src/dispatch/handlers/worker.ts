@@ -14,6 +14,7 @@ import { projectConnectorCompletion } from "./connector-completion-projector.js"
 import { reflectCoordinatorResult, type WorkerCompletionOptions } from "./worker-completion.js";
 import { buildWorkerSpawnRequest, parseWorkerSpawnPayload } from "./worker-spawn-payload.js";
 import {
+  allocateWorkerSpawnAttempt,
   createWorkerSpawnWorkItem,
   throwWithWorkItemReflectionFailure,
 } from "./worker-work-item.js";
@@ -179,6 +180,14 @@ export function createWorkerDispatchHandlers(
         payload,
         INTERNAL_EXECUTOR_KIND,
       );
+      // #510 C2: the attempt identity is appended on the work stream before
+      // the executor acts; attemptId travels alongside workerRunId.
+      const attemptId = await allocateWorkerSpawnAttempt(
+        workItemHash,
+        request.prompt,
+        INTERNAL_EXECUTOR_KIND,
+        { model, policyPlan, workspaceRoot: command.workspaceRoot },
+      );
       let result: Execution.Result;
       try {
         result = await coordinator.dispatch(request.sessionId, request);
@@ -203,6 +212,7 @@ export function createWorkerDispatchHandlers(
           sessionId: request.sessionId,
           runId: request.runId,
           workItemHash,
+          attemptId,
           result,
           reflection,
         },

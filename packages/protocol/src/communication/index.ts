@@ -23,6 +23,12 @@ export namespace Communication {
     export const CorrelationQuery = PendingAskSchema.CorrelationQuery;
     export type CorrelationQuery = PendingAskSchema.CorrelationQuery;
 
+    export const WriteMethod = PendingAskSchema.WriteMethod;
+    export type WriteMethod = PendingAskSchema.WriteMethod;
+
+    export const FrozenError = PendingAskSchema.FrozenError;
+    export type FrozenError = InstanceType<typeof PendingAskSchema.FrozenError>;
+
     export const Events = PendingAskSchema.Events;
   }
 

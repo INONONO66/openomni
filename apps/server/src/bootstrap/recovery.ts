@@ -1,7 +1,7 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { WaitService, type DefaultDispatchRuntime } from "@openomni/openomni";
-import { Bus, PendingInteractionStore } from "@openomni/session";
+import { Bus, PendingInteractionStore, Storage } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
@@ -65,6 +65,47 @@ export async function startInboundSurfacesAfterRecovery<T>(
   return server;
 }
 
+/**
+ * Boot ledger tail verification (#510 D1): records every chain-break as an
+ * observe-only Operational event and RETURNS — a broken tail never refuses
+ * boot (the Governor incident is a later phase; full-chain verification is
+ * the #226 offline restore drill).
+ */
+function recordLedgerChainBreaks(traceId: string): void {
+  try {
+    const ledger = Storage.getAdapter().ledger;
+    if (!ledger) {
+      // Loud absence (AGENTS.md rule 7): the ledger sub-adapter is optional
+      // for test fakes ONLY — a production adapter without it means tail
+      // verification cannot run, and that must surface as an Operational
+      // error (via the catch below), never as a silent empty result.
+      throw new Error(
+        "storage adapter does not implement ledger reads — tail verification skipped",
+      );
+    }
+    const breaks = ledger.verifyTail();
+    for (const chainBreak of breaks) {
+      Bus.publish(Operational.Error, {
+        traceId,
+        time: Date.now(),
+        component: "server",
+        msg: `ledger chain-break detected at boot: ${chainBreak.streamId} seq ${chainBreak.seq} (${chainBreak.code})`,
+        context: { ...chainBreak },
+      });
+    }
+  } catch (error) {
+    // Observe-only surface: a verification failure is itself recorded and
+    // must not refuse boot any more than a chain-break does.
+    Bus.publish(Operational.Error, {
+      traceId,
+      time: Date.now(),
+      component: "server",
+      msg: "ledger tail verification failed at boot",
+      context: { error: error instanceof Error ? error.message : String(error) },
+    });
+  }
+}
+
 export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> {
   const { handler, coordinator, traceId, completionRuntime: completionRecovery } = input;
   const startTime = Date.now();
@@ -77,19 +118,37 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
 
   let sessionsRecovered = 0;
   try {
+    recordLedgerChainBreaks(id);
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
     if (completionRecovery) {
       try {
         const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
-        Bus.publish(receipt.failures.length > 0 ? Operational.Error : Operational.Info, {
+        // Loud per-failure surfacing (#510 review fix F4): a completion
+        // resume that fails (e.g. a staleHead against a 0014-shifted
+        // recorded head) names its work item in its own Operational.Error —
+        // never buried in an aggregate context blob. Boot stays alive.
+        for (const failure of receipt.failures) {
+          Bus.publish(Operational.Error, {
+            traceId: id,
+            time: Date.now(),
+            component: "server",
+            msg: `recovery failed to resume recorded WorkItem completion: ${failure.workItemHash}`,
+            context: {
+              workItemHash: failure.workItemHash,
+              admissionId: failure.admissionId,
+              error: failure.error,
+            },
+          });
+        }
+        Bus.publish(Operational.Info, {
           traceId: id,
           time: Date.now(),
           component: "server",
           msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
           context: {
             skipped: receipt.skipped,
-            failures: receipt.failures,
+            failures: receipt.failures.length,
           },
         });
       } catch (error) {

@@ -16,7 +16,7 @@ import type { ToolPermissionPolicyConfig } from "./builtin/tool-guard";
 import type { PolicyContext } from "./types";
 
 export { PolicyRegistry } from "@openomni/policy";
-export type { PolicyFactory, PolicyRegistryInstance, RuntimeContext } from "@openomni/policy";
+export type { PolicyFactory, PolicyRegistryInstance } from "@openomni/policy";
 
 const MessageSummarizerSchema = z.custom<CompactionOptions["onSummarize"]>(
   (value) => typeof value === "function",

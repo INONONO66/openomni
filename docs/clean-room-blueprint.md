@@ -16,9 +16,9 @@ Every piece of code answers exactly one question:
 | Effect | what do we do? | `kernel` (openomni renamed, #505) | Effectful services: assemble state, call protocol folds, record to ledger, execute. |
 
 Support tiers: `policy` (pure decision engine), `llm`, `agent` (loop), `ipc` (#496),
-`coordinator` (local-process Execution.Driver), driver band `naru`/`chasa`/`masil`/
-`dokkaebi` ({protocol, ipc} deps only), `gantaek` (deferred until a second execution
-target kind exists). `apps/server` is the composition root (bootstrap-only
+`coordinator` (local-process Execution.Driver), driver band `channels`/`remote`/
+`browser`/`machines` ({protocol, ipc} deps only), `placement` (deferred until a
+second execution target kind exists). `apps/server` is the composition root (bootstrap-only
 ledger, see #503) plus userland (`agents/`, `worker/` — recorded #504 exception).
 `@openomni/core` is REJECTED: every candidate util already has a natural owner.
 
@@ -50,8 +50,8 @@ J7 worker execution lives at `apps/server/src/worker/` (recorded #504 exception;
 promote to a package only when a second execution host exists). J8 loop/LLM event
 descriptors -> `execution/events.ts`, MCP -> `tool/events.ts`, pure telemetry
 defined package-locally. J9 consent-validation stays beside the ledger store.
-J10 band skeletons: naru immediately (real code moves), chasa/masil/dokkaebi at
-their leaf start. J11 coordinator keeps its name; public surface narrows to
+J10 band skeletons: channels immediately (real code moves), remote/browser/machines
+at their leaf start. J11 coordinator keeps its name; public surface narrows to
 Execution.Driver. J12 `owner-map-driver.ts` (rename from runtime-owner-driver).
 
 Storage decisions: Drizzle ORM pinned to stable (drizzle-orm 0.45.2 / drizzle-kit
@@ -76,14 +76,17 @@ sub-adapter ever guards a production write.
    domain stores ported, legacy DB ATTACH read-only; move session's 22
    authority-decision files' logic into kernel.
 3. **P3 acceleration** — #496 ipc extraction, #497–#500 protocol 30->13 and
-   vocabulary convergence, #502/#505 renames, naru extraction (fixes the two
+   vocabulary convergence, #502/#505 renames, channels extraction (fixes the two
    Discord gateway bugs by re-merging the split), #503/#504 server boundary.
 
 Known defects fixed en route: Discord heartbeat-ack never called + RESUME
-token:undefined (naru re-merge), empty `SurfaceKey.clear()` called by
-`ingress/engine.ts:76`, double tool pipeline (agent wraps kernel executor —
+token:undefined (channels re-merge), empty `SurfaceKey.clear()` called by
+`IngressEngine.reset()` (FIXED — #522: fake API deleted, `Storage.reset()`
+is the enforcement layer), double tool pipeline (agent wraps kernel executor —
 duplicate events + double policy pass; agent half loses emission/policy),
-`storage.ts` warn-and-auto-init `:memory:` (plus the test pinning it),
+`storage.ts` warn-and-auto-init `:memory:` (FIXED — #522: uninitialized
+`Storage.get()` throws, the pinning test is inverted to `fail-closed.test.ts`,
+and the SurfaceKey register/claim fail-open seams fail closed with it),
 ~3,400 LOC of test harnesses exported from src barrels (move to test/),
 `agent/src/bun-test.d.ts` leaking into dist.
 

@@ -189,6 +189,17 @@ const InfoShape = z.object({
   executorKind: ExecutorKind.optional(),
   attempt: z.number().int().min(1).default(1),
   maxAttempts: z.number().int().min(1).optional(),
+  /**
+   * #510 C2 attempt-identity watermark. `lastAttemptSeq` is the highest
+   * attemptSeq allocated on this WorkItem's owner stream; the fact-seq ==
+   * revision equation binds it to the stream's serialized append, so
+   * attemptSeq is monotonic and never reused. `currentAttemptId` is the
+   * most recently allocated attemptId — the retryOf lineage source for the
+   * next allocation. Full attempt identity lives in the
+   * `work_item.attempt_allocated` facts, not in this projection.
+   */
+  lastAttemptSeq: z.number().int().nonnegative().default(0),
+  currentAttemptId: z.string().min(1).optional(),
   timestamps: z.object({
     created: z.number(),
     updated: z.number(),
@@ -267,7 +278,7 @@ function validateCompletionContract(item: z.infer<typeof InfoShape>, ctx: z.Refi
 }
 
 // merged from http.ts (#453 hygiene: sub-30-LOC single-importer)
-export function isHttpUrl(target: string): boolean {
+function isHttpUrl(target: string): boolean {
   try {
     const protocol = new URL(target).protocol;
     return protocol === "http:" || protocol === "https:";

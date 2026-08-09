@@ -134,13 +134,24 @@ describe("observability routes", () => {
     expect(body.chainIntegrity.totalVerified).toBe(3);
   });
 
-  test("session event journal endpoint is not registered without an observability token", async () => {
-    const app = createRouter();
-    const res = await app.fetch(
-      new Request("http://localhost/observability/sessions/session-1/events"),
-    );
-
-    expect(res.status).toBe(404);
+  test("fails closed: unconfigured or empty token denies 401 regardless of header", async () => {
+    // Regression pin (auth-bypass audit): with an empty configured token,
+    // `Bearer ${""}` is exactly "Bearer " — a header of "Bearer " must NOT
+    // authorize. Undefined and "" tokens both deny every header shape.
+    for (const options of [undefined, { observabilityToken: "" }]) {
+      const app = createRouter(undefined, options);
+      for (const headers of [
+        undefined,
+        { Authorization: "Bearer " },
+        { Authorization: "Bearer any-token" },
+      ]) {
+        const res = await app.fetch(
+          new Request("http://localhost/observability/sessions/session-1/events", { headers }),
+        );
+        expect(res.status).toBe(401);
+        expect(await res.json()).toEqual({ error: "Unauthorized" });
+      }
+    }
   });
 
   test("session event journal endpoint rejects missing or wrong bearer tokens before querying storage", async () => {

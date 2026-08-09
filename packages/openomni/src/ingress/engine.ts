@@ -6,9 +6,10 @@ import {
   type Policy,
   IngressEvent,
   PolicyDecision as Decision,
+  type RoutingDecisionPayload,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
+import { Bus, Storage, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
@@ -19,6 +20,7 @@ import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
 import {
   executeWaitRoute,
+  IngressRoutingError,
   pinRouteSession,
   pinSelectedTarget,
   requireRoutedDecision,
@@ -46,23 +48,130 @@ function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
 }
 
+// Route owner-stream key (#510 review fix F1): normalizer-minted inbound ids
+// are only unique WITHIN a channel — telegram normalizer ids are per-chat
+// counters and the github normalizer fallback is
+// `${eventKey}-${issueNumber}-${sender}-${len}` — so the stream identity
+// carries the surface + workspace + channel scope. Without it a colliding id
+// from another channel (or an attacker-chosen channel) could preempt or
+// replay a foreign decision. Each component is URI-encoded (delimiter
+// safety): the protocol schemas allow plain strings, so a ":" inside a
+// channel or id could otherwise forge a foreign scope's key (e.g.
+// channel "C1" + id "x:5" colliding with channel "C1:x" + id "5").
+function routeStreamId(event: Ingress.InboundEvent): string {
+  const component = (value: string | undefined) => encodeURIComponent(value ?? "");
+  return `route:${component(event.surface)}:${component(event.workspace)}:${component(event.channel)}:${component(event.id)}`;
+}
+
+// Replay equivalence gate (#510 review fix F2): a cas_conflict means this
+// inbound was ALREADY decided. The recorded decision and the fresh one must
+// agree on every execution-shaping field — stage, outcome, target, sessionId,
+// runId, pendingInteractionId — before the redelivery may proceed. Fields
+// like traceId/time/reason/factsUsed are delivery-local and deliberately
+// excluded.
+function routeDecisionsEquivalent(
+  recorded: RoutingDecisionPayload,
+  fresh: RoutingDecisionPayload,
+): boolean {
+  return (
+    recorded.stage === fresh.stage &&
+    recorded.outcome === fresh.outcome &&
+    recorded.target === fresh.target &&
+    recorded.sessionId === fresh.sessionId &&
+    recorded.runId === fresh.runId &&
+    recorded.pendingInteractionId === fresh.pendingInteractionId
+  );
+}
+
+// #510 C3 ruling 1 — the routing decision is a decision-class fact on the
+// single-fact owner stream `route:<surface>:<workspace>:<channel>:<id>`
+// (expectedHead 0), awaited durably BEFORE anything acts on the decision:
+// the observe-only Bus publish, the typed terminal rejection, and
+// wait/handler execution all follow the append. No record, no action — with
+// one EQUIVALENCE-GATED replay carve-out (review fix F2): a cas_conflict
+// means this inbound was already decided, and a redelivered inbound may
+// proceed only when the fresh decision matches the recorded one on every
+// execution-shaping field (see routeDecisionsEquivalent). Equivalent →
+// execution proceeds with the FRESH resolution and fresh decision (identical
+// anyway), so recorded payload and fresh waitExecution/selectedTarget can
+// never mix: an accepted route re-executes idempotently (the wait fold's
+// already_resolved short-circuit re-delivers to the owner — the #519
+// attach/deliver crash-window recovery), a terminal decision repeats the
+// same typed rejection. Divergent → typed route_replay_divergent, fail
+// closed: no action, no second fact, nothing published. Only append
+// INFRASTRUCTURE failure (missing sub-adapter, failed append/read, foreign
+// or unparsable recorded fact) fails closed as route_record_failed.
+function recordRouteDecided(
+  streamId: string,
+  decision: RoutingDecisionPayload,
+): RoutingDecisionPayload {
+  const ledger = Storage.get().ledger;
+  if (!ledger) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      "Storage adapter does not implement ledger append — routing decisions fail closed",
+      decision,
+    );
+  }
+  let appended: ReturnType<typeof ledger.append>;
+  try {
+    appended = ledger.append({ streamId, type: "route.decided", data: decision }, 0);
+  } catch (error) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      `routing decision append failed: ${error instanceof Error ? error.message : String(error)}`,
+      decision,
+    );
+  }
+  if (appended.kind === "appended") return decision;
+  let recorded: RoutingDecisionPayload;
+  try {
+    const fact = ledger.headFact(streamId);
+    if (fact === undefined || fact.type !== "route.decided") {
+      throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
+    }
+    recorded = IngressEvent.RoutingDecision.schema.parse(fact.data);
+  } catch (error) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      `recorded routing decision read failed: ${error instanceof Error ? error.message : String(error)}`,
+      decision,
+    );
+  }
+  if (!routeDecisionsEquivalent(recorded, decision)) {
+    throw new IngressRoutingError(
+      "route_replay_divergent",
+      `redelivered inbound diverges from its recorded routing decision: recorded ${recorded.stage}/${recorded.outcome}, fresh ${decision.stage}/${decision.outcome}`,
+      decision,
+    );
+  }
+  return decision;
+}
+
 // Correlation is read-only (#215): wait ambiguity is recorded solely by the
-// published RoutingDecision and the typed route_ambiguous rejection — frozen
-// legacy rows are never mutated on lookup.
-function resolveAndPublishRoute<Event extends Ingress.InboundEvent>(
+// appended route.decided fact, its published RoutingDecision projection, and
+// the typed route_ambiguous rejection — frozen legacy rows are never mutated
+// on lookup.
+function resolveAndRecordRoute<Event extends Ingress.InboundEvent>(
   event: Event,
   traceId: string,
 ): KernelRouteResolution<Event> {
   const resolution = resolveKernelRoute(event, traceId);
   const decision = IngressEvent.RoutingDecision.schema.parse(resolution.decision);
-  const validated = { ...resolution, decision };
-  Bus.publish(IngressEvent.RoutingDecision, decision);
-  return validated;
+  // Redelivery passes the equivalence gate or fails closed — execution below
+  // always uses the fresh decision with its own fresh resolution.
+  const effective = recordRouteDecided(routeStreamId(event), decision);
+  // Observe-only projection — strictly after the append (or after the gated
+  // equivalent replay); lossy by contract. A divergent replay publishes
+  // nothing (the gate throws above).
+  Bus.publish(IngressEvent.RoutingDecision, effective);
+  return { ...resolution, decision: effective };
 }
 
 export namespace IngressEngine {
   export function reset(): void {
-    SurfaceKey.clear();
+    // Storage-backed state (sessions, surface keys) is cleared by the
+    // Storage.reset() adapter swap; there is no separate SurfaceKey reset.
     Storage.reset();
     Bus.reset();
     _coordinator = undefined;
@@ -122,7 +231,7 @@ export namespace IngressEngine {
       throw new TypeError("external ingress actor resolution changed event mode");
     }
     const trace = TraceContext.create();
-    const route = resolveAndPublishRoute(resolvedActorEvent, trace.traceId);
+    const route = resolveAndRecordRoute(resolvedActorEvent, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
@@ -156,7 +265,7 @@ export namespace IngressEngine {
     }>,
   ): Promise<Ingress.IngressResult> {
     const trace = TraceContext.create();
-    const route = resolveAndPublishRoute(event, trace.traceId);
+    const route = resolveAndRecordRoute(event, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
