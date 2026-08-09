@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786302509351,
+  "lastUpdate": 1786302745105,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -37673,6 +37673,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 545976,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "141faf8d27a2ce9bb5c3cb588e68483f2b34d9a8",
+          "message": "fix(server): remove mock weather_lookup tool from catalog (#521) (#525)\n\nThe CustomToolProvider baked a mock `weather_lookup` tool (output tagged\n\"OpenOmni Custom Tool (E2E Test)\") into its default catalog. Because\nbootstrap constructs `new CustomToolProvider()` unconditionally, the mock\nreached the tool dispatcher, the worker bootstrap catalog, and the Resident\ntool list — the LLM could call a fake weather tool in production.\n\nReconcile-first proof (rg over the tree): the only consumers were the mock\ndefinition itself, a test asserting it was in the default catalog, an\ningress-bridge test fixture that merely reused the name for an arbitrary\nstub, and a manual E2E harness. No legitimate production consumer.\n\nChanges:\n- Drop the mock from provider.ts; the production custom catalog is now\n  exactly createOpenSearchNativeTools() (web_search, web_fetch). Stub tools\n  reach the catalog only through the existing `extraTools` constructor seam.\n- provider.test.ts: surviving enforcement layer is the no-arg constructor;\n  add a pinning test that fails if any mock (weather_lookup) is re-baked into\n  the default catalog, asserting the specific tool name.\n- ingress-bridge.test.ts: rename the arbitrary fixture tool weather_lookup ->\n  custom_probe so no dangling reference to the deleted mock remains.\n- tool-proxy-e2e.ts: repoint the manual harness onto the real web_search\n  custom tool. The issue suggested injecting the mock via extraTools in E2E,\n  but no E2E server bootstrap exists to do that injection (the harness is a\n  pure WS client); exercising the real Resident custom tool verifies the same\n  round-trip without reintroducing a mock or new server plumbing.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T19:11:10Z",
+          "tree_id": "8172eef6d9ebc633962ed1f459e71836243d57d5",
+          "url": "https://github.com/INONONO66/openomni/commit/141faf8d27a2ce9bb5c3cb588e68483f2b34d9a8"
+        },
+        "date": 1786302743928,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 352,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 572,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2034,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2558,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12330,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1289,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1237,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 622,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 15846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1763,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8423,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 79391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 395726,
             "unit": "ns/op"
           }
         ]
