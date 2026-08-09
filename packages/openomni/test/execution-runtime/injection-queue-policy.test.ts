@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
 import { Session, Storage } from "@openomni/session";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
@@ -34,6 +34,11 @@ async function dispatchTurnFinish(
 }
 
 describe("createInjectionQueueDrainPolicy", () => {
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
   afterEach(() => {
     Storage.reset();
   });
