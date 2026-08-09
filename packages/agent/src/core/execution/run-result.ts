@@ -37,7 +37,3 @@ export function createRunErrorEvent(error: Error, willRetry: boolean): AgentEven
     willRetry,
   };
 }
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
