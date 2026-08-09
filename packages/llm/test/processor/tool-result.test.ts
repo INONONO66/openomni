@@ -104,7 +104,7 @@ describe("Processor tool result projection", () => {
     expect(runningSnapshot).toBeDefined();
   });
 
-  test("ignores unmatched AI SDK tool-result stream parts", async () => {
+  test("synthesizes an error part for unmatched AI SDK tool-result stream parts", async () => {
     const toolCalls: Tool.Call[] = [];
     const toolResults: Tool.Result[] = [];
     const messages: Message.WithParts[] = [];
@@ -136,9 +136,15 @@ describe("Processor tool result projection", () => {
 
     await processor.process({ system: "" });
 
+    // #532-6: no Tool.Call/Tool.Result is emitted (no call to correlate),
+    // but the anomaly is recorded as an error tool part.
     expect(toolCalls).toEqual([]);
     expect(toolResults).toEqual([]);
-    expect(messages.at(-1)?.parts ?? []).toEqual([]);
+    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
+    expect(toolPart).toMatchObject({
+      callID: "forged-call",
+      state: { status: "error", error: "tool result for unknown call: forged" },
+    });
   });
 
   test("projects AI SDK tool-error stream parts as failed tool results", async () => {
@@ -430,7 +436,9 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     const state = lastToolState(messages);
     expect(state?.status).toBe("error");
     if (state?.status === "error") {
-      expect(state.error).toBe("Processing was interrupted");
+      // T1 vocabulary: abort-grace expiry advances the tool part with the
+      // "interrupted" transition, which the fold projects as this error.
+      expect(state.error).toBe("interrupted");
     }
   });
 });

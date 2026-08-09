@@ -20,8 +20,27 @@ function buildAssistantTextBlock(content: string): AssistantTextBlock {
   return { type: "text", text: content };
 }
 
-function buildAssistantReasoningBlock(content: string): AssistantReasoningBlock {
-  return { type: "reasoning", text: content };
+/**
+ * #532 candidate 10: the provider reasoning signature is only valid for the
+ * exact model that produced it, so it is resent only when the outgoing
+ * request's {providerID, modelID} match the pair stored on the message. The
+ * message stores no third "api" field, so this double check is the honest
+ * available check. The `anthropic` providerOptions namespace is the resend
+ * mechanism of @ai-sdk/anthropic (the only provider emitting signatures
+ * today); other providers ignore the foreign namespace.
+ */
+function buildAssistantReasoningBlock(
+  part: Message.ReasoningPart,
+  resendSignature: boolean,
+): AssistantReasoningBlock {
+  if (resendSignature && part.signature !== undefined) {
+    return {
+      type: "reasoning",
+      text: part.text,
+      providerOptions: { anthropic: { signature: part.signature } },
+    };
+  }
+  return { type: "reasoning", text: part.text };
 }
 
 function buildToolCallBlock(call: {
@@ -86,11 +105,16 @@ export function toModelMessages(
     }
 
     if (msg.info.role === "assistant") {
-      // Skip error messages (aborted, auth errors, etc.)
-      if ("error" in msg.info && msg.info.error) continue;
+      // Skip error-finished turns from replay: an attempt that closed with
+      // finish:"error" (#545 message.finished projection) never produced a
+      // durable assistant turn the provider should see again.
+      if (msg.info.finish === "error") continue;
+
+      const resendSignature =
+        msg.info.providerID === model.providerID && msg.info.modelID === model.id;
 
       const textContent: string[] = [];
-      const reasoningContent: string[] = [];
+      const reasoningBlocks: AssistantReasoningBlock[] = [];
       const toolCalls: AssistantToolCallBlock[] = [];
       const toolResults: ToolMessage[] = [];
 
@@ -100,7 +124,7 @@ export function toModelMessages(
         }
 
         if (part.type === "reasoning") {
-          reasoningContent.push(part.text);
+          reasoningBlocks.push(buildAssistantReasoningBlock(part, resendSignature));
         }
 
         if (part.type === "tool") {
@@ -148,15 +172,13 @@ export function toModelMessages(
       }
 
       // Reasoning blocks must precede text/tool-call blocks: Anthropic rejects
-      // assistant turns where a thinking block follows other content.
+      // assistant turns where a thinking block follows other content. Each
+      // reasoning part stays its own block — signatures are per-block.
       if (toolCalls.length > 0) {
         const assistantContent: Array<
           AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock
-        > = [];
+        > = [...reasoningBlocks];
 
-        if (reasoningContent.length > 0) {
-          assistantContent.push(buildAssistantReasoningBlock(reasoningContent.join("\n")));
-        }
         if (textContent.length > 0) {
           assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
         }
@@ -167,9 +189,9 @@ export function toModelMessages(
         for (const result of toolResults) {
           coreMessages.push(result);
         }
-      } else if (reasoningContent.length > 0) {
+      } else if (reasoningBlocks.length > 0) {
         const assistantContent: Array<AssistantTextBlock | AssistantReasoningBlock> = [
-          buildAssistantReasoningBlock(reasoningContent.join("\n")),
+          ...reasoningBlocks,
         ];
         if (textContent.length > 0) {
           assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
