@@ -65,19 +65,19 @@ Driver packages form a lateral band outside the ring tower:
 
 ```
 ring 0  @openomni/protocol
-ring 1  @openomni/ledger   @openomni/policy   @openomni/gantaek   ← gantaek joins ring 1
+ring 1  @openomni/ledger   @openomni/policy   @openomni/placement   ← placement joins ring 1
 ring 2  @openomni/llm   @openomni/coordinator   @openomni/ipc (#496)
 ring 3  @openomni/agent
 ring 4  @openomni/kernel
 ring 5  apps/server                       ← composition root: all band registration here
 ──────────────────────────────────────────────────────────────────
 driver band (outside the tower; repo-extractable):
-  @openomni/naru      channel drivers (telegram/discord/github/websocket)
-  @openomni/chasa     remote-execution drivers (ssh/reverse/attach; the shipped local
+  @openomni/channels  channel drivers (telegram/discord/github/websocket)
+  @openomni/remote    remote-execution drivers (ssh/reverse/attach; the shipped local
                       worker path becomes the local-process driver behind the same
                       contract per #500 — coordinator-side, not a band leaf)
-  @openomni/masil     browser-use driver
-  @openomni/dokkaebi  machine-handle SDK
+  @openomni/browser   browser-use driver
+  @openomni/machines  machine-handle SDK
 ```
 
 Band rules (enforced by `script/check-deps.ts`):
@@ -87,11 +87,11 @@ Band rules (enforced by `script/check-deps.ts`):
 3. The extraction test is normative: every band package builds and passes its tests standalone with only its declared dependencies, so it can be lifted into its own repository without touching kernel internals.
 4. Drivers start as folders inside their band package and split into packages only after a second consumer exists (the earned-abstraction rule).
 
-**Outbound target selection is `@openomni/gantaek`** (gantaek — court selection: pick one executor among capability-tagged candidates), a ring-1 pure decision package beside policy. It maps `(command, capability tags, declared facts, policy constraints) → target decision` with declared fallback chains (model error/refusal/timeout → next candidate). It decides placement only: policy alone owns allow/deny, admission alone closes work, and the selection result is consumed as an input, like Stakes. Inbound routing (`resolveRoute`) is a kernel gate concern and stays in the kernel. A network path (VPN, tailnet, proxy exit) is a capability tag and endpoint property on the target — never a kernel concern (*illustration*: per-command network wrapping as a `chasa`/`masil` execution-profile option); how the effective path is recorded belongs to the #510 attempt-identity and #492 effect contracts — this document does not extend their enumerations.
+**Outbound target selection is `@openomni/placement`** (pick one executor among capability-tagged candidates), a ring-1 pure decision package beside policy. It maps `(command, capability tags, declared facts, policy constraints) → target decision` with declared fallback chains (model error/refusal/timeout → next candidate). It decides placement only: policy alone owns allow/deny, admission alone closes work, and the selection result is consumed as an input, like Stakes. Inbound routing (`resolveRoute`) is a kernel gate concern and stays in the kernel. A network path (VPN, tailnet, proxy exit) is a capability tag and endpoint property on the target — never a kernel concern (*illustration*: per-command network wrapping as a `remote`/`browser` execution-profile option); how the effective path is recorded belongs to the #510 attempt-identity and #492 effect contracts — this document does not extend their enumerations.
 
 ## The Mailroom: One Boundary for External Communication
 
-All communication with the outside world crosses one seam, owned by `@openomni/naru` (naru — the ferry crossing: all external IO passes here with zero authority).
+All communication with the outside world crosses one seam, owned by `@openomni/channels` (the mailroom: all external IO passes here with zero authority).
 
 - **Inbound**: a channel driver receives a surface-native event, stamps provenance only (*illustration*: channel, external id, timestamps — the exact provenance field set is fixed by the #499 `Channel` contract), and emits the single canonical `Ingress.InboundEvent`. Every authority decision — blacklist, wait correlation, channel ceiling, actor identity, surface default — happens afterwards, inside the kernel's `resolveRoute` pipeline, which the band never re-implements.
 - **Outbound**: the kernel records the effect intent first (intent-event-ID as idempotency key, #492), then hands the authorized payload to a channel driver for delivery; the driver reports `confirmed | failed | unknown` and reconciliation owns the rest.
@@ -101,8 +101,7 @@ All communication with the outside world crosses one seam, owned by `@openomni/n
 
 ## Package Naming and Code Conventions for New Pieces
 
-- **Names are path-level only.** Band/ring package names may be Korean-flavored (`gantaek`, `naru`, `chasa`, `masil`, `dokkaebi`); exported symbols, protocol nouns, and LLM-facing tool names stay English under the #467/#500 gates (`naru` exports `ChannelDriver`, never `NaruDriver`; tools are verb-first snake_case like `open_page`, never a package name).
-- **Gloss is mandatory.** The first line of every such package's AGENTS.md carries its one-line English gloss (e.g., `gantaek (간택 — court selection: pick one executor among capability-tagged candidates)`).
+- **Names are path-level only.** Band/ring package names are plain descriptive English (`placement`, `channels`, `remote`, `browser`, `machines`); exported symbols, protocol nouns, and LLM-facing tool names stay English under the #467/#500 gates (`channels` exports `ChannelDriver`, never a package-branded name; tools are verb-first snake_case like `open_page`, never a package name).
 - **Uniform skeleton.** `src/index.ts` (public API only), Zod-first schema modules, one concept per file, and a `test/` mirror — a new-package convention; existing packages keep their current layouts.
 - **Decisions are pure functions; effects live behind driver interfaces; errors are typed unions** (`cooldown_suppressed`-style) — the same conventions the kernel already follows.
 
