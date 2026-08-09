@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786301117933,
+  "lastUpdate": 1786301389093,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -36929,6 +36929,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516576,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2f070d87d740991b58d83dfcfa2d039e22d64d99",
+          "message": "refactor(agent): narrow policy barrel, drop 8 dead type re-exports (#524)\n\nThe agent policy `index.ts` re-exported six generic policy types\n(GenericPolicyContext, PolicyRegistrationGeneric, PolicyEngineInstanceGeneric,\nDispatchContextGeneric, AuditDispatchContextGeneric, AuditEmit) and\nRuntimeContext, and `registry.ts` re-exported RuntimeContext. Every real\nconsumer imports these directly from @openomni/policy; nothing imports them\nthrough the agent barrel (knip-confirmed, rg re-proven repo-wide). The two\nstill needed locally (DispatchContextGeneric, PolicyEngineInstanceGeneric) keep\ntheir existing `import type` for the DispatchContext/PolicyEngineInstance\naliases — only the dead re-exports are removed.\n\nPure public-barrel narrowing (AGENTS.md CODING BOUNDARY: prefer narrowing\nbarrels); type-only, no runtime change. Shrinks the dead-export ratchet\nbaseline 38 -> 30 (shrinking is autonomous per Execution Discipline 5).\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T18:48:31Z",
+          "tree_id": "58a153a47240f7951fafcb23336355be231b257c",
+          "url": "https://github.com/INONONO66/openomni/commit/2f070d87d740991b58d83dfcfa2d039e22d64d99"
+        },
+        "date": 1786301388380,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 668,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11216,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3184,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8201,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 868,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1471,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1627,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20920,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2357,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10821,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103976,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 523833,
             "unit": "ns/op"
           }
         ]
