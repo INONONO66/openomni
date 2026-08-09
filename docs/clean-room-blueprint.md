@@ -31,8 +31,10 @@ ledger, see #503) plus userland (`agents/`, `worker/` — recorded #504 exceptio
   Each domain: `index.ts` entry + `schema.ts`/`fold.ts`/`events.ts`.
 - **ledger**: db + append (raw CAS + chain) + observe + per-record-family domains
   (session, transcript, actor, grant, blacklist, wait, work-item(+attempts),
-  surface-key, artifact, app-connector, schedule) + `archive/` (frozen legacy rows,
-  ATTACH read-only, upcast-on-read — never destructive).
+  surface-key, artifact, app-connector, schedule) + `archive/` (frozen legacy rows:
+  second connection to the same file + frozen tables, upcast-on-read — never
+  destructive; not a separate ATTACHed file — WAL cross-file writes are
+  non-atomic).
 - **kernel**: ingress(routing), command(dispatch renamed), wait, messaging,
   work-item(admission service; fold lives in protocol), evidence, stakes
   (current `openomni/src/ledger/` renamed — name collision fix), schedule, policy,
@@ -49,7 +51,9 @@ unless second consumer proven at implementation time. J5 no `core` package.
 J7 worker execution lives at `apps/server/src/worker/` (recorded #504 exception;
 promote to a package only when a second execution host exists). J8 loop/LLM event
 descriptors -> `execution/events.ts`, MCP -> `tool/events.ts`, pure telemetry
-defined package-locally. J9 consent-validation stays beside the ledger store.
+defined package-locally (amended 2026-08-10: band-published telemetry
+descriptors may live in protocol `ledger/events.ts`; the package-local rule is
+confined to kernel-internal telemetry). J9 consent-validation stays beside the ledger store.
 J10 band skeletons: channels immediately (real code moves), remote/browser/machines
 at their leaf start. J11 coordinator keeps its name; public surface narrows to
 Execution.Driver. J12 `owner-map-driver.ts` (rename from runtime-owner-driver).
@@ -73,7 +77,8 @@ sub-adapter ever guards a production write.
    (~15 files / ~1,900 LOC converge), legacy rows upcast-on-read, existing-agent
    message driver (restart-quorum / duplicate-ambiguous scenarios).
 2. **#510 clean ledger** — new `ledger.db` baseline via Drizzle, `append/` CAS,
-   domain stores ported, legacy DB ATTACH read-only; move session's 22
+   domain stores ported, legacy rows frozen in place (same-file second
+   connection + frozen tables, upcast-on-read); move session's 22
    authority-decision files' logic into kernel.
 3. **P3 acceleration** — #496 ipc extraction, #497–#500 protocol 30->13 and
    vocabulary convergence, #502/#505 renames, channels extraction (fixes the two
@@ -83,7 +88,8 @@ Known defects fixed en route: Discord heartbeat-ack never called + RESUME
 token:undefined (channels re-merge), empty `SurfaceKey.clear()` called by
 `IngressEngine.reset()` (FIXED — #522: fake API deleted, `Storage.reset()`
 is the enforcement layer), double tool pipeline (agent wraps kernel executor —
-duplicate events + double policy pass; agent half loses emission/policy),
+duplicate events + double policy pass; agent keeps policy dispatch — event
+emission is single-sourced to the executor),
 `storage.ts` warn-and-auto-init `:memory:` (FIXED — #522: uninitialized
 `Storage.get()` throws, the pinning test is inverted to `fail-closed.test.ts`,
 and the SurfaceKey register/claim fail-open seams fail closed with it),
@@ -93,3 +99,5 @@ and the SurfaceKey register/claim fail-open seams fail closed with it),
 Full file-level disposition (484 files: KEEP 65% / REWRITE 13% / MERGE 22% /
 DELETE 0.6%) was produced by the 2026-08-08 audit; re-verify per-file claims at
 head when each stage executes (reconcile-first law).
+
+_Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
