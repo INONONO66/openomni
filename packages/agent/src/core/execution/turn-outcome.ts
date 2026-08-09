@@ -1,4 +1,5 @@
-import { type Message, PolicyDecision } from "@openomni/protocol";
+import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";
@@ -70,6 +71,14 @@ export async function* handleStop(
     return "complete";
   }
 
+  // #546: the turn's assistant output always enters history — tool and
+  // reasoning parts included, regardless of continuation — and it enters
+  // BEFORE run.turn.post dispatch, so history-rewriting policies
+  // (run.replace_messages) operate on a history that contains it and stay
+  // the final word.
+  const assistantMessage = resolveTurnAssistant(state, turn, agentBase);
+  appendRunMessages(state, [assistantMessage]);
+
   const postTurnDecision = await engine.dispatchPoint(
     "run.turn.post",
     buildLifecyclePolicyContext(state, config, agentBase, {
@@ -89,16 +98,6 @@ export async function* handleStop(
     action: postTurnDecision.verdict,
     reason: PolicyDecision.reason(postTurnDecision, undefined),
   };
-
-  // #546: the turn's assistant output always enters history — tool and
-  // reasoning parts included — regardless of continuation. The fold-projected
-  // snapshot is the source of truth; the text-only rebuild is only a fallback
-  // for runs whose llm never emitted a boundary snapshot.
-  const parentID = state.messages.at(-1)?.info.id ?? "";
-  const assistantMessage =
-    turn.turnAssistant.message ??
-    createAssistantMessage(state.lastAssistantText, parentID, state.sessionId);
-  appendRunMessages(state, [assistantMessage]);
 
   if (!PolicyDecision.isBlocking(postTurnDecision)) {
     try {
@@ -241,6 +240,32 @@ export async function* handleError(
   emitRunFailed(agentBase, lastError);
   yield createRunErrorEvent(normalizedError, false);
   return { action: "throw", kind: "error", error: normalizedError, errorMessage: lastError };
+}
+
+/**
+ * The turn's assistant message is the llm fold's boundary snapshot — the one
+ * source of truth for what enters history (#546). The empty-text fallback is
+ * a TEST-STUB-ONLY path: every production processor exit emits a finished
+ * snapshot (#557), so a missing snapshot means the configured llm run never
+ * drove the sink. It is loud (Operational.Error) and deliberately does NOT
+ * reuse lastAssistantText, which may still hold the PREVIOUS turn's text —
+ * resurrecting it would forge history.
+ */
+function resolveTurnAssistant(
+  state: RunState,
+  turn: TurnArtifacts,
+  agentBase: AgentRunBase,
+): Message.WithParts {
+  if (turn.turnAssistant.message !== undefined) return turn.turnAssistant.message;
+  Bus.publish(Operational.Error, {
+    traceId: agentBase.traceId,
+    time: Date.now(),
+    sessionId: agentBase.sessionId || state.sessionId,
+    component: "agent.turn",
+    msg: "llm sink emitted no assistant snapshot — test stub?",
+  });
+  const parentID = state.messages.at(-1)?.info.id ?? "";
+  return createAssistantMessage("", parentID, state.sessionId);
 }
 
 function continueDecision(state: RunState): Extract<TurnDecision, { kind: "continue" }> {

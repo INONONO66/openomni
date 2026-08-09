@@ -42,24 +42,25 @@ export async function* streamAgent(
   emitRunStarted(resolvedTrace, config.model.id);
   assertToolExecutor(config);
 
-  // #546: run state lives across attempts — an agent-level retry regenerates
-  // only the attempt (engine + turn artifacts), never the history, and
-  // budget/usage keep accumulating (no double-billing reset).
+  // #546: run state and pre-run dispatch are run-scoped, living across
+  // attempts — an agent-level retry regenerates only the attempt (turn
+  // artifacts), never the history, budget/usage (no double-billing reset),
+  // or run.lifecycle.pre effects (prompt injections apply exactly once).
   const state = createRunState({ ...input, traceContext: resolvedTrace });
+  const engine = buildPolicyEngine(config, agentBase);
+
+  const preRunEvent = await dispatchPreRun(state, engine, config, agentBase);
+  if (preRunEvent) {
+    yield preRunEvent;
+    return;
+  }
 
   while (attempt <= retryPolicy.maxAttempts) {
-    const engine = buildPolicyEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
         config.model,
       );
       const configuredToolChoice = resolveToolChoice(config);
-
-      const preRunEvent = await dispatchPreRun(state, engine, config, agentBase);
-      if (preRunEvent) {
-        yield preRunEvent;
-        return;
-      }
 
       while (true) {
         const budgetEvent = await dispatchBudgetCheck(state, engine, config, agentBase);

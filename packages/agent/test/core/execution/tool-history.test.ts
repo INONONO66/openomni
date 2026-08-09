@@ -313,3 +313,159 @@ describe("tool-bearing history (#546)", () => {
     });
   });
 });
+
+describe("tool-bearing history regressions (#546 fix-first)", () => {
+  it("turn.finish replace_messages sees the assistant message, so keep-all preserves tool parts", async () => {
+    const capturedInputs: Message.WithParts[][] = [];
+    let replaced = false;
+    let call = 0;
+    const run: MockLlmFn = async (input, sink) => {
+      call += 1;
+      const messages = input.messages as Message.WithParts[];
+      capturedInputs.push([...messages]);
+      const { sessionID, parentID } = sessionAndParent(messages);
+      if (call === 1) {
+        emitToolTurn(sink, "msg-turn-1", sessionID, parentID);
+      } else {
+        emitTextTurn(sink, `msg-turn-${call}`, sessionID, parentID);
+      }
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: { run, resolveProviderModel: async () => providerModel },
+      middleware: [
+        {
+          name: "test:replace-keep-all",
+          timing: "turn.finish",
+          priority: 100,
+          fn: (ctx) => {
+            if (replaced) return allow();
+            replaced = true;
+            // A history-rewriting policy that keeps everything it can see.
+            // The dispatch context must already contain the just-finished
+            // assistant message, or this "no-op" rewrite silently deletes it.
+            const messages = (ctx as unknown as { messages: Message.WithParts[] }).messages;
+            return allow("test.replace-keep", "replace", [
+              { type: "run.replace_messages", messages: [...messages] },
+              { type: "run.continue_with_prompt", prompt: "go on" },
+            ]);
+          },
+        },
+      ],
+    });
+
+    const result = await agent.run({
+      messages: [{ role: "user", content: "what is the answer?" }],
+    });
+
+    expect(result.finishReason).toBe("stop");
+    expect(capturedInputs).toHaveLength(2);
+    const second = capturedInputs[1] ?? [];
+    const assistantEntry = second.find((m) => m.info.id === "msg-turn-1");
+    expect(assistantEntry).toBeDefined();
+    expect(assistantEntry?.parts.some((part) => part.type === "tool")).toBe(true);
+  });
+
+  it("injects run.start prompt effects exactly once across agent retries", async () => {
+    const capturedInputs: Message.WithParts[][] = [];
+    let call = 0;
+    const run: MockLlmFn = async (input, sink) => {
+      call += 1;
+      const messages = input.messages as Message.WithParts[];
+      capturedInputs.push([...messages]);
+      if (call === 1) return createErrorOutcome("transient failure");
+      const { sessionID, parentID } = sessionAndParent(messages);
+      emitTextTurn(sink, `msg-turn-${call}`, sessionID, parentID);
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: { run, resolveProviderModel: async () => providerModel },
+      middleware: [
+        {
+          name: "test:run-start-inject",
+          timing: "run.start",
+          priority: 100,
+          fn: () =>
+            allow("test.pre-run", "inject", [
+              { type: "prompt.inject_message", message: "system context" },
+            ]),
+        },
+        {
+          name: "test:fast-retry",
+          timing: "error",
+          priority: 100,
+          fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
+        },
+      ],
+    });
+
+    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+
+    expect(result.finishReason).toBe("stop");
+    expect(call).toBe(2);
+    // Pre-run effects are run-scoped: attempt 2's model input carries the
+    // injection exactly once, not once per attempt.
+    const second = capturedInputs[1] ?? [];
+    const injections = second.filter((m) =>
+      m.parts.some((part) => part.type === "text" && part.text === "system context"),
+    );
+    expect(injections).toHaveLength(1);
+  });
+
+  it("does not resurrect the previous turn's text when a stub emits no snapshot", async () => {
+    let finalMessages: Message.WithParts[] | undefined;
+    let call = 0;
+    const run: MockLlmFn = async (input, sink) => {
+      call += 1;
+      const messages = input.messages as Message.WithParts[];
+      const { sessionID, parentID } = sessionAndParent(messages);
+      if (call === 1) {
+        emitTextTurn(sink, "msg-turn-1", sessionID, parentID);
+      }
+      // Turn 2: a snapshot-less stub — never drives the sink.
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: { run, resolveProviderModel: async () => providerModel },
+      middleware: [
+        injectOnceMiddleware(),
+        {
+          name: "test:capture-final-history",
+          timing: "run.finish",
+          priority: 100,
+          fn: (ctx) => {
+            finalMessages = [
+              ...((ctx as unknown as { messages: Message.WithParts[] }).messages ?? []),
+            ];
+            return allow();
+          },
+        },
+      ],
+    });
+
+    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+
+    expect(result.finishReason).toBe("stop");
+    expect(call).toBe(2);
+    expect(finalMessages).toBeDefined();
+    // The snapshot-less fallback must not duplicate turn 1's "done" text.
+    const doneMessages = (finalMessages ?? []).filter((m) =>
+      m.parts.some((part) => part.type === "text" && part.text === "done"),
+    );
+    expect(doneMessages).toHaveLength(1);
+    const last = finalMessages?.at(-1);
+    expect(last?.info.role).toBe("assistant");
+    expect(
+      last?.parts
+        .filter((part): part is Message.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join(""),
+    ).toBe("");
+  });
+});
