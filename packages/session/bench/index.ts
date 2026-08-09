@@ -5,6 +5,7 @@ import { Bench } from "tinybench";
 import type { Message } from "@openomni/protocol";
 import { Bus } from "../src/bus/index.ts";
 import { Session } from "../src/session/index.ts";
+import { initialize } from "../src/storage/initialize.ts";
 import { Storage } from "../src/storage/storage.ts";
 
 type BenchmarkResult = {
@@ -80,6 +81,7 @@ function recordResults(suite: string, bench: Bench): void {
 
 async function runSessionHydration(): Promise<void> {
   Storage.reset();
+  initialize({ dbPath: ":memory:" });
   Bus.reset();
 
   const sessions = Array.from({ length: 100 }, (_, sessionIndex) => {
@@ -172,6 +174,7 @@ async function runStorageSessionList(): Promise<void> {
 
   for (const count of sessionCounts) {
     Storage.reset();
+    initialize({ dbPath: ":memory:" });
     Bus.reset();
     for (let index = 0; index < count; index += 1) {
       Session.create({ title: `list-session-${count}-${index}`, model: MODEL });
