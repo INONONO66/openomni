@@ -349,6 +349,149 @@ describe("Transcript fold — invalid_transition", () => {
   });
 });
 
+describe("Transcript fold — appended initial state and coherence (F1/F3/F4/F5)", () => {
+  test("appending a tool part born past pending is invalid_transition", () => {
+    const state = applyAll([createdFact()]);
+    for (const toolState of [
+      { status: "running", input: {}, time: { start: 1_200 } },
+      {
+        status: "completed",
+        input: {},
+        output: "x",
+        title: "t",
+        metadata: {},
+        time: { start: 1_200, end: 1_300 },
+      },
+      { status: "error", input: {}, error: "boom", time: { start: 1_200, end: 1_300 } },
+    ] satisfies Message.ToolPart["state"][]) {
+      expectRejected(
+        Transcript.fold(state, appendedFact(buildToolPart({ state: toolState }))),
+        "invalid_transition",
+      );
+    }
+  });
+
+  test("appending a text or reasoning part born terminal (time.end set) is invalid_transition", () => {
+    const state = applyAll([createdFact()]);
+    expectRejected(
+      Transcript.fold(state, appendedFact(buildTextPart({ time: { start: 1_100, end: 1_200 } }))),
+      "invalid_transition",
+    );
+    const reasoning: Message.Part = {
+      id: "part-reasoning-1",
+      sessionID: SESSION_ID,
+      messageID: MESSAGE_ID,
+      type: "reasoning",
+      text: "thinking",
+      time: { start: 1_100, end: 1_200 },
+    };
+    expectRejected(Transcript.fold(state, appendedFact(reasoning)), "invalid_transition");
+  });
+
+  test("appending a part stamped with a foreign sessionID is invalid_transition", () => {
+    const state = applyAll([createdFact()]);
+    expectRejected(
+      Transcript.fold(state, appendedFact(buildTextPart({ sessionID: "session-other" }))),
+      "invalid_transition",
+    );
+  });
+
+  test("closing a running part before its start (end < start) is invalid_transition", () => {
+    const state = applyAll([
+      createdFact(),
+      appendedFact(buildToolPart()),
+      advancedFact("part-tool-1", { to: "running", at: 1_200 }),
+    ]);
+    expectRejected(
+      Transcript.fold(
+        state,
+        advancedFact("part-tool-1", { to: "completed", at: 1_100, output: "x" }),
+      ),
+      "invalid_transition",
+    );
+    expectRejected(
+      Transcript.fold(
+        state,
+        advancedFact("part-tool-1", { to: "error", at: 1_100, error: "boom" }),
+      ),
+      "invalid_transition",
+    );
+    expectRejected(
+      Transcript.fold(state, advancedFact("part-tool-1", { to: "interrupted", at: 1_100 })),
+      "invalid_transition",
+    );
+
+    const textState = applyAll([createdFact(), appendedFact(buildTextPart())]);
+    expectRejected(
+      Transcript.fold(
+        textState,
+        advancedFact("part-text-1", { to: "completed", at: 1_000, output: "h" }),
+      ),
+      "invalid_transition",
+    );
+  });
+
+  test("message.created with an already-finished assistant info is invalid_transition", () => {
+    const finishedInfo: Message.Info = { ...buildAssistantInfo(), finish: "stop" };
+    expectRejected(Transcript.fold(undefined, createdFact(finishedInfo)), "invalid_transition");
+  });
+});
+
+describe("Transcript fold — reasoning signature carrier (F2)", () => {
+  test("completed with signature projects it onto the reasoning part", () => {
+    const reasoning: Message.Part = {
+      id: "part-reasoning-1",
+      sessionID: SESSION_ID,
+      messageID: MESSAGE_ID,
+      type: "reasoning",
+      text: "thi",
+      time: { start: 1_100 },
+    };
+    const state = applyAll([
+      createdFact(),
+      appendedFact(reasoning),
+      advancedFact("part-reasoning-1", {
+        to: "completed",
+        at: 1_400,
+        output: "thinking done",
+        signature: "sig-1",
+      }),
+    ]);
+    expect(state.parts[0]).toEqual({
+      ...reasoning,
+      text: "thinking done",
+      signature: "sig-1",
+      time: { start: 1_100, end: 1_400 },
+    });
+  });
+
+  test("signature on completed is ignored for text and tool parts", () => {
+    const state = applyAll([
+      createdFact(),
+      appendedFact(buildTextPart()),
+      appendedFact(buildToolPart()),
+      advancedFact("part-tool-1", { to: "running", at: 1_200 }),
+      advancedFact("part-text-1", {
+        to: "completed",
+        at: 1_400,
+        output: "hello",
+        signature: "sig-1",
+      }),
+      advancedFact("part-tool-1", { to: "completed", at: 1_500, output: "x", signature: "sig-1" }),
+    ]);
+    expect(state.parts[0]).toEqual(
+      buildTextPart({ text: "hello", time: { start: 1_100, end: 1_400 } }),
+    );
+    if (state.parts[1]?.type !== "tool") throw new Error("expected tool part");
+    expect("signature" in state.parts[1]).toBe(false);
+  });
+
+  test("PartTransition completed round-trips signature through zod", () => {
+    const transition = { to: "completed", at: 1_400, output: "o", signature: "sig-1" };
+    expect(Transcript.PartTransition.parse(transition)).toEqual(transition as never);
+  });
+});
+
 describe("Transcript fold — already_finished", () => {
   test("a second message.finished is already_finished", () => {
     const state = applyAll([createdFact(), finishedFact()]);

@@ -14,7 +14,9 @@ import type * as Schema from "./schema.js";
  * Rule order is pinned (each earlier rule wins):
  *   1. created-on-existing  -> rejected invalid_transition (a message id is
  *                              created exactly once; message.created on
- *                              undefined state is the only way to open one)
+ *                              undefined state is the only way to open one;
+ *                              an info born already finished also rejects —
+ *                              the defect is caught at its origin)
  *   2. message identity     -> rejected unknown_message (any non-created fact
  *                              on undefined state or a mismatched messageId)
  *   3. finished guard       -> rejected already_finished (any fact addressed
@@ -27,9 +29,13 @@ import type * as Schema from "./schema.js";
  *                              text/reasoning accept only "completed"; all
  *                              other part types are punctual and never
  *                              advance; re-advancing a terminal part rejects;
- *                              appending a duplicate partId or a part stamped
- *                              with a foreign messageID rejects; finishing a
- *                              user message rejects)
+ *                              closing a running part with at < time.start
+ *                              rejects; appended parts must be born
+ *                              non-terminal — tool parts pending, text/
+ *                              reasoning parts without time.end; appending a
+ *                              duplicate partId or a part stamped with a
+ *                              foreign messageID/sessionID rejects; finishing
+ *                              a user message rejects)
  *   6. apply                -> new state objects, inputs never mutated
  */
 
@@ -56,7 +62,7 @@ function isFinished(info: Message.Info): boolean {
 
 export function fold(state: Message.WithParts | undefined, fact: Schema.Fact): FoldOutcome {
   if (fact.type === "message.created") {
-    if (state !== undefined) {
+    if (state !== undefined || isFinished(fact.message)) {
       return reject("invalid_transition");
     }
     return { applied: true, state: { info: fact.message, parts: [] } };
@@ -69,10 +75,13 @@ export function fold(state: Message.WithParts | undefined, fact: Schema.Fact): F
   }
   switch (fact.type) {
     case "part.appended": {
-      if (fact.part.messageID !== fact.messageId) {
+      if (fact.part.messageID !== fact.messageId || fact.part.sessionID !== state.info.sessionID) {
         return reject("invalid_transition");
       }
       if (state.parts.some((part) => part.id === fact.part.id)) {
+        return reject("invalid_transition");
+      }
+      if (!isAppendableInitialState(fact.part)) {
         return reject("invalid_transition");
       }
       return { applied: true, state: { info: state.info, parts: [...state.parts, fact.part] } };
@@ -116,6 +125,27 @@ export function fold(state: Message.WithParts | undefined, fact: Schema.Fact): F
         },
       };
     }
+  }
+}
+
+/**
+ * Appended parts must be born non-terminal so every lifecycle step flows
+ * through part.advanced: tool parts start pending, text/reasoning parts start
+ * without an end time. Punctual part types are complete at birth by nature.
+ */
+function isAppendableInitialState(part: Message.Part): boolean {
+  switch (part.type) {
+    case "tool":
+      return part.state.status === "pending";
+    case "text":
+    case "reasoning":
+      return part.time?.end === undefined;
+    case "step-start":
+    case "step-finish":
+    case "retry":
+    case "snapshot":
+    case "compaction":
+      return true;
   }
 }
 
@@ -170,7 +200,7 @@ function advanceToolPart(
       };
     }
     case "completed": {
-      if (state.status !== "running") {
+      if (state.status !== "running" || transition.at < state.time.start) {
         return undefined;
       }
       return {
@@ -186,7 +216,7 @@ function advanceToolPart(
       };
     }
     case "error": {
-      if (state.status !== "running") {
+      if (state.status !== "running" || transition.at < state.time.start) {
         return undefined;
       }
       return {
@@ -200,7 +230,7 @@ function advanceToolPart(
       };
     }
     case "interrupted": {
-      if (state.status !== "running") {
+      if (state.status !== "running" || transition.at < state.time.start) {
         return undefined;
       }
       return {
@@ -219,7 +249,9 @@ function advanceToolPart(
 /**
  * Text and reasoning parts have no intermediate states: the only legal
  * transition is "completed", which stamps the authoritative final text and
- * the end time. A part whose time.end is set is terminal.
+ * the end time. A part whose time.end is set is terminal. The provider
+ * reasoning signature rides the completed transition (it arrives at stream
+ * end) and projects onto reasoning parts only.
  */
 function advanceTextLikePart(
   part: Message.TextPart | Message.ReasoningPart,
@@ -232,6 +264,17 @@ function advanceTextLikePart(
     return undefined;
   }
   const start = part.type === "reasoning" ? part.time.start : (part.time?.start ?? transition.at);
+  if (transition.at < start) {
+    return undefined;
+  }
+  if (part.type === "reasoning") {
+    return {
+      ...part,
+      text: transition.output,
+      ...(transition.signature !== undefined ? { signature: transition.signature } : {}),
+      time: { start, end: transition.at },
+    };
+  }
   return {
     ...part,
     text: transition.output,

@@ -47,6 +47,12 @@ const TransitionCompleted = z
     at: z.number(),
     output: z.string(),
     title: z.string().optional(),
+    /**
+     * Provider reasoning signature — arrives at stream end, so the completed
+     * transition is its carrier fact. Projected onto ReasoningPart.signature;
+     * ignored for text and tool parts.
+     */
+    signature: z.string().optional(),
   })
   .strict();
 
