@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786213789988,
+  "lastUpdate": 1786288758448,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -36309,6 +36309,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518999,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb69a48b4c29e8ed041f11eb4782805aa177993b",
+          "message": "feat(session,openomni,server): clean-ledger decision write path (#510) (#523)\n\n* feat(session,protocol): ledger append core with CAS and hash chain\n\nAdds the clean-ledger foundation (#510 phase A): LedgerAppend protocol\ncontract (typed append input/outcome, FULL/NORMAL durability vocabulary,\nchain-break facts) and the session ledger-core — Ledger.append(event,\nexpectedHead) as a serialized compare-and-set over ledger_head with a\nchanges===1 receipt and hash-chained inserts, all raw prepared\nstatements inside a sync immediate transaction (conflicts return typed\ncas_conflict without writing; retry belongs to the caller). Boot tail\nverification reports chain-break facts and never refuses boot. Drizzle\n(pinned 0.45.2/0.31.10) defines the DDL only; the hand-written 0013\nmigration applies through the existing BEGIN IMMEDIATE runner. No\nexisting writer is cut over yet. The vocab baseline grows by one\n(ledger-append — named to avoid colliding with the #499 Ledger\nnamespace; shrinks back at convergence): Owner sign-off surface is this\nreview.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session,protocol): wait transitions append decision-class facts\n\nFirst decision class on the clean-ledger write path (#510): every\nWaitStore create/transition appends its fact through\nLedger.append(event, expectedHead) inside the same sync immediate\nstorage transaction as the projection write — no record, no action; a\nprojection failure rolls the appended fact back with it, so\nledger_head can never disagree with the projected revision (binding:\nthe fact at seq N produces revision N; creates are born at revision 1).\nLedger cas_conflict surfaces as the existing typed revision_conflict.\nBus publishes move after durable commit and stay observe-only. Adds the\nStorage.LedgerSubAdapter contract (fail-closed for decision writers),\nswitches Adapter.transaction to BEGIN IMMEDIATE, and ships the\nissue-specified script/conformance/p2-ledger-baseline.test.ts\n(append-before-act, failed-append leaves nothing, stale-head typed\nconflict, duplicate-create fail-closed, tail verification incl. tamper\ndetection) wired into CI as a conformance test step. Initial wait\nrevision moves 0->1 (observable only in tests; the messaging surface\nthat writes waits is dormant-by-default in production).\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session,openomni): work-item lifecycle on the decision-class path\n\nEvery WorkItem lifecycle write appends its fact on stream\nwork:<workItemId> before the projection in the same sync immediate\ntransaction (fact seq N == revision N; creates born at revision 1,\nmatching the wait class). The completion admission fold is untouched:\nits single writer seam classifies each durable write into\nreservation/verdict/terminal facts, so admission accept AND refuse are\nappended facts and the terminal projection follows its verdict fact.\nPre-cutover rows adopt lazily: a work_item.adopted genesis fact with\nthe observed snapshot lands at seq 1 on the first post-cutover\ntransition (transition history is not fabricated; documented in the\n0014 migration that adds the physical revision column). Duplicate\ncreate and stale head surface through the store's existing typed error\nvocabulary. Conformance suite grows to 10 cases (wait + work-item:\nappend-before-act, failed-append-leaves-nothing, adoption genesis,\nverdict facts, tail verification).\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(protocol,session,openomni): attempt identity and allocation facts\n\nShips the #510 attempt identity vocabulary as zod contracts in\nprotocol/work-item/attempt.ts: opaque attemptId, per-WorkItem monotonic\nattemptSeq bound to the stream's serialized append (fact seq ==\nrevision), retryOf lineage derived from the projection (never\ncaller-supplied, self-retry and first-attempt-lineage refined away),\ncontent/environment fingerprints whose required coverage slots cannot\nbe silently empty (absent-but-listed with a reason) and whose digests\nare recomputed at parse time by the single exported canonicalDigest\nowner, plus dormant cacheKey (derived-never-assigned, structurally not\na row key), replayKey (archived-range binding only), and the\nfail-loud twelve-category nondeterminism manifest. The session store\nallocates attempts through the same append-before-projection\ntransaction (work_item.attempt_allocated with the full identity;\nprojection carries only a lastAttemptSeq/currentAttemptId watermark),\nand both kernel spawn sites (internal worker and connector endpoint)\ncompute fingerprints from materials in hand and thread attemptId\nalongside runId. WorkerRun remains structurally untouched (its freeze\nis phase D). Conformance grows to 13 cases.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(protocol,session,openomni): route and command decision facts\n\nRouting decisions and dispatch authorization join the decision-class\nwrite path (#510): the kernel appends route.decided on\nroute:<inboundEventId> before any routed action executes (terminal\ndrop/block/ambiguous decisions are facts too), and dispatch appends\ncommand.authorized/command.denied on command:<dispatchId> after the\npolicy verdict and before the handler runs. Bus publishes follow the\ndurable append and stay observe-only. Conflict semantics are per class\nand documented in the new StreamRegistry: a route conflict is a REPLAY\n— the recorded decision is read back (new Ledger.headFact) and\nre-executed idempotently, which preserves the #519 crash-window\nrecovery (a redelivered resolving reply reaches the owner through the\nfold's already_resolved short-circuit) and makes a recorded terminal\ndecision dominate even if conditions later change; a command conflict\nstays a fail-closed anomaly (dispatchId is minted per submit). Append\ninfrastructure failure blocks the action for both classes. Effect\nintent/outcome ships as dormant vocabulary for #492. Conformance grows\nto 21 cases.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session,server,protocol): per-connection durability split\n\nSame-file per-connection durability (#510 phase D1, blueprint\namendment recorded for Owner sign-off: a separate ledger.db file would\nbreak append+projection atomicity under WAL cross-database\ntransactions): the primary connection that owns every decision-class\nwrite runs synchronous=FULL; bus-persistence telemetry moves to its own\nNORMAL connection with true group commit (a synchronous burst commits\nas one immediate transaction; the chain tip now reads inside that\ntransaction, closing a pre-existing fork window; :memory: degrades to\nthe single connection, documented and tested). Boot recovery verifies\nthe ledger chain tail across all streams and records chain-break facts\nas operational events without refusing boot. Shutdown now drains the\ntelemetry batch and actually runs wal_checkpoint(TRUNCATE) on close —\nthe previous checkpoint block was an unreachable guard (reconcile-first\nnoted). LedgerSubAdapter.verifyTail is required, per the fail-closed\nadapter rule.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session,protocol): freeze pending-ask writes, ship archive manifest\n\nLegacy archive boundary begins (#510 D2a): every PendingAskStore write\nthrows the typed pending_ask_frozen error (reads and the #519 upcast\npath serve frozen rows unchanged; 80 LOC of dead write helpers\nremoved). The archive manifest generator enumerates frozen tables with\nsource schema version, row count, id range, and a table-level integrity\nhash over canonical row JSON in id order (single digest owner\ncanonicalDigest; verified byte-for-byte plus tamper mismatch in\nconformance). Named-consumer audit is recorded honestly: retry-policy\nand completion resume are already fact-backed (pinned by conformance\nreceipts, no churn); interrupted-run recovery, worker-run history, and\nthe 0005 executor-kind readers still need WorkerRun live state and are\nenumerated as D2b remaining scope alongside the frozen-PI transitions.\nConformance grows to 25 cases.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(server,session,protocol): authenticated admin ledger read surface\n\nShips the /admin/ledger read endpoints (#510 D3): attempt identity\ninspection by contentFingerprint (digests only, structured inputs stay\nprivate), stream head fact, the boot-equivalent tail-verification\nreport, and the archive manifest. Auth follows the observability bearer\nconvention and fails closed — with no OPENOMNI_ADMIN_TOKEN configured\nevery request is 401 and no token is valid (pinned). The surface is\nstrictly read-only: a write-refusing adapter serves every endpoint\nunchanged and mutating methods 404, pinned by tests; the issue's\nPOST scenarios driver is intentionally not implemented on this surface\n(it writes; its semantics live in the conformance suite) and lands with\nthe remaining D2b scope. Adds the minimal LedgerSubAdapter.factsByType\nread so SQL stays inside ledger-core.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni,session,server): apply three-lens adversarial review batch\n\nRoute replay is now equivalence-gated: the stream key gains\nsurface/workspace/channel scope (Telegram per-chat counters and GitHub\nfallback ids collide globally; an attacker could preempt a victim's\nstream), and on a conflict the recorded decision is compared to the\nfresh one (stage/outcome/target/session/run/interaction) — equivalent\nreplays proceed with the fresh resolution (preserving the #519 crash\nredelivery through the fold's already_resolved), divergent replays fail\nclosed with the typed route_replay_divergent and never mix a recorded\ndecision with fresh execution parameters or fall through to surface\nrouting. Upgrade paths from existing databases are no longer untested\nground: ledger-core gains an explicit adoptStream genesis path, open\nwaits from before the cutover adopt lazily at their own revision (and\none corrupt wait can no longer kill boot — the sweep isolates per\nwait), migration 0014 shifts legacy work-item revisions to the 1-base\ninstead of clamping them (remove-guard semantics preserved,\ntransition counts kept), work-item adoption generalizes to the row's\nown revision, and stranded completion resumes now report loudly per\nwork item. SQLITE_BUSY maps to typed unavailable errors at both store\nentry points; the admin bearer compare is timing-safe;\nupstreamFingerprints joins the declared() discipline (no silently\nempty list); docs enumerate the full remaining scope honestly\n(policy-point grammar flagged as an Owner item: the issue text\nconflicts with the shipped grammar). Conformance grows to 27 cases.\n\nRoadmap: #510\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix: harden #523 admin auth and apply coderabbit review fixes\n\nSelf-audit fallback sweep + PR #523 CodeRabbit triage (verify-fix-or-refute).\n\nMandatory self-audit fixes:\n- recovery.ts: ledger sub-adapter absence now throws into the observe-only\n  catch (loud Operational.Error) instead of silent verifyTail() ?? [].\n- routes.ts: bearerAuthorized fails closed on empty/undefined token; the\n  observability route is always registered and returns 401 while unconfigured\n  (same convention as admin), closing the \"Bearer \" empty-token match.\n\nCodeRabbit fixes (9): admin/ledger/attempts limit (default 200/cap 1000/400),\nURI-encoded route stream components (delimiter-safe), boundary/forgery test\nhardening, adopt genesis carries owner/status/expiry identity only (no erasable\nreply data), completion-writer fails closed on combined admission+terminal\nwrite, updateWorkItem protects attempt lifecycle fields, conformance adapter\nleak fix, manifest CLI missing-value diagnostics.\n\nRefuted (2): command stream identity (record-before-act by design, not dedup),\nwait factTypes bus-event confusion — but the audit added the real drift the\nbot missed (wait.adopted registry entry). headRow null-normalization pinned.\n\nGates: packages 3078 pass, server 379 pass, conformance 27 pass, 0 fail;\ncheck-types 11/11, lint, lint:tools, check-deps, check-dead-exports, guards OK.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T00:17:53+09:00",
+          "tree_id": "8329abf9c33be231152b93bbb79f4467825a7d5a",
+          "url": "https://github.com/INONONO66/openomni/commit/bb69a48b4c29e8ed041f11eb4782805aa177993b"
+        },
+        "date": 1786288757176,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 623,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5866,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8100,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1370,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 711,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20388,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2302,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10830,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 538086,
             "unit": "ns/op"
           }
         ]
