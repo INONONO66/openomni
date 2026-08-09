@@ -230,11 +230,14 @@ export class DiscordGateway {
     // nor zombify the connection with a never-firing heartbeat (CodeQL
     // js/resource-exhaustion). Discord's real value is ~41250ms; the 100ms
     // floor bounds timer pressure while keeping fake-gateway state-machine
-    // tests fast.
-    const clampedMs = Math.min(
-      Math.max(Number.isFinite(intervalMs) ? intervalMs : 0, 100),
-      300_000,
-    );
+    // tests fast. Explicit comparison guard (not Math.min/max) so the taint
+    // barrier is analyzable.
+    let clampedMs = 100;
+    if (Number.isFinite(intervalMs) && intervalMs >= 100 && intervalMs <= 300_000) {
+      clampedMs = intervalMs;
+    } else if (intervalMs > 300_000) {
+      clampedMs = 300_000;
+    }
     this.stopHeartbeat();
     this.heartbeatAckReceived = true;
     this.heartbeatTimer = setInterval(() => {
