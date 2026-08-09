@@ -1,26 +1,24 @@
-import { PolicyDecision } from "@openomni/protocol";
-import { effectOf } from "./policy-effects";
+import { type Message, PolicyDecision } from "@openomni/protocol";
+import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
 import {
+  createGuardCompleteEvent,
+  createRunCompleteEvent,
+  createRunErrorEvent,
+  emitCompaction,
   emitErrorRetry,
   emitRunCompleted,
   emitRunFailed,
   emitTurnComplete,
   publishDenyDiagnostic,
 } from "./run-events";
-import { dispatchPostRunTransform, applyPostCompaction } from "./completion-policy";
-import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import { PolicyEffectApplier } from "./policy-effects-apply";
-import {
-  createGuardCompleteEvent,
-  createRunCompleteEvent,
-  createRunErrorEvent,
-} from "./run-result";
 import {
   advanceRunContinuation,
   advanceRunTurn,
+  applyCompactionMessages,
+  buildLifecyclePolicyContext,
   appendRunMessages,
   appendRunStep,
   type ErrorDecision,
@@ -257,4 +255,73 @@ function flowDecision(decision: Exclude<TurnDecision, { kind: "error" }>): "cont
 
 function continueFlowDecision(decision: Extract<TurnDecision, { kind: "continue" }>): "continue" {
   return decision.kind;
+}
+
+// merged from completion-policy.ts (250-LOC split refold: single-importer stage)
+async function dispatchPostRunTransform(
+  state: RunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+): Promise<void> {
+  const postRunDecision = await engine.dispatchPoint(
+    "run.lifecycle.post",
+    buildLifecyclePolicyContext(state, config, agentBase, {
+      isCompletion: true,
+      runOutcome: { type: "stop" },
+    }),
+  );
+  if (PolicyDecision.isBlocking(postRunDecision)) {
+    publishDenyDiagnostic("run.finish", postRunDecision, state, config, agentBase);
+  }
+}
+
+async function applyPostCompaction(
+  state: RunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+  isCompletion: boolean,
+): Promise<AgentEvent | null> {
+  const compactionDecision = await engine.dispatchPoint(
+    "run.completion.pre",
+    buildLifecyclePolicyContext(state, config, agentBase, {
+      isCompletion,
+      completionCandidate: {
+        isCompletion,
+        messages: state.messages,
+      },
+    }),
+  );
+
+  if (PolicyDecision.isBlocking(compactionDecision)) {
+    publishDenyDiagnostic("completion.prepare", compactionDecision, state, config, agentBase);
+    return createGuardCompleteEvent(state, { finishReason: "stop" });
+  }
+
+  let messages: Message.WithParts[] | undefined;
+  try {
+    messages = PolicyEffectApplier.replacementMessages(compactionDecision);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    publishDenyDiagnostic(
+      "completion.prepare",
+      PolicyDecision.deny({
+        policyId: "agent.policy.composed",
+        reasonCodes: [reason],
+        effects: [{ type: "run.abort", reason }],
+      }),
+      state,
+      config,
+      agentBase,
+    );
+    return createGuardCompleteEvent(state, { finishReason: "stop" });
+  }
+  if (messages !== undefined) {
+    const messagesBefore = applyCompactionMessages(state, messages);
+    emitCompaction(agentBase, messagesBefore, state.messages.length);
+  }
+  PolicyEffectApplier.applyPromptMessageEffects(state, compactionDecision);
+
+  return null;
 }

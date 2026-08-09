@@ -1,20 +1,20 @@
 import { run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/protocol";
-import { TraceContext } from "@openomni/session";
+import { Bus, TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
+import { PolicyEngine, type PolicyEngineInstance } from "../policy";
 import { resolveProviderModel } from "./shared";
 import { emitRunStarted, emitTurnStart } from "./run-events";
 import { handleCompact, handleContinue, handleError, handleStop } from "./turn-outcome";
 import { assertToolExecutor, buildTurn, resolveToolChoice } from "./turn-prepare";
-import { buildPolicyEngine } from "./policy-engine-builder";
 import {
   dispatchBudgetCheck,
   dispatchModelRequest,
   dispatchModelResponse,
   dispatchPreRun,
 } from "./lifecycle-dispatch";
-import { createRunState } from "./run-state";
+import { createRunState, type AgentRunBase } from "./run-state";
 
 export async function* streamAgent(
   input: ChatAgentInput,
@@ -164,4 +164,23 @@ function unknownOutcomeType(value: unknown): string {
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+// merged from policy-engine-builder.ts (250-LOC split refold: single-importer stage)
+export function buildPolicyEngine(
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+): PolicyEngineInstance {
+  const engine = PolicyEngine.create({
+    traceContext: {
+      traceId: agentBase.traceId,
+      ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
+      ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
+    },
+    auditEmit: Bus.publish,
+  });
+  for (const reg of config.middleware ?? []) {
+    engine.register(reg);
+  }
+  return engine;
 }
