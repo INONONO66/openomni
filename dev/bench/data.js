@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786298197110,
+  "lastUpdate": 1786301117933,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -36805,6 +36805,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 539233,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ef7b2d10b2dd102b94c5557c7186c755aa57dde2",
+          "message": "fix(session,openomni): fail closed on uninitialized storage (#522) (#536)\n\nStorage.get() before initialize() silently booted a volatile :memory:\ndatabase behind a console.warn — decision-class stores must fail closed.\nAn uninitialized get() now throws; the warn/auto-init machinery is deleted\nand the pinning test is inverted (warn-mode.test.ts -> fail-closed.test.ts,\nincluding a withIsolation-scope pin).\n\nSame fail-open family in SurfaceKey (found by the #527 adversarial review):\nregister silently skipped persistence and claim returned the candidate\nsessionId as a fabricated successful claim when the surfaceKey sub-adapter\nwas absent — on the production ingest path. All SurfaceKey operations now\nrequire the sub-adapter (requireSubAdapter, same convention as actor/\napp-connector/worker-grant stores); listBySession is non-optional on the\nsub-adapter interface. packages/session/AGENTS.md claims flipped by this\nchange (\"gracefully degrade\", \"default InMemoryStorage\") are corrected.\n\nConsumers that leaned on auto-init get explicit initialization instead:\nsession bench suites, dispatch test fixtures, injection-queue policy tests,\nand the in-process worker-runner resident-ask suite (production worker\nprocesses already initialize at worker-entry; the apps/server edit is a\ntest-hygiene beforeEach — flagged for Owner sign-off as territory\nexception).\n\nEnforcement layer: the Storage.get() throw itself + requireSubAdapter.\nPinning tests: storage/fail-closed.test.ts, surface-key.test.ts fail-closed\ndescribe (operations throw; claim never fabricates ownership).\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T03:43:58+09:00",
+          "tree_id": "48a99e3dce4e6574e4971b0959404f00cf623263",
+          "url": "https://github.com/INONONO66/openomni/commit/ef7b2d10b2dd102b94c5557c7186c755aa57dde2"
+        },
+        "date": 1786301117247,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5910,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2756,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2413,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15263,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7970,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 818,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1312,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 744,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2306,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10833,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102214,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516576,
             "unit": "ns/op"
           }
         ]
