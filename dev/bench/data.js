@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786302312917,
+  "lastUpdate": 1786302509351,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -37549,6 +37549,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 529664,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "820511a2187a396b213dce3c128fac3bb9b270ee",
+          "message": "fix(server): await connector process-group termination (#517) (#542)\n\n* fix(server): await connector process-group termination (#517)\n\nA TERM-resistant descendant retaining the inherited stdout/stderr\npipes kept runConnectorProcess pending forever after the configured\ntimeout — only a single group SIGTERM was ever sent.\n\nTermination contract (#517):\n- one memoized termination flow shared by every interruption path;\n  first interruption reason wins under concurrent signals\n- group SIGTERM -> bounded graceful window (2s) -> group SIGKILL ->\n  bounded reap window (2s); liveness is probed before every signal so\n  an observed group exit is never signalled again (ESRCH-only probe:\n  EPERM means alive-but-unsignalable, not gone)\n- dispatch settles when the group is gone or the reap window closes:\n  stream readers become cancellable and are cancelled after a short\n  drain, so held pipes can never keep the dispatch pending; an\n  unreaped group is named in the interrupted outcome\n- real stream read errors still fail the run (cancellation is\n  distinguished by flag, never swallowed into fake success)\n\nDeterministic regression (no fixed sleeps; exact readiness markers):\nTERM-ignoring descendant holding pipes -> dispatch settles interrupted\nwith the original reason and the descendant is dead at settle;\nconcurrent stall+timeout preserves the first reason; natural exits\nclassify by exit code.\n\nThe issue's abort-path leg has no code surface today (no AbortSignal\nparameter exists); terminate() is the memoization point a future\nabort wires into.\n\nCloses #517\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): tolerate zombie reap window in termination assertion\n\nCI (Linux): a SIGKILLed init-reparented descendant lingers as a zombie\nfor a beat and kill(pid, 0) succeeds for zombies — the group probe\ncorrectly reported the group gone (dispatch settled), only the direct\npid assertion raced init's reap. Bounded poll instead of an instant\ncheck; the pinned contract (descendant dead at settle) is unchanged.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T19:07:07Z",
+          "tree_id": "0dd49ec074ba1029437b0a03a89050843088bb26",
+          "url": "https://github.com/INONONO66/openomni/commit/820511a2187a396b213dce3c128fac3bb9b270ee"
+        },
+        "date": 1786302508137,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 529,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 696,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6219,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10233,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16217,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8551,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 886,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 760,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19928,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2124,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11300,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 107591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 545976,
             "unit": "ns/op"
           }
         ]
