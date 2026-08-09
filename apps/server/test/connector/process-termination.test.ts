@@ -28,6 +28,22 @@ function processAlive(pid: number): boolean {
   }
 }
 
+/**
+ * On Linux a SIGKILLed, init-reparented descendant lingers as a ZOMBIE for a
+ * beat — `kill(pid, 0)` still succeeds for zombies even though the process
+ * is dead and its pipes are closed (the group probe correctly reports the
+ * group gone, which is why the dispatch settled). Bounded poll until init
+ * reaps it; the assertion is "dead", not "already reaped at settle-instant".
+ */
+async function expectProcessGone(pid: number, timeoutMs = 3_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!processAlive(pid)) return;
+    await Bun.sleep(20);
+  }
+  expect(processAlive(pid)).toBe(false);
+}
+
 async function waitForFile(path: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -71,8 +87,9 @@ describe("connector process-group termination (#517)", () => {
       const result = await pending; // pre-fix: pending forever on the held pipes
       expect(result.outcome.status).toBe("interrupted");
       expect(result.outcome.interruptionReason).toBe("timeout");
-      // The group is gone when dispatch settles — the descendant included.
-      expect(processAlive(descendantPid)).toBe(false);
+      // The group is gone when dispatch settles — the descendant included
+      // (zombie-reap tolerated, see expectProcessGone).
+      await expectProcessGone(descendantPid);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -104,7 +121,7 @@ describe("connector process-group termination (#517)", () => {
       const result = await pending;
       expect(result.outcome.status).toBe("interrupted");
       expect(result.outcome.interruptionReason).toBe("stall_timeout");
-      expect(processAlive(descendantPid)).toBe(false);
+      await expectProcessGone(descendantPid);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
