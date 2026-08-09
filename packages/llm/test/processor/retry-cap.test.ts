@@ -93,3 +93,39 @@ describe("Processor retry cap", () => {
     expect(retries).toEqual([2, 2]);
   });
 });
+
+describe("Processor retry header-delay cap (#532 candidate 3)", () => {
+  afterEach(() => {
+    Bus.reset();
+  });
+
+  test("a server-directed wait above the cap fails fast instead of stalling", async () => {
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-retry-cap",
+      model,
+      abort: new AbortController().signal,
+      sink: {
+        onMessage: () => undefined,
+        onToolCall: () => undefined,
+        onToolResult: () => undefined,
+        onSnapshot: () => undefined,
+      },
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield { type: "text-start", id: "t" };
+          throw new APIError({
+            message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
+            isRetryable: true,
+            responseHeaders: { "retry-after": "3600" },
+          });
+        })(),
+      }),
+    });
+
+    const startedAt = Date.now();
+    await expect(processor.process({ system: "" })).rejects.toBeDefined();
+    // Under the old policy this would have slept for an hour mid-run.
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+  });
+});

@@ -144,20 +144,33 @@ export namespace Processor {
               return;
             } catch (e: unknown) {
               const apiError = coerceApiError(e);
-              const retryReason = Retry.isRetryable(apiError ?? e);
+              const decision = Retry.decide(attempt + 1, apiError ?? e);
 
-              if (retryReason === undefined || ++attempt > retryAttemptLimit) {
+              if (!decision.retryable || ++attempt > retryAttemptLimit) {
+                if (!decision.retryable && decision.reason !== "non_retryable" && trace) {
+                  // A retryable error declined for another reason (e.g. the
+                  // server-directed wait exceeded the cap) must say why.
+                  Bus.publish(Operational.Error, {
+                    traceId: trace.traceId,
+                    time: Date.now(),
+                    sessionId: trace.sessionId,
+                    component: "llm.retry",
+                    msg: "retry declined",
+                    error: decision.reason,
+                  });
+                }
                 if (!(e instanceof DOMException && e.name === "AbortError")) {
                   assistantMessage.time.completed = Date.now();
                 }
                 throw e;
               }
+              const retryReason = decision.reason;
 
               // Tool calls from the failed attempt will never receive a
               // result from the next attempt's stream — settle them now.
               settlePendingTools();
 
-              const delayMs = Retry.delay(attempt, apiError);
+              const delayMs = decision.delayMs;
               if (trace) {
                 Bus.publish(LlmCall.RetryDecided, {
                   traceId: trace.traceId,
