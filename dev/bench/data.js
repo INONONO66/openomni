@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786288758448,
+  "lastUpdate": 1786289120998,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -36433,6 +36433,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 538086,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "340b2fa637d071c8e87eb98bfced8fb733695204",
+          "message": "feat(openomni): wire effect drivers and finish reconciliation (#492) (#526)\n\nWire the EFFECT decision class that #510 shipped as dormant vocabulary.\n\nSession (durable ledger writer):\n- EffectStore over stream effect:<effectId> — intend appends effect.intended\n  at seq 1 (record-before-act) through the raw-CAS Ledger.append path in one\n  sync immediate transaction (no ORM on the write path); the intent event id\n  is the idempotency key, so re-intend is a typed fresh:false replay. Exactly\n  one terminal outcome fact at seq 2: confirm/fail are idempotent on\n  same-outcome replay and fail closed on a divergent second outcome\n  (already_terminal), a missing intent (not_intended), or a missing ledger\n  sub-adapter (adapter_absent — never a fallback snapshot). \"unknown\" records\n  NO terminal fact, so the intent stays reconcilable; outstandingIntents()\n  surfaces the crash window.\n- WorkItemStore.recordEffect projects each intent's state onto\n  completionFacts.effects via the authorized completion writer (existing\n  work_item.updated fact, no new vocabulary) so the #490 admission fold blocks\n  (effect_outcome_unresolved) while an in-attempt intent is outcome-less.\n  Per-intent createdAt is kept strictly monotonic so a same-millisecond\n  terminal append wins the fold's latest-per-intent selection.\n\nOpenOmni (record-before-act service + finish sweep):\n- EffectManifest refuses unmanifested kinds and unsafe input BEFORE any ledger\n  write (a refusal materializes nothing). EffectService: resolve/sanitize →\n  intend → link WorkItem → driver.execute → confirm/fail; a replay never\n  blindly re-executes (terminal replays the recorded outcome, pending hands to\n  the driver's idempotent reconcile probe).\n- EffectReconciler.reconcile() probes every outstanding intent under its\n  effectId key and escalates on exhaustion via the injected Stakes seam rather\n  than silently terminalizing (fail-closed: exhaustion with no seam throws).\n\nPinned by packages/session/test/effect/store.test.ts and\npackages/openomni/test/effect/service.test.ts. docs/implementation-status.md\nupdated in-commit (doc-state sync law). Concrete driver registration, the boot\nreconcile call, the admin surface, and the conformance baseline are apps/server\n+ script follow-ups (flagged in the status row).\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T00:23:56+09:00",
+          "tree_id": "76df18529c3d6cb4437b7c7de867b737efcad66f",
+          "url": "https://github.com/INONONO66/openomni/commit/340b2fa637d071c8e87eb98bfced8fb733695204"
+        },
+        "date": 1786289120218,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5854,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8813,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2362,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15084,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7891,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 793,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1290,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2290,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10863,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102059,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516390,
             "unit": "ns/op"
           }
         ]
