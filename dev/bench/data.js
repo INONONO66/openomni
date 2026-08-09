@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786306262084,
+  "lastUpdate": 1786313556823,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -38293,6 +38293,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516352,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b4d3c4b12187dc4dd7d2652d2028a6d53ecf431",
+          "message": "chore(agent): move bun-test ambient shim out of production src (#555)\n\nThe 50 LOC ambient `declare module \"bun:test\"` shim lived in\npackages/agent/src/, so consumers inherited a fake module declaration on\ntypecheck. Move it to packages/agent/test/ (precedent:\npackages/protocol/test/bun-test.d.ts). tsconfig include stays \"src\",\nmatching the protocol layout; check-types stays green. The stale untracked\npackages/agent/dist/ artifact is absent in a fresh checkout (nothing to\ndelete here).\n\napps/cli (issue scope 2) needs no commit: it was already git-removed in\n2570f4fd (#121), and the leftover dist/ + node_modules/ in the old working\ntree were untracked (git ls-files apps/cli -> 0). Zero-consumer proof:\nrg -l 'apps/cli' --hidden -g '!node_modules' -g '!.git' -> 0 hits;\nworkspaces glob 'apps/*' matches only apps/server; turbo.json has no cli\nreference. Delete the stale directory with rm -rf apps/cli in the main\nworking tree.\n\nRefs #550\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T22:11:14Z",
+          "tree_id": "0f0dbb4dc8ba87a8d5e71fddd78e5fbfcddf24a2",
+          "url": "https://github.com/INONONO66/openomni/commit/3b4d3c4b12187dc4dd7d2652d2028a6d53ecf431"
+        },
+        "date": 1786313556059,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 623,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5894,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2514,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2978,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2440,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15376,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8054,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 857,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103036,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 521246,
             "unit": "ns/op"
           }
         ]
