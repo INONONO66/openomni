@@ -42,8 +42,12 @@ export async function* streamAgent(
   emitRunStarted(resolvedTrace, config.model.id);
   assertToolExecutor(config);
 
+  // #546: run state lives across attempts — an agent-level retry regenerates
+  // only the attempt (engine + turn artifacts), never the history, and
+  // budget/usage keep accumulating (no double-billing reset).
+  const state = createRunState({ ...input, traceContext: resolvedTrace });
+
   while (attempt <= retryPolicy.maxAttempts) {
-    const state = createRunState({ ...input, traceContext: resolvedTrace });
     const engine = buildPolicyEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(

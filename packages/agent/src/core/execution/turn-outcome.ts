@@ -90,6 +90,16 @@ export async function* handleStop(
     reason: PolicyDecision.reason(postTurnDecision, undefined),
   };
 
+  // #546: the turn's assistant output always enters history — tool and
+  // reasoning parts included — regardless of continuation. The fold-projected
+  // snapshot is the source of truth; the text-only rebuild is only a fallback
+  // for runs whose llm never emitted a boundary snapshot.
+  const parentID = state.messages.at(-1)?.info.id ?? "";
+  const assistantMessage =
+    turn.turnAssistant.message ??
+    createAssistantMessage(state.lastAssistantText, parentID, state.sessionId);
+  appendRunMessages(state, [assistantMessage]);
+
   if (!PolicyDecision.isBlocking(postTurnDecision)) {
     try {
       PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision);
@@ -111,19 +121,13 @@ export async function* handleStop(
     }
   }
 
-  const parentID = state.messages.at(-1)?.info.id ?? "";
-  const assistantMessage = createAssistantMessage(
-    state.lastAssistantText,
-    parentID,
-    state.sessionId,
-  );
   const continuationMessages = PolicyEffectApplier.continuationMessages(
     postTurnDecision,
     state.sessionId,
     assistantMessage.info.id,
   );
   if (!PolicyDecision.isBlocking(postTurnDecision) && continuationMessages.length > 0) {
-    appendRunMessages(state, [assistantMessage, ...continuationMessages]);
+    appendRunMessages(state, continuationMessages);
     const blocked = await applyPostCompaction(state, engine, config, agentBase, true);
     if (blocked) {
       yield blocked;
