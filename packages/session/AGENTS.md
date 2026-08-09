@@ -20,7 +20,7 @@ src/
 │   └── info.ts           # SessionInfo schema (leaf — breaks session ↔ storage cycle)
 ├── storage/
 │   ├── index.ts          # Barrel
-│   ├── storage.ts        # Storage.Adapter interface + InMemoryStorage + Storage singleton
+│   ├── storage.ts        # Storage.Adapter interface + Storage singleton
 │   ├── sqlite-storage.ts # SqliteStorageAdapter facade (Bun SQLite persistence)
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
@@ -94,3 +94,5 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.
 - Do NOT add communication routing or authority evaluation here. Session is the durable substrate; OpenOmni is the kernel.
 - Do NOT add a second completion-admission append or terminal method here. The only product completion boundary is `packages/openomni/src/work-item/`.
+
+_Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
