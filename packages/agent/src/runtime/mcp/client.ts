@@ -171,7 +171,7 @@ export class McpClient {
   }
 }
 
-export function requestOptions(
+function requestOptions(
   config: McpServerConfig,
   context?: { readonly signal?: AbortSignal },
 ): RequestOptions | undefined {
