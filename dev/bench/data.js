@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786314169091,
+  "lastUpdate": 1786317236959,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -38541,6 +38541,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 520829,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0bafc0e3b7cd4f6a77f8f9a8e44d2c8e522bf4a0",
+          "message": "feat(protocol,llm): transcript fact model and fold-based processor (#557)\n\n* feat(protocol): transcript fact model and fold (#545 T1)\n\nConversation history as an append-only fact stream: Transcript.Fact\n(message.created / part.appended / part.advanced / message.finished),\ntranscript-owned Usage, PartTransition mirroring Tool.State statuses\nplus interrupted, and a pure fold(state, fact) -> applied|rejected\nprojection into Message.WithParts following the wait/fold.ts\nconventions (time as input, tagged-union outcome, pinned rule order,\nimmutable state updates).\n\nAlso adds optional ReasoningPart.signature (candidate 10); the\nsame-model resend check lands with the T2 processor consumer.\nTranscript bus events intentionally deferred to their first consumer.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(protocol): harden transcript fold per adversarial review (#545 T1)\n\n- part.appended validates initial state: tool parts must be born\n  pending, text/reasoning parts non-terminal (F1)\n- completed transition carries an optional provider reasoning\n  signature, projected onto ReasoningPart.signature only (F2)\n- appended parts must match the message's sessionID (F3)\n- closing a running part with at < time.start rejects (F4)\n- message.created rejects an already-finished assistant info (F5)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(llm): fold-based processor emitting transcript facts (#545 T2)\n\nThe processor now generates Transcript.Fact objects as the stream\nprogresses and folds each one into per-attempt state (loud-throw on\nrejection - a bad fact order is a recording defect). Per-token deltas\nonly grow an internal buffer (O(1)); sink.onMessage fires at part\nboundaries only (part.appended / part.advanced / message.finished) with\nthe immutable fold state, so an emitted snapshot is never mutated\nafterwards. This fixes three verified defects: O(N*T) full part-array\ncopies per token, failed-attempt parts re-emitting after retry (the\npart buffer was never reset), and emitted snapshots aliasing the\nin-place-mutated assistant info.\n\nAttempt boundary = state boundary: each retry folds from scratch under\na new attemptId (messageID + local counter - no natural attempt id\nexists at run() callsites), and the failed attempt closes with\nmessage.finished{finish:\"error\"} carrying whatever usage the provider\nreturned before the next attempt starts.\n\nPart lifecycle discipline per the T1 fold: text/reasoning parts append\nopen and close via completed{output} (completed.output is the sole\nauthoritative content; aborted text closes as completed with partial\noutput); tool parts append pending, advance running at tool-call,\ncompleted/error at tool-result, and interrupted on abort-grace expiry\n(#543 semantics preserved as facts). finishReason maps exactly into the\ntranscript vocabulary (#532-7): length/content-filter/error are never\nrewritten, and a length finish fails every non-terminal tool part with\n\"truncated output: tool call incomplete\" - no salvage. Malformed\nprovider sequences (#532-6) are rewritten by a small input\nnormalization before folding: orphan deltas open their block, duplicate\nends drop with a debug note, unknown tool-results synthesize an error\npart.\n\nSink gains optional onFact(fact): the fact stream is the consumption\nsurface for C2/#546 (agent history) and C3/#547 (ledger) - stack\ndiscipline, those consumers land in their own leaves.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): honest error-turn skip and signature resend gate (#545 T2)\n\ntoModelMessages skipped error turns with a check that is permanently\nfalse (AssistantMessage has no error field), so error turns were never\nskippable. Now that failed attempts close via the message.finished\nprojection, the branch checks finish === \"error\" and actually fires:\nerror-finished assistant turns are excluded from replay.\n\nReasoning signature resend (#532 candidate 10): each ReasoningPart stays\nits own block (signatures are per-block) and its provider signature is\nresent only when the outgoing {providerID, modelID} match the pair\nstored on the message. The message stores no third \"api\" field, so the\ndouble check is the honest available check; the anthropic\nproviderOptions namespace is the resend mechanism of @ai-sdk/anthropic,\nthe only provider emitting signatures today.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(llm): emission measurement harness for the fold path (#545 T2)\n\nStreams a fixed synthetic 2000-delta/3-part scenario and reports\nsink.onMessage call count plus total serialized bytes (allocation\nproxy). Same harness run on a scratch checkout of main (boundary-count\nassertion removed there): 2008 calls / 9,777,607 bytes before vs\n9 calls / 44,902 bytes after - O(N*T) to O(N).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T23:12:38Z",
+          "tree_id": "e8c841af153a17d12ad8631b0bdc0ffd96bbdc94",
+          "url": "https://github.com/INONONO66/openomni/commit/0bafc0e3b7cd4f6a77f8f9a8e44d2c8e522bf4a0"
+        },
+        "date": 1786317236172,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5855,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9065,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2500,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2791,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15170,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 695,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1282,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2313,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10756,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514473,
             "unit": "ns/op"
           }
         ]
