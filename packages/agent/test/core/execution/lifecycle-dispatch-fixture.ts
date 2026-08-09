@@ -7,7 +7,7 @@ import {
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 
-export function makeInput(): ChatAgentInput {
+function makeInput(): ChatAgentInput {
   return { messages: [{ role: "user", content: "hello" }] };
 }
 

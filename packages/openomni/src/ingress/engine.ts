@@ -9,7 +9,7 @@ import {
   type RoutingDecisionPayload,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
+import { Bus, Storage, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
@@ -170,7 +170,8 @@ function resolveAndRecordRoute<Event extends Ingress.InboundEvent>(
 
 export namespace IngressEngine {
   export function reset(): void {
-    SurfaceKey.clear();
+    // Storage-backed state (sessions, surface keys) is cleared by the
+    // Storage.reset() adapter swap; there is no separate SurfaceKey reset.
     Storage.reset();
     Bus.reset();
     _coordinator = undefined;

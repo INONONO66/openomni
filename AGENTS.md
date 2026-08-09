@@ -189,8 +189,8 @@ a satellite split) to violations of each one.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
 - Do not add provider behavior outside `packages/llm`.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
-- Driver-band packages (approved target: `naru` channels, `chasa` remote execution, `masil` browser use, `dokkaebi` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Korean package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English, and each band package's AGENTS.md opens with its one-line English gloss. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
-- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/gantaek` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) stays in the kernel.
+- Driver-band packages (approved target: `channels` channel drivers, `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
+- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) stays in the kernel.
 
 ## EXECUTION DISCIPLINE
 

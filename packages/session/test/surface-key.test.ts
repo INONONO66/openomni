@@ -17,7 +17,6 @@ describe("SurfaceKey", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
-    SurfaceKey.clear();
   });
 
   describe("create", () => {
@@ -443,8 +442,8 @@ describe("SurfaceKey", () => {
     });
   });
 
-  describe("clear", () => {
-    test("clears all mappings", () => {
+  describe("Storage.reset", () => {
+    test("adapter swap leaves no stale mappings", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
@@ -455,11 +454,45 @@ describe("SurfaceKey", () => {
 
       Storage.reset();
       Storage.initialize({ dbPath: ":memory:" });
-      SurfaceKey.clear();
 
       expect(SurfaceKey.lookup(key1)).toBeUndefined();
       expect(SurfaceKey.lookup(key2)).toBeUndefined();
       expect(SurfaceKey.listBySession(sessionId)).toHaveLength(0);
+    });
+  });
+
+  describe("fail-closed", () => {
+    const key = "slack:workspaceA:channel:C123";
+    const absentMessage = "does not implement surfaceKey";
+
+    test("every operation throws when the surfaceKey sub-adapter is absent", () => {
+      const bare = Storage.get();
+      Storage.configure({
+        transaction: bare.transaction.bind(bare),
+        session: bare.session,
+        message: bare.message,
+        part: bare.part,
+      });
+
+      expect(() => SurfaceKey.register(key, "session-1")).toThrow(absentMessage);
+      expect(() => SurfaceKey.claim(key, "session-1")).toThrow(absentMessage);
+      expect(() => SurfaceKey.lookup(key)).toThrow(absentMessage);
+      expect(() => SurfaceKey.unregister(key)).toThrow(absentMessage);
+      expect(() => SurfaceKey.listBySession("session-1")).toThrow(absentMessage);
+    });
+
+    test("claim never fabricates a successful claim without persistence", () => {
+      const bare = Storage.get();
+      Storage.configure({
+        transaction: bare.transaction.bind(bare),
+        session: bare.session,
+        message: bare.message,
+        part: bare.part,
+      });
+
+      // The pre-#522 fail-open returned the candidate sessionId as if the
+      // claim had been persisted; ownership answers must never be fabricated.
+      expect(() => SurfaceKey.claim(key, "candidate-session")).toThrow(absentMessage);
     });
   });
 });
