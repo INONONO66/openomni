@@ -4,7 +4,7 @@ import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
 import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
-import { buildPolicyEngine } from "../../../src/core/execution/policy-engine-builder";
+import { buildPolicyEngine } from "../../../src/core/execution/runner";
 import { streamAgent } from "../../../src/core/execution/runner";
 import {
   createBudgetReassurancePolicy,

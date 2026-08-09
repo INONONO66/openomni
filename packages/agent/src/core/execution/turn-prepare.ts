@@ -5,13 +5,17 @@ import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
 import { createToolExecutor } from "./tool-executor";
-import { emitBudgetReassurance, emitBudgetWarning } from "./run-events";
-import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import { buildTurnSystemPrompt } from "./prompt-policy";
-import { PolicyEffectApplier } from "./policy-effects-apply";
-import { createGuardCompleteEvent, createRunCompleteEvent } from "./run-result";
-import type { BuildTurnResult, AgentRunBase, RunState, TurnArtifacts } from "./run-state";
 import {
+  createGuardCompleteEvent,
+  createRunCompleteEvent,
+  emitBudgetReassurance,
+  emitBudgetWarning,
+} from "./run-events";
+import { buildSystemPrompt } from "../prompt-builder";
+import { PolicyEffectApplier } from "./policy-effects";
+import type { AgentRunBase, BuildTurnResult, RunState, TurnArtifacts } from "./run-state";
+import {
+  buildLifecyclePolicyContext,
   recordAssistantTokenDelta,
   recordRunToolCall,
   recordRunTurn,
@@ -251,4 +255,38 @@ function createTrackingSink(
     },
     onSnapshot: sink?.onSnapshot ?? (() => undefined),
   };
+}
+
+// merged from prompt-policy.ts (250-LOC split refold: single-importer stage)
+async function buildTurnSystemPrompt(
+  state: RunState,
+  config: ChatAgentConfig,
+  engine: PolicyEngineInstance,
+  agentBase: AgentRunBase,
+): Promise<{ system?: string; blocked?: Policy.PolicyDecision }> {
+  let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
+  const decision = await engine.dispatchPoint(
+    "prompt.context.pre",
+    buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
+  );
+  if (PolicyDecision.isBlocking(decision)) return { system, blocked: decision };
+
+  for (const effect of decision.effects) {
+    if (effect.type === "prompt.replace") {
+      system = effect.prompt;
+    } else if (effect.type === "prompt.append_context") {
+      system = system
+        ? `${system}
+
+${effect.context}`
+        : effect.context;
+    } else if (effect.type === "prompt.inject_message") {
+      system = system
+        ? `${system}
+
+${effect.message}`
+        : effect.message;
+    }
+  }
+  return { system };
 }
