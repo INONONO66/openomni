@@ -40,16 +40,19 @@ async function main() {
   console.log("=== OpenOmni E2E Test: Custom Tool + Dispatch ===\n");
   console.log(`Target: ${WS_URL}`);
 
-  console.log("\n--- Test 1: Custom Tool (weather_lookup) ---");
+  // #521 removed the mock `weather_lookup` tool from the production catalog.
+  // This harness now exercises the real Resident custom tool `web_search`
+  // (opensearch-ai-sdk), so it verifies a genuine server-side custom tool
+  // round-trips end to end rather than a stub. Requires network + opensearch.
+  console.log("\n--- Test 1: Custom Tool (web_search) ---");
   try {
     const response = await sendAndWait(
-      "What's the weather in Seoul? Use the weather_lookup tool to check. Reply with just the weather info.",
+      "Use the web_search tool to find the current weather in Seoul, then reply with just the weather info.",
     );
     const hasWeatherInfo =
       response.toLowerCase().includes("seoul") ||
-      response.toLowerCase().includes("18") ||
-      response.toLowerCase().includes("cloudy") ||
-      response.toLowerCase().includes("weather");
+      response.toLowerCase().includes("weather") ||
+      response.toLowerCase().includes("temperature");
     console.log(`Response preview: ${response.slice(0, 300)}`);
     console.log(
       `✅ Test 1 ${hasWeatherInfo ? "PASS" : "WARN"}: Custom tool ${hasWeatherInfo ? "used successfully" : "may not have been called"}`,
@@ -63,10 +66,10 @@ async function main() {
     const response = await sendAndWait(
       "List all the tools you have available. Just list their names, nothing else.",
     );
-    const hasWeather = response.toLowerCase().includes("weather");
+    const hasWebSearch = response.toLowerCase().includes("web_search");
     console.log(`Response preview: ${response.slice(0, 500)}`);
     console.log(
-      `✅ Test 2 ${hasWeather ? "PASS" : "WARN"}: weather_lookup ${hasWeather ? "is" : "may not be"} in tool list`,
+      `✅ Test 2 ${hasWebSearch ? "PASS" : "WARN"}: web_search ${hasWebSearch ? "is" : "may not be"} in tool list`,
     );
   } catch (err) {
     console.error("❌ Test 2 FAIL:", err);
