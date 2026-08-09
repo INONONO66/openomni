@@ -107,6 +107,64 @@ async function createPending(
   return session.id;
 }
 
+// PendingInteractionStore writes are frozen (#548) — historical rows are
+// seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
+async function seedFrozenPending(
+  id: string,
+  runId: string,
+  allowedActions: PendingInteractionStore.Record["allowedActions"] = ["report_result"],
+): Promise<string> {
+  const existingEndpoint = ActorRegistry.resolveEndpoint("telegram", "seller-1");
+  const targetActorId = existingEndpoint?.identity.id ?? "actor-external-worker";
+  if (!existingEndpoint) {
+    ActorRegistry.registerIdentity({
+      id: targetActorId,
+      kind: "human",
+      trustTier: "assigned_worker",
+      relationship: "external_agent",
+    });
+    ActorRegistry.registerEndpoint({
+      id: correlation.endpointId,
+      actorId: targetActorId,
+      channel: "telegram",
+      externalId: "seller-1",
+    });
+  }
+  const session = Session.create({
+    title: id,
+    model: { providerID: "test", modelID: "test-model" },
+  });
+  await WorkerRun.create(session.id, {
+    runId,
+    title: runId,
+    prompt: "complete assigned work",
+    executorKind: "connector_endpoint",
+  });
+  await WorkerRun.updateStatus(session.id, runId, "starting");
+  await WorkerRun.updateStatus(session.id, runId, "running");
+  await WorkerRun.updateStatus(session.id, runId, "waiting_input");
+  const adapter = Storage.getAdapter().pendingInteraction;
+  if (!adapter) throw new Error("pendingInteraction adapter missing");
+  adapter.create(
+    Communication.PendingInteraction.Record.parse({
+      id,
+      workerRunId: runId,
+      sessionId: session.id,
+      endpointId: correlation.endpointId,
+      channelId: correlation.channelId,
+      correlation: { tokenHash: correlation.tokenHash },
+      allowedActions,
+      targetActorId,
+      status: "open",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      followUpWindow: 60_000,
+    }),
+  );
+  return session.id;
+}
+
 // PendingAskStore writes are frozen (#510 D2a) — historical rows are seeded
 // at the adapter layer, exactly as pre-freeze rows persist on disk.
 function createPendingAsk(
@@ -196,6 +254,41 @@ describe("IngressEngine wait routing", () => {
     expect(handlerWorkspaceRoot).toBe("/trusted/workspace");
     expect(result.sessionId).toBe(sessionId);
     expect(PendingInteractionStore.get("pi-exact")?.status).toBe("resolved");
+  });
+
+  test("routes an inbound reply to a frozen legacy pending-interaction row via upcast (#548 regression pin)", async () => {
+    // Regression pin (#548): rows persisted BEFORE the freeze are seeded at
+    // the adapter layer and must keep routing through the upcast read path —
+    // green before and after the cutover.
+    const sessionId = await seedFrozenPending("pi-frozen-legacy", "run-frozen-legacy");
+    const runtime = new DispatchRuntime();
+    const routed: DispatchProtocol.Command[] = [];
+    runtime.register("worker.complete", (command) => {
+      routed.push(command);
+      return { output: "accepted" };
+    });
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
+    const observed = routingDecisions();
+
+    let result: Ingress.IngressResult;
+    try {
+      result = await kernelEngine().ingest(replyEvent("inbound-frozen-legacy"));
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "route",
+      sessionId,
+      runId: "run-frozen-legacy",
+      pendingInteractionId: "pi-frozen-legacy",
+    });
+    expect(routed).toHaveLength(1);
+    expect(result.sessionId).toBe(sessionId);
+    // The frozen row stays readable; routing never depends on mutating it.
+    expect(PendingInteractionStore.get("pi-frozen-legacy")).toBeDefined();
   });
 
   test("normalizes a plain-text worker reply for the default worker.complete handler", async () => {
@@ -1202,6 +1295,43 @@ describe("IngressEngine durable wait routing", () => {
       "actor-r1",
       "actor-r2",
     ]);
+  });
+
+  test("a new interaction goes through the durable Wait only — the frozen store admits no rows (#548)", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    const wait = openSessionWait("wait-new-interaction");
+
+    const result = await kernelEngine().ingest(replyEvent("inbound-new-interaction"));
+
+    expect(result.sessionId).toBe(wait.ownerRef.id);
+    expect(WaitStore.get("wait-new-interaction")).toMatchObject({ status: "resolved" });
+    // No PendingInteraction row exists or can be created: the write surface
+    // is frozen (#548) and every new interaction lives in the wait table.
+    const adapter = Storage.getAdapter().pendingInteraction;
+    if (!adapter) throw new Error("pendingInteraction adapter missing");
+    expect(adapter.list()).toHaveLength(0);
+    let thrown: unknown;
+    try {
+      PendingInteractionStore.create({
+        id: "pi-new-after-freeze",
+        workerRunId: "run-new-after-freeze",
+        sessionId: wait.ownerRef.id,
+        endpointId: correlation.endpointId,
+        channelId: correlation.channelId,
+        correlation: { tokenHash: correlation.tokenHash },
+        allowedActions: ["report_result"],
+        expiresAt: Number.MAX_SAFE_INTEGER,
+        followUpWindow: 60_000,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    if (!Communication.PendingInteraction.FrozenError.isInstance(thrown)) {
+      throw new Error("expected the typed PendingInteractionFrozenError");
+    }
+    expect(thrown.data.code).toBe("pending_interaction_frozen");
+    expect(thrown.data.method).toBe("create");
+    expect(adapter.list()).toHaveLength(0);
   });
 
   test("fails closed when a durable wait and a frozen legacy row collide at one level", async () => {

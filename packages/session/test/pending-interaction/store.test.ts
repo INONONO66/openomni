@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Communication } from "@openomni/protocol";
 import { Bus, PendingInteractionStore, Session, Storage, WorkerRun } from "../../src/index";
 
 beforeEach(() => {
@@ -23,8 +24,12 @@ async function createWorkerRun(runId: string): Promise<string> {
   return session.id;
 }
 
-function createPendingInteraction(id: string, sessionId: string, expiresAt = 9_999_999_999_999) {
-  return PendingInteractionStore.create({
+function frozenRecord(
+  id: string,
+  sessionId: string,
+  overrides: Partial<Communication.PendingInteraction.Record> = {},
+): Communication.PendingInteraction.Record {
+  return Communication.PendingInteraction.Record.parse({
     id,
     workerRunId: "run-1",
     sessionId,
@@ -36,22 +41,83 @@ function createPendingInteraction(id: string, sessionId: string, expiresAt = 9_9
       tokenHash: "token-1",
     },
     allowedActions: ["report_result", "ask_clarification"],
-    expiresAt,
-    followUpWindow: 100,
+    status: "open",
     createdAt: 1,
     updatedAt: 1,
+    expiresAt: 9_999_999_999_999,
+    followUpWindow: 100,
+    ...overrides,
   });
 }
 
-describe("PendingInteractionStore", () => {
-  test("creates worker-owned routing state and finds it by scoped correlation", async () => {
+/**
+ * Historical rows predate the #548 freeze; tests emulate them at the adapter
+ * layer because the store's write surface is frozen by design (pending-ask
+ * precedent, #510 D2a).
+ */
+function seedFrozenRow(record: Communication.PendingInteraction.Record): void {
+  const adapter = Storage.getAdapter().pendingInteraction;
+  if (!adapter) throw new Error("pendingInteraction adapter missing");
+  adapter.create(record);
+}
+
+describe("PendingInteractionStore (frozen legacy writer, #548)", () => {
+  test("every write method throws the typed frozen error and persists/publishes nothing", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     const sessionId = await createWorkerRun("run-1");
+    seedFrozenRow(frozenRecord("pi-frozen", sessionId));
 
-    const created = createPendingInteraction("pi-1", sessionId);
+    const attempts: ReadonlyArray<
+      readonly [Communication.PendingInteraction.WriteMethod, () => unknown]
+    > = [
+      [
+        "create",
+        () =>
+          PendingInteractionStore.create({
+            id: "pi-new",
+            workerRunId: "run-1",
+            sessionId,
+            endpointId: "telegram:seller-1",
+            channelId: "telegram:dm",
+            correlation: { replyToMessageId: "reply-new" },
+            allowedActions: ["report_result"],
+            expiresAt: Date.now() + 60_000,
+            followUpWindow: 100,
+          }),
+      ],
+      ["resolve", () => PendingInteractionStore.resolve("pi-frozen", { resolvedAt: 10 })],
+      ["markFollowUp", () => PendingInteractionStore.markFollowUp("pi-frozen")],
+      ["cancel", () => PendingInteractionStore.cancel("pi-frozen", { cancelledAt: 10 })],
+      ["cleanupExpired", () => PendingInteractionStore.cleanupExpired()],
+    ];
 
-    expect(created.status).toBe("open");
+    for (const [method, attempt] of attempts) {
+      let thrown: unknown;
+      try {
+        attempt();
+      } catch (error) {
+        thrown = error;
+      }
+      if (!Communication.PendingInteraction.FrozenError.isInstance(thrown)) {
+        throw new Error(`expected the typed PendingInteractionFrozenError for ${method}`);
+      }
+      expect(thrown.data.code).toBe("pending_interaction_frozen");
+      expect(thrown.data.method).toBe(method);
+    }
+
+    await flushBus();
+    expect(events).toEqual([]);
+    // The frozen row is untouched; the rejected create persisted nothing.
+    expect(PendingInteractionStore.get("pi-frozen")).toEqual(frozenRecord("pi-frozen", sessionId));
+    expect(PendingInteractionStore.get("pi-new")).toBeUndefined();
+  });
+
+  test("frozen rows stay readable by id and by scoped correlation", async () => {
+    const sessionId = await createWorkerRun("run-1");
+    seedFrozenRow(frozenRecord("pi-read", sessionId));
+
+    expect(PendingInteractionStore.get("pi-read")?.status).toBe("open");
     expect(
       PendingInteractionStore.findByCorrelation({
         endpointId: "telegram:seller-1",
@@ -66,153 +132,64 @@ describe("PendingInteractionStore", () => {
         replyToMessageId: "reply-1",
       }),
     ).toHaveLength(0);
-
-    await flushBus();
-    expect(events).toContain("pending_interaction.opened");
   });
 
-  test("keeps resolved interactions matchable only during the follow-up window", async () => {
+  test("read-time expiry gates frozen open rows past expiresAt", async () => {
     const sessionId = await createWorkerRun("run-1");
-    createPendingInteraction("pi-2", sessionId);
+    seedFrozenRow(frozenRecord("pi-expired-open", sessionId, { expiresAt: 1_000 }));
 
-    const resolved = PendingInteractionStore.resolve("pi-2", { resolvedAt: 20 });
-
-    expect(resolved.status).toBe("resolved");
-    expect(
-      PendingInteractionStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:dm",
-          threadId: "thread-1",
-        },
-        119,
-      ),
-    ).toHaveLength(1);
-    expect(
-      PendingInteractionStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:dm",
-          threadId: "thread-1",
-        },
-        121,
-      ),
-    ).toHaveLength(0);
+    const query = {
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      tokenHash: "token-1",
+    };
+    expect(PendingInteractionStore.findByCorrelation(query, 999)).toHaveLength(1);
+    expect(PendingInteractionStore.findByCorrelation(query, 1_001)).toHaveLength(0);
   });
 
-  test("does not match follow-up records after the original follow-up window", async () => {
+  test("read-time expiry keeps resolved rows matchable only during the follow-up window", async () => {
     const sessionId = await createWorkerRun("run-1");
-    const resolvedAt = Date.now();
-    createPendingInteraction("pi-follow-up", sessionId);
-    PendingInteractionStore.resolve("pi-follow-up", { resolvedAt });
-    PendingInteractionStore.markFollowUp("pi-follow-up");
-
-    expect(
-      PendingInteractionStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:dm",
-          threadId: "thread-1",
-        },
-        resolvedAt + 101,
-      ),
-    ).toHaveLength(0);
-  });
-
-  test("matches follow-up records inside the original follow-up window", async () => {
-    const sessionId = await createWorkerRun("run-1");
-    const resolvedAt = Date.now();
-    createPendingInteraction("pi-follow-up-inside", sessionId);
-    PendingInteractionStore.resolve("pi-follow-up-inside", { resolvedAt });
-    PendingInteractionStore.markFollowUp("pi-follow-up-inside");
-
-    expect(
-      PendingInteractionStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:dm",
-          threadId: "thread-1",
-        },
-        resolvedAt + 100,
-      ),
-    ).toHaveLength(1);
-  });
-
-  test("does not match open interactions after expiresAt", async () => {
-    const sessionId = await createWorkerRun("run-1");
-    createPendingInteraction("pi-expired-open", sessionId, 1_000);
-
-    expect(
-      PendingInteractionStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:dm",
-          tokenHash: "token-1",
-        },
-        1_001,
-      ),
-    ).toHaveLength(0);
-  });
-
-  test("cleanupExpired expires stale open, resolved, and follow-up records", async () => {
-    const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
-    const cleanupAt = Date.now() + 101;
-    const sessionId = await createWorkerRun("run-1");
-    createPendingInteraction("pi-expired-open-cleanup", sessionId, cleanupAt - 1);
-    createPendingInteraction("pi-active-open-cleanup", sessionId, cleanupAt + 1);
-    createPendingInteraction("pi-expired-resolved-cleanup", sessionId);
-    PendingInteractionStore.resolve("pi-expired-resolved-cleanup", { resolvedAt: cleanupAt - 101 });
-    createPendingInteraction("pi-expired-follow-up-cleanup", sessionId);
-    PendingInteractionStore.resolve("pi-expired-follow-up-cleanup", {
-      resolvedAt: cleanupAt - 101,
-    });
-    PendingInteractionStore.markFollowUp("pi-expired-follow-up-cleanup");
-
-    const expired = PendingInteractionStore.cleanupExpired(cleanupAt);
-    await flushBus();
-
-    expect(expired.map((record) => record.id).sort()).toEqual([
-      "pi-expired-follow-up-cleanup",
-      "pi-expired-open-cleanup",
-      "pi-expired-resolved-cleanup",
-    ]);
-    expect(PendingInteractionStore.get("pi-expired-follow-up-cleanup")?.status).toBe("expired");
-    expect(PendingInteractionStore.get("pi-expired-open-cleanup")?.status).toBe("expired");
-    expect(PendingInteractionStore.get("pi-expired-resolved-cleanup")?.status).toBe("expired");
-    expect(PendingInteractionStore.get("pi-active-open-cleanup")?.status).toBe("open");
-    expect(events.filter((event) => event === "pending_interaction.expired")).toHaveLength(3);
-  });
-
-  test("terminal transitions are idempotent and stop correlation matches", async () => {
-    const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
-    const sessionId = await createWorkerRun("run-1");
-    createPendingInteraction("pi-3", sessionId);
-
-    const cancelled = PendingInteractionStore.cancel("pi-3", { cancelledAt: 10 });
-    const duplicate = PendingInteractionStore.cancel("pi-3", { cancelledAt: 20 });
-    await flushBus();
-
-    expect(cancelled.status).toBe("cancelled");
-    expect(duplicate.cancelledAt).toBe(10);
-    expect(
-      PendingInteractionStore.findByCorrelation({
-        endpointId: "telegram:seller-1",
-        channelId: "telegram:dm",
-        tokenHash: "token-1",
+    seedFrozenRow(
+      frozenRecord("pi-resolved", sessionId, {
+        status: "resolved",
+        resolvedAt: 20,
       }),
-    ).toHaveLength(0);
-    expect(events.filter((event) => event === "pending_interaction.cancelled")).toHaveLength(1);
+    );
+
+    const query = {
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      threadId: "thread-1",
+    };
+    expect(PendingInteractionStore.findByCorrelation(query, 119)).toHaveLength(1);
+    expect(PendingInteractionStore.findByCorrelation(query, 121)).toHaveLength(0);
   });
 
-  test("open interactions survive adapter recreation", async () => {
+  test("read-time expiry gates follow-up rows by the original follow-up window", async () => {
+    const sessionId = await createWorkerRun("run-1");
+    seedFrozenRow(
+      frozenRecord("pi-follow-up", sessionId, {
+        status: "follow_up",
+        resolvedAt: 20,
+      }),
+    );
+
+    const query = {
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      threadId: "thread-1",
+    };
+    expect(PendingInteractionStore.findByCorrelation(query, 120)).toHaveLength(1);
+    expect(PendingInteractionStore.findByCorrelation(query, 121)).toHaveLength(0);
+  });
+
+  test("frozen rows survive adapter recreation", async () => {
     const adapter = Storage.getAdapter();
     const sessionId = await createWorkerRun("run-1");
-    createPendingInteraction("pi-4", sessionId);
+    seedFrozenRow(frozenRecord("pi-survive", sessionId));
 
     Storage.configure(adapter);
 
-    expect(PendingInteractionStore.get("pi-4")?.status).toBe("open");
+    expect(PendingInteractionStore.get("pi-survive")?.status).toBe("open");
   });
 });

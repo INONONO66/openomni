@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
-import type { Wait } from "@openomni/protocol";
+import { Communication, type Wait } from "@openomni/protocol";
 import {
   createDefaultDispatchRuntime,
   WaitService,
@@ -58,6 +58,39 @@ async function createPendingInteractionFixture(
         }
       : {}),
   });
+}
+
+// PendingInteractionStore writes are frozen (#548) — historical rows are
+// seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
+async function seedFrozenPendingInteractionFixture(
+  id: string,
+  expiresAt: number,
+  lifecycle: "open" | "follow_up" = "open",
+): Promise<void> {
+  const session = Session.create({
+    title: `${id}-session`,
+    model: { providerID: "test", modelID: "test" },
+  });
+  await WorkerRun.create(session.id, { runId: `${id}-run`, title: id, prompt: "test" });
+  const adapter = Storage.getAdapter().pendingInteraction;
+  if (!adapter) throw new Error("pendingInteraction adapter missing");
+  adapter.create(
+    Communication.PendingInteraction.Record.parse({
+      id,
+      workerRunId: `${id}-run`,
+      sessionId: session.id,
+      endpointId: "discord:bot-1",
+      channelId: "dev",
+      correlation: { replyToMessageId: `${id}-reply` },
+      allowedActions: ["report_result"],
+      status: lifecycle,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      expiresAt,
+      followUpWindow: 100,
+      ...(lifecycle === "follow_up" ? { resolvedAt: Date.now() - 200 } : {}),
+    }),
+  );
 }
 
 describe("server recovery", () => {
@@ -317,6 +350,45 @@ describe("server recovery", () => {
     });
     // Observe-only surface: the error is loud but boot still completes.
     expect(events).toContain("operational.recovery.completed");
+  });
+
+  it("records the frozen-store no-op receipt and never writes pending interactions (#548)", async () => {
+    const infoMessages: string[] = [];
+    const eventNames: string[] = [];
+    Bus.observe((event, payload) => {
+      eventNames.push(event.name);
+      if (event.name === "operational.info") {
+        infoMessages.push(String((payload as Record<string, unknown>).msg));
+      }
+    });
+    // Stale by every pre-freeze rule: recovery must still write nothing.
+    await seedFrozenPendingInteractionFixture("pi-frozen-stale", Date.now() - 1);
+    await seedFrozenPendingInteractionFixture(
+      "pi-frozen-follow-up",
+      Date.now() + 60_000,
+      "follow_up",
+    );
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-frozen-receipt",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [],
+        }),
+      },
+    });
+
+    // Frozen store (#548): the boot expiry sweep is a no-op with a receipt —
+    // rows keep their persisted status and read-time expiry gates matching.
+    expect(PendingInteractionStore.get("pi-frozen-stale")?.status).toBe("open");
+    expect(PendingInteractionStore.get("pi-frozen-follow-up")?.status).toBe("follow_up");
+    expect(eventNames).not.toContain("pending_interaction.expired");
+    expect(
+      infoMessages.some((msg) => msg.includes("pending-interaction") && msg.includes("frozen")),
+    ).toBe(true);
   });
 
   it("expires stale PendingInteractions during boot recovery", async () => {
