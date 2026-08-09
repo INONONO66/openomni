@@ -278,7 +278,7 @@ function validateCompletionContract(item: z.infer<typeof InfoShape>, ctx: z.Refi
 }
 
 // merged from http.ts (#453 hygiene: sub-30-LOC single-importer)
-export function isHttpUrl(target: string): boolean {
+function isHttpUrl(target: string): boolean {
   try {
     const protocol = new URL(target).protocol;
     return protocol === "http:" || protocol === "https:";
