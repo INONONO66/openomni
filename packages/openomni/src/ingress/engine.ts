@@ -54,9 +54,13 @@ function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
 // `${eventKey}-${issueNumber}-${sender}-${len}` — so the stream identity
 // carries the surface + workspace + channel scope. Without it a colliding id
 // from another channel (or an attacker-chosen channel) could preempt or
-// replay a foreign decision.
+// replay a foreign decision. Each component is URI-encoded (delimiter
+// safety): the protocol schemas allow plain strings, so a ":" inside a
+// channel or id could otherwise forge a foreign scope's key (e.g.
+// channel "C1" + id "x:5" colliding with channel "C1:x" + id "5").
 function routeStreamId(event: Ingress.InboundEvent): string {
-  return `route:${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}:${event.id}`;
+  const component = (value: string | undefined) => encodeURIComponent(value ?? "");
+  return `route:${component(event.surface)}:${component(event.workspace)}:${component(event.channel)}:${component(event.id)}`;
 }
 
 // Replay equivalence gate (#510 review fix F2): a cas_conflict means this

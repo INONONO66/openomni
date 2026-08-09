@@ -27,6 +27,7 @@ export const StreamRegistry = {
     conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
     factTypes: [
       "wait.opened",
+      "wait.adopted",
       "wait.attached",
       "wait.resolved",
       "wait.expired",
@@ -68,8 +69,11 @@ export const StreamRegistry = {
     // are only unique WITHIN a channel (Telegram per-chat counters, GitHub
     // per-issue fallback ids), so the surface + workspace + channel scope is
     // part of the stream identity — a colliding id from another channel can
-    // never preempt or replay a foreign decision.
-    stream: 'route:<surface>:<workspace ?? "">:<channel ?? "">:<inboundEventId>',
+    // never preempt or replay a foreign decision. Components are URI-encoded
+    // (they are protocol plain strings, so a raw ":" could forge a foreign
+    // scope's key).
+    stream:
+      'route:<uriencoded surface>:<uriencoded workspace ?? "">:<uriencoded channel ?? "">:<uriencoded inboundEventId>',
     heads: "single-fact (expectedHead 0, seq 1)",
     conflictMeans:
       "inbound event id already routed — replay is EQUIVALENCE-GATED (F2): the fresh decision must match the recorded one on stage/outcome/target/sessionId/runId/pendingInteractionId; equivalent redelivery proceeds with the fresh resolution (accepted routes re-execute idempotently, terminal decisions repeat their rejection), divergent fails closed as route_replay_divergent",

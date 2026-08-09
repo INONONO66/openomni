@@ -84,12 +84,19 @@ import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest"
 
 let tempDir: string;
 let inspect: Database;
+// The REAL adapter behind any test-local Storage.configure swap (e.g.
+// configureFailingLedger spreads it into a plain object, losing the
+// prototype's close()): afterEach closes THIS, not whatever getAdapter()
+// returns, so the primary + telemetry connections never leak.
+let baseAdapter: SqliteStorageAdapter | undefined;
 
 beforeEach(() => {
   Bus.reset();
   Storage.reset();
   tempDir = mkdtempSync(join(tmpdir(), "p2-ledger-baseline-"));
   Storage.initialize({ dbPath: join(tempDir, "openomni.db") });
+  const adapter = Storage.getAdapter();
+  baseAdapter = adapter instanceof SqliteStorageAdapter ? adapter : undefined;
   // Second connection on the same WAL file: assertions and tampering must
   // not ride the writer's connection.
   inspect = new Database(join(tempDir, "openomni.db"));
@@ -97,8 +104,8 @@ beforeEach(() => {
 
 afterEach(() => {
   inspect.close();
-  const adapter = Storage.getAdapter();
-  if (adapter instanceof SqliteStorageAdapter) adapter.close();
+  baseAdapter?.close();
+  baseAdapter = undefined;
   Storage.reset();
   Bus.reset();
   rmSync(tempDir, { recursive: true, force: true });
@@ -277,14 +284,22 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
     expect(headOf("wait-1")).toBe(2);
     expect(WaitStore.get("wait-1")?.revision).toBe(2);
     const adopted = JSON.parse(facts[0]?.data ?? "{}") as {
-      snapshot?: { id?: string; revision?: number };
+      ownerKind?: string;
+      ownerId?: string;
+      status?: string;
       revision?: number;
     };
-    // The genesis fact records the observed snapshot at seq === revision —
-    // pre-cutover history is adopted, never fabricated.
+    // The genesis fact records the observed identity at seq === revision —
+    // pre-cutover history is adopted, never fabricated — and carries NO
+    // erasable data: the hash-chained fact is immutable, so replies
+    // (responder ids) and correlation identifiers must never bake into it.
     expect(adopted.revision).toBe(1);
-    expect(adopted.snapshot?.id).toBe("wait-1");
-    expect(adopted.snapshot?.revision).toBe(1);
+    expect(adopted.ownerKind).toBe("workItem");
+    expect(adopted.ownerId).toBe("wi-1");
+    expect(adopted.status).toBe("open");
+    expect(adopted).not.toHaveProperty("snapshot");
+    expect(adopted).not.toHaveProperty("replies");
+    expect(adopted).not.toHaveProperty("correlation");
     // The adopted stream verifies clean at boot.
     expect(Ledger.verifyTail(inspect)).toEqual([]);
   });

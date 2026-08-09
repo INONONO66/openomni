@@ -143,6 +143,8 @@ export async function updateWorkItem(
     "timestamps",
     "failureReason",
     "attempt",
+    "lastAttemptSeq",
+    "currentAttemptId",
     "maxAttempts",
     "executorKind",
     "workerRunId",

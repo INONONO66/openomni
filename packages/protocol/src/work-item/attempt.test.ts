@@ -46,6 +46,11 @@ function attemptOf(overrides: Record<string, unknown> = {}): Record<string, unkn
   };
 }
 
+/** Tamper helper: always yields a DIFFERENT last character ("0" is a valid hex/last char, so a blind replace can be a no-op). */
+function forgeLastChar(value: string): string {
+  return value.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+}
+
 function refineMessages(result: { success: boolean; error?: { issues: { message: string }[] } }) {
   if (result.success || !result.error) throw new Error("expected a refine rejection");
   return result.error.issues.map((issue) => issue.message);
@@ -74,7 +79,7 @@ describe("WorkItem fingerprints", () => {
     expect(fingerprint.digest).toBe(WorkItem.canonicalDigest(fingerprint.inputs));
     expect(WorkItem.ContentFingerprint.safeParse(fingerprint).success).toBe(true);
 
-    const forged = { ...fingerprint, digest: fingerprint.digest.replace(/.$/, "0") };
+    const forged = { ...fingerprint, digest: forgeLastChar(fingerprint.digest) };
     const rejected = WorkItem.ContentFingerprint.safeParse(forged);
     expect(refineMessages(rejected)).toContain(
       "fingerprint digest does not match its canonical inputs",
@@ -181,7 +186,7 @@ describe("WorkItem.CacheKey", () => {
 
   test("the key is derived, never assigned — a tampered key rejects", () => {
     const cacheKey = WorkItem.cacheKeyOf(content(), environment(), ["os"]);
-    const forged = { ...cacheKey, key: cacheKey.key.replace(/.$/, "0") };
+    const forged = { ...cacheKey, key: forgeLastChar(cacheKey.key) };
     expect(refineMessages(WorkItem.CacheKey.safeParse(forged))).toContain(
       "cacheKey is derived from its components, never assigned",
     );

@@ -32,9 +32,9 @@ function requireAdapter(): ProtocolStorage.WaitSubAdapter {
  *     the CAS receipt and the ledger head can never disagree;
  *   - a PRE-CUTOVER row (revision >= 1, empty owner stream — its writes
  *     predate phase B) is adopted lazily on its first transition: a
- *     wait.adopted genesis fact with the record snapshot lands at seq ===
- *     revision via Ledger.adoptStream, then the transition proceeds (#510
- *     review fix F3).
+ *     wait.adopted genesis fact (owner/status/expiry identity only — never
+ *     the erasable record snapshot) lands at seq === revision via
+ *     Ledger.adoptStream, then the transition proceeds (#510 review fix F3).
  */
 function requireLedger(): ProtocolStorage.LedgerSubAdapter {
   const ledger = Storage.get().ledger;
@@ -298,14 +298,24 @@ export namespace WaitStore {
         // Lazy adoption (#510 review fix F3): a pre-cutover wait row exists
         // at revision >= 1 with an EMPTY owner stream (its writes predate the
         // phase-B cutover). Adopt the stream at the observed revision — the
-        // wait.adopted genesis carries the record snapshot at seq ===
-        // revision — then retry the transition append at the same head. A
-        // concurrent adopter throws the typed AdoptError, which surfaces as
-        // the same revision_conflict any lost race produces.
+        // wait.adopted genesis lands at seq === revision — then retry the
+        // transition append at the same head. A concurrent adopter throws
+        // the typed AdoptError, which surfaces as the same revision_conflict
+        // any lost race produces. The genesis payload mirrors wait.opened
+        // and deliberately carries NO erasable data: the hash-chained ledger
+        // is immutable, so replies (responder ids), correlation identifiers,
+        // and allowed-action/identity fields must never be baked into it —
+        // the projection row remains the read model for those.
         try {
           ledger.adoptStream(waitStreamId(id), current.revision, {
             type: "wait.adopted",
-            data: { snapshot: current, revision: current.revision },
+            data: {
+              ownerKind: current.ownerRef.kind,
+              ownerId: current.ownerRef.id,
+              status: current.status,
+              expiresAt: current.expiresAt,
+              revision: current.revision,
+            },
           });
         } catch (error) {
           if (LedgerAppend.AdoptError.isInstance(error)) {

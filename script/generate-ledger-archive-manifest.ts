@@ -102,11 +102,12 @@ function parseArgs(argv: readonly string[]): { dbPath: string; outPath: string }
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
-    if (flag === "--db" && value) {
-      dbPath = value;
-      i += 1;
-    } else if (flag === "--out" && value) {
-      outPath = value;
+    if (flag === "--db" || flag === "--out") {
+      if (value === undefined) {
+        throw new Error(`missing value for ${flag} (usage: [--db <path>] [--out <path>])`);
+      }
+      if (flag === "--db") dbPath = value;
+      else outPath = value;
       i += 1;
     } else {
       throw new Error(`unknown argument: ${flag} (usage: [--db <path>] [--out <path>])`);

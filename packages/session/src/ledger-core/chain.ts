@@ -60,9 +60,11 @@ function verifyStreamTail(input: {
     )
     .all(streamId, depth) as EventRow[];
 
-  const headRow = db.query("SELECT head FROM ledger_head WHERE stream_id = ?").get(streamId) as {
-    head: number;
-  } | null;
+  // `.get()` returns null for an empty result on current bun:sqlite; the
+  // `?? null` pins that shape locally so `headRow === null` below can never
+  // meet an undefined from a future runtime change.
+  const headRow = (db.query("SELECT head FROM ledger_head WHERE stream_id = ?").get(streamId) ??
+    null) as { head: number } | null;
   const maxSeq = rows[0]?.seq ?? 0;
   if (headRow?.head !== maxSeq) {
     breaks.push({

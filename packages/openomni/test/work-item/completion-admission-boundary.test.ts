@@ -819,7 +819,10 @@ describe("WorkItem completion admission service", () => {
         // owner-stream head equal to the drifted revision.
         const storage = Storage.get();
         storage.transaction(() => {
-          storage.ledger?.append(
+          // Both halves must land (loud, not best-effort): a silently failed
+          // fact append or projection CAS would mean the drift this test
+          // depends on never happened, masking the regression it simulates.
+          const appended = storage.ledger?.append(
             {
               streamId: `work:${hash}`,
               type: "work_item.updated",
@@ -827,7 +830,12 @@ describe("WorkItem completion admission service", () => {
             },
             current.revision,
           );
-          storage.workItem?.compareAndSet(hash, expectedRevision, advanced);
+          if (appended?.kind !== "appended") {
+            throw new Error("external drift fact append failed — fixture drift did not happen");
+          }
+          if (!storage.workItem?.compareAndSet(hash, expectedRevision, advanced)) {
+            throw new Error("external drift projection CAS failed — fixture drift did not happen");
+          }
         });
       }
       return completionWriter(hash, expectedRevision, next);

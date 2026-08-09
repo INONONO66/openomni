@@ -73,7 +73,17 @@ export async function startInboundSurfacesAfterRecovery<T>(
  */
 function recordLedgerChainBreaks(traceId: string): void {
   try {
-    const breaks = Storage.getAdapter().ledger?.verifyTail() ?? [];
+    const ledger = Storage.getAdapter().ledger;
+    if (!ledger) {
+      // Loud absence (AGENTS.md rule 7): the ledger sub-adapter is optional
+      // for test fakes ONLY — a production adapter without it means tail
+      // verification cannot run, and that must surface as an Operational
+      // error (via the catch below), never as a silent empty result.
+      throw new Error(
+        "storage adapter does not implement ledger reads — tail verification skipped",
+      );
+    }
+    const breaks = ledger.verifyTail();
     for (const chainBreak of breaks) {
       Bus.publish(Operational.Error, {
         traceId,

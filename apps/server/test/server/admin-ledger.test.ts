@@ -119,17 +119,27 @@ describe("admin ledger routes", () => {
   });
 
   test("fails closed: every route denies 401 while no admin token is configured", async () => {
-    const app = createRouter();
+    // Undefined AND empty-string tokens both fail closed. The "Bearer "
+    // header is the auth-bypass regression pin: `Bearer ${""}` is exactly
+    // "Bearer ", so an empty token must never authorize that header.
+    for (const options of [undefined, { adminToken: "" }]) {
+      const app = createRouter(undefined, options);
 
-    for (const path of ADMIN_READ_PATHS) {
-      const bare = await app.fetch(new Request(`http://localhost${path}`));
-      const withToken = await app.fetch(authedRequest(path));
+      for (const path of ADMIN_READ_PATHS) {
+        const bare = await app.fetch(new Request(`http://localhost${path}`));
+        const emptyBearer = await app.fetch(
+          new Request(`http://localhost${path}`, { headers: { Authorization: "Bearer " } }),
+        );
+        const withToken = await app.fetch(authedRequest(path));
 
-      expect(bare.status).toBe(401);
-      expect(await bare.json()).toEqual({ error: "Unauthorized" });
-      // No configured token means NO token is valid — not "any token works".
-      expect(withToken.status).toBe(401);
-      expect(await withToken.json()).toEqual({ error: "Unauthorized" });
+        expect(bare.status).toBe(401);
+        expect(await bare.json()).toEqual({ error: "Unauthorized" });
+        expect(emptyBearer.status).toBe(401);
+        expect(await emptyBearer.json()).toEqual({ error: "Unauthorized" });
+        // No configured token means NO token is valid — not "any token works".
+        expect(withToken.status).toBe(401);
+        expect(await withToken.json()).toEqual({ error: "Unauthorized" });
+      }
     }
   });
 
@@ -188,6 +198,29 @@ describe("admin ledger routes", () => {
 
     expect(unmatched.status).toBe(200);
     expect(((await unmatched.json()) as { attempts: AttemptSummary[] }).attempts).toEqual([]);
+  });
+
+  test("attempts: the listing is bounded — limit keeps the newest facts, invalid limits are 400", async () => {
+    const app = createRouter(undefined, { adminToken: ADMIN_TOKEN });
+    appendAttemptFact("hash-a", attemptIdentity("work item a", 1), 1);
+    appendAttemptFact("hash-a", attemptIdentity("work item a", 2), 2);
+    appendAttemptFact("hash-b", attemptIdentity("work item b", 1), 1);
+
+    const limited = await app.fetch(authedRequest("/admin/ledger/attempts?limit=2"));
+    const limitedBody = (await limited.json()) as { attempts: AttemptSummary[] };
+
+    expect(limited.status).toBe(200);
+    // Newest window: the oldest fact falls out first.
+    expect(limitedBody.attempts).toHaveLength(2);
+    expect(limitedBody.attempts.map((attempt) => attempt.stream)).toEqual([
+      "work:hash-a",
+      "work:hash-b",
+    ]);
+
+    for (const bad of ["0", "-1", "abc", "1.5"]) {
+      const rejected = await app.fetch(authedRequest(`/admin/ledger/attempts?limit=${bad}`));
+      expect(rejected.status).toBe(400);
+    }
   });
 
   test("stream head returns the newest recorded fact; an empty stream is 404", async () => {

@@ -56,6 +56,20 @@ export function isAuthorizedCompletionWriter(): boolean {
 // refuse tampered shapes inside the same transaction, rolling the fact back.
 function completionFactOf(existing: WorkItem.Info, next: WorkItem.Info): WorkItemFact {
   if (next.completionTerminalReceipt && !existing.completionTerminalReceipt) {
+    // One fact per revision bump (head == revision binding): a candidate row
+    // that BOTH introduces the terminal receipt and appends an admission or
+    // reservation would silently drop the earlier decision fact — the
+    // admission service always commits them as separate writes, so a
+    // combined row is a contract violation and fails closed here.
+    if (
+      next.completionFacts.admissions.length > existing.completionFacts.admissions.length ||
+      next.completionFacts.requestReservations.length >
+        existing.completionFacts.requestReservations.length
+    ) {
+      throw new Error(
+        `WorkItem terminal receipt cannot commit with an admission/reservation in one write: ${next.hash}`,
+      );
+    }
     const receipt = next.completionTerminalReceipt;
     return {
       type: "work_item.completed",

@@ -26,6 +26,10 @@ type EventSummary = {
  * ledger) share this one owner.
  */
 function bearerAuthorized(header: string | undefined, token: string): boolean {
+  // Fail closed on a missing/empty token: `Bearer ${""}` is the 7-byte string
+  // "Bearer ", which a header of exactly "Bearer " would match — an
+  // unconfigured surface must never authorize anything.
+  if (!token) return false;
   const expected = Buffer.from(`Bearer ${token}`);
   const provided = Buffer.from(header ?? "");
   if (provided.length !== expected.length) return false;
@@ -86,45 +90,47 @@ export function createRouter(
     }),
   );
 
-  if (options.observabilityToken) {
-    app.get("/observability/sessions/:sessionId/events", async (c) => {
-      if (!bearerAuthorized(c.req.header("Authorization"), options.observabilityToken ?? "")) {
-        return c.json({ error: "Unauthorized" }, 401);
-      }
+  // Always registered, fails closed while unconfigured (same convention as
+  // the admin ledger surface): no observability token means every request is
+  // denied 401 — never "route absent", and never "empty token matches".
+  app.get("/observability/sessions/:sessionId/events", async (c) => {
+    const token = options.observabilityToken;
+    if (!token || !bearerAuthorized(c.req.header("Authorization"), token)) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
 
-      const sessionId = c.req.param("sessionId");
-      try {
-        const [stats, errors, workerRuns, chainIntegrity] = await Promise.all([
-          BusQuery.getStats(sessionId),
-          BusQuery.listErrors(sessionId),
-          BusQuery.getWorkerRunHistory(sessionId),
-          BusQuery.verifyChainIntegrity(sessionId),
-        ]);
-        return c.json({
-          sessionId,
-          stats,
-          errors: errors.map(toEventSummary),
-          workerRuns,
-          chainIntegrity,
-        });
-      } catch (error) {
-        Bus.publish(Operational.Error, {
-          traceId: c.get("requestId"),
-          time: Date.now(),
-          component: "server",
-          msg: "observability query failed",
-          error: error instanceof Error ? error.message : String(error),
-          context: { sessionId },
-        });
-        return c.json(
-          {
-            error: "Observability query unavailable",
-          },
-          503,
-        );
-      }
-    });
-  }
+    const sessionId = c.req.param("sessionId");
+    try {
+      const [stats, errors, workerRuns, chainIntegrity] = await Promise.all([
+        BusQuery.getStats(sessionId),
+        BusQuery.listErrors(sessionId),
+        BusQuery.getWorkerRunHistory(sessionId),
+        BusQuery.verifyChainIntegrity(sessionId),
+      ]);
+      return c.json({
+        sessionId,
+        stats,
+        errors: errors.map(toEventSummary),
+        workerRuns,
+        chainIntegrity,
+      });
+    } catch (error) {
+      Bus.publish(Operational.Error, {
+        traceId: c.get("requestId"),
+        time: Date.now(),
+        component: "server",
+        msg: "observability query failed",
+        error: error instanceof Error ? error.message : String(error),
+        context: { sessionId },
+      });
+      return c.json(
+        {
+          error: "Observability query unavailable",
+        },
+        503,
+      );
+    }
+  });
 
   registerAdminLedgerRoutes(app, options);
 
@@ -155,17 +161,28 @@ function registerAdminLedgerRoutes(app: Hono<Env>, options: RouterOptions): void
 
   // Issue #510 Manual QA: attempt-identity history — distinct attemptIds,
   // monotonic attemptSeq per work stream, optionally filtered by content
-  // fingerprint digest. Fingerprints are reported as digests only.
+  // fingerprint digest. Fingerprints are reported as digests only. The
+  // result set is BOUNDED (`limit`, newest last, default/cap below): the
+  // fact history grows without bound and each row pays a full
+  // WorkItem.Attempt.parse, so the digest filter runs on the raw fact and
+  // the parse runs only on the returned window.
   app.get("/admin/ledger/attempts", (c) =>
     respondWithLedgerRead(c, () => {
       const contentFingerprint = c.req.query("contentFingerprint");
+      const limit = parseAttemptListLimit(c.req.query("limit"));
+      if (limit === undefined) {
+        return c.json({ error: "limit must be a positive integer" }, 400);
+      }
       const attempts = requireLedger()
         .factsByType("work_item.attempt_allocated")
-        .map(toAttemptSummary)
         .filter(
-          (attempt) =>
-            contentFingerprint === undefined || attempt.contentFingerprint === contentFingerprint,
-        );
+          (fact) =>
+            contentFingerprint === undefined ||
+            (fact.data.contentFingerprint as { digest?: string } | undefined)?.digest ===
+              contentFingerprint,
+        )
+        .slice(-limit)
+        .map(toAttemptSummary);
       return c.json({ attempts });
     }),
   );
@@ -198,6 +215,17 @@ function registerAdminLedgerRoutes(app: Hono<Env>, options: RouterOptions): void
       return c.json(JSON.parse(readFileSync(path, "utf-8")));
     }),
   );
+}
+
+const AttemptListDefaultLimit = 200;
+const AttemptListMaxLimit = 1000;
+
+/** Absent -> default; positive integer -> capped; anything else -> undefined (400). */
+function parseAttemptListLimit(raw: string | undefined): number | undefined {
+  if (raw === undefined) return AttemptListDefaultLimit;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) return undefined;
+  return Math.min(parsed, AttemptListMaxLimit);
 }
 
 function requireLedger(): ProtocolStorage.LedgerSubAdapter {

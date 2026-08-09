@@ -279,6 +279,44 @@ describe("server recovery", () => {
     expect(events).toContain("operational.recovery.completed");
   });
 
+  it("records a LOUD Operational.Error when the adapter lacks the ledger sub-adapter", async () => {
+    // AGENTS.md rule 7 pin: an optional sub-adapter is test-fake-only — its
+    // absence in a boot path must surface as an error, never as a silent
+    // empty verification result.
+    const { ledger: _ledger, ...withoutLedger } = Storage.getAdapter();
+    Storage.configure(withoutLedger);
+
+    const errorPayloads: Array<Record<string, unknown>> = [];
+    const events: string[] = [];
+    Bus.observe((event, payload) => {
+      events.push(event.name);
+      if (event.name === "operational.error") {
+        errorPayloads.push(payload as Record<string, unknown>);
+      }
+    });
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-ledger-absent",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [],
+        }),
+      },
+    });
+
+    const absenceError = errorPayloads.find((payload) =>
+      String(payload.msg).includes("ledger tail verification failed at boot"),
+    );
+    expect(absenceError?.context).toMatchObject({
+      error: "storage adapter does not implement ledger reads — tail verification skipped",
+    });
+    // Observe-only surface: the error is loud but boot still completes.
+    expect(events).toContain("operational.recovery.completed");
+  });
+
   it("expires stale PendingInteractions during boot recovery", async () => {
     const events: string[] = [];
     const completedPayloads: Array<Record<string, unknown>> = [];
