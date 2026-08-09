@@ -75,7 +75,7 @@ function staticMember(expression: ts.Expression): StaticMember | undefined {
 
 type Binding = Readonly<{
   name: string;
-  importKind?: "engine" | "namespace" | "store";
+  importKind?: "engine" | "namespace" | "kernel-namespace" | "store";
   importedName?: string;
   initializer?: ts.Expression;
   propertyName?: string;
@@ -172,6 +172,12 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
             addBinding(scope, {
               name: clause.namedBindings.name.text,
               importKind: "namespace",
+            });
+          }
+          if (moduleName === "@openomni/openomni") {
+            addBinding(scope, {
+              name: clause.namedBindings.name.text,
+              importKind: "kernel-namespace",
             });
           }
         } else {
@@ -284,7 +290,10 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
   return { scopeOf, resolveIdentifier };
 }
 
-type Provenance = Readonly<{ kind: "engine" | "method" | "namespace" | "store"; name?: string }>;
+type Provenance = Readonly<{
+  kind: "engine" | "method" | "namespace" | "kernel-namespace" | "engine-factory" | "store";
+  name?: string;
+}>;
 
 function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenance | undefined {
   const memo = new Map<Binding, Provenance | undefined>();
@@ -300,6 +309,9 @@ function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenan
     if (receiver?.kind === "namespace" && ROUTING_STORES.has(member.name)) {
       return { kind: "store", name: member.name };
     }
+    if (receiver?.kind === "kernel-namespace" && member.name === "createIngressEngine") {
+      return { kind: "engine-factory" };
+    }
     return undefined;
   };
   const resolve = (binding: Binding | undefined): Provenance | undefined => {
@@ -310,6 +322,7 @@ function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenan
     let result: Provenance | undefined;
     if (binding.importKind === "engine") result = { kind: "engine" };
     else if (binding.importKind === "namespace") result = { kind: "namespace" };
+    else if (binding.importKind === "kernel-namespace") result = { kind: "kernel-namespace" };
     else if (binding.importKind === "store") result = { kind: "store", name: binding.importedName };
     else if (binding.initializer) {
       const source = expressionProvenance(binding.initializer);
@@ -318,6 +331,11 @@ function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenan
         result = { kind: "method" };
       } else if (source?.kind === "namespace" && ROUTING_STORES.has(binding.propertyName)) {
         result = { kind: "store", name: binding.propertyName };
+      } else if (
+        source?.kind === "kernel-namespace" &&
+        binding.propertyName === "createIngressEngine"
+      ) {
+        result = { kind: "engine-factory" };
       }
     }
     active.delete(binding);
@@ -466,6 +484,22 @@ function detectRoutingBoundaryViolations(parsed: readonly ParsedSource[]): reado
           ROUTING_STORES.has(member.name)
         ) {
           violations.push(`${path}: accesses routing store ${member.name}`);
+        }
+        // #558 review: `import * as OO` + OO.createIngressEngine bypassed the
+        // named-import rule — flag namespace-qualified factory access too.
+        if (
+          member &&
+          expressionProvenance(member.receiver)?.kind === "kernel-namespace" &&
+          member.name === "createIngressEngine"
+        ) {
+          violations.push(`${path}: imports createIngressEngine`);
+        }
+      }
+
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        const callee = resolve(model.resolveIdentifier(node.expression));
+        if (callee?.kind === "engine-factory") {
+          violations.push(`${path}: imports createIngressEngine`);
         }
       }
 
@@ -656,6 +690,16 @@ describe("server ingress routing ownership boundary", () => {
       "wrapped static session member",
       'import * as Session from "@openomni/session"; ((Session as typeof Session)!)[("ChannelGrantStore" as const)].get("id");',
       "accesses routing store ChannelGrantStore",
+    ],
+    [
+      "namespace-qualified engine construction",
+      'import * as OpenOmni from "@openomni/openomni"; const engine = OpenOmni.createIngressEngine();',
+      "imports createIngressEngine",
+    ],
+    [
+      "destructured namespace engine factory alias",
+      'import * as OpenOmni from "@openomni/openomni"; const { createIngressEngine: make } = OpenOmni; make();',
+      "imports createIngressEngine",
     ],
   ] as const;
 
