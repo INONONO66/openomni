@@ -64,11 +64,12 @@ function denyingPolicyEngine(
   return engine;
 }
 
-type ReflectOptions = Omit<WorkerCompletionOptions, "completionService"> &
+type ReflectOptions = Omit<WorkerCompletionOptions, "completionService" | "verifierRegistry"> &
   Readonly<{
     completionService?: CompletionAdmissionService;
     completionPolicyEngine?: ReturnType<typeof PolicyEngine.create>;
     stakesResolver?: CompletionStakesResolver;
+    verifierRegistry?: WorkerCompletionOptions["verifierRegistry"];
   }>;
 
 function completionServiceFor(options: ReflectOptions): CompletionAdmissionService {
@@ -109,14 +110,18 @@ function reflectCoordinatorResult(
   return reflectCoordinatorResultProduction(workItemHash, result, {
     ...rest,
     completionService: completionServiceFor(options),
+    verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
   });
 }
 
 function projectConnectorCompletion(
   workItemHash: string,
   result: Execution.Result,
-  options: Omit<ConnectorCompletionOptions, "completionService"> &
-    Pick<ReflectOptions, "completionService" | "completionPolicyEngine" | "stakesResolver">,
+  options: Omit<ConnectorCompletionOptions, "completionService" | "verifierRegistry"> &
+    Pick<
+      ReflectOptions,
+      "completionService" | "completionPolicyEngine" | "stakesResolver" | "verifierRegistry"
+    >,
 ) {
   const {
     completionPolicyEngine: _policyEngine,
@@ -127,6 +132,7 @@ function projectConnectorCompletion(
   return projectConnectorCompletionProduction(workItemHash, result, {
     ...rest,
     completionService: completionServiceFor(options),
+    verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
   });
 }
 
@@ -990,16 +996,19 @@ describe("worker completion admission convergence", () => {
     });
     await aEntered.promise;
     clock = 20_000;
+    // In-flight tracking is service-instance state (#549): the takeover owner
+    // and the later contender go through the same service, as in production.
+    const serviceB = contenderService(policyB);
     const attemptB = reflectCoordinatorResult(item.hash, succeeded(output), {
       ...base,
-      completionService: contenderService(policyB),
+      completionService: serviceB,
     });
     await bEntered.promise;
     releaseA.resolve();
     const expiredA = await attemptA;
     const contenderC = await reflectCoordinatorResult(item.hash, succeeded(output), {
       ...base,
-      completionService: contenderService(policyB),
+      completionService: serviceB,
     });
     try {
       expect(expiredA.completionBlocker).toContain("completion reservation lease lost");

@@ -20,7 +20,6 @@ import {
 const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
 const MAX_READ_BACK_BODY_BYTES = 1_000_000;
-const activeCompletionRequests = new Map<string, string>();
 
 const ReadBackRequest = WorkItem.ReadBackRequest.superRefine((request, ctx) => {
   if (request.timeoutMs !== undefined && request.timeoutMs > MAX_READ_BACK_TIMEOUT_MS) {
@@ -138,6 +137,8 @@ type WorkerReadBackEvidenceBinding = Readonly<{
 
 export interface WorkerCompletionOptions {
   readonly completionService?: CompletionAdmissionService;
+  /** Shared deterministic verifier registry (#549); constructed at dispatch setup, never per call. */
+  readonly verifierRegistry: VerifierRegistry.Registry;
   readonly sourceOrigin: WorkItem.CompletionSourceOrigin;
   readonly readBack?: ReadBackExecutor.Options;
   readonly readBackEnvelopeTimeoutMs?: number;
@@ -210,6 +211,7 @@ export async function reflectCoordinatorResult(
         const replayed = replayPreparedReport(requestRoot, parsed.envelope);
         const outcome = await admitWorkerCompletion({
           completionService,
+          verifierRegistry: options.verifierRegistry,
           requestId,
           workItemHash,
           result,
@@ -223,7 +225,7 @@ export async function reflectCoordinatorResult(
       }
       if (
         reservation.state === "busy" ||
-        (reservation.state === "existing" && activeCompletionRequests.has(requestId))
+        (reservation.state === "existing" && completionService.hasActiveRequest(requestId))
       ) {
         return completionReflection(
           workItemHash,
@@ -244,7 +246,7 @@ export async function reflectCoordinatorResult(
         envelopeDigest: completionEnvelopeDigest,
       };
       const invocationToken = reservation.reservation.id;
-      activeCompletionRequests.set(requestId, invocationToken);
+      const releaseActiveRequest = completionService.trackActiveRequest(requestId, invocationToken);
       try {
         const prepared = await prepareCompletionReport(
           workItemHash,
@@ -258,6 +260,7 @@ export async function reflectCoordinatorResult(
           beforeAdmissionWrite: assertLease,
           completionReservation,
           completionService,
+          verifierRegistry: options.verifierRegistry,
           requestId,
           workItemHash,
           result,
@@ -269,9 +272,7 @@ export async function reflectCoordinatorResult(
         });
         return completionOutcomeReflection(workItemHash, outcome);
       } finally {
-        if (activeCompletionRequests.get(requestId) === invocationToken) {
-          activeCompletionRequests.delete(requestId);
-        }
+        releaseActiveRequest();
       }
     } catch (err) {
       if (
@@ -315,6 +316,7 @@ type WorkerCompletionAdmissionInput = Readonly<{
   beforeAdmissionWrite?: () => void;
   completionReservation?: CompletionRequestCallOptions["reservation"];
   completionService: CompletionAdmissionService;
+  verifierRegistry: VerifierRegistry.Registry;
   requestId: string;
   workItemHash: string;
   result: Execution.Result;
@@ -342,6 +344,7 @@ async function admitWorkerCompletion(
       (reservation) => reservation.requestId === requestId,
     )?.createdAt ?? input.now();
   const projected = projectCriterionFacts(
+    input.verifierRegistry,
     item,
     requestId,
     input.criterionFacts,
@@ -457,13 +460,13 @@ type ProjectedFacts = Readonly<{
 }>;
 
 function projectCriterionFacts(
+  registry: VerifierRegistry.Registry,
   item: WorkItem.Info,
   requestId: string,
   inputs: readonly WorkerCriterionFactInput[],
   readBackEvidenceBindings: ReadonlyMap<number, WorkerReadBackEvidenceBinding>,
   createdAt: number,
 ): ProjectedFacts {
-  const registry = VerifierRegistry.create();
   const claims: WorkItem.Claim[] = [];
   const observations: WorkItem.Observation[] = [];
   const results: WorkItem.CriterionResult[] = [];

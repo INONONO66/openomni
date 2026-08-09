@@ -890,6 +890,19 @@ export type CompletionAdmissionService = Readonly<{
    */
   reserveRequest(input: CompletionServiceReservationInput): CompletionRequestReservationOutcome;
   assertReservationLease(input: CompletionServiceLeaseInput): void;
+  /**
+   * Whether this service instance is actively preparing the request in this
+   * process (#549). A durable reservation row ("existing") only proves some
+   * owner reserved it once; this answers whether the work is in flight HERE.
+   */
+  hasActiveRequest(requestId: string): boolean;
+  /**
+   * Marks a request as actively prepared by this invocation and returns the
+   * release. The release clears the marker only while this invocation still
+   * owns it, so a takeover that re-marked the request is never un-marked by
+   * the loser's cleanup (#549 — previously a module-level Map).
+   */
+  trackActiveRequest(requestId: string, invocationToken: string): () => void;
 }>;
 
 type CompletionAdmissionServiceOptions = Readonly<{
@@ -919,6 +932,9 @@ export function createCompletionAdmissionService(
 ): CompletionAdmissionService {
   const serviceOwnerId = options.ownerId ?? `completion-process:${crypto.randomUUID()}`;
   const reservationOwnerId = options.reservation?.ownerId ?? serviceOwnerId;
+  // In-process in-flight tracking is instance state (#549): two services in
+  // one process never see each other's active completion requests.
+  const activeCompletionRequests = new Map<string, string>();
   const baseDecision =
     options.decision ??
     createCompletionDecision(decisionDependencies(options, options.verificationErrorAuthorityPort));
@@ -1108,6 +1124,19 @@ export function createCompletionAdmissionService(
         fence: input.fence,
         now: options.now(),
       });
+    },
+
+    hasActiveRequest(requestId) {
+      return activeCompletionRequests.has(requestId);
+    },
+
+    trackActiveRequest(requestId, invocationToken) {
+      activeCompletionRequests.set(requestId, invocationToken);
+      return () => {
+        if (activeCompletionRequests.get(requestId) === invocationToken) {
+          activeCompletionRequests.delete(requestId);
+        }
+      };
     },
   });
 }
