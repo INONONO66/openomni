@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786302950966,
+  "lastUpdate": 1786303200324,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -37921,6 +37921,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 523399,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc7440ed2c5a75b4dee3d0573f5d8e63c208ca8c",
+          "message": "fix(server): Discord gateway heartbeat ack + real RESUME token (#520) (#541)\n\n* fix(server): wire Discord heartbeat ack and real RESUME token (#520)\n\nRe-merges heartbeat.ts + dispatch-router.ts into gateway.ts (the\nsatellite split severed both protocol data paths, per the issue's own\ndiagnosis and AGENTS.md module rules; zero external consumers proven\nbefore deletion):\n\n- HEARTBEAT_ACK now sets the watchdog flag — nothing called\n  Heartbeat.ack(), so every connection was force-closed after ~2\n  heartbeat intervals (~82s reconnect loop on the deployed server)\n- RESUME carries the real token — the router had no token access and\n  serialized token: undefined, which JSON.stringify drops; Discord\n  answered INVALID_SESSION and every resume degraded to re-identify\n- missed-ack close uses 4000 (non-1000 keeps the session resumable;\n  the default close read as a clean goodbye and invalidated it)\n- review hardening: server-requested op-1 HEARTBEAT gets an immediate\n  beat (docs require it); sequence capture uses a typeof guard so a\n  missing s can never serialize seq: undefined (same class as the\n  token bug)\n\nNew state-machine suite drives the gateway against a scripted fake\nDiscord gateway over a real WebSocket: identify token, ack survival\nacross 5+ intervals, missed-ack 4000 close, RESUME token/session/seq\nafter server-requested reconnect, re-identify after non-resumable\nINVALID_SESSION.\n\nPre-existing reconnect-chain death on fetchGatewayUrl rejection is\nfiled as #540.\n\nCloses #520\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(server): clamp gateway heartbeat interval to sane bounds\n\nThe interval is network input from the HELLO payload; CodeQL flags an\nunclamped user-controlled timer duration (js/resource-exhaustion). Clamp\nto [1s, 5min] — a malformed payload can no longer busy-loop the process\nor install a never-firing heartbeat.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(server): lower heartbeat clamp floor to 100ms\n\nThe 1s floor broke the fake-gateway state-machine test (100ms interval);\n100ms still bounds timer pressure against malformed HELLO payloads.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(server): use an analyzable comparison guard for the heartbeat clamp\n\nCodeQL's js/resource-exhaustion taint barrier does not model the\nMath.min/Math.max sandwich as a sanitizer; the equivalent explicit\ncomparison guard is. Same bounds ([100ms, 5min]), same behavior.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T19:18:35Z",
+          "tree_id": "6880a96196f0e6f9fe5140517ef077e3951fe189",
+          "url": "https://github.com/INONONO66/openomni/commit/bc7440ed2c5a75b4dee3d0573f5d8e63c208ca8c"
+        },
+        "date": 1786303199638,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10072,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15173,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7922,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 810,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1292,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 753,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20583,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2303,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11182,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102624,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516826,
             "unit": "ns/op"
           }
         ]
