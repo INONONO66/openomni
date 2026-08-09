@@ -88,6 +88,8 @@ export async function runOnboard(options: OnboardOptions = {}): Promise<void> {
     const host = flags.host ?? asString(server.host) ?? (await io.ask("Server host", "127.0.0.1"));
     const existingWsToken = asString(server.wsToken);
     const wsToken = existingWsToken && !flags.force ? existingWsToken : randomToken();
+    const existingAdminToken = asString(server.adminToken);
+    const adminToken = existingAdminToken && !flags.force ? existingAdminToken : randomToken();
 
     const tokenHubUrl =
       flags.tokenHubUrl ?? (await io.ask("Token hub base URL (blank to skip auth setup)", ""));
@@ -124,7 +126,7 @@ export async function runOnboard(options: OnboardOptions = {}): Promise<void> {
       };
     }
     raw.workspace = { ...workspace, root: workspaceRoot };
-    raw.server = { ...server, port, host, wsToken };
+    raw.server = { ...server, port, host, wsToken, adminToken };
 
     assertNoApiKeyLeak(raw, "config.json");
     // 0600 from the first byte (wsToken inside) and atomic so a crash cannot
@@ -142,7 +144,7 @@ export async function runOnboard(options: OnboardOptions = {}): Promise<void> {
     io.log(
       `model:     ${model ? `${model.provider}/${model.id}` : "not configured (server boots without realtime surfaces)"}`,
     );
-    io.log(`server:    http://${host}:${port} (ws token in config.json)`);
+    io.log(`server:    http://${host}:${port} (ws + admin tokens in config.json)`);
 
     if (flags.installDaemon) {
       installDaemon(io);

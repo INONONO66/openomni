@@ -52,6 +52,9 @@ describe("onboard", () => {
     expect(server.host).toBe("127.0.0.1");
     expect(typeof server.wsToken).toBe("string");
     expect((server.wsToken as string).length).toBeGreaterThanOrEqual(40);
+    expect(typeof server.adminToken).toBe("string");
+    expect((server.adminToken as string).length).toBeGreaterThanOrEqual(40);
+    expect(server.adminToken).not.toBe(server.wsToken);
     expect((config.workspace as Record<string, unknown>).root).toBe(join(baseDir, "workspace"));
     expect(existsSync(join(baseDir, "workspace"))).toBe(true);
     expect(statSync(configPath).mode & 0o777).toBe(0o600);
@@ -59,20 +62,18 @@ describe("onboard", () => {
     expect(existsSync(join(baseDir, "auth.json"))).toBe(false);
   });
 
-  it("is idempotent: rerun preserves the ws token, --force rotates it", async () => {
+  it("is idempotent: rerun preserves both tokens, --force rotates them", async () => {
     await runOnboard({ baseDir, io: createStubIO() });
-    const first = readJson(join(baseDir, "config.json"));
+    const first = readJson(join(baseDir, "config.json")).server as Record<string, unknown>;
     await runOnboard({ baseDir, io: createStubIO() });
-    const second = readJson(join(baseDir, "config.json"));
-    expect((second.server as Record<string, unknown>).wsToken).toBe(
-      (first.server as Record<string, unknown>).wsToken as string,
-    );
+    const second = readJson(join(baseDir, "config.json")).server as Record<string, unknown>;
+    expect(second.wsToken).toBe(first.wsToken as string);
+    expect(second.adminToken).toBe(first.adminToken as string);
 
     await runOnboard({ baseDir, io: createStubIO(), flags: { force: true } });
-    const third = readJson(join(baseDir, "config.json"));
-    expect((third.server as Record<string, unknown>).wsToken).not.toBe(
-      (first.server as Record<string, unknown>).wsToken as string,
-    );
+    const third = readJson(join(baseDir, "config.json")).server as Record<string, unknown>;
+    expect(third.wsToken).not.toBe(first.wsToken as string);
+    expect(third.adminToken).not.toBe(first.adminToken as string);
   });
 
   it("preserves keys it does not own", async () => {
