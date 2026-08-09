@@ -46,6 +46,10 @@ try {
     stdout: "pipe",
     stderr: "pipe",
   });
+  // Start draining immediately — an undrained pipe backpressures the child
+  // once the buffer fills, which can stall the server mid-boot.
+  const serveStdout = new Response(serve.stdout).text();
+  const serveStderr = new Response(serve.stderr).text();
 
   const deadline = Date.now() + 20_000;
   let healthy = false;
@@ -64,10 +68,8 @@ try {
     }
   }
   if (!healthy) {
-    const [stdout, stderr] = await Promise.all([
-      new Response(serve.stdout).text(),
-      new Response(serve.stderr).text(),
-    ]);
+    serve.kill("SIGTERM");
+    const [stdout, stderr] = await Promise.all([serveStdout, serveStderr]);
     console.error(stdout, stderr);
     throw new Error("bundled server never answered /health");
   }

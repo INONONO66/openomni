@@ -13,20 +13,27 @@ export interface UnitContext {
   scope: UnitScope;
 }
 
+// systemd expands `%` specifiers and `$` variables inside ExecStart and
+// Environment even within quotes; literal occurrences in install paths must
+// be doubled or the unit resolves to a different path than was installed.
+function systemdEscape(value: string): string {
+  return value.replace(/%/g, "%%").replace(/\$/g, "$$$$");
+}
+
 /**
  * The unit pins PATH because the coordinator spawns workers via a bare `bun`
  * lookup, and the default systemd PATH does not include ~/.bun/bin. Paths are
  * quoted — install locations with spaces would otherwise split ExecStart.
  */
 export function renderSystemdUnit(ctx: UnitContext): string {
-  const binDir = dirname(ctx.execPath);
+  const binDir = systemdEscape(dirname(ctx.execPath));
   return `[Unit]
 Description=OpenOmni server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart="${ctx.execPath}" "${ctx.scriptPath}" serve
+ExecStart="${systemdEscape(ctx.execPath)}" "${systemdEscape(ctx.scriptPath)}" serve
 Restart=on-failure
 RestartSec=2
 Environment="PATH=${binDir}:/usr/local/bin:/usr/bin:/bin"
@@ -59,6 +66,15 @@ export function installDaemon(io: Pick<OnboardIO, "log" | "warn">): void {
   }
 
   const isRoot = process.getuid?.() === 0;
+  if (isRoot) {
+    // The system-scope unit carries no User= — state lives in the onboarding
+    // user's ~/.openomni, and onboard-as-root wrote /root/.openomni, so
+    // pointing User= elsewhere would orphan the config. Surface the posture
+    // instead of silently installing a root service.
+    io.warn(
+      "installing a system-scope unit that runs the server as root; prefer onboarding as a dedicated non-root user (systemd --user + loginctl enable-linger)",
+    );
+  }
   const scope: UnitScope = isRoot ? "system" : "user";
   const unitDir = isRoot ? "/etc/systemd/system" : join(homedir(), ".config", "systemd", "user");
   const unitPath = join(unitDir, "openomni.service");

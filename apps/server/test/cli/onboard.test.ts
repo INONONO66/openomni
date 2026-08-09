@@ -224,7 +224,7 @@ describe("parseOnboardFlags", () => {
   it("rejects invalid ports and unknown flags", () => {
     expect(() => parseOnboardFlags(["--port", "70000"])).toThrow(/invalid port/);
     expect(() => parseOnboardFlags(["--port", "abc"])).toThrow(/invalid port/);
-    expect(() => parseOnboardFlags(["--bogus"])).toThrow();
+    expect(() => parseOnboardFlags(["--bogus"])).toThrow(/bogus/);
   });
 });
 
@@ -244,6 +244,16 @@ describe("renderSystemdUnit", () => {
     expect(
       renderSystemdUnit({ execPath: "/usr/bin/bun", scriptPath: "/x", scope: "system" }),
     ).toContain("WantedBy=multi-user.target");
+  });
+
+  it("escapes systemd % specifiers and $ variables in install paths", () => {
+    const unit = renderSystemdUnit({
+      execPath: "/opt/100%/bin/bun",
+      scriptPath: "/opt/$HOME-like/cli.js",
+      scope: "user",
+    });
+    expect(unit).toContain('ExecStart="/opt/100%%/bin/bun" "/opt/$$HOME-like/cli.js" serve');
+    expect(unit).toContain('Environment="PATH=/opt/100%%/bin:');
   });
 
   it("quotes paths containing spaces", () => {

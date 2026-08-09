@@ -67,7 +67,9 @@ export async function runOnboard(options: OnboardOptions = {}): Promise<void> {
   const baseDir = options.baseDir ?? join(homedir(), ".openomni");
   const io = options.io ?? createTerminalIO();
   try {
-    mkdirSync(baseDir, { recursive: true });
+    // 0700: the directory holds auth.json (credentials) and config.json
+    // (tokens) — never group/world readable.
+    mkdirSync(baseDir, { recursive: true, mode: 0o700 });
     const configPath = join(baseDir, "config.json");
     const authPath = join(baseDir, "auth.json");
     const raw = readExistingConfig(configPath);
