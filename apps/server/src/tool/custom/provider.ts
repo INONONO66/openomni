@@ -4,7 +4,6 @@ import type {
   ToolCategory,
   ToolExecutionContext,
   ToolProvider,
-  ToolSource,
 } from "@openomni/openomni";
 import { createOpenSearchNativeTools } from "./opensearch";
 
@@ -15,51 +14,10 @@ export class CustomToolProvider implements ToolProvider {
   private tools: NativeTool[] = [];
 
   constructor(extraTools: NativeTool[] = []) {
-    const builtInTools: NativeTool[] = [
-      {
-        spec: {
-          name: "weather_lookup",
-          description:
-            "Look up current weather for a given city. Returns temperature and conditions.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              city: { type: "string", description: "City name to look up weather for" },
-            },
-            required: ["city"],
-          },
-        },
-        riskTier: 0,
-        isReadOnly: true,
-        isDestructive: false,
-        isConcurrencySafe: true,
-        source: "server" as ToolSource,
-        category: "custom",
-        execute: async (call: Tool.Call): Promise<Tool.Result> => {
-          const input = call.input as { city: string };
-          const city = input.city || "Unknown";
-          const mockWeather: Record<string, { temp: number; condition: string }> = {
-            seoul: { temp: 18, condition: "Partly Cloudy" },
-            tokyo: { temp: 22, condition: "Sunny" },
-            "new york": { temp: 15, condition: "Rainy" },
-            london: { temp: 12, condition: "Foggy" },
-          };
-          const weather = mockWeather[city.toLowerCase()] ?? { temp: 20, condition: "Clear" };
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: JSON.stringify({
-              city,
-              temperature: `${weather.temp}°C`,
-              condition: weather.condition,
-              source: "OpenOmni Custom Tool (E2E Test)",
-            }),
-          };
-        },
-      },
-    ];
-
-    const defaultTools = [...builtInTools, ...createOpenSearchNativeTools()];
+    // The production custom-tool catalog is exactly the OpenSearch web tools.
+    // No mock/test tools are baked in (#521): E2E fixtures that need a stub
+    // tool inject it through the `extraTools` seam below, never through here.
+    const defaultTools = createOpenSearchNativeTools();
     const duplicate = extraTools.find((candidate) =>
       defaultTools.some((base) => base.spec.name === candidate.spec.name),
     );

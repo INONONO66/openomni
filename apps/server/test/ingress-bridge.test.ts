@@ -53,7 +53,7 @@ const deps = {
   systemProvider: makeProvider([makeTool("read"), makeTool("bash")]),
   agentProvider: makeProvider([makeTool("dispatch")]),
   mcpProvider: makeProvider([makeTool("mcp_search")]),
-  customProvider: makeProvider([makeTool("weather_lookup")]),
+  customProvider: makeProvider([makeTool("custom_probe")]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
   workspaceRoot: "/workspace",
 };
@@ -128,10 +128,10 @@ describe("ingress bridge transport boundary", () => {
     expect(event.agent.systemPrompt).toContain("Resident");
     expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
+      "custom_probe",
       "dispatch",
       "mcp_search",
       "read",
-      "weather_lookup",
     ]);
   });
 
