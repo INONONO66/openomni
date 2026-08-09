@@ -6,19 +6,9 @@ export type {
   PolicyRegistration,
 } from "./types";
 export { PolicyEngine } from "./engine";
-export type {
-  PolicyDecision,
-  PolicyAuditConfig,
-  PolicyEngineConfig,
-  GenericPolicyContext,
-  PolicyRegistrationGeneric,
-  PolicyEngineInstanceGeneric,
-  DispatchContextGeneric,
-  AuditDispatchContextGeneric,
-  AuditEmit,
-} from "@openomni/policy";
+export type { PolicyDecision, PolicyAuditConfig, PolicyEngineConfig } from "@openomni/policy";
 export { PolicyRegistry, defaultRegistry } from "./registry";
-export type { PolicyFactory, PolicyRegistryInstance, RuntimeContext } from "./registry";
+export type { PolicyFactory, PolicyRegistryInstance } from "./registry";
 export * from "./builtin";
 
 import type { PolicyContext, PolicyEngineRegistration } from "./types";
