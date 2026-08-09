@@ -3,7 +3,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createWorkItemCompletionWriter } from "../work-item/completion-writer.js";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
-import { SqliteStorageAdapter } from "./sqlite-storage";
 
 // Same-process application modules are trusted composition-root code. The completion writer
 // prevents accidental bypass through ordinary store APIs; it is not an OS isolation boundary.
@@ -45,12 +44,15 @@ export namespace Storage {
       remove(messageID: string, partID: string): boolean;
     };
 
+    // Optional here for test fakes only — SurfaceKey operations fail closed
+    // (requireSubAdapter throw) when it is missing; production adapters wire
+    // it as required (SqliteStorageAdapter).
     surfaceKey?: {
       register(key: string, sessionId: string): void;
       claim(key: string, sessionId: string, expectedSessionId?: string): string;
       lookup(key: string): string | undefined;
       delete(key: string): void;
-      listBySession?(sessionId: string): string[];
+      listBySession(sessionId: string): string[];
     };
     artifact?: {
       store(id: string, sessionId: string, meta: string, content: string): void;
@@ -83,7 +85,6 @@ export namespace Storage {
 type StorageScope = {
   adapter: Storage.Adapter | null;
   initializedDbPath: string | null;
-  warnedOnce: boolean;
 };
 
 const storageScope = new AsyncLocalStorage<StorageScope>();
@@ -91,7 +92,6 @@ const storageScope = new AsyncLocalStorage<StorageScope>();
 export namespace Storage {
   let adapter: Adapter | null = null;
   let initializedDbPathValue: string | null = null;
-  let warnedOnce = false;
 
   export function configure(newAdapter: Adapter): WorkItemCompletionWriter {
     const scope = storageScope.getStore();
@@ -119,30 +119,17 @@ export namespace Storage {
     initializedDbPathValue = dbPath;
   }
 
+  // Decision-class stores fail closed (#522): an uninitialized Storage is a
+  // typed boot-order bug, never a silent volatile ":memory:" fallback.
   export function get(): Adapter {
     const scope = storageScope.getStore();
-    if (scope) {
-      if (scope.adapter === null) {
-        if (!scope.warnedOnce) {
-          console.warn(
-            "Storage.get() called before initialize() — auto-initializing in-memory adapter. Call Storage.initialize({ dbPath }) at app entry to suppress this warning.",
-          );
-          scope.warnedOnce = true;
-        }
-        scope.adapter = new SqliteStorageAdapter(":memory:");
-      }
-      return scope.adapter;
+    const current = scope ? scope.adapter : adapter;
+    if (current === null) {
+      throw new Error(
+        'Storage.get() called before initialize() — storage fails closed with no in-memory fallback. Call Storage.initialize({ dbPath }) at app entry (tests: initialize({ dbPath: ":memory:" }) or Storage.configure(adapter)).',
+      );
     }
-    if (adapter === null) {
-      if (!warnedOnce) {
-        console.warn(
-          "Storage.get() called before initialize() — auto-initializing in-memory adapter. Call Storage.initialize({ dbPath }) at app entry to suppress this warning.",
-        );
-        warnedOnce = true;
-      }
-      adapter = new SqliteStorageAdapter(":memory:");
-    }
-    return adapter;
+    return current;
   }
 
   export function getAdapter(): Adapter {
@@ -154,18 +141,13 @@ export namespace Storage {
     if (scope) {
       scope.adapter = null;
       scope.initializedDbPath = null;
-      scope.warnedOnce = false;
       return;
     }
     adapter = null;
     initializedDbPathValue = null;
-    warnedOnce = false;
   }
 
   export function withIsolation<T>(operation: () => T): T {
-    return storageScope.run(
-      { adapter: null, initializedDbPath: null, warnedOnce: false },
-      operation,
-    );
+    return storageScope.run({ adapter: null, initializedDbPath: null }, operation);
   }
 }

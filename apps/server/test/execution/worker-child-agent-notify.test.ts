@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { AgentResult } from "@openomni/agent";
 import { InjectionQueue } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
+import { Storage } from "@openomni/session";
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
 import { WorkerRunner } from "../../src/execution/worker-runner";
 
@@ -20,6 +21,11 @@ function createSpawnOptions(
   respond: (result: unknown) => void,
   overrides: Partial<WorkerRunnerEnvironment> = {},
 ): SpawnRunOptions {
+  // In-process spawnRun without worker-entry bootstrap; Storage.get() fails
+  // closed (#522), so guarantee an adapter here.
+  if (Storage.getInitializedDbPath() === null) {
+    Storage.initialize({ dbPath: ":memory:" });
+  }
   return {
     params,
     ipcAuthToken: "token",

@@ -1,5 +1,6 @@
 import type { AgentResult } from "@openomni/agent";
 import { InjectionQueue } from "@openomni/openomni";
+import { Storage } from "@openomni/session";
 
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
 import type { WorkerRunner } from "../../src/execution/worker-runner";
@@ -20,6 +21,11 @@ export function createSpawnOptions(
   respond: (result: unknown) => void,
   overrides: Partial<WorkerRunnerEnvironment> = {},
 ): SpawnRunOptions {
+  // These suites call spawnRun in-process without the worker-entry bootstrap;
+  // Storage.get() fails closed (#522), so guarantee an adapter here.
+  if (Storage.getInitializedDbPath() === null) {
+    Storage.initialize({ dbPath: ":memory:" });
+  }
   const activeRuns = overrides.activeRuns ?? new Map();
   return {
     params,
