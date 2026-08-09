@@ -225,6 +225,14 @@ export class DiscordGateway {
   }
 
   private startHeartbeat(intervalMs: number): void {
+    // The interval arrives from the gateway payload (network input). Clamp it
+    // so a malformed HELLO can neither busy-loop the process (0/negative/NaN)
+    // nor zombify the connection with a never-firing heartbeat (CodeQL
+    // js/resource-exhaustion). Discord's real value is ~41250ms.
+    const clampedMs = Math.min(
+      Math.max(Number.isFinite(intervalMs) ? intervalMs : 0, 1_000),
+      300_000,
+    );
     this.stopHeartbeat();
     this.heartbeatAckReceived = true;
     this.heartbeatTimer = setInterval(() => {
@@ -237,7 +245,7 @@ export class DiscordGateway {
       }
       this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence });
       this.heartbeatAckReceived = false;
-    }, intervalMs);
+    }, clampedMs);
   }
 
   private stopHeartbeat(): void {
