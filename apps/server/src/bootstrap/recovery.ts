@@ -5,7 +5,7 @@ import {
   type DefaultDispatchRuntime,
   type EffectReconciler,
 } from "@openomni/openomni";
-import { Bus, PendingInteractionStore, Storage } from "@openomni/session";
+import { Bus, Storage } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
@@ -203,15 +203,17 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
         });
       }
     }
-    const expiredPendingInteractions = PendingInteractionStore.cleanupExpired();
-    if (expiredPendingInteractions.length > 0) {
-      Bus.publish(Operational.Info, {
-        traceId: id,
-        time: Date.now(),
-        component: "server",
-        msg: `recovery expired ${expiredPendingInteractions.length} pending interaction(s)`,
-      });
-    }
+    // #548: PendingInteractionStore is frozen — the boot expiry sweep is
+    // retired. Read-time expiry (the store's follow-up-window filter on
+    // findByCorrelation) gates frozen rows; this receipt records the
+    // intentional no-op so recovery stays auditable. Boot-restoration
+    // semantics are #217's scope and are untouched here.
+    Bus.publish(Operational.Info, {
+      traceId: id,
+      time: Date.now(),
+      component: "server",
+      msg: "recovery skipped the pending-interaction expiry sweep: store frozen (#548), read-time expiry gates frozen rows",
+    });
     const expiredWaits = WaitService.sweepExpired();
     if (expiredWaits.length > 0) {
       Bus.publish(Operational.Info, {

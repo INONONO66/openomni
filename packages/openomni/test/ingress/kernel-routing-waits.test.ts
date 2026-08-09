@@ -58,55 +58,6 @@ function replyEvent(
   };
 }
 
-async function createPending(
-  id: string,
-  runId: string,
-  allowedActions: PendingInteractionStore.Record["allowedActions"] = ["report_result"],
-): Promise<string> {
-  const existingEndpoint = ActorRegistry.resolveEndpoint("telegram", "seller-1");
-  const targetActorId = existingEndpoint?.identity.id ?? "actor-external-worker";
-  if (!existingEndpoint) {
-    ActorRegistry.registerIdentity({
-      id: targetActorId,
-      kind: "human",
-      trustTier: "assigned_worker",
-      relationship: "external_agent",
-    });
-    ActorRegistry.registerEndpoint({
-      id: correlation.endpointId,
-      actorId: targetActorId,
-      channel: "telegram",
-      externalId: "seller-1",
-    });
-  }
-  const session = Session.create({
-    title: id,
-    model: { providerID: "test", modelID: "test-model" },
-  });
-  await WorkerRun.create(session.id, {
-    runId,
-    title: runId,
-    prompt: "complete assigned work",
-    executorKind: "connector_endpoint",
-  });
-  await WorkerRun.updateStatus(session.id, runId, "starting");
-  await WorkerRun.updateStatus(session.id, runId, "running");
-  await WorkerRun.updateStatus(session.id, runId, "waiting_input");
-  PendingInteractionStore.create({
-    id,
-    workerRunId: runId,
-    sessionId: session.id,
-    endpointId: correlation.endpointId,
-    channelId: correlation.channelId,
-    correlation: { tokenHash: correlation.tokenHash },
-    allowedActions,
-    targetActorId,
-    expiresAt: Number.MAX_SAFE_INTEGER,
-    followUpWindow: 60_000,
-  });
-  return session.id;
-}
-
 // PendingInteractionStore writes are frozen (#548) — historical rows are
 // seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
 async function seedFrozenPending(
@@ -213,7 +164,7 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("dispatches one exact reply through the injected shared DispatchRuntime", async () => {
-    const sessionId = await createPending("pi-exact", "run-exact");
+    const sessionId = await seedFrozenPending("pi-exact", "run-exact");
     const runtime = new DispatchRuntime();
     const routed: DispatchProtocol.Command[] = [];
     const order: string[] = [];
@@ -253,7 +204,8 @@ describe("IngressEngine wait routing", () => {
     expect(routed).toHaveLength(1);
     expect(handlerWorkspaceRoot).toBe("/trusted/workspace");
     expect(result.sessionId).toBe(sessionId);
-    expect(PendingInteractionStore.get("pi-exact")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-exact")?.status).toBe("open");
   });
 
   test("routes an inbound reply to a frozen legacy pending-interaction row via upcast (#548 regression pin)", async () => {
@@ -292,7 +244,7 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("normalizes a plain-text worker reply for the default worker.complete handler", async () => {
-    const sessionId = await createPending("pi-plain-text", "run-plain-text");
+    const sessionId = await seedFrozenPending("pi-plain-text", "run-plain-text");
     const workItem = await WorkItemStore.create({
       name: "plain-text connector completion",
       sourceMessageId: "outbound-plain-text",
@@ -314,14 +266,15 @@ describe("IngressEngine wait routing", () => {
     );
 
     expect(result.result.output).toBe("");
-    expect(PendingInteractionStore.get("pi-plain-text")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-plain-text")?.status).toBe("open");
     expect(WorkItemStore.get(workItem.hash)?.blockers).toEqual([
       expect.objectContaining({ description: "completion report is required" }),
     ]);
   });
 
   test("does not execute a valid action that the matched interaction denies", async () => {
-    await createPending("pi-denied-action", "run-denied-action", ["report_result"]);
+    await seedFrozenPending("pi-denied-action", "run-denied-action", ["report_result"]);
     const runtime = new DispatchRuntime();
     let calls = 0;
     runtime.register("resident.ask", () => {
@@ -360,7 +313,7 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("routes an allowed connector clarification through resident.ask", async () => {
-    const sessionId = await createPending("pi-connector-ask", "run-connector-ask", [
+    const sessionId = await seedFrozenPending("pi-connector-ask", "run-connector-ask", [
       "ask_clarification",
     ]);
     const runtime = new DispatchRuntime();
@@ -386,7 +339,8 @@ describe("IngressEngine wait routing", () => {
       actor: { trustTier: "assigned_worker" },
     });
     expect(result.sessionId).toBe(sessionId);
-    expect(PendingInteractionStore.get("pi-connector-ask")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-connector-ask")?.status).toBe("open");
   });
 
   test.each([
@@ -395,7 +349,7 @@ describe("IngressEngine wait routing", () => {
   ] as const)("rejects allowed but unsupported %s ingress actions before dispatch", async (action) => {
     const suffix = action.replace("_", "-");
     const interactionId = `pi-unsupported-${suffix}`;
-    await createPending(interactionId, `run-unsupported-${suffix}`, [action]);
+    await seedFrozenPending(interactionId, `run-unsupported-${suffix}`, [action]);
     const runtime = new DispatchRuntime();
     let dispatchExecutions = 0;
     runtime.register("actor.message", () => {
@@ -431,7 +385,7 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("pins a poisoned PendingInteraction event to the matched session and run", async () => {
-    const sessionId = await createPending("pi-poisoned", "run-poisoned");
+    const sessionId = await seedFrozenPending("pi-poisoned", "run-poisoned");
     const runtime = new DispatchRuntime();
     let submittedCommand: DispatchProtocol.Command | undefined;
     let handlerContext: { sessionId?: string; runId?: string } | undefined;
@@ -485,7 +439,8 @@ describe("IngressEngine wait routing", () => {
       target: { kind: "worker", sessionId },
       sessionId,
     });
-    expect(PendingInteractionStore.get("pi-poisoned")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-poisoned")?.status).toBe("open");
   });
 
   test("routes a PendingAsk private external-message match to its owner session and run", async () => {
@@ -602,8 +557,8 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("does not guess or mutate for PI-only ambiguity", async () => {
-    await createPending("pi-ambiguous-a", "run-ambiguous-a");
-    await createPending("pi-ambiguous-b", "run-ambiguous-b");
+    await seedFrozenPending("pi-ambiguous-a", "run-ambiguous-a");
+    await seedFrozenPending("pi-ambiguous-b", "run-ambiguous-b");
     const runtime = new DispatchRuntime();
     let calls = 0;
     runtime.register("worker.complete", () => {
@@ -636,7 +591,7 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("fails closed for combined PendingInteraction and PendingAsk matches", async () => {
-    await createPending("pi-combined", "run-combined");
+    await seedFrozenPending("pi-combined", "run-combined");
     createPendingAsk("ask-combined", "session-ask-combined", {
       tokenHash: correlation.tokenHash,
     });
@@ -722,7 +677,7 @@ describe("IngressEngine wait routing", () => {
       channel: "telegram",
       externalId: "intruder-2",
     });
-    await createPending("pi-shared-channel-victim", "run-shared-channel-victim");
+    await seedFrozenPending("pi-shared-channel-victim", "run-shared-channel-victim");
     const runtime = new DispatchRuntime();
     let dispatchExecutions = 0;
     runtime.register("worker.complete", () => {
@@ -771,7 +726,7 @@ describe("IngressEngine wait routing", () => {
       value: "endpoint-seller-resolved",
       createdBy: "actor-owner",
     });
-    await createPending("pi-resolved-endpoint", "run-resolved-endpoint");
+    await seedFrozenPending("pi-resolved-endpoint", "run-resolved-endpoint");
     const runtime = new DispatchRuntime();
     let dispatchExecutions = 0;
     runtime.register("worker.complete", () => {
@@ -912,7 +867,7 @@ describe("IngressEngine wait routing", () => {
   // and by the frozen-ask assertions in the two ambiguity tests above.
 
   test("leaves an authorized exact interaction open when no handler is selected", async () => {
-    const sessionId = await createPending("pi-no-handler", "run-no-handler");
+    const sessionId = await seedFrozenPending("pi-no-handler", "run-no-handler");
     makeKernelRoutingEngine({ dispatchRuntime: new DispatchRuntime() });
     const observed = routingDecisions();
 
@@ -941,7 +896,7 @@ describe("IngressEngine wait routing", () => {
   });
 
   test("does not expose structured Dispatch handler output as channel text", async () => {
-    await createPending("pi-structured-output", "run-structured-output");
+    await seedFrozenPending("pi-structured-output", "run-structured-output");
     const runtime = new DispatchRuntime();
     runtime.register("worker.complete", () => ({ output: { internal: "result" } }));
     makeKernelRoutingEngine({ dispatchRuntime: runtime });
@@ -949,11 +904,12 @@ describe("IngressEngine wait routing", () => {
     const result = await kernelEngine().ingest(replyEvent("inbound-structured-output"));
 
     expect(result.result.output).toBe("");
-    expect(PendingInteractionStore.get("pi-structured-output")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-structured-output")?.status).toBe("open");
   });
 
   test("fails with typed evidence for unsupported primitive Dispatch output", async () => {
-    await createPending("pi-primitive-output", "run-primitive-output");
+    await seedFrozenPending("pi-primitive-output", "run-primitive-output");
     const runtime = new DispatchRuntime();
     runtime.register("worker.complete", () => ({ output: 42 }));
     makeKernelRoutingEngine({ dispatchRuntime: runtime });
@@ -1338,7 +1294,7 @@ describe("IngressEngine durable wait routing", () => {
     registerResponder("actor-external-worker", "seller-1");
     // The wait table is the first tier: a durable wait shadows same-token
     // frozen legacy rows instead of guessing between backings.
-    await createPending("pi-shadowed", "run-shadowed");
+    await seedFrozenPending("pi-shadowed", "run-shadowed");
     const wait = openSessionWait("wait-tier-first");
 
     const result = await kernelEngine().ingest(replyEvent("inbound-wait-tier"));

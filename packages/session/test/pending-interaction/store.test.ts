@@ -63,10 +63,11 @@ function seedFrozenRow(record: Communication.PendingInteraction.Record): void {
 
 describe("PendingInteractionStore (frozen legacy writer, #548)", () => {
   test("every write method throws the typed frozen error and persists/publishes nothing", async () => {
-    const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
     const sessionId = await createWorkerRun("run-1");
     seedFrozenRow(frozenRecord("pi-frozen", sessionId));
+    await flushBus();
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
 
     const attempts: ReadonlyArray<
       readonly [Communication.PendingInteraction.WriteMethod, () => unknown]

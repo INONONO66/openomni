@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { PolicyDecision, Dispatch as DispatchProtocol } from "@openomni/protocol";
 import { PendingInteractionStore, Storage } from "@openomni/session";
 import { DispatchRuntime, submitPinnedPendingInteraction } from "../../src/dispatch/runtime";
-import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
+import {
+  createWorkerRunFixture,
+  resetDispatchTestState,
+  seedPendingInteraction,
+} from "./runtime-test-fixtures";
 
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
@@ -22,7 +26,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-1",
       workerRunId: "run-pi",
       sessionId: session.id,
@@ -82,7 +86,8 @@ describe("DispatchRuntime", () => {
       },
     });
     expect(routedCommand?.actor.trustTier).toBe("assigned_worker");
-    expect(PendingInteractionStore.get("pi-dispatch-1")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-dispatch-1")?.status).toBe("open");
     expect(authority?.factsUsed).toContain("effective_authority.pending_interaction_scope.allow");
     expect(authority?.factsUsed).toContain("pending_interaction.pi-dispatch-1");
   });
@@ -104,7 +109,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-token-mismatch");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-token-mismatch",
       workerRunId: "run-pi-token-mismatch",
       sessionId: session.id,
@@ -145,7 +150,8 @@ describe("DispatchRuntime", () => {
     expect(result.status).toBe("completed");
     expect(result.handler).toBe("worker.complete");
     expect(routedCommand?.action).toBe("worker.complete");
-    expect(PendingInteractionStore.get("pi-dispatch-token-mismatch")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-dispatch-token-mismatch")?.status).toBe("open");
   });
 
   test("token mismatch with no endpoint or actor proof stays unrouted and is denied", async () => {
@@ -158,7 +164,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-no-proof");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-no-proof",
       workerRunId: "run-pi-no-proof",
       sessionId: session.id,
@@ -202,7 +208,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-clarification");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-clarification",
       workerRunId: "run-pi-clarification",
       sessionId: session.id,
@@ -240,7 +246,8 @@ describe("DispatchRuntime", () => {
     });
     expect(routedCommand?.wait).toBe(true);
     expect(routedCommand?.actor.trustTier).toBe("assigned_worker");
-    expect(PendingInteractionStore.get("pi-dispatch-clarification")?.status).toBe("resolved");
+    // #548: the store is frozen — routing leaves the legacy row as persisted.
+    expect(PendingInteractionStore.get("pi-dispatch-clarification")?.status).toBe("open");
   });
 
   test("denies unmatched actor.message from unknown actors", async () => {
@@ -279,7 +286,7 @@ describe("DispatchRuntime", () => {
   test("fails closed when a pinned interaction is cancelled during authorization", async () => {
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-cancel-race");
-    const pinned = PendingInteractionStore.create({
+    const pinned = seedPendingInteraction({
       id: "pi-dispatch-cancel-race",
       workerRunId: "run-pi-cancel-race",
       sessionId: session.id,
@@ -293,7 +300,16 @@ describe("DispatchRuntime", () => {
     let called = false;
     const runtime = new DispatchRuntime({
       onPolicyDecision: (decision) => {
-        if (decision.verdict === "allow") PendingInteractionStore.cancel(pinned.id);
+        // The store is frozen (#548): emulate an out-of-band persisted
+        // cancellation at the adapter layer, as a pre-freeze writer did.
+        if (decision.verdict === "allow") {
+          Storage.get().pendingInteraction?.set({
+            ...pinned,
+            status: "cancelled",
+            cancelledAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
       },
     });
     runtime.register("worker.complete", () => {
@@ -324,7 +340,7 @@ describe("DispatchRuntime", () => {
   test("fails closed when a pinned identity is replaced during authorization", async () => {
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-replacement-race");
-    const pinned = PendingInteractionStore.create({
+    const pinned = seedPendingInteraction({
       id: "pi-dispatch-replacement-race",
       workerRunId: "run-pi-replacement-race",
       sessionId: session.id,

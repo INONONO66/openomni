@@ -31,35 +31,6 @@ afterEach(() => {
   Bus.reset();
 });
 
-async function createPendingInteractionFixture(
-  id: string,
-  expiresAt: number,
-  lifecycle: "open" | "follow_up" = "open",
-): Promise<void> {
-  const session = Session.create({
-    title: `${id}-session`,
-    model: { providerID: "test", modelID: "test" },
-  });
-  await WorkerRun.create(session.id, { runId: `${id}-run`, title: id, prompt: "test" });
-  PendingInteractionStore.create({
-    id,
-    workerRunId: `${id}-run`,
-    sessionId: session.id,
-    endpointId: "discord:bot-1",
-    channelId: "dev",
-    correlation: { replyToMessageId: `${id}-reply` },
-    allowedActions: ["report_result"],
-    expiresAt,
-    followUpWindow: 100,
-    ...(lifecycle === "follow_up"
-      ? {
-          status: "follow_up" as const,
-          resolvedAt: Date.now() - 200,
-        }
-      : {}),
-  });
-}
-
 // PendingInteractionStore writes are frozen (#548) — historical rows are
 // seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
 async function seedFrozenPendingInteractionFixture(
@@ -146,9 +117,9 @@ describe("server recovery", () => {
     expect(completionRecoveryCalls).toBe(1);
   });
 
-  it("continues pending-interaction cleanup when completion recovery fails", async () => {
+  it("continues boot recovery when completion recovery fails, without touching frozen rows", async () => {
     const pendingId = "pending:completion-recovery-failure";
-    await createPendingInteractionFixture(pendingId, Date.now() - 100);
+    await seedFrozenPendingInteractionFixture(pendingId, Date.now() - 100);
 
     await expect(
       runRecovery({
@@ -162,7 +133,8 @@ describe("server recovery", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(PendingInteractionStore.get(pendingId)?.status).toBe("expired");
+    // #548: the store is frozen — recovery never expires pending interactions.
+    expect(PendingInteractionStore.get(pendingId)?.status).toBe("open");
   });
 
   it("surfaces each failed WorkItem completion resume as its own loud Operational.Error", async () => {
@@ -391,7 +363,9 @@ describe("server recovery", () => {
     ).toBe(true);
   });
 
-  it("expires stale PendingInteractions during boot recovery", async () => {
+  // The pre-#548 boot expiry sweep test lived here; the frozen-store no-op
+  // receipt pin above replaces it. Coordinator accounting keeps its own pin:
+  it("reports coordinator-recovered sessions in the completion event", async () => {
     const events: string[] = [];
     const completedPayloads: Array<Record<string, unknown>> = [];
     Bus.observe((event, data) => {
@@ -400,13 +374,6 @@ describe("server recovery", () => {
         completedPayloads.push(data as Record<string, unknown>);
       }
     });
-    await createPendingInteractionFixture("pi-boot-expired", Date.now() - 1);
-    await createPendingInteractionFixture(
-      "pi-boot-follow-up-expired",
-      Date.now() + 60_000,
-      "follow_up",
-    );
-    await createPendingInteractionFixture("pi-boot-active", Date.now() + 60_000);
 
     await runRecovery({
       handler: undefined,
@@ -423,10 +390,6 @@ describe("server recovery", () => {
       },
     });
 
-    expect(PendingInteractionStore.get("pi-boot-expired")?.status).toBe("expired");
-    expect(PendingInteractionStore.get("pi-boot-follow-up-expired")?.status).toBe("expired");
-    expect(PendingInteractionStore.get("pi-boot-active")?.status).toBe("open");
-    expect(events).toContain("pending_interaction.expired");
     expect(events).toContain("operational.recovery.completed");
     expect(completedPayloads[0]?.sessionsRecovered).toBe(2);
   });
