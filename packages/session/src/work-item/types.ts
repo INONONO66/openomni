@@ -1,5 +1,6 @@
 import type { Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
 import type { Storage } from "../storage/storage.js";
+import type { WorkItemFact } from "./facts.js";
 
 export type WorkItemAdapter = NonNullable<Storage.Adapter["workItem"]>;
 
@@ -35,6 +36,8 @@ export type WorkItemTransitionTarget = "started" | "completed" | "failed" | "can
 export type WorkItemMutation = {
   updated: WorkItem.Info;
   changedFields: string[];
+  /** Decision-class fact appended before the projection CAS (#510 C1). */
+  fact: WorkItemFact;
   target?: WorkItemTransitionTarget;
   afterPublish?: (updated: WorkItem.Info) => void;
 };

@@ -14,7 +14,7 @@ export function initialize(options?: InitializeOptions): Storage.WorkItemComplet
 
   if (initializedDbPath !== null && initializedDbPath !== "__configured__") {
     if (initializedDbPath === dbPath) {
-      return createWorkItemCompletionWriter(() => Storage.get().workItem);
+      return createWorkItemCompletionWriter(() => Storage.get());
     }
     throw new Error(
       "Storage already initialized with a different dbPath. Call Storage.reset() first.",

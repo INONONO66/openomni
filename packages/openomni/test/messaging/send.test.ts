@@ -292,9 +292,10 @@ describe("delivery receipt", () => {
     if (receipt.kind !== "sent" || receipt.operation !== "awaited") {
       throw new Error("expected awaited sent receipt");
     }
-    // The send receipt carries the receipt-updated record (revision bumped).
+    // The send receipt carries the receipt-updated record (revision bumped
+    // from 1 at create — head === revision on the owner stream, #510).
     expect(receipt.wait.correlation.replyToMessageId).toBe("platform:msg-77");
-    expect(receipt.wait.revision).toBe(1);
+    expect(receipt.wait.revision).toBe(2);
     const stored = WaitStore.get("wait:test-awaited");
     expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
     // Correlation now answers the platform id, not the internal message id.
@@ -314,8 +315,8 @@ describe("delivery receipt", () => {
       throw new Error("expected awaited sent receipt");
     }
     expect(receipt.wait.correlation.replyToMessageId).toBe("message:test-awaited");
-    expect(receipt.wait.revision).toBe(0);
-    expect(WaitStore.get("wait:test-awaited")?.revision).toBe(0);
+    expect(receipt.wait.revision).toBe(1);
+    expect(WaitStore.get("wait:test-awaited")?.revision).toBe(1);
   });
 
   test("a fire-and-forget receipt records nothing — there is no wait to re-key", async () => {

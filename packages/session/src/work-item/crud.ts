@@ -1,8 +1,9 @@
-import { WorkItem } from "@openomni/protocol";
+import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { detectCycles } from "./dependency.js";
-import { persistMutation } from "./mutation.js";
+import { appendTransitionFact, requireWorkItemLedger, runWorkItemTransaction } from "./facts.js";
+import { commitMutation, persistMutation } from "./mutation.js";
 import type { WorkItemListFilter } from "./types.js";
 
 export function getWorkItem(hash: string): WorkItem.Info | undefined {
@@ -14,8 +15,6 @@ export function listWorkItems(filter?: WorkItemListFilter): WorkItem.Info[] {
 }
 
 class WorkItemRemoveFailedError extends Error {}
-
-class WorkItemRevisionError extends Error {}
 
 type GraphMutation = Readonly<{
   existing: WorkItem.Info;
@@ -32,10 +31,13 @@ export function removeWorkItem(hash: string): boolean {
   const adapter = Storage.get();
   const workItem = adapter.workItem;
   if (!workItem) return false;
+  const ledger = requireWorkItemLedger(adapter);
 
   let removal: RemovalResult | undefined;
   try {
-    removal = adapter.transaction(() => removeWorkItemGraph(workItem, hash));
+    removal = runWorkItemTransaction(adapter, hash, () =>
+      removeWorkItemGraph(workItem, ledger, hash),
+    );
   } catch (error) {
     if (error instanceof WorkItemRemoveFailedError) return false;
     throw error;
@@ -61,11 +63,15 @@ export function removeWorkItem(hash: string): boolean {
 
 function removeWorkItemGraph(
   workItem: NonNullable<Storage.Adapter["workItem"]>,
+  ledger: ProtocolStorage.LedgerSubAdapter,
   hash: string,
 ): RemovalResult | undefined {
   const existing = workItem.get(hash);
   if (!existing) return undefined;
-  if (existing.revision !== 0) {
+  // Revision 1 is the birth revision (#510 C1) — only items with no
+  // transition beyond creation may be removed; the created/adopted fact
+  // stays on the owner stream as durable history of the removal.
+  if (existing.revision !== 1) {
     throw new Error("Cannot remove WorkItem after durable history exists");
   }
 
@@ -105,15 +111,16 @@ function removeWorkItemGraph(
     }
   }
 
-  const mutations = [...staged.values()].map((mutation) => {
-    const updated: WorkItem.Info = {
-      ...mutation.updated,
-      revision: mutation.existing.revision + 1,
-    };
-    if (!workItem.compareAndSet(updated.hash, mutation.existing.revision, updated)) {
-      throw new WorkItemRevisionError(`stale WorkItem revision: ${updated.hash}`);
-    }
-    return { existing: mutation.existing, updated };
+  const mutations = [...staged.values()].map((mutation) => ({
+    existing: mutation.existing,
+    updated: commitMutation(workItem, ledger, mutation.existing, mutation.updated, {
+      type: "work_item.updated",
+      data: { fields: ["relations"] },
+    }),
+  }));
+  appendTransitionFact(ledger, existing, {
+    type: "work_item.removed",
+    data: { removedAt: time },
   });
   if (!workItem.remove(hash)) {
     throw new WorkItemRemoveFailedError(`failed to remove WorkItem: ${hash}`);
@@ -136,6 +143,8 @@ export async function updateWorkItem(
     "timestamps",
     "failureReason",
     "attempt",
+    "lastAttemptSeq",
+    "currentAttemptId",
     "maxAttempts",
     "executorKind",
     "workerRunId",
@@ -181,5 +190,8 @@ export async function updateWorkItem(
     },
   };
 
-  return persistMutation(adapter.workItem, existing, updated, now, Object.keys(fields));
+  return persistMutation(adapter.workItem, existing, updated, now, Object.keys(fields), {
+    type: "work_item.updated",
+    data: { fields: Object.keys(fields) },
+  });
 }

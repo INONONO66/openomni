@@ -13,7 +13,9 @@ export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem
   }));
   return WorkItem.Info.parse({
     hash,
-    revision: 0,
+    // Birth revision 1 (#510 C1): the work_item.created fact is seq 1 on the
+    // owner stream, so head === revision from birth.
+    revision: 1,
     name: input.name,
     sourceMessageId: input.sourceMessageId,
     sourceChannel: input.sourceChannel,

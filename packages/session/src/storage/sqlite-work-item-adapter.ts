@@ -11,12 +11,13 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       const result = db
         .query(
           `INSERT OR IGNORE INTO work_item
-             (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (hash, data, revision, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           hash,
           JSON.stringify(parsed),
+          parsed.revision,
           WorkItem.deriveStatus(parsed),
           parsed.assigneeId ?? null,
           parsed.sessionId ?? null,
@@ -55,10 +56,14 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
       ) {
         throw new Error("WorkItem completion fact writes are restricted to the OpenOmni boundary");
       }
+      // Revision CAS on the physical column (0014): the column is written in
+      // lockstep with the payload's revision, so head==revision holds for
+      // both readers.
       const result = db
         .query(
           `UPDATE work_item SET
              data = ?,
+             revision = ?,
              status = ?,
              assignee_id = ?,
              session_id = ?,
@@ -66,10 +71,11 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
              source_channel = ?,
              time_updated = ?
            WHERE hash = ?
-             AND json_extract(data, '$.revision') = ?`,
+             AND revision = ?`,
         )
         .run(
           JSON.stringify(parsed),
+          parsed.revision,
           WorkItem.deriveStatus(parsed),
           parsed.assigneeId ?? null,
           parsed.sessionId ?? null,

@@ -1,3 +1,4 @@
+import * as AttemptContract from "./attempt.js";
 import { Events as EventDescriptors } from "./events.js";
 import {
   criterionId as createCriterionId,
@@ -108,6 +109,45 @@ export namespace WorkItem {
 
   export const Info = Schema.Info;
   export type Info = Schema.Info;
+
+  export const AttemptId = AttemptContract.AttemptId;
+  export type AttemptId = AttemptContract.AttemptId;
+
+  export const Attempt = AttemptContract.Attempt;
+  export type Attempt = AttemptContract.Attempt;
+
+  export const ContentFingerprintInputs = AttemptContract.ContentFingerprintInputs;
+  export type ContentFingerprintInputs = AttemptContract.ContentFingerprintInputs;
+
+  export const ContentFingerprint = AttemptContract.ContentFingerprint;
+  export type ContentFingerprint = AttemptContract.ContentFingerprint;
+
+  export const EnvironmentFingerprintInputs = AttemptContract.EnvironmentFingerprintInputs;
+  export type EnvironmentFingerprintInputs = AttemptContract.EnvironmentFingerprintInputs;
+
+  export const EnvironmentFingerprint = AttemptContract.EnvironmentFingerprint;
+  export type EnvironmentFingerprint = AttemptContract.EnvironmentFingerprint;
+
+  export const EnvironmentSubsetField = AttemptContract.EnvironmentSubsetField;
+  export type EnvironmentSubsetField = AttemptContract.EnvironmentSubsetField;
+
+  export const CacheKey = AttemptContract.CacheKey;
+  export type CacheKey = AttemptContract.CacheKey;
+
+  export const ReplayKey = AttemptContract.ReplayKey;
+  export type ReplayKey = AttemptContract.ReplayKey;
+
+  export const NondeterminismCategory = AttemptContract.NondeterminismCategory;
+  export type NondeterminismCategory = AttemptContract.NondeterminismCategory;
+
+  export const NondeterminismManifest = AttemptContract.NondeterminismManifest;
+  export type NondeterminismManifest = AttemptContract.NondeterminismManifest;
+
+  export const canonicalDigest = AttemptContract.canonicalDigest;
+  export const generateAttemptId = AttemptContract.generateAttemptId;
+  export const contentFingerprintOf = AttemptContract.contentFingerprintOf;
+  export const environmentFingerprintOf = AttemptContract.environmentFingerprintOf;
+  export const cacheKeyOf = AttemptContract.cacheKeyOf;
 
   export const deriveStatus = resolveStatus;
   export const criterionId = createCriterionId;
