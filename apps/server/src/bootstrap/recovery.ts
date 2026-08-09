@@ -1,6 +1,10 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { WaitService, type DefaultDispatchRuntime } from "@openomni/openomni";
+import {
+  WaitService,
+  type DefaultDispatchRuntime,
+  type EffectReconciler,
+} from "@openomni/openomni";
 import { Bus, PendingInteractionStore, Storage } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
@@ -48,6 +52,8 @@ export type BootstrapRecoveryInput = Readonly<{
   coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> };
   traceId?: string;
   completionRuntime: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">;
+  /** #492 finish reconciliation — probes every outcome-less effect intent at boot. */
+  effects?: Pick<EffectReconciler, "reconcile">;
 }>;
 
 type InboundSurface = Readonly<{ start(): Promise<void> | void }>;
@@ -106,6 +112,39 @@ function recordLedgerChainBreaks(traceId: string): void {
   }
 }
 
+/**
+ * #492 finish reconciliation at boot: every outcome-less `effect:<id>` intent
+ * is probed under its idempotency key BEFORE recorded WorkItem completions
+ * resume (admission may be blocked exactly on those unresolved effects).
+ * Observe-only like the chain-break walk: a sweep failure is recorded loudly
+ * and boot proceeds — the intents stay durable, admission stays blocked, and
+ * the next sweep retries. Exhaustion escalation lives in the injected Stakes
+ * seam (see bootstrap/effects.ts), never here.
+ */
+async function reconcileOutstandingEffects(
+  effects: Pick<EffectReconciler, "reconcile">,
+  traceId: string,
+): Promise<void> {
+  try {
+    const summary = await effects.reconcile();
+    Bus.publish(Operational.Info, {
+      traceId,
+      time: Date.now(),
+      component: "server",
+      msg: `recovery reconciled ${summary.resolved} of ${summary.scanned} outstanding effect intent(s)`,
+      context: { ...summary },
+    });
+  } catch (error) {
+    Bus.publish(Operational.Error, {
+      traceId,
+      time: Date.now(),
+      component: "server",
+      msg: "effect reconciliation failed at boot",
+      context: { error: error instanceof Error ? error.message : String(error) },
+    });
+  }
+}
+
 export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> {
   const { handler, coordinator, traceId, completionRuntime: completionRecovery } = input;
   const startTime = Date.now();
@@ -119,6 +158,9 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
   let sessionsRecovered = 0;
   try {
     recordLedgerChainBreaks(id);
+    if (input.effects) {
+      await reconcileOutstandingEffects(input.effects, id);
+    }
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
     if (completionRecovery) {
