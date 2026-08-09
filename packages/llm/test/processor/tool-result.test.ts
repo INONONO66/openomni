@@ -327,3 +327,110 @@ describe("Processor tool error normalization", () => {
     });
   });
 });
+
+describe("Processor abort settlement grace (#532 candidate 2)", () => {
+  afterEach(() => {
+    Bus.reset();
+  });
+
+  function captureSink(messages: Message.WithParts[]): Sink {
+    return {
+      onMessage: (message) => messages.push(message),
+      onToolCall: () => undefined,
+      onToolResult: () => undefined,
+      onSnapshot: () => undefined,
+    };
+  }
+
+  function lastToolState(messages: Message.WithParts[]): Message.ToolPart["state"] | undefined {
+    const parts = messages[messages.length - 1]?.parts ?? [];
+    const tool = parts.find((part): part is Message.ToolPart => part.type === "tool");
+    return tool?.state;
+  }
+
+  test("tool result already in the stream at abort settles as completed", async () => {
+    const messages: Message.WithParts[] = [];
+    const abortController = new AbortController();
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: abortController.signal,
+      sink: captureSink(messages),
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-grace",
+            toolName: "write_file",
+            input: { path: "/tmp/x" },
+          };
+          abortController.abort();
+          yield {
+            type: "tool-result",
+            toolCallId: "call-grace",
+            toolName: "write_file",
+            output: { output: "written", isError: false },
+          };
+        })(),
+      }),
+    });
+
+    await expect(processor.process({ system: "" })).rejects.toMatchObject({
+      name: "AbortError",
+    });
+
+    // The tool DID run (the SDK executes between tool-call and tool-result);
+    // recording it as interrupted would misreport a real side effect.
+    const state = lastToolState(messages);
+    expect(state?.status).toBe("completed");
+    if (state?.status === "completed") {
+      expect(state.output).toBe("written");
+      expect(state.time.end).toBeGreaterThanOrEqual(state.time.start);
+    }
+  });
+
+  test("tool result that never arrives settles as interrupted after the grace window", async () => {
+    const messages: Message.WithParts[] = [];
+    const abortController = new AbortController();
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: abortController.signal,
+      sink: captureSink(messages),
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-hang",
+            toolName: "slow_tool",
+            input: {},
+          };
+          abortController.abort();
+          yield { type: "text-delta", id: "t1", text: "..." };
+          // Result never arrives: block until the consumer stops pulling.
+          await new Promise(() => undefined);
+        })(),
+      }),
+    });
+
+    const startedAt = Date.now();
+    await expect(processor.process({ system: "" })).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    const elapsed = Date.now() - startedAt;
+    // The grace window was actually attempted (~250ms) AND is bounded —
+    // abort must not hang on a dead stream nor return before the grace.
+    expect(elapsed).toBeGreaterThanOrEqual(200);
+    expect(elapsed).toBeLessThan(1500);
+
+    const state = lastToolState(messages);
+    expect(state?.status).toBe("error");
+    if (state?.status === "error") {
+      expect(state.error).toBe("Processing was interrupted");
+    }
+  });
+});
