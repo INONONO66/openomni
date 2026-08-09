@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786302745105,
+  "lastUpdate": 1786302950966,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -37797,6 +37797,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 395726,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6be84aaa74b7b99169d7cbdf5fbe5b58169d14d0",
+          "message": "feat(server): openomni CLI + onboard wizard, publishable root package (#534)\n\n* feat(server): add openomni CLI, onboard wizard, root packaging\n\nbun install -g openomni && openomni onboard now produces a booting server\nwith no Docker and no manual config surgery.\n\n- root package publishes as 'openomni' (bin, files whitelist, release\n  script); bun publish runs no lifecycle scripts, so 'bun run release'\n  (build + boot smoke + publish) is the fail-closed gate\n- script/build-dist.ts emits two self-contained bundles (cli.js +\n  worker-entry.js at dist/bin) and ships packages/session/migration at\n  the package-relative path the session store resolves at runtime;\n  main({ workerScript }) lets the bundle inject the worker entry\n- onboard fills existing plumbing only (ServerConfig + Auth proxy):\n  preserve-merge idempotent rewrite, wsToken kept unless --force,\n  config.json never carries apiKey/key fields (pinned by test), 0600\n  atomic writes, model suggestion via resolveDefaultProviderModel\n- systemd: system unit as root, user unit otherwise, print-only\n  elsewhere; quoted paths, PATH pinned for the bare-'bun' worker spawn\n- opensearch-ai-sdk stays external (jsdom is unbundleable) as the sole\n  runtime npm dependency\n- worker/migration paths use import.meta.dir (URL.pathname percent-\n  encodes spaces/non-ASCII, which would break worker spawn after install)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(server): onboard also provisions the admin token\n\nserver.adminToken has existed since #523 (guards /admin/ledger/*,\nfail-closed 401 while unset) — the earlier claim that no consumer exists\nwas a stale read of the pre-rebase tree. Same keep-unless---force\nsemantics as wsToken, pinned by test.\n\n* fix(server): address #534 review findings\n\n- ~/.openomni created 0700 (holds auth.json credentials).\n- systemd unit escapes % specifiers and $ variables in install paths\n  (unit test pins %% / $$ rendering).\n- system-scope install warns that the unit runs the server as root and\n  why User= is not emitted (state lives in the onboarding user's home).\n- smoke-dist drains serve stdout/stderr from spawn (undrained pipe\n  backpressures the child mid-boot) and kills the child before awaiting\n  the drains on the unhealthy path.\n- parseOnboardFlags unknown-flag test asserts the message.\n- implementation-status row documents adminToken alongside wsToken.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T19:14:36Z",
+          "tree_id": "c690662bca24b9d803c1314619fb05f6bd838a1e",
+          "url": "https://github.com/INONONO66/openomni/commit/6be84aaa74b7b99169d7cbdf5fbe5b58169d14d0"
+        },
+        "date": 1786302950207,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 680,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6290,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10153,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3172,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16203,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 739,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1432,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 771,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19371,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2260,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10777,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 523399,
             "unit": "ns/op"
           }
         ]
