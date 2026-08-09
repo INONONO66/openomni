@@ -1,5 +1,6 @@
 import type { WorkItem } from "@openomni/protocol";
 import { createWorkItem } from "./create.js";
+import { recordWorkItemEffect, type RecordEffectInput } from "./effect-link.js";
 import { getWorkItem, listWorkItems, removeWorkItem, updateWorkItem } from "./crud.js";
 import {
   addWorkItemBlocker,
@@ -109,6 +110,16 @@ export namespace WorkItemStore {
   }
 
   export const recordOutcome = recordWorkItemOutcome;
+
+  /**
+   * #492 ↔ #490 — projects one effect intent's state onto the WorkItem's
+   * completion facts so admission blocks until the effect reaches a terminal
+   * outcome. Called by the OpenOmni effect service/reconciler; the durable
+   * effect audit lives on the `effect:<effectId>` stream.
+   */
+  export function recordEffect(hash: string, input: RecordEffectInput): WorkItem.Info | undefined {
+    return recordWorkItemEffect(hash, input);
+  }
 
   export function areDependenciesMet(hash: string): DependencyReadiness {
     return areStoredDependenciesMet(hash);
