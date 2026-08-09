@@ -130,6 +130,41 @@ describe("runWaitReady (log source, real producer)", () => {
     }
   });
 
+  it("re-follows from the top after truncation/rotation", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "openomni-wait-ready-"));
+    const logFile = join(dir, "unit.log");
+    writeFileSync(logFile, "old content that makes the file long\n");
+    try {
+      const run = runWaitReady({
+        source: { type: "log", file: logFile },
+        event: "OpenOmni ready",
+        timeoutMs: 10_000,
+        json: false,
+      });
+      await Bun.sleep(120); // let the follower pin its offset at the old size
+      // Rotation: the file shrinks below the pinned offset, then the event
+      // arrives in the fresh file — the follower must restart from the top.
+      writeFileSync(logFile, "OpenOmni ready\n");
+      const result = await run;
+      expect(result.observed).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== "linux")(
+    "service mode follows journalctl and times out cleanly for a unit with no events",
+    async () => {
+      const result = await runWaitReady({
+        source: { type: "service", unit: "openomni-wait-ready-test-nonexistent" },
+        event: "never logged",
+        timeoutMs: 1_500,
+        json: false,
+      });
+      expect(result.observed).toBe(false);
+    },
+  );
+
   it("exits with observed:false on timeout", async () => {
     const dir = mkdtempSync(join(tmpdir(), "openomni-wait-ready-"));
     const logFile = join(dir, "unit.log");

@@ -177,6 +177,35 @@ describe("admin effect routes", () => {
     expect(absent.status).toBe(404);
   });
 
+  test("storage-level failures surface as 503, never as a crash or a leak", async () => {
+    const { EffectStoreError } = await import("@openomni/session");
+    const throwing = {
+      service: {
+        run: () => {
+          throw new EffectStoreError("adapter_absent", "no ledger sub-adapter");
+        },
+      },
+      reconciler: {
+        reconcile: () => {
+          throw new EffectStoreError("unavailable", "storage busy");
+        },
+      },
+    };
+    const app = createRouter(undefined, {
+      adminToken: ADMIN_TOKEN,
+      effects: throwing as unknown as NonNullable<Parameters<typeof createRouter>[1]>["effects"],
+    });
+
+    const created = await app.fetch(intentRequest({ scenario: "manual" }));
+    expect(created.status).toBe(503);
+    expect(((await created.json()) as { error: string }).error).toBe("Effect surface unavailable");
+
+    const reconciled = await app.fetch(
+      authedRequest("/admin/effects/reconcile", { method: "POST" }),
+    );
+    expect(reconciled.status).toBe(503);
+  });
+
   test("routes are absent when no effect runtime is provided (reduced router)", async () => {
     const app = createRouter(undefined, { adminToken: ADMIN_TOKEN });
     const response = await app.fetch(intentRequest({ scenario: "manual" }));
