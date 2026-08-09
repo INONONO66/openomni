@@ -22,6 +22,7 @@ import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
 import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
+import { assembleEffectRuntime } from "./effects";
 import { createServerDispatchOwners } from "./dispatch-owners";
 import { registerServerMessaging } from "./messaging";
 import { connectMcpServers } from "./mcp";
@@ -196,6 +197,8 @@ export async function main(): Promise<void> {
 
   const traceId = crypto.randomUUID();
   const mode = "coordinator";
+  // #492: manifest composition + finish reconciliation + admin drive surface.
+  const effectRuntime = assembleEffectRuntime();
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,
     // #510 D3: read-only ledger inspection; denies 401 until
@@ -203,6 +206,7 @@ export async function main(): Promise<void> {
     adminToken: config.server.adminToken,
     // D2a artifact convention: the manifest lives beside the database file.
     ledgerArchiveManifestPath: join(dirname(config.storage.dbPath), "ledger-archive-manifest.json"),
+    effects: { service: effectRuntime.service, reconciler: effectRuntime.reconciler },
   });
   const server = await startInboundSurfacesAfterRecovery({
     recover: () =>
@@ -211,6 +215,7 @@ export async function main(): Promise<void> {
         coordinator,
         traceId,
         completionRuntime: sharedDispatchRuntime,
+        effects: effectRuntime.reconciler,
       }),
     createServer: () =>
       Bun.serve({

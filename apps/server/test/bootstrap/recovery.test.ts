@@ -8,12 +8,14 @@ import {
 } from "@openomni/openomni";
 import {
   Bus,
+  EffectStore,
   PendingInteractionStore,
   Session,
   Storage,
   WaitStore,
   WorkerRun,
 } from "@openomni/session";
+import { assembleEffectRuntime } from "../../src/bootstrap/effects";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "../../src/bootstrap/recovery";
 
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -355,5 +357,85 @@ describe("server recovery", () => {
     expect(events).toContain("pending_interaction.expired");
     expect(events).toContain("operational.recovery.completed");
     expect(completedPayloads[0]?.sessionsRecovered).toBe(2);
+  });
+});
+
+describe("boot effect reconciliation (#492)", () => {
+  const stubCompletionRuntime = {
+    recoverRecordedWorkItemCompletions: async () => ({
+      recovered: 0,
+      skipped: 0,
+      failures: [],
+    }),
+  };
+
+  it("resolves an outcome-less crash-window intent at boot under its idempotency key", async () => {
+    const runtime = assembleEffectRuntime();
+    // Simulate the crash window: the intent landed, the outcome never did.
+    EffectStore.intend({ effectId: "fx-boot-1", kind: "crash-after-intent" });
+    expect(EffectStore.status("fx-boot-1").status).toBe("pending");
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-effect-boot",
+      completionRuntime: stubCompletionRuntime,
+      effects: runtime.reconciler,
+    });
+
+    const status = EffectStore.status("fx-boot-1");
+    expect(status.status).toBe("confirmed");
+    expect(status.materializationCount).toBe(1);
+  });
+
+  it("runs the effect sweep before recorded WorkItem completions resume", async () => {
+    const order: string[] = [];
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-effect-order",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => {
+          order.push("completion");
+          return { recovered: 0, skipped: 0, failures: [] };
+        },
+      },
+      effects: {
+        reconcile: async () => {
+          order.push("effects");
+          return { scanned: 0, resolved: 0, stillUnknown: 0, escalated: 0 };
+        },
+      },
+    });
+    expect(order).toEqual(["effects", "completion"]);
+  });
+
+  it("treats an effect sweep failure as observe-only: loud error, boot proceeds", async () => {
+    const errors: string[] = [];
+    Bus.observe((event, payload) => {
+      if (event.name === "operational.error") {
+        errors.push(String((payload as { msg?: unknown }).msg));
+      }
+    });
+
+    let completionRan = false;
+    await expect(
+      runRecovery({
+        handler: undefined,
+        traceId: "trace-effect-sweep-failure",
+        completionRuntime: {
+          recoverRecordedWorkItemCompletions: async () => {
+            completionRan = true;
+            return { recovered: 0, skipped: 0, failures: [] };
+          },
+        },
+        effects: {
+          reconcile: async () => {
+            throw new Error("probe blew up");
+          },
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(completionRan).toBe(true);
+    expect(errors.some((msg) => msg.includes("effect reconciliation failed at boot"))).toBe(true);
   });
 });
