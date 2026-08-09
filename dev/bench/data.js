@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786301871378,
+  "lastUpdate": 1786302087980,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -37301,6 +37301,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 540065,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8e119a68f1b2c293e6c2f5d9ce7c2ee63029a57",
+          "message": "feat(server): #492 boot wiring — effect manifest, finish reconciliation, admin drive surface (#539)\n\n* feat(server): wire #492 effects: boot manifest, reconcile, admin API\n\nMakes the #526 effect substrate a shipped consumer-backed capability\n(docs row 🚧→✅):\n\n- bootstrap/effects.ts composes the EffectManifest at boot with the\n  issue's Manual QA drivers (manual, crash-after-intent,\n  definite-failure, unknown-result, exhausting-probe) and injects the\n  Stakes escalation seam: exhaustion adds ONE durable waiting_input\n  blocker (deterministic id, deduplicated across sweeps; terminal or\n  missing WorkItems get the loud event only) per kernel-contract\n  §retry policy — never a silent terminalization\n- runRecovery runs EffectReconciler.reconcile() before recorded\n  WorkItem completions resume; sweep failure is observe-only like the\n  chain-break walk (intents stay durable and admission-blocking)\n- /admin/effects/* drive surface per issue Manual QA: POST /intents\n  (422 typed refusals, materializationCount 0), POST /reconcile,\n  GET /intents/:id — behind the shared fail-closed /admin/* bearer\n  gate, now hoisted into createRouter so refactoring one admin surface\n  can never un-gate another\n- manual/wait-ready.ts bounded readiness driver (#217/#226 consumer):\n  read position pinned BEFORE the announce marker (journal cursor via\n  --show-cursor / native offset follower for --log), producer owned\n  and terminated, poll loop stop-flagged so a timed-out watch cannot\n  leak\n- script/conformance/p2-effects-reconciliation.test.ts pins the seven\n  normative rows (record-before-act fact order, failure-vs-unknown,\n  restart reconciliation, duplicate-materialization refusal,\n  unmanifested/unsanitized zero-fact refusals, deduplicated seam\n  escalation with fail-closed no-seam throw)\n\nThe substrate's confirm→projection crash window (terminal effect fact\nwith unresolved completionFacts.effects blocks admission forever) is\npackages territory and filed as #538, linked from the doc row.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): cover escalation seam branches, 503 path, follower edges\n\nCI coverage ratchet: apps/server fell 0.75pp below baseline — the\nconformance suite pins the same semantics but its coverage lands on\nscript/, not apps/server. Adds in-package pins: escalation blocker\ndedup across sweeps, terminal/missing WorkItem escalation outcomes,\nEffectStoreError -> 503 on the admin surface, follower re-follow after\nrotation, and a linux-only journalctl service-mode timeout.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T19:00:04Z",
+          "tree_id": "0eb495d4a2d9829f91ed9584be9c74b5154c4dfe",
+          "url": "https://github.com/INONONO66/openomni/commit/b8e119a68f1b2c293e6c2f5d9ce7c2ee63029a57"
+        },
+        "date": 1786302087612,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 333,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6459,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1950,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 1991,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14163,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 561,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1052,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1307,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 567,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 15056,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1660,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 9293,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 86172,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 448889,
             "unit": "ns/op"
           }
         ]
