@@ -29,15 +29,70 @@ export interface ConnectorProcessResult {
 const DEFAULT_TIMEOUT_MS = 600_000;
 const MIN_LOG_POLL_MS = 25;
 const MAX_LOG_POLL_MS = 1_000;
+// #517 termination contract: group SIGTERM → bounded graceful window → group
+// SIGKILL → bounded reap. Dispatch settles when the group is gone or the reap
+// window closes — never "whenever a TERM-resistant descendant releases the
+// inherited pipes".
+const GRACEFUL_TERMINATION_WINDOW_MS = 2_000;
+const KILL_REAP_WINDOW_MS = 2_000;
+const GROUP_POLL_MS = 25;
+const INTERRUPT_DRAIN_MS = 150;
 
-function terminateProcess(proc: { readonly pid: number; kill(): void }): void {
+type GroupTerminationResult = "already_exited" | "terminated" | "killed" | "unreaped";
+
+type SpawnedProcess = {
+  readonly pid: number;
+  kill(signal?: number | NodeJS.Signals): void;
+};
+
+function groupAlive(pid: number): boolean {
   try {
-    process.kill(-proc.pid, "SIGTERM");
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    // Only ESRCH means the group is gone — EPERM is "alive but
+    // unsignalable" (e.g. a uid-changing descendant), and reporting that as
+    // exited would skip the kill flow entirely.
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+function signalGroup(proc: SpawnedProcess, signal: "SIGTERM" | "SIGKILL"): void {
+  try {
+    process.kill(-proc.pid, signal);
     return;
   } catch (error) {
     if (!(error instanceof Error)) throw error;
   }
-  proc.kill();
+  try {
+    proc.kill(signal);
+  } catch {
+    // Parent already reaped; descendants (if any) are covered by the group
+    // probe loop in terminateProcessGroup.
+  }
+}
+
+async function waitForGroupExit(pid: number, windowMs: number): Promise<boolean> {
+  const deadline = Date.now() + windowMs;
+  while (Date.now() < deadline) {
+    if (!groupAlive(pid)) return true;
+    await Bun.sleep(GROUP_POLL_MS);
+  }
+  return !groupAlive(pid);
+}
+
+/**
+ * #517 — one termination flow, memoized by the caller across every
+ * interruption path. Probes group liveness before each signal so an observed
+ * group exit is never signalled again.
+ */
+async function terminateProcessGroup(proc: SpawnedProcess): Promise<GroupTerminationResult> {
+  if (!groupAlive(proc.pid)) return "already_exited";
+  signalGroup(proc, "SIGTERM");
+  if (await waitForGroupExit(proc.pid, GRACEFUL_TERMINATION_WINDOW_MS)) return "terminated";
+  if (!groupAlive(proc.pid)) return "terminated";
+  signalGroup(proc, "SIGKILL");
+  return (await waitForGroupExit(proc.pid, KILL_REAP_WINDOW_MS)) ? "killed" : "unreaped";
 }
 
 function interruptionMessage(reason: "timeout" | "stall_timeout", timeoutMs: number): string {
@@ -47,26 +102,49 @@ function interruptionMessage(reason: "timeout" | "stall_timeout", timeoutMs: num
   return `connector process timed out after ${timeoutMs}ms`;
 }
 
-async function readStream(
+/**
+ * Cancellable stream drain. `cancel()` is the #517 backstop for a descendant
+ * that survives even the group SIGKILL while holding an inherited pipe: the
+ * read resolves with whatever arrived instead of keeping the dispatch
+ * pending forever.
+ */
+function readStreamCancellable(
   stream: ReadableStream<Uint8Array> | null,
   onActivity: () => void,
-): Promise<string> {
-  if (stream === null) return "";
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let output = "";
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      if (chunk.value.length > 0) onActivity();
-      output += decoder.decode(chunk.value, { stream: true });
-    }
-    output += decoder.decode();
-    return output;
-  } finally {
-    reader.releaseLock();
+): { readonly output: Promise<string>; cancel(): void } {
+  if (stream === null) {
+    return { output: Promise.resolve(""), cancel: () => undefined };
   }
+  const reader = stream.getReader();
+  let cancelled = false;
+  const output = (async () => {
+    const decoder = new TextDecoder();
+    let text = "";
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        if (chunk.value.length > 0) onActivity();
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } catch (error) {
+      // cancel() resolves the pending read with done, it does not throw —
+      // an error here is a REAL stream failure. After cancellation return
+      // the partial output; otherwise keep the pre-#517 semantics (the
+      // rejection reaches the outer catch and the run reports failed).
+      if (!cancelled) throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    return text + decoder.decode();
+  })();
+  return {
+    output,
+    cancel: () => {
+      cancelled = true;
+      void reader.cancel().catch(() => undefined);
+    },
+  };
 }
 
 function questionBridgeEnabled(questionBridge: AppConnector.QuestionBridge | undefined): boolean {
@@ -137,10 +215,23 @@ export async function runConnectorProcess(
       },
     );
     let interruptionReason: "timeout" | "stall_timeout" | undefined;
+    let termination: Promise<GroupTerminationResult> | undefined;
+    const terminate = () => {
+      termination ??= terminateProcessGroup(proc);
+      return termination;
+    };
+    let signalInterrupted!: () => void;
+    const interrupted = new Promise<void>((resolveInterrupted) => {
+      signalInterrupted = resolveInterrupted;
+    });
     const interrupt = (reason: "timeout" | "stall_timeout") => {
+      // First interruption reason wins under concurrent signals; the
+      // termination flow itself is memoized so repeated triggers cannot
+      // duplicate cleanup.
       if (interruptionReason !== undefined) return;
       interruptionReason = reason;
-      terminateProcess(proc);
+      signalInterrupted();
+      void terminate();
     };
     const timeoutTimer = setTimeout(() => interrupt("timeout"), timeoutMs);
     let stallTimer: ReturnType<typeof setTimeout> | undefined;
@@ -171,31 +262,66 @@ export async function runConnectorProcess(
 
     resetStallTimer();
     startLogActivityPolling();
+    const stdoutRead = readStreamCancellable(proc.stdout, resetStallTimer);
+    const stderrRead = readStreamCancellable(proc.stderr, resetStallTimer);
     try {
-      const [stdout, stderr, exitCode] = await Promise.all([
-        readStream(proc.stdout, resetStallTimer),
-        readStream(proc.stderr, resetStallTimer),
-        proc.exited,
-      ]);
-      if (interruptionReason !== undefined) {
+      type SettledRun = {
+        stdout: string;
+        stderr: string;
+        exitCode?: number;
+        reaping?: GroupTerminationResult;
+      };
+      const naturalSettle = Promise.all([stdoutRead.output, stderrRead.output, proc.exited]).then(
+        ([stdout, stderr, exitCode]): SettledRun => ({
+          stdout,
+          stderr,
+          exitCode,
+        }),
+      );
+      // #517: an interrupted run settles when the process GROUP is gone (or
+      // the bounded reap window closes) — never "when a TERM-resistant
+      // descendant lets go of the inherited pipes". After termination the
+      // streams get a short drain window, then the readers are cancelled so
+      // the dispatch can always settle with partial output.
+      const boundedInterruptSettle = interrupted.then(async (): Promise<SettledRun> => {
+        const reaping = await terminate();
+        await Promise.race([
+          Promise.all([stdoutRead.output, stderrRead.output]),
+          Bun.sleep(INTERRUPT_DRAIN_MS),
+        ]);
+        stdoutRead.cancel();
+        stderrRead.cancel();
+        const [stdout, stderr] = await Promise.all([stdoutRead.output, stderrRead.output]);
+        return { stdout, stderr, reaping };
+      });
+      const settled = await Promise.race([naturalSettle, boundedInterruptSettle]);
+      // Read synchronously after the race: a timer cannot interleave here, so
+      // a natural exit at the deadline classifies deterministically by
+      // whether its interruption fired before the settle.
+      const reason = interruptionReason;
+      if (reason !== undefined) {
         const reasonTimeoutMs =
-          interruptionReason === "stall_timeout" ? (spawn.stallTimeoutMs ?? timeoutMs) : timeoutMs;
+          reason === "stall_timeout" ? (spawn.stallTimeoutMs ?? timeoutMs) : timeoutMs;
+        const unreaped =
+          settled.reaping === "unreaped"
+            ? "; process group could not be reaped within the bounded window"
+            : "";
         return {
           outcome: {
             status: "interrupted",
-            stdout,
-            stderr: stderr || interruptionMessage(interruptionReason, reasonTimeoutMs),
-            interruptionReason,
+            stdout: settled.stdout,
+            stderr: settled.stderr || `${interruptionMessage(reason, reasonTimeoutMs)}${unreaped}`,
+            interruptionReason: reason,
           },
           redactions: bridge?.redactions ?? [],
         };
       }
       return {
         outcome: {
-          status: exitCode === 0 ? "succeeded" : "failed",
-          stdout,
-          stderr,
-          exitCode,
+          status: settled.exitCode === 0 ? "succeeded" : "failed",
+          stdout: settled.stdout,
+          stderr: settled.stderr,
+          exitCode: settled.exitCode,
         },
         redactions: bridge?.redactions ?? [],
       };
