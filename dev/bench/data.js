@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786317236959,
+  "lastUpdate": 1786317466659,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -38665,6 +38665,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514473,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f1fcdc9e58e3ef6bb9d10acc4725c8b69fffdd7",
+          "message": "refactor(openomni): instantiate ingress engine and completion tracking (#558)\n\n* refactor(openomni): instantiate IngressEngine via factory (#549)\n\nThe IngressEngine namespace singleton (6 module-level mutable variables,\n5 setters) becomes a createIngressEngine(deps) factory returning an\ninstance; all collaborators (coordinator, resident runtime, agent\nresolver, dispatch runtime, policy observer, inbound policies) are\nconstruction-injected and immutable afterwards. Routing behavior is\nunchanged.\n\n- Server bootstrap constructs the single engine and threads it to the\n  conversation handler (MessageHandlerDeps.ingress), CronAdapter.fire,\n  and the dispatch owners' resident.ask seam (fail-closed ref, matching\n  the existing requireDispatchRuntime pattern for the construction\n  cycle between engine and dispatch runtime).\n- resident.ask executes through the injected owners.ingress instance;\n  CronAdapter.fire takes the engine as a parameter.\n- Tests build engines from fresh factory calls instead of setter\n  resets; storage/bus isolation is now explicit Storage.reset()/\n  Bus.reset().\n- New engine-isolation test proves two engines in one process share no\n  state (policies, runtimes, observers).\n- The ingress-routing boundary checker now anchors engine provenance on\n  processMessage's injected ingress parameter and flags any value\n  import of createIngressEngine in bridge/conversation sources.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): instance completion tracking and verifier (#549)\n\nThe module-level activeCompletionRequests Map in the worker-completion\nhandler becomes instance state of the completion admission service (and\ntherefore the gateway): CompletionAdmissionService gains\nhasActiveRequest/trackActiveRequest, so in-process in-flight tracking\nlives with the service that owns the durable reservation, and two\nservices in one process never observe each other's in-flight requests.\nThe token-guarded release semantics are unchanged.\n\nVerifierRegistry.create() is hoisted out of the per-call\nprojectCriterionFacts path: WorkerCompletionOptions now requires an\ninjected registry, resolved once at dispatch handler construction\n(registerBuiltInDispatchHandlers / createWorkerDispatchHandlers) and\nthreaded through worker.spawn, worker.complete and the connector\ncompletion projector — matching the all-origin authority-ports\ndirection.\n\nThe takeover-ownership admission test routes the takeover owner and the\nlater contender through the same service instance, as production does.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): port conformance suite to instance ingress engine (#549)\n\nscript/conformance/p2-ledger-baseline.test.ts still imported the deleted\nIngressEngine namespace, so the required CI conformance gate died at\nmodule load. The C3 routing describe now constructs engines per scenario\nwith createIngressEngine(deps) — coordinator injected explicitly,\nsetter/clear global mutation gone — with every assertion unchanged.\n\nAlso updates the stale CronAdapter.fire signatures in\napps/server/AGENTS.md, packages/openomni/AGENTS.md, and\ndocs/implementation-status.md: fire is now (job, engine).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-09T23:16:26Z",
+          "tree_id": "3182aff4ec503c8c01a6f09209add8c57d421021",
+          "url": "https://github.com/INONONO66/openomni/commit/5f1fcdc9e58e3ef6bb9d10acc4725c8b69fffdd7"
+        },
+        "date": 1786317465407,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6320,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1911,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 1982,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13790,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 551,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1047,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 37,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 561,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 15141,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 9274,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 86171,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 426907,
             "unit": "ns/op"
           }
         ]
