@@ -1,25 +1,31 @@
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
-import { Heartbeat } from "./heartbeat";
-import { handleGatewayPayload, type DispatchState } from "./dispatch-router";
-import { GatewayOp, Intents, type GatewayPayload } from "./types";
+import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
 
 export interface GatewayCallbacks {
   onDispatch: (event: string, data: unknown) => void;
   onReady: (info: { botId: string; botUsername: string }) => void;
 }
 
+/**
+ * Discord gateway connection state machine. Heartbeat and payload routing
+ * live INSIDE this class (#520): the former heartbeat.ts/dispatch-router.ts
+ * satellite split severed the two data paths the protocol depends on — no
+ * code path delivered HEARTBEAT_ACK to the ack flag (so the missed-ack
+ * watchdog force-closed every ~2 intervals), and the router had no token
+ * access so RESUME serialized `token: undefined` (dropped by JSON.stringify;
+ * Discord answers INVALID_SESSION and every resume degraded to re-identify).
+ */
 export class DiscordGateway {
   private ws: WebSocket | null = null;
-  private readonly heartbeat = new Heartbeat();
   private running = false;
-  private state: DispatchState = {
-    sequence: null,
-    sessionId: null,
-    resumeUrl: null,
-    reconnectAttempt: 0,
-  };
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatAckReceived = true;
+  private sequence: number | null = null;
+  private sessionId: string | null = null;
+  private resumeUrl: string | null = null;
+  private reconnectAttempt = 0;
 
   constructor(
     private readonly token: string,
@@ -34,16 +40,13 @@ export class DiscordGateway {
 
   stop(): void {
     this.running = false;
-    this.heartbeat.stop();
+    this.stopHeartbeat();
     this.ws?.close(1000);
     this.ws = null;
   }
 
   private async reconnect(): Promise<void> {
-    const url =
-      this.state.resumeUrl && this.state.sessionId
-        ? this.state.resumeUrl
-        : await this.fetchGatewayUrl();
+    const url = this.resumeUrl && this.sessionId ? this.resumeUrl : await this.fetchGatewayUrl();
     await this.openSocket(url);
   }
 
@@ -55,22 +58,7 @@ export class DiscordGateway {
 
       ws.addEventListener("message", (event) => {
         const payload = JSON.parse(String(event.data)) as GatewayPayload;
-        const ready = handleGatewayPayload(payload, this.state, {
-          sendGateway: (p) => this.sendGateway(p),
-          identify: () => this.identify(),
-          startHeartbeat: (ms) =>
-            this.heartbeat.start(
-              ms,
-              (p) => this.sendGateway(p),
-              () => this.state.sequence,
-              () => this.ws?.close(),
-            ),
-          closeSocket: (code) => this.ws?.close(code),
-          stopRunning: () => {
-            this.running = false;
-          },
-          callbacks: this.callbacks,
-        });
+        const ready = this.handlePayload(payload);
         if (ready && !resolved) {
           resolved = true;
           resolve();
@@ -78,7 +66,7 @@ export class DiscordGateway {
       });
 
       ws.addEventListener("close", async (event) => {
-        this.heartbeat.stop();
+        this.stopHeartbeat();
         if (!resolved) {
           resolved = true;
           reject(new Error(`WebSocket closed before ready: ${event.code}`));
@@ -95,8 +83,8 @@ export class DiscordGateway {
           return;
         }
         if (this.running) {
-          this.state.reconnectAttempt++;
-          const backoffMs = calculateBackoff(this.state.reconnectAttempt);
+          this.reconnectAttempt++;
+          const backoffMs = calculateBackoff(this.reconnectAttempt);
           Bus.publish(Operational.Warn, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
@@ -131,6 +119,145 @@ export class DiscordGateway {
         }),
       );
     });
+  }
+
+  /** Routes one gateway payload; returns true when the connection is ready. */
+  private handlePayload(payload: GatewayPayload): boolean {
+    // typeof guard, not `!== null`: a MISSING s would otherwise assign
+    // undefined, and `seq: undefined` in RESUME gets dropped by
+    // JSON.stringify — the same serialization class as the #520 token bug.
+    if (typeof payload.s === "number") this.sequence = payload.s;
+
+    switch (payload.op) {
+      case GatewayOp.HELLO: {
+        const d = payload.d as { heartbeat_interval: number };
+        this.startHeartbeat(d.heartbeat_interval);
+        if (this.sessionId && this.sequence !== null) {
+          // #520 fix 2: the REAL token — `token: undefined` was dropped by
+          // JSON.stringify and Discord answered INVALID_SESSION on every
+          // resume attempt.
+          this.sendGateway({
+            op: GatewayOp.RESUME,
+            d: { token: this.token, session_id: this.sessionId, seq: this.sequence },
+          });
+        } else {
+          this.identify();
+        }
+        return false;
+      }
+      case GatewayOp.HEARTBEAT:
+        // Server-requested heartbeat: the docs require an immediate beat,
+        // else the server closes the connection.
+        this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence });
+        return false;
+      case GatewayOp.HEARTBEAT_ACK:
+        // #520 fix 1: the ack has to reach the watchdog flag — before the
+        // re-merge nothing set it, so every connection was force-closed
+        // after ~2 heartbeat intervals.
+        this.heartbeatAckReceived = true;
+        return false;
+      case GatewayOp.RECONNECT:
+        Bus.publish(Operational.Info, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "discord server requested reconnect",
+        });
+        this.ws?.close(4000);
+        return false;
+      case GatewayOp.INVALID_SESSION: {
+        const resumable = payload.d as boolean;
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "discord invalid session",
+          context: { resumable },
+        });
+        if (!resumable) {
+          this.sessionId = null;
+          this.sequence = null;
+        }
+        this.ws?.close(4000);
+        return false;
+      }
+      case GatewayOp.DISPATCH:
+        return payload.t ? this.handleDispatch(payload.t, payload.d) : false;
+      default:
+        return false;
+    }
+  }
+
+  private handleDispatch(event: string, data: unknown): boolean {
+    if (event === "READY") {
+      const d = data as { session_id: string; resume_gateway_url: string; user: DiscordUser };
+      this.sessionId = d.session_id;
+      this.resumeUrl = `${d.resume_gateway_url}?v=10&encoding=json`;
+      this.reconnectAttempt = 0;
+      this.callbacks.onReady({ botId: d.user.id, botUsername: d.user.username });
+      return true;
+    }
+    if (event === "RESUMED") {
+      this.reconnectAttempt = 0;
+      Bus.publish(Operational.Info, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord session resumed",
+      });
+      return true;
+    }
+    try {
+      this.callbacks.onDispatch(event, data);
+    } catch (err) {
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord dispatch error",
+        context: {
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        },
+      });
+    }
+    return false;
+  }
+
+  private startHeartbeat(intervalMs: number): void {
+    // The interval arrives from the gateway payload (network input). Clamp it
+    // so a malformed HELLO can neither busy-loop the process (0/negative/NaN)
+    // nor zombify the connection with a never-firing heartbeat (CodeQL
+    // js/resource-exhaustion). Discord's real value is ~41250ms; the 100ms
+    // floor bounds timer pressure while keeping fake-gateway state-machine
+    // tests fast. Explicit comparison guard (not Math.min/max) so the taint
+    // barrier is analyzable.
+    let clampedMs = 100;
+    if (Number.isFinite(intervalMs) && intervalMs >= 100 && intervalMs <= 300_000) {
+      clampedMs = intervalMs;
+    } else if (intervalMs > 300_000) {
+      clampedMs = 300_000;
+    }
+    this.stopHeartbeat();
+    this.heartbeatAckReceived = true;
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.heartbeatAckReceived) {
+        // Missed ack: zombied connection. Close with a non-1000 code so the
+        // session stays resumable (Discord treats 1000/1001 as a clean
+        // goodbye and invalidates the session).
+        this.ws?.close(4000);
+        return;
+      }
+      this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence });
+      this.heartbeatAckReceived = false;
+    }, clampedMs);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   private identify(): void {
