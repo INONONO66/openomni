@@ -1,8 +1,8 @@
 import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
 import type { Policy, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { ChatAgentConfig, TokenUsage } from "../types";
-import type { AgentRunBase, RunState } from "./run-state";
+import type { AgentEvent, AgentStep, ChatAgentConfig, TokenUsage } from "../types";
+import { getCompactionCount, type AgentRunBase, type RunState } from "./run-state";
 
 export function emitRunStarted(trace: TraceContext.Type, modelId: string): void {
   Bus.publish(Operational.Info, {
@@ -197,4 +197,42 @@ function eventSessionId(state: RunState, agentBase: AgentRunBase): string {
 function diagnosticSessionId(state: RunState, agentBase: AgentRunBase): string | undefined {
   const sessionId = eventSessionId(state, agentBase);
   return sessionId === "runner" ? undefined : sessionId;
+}
+
+// merged from run-result.ts (250-LOC split refold: single-importer stage)
+export function createGuardCompleteEvent(
+  state: RunState,
+  options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },
+): AgentEvent {
+  return createRunCompleteEvent(state, { ...options, guardAborted: true });
+}
+
+export function createRunCompleteEvent(
+  state: RunState,
+  options?: {
+    text?: string;
+    steps?: AgentStep[];
+    finishReason?: "stop" | "stalled" | "max-steps";
+    guardAborted?: boolean;
+  },
+): AgentEvent {
+  return {
+    type: "complete",
+    result: {
+      text: options?.text ?? state.lastAssistantText,
+      steps: options?.steps ?? state.steps,
+      usage: state.totalUsage,
+      finishReason: options?.finishReason ?? "stop",
+      ...(options?.guardAborted !== undefined && { guardAborted: options.guardAborted }),
+      compactionCount: getCompactionCount(state),
+    },
+  };
+}
+
+export function createRunErrorEvent(error: Error, willRetry: boolean): AgentEvent {
+  return {
+    type: "error",
+    error,
+    willRetry,
+  };
 }

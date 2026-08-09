@@ -7,7 +7,8 @@ import {
   recordTurn,
   type BudgetState,
 } from "../budget";
-import type { AgentEvent, AgentStep, ChatAgentInput, TokenUsage } from "../types";
+import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
+import type { DispatchContext } from "../policy";
 import { toMessagesWithParts } from "./shared";
 
 export interface AgentRunBase {
@@ -148,4 +149,59 @@ export function applyCompactionMessages(state: RunState, messages: Message.WithP
   state.messages = messages;
   state.compactionCount += 1;
   return messagesBefore;
+}
+
+// merged from lifecycle-context.ts (250-LOC split refold: single-importer stage)
+type LifecyclePolicyContextOverrides = Partial<
+  Pick<
+    DispatchContext,
+    "turnCount" | "continuationCount" | "elapsedMs" | "isCompletion" | "toolInput"
+  >
+> &
+  Record<string, unknown>;
+
+export function buildLifecyclePolicyContext<
+  const TOverrides extends LifecyclePolicyContextOverrides = Record<string, never>,
+>(
+  state: RunState,
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+  overrides: TOverrides = {} as TOverrides,
+): Omit<DispatchContext, "actorId" | "sessionId" | "runId"> &
+  Omit<TOverrides, "actorId" | "sessionId" | "runId"> & {
+    readonly actorId: string;
+    readonly sessionId: string;
+    readonly runId: string;
+  } {
+  const { elapsedMs = Date.now() - state.startTime, ...rest } = overrides;
+  return {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: false,
+    continuationCount: state.continuationCount,
+    elapsedMs,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+    ...rest,
+    actorId: agentBase.actorId,
+    sessionId: agentBase.sessionId || state.sessionId,
+    runId: agentBase.runId || agentBase.traceId,
+  } as unknown as Omit<DispatchContext, "actorId" | "sessionId" | "runId"> &
+    Omit<TOverrides, "actorId" | "sessionId" | "runId"> & {
+      readonly actorId: string;
+      readonly sessionId: string;
+      readonly runId: string;
+    };
+}
+
+export function agentBaseForState(state: RunState): AgentRunBase {
+  return {
+    traceId: state.sessionId,
+    sessionId: state.sessionId,
+    runId: state.sessionId,
+    actorId: state.sessionId,
+  };
 }
