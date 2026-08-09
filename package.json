@@ -1,7 +1,23 @@
 {
   "name": "openomni",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Single-Owner Agent OS — one Resident, isolated Workers, one ledger",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/INONONO66/openomni.git"
+  },
+  "bin": {
+    "openomni": "dist/bin/cli.js"
+  },
+  "files": [
+    "dist/bin",
+    "migration"
+  ],
   "scripts": {
+    "build:dist": "bun run script/build-dist.ts",
+    "smoke:dist": "bun run script/smoke-dist.ts",
+    "prepack": "bun run build:dist && bun run smoke:dist",
+    "release": "bun run build:dist && bun run smoke:dist && bun publish",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "server": "bun run --cwd apps/server src/index.ts",
@@ -18,6 +34,9 @@
     "bench": "turbo run bench",
     "generate:models-snapshot": "bun run script/generate-models-snapshot.ts"
   },
+  "dependencies": {
+    "opensearch-ai-sdk": "0.0.3"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@commitlint/cli": "^20.5.0",
@@ -31,7 +50,7 @@
     "ultracite": "7.8.3"
   },
   "engines": {
-    "node": ">=18"
+    "bun": ">=1.3.0"
   },
   "packageManager": "bun@1.3.6",
   "workspaces": [

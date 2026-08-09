@@ -5,7 +5,8 @@
     "@biomejs/biome",
     "@commitlint/cli",
     "lefthook",
-    "turbo"
+    "turbo",
+    "opensearch-ai-sdk"
   ],
   "workspaces": {
     ".": {
@@ -19,7 +20,13 @@
       "project": ["script/**/*.ts", "*.json", "*.jsonc", "*.yml", "*.yaml"]
     },
     "apps/server": {
-      "entry": ["src/index.ts", "test/**/*.test.ts", "test/e2e/*.ts"],
+      "entry": [
+        "src/index.ts",
+        "src/cli.ts",
+        "src/execution/worker-entry.ts",
+        "test/**/*.test.ts",
+        "test/e2e/*.ts"
+      ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/coordinator": {

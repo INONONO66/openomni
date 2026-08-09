@@ -50,7 +50,16 @@ function createRoutingHandler(
   });
 }
 
-export async function main(): Promise<void> {
+export interface MainOptions {
+  /**
+   * Absolute path to the worker entry script. The bundled CLI must inject the
+   * dist-relative path because `import.meta.url` inside the bundle no longer
+   * points at the source tree.
+   */
+  workerScript?: string;
+}
+
+export async function main(options: MainOptions = {}): Promise<void> {
   const config = loadConfig();
   if (process.env.OPENOMNI_MODE === "local") {
     throw new Error("OPENOMNI_MODE=local is disabled; OpenOmni requires coordinator mode");
@@ -87,7 +96,8 @@ export async function main(): Promise<void> {
     component: "server",
     msg: "server running in coordinator mode",
   });
-  const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
+  const workerScript =
+    options.workerScript ?? join(import.meta.dir, "../execution/worker-entry.ts");
   const customProvider = new CustomToolProvider();
   const bootstrap = await assembleBootstrap(mcpProvider, undefined, customProvider);
   const hasAnyChannel = Boolean(
