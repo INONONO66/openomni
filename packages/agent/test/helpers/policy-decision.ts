@@ -112,11 +112,3 @@ export function replaceMessages(
 ): Policy.PolicyDecision {
   return allow(policyId, reason, [{ type: "run.replace_messages", messages }]);
 }
-
-export function rewriteWriteback(
-  output: string,
-  policyId = "test.writeback",
-  reason = "writeback_rewrite",
-): Policy.PolicyDecision {
-  return allow(policyId, reason, [{ type: "writeback.rewrite", output }]);
-}
