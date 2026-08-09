@@ -3,12 +3,13 @@ import { IngressEvent, type Ingress } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 
 let CronAdapter: typeof import("../../src/ingress/cron-adapter").CronAdapter;
-let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+let createIngressEngine: typeof import("../../src/ingress/engine")["createIngressEngine"];
 
 beforeEach(async () => {
   ({ CronAdapter } = await import("../../src/ingress/cron-adapter"));
-  ({ IngressEngine } = await import("../../src/ingress/engine"));
-  IngressEngine.reset();
+  ({ createIngressEngine } = await import("../../src/ingress/engine"));
+  Storage.reset();
+  Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
 });
 
@@ -19,26 +20,19 @@ afterAll(() => {
 describe("CronAdapter.fire", () => {
   it("calls ingestInternal with correct event shape", async () => {
     let capturedEvent: Ingress.InternalEvent | undefined;
-    IngressEngine.setAgentResolver({
-      resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
-    });
-
-    const originalIngestInternal = IngressEngine.ingestInternal;
-    IngressEngine.ingestInternal = async (event) => {
-      capturedEvent = event;
-      return {
-        mode: "internal",
-        target: { kind: "resident" },
-        sessionId: "test",
-        result: { output: "ok", finishReason: "stop" },
-      };
+    const engine = {
+      ingestInternal: async (event: Ingress.InternalEvent): Promise<Ingress.IngressResult> => {
+        capturedEvent = event;
+        return {
+          mode: "internal",
+          target: { kind: "resident" },
+          sessionId: "test",
+          result: { output: "ok", finishReason: "stop" },
+        };
+      },
     };
 
-    try {
-      await CronAdapter.fire({ id: "job-1", agentName: "dev", payload: "hello" });
-    } finally {
-      IngressEngine.ingestInternal = originalIngestInternal;
-    }
+    await CronAdapter.fire({ id: "job-1", agentName: "dev", payload: "hello" }, engine);
 
     expect(capturedEvent?.surface).toBe("cron");
     expect(capturedEvent?.mode).toBe("internal");
@@ -52,28 +46,33 @@ describe("CronAdapter.fire", () => {
     const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
       received.push(event);
     });
-    IngressEngine.setAgentResolver({
-      resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
-    });
-    IngressEngine.setCoordinator({
-      async dispatch(_sessionId, request) {
-        return {
-          runId: request.runId,
-          sessionId: request.sessionId,
-          status: "succeeded" as const,
-          output: "ok",
-          finishReason: "stop" as const,
-        };
+    const engine = createIngressEngine({
+      agentResolver: {
+        resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
+      },
+      coordinator: {
+        async dispatch(_sessionId, request) {
+          return {
+            runId: request.runId,
+            sessionId: request.sessionId,
+            status: "succeeded" as const,
+            output: "ok",
+            finishReason: "stop" as const,
+          };
+        },
       },
     });
 
     try {
-      await CronAdapter.fire({
-        id: "job-received",
-        agentName: "dev",
-        payload: "hello",
-        target: { kind: "worker" },
-      });
+      await CronAdapter.fire(
+        {
+          id: "job-received",
+          agentName: "dev",
+          payload: "hello",
+          target: { kind: "worker" },
+        },
+        engine,
+      );
     } finally {
       unsubscribe();
     }

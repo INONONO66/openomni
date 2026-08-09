@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyDecision, type Ingress } from "@openomni/protocol";
 import { ActorRegistry, ChannelGrantStore } from "@openomni/session";
-import { IngressEngine } from "../../src/ingress/engine";
 import {
+  kernelEngine,
+  makeKernelRoutingEngine,
   ownerEvent,
   resetKernelRoutingState,
   residentExecutions,
@@ -25,15 +26,19 @@ function strangerEvent(id: string): Ingress.DirectEvent {
 }
 
 function captureRoutedFacts(captured: { actor?: unknown; treatment?: unknown }): void {
-  IngressEngine.registerIngressPolicy({
-    name: "test:capture-routed-facts",
-    timing: "inbound.receive",
-    priority: 0,
-    fn: (context) => {
-      captured.actor = context.toolInput?.actor;
-      captured.treatment = context.toolInput?.inboundTreatment;
-      return PolicyDecision.allow({ policyId: "test.capture-routed-facts" });
-    },
+  makeKernelRoutingEngine({
+    policies: [
+      {
+        name: "test:capture-routed-facts",
+        timing: "inbound.receive",
+        priority: 0,
+        fn: (context) => {
+          captured.actor = context.toolInput?.actor;
+          captured.treatment = context.toolInput?.inboundTreatment;
+          return PolicyDecision.allow({ policyId: "test.capture-routed-facts" });
+        },
+      },
+    ],
   });
 }
 
@@ -47,7 +52,7 @@ describe("IngressEngine access routing", () => {
     // When
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(ownerEvent));
+      error = await captureError(kernelEngine().ingest(ownerEvent));
     } finally {
       observed.unsubscribe();
     }
@@ -77,7 +82,7 @@ describe("IngressEngine access routing", () => {
     // When
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(ownerEvent));
+      error = await captureError(kernelEngine().ingest(ownerEvent));
     } finally {
       observed.unsubscribe();
     }
@@ -104,7 +109,7 @@ describe("IngressEngine access routing", () => {
     // When
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(roleOnlyEvent));
+      error = await captureError(kernelEngine().ingest(roleOnlyEvent));
     } finally {
       observed.unsubscribe();
     }
@@ -134,7 +139,7 @@ describe("IngressEngine access routing", () => {
 
     // When
     try {
-      await IngressEngine.ingest(event);
+      await kernelEngine().ingest(event);
     } finally {
       observed.unsubscribe();
     }
@@ -174,7 +179,7 @@ describe("IngressEngine access routing", () => {
     // When
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest(event);
+      result = await kernelEngine().ingest(event);
     } finally {
       observed.unsubscribe();
     }
@@ -209,7 +214,7 @@ describe("IngressEngine access routing", () => {
     // When
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest(ownerEvent);
+      result = await kernelEngine().ingest(ownerEvent);
     } finally {
       observed.unsubscribe();
     }
@@ -241,7 +246,7 @@ describe("IngressEngine access routing", () => {
     // When
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(ownerEvent));
+      error = await captureError(kernelEngine().ingest(ownerEvent));
     } finally {
       observed.unsubscribe();
     }
@@ -259,15 +264,17 @@ describe("IngressEngine access routing", () => {
 
   test("publishes one route decision and continues for internal Resident input", async () => {
     // Given
-    IngressEngine.setAgentResolver({
-      resolve: async () => ({ model: { provider: "test", id: "test-model" } }),
+    makeKernelRoutingEngine({
+      agentResolver: {
+        resolve: async () => ({ model: { provider: "test", id: "test-model" } }),
+      },
     });
     const observed = routingDecisions();
 
     // When
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingestInternal({
+      result = await kernelEngine().ingestInternal({
         id: "inbound-cron",
         surface: "cron",
         mode: "internal",

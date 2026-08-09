@@ -6,7 +6,7 @@ import { IngressEvent, type CronJob, type Dispatch } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { DispatchRegistry, registerBuiltInDispatchHandlers } from "../../src/dispatch";
 import { CronJobRegistry, CronJobRunner } from "../../src/execution-runtime";
-import { CronAdapter, IngressEngine, ResidentRuntime } from "../../src";
+import { CronAdapter, createIngressEngine, ResidentRuntime } from "../../src";
 
 function tempDbPath(): { readonly dir: string; readonly dbPath: string } {
   const dir = mkdtempSync(join(tmpdir(), "openomni-cron-runner-"));
@@ -57,7 +57,7 @@ describe("CronJobRunner", () => {
   let tmpDir = "";
 
   afterEach(() => {
-    IngressEngine.reset();
+    Bus.reset();
     CronJobRegistry.clear();
     Storage.reset();
     if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
@@ -326,23 +326,23 @@ describe("CronJobRunner", () => {
     const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
       received.push(event);
     });
-    IngressEngine.setAgentResolver({
-      resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
-    });
-    IngressEngine.setResidentRuntime(
-      ResidentRuntime.create({
+    const engine = createIngressEngine({
+      agentResolver: {
+        resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
+      },
+      residentRuntime: ResidentRuntime.create({
         runAgent: async (_config, input) => {
           outputs.push(String(input.messages.at(-1)?.content ?? ""));
           return { text: "cron-result", finishReason: "stop" };
         },
       }),
-    );
+    });
 
     try {
       await CronJobRunner.tick({
         nowMs: () => created.createdAt + 60_000,
         fire: async (job) => {
-          await CronAdapter.fire(job);
+          await CronAdapter.fire(job, engine);
         },
       });
     } finally {

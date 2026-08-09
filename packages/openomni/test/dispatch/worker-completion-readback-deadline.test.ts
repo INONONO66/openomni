@@ -6,6 +6,7 @@ import {
   reflectCoordinatorResult as reflectCoordinatorResultProduction,
   type WorkerCompletionOptions,
 } from "../../src/dispatch/handlers/worker-completion";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 import {
   createCompletionAdmissionService,
   type CompletionAdmissionService,
@@ -30,14 +31,18 @@ function completionService(
 function reflectCoordinatorResult(
   workItemHash: string,
   result: Parameters<typeof reflectCoordinatorResultProduction>[1],
-  options: Omit<WorkerCompletionOptions, "completionService"> &
-    Readonly<{ completionService?: CompletionAdmissionService }>,
+  options: Omit<WorkerCompletionOptions, "completionService" | "verifierRegistry"> &
+    Readonly<{
+      completionService?: CompletionAdmissionService;
+      verifierRegistry?: WorkerCompletionOptions["verifierRegistry"];
+    }>,
 ) {
   return reflectCoordinatorResultProduction(workItemHash, result, {
     ...options,
     completionService:
       options.completionService ??
       completionService(options.now === undefined ? {} : { now: options.now }),
+    verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
   });
 }
 
@@ -424,6 +429,7 @@ describe("worker completion read-back deadline", () => {
     const denyingService = completionService({ policyEngine });
     await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
       completionService: denyingService,
+      verifierRegistry: VerifierRegistry.create(),
       sourceOrigin: { source: "internal_worker" },
     });
     const blocked = WorkItemStore.get(workItem.hash);
@@ -431,6 +437,7 @@ describe("worker completion read-back deadline", () => {
 
     const replay = await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
       completionService: denyingService,
+      verifierRegistry: VerifierRegistry.create(),
       sourceOrigin: { source: "internal_worker" },
     });
 

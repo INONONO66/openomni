@@ -14,11 +14,16 @@ import {
   testState,
 } from "./_llm-mock";
 
-let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+type IngressEngineModule = typeof import("../../src/ingress/engine");
+type IngressEngine = import("../../src/ingress/engine").IngressEngine;
+type IngressEngineDeps = import("../../src/ingress/engine").IngressEngineDeps;
+
+let createIngressEngine: IngressEngineModule["createIngressEngine"];
 let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
+let engine: IngressEngine;
 
 beforeAll(async () => {
-  ({ IngressEngine } = await import("../../src/ingress/engine"));
+  ({ createIngressEngine } = await import("../../src/ingress/engine"));
   ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
@@ -31,11 +36,11 @@ beforeEach(() => {
   testState.runFn = defaultRunFn("engine-test");
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
-  IngressEngine.reset();
+  Storage.reset();
+  Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
   installChannelGrants();
-  installResidentRuntime();
-  installCoordinator();
+  engine = makeEngine();
 });
 
 function installChannelGrants() {
@@ -50,20 +55,27 @@ function installChannelGrants() {
   }
 }
 
-function installResidentRuntime() {
-  IngressEngine.setResidentRuntime(
-    ResidentRuntime.create({
-      runAgent: async (_config, input) => {
-        testState.llmInputs.push(input);
-        return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
-      },
-    }),
-  );
+function testResidentRuntime() {
+  return ResidentRuntime.create({
+    runAgent: async (_config, input) => {
+      testState.llmInputs.push(input);
+      return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
+    },
+  });
 }
 
-function installCoordinator() {
-  IngressEngine.setCoordinator({
-    async dispatch(_sessionId, request) {
+function testCoordinator() {
+  return {
+    async dispatch(
+      _sessionId: string,
+      request: { runId: string; sessionId: string },
+    ): Promise<{
+      runId: string;
+      sessionId: string;
+      status: "succeeded";
+      output: string;
+      finishReason: "stop";
+    }> {
       const output = testState.responseQueue.shift() ?? "{}";
       return {
         runId: request.runId,
@@ -73,6 +85,14 @@ function installCoordinator() {
         finishReason: "stop" as const,
       };
     },
+  };
+}
+
+function makeEngine(overrides: IngressEngineDeps = {}): IngressEngine {
+  return createIngressEngine({
+    residentRuntime: testResidentRuntime(),
+    coordinator: testCoordinator(),
+    ...overrides,
   });
 }
 
@@ -103,7 +123,7 @@ describe("IngressEngine", () => {
       },
     };
 
-    const result = await IngressEngine.ingest(event);
+    const result = await engine.ingest(event);
 
     expect(result.mode).toBe("direct");
     expect(result.result.output).toBe("direct response");
@@ -122,7 +142,7 @@ describe("IngressEngine", () => {
     });
 
     try {
-      await IngressEngine.ingest({
+      await engine.ingest({
         id: "event-worker-target-key-1",
         surface: "slack",
         workspace: "team-a",
@@ -144,7 +164,7 @@ describe("IngressEngine", () => {
 
   it("ingest() with invalid event throws", async () => {
     const error = await catchError(
-      IngressEngine.ingest({
+      engine.ingest({
         id: "invalid-1",
         surface: "tui",
         payload: "hello",
@@ -156,13 +176,15 @@ describe("IngressEngine", () => {
 
   it("rejects missing coordinator through ingress middleware", async () => {
     const decisions: PolicyDecision[] = [];
-    IngressEngine.clearCoordinator();
-    IngressEngine.setPolicyDecisionObserver((decision) => {
-      decisions.push(decision);
+    engine = makeEngine({
+      coordinator: undefined,
+      onPolicyDecision: (decision) => {
+        decisions.push(decision);
+      },
     });
 
     const error = await catchError(
-      IngressEngine.ingest({
+      engine.ingest({
         id: "event-no-coordinator-1",
         surface: "tui",
         workspace: "/repo",
@@ -189,21 +211,23 @@ describe("IngressEngine", () => {
 
   it("rejects unauthorized top-level actors before dispatch", async () => {
     let dispatchCalled = false;
-    IngressEngine.setCoordinator({
-      async dispatch(_sessionId, request) {
-        dispatchCalled = true;
-        return {
-          runId: request.runId,
-          sessionId: request.sessionId,
-          status: "succeeded" as const,
-          output: "should not dispatch",
-          finishReason: "stop" as const,
-        };
+    engine = makeEngine({
+      coordinator: {
+        async dispatch(_sessionId, request) {
+          dispatchCalled = true;
+          return {
+            runId: request.runId,
+            sessionId: request.sessionId,
+            status: "succeeded" as const,
+            output: "should not dispatch",
+            finishReason: "stop" as const,
+          };
+        },
       },
     });
 
     const error = await catchError(
-      IngressEngine.ingest({
+      engine.ingest({
         id: "event-unauthorized-1",
         surface: "internal",
         workspace: "/repo",
@@ -225,33 +249,36 @@ describe("IngressEngine", () => {
 
   it("treats inbound.receive deny verdict as terminal before dispatch", async () => {
     let dispatchCalled = false;
-    IngressEngine.setCoordinator({
-      async dispatch(_sessionId, request) {
-        dispatchCalled = true;
-        return {
-          runId: request.runId,
-          sessionId: request.sessionId,
-          status: "succeeded" as const,
-          output: "should not dispatch",
-          finishReason: "stop" as const,
-        };
+    engine = makeEngine({
+      coordinator: {
+        async dispatch(_sessionId, request) {
+          dispatchCalled = true;
+          return {
+            runId: request.runId,
+            sessionId: request.sessionId,
+            status: "succeeded" as const,
+            output: "should not dispatch",
+            finishReason: "stop" as const,
+          };
+        },
       },
-    });
-
-    IngressEngine.registerIngressPolicy({
-      name: "test:deny-inbound",
-      timing: "inbound.receive",
-      priority: 0,
-      fn: () =>
-        ProtocolPolicyDecision.deny({
-          policyId: "test:deny-inbound",
-          reasonCodes: ["inbound denied by policy"],
-          effects: [{ type: "run.abort", reason: "inbound denied by policy" }],
-        }),
+      policies: [
+        {
+          name: "test:deny-inbound",
+          timing: "inbound.receive",
+          priority: 0,
+          fn: () =>
+            ProtocolPolicyDecision.deny({
+              policyId: "test:deny-inbound",
+              reasonCodes: ["inbound denied by policy"],
+              effects: [{ type: "run.abort", reason: "inbound denied by policy" }],
+            }),
+        },
+      ],
     });
 
     const error = await catchError(
-      IngressEngine.ingest({
+      engine.ingest({
         id: "event-denied-inbound-1",
         surface: "tui",
         workspace: "/repo",
@@ -271,33 +298,36 @@ describe("IngressEngine", () => {
 
   it("treats inbound.receive pending verdict as terminal", async () => {
     let dispatchCalled = false;
-    IngressEngine.setCoordinator({
-      async dispatch(_sessionId, request) {
-        dispatchCalled = true;
-        return {
-          runId: request.runId,
-          sessionId: request.sessionId,
-          status: "succeeded" as const,
-          output: "should not dispatch",
-          finishReason: "stop" as const,
-        };
+    engine = makeEngine({
+      coordinator: {
+        async dispatch(_sessionId, request) {
+          dispatchCalled = true;
+          return {
+            runId: request.runId,
+            sessionId: request.sessionId,
+            status: "succeeded" as const,
+            output: "should not dispatch",
+            finishReason: "stop" as const,
+          };
+        },
       },
-    });
-
-    IngressEngine.registerIngressPolicy({
-      name: "test:retry-inbound",
-      timing: "inbound.receive",
-      priority: 0,
-      fn: () =>
-        ProtocolPolicyDecision.pending({
-          policyId: "test:retry-inbound",
-          reasonCodes: ["approval required at inbound.receive"],
-          effects: [{ type: "run.abort", reason: "approval required at inbound.receive" }],
-        }),
+      policies: [
+        {
+          name: "test:retry-inbound",
+          timing: "inbound.receive",
+          priority: 0,
+          fn: () =>
+            ProtocolPolicyDecision.pending({
+              policyId: "test:retry-inbound",
+              reasonCodes: ["approval required at inbound.receive"],
+              effects: [{ type: "run.abort", reason: "approval required at inbound.receive" }],
+            }),
+        },
+      ],
     });
 
     const error = await catchError(
-      IngressEngine.ingest({
+      engine.ingest({
         id: "event-retry-inbound-1",
         surface: "tui",
         workspace: "/repo",
@@ -345,13 +375,13 @@ describe("IngressEngine", () => {
       },
     };
 
-    const first = await IngressEngine.ingest(eventA);
-    const second = await IngressEngine.ingest(eventB);
+    const first = await engine.ingest(eventA);
+    const second = await engine.ingest(eventB);
 
     expect(first.sessionId).toBe(second.sessionId);
   });
 
-  it("reset() clears session mapping state", async () => {
+  it("storage reset clears session mapping state", async () => {
     testState.responseQueue.push("before reset");
     testState.responseQueue.push("after reset");
 
@@ -367,14 +397,14 @@ describe("IngressEngine", () => {
       },
     };
 
-    const first = await IngressEngine.ingest(event);
-    IngressEngine.reset();
+    const first = await engine.ingest(event);
+    Storage.reset();
+    Bus.reset();
     Storage.initialize({ dbPath: ":memory:" });
     installChannelGrants();
-    installResidentRuntime();
-    installCoordinator();
+    engine = makeEngine();
 
-    const second = await IngressEngine.ingest({
+    const second = await engine.ingest({
       ...event,
       id: "event-reset-2",
       payload: "After reset",
@@ -398,7 +428,7 @@ describe("IngressEngine", () => {
 
     let caughtError: Error | undefined;
     try {
-      await IngressEngine.ingest(event);
+      await engine.ingest(event);
     } catch (err) {
       if (!(err instanceof Error)) throw err;
       caughtError = err;
@@ -447,9 +477,9 @@ describe("IngressEngine", () => {
     }
 
     it("aborts ingest when inbound.receive policy returns abort", async () => {
-      IngressEngine.registerIngressPolicy(abortPolicy("rate limit exceeded"));
+      engine = makeEngine({ policies: [abortPolicy("rate limit exceeded")] });
 
-      const error = await catchError(IngressEngine.ingest(makeEvent()));
+      const error = await catchError(engine.ingest(makeEvent()));
 
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toBe("rate limit exceeded");
@@ -457,9 +487,9 @@ describe("IngressEngine", () => {
 
     it("proceeds normally when inbound.receive policy returns continue", async () => {
       testState.responseQueue.push("policy-ok response");
-      IngressEngine.registerIngressPolicy(continuePolicy());
+      engine = makeEngine({ policies: [continuePolicy()] });
 
-      const result = await IngressEngine.ingest(makeEvent());
+      const result = await engine.ingest(makeEvent());
 
       expect(result.mode).toBe("direct");
       expect(result.result.output).toBe("policy-ok response");
@@ -467,12 +497,14 @@ describe("IngressEngine", () => {
 
     it("records inbound.receive decision through observer", async () => {
       const decisions: PolicyDecision[] = [];
-      IngressEngine.setPolicyDecisionObserver((d) => {
-        decisions.push(d);
+      engine = makeEngine({
+        onPolicyDecision: (d) => {
+          decisions.push(d);
+        },
+        policies: [abortPolicy("blocked")],
       });
-      IngressEngine.registerIngressPolicy(abortPolicy("blocked"));
 
-      await catchError(IngressEngine.ingest(makeEvent()));
+      await catchError(engine.ingest(makeEvent()));
 
       const ingressDecision = decisions.find((d) => d.policyId === "test.abort");
       expect(ingressDecision).toBeDefined();
@@ -483,23 +515,25 @@ describe("IngressEngine", () => {
 
     it("provides surface and actor labels to policy context", async () => {
       let capturedLabels: unknown;
-      IngressEngine.registerIngressPolicy({
-        name: "test:label-capture",
-        timing: "inbound.receive",
-        priority: 0,
-        fn: (ctx) => {
-          capturedLabels = ctx.labels;
-          return ProtocolPolicyDecision.allow({
-            policyId: "test.labels",
-            reasonCodes: ["captured"],
-          });
-        },
+      engine = makeEngine({
+        policies: [
+          {
+            name: "test:label-capture",
+            timing: "inbound.receive",
+            priority: 0,
+            fn: (ctx) => {
+              capturedLabels = ctx.labels;
+              return ProtocolPolicyDecision.allow({
+                policyId: "test.labels",
+                reasonCodes: ["captured"],
+              });
+            },
+          },
+        ],
       });
       testState.responseQueue.push("ok");
 
-      await IngressEngine.ingest(
-        makeEvent({ surface: "slack", meta: { actor: { role: "user" } } }),
-      );
+      await engine.ingest(makeEvent({ surface: "slack", meta: { actor: { role: "user" } } }));
 
       expect(capturedLabels).toEqual([
         { value: "surface.slack", source: "system" },
@@ -512,7 +546,7 @@ describe("IngressEngine", () => {
     it("skips dispatch when no ingress policies registered", async () => {
       testState.responseQueue.push("no-policy response");
 
-      const result = await IngressEngine.ingest(makeEvent());
+      const result = await engine.ingest(makeEvent());
 
       expect(result.mode).toBe("direct");
       expect(result.result.output).toBe("no-policy response");

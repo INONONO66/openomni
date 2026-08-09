@@ -9,11 +9,15 @@ import {
   testState,
 } from "./_llm-mock";
 
-let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+type IngressEngine = import("../../src/ingress/engine").IngressEngine;
+type IngressEngineDeps = import("../../src/ingress/engine").IngressEngineDeps;
+
+let createIngressEngine: typeof import("../../src/ingress/engine")["createIngressEngine"];
 let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
+let engine: IngressEngine;
 
 beforeAll(async () => {
-  ({ IngressEngine } = await import("../../src/ingress/engine"));
+  ({ createIngressEngine } = await import("../../src/ingress/engine"));
   ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
@@ -21,21 +25,27 @@ afterAll(() => {
   mock.restore();
 });
 
-beforeEach(() => {
-  resetTestState();
-  testState.runFn = defaultRunFn("engine-internal-test");
-  mockModelsGet.mockClear();
-  mockProviderFromModelsDevModel.mockClear();
-  IngressEngine.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-  IngressEngine.setResidentRuntime(
-    ResidentRuntime.create({
+function makeEngine(overrides: IngressEngineDeps = {}): IngressEngine {
+  return createIngressEngine({
+    residentRuntime: ResidentRuntime.create({
       runAgent: async (_config, input) => {
         testState.llmInputs.push(input);
         return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
       },
     }),
-  );
+    ...overrides,
+  });
+}
+
+beforeEach(() => {
+  resetTestState();
+  testState.runFn = defaultRunFn("engine-internal-test");
+  mockModelsGet.mockClear();
+  mockProviderFromModelsDevModel.mockClear();
+  Storage.reset();
+  Bus.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  engine = makeEngine();
 });
 
 const mockAgentDef: Ingress.AgentDef = {
@@ -68,7 +78,7 @@ describe("ingestInternal", () => {
 
     let error: Error | undefined;
     try {
-      error = await catchError(IngressEngine.ingestInternal(event));
+      error = await catchError(engine.ingestInternal(event));
     } finally {
       unsubscribe();
     }
@@ -85,9 +95,6 @@ describe("ingestInternal", () => {
   });
 
   it("publishes one schema-valid system decision before resident execution", async () => {
-    IngressEngine.setAgentResolver({
-      resolve: async () => mockAgentDef,
-    });
     const order: string[] = [];
     const decisions: unknown[] = [];
     const unsubscribe = Bus.observe((event, payload) => {
@@ -96,18 +103,21 @@ describe("ingestInternal", () => {
         decisions.push(payload);
       }
     });
-    IngressEngine.setResidentRuntime(
-      ResidentRuntime.create({
+    engine = makeEngine({
+      agentResolver: {
+        resolve: async () => mockAgentDef,
+      },
+      residentRuntime: ResidentRuntime.create({
         runAgent: async () => {
           order.push("execute");
           return { text: "cron result", finishReason: "stop" };
         },
       }),
-    );
+    });
 
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingestInternal({
+      result = await engine.ingestInternal({
         id: "t2",
         surface: "cron",
         mode: "internal",
@@ -148,7 +158,7 @@ describe("ingest() security", () => {
       payload: "hack",
     };
 
-    const error = await catchError(IngressEngine.ingest(event));
+    const error = await catchError(engine.ingest(event));
 
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toContain("invalid_literal");

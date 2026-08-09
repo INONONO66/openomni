@@ -82,7 +82,7 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
 11. Start each channel (`channel.start()` in parallel).
 12. `runRecovery(routingHandler, coordinator, traceId)` — resume sessions interrupted before last shutdown.
-13. `CronJobRunner.start({ fire: CronAdapter.fire })` — reload persisted schedules and fire due cron jobs through internal ingress.
+13. `CronJobRunner.start({ fire: (job) => CronAdapter.fire(job, ingressEngine) })` — reload persisted schedules and fire due cron jobs through the injected ingress engine instance (#549).
 14. `installShutdownHandlers({ channels, server, mcpProvider, coordinator, cronRunner })` — graceful stop on SIGINT / SIGTERM.
 
 **Local mode** (`OPENOMNI_MODE=local`): disabled. Do not add in-process `ChatAgent` execution paths.

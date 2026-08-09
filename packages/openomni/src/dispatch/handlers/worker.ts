@@ -1,6 +1,7 @@
 import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
 import { WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
+import { VerifierRegistry } from "../../evidence/verifier-registry.js";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
 import { PolicyResolver, type PolicyResolverInstance } from "../../policy/index.js";
 import type { ConnectorEndpointDriverOwner } from "../owners.js";
@@ -21,7 +22,12 @@ import {
 import { extractText } from "./shared.js";
 
 export interface WorkerDispatchHandlerOptions
-  extends Omit<WorkerCompletionOptions, "sourceOrigin"> {
+  extends Omit<WorkerCompletionOptions, "sourceOrigin" | "verifierRegistry"> {
+  /**
+   * Shared deterministic verifier registry (#549). Resolved once at handler
+   * construction — completion projection never constructs its own.
+   */
+  readonly verifierRegistry?: WorkerCompletionOptions["verifierRegistry"];
   readonly coordinator?: CoordinatorLike;
   readonly connectorEndpointDriver?: ConnectorEndpointDriverOwner;
   readonly defaultModel?: Model.Ref;
@@ -152,12 +158,14 @@ export function createWorkerDispatchHandlers(
 > {
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const policyResolver = options.policyResolver ?? PolicyResolver.create();
+  const verifierRegistry = options.verifierRegistry ?? VerifierRegistry.create();
   return {
     async "worker.spawn"(command) {
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
           completionService: options.completionService,
+          verifierRegistry,
           driver: options.connectorEndpointDriver,
           readBack: options.readBack,
           readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
@@ -201,6 +209,7 @@ export function createWorkerDispatchHandlers(
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
         completionService: options.completionService,
+        verifierRegistry,
         sourceOrigin: { source: "internal_worker" },
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
@@ -227,6 +236,7 @@ export function createWorkerDispatchHandlers(
       const workItemHash = workItem.hash;
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
         completionService: options.completionService,
+        verifierRegistry,
         readBack: options.readBack,
         readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
         readBackRecorder: options.readBackRecorder,

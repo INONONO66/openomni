@@ -1,5 +1,6 @@
 import type { AppConnector, CronJob, Dispatch, Execution, Model } from "@openomni/protocol";
 import type { CoordinatorLike } from "../ingress/coordinator-like.js";
+import type { IngressEngine } from "../ingress/engine.js";
 import type { ResidentRuntime } from "../resident/runtime.js";
 
 export interface DispatchSchedulerOwner {
@@ -48,6 +49,8 @@ export interface DispatchOwners {
   readonly device?: DeviceDispatchOwner;
   readonly outbound?: OutboundDispatchOwner;
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
+  /** Ingress engine instance the resident.ask handler executes through (#549). */
+  readonly ingress?: Pick<IngressEngine, "ingestInternal">;
   readonly scheduler?: DispatchSchedulerOwner;
   readonly defaultModel?: Model.Ref;
 }

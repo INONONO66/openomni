@@ -21,9 +21,8 @@ describe("Ingress blacklist", () => {
       reason: "blocked actor",
       createdBy: "act_owner",
     });
-    const engine = getIngressEngine();
     let inboundPolicyCalled = false;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy(() => {
         inboundPolicyCalled = true;
       }),
