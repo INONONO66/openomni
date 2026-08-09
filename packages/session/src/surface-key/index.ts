@@ -15,9 +15,11 @@
  * The `ChannelKind` type defines recognized channel/peer kinds.
  * Use `SurfaceKey.fromChannel()` for structured creation with explicit kind.
  *
- * Storage: uses Storage.Adapter.surfaceKey (SQLite) when available.
+ * Storage: uses Storage.Adapter.surfaceKey (SQLite); a missing sub-adapter
+ * fails closed — routing must never fabricate ownership answers (#522).
  */
 
+import { requireSubAdapter } from "../storage/timestamped-store";
 import { Storage } from "../storage/storage";
 
 type ChannelKind = "dm" | "group" | "channel" | "thread" | "chat";
@@ -113,8 +115,15 @@ export namespace SurfaceKey {
     return { surface, namespace, kind, id, threadId };
   }
 
+  function subAdapter(): NonNullable<Storage.Adapter["surfaceKey"]> {
+    return requireSubAdapter(
+      Storage.get().surfaceKey,
+      "Storage adapter does not implement surfaceKey — surface-key routing fails closed",
+    );
+  }
+
   export function lookup(key: string): string | undefined {
-    return Storage.get().surfaceKey?.lookup(key);
+    return subAdapter().lookup(key);
   }
 
   /**
@@ -130,7 +139,7 @@ export namespace SurfaceKey {
       );
     }
 
-    Storage.get().surfaceKey?.register(key, sessionId);
+    subAdapter().register(key, sessionId);
   }
 
   /**
@@ -146,9 +155,7 @@ export namespace SurfaceKey {
       );
     }
 
-    const surfaceKey = Storage.get().surfaceKey;
-    if (!surfaceKey) return sessionId;
-    return surfaceKey.claim(key, sessionId, expectedSessionId);
+    return subAdapter().claim(key, sessionId, expectedSessionId);
   }
 
   /**
@@ -157,8 +164,7 @@ export namespace SurfaceKey {
    * @returns true if key was found and removed, false otherwise
    */
   export function unregister(key: string): boolean {
-    const sk = Storage.get().surfaceKey;
-    if (!sk) return false;
+    const sk = subAdapter();
     const sessionId = sk.lookup(key);
     if (!sessionId) return false;
     sk.delete(key);
@@ -171,6 +177,6 @@ export namespace SurfaceKey {
    * @returns Array of surfaceKeys for this session
    */
   export function listBySession(sessionId: string): string[] {
-    return Storage.get().surfaceKey?.listBySession?.(sessionId) ?? [];
+    return subAdapter().listBySession(sessionId);
   }
 }

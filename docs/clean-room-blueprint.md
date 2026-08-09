@@ -84,7 +84,9 @@ token:undefined (channels re-merge), empty `SurfaceKey.clear()` called by
 `IngressEngine.reset()` (FIXED — #522: fake API deleted, `Storage.reset()`
 is the enforcement layer), double tool pipeline (agent wraps kernel executor —
 duplicate events + double policy pass; agent half loses emission/policy),
-`storage.ts` warn-and-auto-init `:memory:` (plus the test pinning it),
+`storage.ts` warn-and-auto-init `:memory:` (FIXED — #522: uninitialized
+`Storage.get()` throws, the pinning test is inverted to `fail-closed.test.ts`,
+and the SurfaceKey register/claim fail-open seams fail closed with it),
 ~3,400 LOC of test harnesses exported from src barrels (move to test/),
 `agent/src/bun-test.d.ts` leaking into dist.
 

@@ -1,7 +1,12 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { IngressEvent } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus, Storage } from "@openomni/session";
 import { ResidentRuntime } from "../../src/resident/runtime";
+
+beforeEach(() => {
+  Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+});
 
 function makeEvent() {
   return {

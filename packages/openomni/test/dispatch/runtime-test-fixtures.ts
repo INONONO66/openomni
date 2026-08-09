@@ -7,6 +7,7 @@ export const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
 export function resetDispatchTestState(): void {
   Bus.reset();
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
 }
 
 export async function createWorkerRunFixture(runId = "run-1", sessionTitle = `${runId}-session`) {
