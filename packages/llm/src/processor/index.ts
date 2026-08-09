@@ -1,6 +1,7 @@
 import {
   LlmCall,
   Operational,
+  Transcript,
   type Message,
   type Run,
   type Sink,
@@ -11,11 +12,13 @@ import { coerceApiError } from "../error";
 import { Retry } from "../retry";
 import type { Provider } from "../provider";
 import {
-  cleanupPendingTools,
   createStreamEventState,
   drainToolSettlements,
   handleStreamEvent,
+  mapFinishReason,
+  settleAttempt,
   type StreamEvent,
+  type StreamEventContext,
 } from "./stream-events.js";
 
 export namespace Processor {
@@ -46,6 +49,15 @@ export namespace Processor {
     process(streamInput: StreamInput): Promise<void>;
   }
 
+  /**
+   * Fold-based stream processor (#545 T2): every observation becomes a
+   * Transcript.Fact folded into per-attempt state. Per-token deltas only grow
+   * an internal buffer (O(1)); sink.onMessage fires at part boundaries only
+   * (part.appended / part.advanced / message.finished) with the immutable
+   * fold state — an emitted snapshot is never mutated afterwards. Attempt
+   * boundary = state boundary: each retry folds from scratch under a new
+   * attemptId, and the failed attempt closes with finish:"error" first.
+   */
   export function create(options: ProcessorOptions): ProcessorInfo {
     const {
       assistantMessage,
@@ -62,50 +74,72 @@ export namespace Processor {
       ? Math.max(0, Math.floor(maxRetryAttempts))
       : DEFAULT_MAX_RETRY_ATTEMPTS;
     const sink = createProjectedSink(configuredSink, sessionID, trace?.traceId);
-    const messageParts: Message.Part[] = [];
 
-    function addMessagePart(part: Message.Part): void {
-      messageParts.push(part);
-      sink.onMessage({ info: assistantMessage, parts: [...messageParts] });
+    let folded: Message.WithParts | undefined;
+
+    function record(fact: Transcript.Fact): void {
+      const outcome = Transcript.fold(folded, fact);
+      if ("rejected" in outcome) {
+        // A rejected fact is a recording defect (bad fact order), never a
+        // recoverable branch.
+        throw new Error(`transcript recording defect: ${outcome.reason} on ${fact.type}`);
+      }
+      folded = outcome.state;
+      sink.onFact?.(fact);
+      // Snapshots go out at part boundaries only; the fold state is immutable
+      // so consumers may hold it without copying.
+      if (fact.type !== "message.created") {
+        sink.onMessage(folded);
+      }
     }
 
-    function updateMessagePart(part: Message.Part): void {
-      const partIndex = messageParts.findIndex((item) => item.id === part.id);
-      if (partIndex >= 0) {
-        messageParts[partIndex] = part;
-      } else {
-        messageParts.push(part);
-      }
-      sink.onMessage({ info: assistantMessage, parts: [...messageParts] });
+    function debugNote(msg: string, data?: Record<string, unknown>): void {
+      publishInfo(sessionID, trace?.traceId, msg, data);
     }
 
     return {
       get message() {
-        return assistantMessage;
+        return (folded?.info ?? assistantMessage) as Message.AssistantMessage;
       },
 
       async process(streamInput: StreamInput): Promise<void> {
         publishStatus(sink, sessionID, { type: "busy" });
-        const pendingTools: Message.ToolPart[] = [];
         let attempt = 0;
-
-        function settlePendingTools(): void {
-          cleanupPendingTools(pendingTools, updateMessagePart, sink);
-          pendingTools.length = 0;
-        }
+        let attemptSeq = 0;
 
         try {
           while (true) {
+            // No natural attempt id exists at run() callsites, so attempt
+            // identity is derived here: messageID (unique per run) + a local
+            // attempt counter.
+            attemptSeq += 1;
+            const attemptId = `${assistantMessage.id}#${attemptSeq}`;
+            folded = undefined;
+            record({ type: "message.created", attemptId, message: { ...assistantMessage } });
+
+            const eventState = createStreamEventState();
+            const eventContext: StreamEventContext = {
+              sessionID,
+              messageID: assistantMessage.id,
+              attemptId,
+              sink,
+              record,
+              note: debugNote,
+            };
+
+            function finishAttempt(finish: Transcript.FinishReason): void {
+              record({
+                type: "message.finished",
+                attemptId,
+                messageId: assistantMessage.id,
+                at: Date.now(),
+                finish,
+                usage: eventState.usage,
+              });
+            }
+
             try {
               const stream = await createStream(streamInput);
-              const eventState = createStreamEventState();
-              const eventContext = {
-                sessionID,
-                assistantMessage,
-                sink,
-                pendingTools,
-                messagePartWriter: { add: addMessagePart, update: updateMessagePart },
-              };
 
               const iterator = stream.fullStream[Symbol.asyncIterator]();
               try {
@@ -140,7 +174,11 @@ export namespace Processor {
                 }
               }
 
-              assistantMessage.time.completed = Date.now();
+              // Clean stream end: the AI SDK can stop (stepCountIs) after
+              // emitting tool-call events whose results will never arrive —
+              // settle them, then close the attempt.
+              settleAttempt(eventState, eventContext, { aborted: false });
+              finishAttempt(mapFinishReason(eventState.finishReason));
               return;
             } catch (e: unknown) {
               const apiError = coerceApiError(e);
@@ -159,16 +197,18 @@ export namespace Processor {
                     error: decision.reason,
                   });
                 }
-                if (!(e instanceof DOMException && e.name === "AbortError")) {
-                  assistantMessage.time.completed = Date.now();
-                }
+                const aborted = e instanceof DOMException && e.name === "AbortError";
+                settleAttempt(eventState, eventContext, { aborted });
+                finishAttempt(aborted ? "aborted" : "error");
                 throw e;
               }
               const retryReason = decision.reason;
 
-              // Tool calls from the failed attempt will never receive a
-              // result from the next attempt's stream — settle them now.
-              settlePendingTools();
+              // The failed attempt closes before the next one starts: tool
+              // calls from it will never receive a result from the next
+              // attempt's stream, and its parts must not re-emit.
+              settleAttempt(eventState, eventContext, { aborted: false });
+              finishAttempt("error");
 
               const delayMs = decision.delayMs;
               if (trace) {
@@ -206,26 +246,32 @@ export namespace Processor {
             }
           }
         } finally {
-          // Also covers clean stream end: the AI SDK can stop (stepCountIs)
-          // after emitting tool-call events whose results will never arrive.
-          settlePendingTools();
           publishStatus(sink, sessionID, { type: "idle" });
         }
       },
     };
   }
 
+  function publishInfo(
+    sessionID: string,
+    traceId: string | undefined,
+    message: string,
+    data?: Record<string, unknown>,
+  ): void {
+    if (!sessionID) return;
+    Bus.publish(Operational.Info, {
+      traceId: traceId ?? sessionID,
+      time: Date.now(),
+      sessionId: sessionID,
+      component: "llm.processor",
+      msg: message,
+      context: data,
+    });
+  }
+
   function createProjectedSink(sink: Sink, sessionID: string, traceId?: string): Sink {
     function publish(message: string, data?: Record<string, unknown>): void {
-      if (!sessionID) return;
-      Bus.publish(Operational.Info, {
-        traceId: traceId ?? sessionID,
-        time: Date.now(),
-        sessionId: sessionID,
-        component: "llm.processor",
-        msg: message,
-        context: data,
-      });
+      publishInfo(sessionID, traceId, message, data);
     }
 
     return {
@@ -236,6 +282,10 @@ export namespace Processor {
           messageId: message.info.id,
           partCount: message.parts.length,
         });
+      },
+
+      onFact(fact: Transcript.Fact) {
+        sink.onFact?.(fact);
       },
 
       onToolCall(call: Tool.Call) {

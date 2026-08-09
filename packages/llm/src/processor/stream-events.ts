@@ -1,4 +1,4 @@
-import type { Message, Sink } from "@openomni/protocol";
+import type { Message, Sink, Transcript } from "@openomni/protocol";
 import { TokenTracker } from "../token";
 
 export interface StreamEvent {
@@ -6,29 +6,128 @@ export interface StreamEvent {
   [key: string]: unknown;
 }
 
-type MessagePartWriter = {
-  add(part: Message.Part): void;
-  update(part: Message.Part): void;
-};
-
 export type StreamEventContext = {
   readonly sessionID: string;
-  readonly assistantMessage: Message.AssistantMessage;
+  readonly messageID: string;
+  readonly attemptId: string;
   readonly sink: Sink;
-  readonly pendingTools: Message.ToolPart[];
-  readonly messagePartWriter: MessagePartWriter;
+  /**
+   * Records one transcript fact: folds it into the processor's attempt state
+   * (loud-throw on rejection — a bad fact order is a recording defect) and
+   * emits the part-boundary snapshot when the fact is a boundary.
+   */
+  readonly record: (fact: Transcript.Fact) => void;
+  /** Debug note for normalized-away provider anomalies (#532-6). */
+  readonly note: (msg: string, data?: Record<string, unknown>) => void;
 };
 
-type StreamEventState = {
-  currentText?: Message.TextPart;
-  reasoningMap: Record<string, Message.ReasoningPart>;
+type OpenBlock = {
+  partId: string;
+  text: string;
+  signature?: string;
+};
+
+export type StreamEventState = {
+  currentText?: OpenBlock;
+  /** Provider reasoning block id → open block buffer. */
+  reasoning: Map<string, OpenBlock>;
+  /** Tool callID → part id, for every tool part not yet terminal. */
+  pendingTools: Map<string, string>;
+  /** Usage accumulated across this attempt's step-finish events. */
+  usage: Transcript.Usage;
+  /** Raw provider finish reason from the last step-finish event. */
+  finishReason?: string;
 };
 
 export function createStreamEventState(): StreamEventState {
-  return { reasoningMap: {} };
+  return {
+    reasoning: new Map(),
+    pendingTools: new Map(),
+    usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  };
+}
+
+/**
+ * Provider finish reason → transcript finish vocabulary, mapped exactly
+ * (#532-7): length and content-filter/error finishes are never rewritten to
+ * "stop". The transcript vocabulary has no content-filter value, so a
+ * filtered turn closes as "error" — abnormal stays abnormal; the raw
+ * provider string is preserved verbatim on the step-finish part.
+ */
+export function mapFinishReason(reason: string | undefined): Transcript.FinishReason {
+  switch (reason) {
+    case "length":
+    case "max_tokens":
+      return "length";
+    case "error":
+    case "content-filter":
+    case "content_filter":
+      return "error";
+    default:
+      // stop, end_turn, tool-calls, tool_use, other, unknown, absent.
+      return "stop";
+  }
 }
 
 export function handleStreamEvent(
+  event: StreamEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): void {
+  for (const normalized of normalizeEvent(event, state, context)) {
+    applyStreamEvent(normalized, state, context);
+  }
+}
+
+/**
+ * #532-6 malformed-sequence normalization: rewrites impossible provider
+ * sequences into legal ones before any fact is recorded. A delta for an
+ * unopened block opens it; a duplicate end (or start) is dropped with a
+ * debug note. This is deliberately a small input rewrite, not a layer —
+ * everything downstream sees only well-formed block sequences.
+ */
+function normalizeEvent(
+  event: StreamEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): StreamEvent[] {
+  switch (event.type) {
+    case "text-start": {
+      if (state.currentText === undefined) return [event];
+      context.note("stream.normalized", { anomaly: "text-start while a text block is open" });
+      return [{ type: "text-end" }, event];
+    }
+    case "text-delta": {
+      if (state.currentText !== undefined) return [event];
+      context.note("stream.normalized", { anomaly: "text-delta for an unopened block" });
+      return [{ type: "text-start", providerMetadata: event.providerMetadata }, event];
+    }
+    case "text-end": {
+      if (state.currentText !== undefined) return [event];
+      context.note("stream.normalized", { anomaly: "duplicate text-end ignored" });
+      return [];
+    }
+    case "reasoning-start": {
+      if (!state.reasoning.has(String(event.id))) return [event];
+      context.note("stream.normalized", { anomaly: "duplicate reasoning-start ignored" });
+      return [];
+    }
+    case "reasoning-delta": {
+      if (state.reasoning.has(String(event.id))) return [event];
+      context.note("stream.normalized", { anomaly: "reasoning-delta for an unopened block" });
+      return [{ type: "reasoning-start", id: event.id }, event];
+    }
+    case "reasoning-end": {
+      if (state.reasoning.has(String(event.id))) return [event];
+      context.note("stream.normalized", { anomaly: "duplicate reasoning-end ignored" });
+      return [];
+    }
+    default:
+      return [event];
+  }
+}
+
+function applyStreamEvent(
   event: StreamEvent,
   state: StreamEventState,
   context: StreamEventContext,
@@ -39,11 +138,14 @@ export function handleStreamEvent(
       break;
     }
     case "text-delta": {
-      appendText(event, state, context);
+      // Per-token cost is O(1): the delta only grows an internal buffer.
+      if (state.currentText) {
+        state.currentText.text += String(event.text || "");
+      }
       break;
     }
     case "text-end": {
-      finishText(event, state, context);
+      finishText(state, context);
       break;
     }
     case "reasoning-start": {
@@ -51,7 +153,7 @@ export function handleStreamEvent(
       break;
     }
     case "reasoning-delta": {
-      appendReasoning(event, state, context);
+      appendReasoning(event, state);
       break;
     }
     case "reasoning-end": {
@@ -59,23 +161,31 @@ export function handleStreamEvent(
       break;
     }
     case "tool-call": {
-      handleToolCall(event, context);
+      handleToolCall(event, state, context);
       break;
     }
     case "tool-result": {
-      handleToolResult(event, context);
+      handleToolResult(event, state, context);
       break;
     }
     case "tool-error": {
-      handleToolResult({ ...event, type: "tool-result", isError: true }, context);
+      handleToolResult({ ...event, type: "tool-result", isError: true }, state, context);
       break;
     }
     case "step-start": {
-      addStepStart(context);
+      appendPart(
+        {
+          id: crypto.randomUUID(),
+          sessionID: context.sessionID,
+          messageID: context.messageID,
+          type: "step-start",
+        },
+        context,
+      );
       break;
     }
     case "step-finish": {
-      addStepFinish(event, context);
+      handleStepFinish(event, state, context);
       break;
     }
     case "finish": {
@@ -90,57 +200,52 @@ export function handleStreamEvent(
   }
 }
 
+function appendPart(part: Message.Part, context: StreamEventContext): void {
+  context.record({
+    type: "part.appended",
+    attemptId: context.attemptId,
+    messageId: context.messageID,
+    part,
+  });
+}
+
+function advancePart(
+  partId: string,
+  transition: Transcript.PartTransition,
+  context: StreamEventContext,
+): void {
+  context.record({
+    type: "part.advanced",
+    attemptId: context.attemptId,
+    messageId: context.messageID,
+    partId,
+    transition,
+  });
+}
+
 function startText(event: StreamEvent, state: StreamEventState, context: StreamEventContext): void {
-  state.currentText = {
+  const part: Message.TextPart = {
     id: crypto.randomUUID(),
     sessionID: context.sessionID,
-    messageID: context.assistantMessage.id,
+    messageID: context.messageID,
     type: "text",
     text: "",
     time: { start: Date.now() },
     metadata: (event.providerMetadata as Record<string, unknown>) || {},
   };
-  context.messagePartWriter.add(state.currentText);
+  state.currentText = { partId: part.id, text: "" };
+  appendPart(part, context);
 }
 
-// Handlers publish copy-on-write part objects: a published part is never
-// mutated afterwards, so sink consumers holding earlier snapshots see the
-// state at publish time, not the final state.
-function appendText(
-  event: StreamEvent,
-  state: StreamEventState,
-  context: StreamEventContext,
-): void {
-  if (!state.currentText) return;
-  const updated: Message.TextPart = {
-    ...state.currentText,
-    text: state.currentText.text + String(event.text || ""),
-    ...(event.providerMetadata !== undefined && {
-      metadata: event.providerMetadata as Record<string, unknown>,
-    }),
-  };
-  state.currentText = updated;
-  context.messagePartWriter.update(updated);
-}
-
-function finishText(
-  event: StreamEvent,
-  state: StreamEventState,
-  context: StreamEventContext,
-): void {
-  const current = state.currentText;
-  if (current?.time) {
-    const updated: Message.TextPart = {
-      ...current,
-      text: current.text.trimEnd(),
-      time: { start: current.time.start, end: Date.now() },
-      ...(event.providerMetadata !== undefined && {
-        metadata: event.providerMetadata as Record<string, unknown>,
-      }),
-    };
-    context.messagePartWriter.update(updated);
-  }
+function finishText(state: StreamEventState, context: StreamEventContext): void {
+  const open = state.currentText;
+  if (open === undefined) return;
   state.currentText = undefined;
+  advancePart(
+    open.partId,
+    { to: "completed", at: Date.now(), output: open.text.trimEnd() },
+    context,
+  );
 }
 
 function startReasoning(
@@ -148,38 +253,25 @@ function startReasoning(
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
-  const reasoningId = String(event.id);
-  if (reasoningId in state.reasoningMap) return;
   const part: Message.ReasoningPart = {
     id: crypto.randomUUID(),
     sessionID: context.sessionID,
-    messageID: context.assistantMessage.id,
+    messageID: context.messageID,
     type: "reasoning",
     text: "",
     time: { start: Date.now(), end: undefined },
     metadata: (event.providerMetadata as Record<string, unknown>) || {},
   };
-  state.reasoningMap[reasoningId] = part;
-  context.messagePartWriter.add(part);
+  state.reasoning.set(String(event.id), { partId: part.id, text: "" });
+  appendPart(part, context);
 }
 
-function appendReasoning(
-  event: StreamEvent,
-  state: StreamEventState,
-  context: StreamEventContext,
-): void {
-  const reasoningId = String(event.id);
-  const part = state.reasoningMap[reasoningId];
-  if (part == null) return;
-  const updated: Message.ReasoningPart = {
-    ...part,
-    text: part.text + String(event.text || ""),
-    ...(event.providerMetadata !== undefined && {
-      metadata: event.providerMetadata as Record<string, unknown>,
-    }),
-  };
-  state.reasoningMap[reasoningId] = updated;
-  context.messagePartWriter.update(updated);
+function appendReasoning(event: StreamEvent, state: StreamEventState): void {
+  const open = state.reasoning.get(String(event.id));
+  if (open === undefined) return;
+  open.text += String(event.text || "");
+  const signature = extractSignature(event.providerMetadata);
+  if (signature !== undefined) open.signature = signature;
 }
 
 function finishReasoning(
@@ -188,88 +280,183 @@ function finishReasoning(
   context: StreamEventContext,
 ): void {
   const reasoningId = String(event.id);
-  const part = state.reasoningMap[reasoningId];
-  if (part == null) return;
-  const updated: Message.ReasoningPart = {
-    ...part,
-    text: part.text.trimEnd(),
-    time: {
-      start: part.time?.start ?? Date.now(),
-      end: Date.now(),
+  const open = state.reasoning.get(reasoningId);
+  if (open === undefined) return;
+  state.reasoning.delete(reasoningId);
+  const signature = extractSignature(event.providerMetadata) ?? open.signature;
+  advancePart(
+    open.partId,
+    {
+      to: "completed",
+      at: Date.now(),
+      output: open.text.trimEnd(),
+      ...(signature !== undefined ? { signature } : {}),
     },
-    ...(event.providerMetadata !== undefined && {
-      metadata: event.providerMetadata as Record<string, unknown>,
-    }),
-  };
-  context.messagePartWriter.update(updated);
-  delete state.reasoningMap[reasoningId];
+    context,
+  );
 }
 
-function handleToolCall(event: StreamEvent, context: StreamEventContext): void {
+/**
+ * The provider reasoning signature rides providerMetadata (Anthropic emits it
+ * as a trailing empty reasoning-delta with {anthropic:{signature}}). Scan the
+ * namespaces so the capture is provider-agnostic.
+ */
+function extractSignature(providerMetadata: unknown): string | undefined {
+  if (typeof providerMetadata !== "object" || providerMetadata === null) return undefined;
+  for (const value of Object.values(providerMetadata)) {
+    if (typeof value !== "object" || value === null) continue;
+    const signature = (value as Record<string, unknown>).signature;
+    if (typeof signature === "string") return signature;
+  }
+  return undefined;
+}
+
+function handleToolCall(
+  event: StreamEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): void {
   const input = ((event.input ?? event.args) as Record<string, unknown>) || {};
-  const toolPart: Message.ToolPart = {
+  const callID = String(event.toolCallId);
+  const part: Message.ToolPart = {
     id: crypto.randomUUID(),
     sessionID: context.sessionID,
-    messageID: context.assistantMessage.id,
+    messageID: context.messageID,
     type: "tool",
-    callID: String(event.toolCallId),
+    callID,
     tool: String(event.toolName),
-    // The AI SDK executes the tool between tool-call and tool-result, so the
-    // call event is the execution start: record it here so the result can
-    // report a real duration.
-    state: {
-      status: "running",
-      input,
-      time: { start: Date.now() },
-    },
+    state: { status: "pending", input },
   };
-  context.messagePartWriter.add(toolPart);
-  context.pendingTools.push(toolPart);
-  context.sink.onToolCall({
-    id: toolPart.callID,
-    tool: toolPart.tool,
-    input: toolPart.state.input,
-  });
+  appendPart(part, context);
+  // The AI SDK executes the tool between tool-call and tool-result, so the
+  // call event is the execution start: advance to running here so the result
+  // can report a real duration.
+  advancePart(part.id, { to: "running", at: Date.now() }, context);
+  state.pendingTools.set(callID, part.id);
+  context.sink.onToolCall({ id: callID, tool: part.tool, input });
 }
 
-function handleToolResult(event: StreamEvent, context: StreamEventContext): void {
+function handleToolResult(
+  event: StreamEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): void {
   const toolCallId = String(event.toolCallId);
-  const toolPart = context.pendingTools.find((pending) => pending.callID === toolCallId);
-  if (!toolPart) return;
-
   const outputPayload = normalizeOutputPayload(event);
   const isError = event.isError === true || outputPayload.isError;
-  const start = toolPart.state.status === "running" ? toolPart.state.time.start : Date.now();
+  const partId = state.pendingTools.get(toolCallId);
 
-  const updated: Message.ToolPart = {
-    ...toolPart,
-    state: isError
-      ? {
-          status: "error",
-          input: toolPart.state.input,
-          error: outputPayload.output,
-          time: { start, end: Date.now() },
-        }
+  if (partId === undefined) {
+    // #532-6: a result for a call that never happened. Synthesize an error
+    // part so the anomaly is recorded; no Tool.Call/Tool.Result is emitted
+    // because no call exists to correlate with.
+    context.note("stream.normalized", {
+      anomaly: "tool-result for unknown call",
+      toolCallId,
+    });
+    const synthetic: Message.ToolPart = {
+      id: crypto.randomUUID(),
+      sessionID: context.sessionID,
+      messageID: context.messageID,
+      type: "tool",
+      callID: toolCallId,
+      tool: String(event.toolName ?? "unknown"),
+      state: { status: "pending", input: {} },
+    };
+    const at = Date.now();
+    appendPart(synthetic, context);
+    advancePart(synthetic.id, { to: "running", at }, context);
+    advancePart(
+      synthetic.id,
+      { to: "error", at, error: `tool result for unknown call: ${outputPayload.output}` },
+      context,
+    );
+    return;
+  }
+
+  state.pendingTools.delete(toolCallId);
+  advancePart(
+    partId,
+    isError
+      ? { to: "error", at: Date.now(), error: outputPayload.output }
       : {
-          status: "completed",
-          input: toolPart.state.input,
+          to: "completed",
+          at: Date.now(),
           output: outputPayload.output,
-          title: String(event.toolName ?? toolPart.tool),
-          metadata: {},
-          time: { start, end: Date.now() },
+          ...(event.toolName !== undefined ? { title: String(event.toolName) } : {}),
         },
-  };
-
-  context.messagePartWriter.update(updated);
+    context,
+  );
   context.sink.onToolResult({
     id: crypto.randomUUID(),
     toolCallId,
     output: outputPayload.output,
     ...(isError && { isError: true }),
   });
+}
 
-  const index = context.pendingTools.indexOf(toolPart);
-  if (index >= 0) context.pendingTools.splice(index, 1);
+function handleStepFinish(
+  event: StreamEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): void {
+  const finishReason = String(event.finishReason || "end_turn");
+  const usage = TokenTracker.extractUsage({
+    usage: event.usage,
+    providerMetadata: event.providerMetadata,
+  });
+
+  state.finishReason = finishReason;
+  state.usage = {
+    input: state.usage.input + usage.inputTokens,
+    output: state.usage.output + usage.outputTokens,
+    reasoning: state.usage.reasoning + (usage.reasoningTokens ?? 0),
+    cache: {
+      read: state.usage.cache.read + (usage.cacheReadTokens ?? 0),
+      write: state.usage.cache.write + (usage.cacheWriteTokens ?? 0),
+    },
+  };
+
+  // #532-7: a length-truncated step cannot have completed its tool calls —
+  // fail every non-terminal tool part now, no salvage.
+  if (mapFinishReason(finishReason) === "length") {
+    const at = Date.now();
+    for (const [callID, partId] of state.pendingTools) {
+      advancePart(
+        partId,
+        { to: "error", at, error: "truncated output: tool call incomplete" },
+        context,
+      );
+      context.sink.onToolResult({
+        id: crypto.randomUUID(),
+        toolCallId: callID,
+        output: "truncated output: tool call incomplete",
+        isError: true,
+      });
+    }
+    state.pendingTools.clear();
+  }
+
+  appendPart(
+    {
+      id: crypto.randomUUID(),
+      sessionID: context.sessionID,
+      messageID: context.messageID,
+      type: "step-finish",
+      reason: finishReason,
+      cost: 0,
+      tokens: {
+        input: usage.inputTokens,
+        output: usage.outputTokens,
+        reasoning: usage.reasoningTokens ?? 0,
+        cache: {
+          read: usage.cacheReadTokens ?? 0,
+          write: usage.cacheWriteTokens ?? 0,
+        },
+      },
+    },
+    context,
+  );
 }
 
 function normalizeOutputPayload(event: StreamEvent): { output: string; isError: boolean } {
@@ -303,72 +490,42 @@ function stringifyOutput(value: unknown): string {
   return String(value);
 }
 
-export function cleanupPendingTools(
-  pendingTools: Message.ToolPart[],
-  updateMessagePart: (part: Message.Part) => void,
-  sink: Sink,
+/**
+ * Closes everything the attempt left open, as facts, before the attempt's
+ * message.finished. Text and reasoning close as completed with whatever
+ * partial output the buffer holds — "interrupted" is tool-only vocabulary in
+ * T1. Tools follow the #543 grace-settle semantics: after the abort grace
+ * expires they advance to interrupted (the tool may have produced a real
+ * side effect we can no longer observe); on every other unsettled exit
+ * (clean stream end after stepCountIs, retryable failure, non-retryable
+ * error) they advance to error.
+ */
+export function settleAttempt(
+  state: StreamEventState,
+  context: StreamEventContext,
+  options: { aborted: boolean },
 ): void {
-  for (const tool of pendingTools) {
-    if (tool.state.status !== "pending" && tool.state.status !== "running") continue;
-    const start = tool.state.status === "running" ? tool.state.time.start : Date.now();
-    updateMessagePart({
-      ...tool,
-      state: {
-        status: "error",
-        input: tool.state.input,
-        error: "Processing was interrupted",
-        time: { start, end: Date.now() },
-      },
-    });
-    sink.onToolResult({
+  finishText(state, context);
+  for (const reasoningId of [...state.reasoning.keys()]) {
+    finishReasoning({ type: "reasoning-end", id: reasoningId }, state, context);
+  }
+  const at = Date.now();
+  for (const [callID, partId] of state.pendingTools) {
+    advancePart(
+      partId,
+      options.aborted
+        ? { to: "interrupted", at }
+        : { to: "error", at, error: "Processing was interrupted" },
+      context,
+    );
+    context.sink.onToolResult({
       id: crypto.randomUUID(),
-      toolCallId: tool.callID,
+      toolCallId: callID,
       output: "Processing was interrupted",
       isError: true,
     });
   }
-}
-
-function addStepStart(context: StreamEventContext): void {
-  context.messagePartWriter.add({
-    id: crypto.randomUUID(),
-    sessionID: context.sessionID,
-    messageID: context.assistantMessage.id,
-    type: "step-start",
-  });
-}
-
-function addStepFinish(event: StreamEvent, context: StreamEventContext): void {
-  const finishReason = String(event.finishReason || "end_turn");
-  const usage = TokenTracker.extractUsage({
-    usage: event.usage,
-    providerMetadata: event.providerMetadata,
-  });
-
-  context.assistantMessage.finish = finishReason;
-  context.assistantMessage.tokens.input += usage.inputTokens;
-  context.assistantMessage.tokens.output += usage.outputTokens;
-  context.assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
-  context.assistantMessage.tokens.cache.read += usage.cacheReadTokens ?? 0;
-  context.assistantMessage.tokens.cache.write += usage.cacheWriteTokens ?? 0;
-
-  context.messagePartWriter.add({
-    id: crypto.randomUUID(),
-    sessionID: context.sessionID,
-    messageID: context.assistantMessage.id,
-    type: "step-finish",
-    reason: finishReason,
-    cost: 0,
-    tokens: {
-      input: usage.inputTokens,
-      output: usage.outputTokens,
-      reasoning: usage.reasoningTokens ?? 0,
-      cache: {
-        read: usage.cacheReadTokens ?? 0,
-        write: usage.cacheWriteTokens ?? 0,
-      },
-    },
-  });
+  state.pendingTools.clear();
 }
 
 /**
@@ -389,10 +546,10 @@ export async function drainToolSettlements(
 ): Promise<void> {
   const deadline = Date.now() + ABORT_SETTLE_GRACE_MS;
   let event: StreamEvent = firstEvent;
-  while (context.pendingTools.length > 0) {
+  while (state.pendingTools.size > 0) {
     if (event.type === "tool-result" || event.type === "tool-error") {
       handleStreamEvent(event, state, context);
-      if (context.pendingTools.length === 0) return;
+      if (state.pendingTools.size === 0) return;
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) return;
