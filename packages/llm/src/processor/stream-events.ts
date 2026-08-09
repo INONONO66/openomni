@@ -370,3 +370,42 @@ function addStepFinish(event: StreamEvent, context: StreamEventContext): void {
     },
   });
 }
+
+/**
+ * #532 candidate 2: when a run aborts, results for tools the SDK already
+ * executed may still be sitting in the stream. Recording those tools as
+ * interrupted would misreport a real side effect, so before the abort is
+ * surfaced the processor drains tool settlement events (only) for a bounded
+ * grace window. Stops early once every pending tool is settled; never blocks
+ * longer than the grace on a dead stream.
+ */
+const ABORT_SETTLE_GRACE_MS = 250;
+
+export async function drainToolSettlements(
+  iterator: AsyncIterator<StreamEvent>,
+  firstEvent: StreamEvent,
+  state: StreamEventState,
+  context: StreamEventContext,
+): Promise<void> {
+  const deadline = Date.now() + ABORT_SETTLE_GRACE_MS;
+  let event: StreamEvent = firstEvent;
+  while (context.pendingTools.length > 0) {
+    if (event.type === "tool-result" || event.type === "tool-error") {
+      handleStreamEvent(event, state, context);
+      if (context.pendingTools.length === 0) return;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    const next = await Promise.race([
+      iterator.next().then(
+        (result) => (result.done ? undefined : result.value),
+        () => undefined,
+      ),
+      new Promise<undefined>((resolve) => {
+        setTimeout(() => resolve(undefined), remaining);
+      }),
+    ]);
+    if (next === undefined) return;
+    event = next;
+  }
+}

@@ -13,12 +13,14 @@ import type { Provider } from "../provider";
 import {
   cleanupPendingTools,
   createStreamEventState,
+  drainToolSettlements,
   handleStreamEvent,
   type StreamEvent,
 } from "./stream-events.js";
 
 export namespace Processor {
   const DEFAULT_MAX_RETRY_ATTEMPTS = 10;
+  const STREAM_CLOSE_GRACE_MS = 250;
 
   interface StreamInput {
     system: string;
@@ -97,16 +99,45 @@ export namespace Processor {
             try {
               const stream = await createStream(streamInput);
               const eventState = createStreamEventState();
+              const eventContext = {
+                sessionID,
+                assistantMessage,
+                sink,
+                pendingTools,
+                messagePartWriter: { add: addMessagePart, update: updateMessagePart },
+              };
 
-              for await (const event of stream.fullStream) {
-                abort.throwIfAborted();
-                handleStreamEvent(event, eventState, {
-                  sessionID,
-                  assistantMessage,
-                  sink,
-                  pendingTools,
-                  messagePartWriter: { add: addMessagePart, update: updateMessagePart },
-                });
+              const iterator = stream.fullStream[Symbol.asyncIterator]();
+              try {
+                while (true) {
+                  const next = await iterator.next();
+                  if (next.done) break;
+                  if (abort.aborted) {
+                    // Settle tools the SDK already executed before surfacing
+                    // the abort (bounded grace) — see drainToolSettlements.
+                    await drainToolSettlements(iterator, next.value, eventState, eventContext);
+                    abort.throwIfAborted();
+                  }
+                  handleStreamEvent(next.value, eventState, eventContext);
+                }
+              } finally {
+                // for-await's IteratorClose equivalent: finalize the stream on
+                // every exit path (abort, event-handler throw, retryable
+                // stream error). Bounded — a generator suspended on a dead
+                // await never settles its return(), and close failures never
+                // outrank the in-flight outcome.
+                const closing = iterator.return?.();
+                if (closing !== undefined) {
+                  await Promise.race([
+                    Promise.resolve(closing).then(
+                      () => undefined,
+                      () => undefined,
+                    ),
+                    new Promise<void>((resolve) => {
+                      setTimeout(resolve, STREAM_CLOSE_GRACE_MS);
+                    }),
+                  ]);
+                }
               }
 
               assistantMessage.time.completed = Date.now();
