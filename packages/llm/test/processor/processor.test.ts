@@ -89,6 +89,7 @@ function streamOf(chunks: Array<Record<string, unknown>>) {
 
 type PartsCapture = {
   sink: Sink;
+  messages: Message.WithParts[];
   finalParts: () => Message.Part[];
   snapshotStates: string[];
   toolCalls: Tool.Call[];
@@ -123,6 +124,7 @@ function capturingSink(): PartsCapture {
         snapshotStates.push(String(snapshot.state.type));
       },
     },
+    messages,
     finalParts: () => messages.at(-1)?.parts ?? [],
     snapshotStates,
     toolCalls,
@@ -221,10 +223,10 @@ describe("Processor", () => {
       expect(textPart?.text).toBe("Hello");
       expect(textPart?.time?.start).toBeNumber();
       expect(textPart?.time?.end).toBeNumber();
-      expect(mockAssistantMessage.time.completed).toBeNumber();
+      expect(processor.message.time.completed).toBeNumber();
     });
 
-    test("streams accumulated text to the sink on every delta", async () => {
+    test("delivers the full text at part boundaries instead of per delta", async () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
@@ -240,8 +242,9 @@ describe("Processor", () => {
 
       await processor.process({ system: "" });
 
-      // start, three deltas, end — each onMessage must carry the text so far.
-      expect(capture.textTimeline).toEqual(["", "Hello", "Hello ", "Hello World", "Hello World"]);
+      // Boundary snapshots only (#545 T2): open part, completed part with the
+      // full text, message.finished. Deltas emit nothing through onMessage.
+      expect(capture.textTimeline).toEqual(["", "Hello World", "Hello World"]);
     });
 
     test("projects reasoning events into a ReasoningPart with timing", async () => {
@@ -294,8 +297,14 @@ describe("Processor", () => {
 
       const types = capture.finalParts().map((part) => part.type);
       expect(types).toEqual(["step-start", "step-finish"]);
-      expect(mockAssistantMessage.finish).toBe("end_turn");
-      expect(mockAssistantMessage.tokens).toEqual({
+      // Provider finish maps into the transcript vocabulary; the raw provider
+      // string survives on the step-finish part.
+      expect(processor.message.finish).toBe("stop");
+      const stepFinish = capture
+        .finalParts()
+        .find((part): part is Message.StepFinishPart => part.type === "step-finish");
+      expect(stepFinish?.reason).toBe("end_turn");
+      expect(processor.message.tokens).toEqual({
         input: 10,
         output: 20,
         reasoning: 4,
@@ -429,10 +438,14 @@ describe("Processor", () => {
       await processor.process({ system: "" });
 
       expect(attemptCount).toBe(2);
-      const toolPart = capture
-        .finalParts()
-        .find((part): part is Message.ToolPart => part.type === "tool");
-      expect(toolPart?.state.status).toBe("error");
+      // The failed attempt's tool part settles as error inside that attempt's
+      // snapshots and never re-emits into the retry attempt (#545 T2).
+      const settledToolStates = capture.messages
+        .flatMap((message) => message.parts)
+        .filter((part): part is Message.ToolPart => part.type === "tool")
+        .map((part) => part.state.status);
+      expect(settledToolStates).toContain("error");
+      expect(capture.finalParts().some((part) => part.type === "tool")).toBe(false);
       expect(capture.toolResults).toHaveLength(1);
       expect(capture.toolResults[0]).toMatchObject({
         toolCallId: "call-attempt-1",
@@ -607,8 +620,10 @@ describe("Processor", () => {
       const textAt = (index: number) =>
         snapshots[index]?.parts.find((part): part is Message.TextPart => part.type === "text")
           ?.text;
-      expect(textAt(1)).toBe("Hello");
-      expect(textAt(2)).toBe("Hello World");
+      // Boundary snapshots: the open part stays empty in the first snapshot
+      // even after the part later completed with the full text.
+      expect(textAt(0)).toBe("");
+      expect(textAt(1)).toBe("Hello World");
     });
 
     test("handles retryable errors with retry logic", async () => {
@@ -753,11 +768,11 @@ describe("Processor", () => {
 
       await processor.process({ system: "" });
 
-      expect(mockAssistantMessage.cost).toBe(0);
-      expect(mockAssistantMessage.providerID).toBe("anthropic");
-      expect(mockAssistantMessage.modelID).toBe("claude-3-5-sonnet");
-      expect(mockAssistantMessage.tokens.input).toBe(10000);
-      expect(mockAssistantMessage.tokens.output).toBe(5000);
+      expect(processor.message.cost).toBe(0);
+      expect(processor.message.providerID).toBe("anthropic");
+      expect(processor.message.modelID).toBe("claude-3-5-sonnet");
+      expect(processor.message.tokens.input).toBe(10000);
+      expect(processor.message.tokens.output).toBe(5000);
     });
 
     test("returns zero cost when model.cost is absent", async () => {
@@ -781,9 +796,9 @@ describe("Processor", () => {
 
       await processor.process({ system: "" });
 
-      expect(mockAssistantMessage.cost).toBe(0);
-      expect(mockAssistantMessage.tokens.input).toBe(10000);
-      expect(mockAssistantMessage.tokens.output).toBe(5000);
+      expect(processor.message.cost).toBe(0);
+      expect(processor.message.tokens.input).toBe(10000);
+      expect(processor.message.tokens.output).toBe(5000);
     });
 
     test("accumulates tokens across multiple step-finish events", async () => {
@@ -813,9 +828,9 @@ describe("Processor", () => {
 
       await processor.process({ system: "" });
 
-      expect(mockAssistantMessage.cost).toBe(0);
-      expect(mockAssistantMessage.tokens.input).toBe(3000);
-      expect(mockAssistantMessage.tokens.output).toBe(1300);
+      expect(processor.message.cost).toBe(0);
+      expect(processor.message.tokens.input).toBe(3000);
+      expect(processor.message.tokens.output).toBe(1300);
     });
   });
 });

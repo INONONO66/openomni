@@ -26,6 +26,8 @@ export namespace Message {
   export const ReasoningPart = PartBase.extend({
     type: z.literal("reasoning"),
     text: z.string(),
+    /** Provider reasoning signature; resent only under a same-model check (#545 T2). */
+    signature: z.string().optional(),
     time: z.object({
       start: z.number(),
       end: z.number().optional(),

@@ -2,7 +2,7 @@
 
 Shared type foundation. Zero internal dependencies. All cross-package Zod schemas live here.
 
-Protocol defines shapes, not behavior. It may describe communication, actor, dispatch, work, IPC, and storage contracts, but it must not decide routing, authority, lifecycle precedence, or execution policy. Runtime meaning belongs in `@openomni/openomni` or lower primitive packages as appropriate.
+Protocol defines schemas plus pure folds — no effects, storage, or I/O. It may describe communication, actor, dispatch, work, IPC, and storage contracts, but it must not decide routing, authority, lifecycle precedence, or execution policy. Runtime meaning belongs in `@openomni/openomni` or lower primitive packages as appropriate.
 
 ## STRUCTURE
 
@@ -113,3 +113,5 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 - Adding a new worker request or IPC field? Update `execution/`, `ipc/`, or `worker-bootstrap/` here first, then adapt coordinator/openomni/server callers.
 - Adding trace metadata? Update `trace/index.ts`; helper functions stay in `@openomni/session`.
 - This package builds to `dist/` — run `bun run build` after changes.
+
+_Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
