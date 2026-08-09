@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BusPersistence, BusQuery } from "@openomni/session";
-import { IngressEngine } from "../../src/ingress/engine";
+
 import {
   createMappedOwnerSession,
   ownerEvent,
   registerOwnerDm,
+  kernelEngine,
   resetKernelRoutingState,
 } from "./_kernel-routing-fixture";
 
@@ -22,7 +23,7 @@ describe("IngressEngine routing decision persistence", () => {
     BusPersistence.start();
 
     // When
-    await IngressEngine.ingest(ownerEvent);
+    await kernelEngine().ingest(ownerEvent);
     await BusPersistence.flush();
 
     // Then

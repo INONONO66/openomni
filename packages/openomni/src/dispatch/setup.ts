@@ -61,6 +61,7 @@ export function registerBuiltInDispatchHandlers(
     ...createResidentDispatchHandlers({
       residentRuntime: owners.residentRuntime,
       defaultModel: owners.defaultModel,
+      ...(owners.ingress === undefined ? {} : { ingress: owners.ingress }),
     }),
     ...createWorkerDispatchHandlers({
       completionService,

@@ -15,9 +15,8 @@ setupIngressActorResolverTest();
 describe("Ingress actor resolver sanitization", () => {
   it("keeps only legacy id and role for unregistered endpoint actor metadata", async () => {
     // Given
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),
@@ -46,9 +45,8 @@ describe("Ingress actor resolver sanitization", () => {
 
   it("strips spoofed canonical actor fields from unregistered endpoints", async () => {
     // Given
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),
@@ -82,9 +80,8 @@ describe("Ingress actor resolver sanitization", () => {
   it("does not resolve actor identity from legacy actor id when userId is absent", async () => {
     // Given
     registerOwnerEndpoint("guild");
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),
@@ -112,9 +109,8 @@ describe("Ingress actor resolver sanitization", () => {
   it("does not resolve same external id from a different surface", async () => {
     // Given
     registerOwnerEndpoint("guild");
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),
@@ -132,9 +128,8 @@ describe("Ingress actor resolver sanitization", () => {
     // Given
     const { actorRegistry: _actorRegistry, ...legacyAdapter } = Storage.get();
     Storage.configure(legacyAdapter);
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),

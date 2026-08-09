@@ -66,11 +66,10 @@ describe("Ingress channel grants", () => {
       defaultTier: "observer",
       createdBy: "act_owner",
     });
-    const engine = getIngressEngine();
     testState.responseQueue.push("ok");
     let capturedLabels: unknown;
     let capturedToolInput: unknown;
-    engine.registerIngressPolicy({
+    const engine = getIngressEngine({
       name: "test:capture-channel-grant-context",
       timing: "inbound.receive",
       priority: 0,

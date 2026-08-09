@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { ChannelGrantStore, Storage } from "@openomni/session";
+import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { ZodError } from "zod";
 import {
   defaultRunFn,
@@ -9,11 +9,14 @@ import {
   testState,
 } from "./_llm-mock";
 
-let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+type IngressEngine = import("../../src/ingress/engine").IngressEngine;
+
+let createIngressEngine: typeof import("../../src/ingress/engine")["createIngressEngine"];
 let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
+let engine: IngressEngine;
 
 beforeAll(async () => {
-  ({ IngressEngine } = await import("../../src/ingress/engine"));
+  ({ createIngressEngine } = await import("../../src/ingress/engine"));
   ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
@@ -26,7 +29,8 @@ beforeEach(() => {
   testState.runFn = defaultRunFn("integration-test");
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
-  IngressEngine.reset();
+  Storage.reset();
+  Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
   for (const surface of ["slack", "tui"]) {
     ChannelGrantStore.put({
@@ -37,24 +41,24 @@ beforeEach(() => {
       createdBy: "act_owner",
     });
   }
-  IngressEngine.setResidentRuntime(
-    ResidentRuntime.create({
+  engine = createIngressEngine({
+    residentRuntime: ResidentRuntime.create({
       runAgent: async (_config, input) => {
         testState.llmInputs.push(input);
         return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
       },
     }),
-  );
-  IngressEngine.setCoordinator({
-    async dispatch(_sessionId, request) {
-      const output = testState.responseQueue.shift() ?? "{}";
-      return {
-        runId: request.runId,
-        sessionId: request.sessionId,
-        status: "succeeded" as const,
-        output,
-        finishReason: "stop" as const,
-      };
+    coordinator: {
+      async dispatch(_sessionId, request) {
+        const output = testState.responseQueue.shift() ?? "{}";
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output,
+          finishReason: "stop" as const,
+        };
+      },
     },
   });
 });
@@ -65,7 +69,7 @@ describe("IngressEngine integration pipeline", () => {
       testState.responseQueue.push("Hi there");
       testState.responseQueue.push("Sure, what do you need?");
 
-      const first = await IngressEngine.ingest({
+      const first = await engine.ingest({
         id: "evt-direct-1",
         mode: "direct",
         surface: "slack",
@@ -78,7 +82,7 @@ describe("IngressEngine integration pipeline", () => {
         },
       });
 
-      const second = await IngressEngine.ingest({
+      const second = await engine.ingest({
         id: "evt-direct-2",
         mode: "direct",
         surface: "slack",
@@ -102,7 +106,7 @@ describe("IngressEngine integration pipeline", () => {
       testState.responseQueue.push("response-a");
       testState.responseQueue.push("response-b");
 
-      const first = await IngressEngine.ingest({
+      const first = await engine.ingest({
         id: "evt-isolation-a",
         mode: "direct",
         surface: "tui",
@@ -114,7 +118,7 @@ describe("IngressEngine integration pipeline", () => {
         },
       });
 
-      const second = await IngressEngine.ingest({
+      const second = await engine.ingest({
         id: "evt-isolation-b",
         mode: "direct",
         surface: "tui",
@@ -140,7 +144,7 @@ describe("IngressEngine integration pipeline", () => {
 
       let caught: unknown;
       try {
-        await IngressEngine.ingest(invalidEvent);
+        await engine.ingest(invalidEvent);
       } catch (error) {
         if (!(error instanceof Error)) throw error;
         caught = error;

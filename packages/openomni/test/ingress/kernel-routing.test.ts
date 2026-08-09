@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { IngressEvent } from "@openomni/protocol";
 import { BlacklistStore, Bus, ChannelGrantStore } from "@openomni/session";
-import { IngressEngine } from "../../src/ingress/engine";
+
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 import {
   createMappedOwnerSession,
   ownerEvent,
   registerOwnerDm,
+  kernelEngine,
   resetKernelRoutingState,
   residentExecutions,
   routingDecisions,
@@ -21,7 +22,7 @@ describe("IngressEngine kernel routing", () => {
     const mappedSession = createMappedOwnerSession();
 
     // When
-    const result = await IngressEngine.ingest(ownerEvent);
+    const result = await kernelEngine().ingest(ownerEvent);
 
     // Then
     expect(result.sessionId).toBe(mappedSession.id);
@@ -36,7 +37,7 @@ describe("IngressEngine kernel routing", () => {
 
     // When
     try {
-      await IngressEngine.ingest(ownerEvent);
+      await kernelEngine().ingest(ownerEvent);
     } finally {
       observed.unsubscribe();
     }
@@ -67,7 +68,7 @@ describe("IngressEngine kernel routing", () => {
 
     // When / Then
     try {
-      await expect(IngressEngine.ingest(ownerEvent)).rejects.toThrow("routing publish failed");
+      await expect(kernelEngine().ingest(ownerEvent)).rejects.toThrow("routing publish failed");
       expect(project).not.toHaveBeenCalled();
       expect(residentExecutions).toEqual([]);
     } finally {
@@ -87,7 +88,7 @@ describe("IngressEngine kernel routing", () => {
 
     // When
     try {
-      await IngressEngine.ingest(ownerEvent);
+      await kernelEngine().ingest(ownerEvent);
       blacklistReads = blacklistRead.mock.calls.length;
       channelReads = channelRead.mock.calls.length;
     } finally {

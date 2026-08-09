@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { IngressEngine } from "@openomni/openomni";
 import { Operational, type Ingress } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { DiscordNormalizer } from "../../src/channel/discord/normalizer";
@@ -15,7 +14,12 @@ const deps = {
   workspaceRoot: "/workspace",
 };
 const normalizer = new DiscordNormalizer({ botId: "bot-1", triggers: [] });
-const originalIngest = IngressEngine.ingest;
+
+// The kernel ingress instance is a handler dep (#549); each test supplies its
+// own mock ingest through the deps seam.
+function handlerFor(ingest: (event: unknown) => Promise<Ingress.IngressResult>) {
+  return createMessageHandler({ ...deps, ingress: { ingest } });
+}
 
 function ingressResult(output: string): Ingress.IngressResult {
   return {
@@ -41,11 +45,9 @@ function normalizeDiscordMessage(replyToId?: string) {
 
 beforeEach(() => {
   Bus.reset();
-  IngressEngine.ingest = originalIngest;
 });
 
 afterEach(() => {
-  IngressEngine.ingest = originalIngest;
   Bus.reset();
 });
 
@@ -57,8 +59,7 @@ describe("conversation kernel routing", () => {
       receivedEvent = event;
       return ingressResult("kernel accepted reply");
     });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     // When
     const response = await handler(normalizeDiscordMessage("outbound-question"));
@@ -79,8 +80,7 @@ describe("conversation kernel routing", () => {
       receivedEvent = event;
       return ingressResult("kernel resident response");
     });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     // When
     const response = await handler(normalizeDiscordMessage());
@@ -95,8 +95,7 @@ describe("conversation kernel routing", () => {
   it("retains the normal empty-output placeholder", async () => {
     // Given
     const ingest = mock(async () => ingressResult(""));
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     // When
     const response = await handler(normalizeDiscordMessage());
@@ -115,8 +114,7 @@ describe("conversation kernel routing", () => {
         reason: "Inbound principal matched the blacklist",
       }),
     );
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     const response = await handler(normalizeDiscordMessage());
 
@@ -137,8 +135,7 @@ describe("conversation kernel routing", () => {
     const unsubscribe = Bus.subscribe(Operational.Error, (payload) => {
       operationalErrors.push(payload);
     });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     try {
       // When

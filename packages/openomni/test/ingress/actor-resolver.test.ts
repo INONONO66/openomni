@@ -27,9 +27,8 @@ describe("Ingress actor resolver", () => {
   it("adds canonical actor fields for registered endpoints before inbound policies", async () => {
     // Given
     registerOwnerEndpoint("guild");
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),
@@ -101,9 +100,8 @@ describe("Ingress actor resolver", () => {
   it("strips canonical actor fields when endpoint workspace does not match", async () => {
     // Given
     registerOwnerEndpoint("guild-a");
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),
@@ -133,9 +131,8 @@ describe("Ingress actor resolver", () => {
   it("resolves actor identity when endpoint workspace matches", async () => {
     // Given
     registerOwnerEndpoint("guild");
-    const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
-    engine.registerIngressPolicy(
+    const engine = getIngressEngine(
       captureActorPolicy((actor) => {
         capturedActor = actor;
       }),

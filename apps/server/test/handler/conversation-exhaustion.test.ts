@@ -43,13 +43,24 @@ function makeMessage(text: string): Adapter.InboundMessage {
   };
 }
 
-const deps: BridgeDeps = {
+const bridgeDeps: BridgeDeps = {
   systemProvider: makeProvider([makeTool("read")]),
   agentProvider: makeProvider([makeTool("dispatch")]),
   mcpProvider: makeProvider([]),
   customProvider: makeProvider([]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
   workspaceRoot: "/workspace",
+};
+
+// Ledger commands never reach kernel ingress; the injected instance (#549)
+// fails loudly if they do.
+const deps = {
+  ...bridgeDeps,
+  ingress: {
+    ingest: async (): Promise<never> => {
+      throw new Error("ingress should not run for task ledger command");
+    },
+  },
 };
 
 beforeEach(() => {

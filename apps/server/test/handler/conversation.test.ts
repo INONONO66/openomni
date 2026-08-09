@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { IngressEngine, type NativeTool, type ToolProvider } from "@openomni/openomni";
+import type { NativeTool, ToolProvider } from "@openomni/openomni";
 import type { Adapter, Ingress, Tool } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, Storage, WorkItemStore } from "@openomni/session";
@@ -69,17 +69,29 @@ const deps: BridgeDeps = {
   workspaceRoot: "/workspace",
 };
 
-const originalIngest = IngressEngine.ingest;
+// The kernel ingress instance is a handler dep (#549); ledger-command tests
+// default to a fail-loud ingest that must never be reached.
+function handlerFor(ingest?: (event: unknown) => Promise<Ingress.IngressResult>) {
+  return createMessageHandler({
+    ...deps,
+    ingress: {
+      ingest:
+        ingest ??
+        (async () => {
+          throw new Error("ingress should not run for this message");
+        }),
+    },
+  });
+}
+
 let completionWriter: Storage.WorkItemCompletionWriter;
 
 beforeEach(() => {
   Storage.reset();
   completionWriter = Storage.initialize({ dbPath: ":memory:" });
-  IngressEngine.ingest = originalIngest;
 });
 
 afterEach(() => {
-  IngressEngine.ingest = originalIngest;
   Bus.reset();
   Storage.reset();
 });
@@ -87,7 +99,7 @@ afterEach(() => {
 describe("conversation task ledger command", () => {
   it("returns an empty open task ledger when no work items are open", async () => {
     // Given
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor();
 
     // When
     const response = await handler(makeMessage(" show   open tasks "));
@@ -98,7 +110,7 @@ describe("conversation task ledger command", () => {
 
   it("matches the open task command case-insensitively", async () => {
     // Given
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor();
 
     // When
     const response = await handler(makeMessage("SHOW OPEN TASKS"));
@@ -112,8 +124,7 @@ describe("conversation task ledger command", () => {
     const ingest = mock(async (): Promise<Ingress.IngressResult> => {
       throw new Error("ingress should not run for task ledger command");
     });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     // When
     const response = await handler(makeMessage("show open tasks"));
@@ -128,8 +139,7 @@ describe("conversation task ledger command", () => {
     const ingest = mock(async (): Promise<Ingress.IngressResult> => {
       throw new Error("ingress should not run for unauthorized task ledger command");
     });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     // When
     const response = await handler(makeMessage("show open tasks", "discord:guild:channel:dev"));
@@ -146,8 +156,7 @@ describe("conversation task ledger command", () => {
     const ingest = mock(async (): Promise<Ingress.IngressResult> => {
       throw new Error("ingress should not run for unauthenticated task ledger command");
     });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
     const message = makeMessage("show open tasks");
 
     // When
@@ -213,7 +222,7 @@ describe("conversation task ledger command", () => {
       goal: "verify cancelled items are hidden",
     });
     await WorkItemStore.cancel(cancelled.hash);
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor();
 
     // When
     const response = await handler(makeMessage("show open tasks"));
@@ -236,7 +245,7 @@ describe("conversation task ledger command", () => {
     for (let i = 0; i < 21; i += 1) {
       await createWorkItem(`Task ${String(i).padStart(2, "0")}`);
     }
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor();
 
     // When
     const response = await handler(makeMessage("show open tasks"));
@@ -255,7 +264,7 @@ describe("conversation task ledger command", () => {
       assigneeId: `worker\n${longChunk}`,
       sessionId: `session\t${longChunk}`,
     });
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor();
 
     // When
     const response = await handler(makeMessage("show open tasks"));
@@ -283,8 +292,7 @@ describe("conversation task ledger command", () => {
         target: { kind: "resident" },
       }),
     );
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler(deps);
+    const handler = handlerFor(ingest);
 
     // When
     const response = await handler(makeMessage("show all tasks"));

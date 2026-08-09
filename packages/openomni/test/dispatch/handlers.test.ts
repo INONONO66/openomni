@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChatAgentConfig, ChatAgentInput } from "@openomni/agent";
 import { Wait } from "@openomni/protocol";
 import { Bus, PendingAskStore, Session, Storage, SurfaceKey, WaitStore } from "@openomni/session";
-import { IngressEngine } from "../../src/ingress/engine";
+import { createIngressEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
@@ -13,8 +13,6 @@ describe("built-in dispatch handlers", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
-    IngressEngine.clearResidentRuntime();
-    IngressEngine.clearAgentResolver();
   });
 
   test("extractText returns empty string for nullish payloads", () => {
@@ -104,41 +102,43 @@ describe("built-in dispatch handlers", () => {
         return { text: "answer", finishReason: "stop" };
       },
     });
-    IngressEngine.setResidentRuntime(residentRuntime);
-    IngressEngine.setAgentResolver({
-      async resolve(_agentName, event) {
-        resolvedWorkspace = event.workspace;
-        return {
-          model: { provider: "test-provider", id: "resident-model" },
-          systemPrompt: "Resident system prompt",
-          tools: [{ name: "resident_tool", inputSchema: { type: "object" } }],
-          toolExecutorFactory: (ctx) => {
-            executorWorkspace = ctx.workspaceRoot;
-            return async () => {
-              throw new Error("tool execution was not expected");
-            };
-          },
-          permissions: { action: "tool.call", allowlist: ["tool:resident_tool"] },
-          policyPlan: {
-            policies: [
-              {
-                id: "builtin:tool-permission",
-                required: true,
-                config: {
-                  permission: { action: "tool.call", allowlist: ["tool:resident_tool"] },
+    const ingressEngine = createIngressEngine({
+      residentRuntime,
+      agentResolver: {
+        async resolve(_agentName, event) {
+          resolvedWorkspace = event.workspace;
+          return {
+            model: { provider: "test-provider", id: "resident-model" },
+            systemPrompt: "Resident system prompt",
+            tools: [{ name: "resident_tool", inputSchema: { type: "object" } }],
+            toolExecutorFactory: (ctx) => {
+              executorWorkspace = ctx.workspaceRoot;
+              return async () => {
+                throw new Error("tool execution was not expected");
+              };
+            },
+            permissions: { action: "tool.call", allowlist: ["tool:resident_tool"] },
+            policyPlan: {
+              policies: [
+                {
+                  id: "builtin:tool-permission",
+                  required: true,
+                  config: {
+                    permission: { action: "tool.call", allowlist: ["tool:resident_tool"] },
+                  },
                 },
-              },
-            ],
-            labels: ["resident"],
-          },
-          toolConfig: { workspaceRoot: "/workspace/resident" },
-          providerOptions: { temperature: 0.2 },
-        };
+              ],
+              labels: ["resident"],
+            },
+            toolConfig: { workspaceRoot: "/workspace/resident" },
+            providerOptions: { temperature: 0.2 },
+          };
+        },
       },
     });
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
-      owners: { residentRuntime },
+      owners: { residentRuntime, ingress: ingressEngine },
     });
     const syncAskPhases: string[] = [];
     const unsubscribe = Bus.observe((event, payload) => {

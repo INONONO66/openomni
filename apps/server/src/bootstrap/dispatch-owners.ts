@@ -21,6 +21,8 @@ export interface ServerDispatchOwnersConfig {
   readonly residentAgentResolver?: {
     resolve(agentName: string, event: Ingress.InternalEvent): Promise<Ingress.AgentDef>;
   };
+  /** Ingress engine seam threaded to the resident.ask handlers (#549). */
+  readonly ingress: NonNullable<DispatchOwners["ingress"]>;
 }
 
 const residentAskHandlerOutput = z
@@ -43,6 +45,7 @@ function createQuestionBridgeHandler(
   const handlers = createResidentDispatchHandlers({
     residentRuntime: config.residentRuntime,
     defaultModel: { provider: model.providerID, id: model.id },
+    ingress: config.ingress,
     ...(config.residentAgentResolver ? { agentResolver: config.residentAgentResolver } : {}),
   });
   const dispatchRuntime = new DispatchRuntime();
@@ -79,6 +82,7 @@ export function createServerDispatchOwners(config: ServerDispatchOwnersConfig): 
   return {
     coordinator: config.coordinator,
     residentRuntime: config.residentRuntime,
+    ingress: config.ingress,
     connectorEndpointDriver: createConnectorEndpointDriver({
       credentials: config.credentials ?? {},
       questionBridge: createQuestionBridgeHandler(config),

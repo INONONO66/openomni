@@ -5,7 +5,7 @@ import {
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
 } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/session";
+import { ActorRegistry, Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -14,12 +14,14 @@ import {
   testState,
 } from "./_llm-mock";
 
-let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+type IngressEngine = import("../../src/ingress/engine").IngressEngine;
+
+let createIngressEngine: typeof import("../../src/ingress/engine")["createIngressEngine"];
 let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
 
 export function setupIngressActorResolverTest(): void {
   beforeAll(async () => {
-    ({ IngressEngine } = await import("../../src/ingress/engine"));
+    ({ createIngressEngine } = await import("../../src/ingress/engine"));
     ({ ResidentRuntime } = await import("../../src/resident/runtime"));
   });
 
@@ -32,7 +34,8 @@ export function setupIngressActorResolverTest(): void {
     testState.runFn = defaultRunFn("actor-resolver-test");
     mockModelsGet.mockClear();
     mockProviderFromModelsDevModel.mockClear();
-    IngressEngine.reset();
+    Storage.reset();
+    Bus.reset();
     Storage.initialize({ dbPath: ":memory:" });
     ChannelGrantStore.put({
       id: "grant-discord-guild-dev",
@@ -61,19 +64,23 @@ export function setupIngressActorResolverTest(): void {
       defaultTier: "owner",
       createdBy: "act_owner",
     });
-    IngressEngine.setResidentRuntime(
-      ResidentRuntime.create({
-        runAgent: async (_config, input) => {
-          testState.llmInputs.push(input);
-          return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
-        },
-      }),
-    );
   });
 }
 
-export function getIngressEngine(): typeof import("../../src/ingress/engine").IngressEngine {
-  return IngressEngine;
+/**
+ * Builds a fresh engine instance for the current test with the shared mock
+ * resident runtime; inbound policies are construction-injected (#549).
+ */
+export function getIngressEngine(...policies: PolicyRegistration[]): IngressEngine {
+  return createIngressEngine({
+    residentRuntime: ResidentRuntime.create({
+      runAgent: async (_config, input) => {
+        testState.llmInputs.push(input);
+        return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
+      },
+    }),
+    policies,
+  });
 }
 
 export function makeEvent(

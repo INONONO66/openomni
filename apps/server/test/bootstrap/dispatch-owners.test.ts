@@ -8,7 +8,7 @@ import {
   type Dispatch,
   type Execution,
 } from "@openomni/protocol";
-import type { DispatchOwners } from "@openomni/openomni";
+import { createIngressEngine, type DispatchOwners } from "@openomni/openomni";
 import { Bus, PendingAskStore, Storage } from "@openomni/session";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 
@@ -202,6 +202,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: residentRuntime(),
+      ingress: createIngressEngine(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
 
@@ -233,6 +234,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: residentRuntime(),
+      ingress: createIngressEngine(),
       credentials: {
         FAKE_API_KEY: "server-secret",
         UNGRANTED_API_KEY: "must-not-leak",
@@ -295,6 +297,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: residentRuntime(residentCalls),
+      ingress: createIngressEngine(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
     const runtime = owners.connectorEndpointDriver;
@@ -373,6 +376,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: failingResidentRuntime(),
+      ingress: createIngressEngine(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
     const runtime = owners.connectorEndpointDriver;
