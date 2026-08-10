@@ -1,6 +1,12 @@
 import type { Database } from "bun:sqlite";
-import type { Message } from "@openomni/protocol";
+import { Message } from "@openomni/protocol";
 import type { Storage } from "./storage";
+
+// Parse-don't-cast on read: a corrupt row is a loud typed defect, never a
+// silently-trusted value (matches the wait/blacklist precedent).
+function decodePart(data: string): Message.Part {
+  return Message.Part.parse(JSON.parse(data));
+}
 
 export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
   return {
@@ -8,7 +14,7 @@ export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
       const row = db
         .query("SELECT data FROM part WHERE id = ? AND message_id = ?")
         .get(partID, messageID) as { data: string } | null;
-      return row ? (JSON.parse(row.data) as Message.Part) : undefined;
+      return row ? decodePart(row.data) : undefined;
     },
 
     set: (messageID: string, part: Message.Part): void => {
@@ -28,7 +34,7 @@ export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
       const rows = db
         .query("SELECT data FROM part WHERE message_id = ? ORDER BY rowid ASC")
         .all(messageID) as Array<{ data: string }>;
-      return rows.map((r) => JSON.parse(r.data) as Message.Part);
+      return rows.map((r) => decodePart(r.data));
     },
 
     listByMessageIDs: (messageIDs: string[]): Message.Part[] => {
@@ -38,7 +44,7 @@ export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
       const rows = db
         .prepare(`SELECT data FROM part WHERE message_id IN (${placeholders}) ORDER BY rowid ASC`)
         .all(...messageIDs) as Array<{ data: string }>;
-      return rows.map((r) => JSON.parse(r.data) as Message.Part);
+      return rows.map((r) => decodePart(r.data));
     },
 
     remove: (messageID: string, partID: string): boolean => {

@@ -1,5 +1,12 @@
-import type { Communication, Storage as ProtocolStorage } from "@openomni/protocol";
+import { Communication, type Storage as ProtocolStorage } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
+
+// Parse-don't-cast on read (#authz fail-closed): a worker_grant row feeds an
+// authorization verdict, so a row that fails its schema is a loud recording/
+// corruption defect, never a silently-trusted value. Matches wait/blacklist.
+function decodeGrant(data: string): Communication.WorkerGrant.Record {
+  return Communication.WorkerGrant.Record.parse(JSON.parse(data));
+}
 
 export function createSqliteWorkerGrantAdapter(
   db: Database,
@@ -12,7 +19,7 @@ export function createSqliteWorkerGrantAdapter(
       const row = db.query("SELECT data FROM worker_grant WHERE id = ?").get(id) as {
         data: string;
       } | null;
-      return row ? (JSON.parse(row.data) as Communication.WorkerGrant.Record) : undefined;
+      return row ? decodeGrant(row.data) : undefined;
     },
     list(workerRunId) {
       const rows = workerRunId
@@ -24,7 +31,7 @@ export function createSqliteWorkerGrantAdapter(
         : (db.query("SELECT data FROM worker_grant ORDER BY time_created ASC").all() as Array<{
             data: string;
           }>);
-      return rows.map((row) => JSON.parse(row.data) as Communication.WorkerGrant.Record);
+      return rows.map((row) => decodeGrant(row.data));
     },
     set(record) {
       insertOrReplace(db, record, true);

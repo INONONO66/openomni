@@ -27,7 +27,6 @@ describe("CronJobRegistry persistence", () => {
   let tmpDir = "";
 
   afterEach(() => {
-    CronJobRegistry.clear();
     Storage.reset();
     if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
     tmpDir = "";
@@ -41,21 +40,33 @@ describe("CronJobRegistry persistence", () => {
 
     CronJobRegistry.register(job);
     Storage.reset();
-    CronJobRegistry.clear();
     Storage.initialize({ dbPath: paths.dbPath });
 
     expect(CronJobRegistry.list()).toEqual([job]);
   });
 
-  test("registry falls back to process memory when storage is not initialized", () => {
+  test("register before initialize fails closed instead of stranding a volatile job", () => {
+    // #522/#547: cron is durable by definition. A job accepted into a volatile
+    // module-level Map before Storage.initialize() is stranded the moment
+    // get/list start reading storage. Registering before init is a loud
+    // boot-order bug, never a silent in-memory write.
     Storage.reset();
     const job = jobFixture();
 
-    CronJobRegistry.register(job);
-
+    expect(() => CronJobRegistry.register(job)).toThrow(/before initialize/);
     expect(Storage.getInitializedDbPath()).toBeNull();
-    expect(CronJobRegistry.list()).toEqual([job]);
-    expect(CronJobRegistry.remove(job.id)).toBe(true);
+  });
+
+  test("clear() empties the single canonical backing, not just process memory", () => {
+    const paths = tempDbPath();
+    tmpDir = paths.dir;
+    Storage.initialize({ dbPath: paths.dbPath });
+    CronJobRegistry.register(jobFixture("job-1"));
+    CronJobRegistry.register(jobFixture("job-2"));
+    expect(CronJobRegistry.list()).toHaveLength(2);
+
+    CronJobRegistry.clear();
+
     expect(CronJobRegistry.list()).toEqual([]);
   });
 
@@ -70,7 +81,6 @@ describe("CronJobRegistry persistence", () => {
     CronJobRegistry.register(second);
     expect(CronJobRegistry.remove("job-1")).toBe(true);
     Storage.reset();
-    CronJobRegistry.clear();
     Storage.initialize({ dbPath: paths.dbPath });
 
     expect(CronJobRegistry.list()).toEqual([second]);

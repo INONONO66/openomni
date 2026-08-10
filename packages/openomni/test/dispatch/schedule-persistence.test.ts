@@ -45,12 +45,10 @@ describe("built-in schedule dispatch persistence", () => {
   const dbPaths = new Set<string>();
 
   beforeEach(() => {
-    CronJobRegistry.clear();
     Storage.reset();
   });
 
   afterEach(() => {
-    CronJobRegistry.clear();
     Storage.reset();
     for (const dbPath of dbPaths) removeSqliteFiles(dbPath);
     dbPaths.clear();
@@ -88,7 +86,6 @@ describe("built-in schedule dispatch persistence", () => {
     ]);
 
     Storage.reset();
-    CronJobRegistry.clear();
     Storage.initialize({ dbPath });
 
     expect(CronJobRegistry.list().map((reopenedJob) => reopenedJob.id)).toEqual([jobId]);
@@ -99,7 +96,6 @@ describe("built-in schedule dispatch persistence", () => {
 
     expect(cancelResult).toEqual({ output: { cancelled: true, jobId } });
     Storage.reset();
-    CronJobRegistry.clear();
     Storage.initialize({ dbPath });
     expect(CronJobRegistry.list()).toEqual([]);
   });
