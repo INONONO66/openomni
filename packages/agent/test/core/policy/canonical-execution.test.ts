@@ -25,13 +25,24 @@ import {
 const allow = () => PolicyDecision.allow({ policyId: "test.allow" });
 
 describe("canonical ChatAgent policy execution", () => {
-  it("keeps legacy middleware active through canonical dispatch", async () => {
-    // Given
+  it("stamps the derived legacy timing alias on canonical dispatch contexts", async () => {
+    // Given (#530: legacy timing registrations are rejected at register(); the
+    // former legacy middleware is now registered canonically at the mapped
+    // point, and dispatch still derives the timing alias from the point.)
     const legacy = mock(() => allow());
     const engine = buildPolicyEngine(
       {
         model: { provider: "test", id: "model" },
-        middleware: [{ name: "legacy", timing: "context.prepare", priority: 1, fn: legacy }],
+        middleware: [
+          {
+            kind: "point",
+            name: "legacy",
+            pointIds: ["prompt.context.pre"],
+            effectCapabilities: { "prompt.context.pre": [] },
+            priority: 1,
+            fn: legacy,
+          },
+        ],
       },
       { traceId: "trace", sessionId: "session", runId: "run" },
     );

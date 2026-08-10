@@ -26,7 +26,7 @@ async function evaluateTool(
   for (const registration of middleware ?? []) {
     engine.register(registration);
   }
-  return engine.dispatch("invoke.prepare", {
+  return engine.dispatchPoint("tool.native.pre", {
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,

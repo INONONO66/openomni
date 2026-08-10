@@ -15,15 +15,17 @@ function newID(prefix: string): string {
   return `${prefix}-${Math.random().toString(16).slice(2)}`;
 }
 
-describe("invoke.result middleware dispatch", () => {
+describe("tool.native.post middleware dispatch", () => {
   it("fires the middleware fn after tool execution with correct context", async () => {
     const toolOutput = "tool-output-value";
     const postToolFn = mock((_ctx: PolicyContext) => allow());
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:invoke.result",
-      timing: "invoke.result",
+      pointIds: ["tool.native.post"],
+      effectCapabilities: { "tool.native.post": [] },
       priority: 100,
       fn: postToolFn,
     });
@@ -53,8 +55,10 @@ describe("invoke.result middleware dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:invoke.result",
-      timing: "invoke.result",
+      pointIds: ["tool.native.post"],
+      effectCapabilities: { "tool.native.post": [] },
       priority: 100,
       fn: postToolFn,
     });
@@ -84,8 +88,10 @@ describe("invoke.result middleware dispatch", () => {
   it("transform verdict modifies the tool output", async () => {
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:transform",
-      timing: "invoke.result",
+      pointIds: ["tool.native.post"],
+      effectCapabilities: { "tool.native.post": ["tool.rewrite_output"] },
       priority: 100,
       fn: () => rewriteToolOutput("modified-output", "test.transform", "modify-output"),
     });
@@ -107,7 +113,7 @@ describe("invoke.result middleware dispatch", () => {
   });
 });
 
-describe("invoke.prepare middleware dispatch", () => {
+describe("tool.native.pre middleware dispatch", () => {
   it("pending approval decision prevents tool execution", async () => {
     const baseExecutor = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
@@ -120,8 +126,10 @@ describe("invoke.prepare middleware dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:approval",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.require_approval"] },
       priority: 100,
       fn: () =>
         pending("test.approval", "approval-required", [
@@ -151,8 +159,10 @@ describe("invoke.prepare middleware dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:abort",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["run.abort"] },
       priority: 100,
       fn: () => abortRun("test.abort", "Blocked: test-deny"),
     });
@@ -176,8 +186,10 @@ describe("invoke.prepare middleware dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:transform-input",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
       priority: 100,
       fn: () => rewriteToolInput({ command: "echo safe" }, "test.transform-input", "rewrite-input"),
     });
@@ -197,27 +209,37 @@ describe("error middleware dispatch (runner level)", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test:error",
-      timing: "error",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.abort"] },
       priority: 100,
       fn: onErrorFn,
     });
 
-    const error = new Error("test-error");
-    const verdict = await engine.dispatch("error", {
+    const verdict = await engine.dispatchPoint("run.error.error", {
+      sessionId: "session",
+      runId: "run",
+      // Canonical run.error.error carries errorCode/errorPhase strings; Error
+      // instances cannot cross the immutable point-context snapshot boundary.
+      errorCode: "test-error",
+      errorPhase: "turn",
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
       isCompletion: false,
       continuationCount: 0,
       elapsedMs: 0,
-      toolInput: { error },
     });
 
     expect(onErrorFn).toHaveBeenCalledTimes(1);
     expect(verdict.verdict).toBe("deny");
-    const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext;
+    const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext & {
+      errorCode?: string;
+      errorPhase?: string;
+    };
     expect(calledCtx.timing).toBe("error");
-    expect(calledCtx.toolInput?.error).toBe(error);
+    expect(calledCtx.errorCode).toBe("test-error");
+    expect(calledCtx.errorPhase).toBe("turn");
   });
 });

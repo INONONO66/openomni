@@ -12,7 +12,14 @@ describe("dispatchPreRun (run.start)", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-pre-run", timing: "run.start", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-pre-run",
+      pointIds: ["run.lifecycle.pre"],
+      effectCapabilities: { "run.lifecycle.pre": [] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     const result = await dispatchPreRun(state, engine, makeConfig());
@@ -27,8 +34,10 @@ describe("dispatchPreRun (run.start)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-pre-run-abort",
-      timing: "run.start",
+      pointIds: ["run.lifecycle.pre"],
+      effectCapabilities: { "run.lifecycle.pre": ["run.abort"] },
       priority: 100,
       fn: () => abortRun("test.abort", "pre-run-block"),
     });
@@ -47,8 +56,10 @@ describe("dispatchPreRun (run.start)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-pre-run-inject",
-      timing: "run.start",
+      pointIds: ["run.lifecycle.pre"],
+      effectCapabilities: { "run.lifecycle.pre": ["prompt.inject_message"] },
       priority: 100,
       fn: () => inject("injected-context", "test.inject", "add-context"),
     });
@@ -76,8 +87,10 @@ it("appends run.start context as a user message", async () => {
   Bus.reset();
   const engine = PolicyEngine.create();
   engine.register({
+    kind: "point",
     name: "test-pre-run-context",
-    timing: "run.start",
+    pointIds: ["run.lifecycle.pre"],
+    effectCapabilities: { "run.lifecycle.pre": ["prompt.append_context"] },
     priority: 100,
     fn: () => appendContext("run context", "test.context", "append"),
   });

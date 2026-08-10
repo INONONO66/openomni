@@ -10,6 +10,7 @@ import { snapshotCanonicalBindings } from "./registration-snapshot";
 
 type PolicyRegistrationErrorCode =
   | "invalid_registration_kind"
+  | "legacy_timing_registration"
   | "invalid_canonical_registration"
   | "empty_point_ids"
   | "duplicate_point_id"

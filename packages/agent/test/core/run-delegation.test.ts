@@ -97,8 +97,10 @@ describe("run() delegation contract", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:post-turn-stalled",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": ["run.abort"] },
           priority: 100,
           fn: () => abortRun("test.stalled", "stalled"),
         },
@@ -162,8 +164,10 @@ describe("run() delegation contract", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:post-turn-deny",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": ["run.abort"] },
           priority: 100,
           fn: () => abortRun("test.policy", "policy-violation"),
         },
@@ -201,8 +205,10 @@ describe("run() delegation contract", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:error_abort",
-          timing: "error",
+          pointIds: ["run.error.error"],
+          effectCapabilities: { "run.error.error": ["run.abort"] },
           priority: 100,
           fn: (ctx) => {
             seenUsage = ctx.usage;
@@ -232,8 +238,10 @@ describe("run() delegation contract", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:post-turn-inject",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": ["run.continue_with_prompt"] },
           priority: 100,
           fn: () =>
             turnCount < 2
@@ -241,8 +249,10 @@ describe("run() delegation contract", () => {
               : allow("test.continue"),
         },
         {
+          kind: "point",
           name: "test:force-compaction",
-          timing: "completion.prepare",
+          pointIds: ["run.completion.pre"],
+          effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
           priority: 1,
           fn: async () => replaceMessages([], "test.force-compaction", "force-compaction"),
         },

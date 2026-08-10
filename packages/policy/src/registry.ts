@@ -1,8 +1,8 @@
 import { Operational, type Policy } from "@openomni/protocol";
 import type {
   AuditEmit,
+  CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
-  PolicyEngineRegistrationGeneric,
 } from "./engine/types";
 
 export interface RuntimeContext {
@@ -16,14 +16,14 @@ export interface RuntimeContext {
 export type PolicyFactory<TCtx extends GenericPolicyContext = GenericPolicyContext> = (
   config: unknown,
   runtime: RuntimeContext,
-) => PolicyEngineRegistrationGeneric<TCtx>;
+) => CanonicalPolicyRegistrationGeneric<TCtx>;
 
 export interface PolicyRegistryInstance<TCtx extends GenericPolicyContext = GenericPolicyContext> {
   register(id: string, factory: PolicyFactory<TCtx>): void;
   resolve(
     plan: Policy.PolicyPlan,
     runtime: RuntimeContext,
-  ): PolicyEngineRegistrationGeneric<TCtx>[];
+  ): CanonicalPolicyRegistrationGeneric<TCtx>[];
   has(id: string): boolean;
   list(): string[];
 }
@@ -54,7 +54,7 @@ function create<
     },
 
     resolve(plan, runtime) {
-      const registrations: PolicyEngineRegistrationGeneric<TCtx>[] = [];
+      const registrations: CanonicalPolicyRegistrationGeneric<TCtx>[] = [];
 
       for (const policy of plan.policies) {
         const factory = factories.get(policy.id);

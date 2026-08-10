@@ -24,8 +24,12 @@ function makeCall(id = "call-1"): Tool.Call {
 
 function verdictPolicy(decision: Policy.PolicyDecision): PolicyRegistration {
   return {
+    kind: "point",
     name: `test-${decision.verdict}`,
-    timing: "invoke.prepare",
+    pointIds: ["tool.native.pre"],
+    effectCapabilities: {
+      "tool.native.pre": [...new Set(decision.effects.map((effect) => effect.type))],
+    },
     priority: 0,
     fn: async () => decision,
   };
@@ -292,14 +296,18 @@ describe("createToolExecutor effect application", () => {
   it("rewrites native tool output after successful invocation", async () => {
     const engine = engineWithRegistrations([
       {
+        kind: "point",
         name: "pre",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": [] },
         priority: 0,
         fn: () => PolicyDecision.allow({ policyId: "pre" }),
       },
       {
+        kind: "point",
         name: "post",
-        timing: "invoke.result",
+        pointIds: ["tool.native.post"],
+        effectCapabilities: { "tool.native.post": ["tool.rewrite_output"] },
         priority: 0,
         fn: () =>
           PolicyDecision.allow({
@@ -326,14 +334,18 @@ describe("createToolExecutor effect application", () => {
   it("keeps post-boundary plain deny diagnostic-only without leaking rewrite effects", async () => {
     const engine = engineWithRegistrations([
       {
+        kind: "point",
         name: "pre",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": [] },
         priority: 0,
         fn: () => PolicyDecision.allow({ policyId: "pre" }),
       },
       {
+        kind: "point",
         name: "post",
-        timing: "invoke.result",
+        pointIds: ["tool.native.post"],
+        effectCapabilities: { "tool.native.post": ["audit.annotate"] },
         priority: 0,
         fn: () =>
           PolicyDecision.deny({
@@ -361,14 +373,18 @@ describe("createToolExecutor effect application", () => {
   it("blocks and redacts output when invoke.result returns deny with explicit run.abort", async () => {
     const engine = engineWithRegistrations([
       {
+        kind: "point",
         name: "pre",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": [] },
         priority: 0,
         fn: () => PolicyDecision.allow({ policyId: "pre" }),
       },
       {
+        kind: "point",
         name: "post",
-        timing: "invoke.result",
+        pointIds: ["tool.native.post"],
+        effectCapabilities: { "tool.native.post": ["run.abort", "tool.rewrite_output"] },
         priority: 0,
         fn: () =>
           PolicyDecision.deny({
@@ -400,8 +416,10 @@ describe("createToolExecutor effect application", () => {
     const capturedSources: Array<string | undefined> = [];
     const engine = engineWithRegistrations([
       {
+        kind: "point",
         name: "capture-mcp",
-        timing: "invoke.prepare",
+        pointIds: ["tool.mcp.pre"],
+        effectCapabilities: { "tool.mcp.pre": [] },
         priority: 0,
         fn: (ctx) => {
           const resourceDescriptor = ctx as {
@@ -433,14 +451,18 @@ describe("createToolExecutor effect application", () => {
       });
       const engine = engineWithRegistrations([
         {
+          kind: "point",
           name: "pre",
-          timing: "invoke.prepare",
+          pointIds: ["tool.native.pre"],
+          effectCapabilities: { "tool.native.pre": [] },
           priority: 0,
           fn: () => PolicyDecision.allow({ policyId: "pre" }),
         },
         {
+          kind: "point",
           name: "post",
-          timing: "invoke.result",
+          pointIds: ["tool.native.post"],
+          effectCapabilities: { "tool.native.post": ["run.abort"] },
           priority: 0,
           fn: () => decision,
         },
@@ -468,14 +490,18 @@ describe("createToolExecutor effect application", () => {
       let calls = 0;
       const engine = engineWithRegistrations([
         {
+          kind: "point",
           name: "pre",
-          timing: "invoke.prepare",
+          pointIds: ["tool.native.pre"],
+          effectCapabilities: { "tool.native.pre": [] },
           priority: 0,
           fn: () => PolicyDecision.allow({ policyId: "pre" }),
         },
         {
+          kind: "point",
           name: "post",
-          timing: "invoke.result",
+          pointIds: ["tool.native.post"],
+          effectCapabilities: { "tool.native.post": ["audit.annotate"] },
           priority: 0,
           fn: () =>
             PolicyDecision.deny({
@@ -513,14 +539,18 @@ describe("createToolExecutor effect application", () => {
       });
       const engine = engineWithRegistrations([
         {
+          kind: "point",
           name: "pre",
-          timing: "invoke.prepare",
+          pointIds: ["tool.native.pre"],
+          effectCapabilities: { "tool.native.pre": [] },
           priority: 0,
           fn: () => PolicyDecision.allow({ policyId: "pre" }),
         },
         {
+          kind: "point",
           name: "post",
-          timing: "invoke.result",
+          pointIds: ["tool.native.post"],
+          effectCapabilities: { "tool.native.post": ["run.abort"] },
           priority: 0,
           fn: () => decision,
         },
@@ -551,8 +581,10 @@ describe("createToolExecutor effect application", () => {
       const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
       const engine = engineWithRegistrations([
         {
+          kind: "point",
           name: "pre",
-          timing: "invoke.prepare",
+          pointIds: ["tool.native.pre"],
+          effectCapabilities: { "tool.native.pre": [] },
           priority: 0,
           fn: () => PolicyDecision.allow({ policyId: "pre" }),
         },
@@ -605,8 +637,10 @@ describe("createToolExecutor effect application", () => {
       const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
       const engine = engineWithRegistrations([
         {
+          kind: "point",
           name: "pre",
-          timing: "invoke.prepare",
+          pointIds: ["tool.native.pre"],
+          effectCapabilities: { "tool.native.pre": [] },
           priority: 0,
           fn: () => PolicyDecision.allow({ policyId: "pre" }),
         },

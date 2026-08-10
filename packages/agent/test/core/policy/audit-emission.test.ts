@@ -54,15 +54,21 @@ describe("PolicyEngine audit emission", () => {
         auditEmit: Bus.publish,
       });
       engine.register({
+        kind: "point",
         name: "deny-shell",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
         priority: 0,
         fn: () => deny("policy.deny-shell", "blocked-shell"),
       });
 
       const ctx = {
         ...baseCtx(),
+        sessionId: "sess-request",
+        runId: "run-request",
+        toolId: "shell",
         toolName: "shell",
+        toolInput: { command: "ls" },
         resourceDescriptor: descriptor,
         traceContext: {
           traceId: "trace-request",
@@ -72,7 +78,7 @@ describe("PolicyEngine audit emission", () => {
         },
       };
 
-      await engine.dispatch("invoke.prepare", ctx);
+      await engine.dispatchPoint("tool.native.pre", ctx);
       await flushBus();
 
       expect(evaluated).toHaveLength(1);
@@ -113,15 +119,21 @@ describe("PolicyEngine audit emission", () => {
     try {
       const engine = PolicyEngine.create({ auditEmit: Bus.publish });
       engine.register({
+        kind: "point",
         name: "deny-shell",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
         priority: 0,
         fn: () => deny("policy.deny-shell", "blocked-shell"),
       });
 
-      const decision = await engine.dispatch("invoke.prepare", {
+      const decision = await engine.dispatchPoint("tool.native.pre", {
         ...baseCtx(),
+        sessionId: "sess-v2",
+        runId: "run-v2",
+        toolId: "shell",
         toolName: "shell",
+        toolInput: { command: "ls" },
         resourceDescriptor: descriptor,
         traceContext: {
           traceId: "trace-v2",

@@ -1,12 +1,7 @@
 import type { Policy } from "@openomni/protocol";
 import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
 import type { BudgetState } from "../budget";
-import type {
-  CanonicalPolicyRegistrationGeneric,
-  GenericPolicyContext,
-  PolicyEngineRegistrationGeneric,
-  PolicyRegistrationGeneric,
-} from "@openomni/policy";
+import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "@openomni/policy";
 
 export interface PolicyContext extends GenericPolicyContext {
   timing: Policy.Timing;
@@ -29,9 +24,12 @@ export interface PolicyContext extends GenericPolicyContext {
 
 export type PolicyFn = CanonicalPolicyRegistrationGeneric<PolicyContext>["fn"];
 
-/** Agent-scoped convenience alias: registration typed to the full agent PolicyContext. */
-export type PolicyRegistration = PolicyRegistrationGeneric<PolicyContext>;
-
 export type CanonicalPolicyRegistration = CanonicalPolicyRegistrationGeneric<PolicyContext>;
 
-export type PolicyEngineRegistration = PolicyEngineRegistrationGeneric<PolicyContext>;
+/**
+ * Canonical-only since #530: the agent engine no longer accepts timing-based
+ * (legacy) registrations — `register()` rejects them fail-closed.
+ */
+export type PolicyRegistration = CanonicalPolicyRegistration;
+
+export type PolicyEngineRegistration = CanonicalPolicyRegistration;

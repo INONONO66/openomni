@@ -7,6 +7,9 @@ import { allow, inject } from "../../../helpers/policy-decision";
 type PolicyDecision = Policy.PolicyDecision;
 
 const goldenRequest = Object.freeze({
+  sessionId: "session",
+  runId: "run",
+  modelId: "model",
   steps: Object.freeze([]),
   usage: Object.freeze({ inputTokens: 128, outputTokens: 64, totalTokens: 192 }),
   turnCount: 2,
@@ -42,8 +45,17 @@ function expectCanonicalDecision(
   expect(typeof decision.durationMs).toBe("number");
 }
 
-function cloneGoldenRequest(): Omit<PolicyContext, "timing"> {
+type GoldenRequest = Omit<PolicyContext, "timing"> & {
+  sessionId: string;
+  runId: string;
+  modelId: string;
+};
+
+function cloneGoldenRequest(): GoldenRequest {
   return {
+    sessionId: goldenRequest.sessionId,
+    runId: goldenRequest.runId,
+    modelId: goldenRequest.modelId,
     steps: [],
     usage: { ...goldenRequest.usage },
     turnCount: goldenRequest.turnCount,
@@ -59,20 +71,26 @@ function cloneGoldenRequest(): Omit<PolicyContext, "timing"> {
 function policySet(): PolicyRegistration[] {
   return [
     {
+      kind: "point",
       name: "workspace-lock",
-      timing: "model.request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
       priority: 30,
       fn: () => inject("Require approval for writes.", "policy.approval", "policy.approval"),
     },
     {
+      kind: "point",
       name: "rewrite-cwd",
-      timing: "model.request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
       priority: 10,
       fn: () => inject("Keep an audit trail.", "policy.audit", "policy.audit"),
     },
     {
+      kind: "point",
       name: "runtime-timeout",
-      timing: "model.request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
       priority: 20,
       fn: () => inject("Use read-only tools first.", "policy.readonly", "policy.readonly"),
     },
@@ -93,7 +111,7 @@ function deterministicOrder(seed: number): PolicyRegistration[] {
 }
 
 async function evaluate(registrations = policySet()): Promise<PolicyDecision> {
-  return registerPolicies(registrations).dispatch("model.request", cloneGoldenRequest());
+  return registerPolicies(registrations).dispatchPoint("connection.llm.pre", cloneGoldenRequest());
 }
 
 describe("policy determinism conformance", () => {
@@ -118,7 +136,9 @@ describe("policy determinism conformance", () => {
   it("keeps concurrent dispatch evaluations isolated", async () => {
     const engine = registerPolicies(policySet());
     const decisions = await Promise.all(
-      Array.from({ length: 16 }, () => engine.dispatch("model.request", cloneGoldenRequest())),
+      Array.from({ length: 16 }, () =>
+        engine.dispatchPoint("connection.llm.pre", cloneGoldenRequest()),
+      ),
     );
 
     for (const decision of decisions) {
@@ -131,8 +151,10 @@ describe("policy determinism conformance", () => {
     const request = cloneGoldenRequest();
     const engine = registerPolicies([
       {
+        kind: "point",
         name: "mutating-policy",
-        timing: "model.request",
+        pointIds: ["connection.llm.pre"],
+        effectCapabilities: { "connection.llm.pre": [] },
         priority: 0,
         fn: (ctx) => {
           try {
@@ -146,7 +168,7 @@ describe("policy determinism conformance", () => {
       },
     ]);
 
-    const decision = await engine.dispatch("model.request", request);
+    const decision = await engine.dispatchPoint("connection.llm.pre", request);
 
     expect(mutationRejected).toBe(true);
     expect(request).toEqual(cloneGoldenRequest());

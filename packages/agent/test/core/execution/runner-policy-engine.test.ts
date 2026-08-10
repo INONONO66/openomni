@@ -23,7 +23,7 @@ describe("buildPolicyEngine policy ownership", () => {
     Bus.reset();
     const engine = buildPolicyEngine(makeConfig(), makeAgentBase());
 
-    const decision = await engine.dispatch("invoke.prepare", validToolNativePreContext);
+    const decision = await engine.dispatchPoint("tool.native.pre", validToolNativePreContext);
 
     expect(decision).toMatchObject({ verdict: "allow", policyId: "agent.policy.composed" });
   });
@@ -33,8 +33,10 @@ describe("buildPolicyEngine policy ownership", () => {
     const config = makeConfig({
       middleware: [
         {
+          kind: "point",
           name: "test:deny-bash",
-          timing: "invoke.prepare",
+          pointIds: ["tool.native.pre"],
+          effectCapabilities: { "tool.native.pre": ["run.abort"] },
           priority: 0,
           fn: denyBash,
         },
@@ -42,7 +44,7 @@ describe("buildPolicyEngine policy ownership", () => {
     });
 
     const engine = buildPolicyEngine(config, makeAgentBase());
-    const decision = await engine.dispatch("invoke.prepare", validToolNativePreContext);
+    const decision = await engine.dispatchPoint("tool.native.pre", validToolNativePreContext);
 
     expect(decision).toMatchObject({
       verdict: "deny",

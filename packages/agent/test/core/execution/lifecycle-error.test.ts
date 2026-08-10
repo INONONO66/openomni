@@ -12,7 +12,14 @@ describe("handleError (error)", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => abortRun("test.error-abort", "error-abort"));
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-on-error", timing: "error", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-on-error",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.abort"] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     const config = makeConfig();
@@ -48,8 +55,10 @@ describe("handleError (error)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-on-error-continue",
-      timing: "error",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": [] },
       priority: 100,
       fn: () => allow(),
     });
@@ -76,8 +85,10 @@ describe("handleError (error)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-on-error-retry-delay",
-      timing: "error",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.retry_after"] },
       priority: 100,
       fn: () =>
         allow("test.retry-delay", "retry-after", [{ type: "run.retry_after", delayMs: 20 }]),
@@ -113,8 +124,10 @@ describe("handleError (error)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-on-error-aborted-retry-delay",
-      timing: "error",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.retry_after"] },
       priority: 100,
       fn: () =>
         allow("test.aborted-retry-delay", "retry-after", [
@@ -151,8 +164,10 @@ describe("handleError (error)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-on-error-retry-limit",
-      timing: "error",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.retry_after"] },
       priority: 100,
       fn: () =>
         allow("test.retry-limit", "retry-after", [

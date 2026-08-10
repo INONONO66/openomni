@@ -14,7 +14,14 @@ describe("model dispatch points", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-model-request", timing: "model.request", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-model-request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": [] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     const result = await dispatchModelRequest(state, engine, makeConfig());
@@ -29,7 +36,14 @@ describe("model dispatch points", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow("test.model-response", "observe-response"));
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-model-response", timing: "model.response", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-model-response",
+      pointIds: ["connection.llm.post"],
+      effectCapabilities: { "connection.llm.post": [] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     state.lastAssistantText = "original";
@@ -53,8 +67,10 @@ describe("model dispatch points", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-model-request-inject",
-      timing: "model.request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
       priority: 100,
       fn: () => inject("pre-llm context", "test.model-request", "inject"),
     });
@@ -76,8 +92,10 @@ describe("model dispatch points", () => {
     const replacement = [createUserMessage("replacement", "test")];
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-model-response-replace",
-      timing: "model.response",
+      pointIds: ["connection.llm.post"],
+      effectCapabilities: { "connection.llm.post": ["run.replace_messages"] },
       priority: 100,
       fn: () => replaceMessages(replacement, "test.model-response", "replace"),
     });
@@ -99,8 +117,10 @@ describe("model dispatch points", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-model-response-bad-replace",
-      timing: "model.response",
+      pointIds: ["connection.llm.post"],
+      effectCapabilities: { "connection.llm.post": ["run.replace_messages"] },
       priority: 100,
       fn: () =>
         allow("test.model-response", "bad-replace", [

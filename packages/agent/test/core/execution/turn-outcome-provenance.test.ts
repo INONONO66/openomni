@@ -47,8 +47,10 @@ describe("handleStop prompt injection provenance", () => {
   it("preserves assistant role through turn.finish continuation", async () => {
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-turn-assistant-inject",
-      timing: "turn.finish",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
       priority: 100,
       fn: () =>
         allow("test.inject", "continuation", [

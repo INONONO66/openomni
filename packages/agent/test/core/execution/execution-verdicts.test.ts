@@ -80,8 +80,10 @@ describe("execution helper deny verdicts", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "deny-run-start",
-      timing: "run.start",
+      pointIds: ["run.lifecycle.pre"],
+      effectCapabilities: { "run.lifecycle.pre": ["audit.annotate"] },
       priority: 100,
       fn: () => deny("test.deny", "blocked"),
     });
@@ -96,8 +98,10 @@ describe("execution helper deny verdicts", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "deny-turn-start",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["audit.annotate"] },
       priority: 100,
       fn: () => deny("test.deny", "blocked"),
     });
@@ -122,8 +126,10 @@ describe("execution helper deny verdicts", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "deny-resources",
-      timing: "resources.prepare",
+      pointIds: ["tool.catalog.pre"],
+      effectCapabilities: { "tool.catalog.pre": ["audit.annotate"] },
       priority: 100,
       fn: () => deny("test.deny", "no-tools"),
     });
@@ -148,8 +154,10 @@ describe("execution helper deny verdicts", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "deny-turn-finish",
-      timing: "turn.finish",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["audit.annotate"] },
       priority: 100,
       fn: () => deny("test.deny", "post-turn"),
     });
@@ -177,8 +185,10 @@ describe("execution helper deny verdicts", () => {
     });
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "deny-compaction",
-      timing: "completion.prepare",
+      pointIds: ["run.completion.pre"],
+      effectCapabilities: { "run.completion.pre": ["audit.annotate"] },
       priority: 100,
       fn: () => deny("test.deny", "post-compaction"),
     });
