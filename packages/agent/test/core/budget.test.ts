@@ -1,10 +1,30 @@
 import { describe, expect, it } from "bun:test";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import {
   checkBudget,
   describeBudgetRemaining,
   createBudgetState,
   effectiveBudgetThresholds,
+  publishBudgetTelemetry,
 } from "../../src/core/budget";
+
+async function countOperationalEmits(run: () => void): Promise<number> {
+  Bus.reset();
+  let count = 0;
+  const unsubWarn = Bus.subscribe(Operational.Warn, () => {
+    count += 1;
+  });
+  const unsubInfo = Bus.subscribe(Operational.Info, () => {
+    count += 1;
+  });
+  run();
+  // Bus delivers on a microtask; a macrotask turn flushes all pending handlers.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  unsubWarn();
+  unsubInfo();
+  return count;
+}
 
 describe("effectiveBudgetThresholds", () => {
   it("uses protocol-owned defaults and runtime-local resolution", () => {
@@ -71,6 +91,47 @@ describe("checkBudget 4-state", () => {
     expect(checkBudget(s, { maxTurns: 24, warningThreshold: 0.9, reassuranceThreshold: 0.7 })).toBe(
       "reassurance",
     );
+  });
+});
+
+describe("checkBudget is a pure query (query/command split)", () => {
+  it("emits no telemetry even called twice at the warning threshold", async () => {
+    const s = { ...createBudgetState(), turns: 20 };
+    const emits = await countOperationalEmits(() => {
+      checkBudget(s, { maxTurns: 24 });
+      checkBudget(s, { maxTurns: 24 });
+    });
+    expect(emits).toBe(0);
+  });
+
+  it("emits no telemetry at the exceeded threshold", async () => {
+    const s = { ...createBudgetState(), turns: 24 };
+    const emits = await countOperationalEmits(() => {
+      checkBudget(s, { maxTurns: 24 });
+    });
+    expect(emits).toBe(0);
+  });
+});
+
+describe("publishBudgetTelemetry is the command (emits once, returns status)", () => {
+  it("emits exactly one event per call at the warning threshold", async () => {
+    const s = { ...createBudgetState(), turns: 20 };
+    let status: string | undefined;
+    const emits = await countOperationalEmits(() => {
+      status = publishBudgetTelemetry(s, { maxTurns: 24 });
+    });
+    expect(status).toBe("warning");
+    expect(emits).toBe(1);
+  });
+
+  it("emits nothing below the reassurance threshold", async () => {
+    const s = { ...createBudgetState(), turns: 5 };
+    let status: string | undefined;
+    const emits = await countOperationalEmits(() => {
+      status = publishBudgetTelemetry(s, { maxTurns: 24 });
+    });
+    expect(status).toBe("ok");
+    expect(emits).toBe(0);
   });
 });
 

@@ -111,6 +111,16 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.appConnectorInstallation = createSqliteAppConnectorInstallationAdapter(this.db);
   }
 
+  /**
+   * #510 D1: the sanctioned accessor to the telemetry connection for
+   * bus-persistence — never exposes the private handle for casting. Always the
+   * telemetry connection (which IS `db` for `:memory:`), so it already encodes
+   * the "prefer telemetry, fall back to primary" resolution.
+   */
+  telemetryConnection(): Database {
+    return this.telemetryDb;
+  }
+
   clear(): void {
     clearSqliteStorage(this.db);
   }

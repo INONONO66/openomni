@@ -33,10 +33,23 @@ export function effectiveBudgetThresholds(budget?: AgentProfile.BudgetThresholdI
   };
 }
 
-export function checkBudget(
-  state: BudgetState,
-  budget?: AgentBudget,
-): "ok" | "reassurance" | "warning" | "exceeded" {
+export type BudgetStatus = "ok" | "reassurance" | "warning" | "exceeded";
+
+type ExceededLimit = "wall time" | "turns" | "tool calls" | "tool wall time";
+
+interface BudgetEvaluation {
+  readonly status: BudgetStatus;
+  readonly elapsedMs: number;
+  readonly maxRatio: number;
+  readonly exceededLimit?: ExceededLimit;
+}
+
+/**
+ * Pure evaluator: the sole source of the 4-state budget verdict and the facts
+ * telemetry needs. No Bus emit, no mutation — see {@link checkBudget} (query)
+ * and {@link publishBudgetTelemetry} (command) for the split callers.
+ */
+function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
   const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
   const maxTurns = budget?.maxTurns ?? 24;
   const maxToolCalls = budget?.maxToolCalls ?? 40;
@@ -44,81 +57,73 @@ export function checkBudget(
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);
 
-  const elapsed = Date.now() - state.startTime;
+  const elapsedMs = Date.now() - state.startTime;
 
-  if (maxWallTimeMs !== -1 && elapsed >= maxWallTimeMs) {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "agent.budget",
-      msg: "budget exceeded: wall time",
-      context: {
-        type: "exceeded",
-        turns: state.turns,
-        toolCalls: state.toolCalls,
-        wallTimeMs: elapsed,
-      },
-    });
-    return "exceeded";
-  }
-  if (maxTurns !== -1 && state.turns >= maxTurns) {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "agent.budget",
-      msg: "budget exceeded: turns",
-      context: {
-        type: "exceeded",
-        turns: state.turns,
-        toolCalls: state.toolCalls,
-        wallTimeMs: elapsed,
-      },
-    });
-    return "exceeded";
-  }
-  if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "agent.budget",
-      msg: "budget exceeded: tool calls",
-      context: {
-        type: "exceeded",
-        turns: state.turns,
-        toolCalls: state.toolCalls,
-        wallTimeMs: elapsed,
-      },
-    });
-    return "exceeded";
-  }
+  const exceeded = (exceededLimit: ExceededLimit): BudgetEvaluation => ({
+    status: "exceeded",
+    elapsedMs,
+    maxRatio: 1,
+    exceededLimit,
+  });
+
+  if (maxWallTimeMs !== -1 && elapsedMs >= maxWallTimeMs) return exceeded("wall time");
+  if (maxTurns !== -1 && state.turns >= maxTurns) return exceeded("turns");
+  if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) return exceeded("tool calls");
   if (maxToolRuntimeMs !== -1 && state.toolRuntimeMs >= maxToolRuntimeMs) {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "agent.budget",
-      msg: "budget exceeded: tool wall time",
-      context: {
-        type: "exceeded",
-        turns: state.turns,
-        toolCalls: state.toolCalls,
-        wallTimeMs: elapsed,
-        toolRuntimeMs: state.toolRuntimeMs,
-      },
-    });
-    return "exceeded";
+    return exceeded("tool wall time");
   }
 
   const ratios: number[] = [];
-  if (maxWallTimeMs !== -1) ratios.push(elapsed / maxWallTimeMs);
+  if (maxWallTimeMs !== -1) ratios.push(elapsedMs / maxWallTimeMs);
   if (maxTurns !== -1) ratios.push(state.turns / maxTurns);
   if (maxToolCalls !== -1) ratios.push(state.toolCalls / maxToolCalls);
   if (maxToolRuntimeMs !== -1) ratios.push(state.toolRuntimeMs / maxToolRuntimeMs);
 
-  if (ratios.length === 0) return "ok";
+  if (ratios.length === 0) return { status: "ok", elapsedMs, maxRatio: 0 };
 
   const maxRatio = Math.max(...ratios);
+  if (maxRatio >= warningRatio) return { status: "warning", elapsedMs, maxRatio };
+  if (maxRatio >= reassuranceRatio) return { status: "reassurance", elapsedMs, maxRatio };
+  return { status: "ok", elapsedMs, maxRatio };
+}
 
-  if (maxRatio >= warningRatio) {
+/**
+ * Query (pure): the budget status. Emits nothing — callers that want the
+ * observability telemetry call {@link publishBudgetTelemetry}. This split
+ * lets the run.turn.pre budget builtins read the status as a predicate
+ * without each re-emitting the per-turn telemetry event (double-effect).
+ */
+export function checkBudget(state: BudgetState, budget?: AgentBudget): BudgetStatus {
+  return evaluateBudget(state, budget).status;
+}
+
+/**
+ * Command: emit the budget observability telemetry once and return the status
+ * for the caller to act on. Invoked from the per-turn lifecycle check so the
+ * event fires exactly once per turn, never once per policy that reads it.
+ */
+export function publishBudgetTelemetry(state: BudgetState, budget?: AgentBudget): BudgetStatus {
+  const evaluation = evaluateBudget(state, budget);
+
+  if (evaluation.status === "exceeded") {
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: `budget exceeded: ${evaluation.exceededLimit}`,
+      context: {
+        type: "exceeded",
+        turns: state.turns,
+        toolCalls: state.toolCalls,
+        wallTimeMs: evaluation.elapsedMs,
+        ...(evaluation.exceededLimit === "tool wall time"
+          ? { toolRuntimeMs: state.toolRuntimeMs }
+          : {}),
+      },
+    });
+    return evaluation.status;
+  }
+  if (evaluation.status === "warning") {
     Bus.publish(Operational.Warn, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
@@ -127,12 +132,12 @@ export function checkBudget(
       context: {
         type: "warning",
         remaining: describeBudgetRemaining(state, budget),
-        ratio: maxRatio.toFixed(2),
+        ratio: evaluation.maxRatio.toFixed(2),
       },
     });
-    return "warning";
+    return evaluation.status;
   }
-  if (maxRatio >= reassuranceRatio) {
+  if (evaluation.status === "reassurance") {
     Bus.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
@@ -141,12 +146,11 @@ export function checkBudget(
       context: {
         type: "reassurance",
         remaining: describeBudgetRemaining(state, budget),
-        ratio: maxRatio.toFixed(2),
+        ratio: evaluation.maxRatio.toFixed(2),
       },
     });
-    return "reassurance";
   }
-  return "ok";
+  return evaluation.status;
 }
 
 export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget): string {

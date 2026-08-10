@@ -365,10 +365,19 @@ async function dispatchToolPre(
     resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
-    return engine.dispatchPoint("tool.mcp.pre", {
+    const mcpInput = {
       ...input,
       ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
-    } as unknown as Policy.PolicyPointInputMap["tool.mcp.pre"] & PolicyContext);
+    };
+    // Invariant: an mcp target carries a string mcpServerId (resolved from the
+    // resource source or an `mcp.` label). When it is genuinely absent the
+    // engine's tool.mcp.pre point contract denies fail-closed (context_missing).
+    // Narrow ONLY that one boundary field — every other field is checked against
+    // the point input type exactly as the native branch below is.
+    return engine.dispatchPoint(
+      "tool.mcp.pre",
+      mcpInput as typeof mcpInput & { mcpServerId: string },
+    );
   }
   return engine.dispatchPoint("tool.native.pre", input);
 }
@@ -394,10 +403,19 @@ async function dispatchToolPost(
     resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
-    return engine.dispatchPoint("tool.mcp.post", {
+    const mcpInput = {
       ...input,
       ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
-    } as unknown as Policy.PolicyPointInputMap["tool.mcp.post"] & PolicyContext);
+    };
+    // Single-field narrowing as in dispatchToolPre. tool.mcp.post is a
+    // FAIL-OPEN post boundary (defaultFailPolicy "fail-open"), so an absent
+    // mcpServerId → context_missing → ALLOW, not deny. That is acceptable here:
+    // post is a post-hoc observation point, not an authorization gate — the
+    // gate already ran at the fail-closed tool.mcp.pre.
+    return engine.dispatchPoint(
+      "tool.mcp.post",
+      mcpInput as typeof mcpInput & { mcpServerId: string },
+    );
   }
   return engine.dispatchPoint("tool.native.post", input);
 }

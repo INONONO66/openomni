@@ -1,14 +1,12 @@
 import type { Database } from "bun:sqlite";
 import { Storage } from "../storage/storage.js";
-import type { PersistableAdapter } from "./types.js";
 
 // Telemetry writes AND reads ride the telemetry connection (#510 D1) —
 // bus_event traffic never contends with the FULL decision connection under
-// WAL. (merged from query-database.ts: the query-side accessor was the same
-// handle with the same fallback.)
+// WAL. The adapter's telemetryConnection() is the single sanctioned path to
+// the handle; no consumer casts past the adapter's private fields.
 export function getDatabase(): Database {
-  const adapter = Storage.getAdapter() as PersistableAdapter;
-  const db = adapter.telemetryDb ?? adapter.db;
+  const db = Storage.getAdapter().telemetryConnection?.();
   if (db === undefined) {
     throw new Error("BusPersistence requires a SQLite-backed storage adapter");
   }
@@ -16,6 +14,5 @@ export function getDatabase(): Database {
 }
 
 export function getOptionalDatabase(): Database | undefined {
-  const adapter = Storage.getAdapter() as PersistableAdapter;
-  return adapter.telemetryDb ?? adapter.db;
+  return Storage.getAdapter().telemetryConnection?.();
 }

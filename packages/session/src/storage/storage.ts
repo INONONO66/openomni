@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import type { Message, Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createWorkItemCompletionWriter } from "../work-item/completion-writer.js";
@@ -27,6 +28,15 @@ export namespace Storage {
 
   export interface Adapter {
     transaction<T>(operation: () => T): T;
+    /**
+     * #510 D1: the telemetry connection (NORMAL/group-commit) that
+     * bus-persistence reads and writes ride — the sanctioned accessor for the
+     * underlying SQLite handle so consumers never cast past `private` fields
+     * to reach it. Returns the primary connection when no split exists
+     * (`:memory:`). Absent on non-SQLite adapters; BusPersistence fails closed
+     * (getDatabase throws) or degrades to a no-op (getOptionalDatabase).
+     */
+    telemetryConnection?(): Database;
     session: {
       get(id: string): SessionInfo | undefined;
       set(id: string, info: SessionInfo): void;
