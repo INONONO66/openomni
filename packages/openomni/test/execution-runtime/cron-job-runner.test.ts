@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,9 +56,15 @@ function command(
 describe("CronJobRunner", () => {
   let tmpDir = "";
 
+  // Storage is the single canonical cron backing (fail-closed before init);
+  // give every test a live in-memory store. Reopen tests reset and reinitialize
+  // against a temp db to exercise durability.
+  beforeEach(() => {
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
   afterEach(() => {
     Bus.reset();
-    CronJobRegistry.clear();
     Storage.reset();
     if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
     tmpDir = "";
@@ -67,11 +73,11 @@ describe("CronJobRunner", () => {
   test("fires due persisted jobs and advances their next run", async () => {
     const paths = tempDbPath();
     tmpDir = paths.dir;
+    Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
     CronJobRegistry.register(dueJob());
 
     Storage.reset();
-    CronJobRegistry.clear();
     Storage.initialize({ dbPath: paths.dbPath });
 
     const fired: CronJob.Info[] = [];
@@ -269,6 +275,7 @@ describe("CronJobRunner", () => {
   test("does not reinsert persisted jobs cancelled while firing", async () => {
     const paths = tempDbPath();
     tmpDir = paths.dir;
+    Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
     const job = dueJob("job-persisted-cancel");
     CronJobRegistry.register(job);
@@ -303,6 +310,7 @@ describe("CronJobRunner", () => {
   test("fires a schedule.create job through CronAdapter after storage reopen", async () => {
     const paths = tempDbPath();
     tmpDir = paths.dir;
+    Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
@@ -318,7 +326,6 @@ describe("CronJobRunner", () => {
     if (!created) throw new Error("schedule.create did not persist a cron job");
 
     Storage.reset();
-    CronJobRegistry.clear();
     Storage.initialize({ dbPath: paths.dbPath });
 
     const received: Array<{ surface: string; mode: string; target?: string }> = [];
