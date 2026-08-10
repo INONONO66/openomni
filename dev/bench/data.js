@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786326485460,
+  "lastUpdate": 1786346735733,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39905,6 +39905,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524879,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18543b458d4e7df7514c3410314a8b541511b77a",
+          "message": "refactor(protocol,server): channels band seam precursors (#569)\n\n* refactor(protocol): move SurfaceKey string codec into Adapter namespace\n\nChannels band seam precursor (#499, #503): the pure surface-key string\ncodec (create/fromChannel/parse + format assertion) is adapter wire\nvocabulary, not storage — move it from @openomni/session into the\nexisting protocol Adapter namespace as Adapter.SurfaceKey. No new\ntop-level noun is introduced; #499 will carry this codec into the\nconverged Channel namespace when the band lands.\n\nThe session surface-key store keeps only storage semantics\n(register/claim/lookup/unregister/listBySession) and imports the codec\nfor its format invariant via Adapter.SurfaceKey.assertWellFormed — a\nsingle validation authority shared with Adapter.SurfaceKey.create.\n\nAll codec callers switch to the protocol import: channel normalizers\nand surfaces (killing the dynamic session import in telegram/surface),\ningress bridge, conversation handler, and the kernel session-resolver\n(which keeps session imports only for claim/lookup). Pure codec tests\nmove to packages/protocol/test/adapter-surface-key.test.ts; the session\nsuite keeps store semantics and gains a claim-format pin.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(server): inject channel publish observation port\n\nChannels band seam precursor (#499): channel adapters no longer import\nthe session Bus. They receive an injected `publish` port —\nPublishPort = BusEvent.Sink[\"publish\"], reusing the protocol's existing\ndriver event-sink vocabulary — threaded from the single construction\nsite in bootstrap/channels.ts, which binds it to Bus.publish (same\ncomposition-root seam as the execution coordinator's events.publish,\n#462 §2).\n\nThe port type lives with the adapter role contracts in channel/types.ts\nfor now; #499 promotes it to the Channel protocol contract. All 32\nOperational telemetry publishes across websocket, discord\n(surface/gateway/client), telegram (surface/poller/client), github\n(surface/client), and the websocket authn middleware now flow through\nthe port. With the codec move this leaves channel/* with zero\n@openomni/session imports.\n\nTests bind a noop or collector port; the websocket deprecation-warning\ntest now asserts the warning through the injected collector instead of\nsubscribing to the global Bus.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): add channels band import-boundary gate\n\nChannels band seam precursor (#499): static AST scan pinning that every\nimport in apps/server/src/channel/** is @openomni/protocol, a node\nbuiltin, or relative — the exact dependency contract of the future\nchannels band. Covers static imports/re-exports, import-equals,\nrequire(), and dynamic import() (non-literal specifiers are violations:\nthe telegram surface previously used that shape to reach the session\npackage). Synthetic red fixtures prove each detection path; a tree-size\nfloor keeps the gate from passing vacuously on a moved directory.\n\nThis test is the band-extraction readiness gate: when the MOVE lands\npost-#499 it travels with the package as its import contract.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T07:24:22Z",
+          "tree_id": "c31ca283c2c9b2d97b2217235b1f55804ec8583e",
+          "url": "https://github.com/INONONO66/openomni/commit/18543b458d4e7df7514c3410314a8b541511b77a"
+        },
+        "date": 1786346734774,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5896,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2370,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15294,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8061,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 797,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1347,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1584,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 719,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2239,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10781,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101569,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513526,
             "unit": "ns/op"
           }
         ]
