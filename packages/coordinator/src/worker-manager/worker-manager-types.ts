@@ -2,7 +2,6 @@ import type { BusEvent, TraceContext, WorkerBootstrap } from "@openomni/protocol
 import type {
   InboundWaitParams,
   InboundWaitResult,
-  ToolCallCancelParams,
   ToolCallContext as SupervisorToolCallContext,
   ToolCallParams,
   ToolCallResult,
@@ -15,13 +14,19 @@ export const DEFAULT_IDLE_SHUTDOWN_MS = 600_000;
 export const DEFAULT_SLOT_WAIT_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_QUEUED_DELIVERIES = 100;
 
-export type { ToolCallCancelParams, ToolCallParams, ToolCallResult };
+export type { ToolCallParams, ToolCallResult };
 export type { InboundWaitParams, InboundWaitResult };
 
 export type ToolCallContext = SupervisorToolCallContext & {
   readonly traceContext?: TraceContext.Type;
 };
 
+/**
+ * Factory-private pool construction config (#553 C9): not exported from the
+ * package barrel. External callers pass an object literal to
+ * `createWorkerManager`; `slotWaitTimeoutMs`/`maxQueuedDeliveries` are
+ * pool-internal knobs exercised only by the coordinator's own tests.
+ */
 export type WorkerManagerConfig = {
   workerScript: string;
   socketDir?: string;
@@ -38,6 +43,8 @@ export type WorkerManagerConfig = {
  * through here — the ledger event edge via `events`, tool execution via
  * `toolRelay` (the dispatcher, ring 4), and the resident question bridge
  * via `inboundWait`. Tests bind a collector sink instead of the Bus.
+ * Factory-private (#553 C9): callers pass a literal; only the port
+ * param/result types are public.
  */
 export type WorkerPorts = {
   events: BusEvent.Sink;
@@ -64,6 +71,8 @@ export type DeliverTask = { sessionId: string } & Record<string, unknown>;
 /**
  * Ring-2 process driver surface (#462 §1): one verb, no judgment.
  * Implements the command face of `Execution.Driver` in protocol.
+ * Exactly the six driver-shaped methods (#553 C9); the test-only chaos
+ * hook lives on the pool class behind `killWorkerForTest`.
  */
 export type WorkerManager = {
   deliver(runId: string, task: DeliverTask): Promise<unknown>;
@@ -71,7 +80,6 @@ export type WorkerManager = {
   send(sessionId: string, message: string, runId?: string): Promise<unknown>;
   stats(): WorkerManagerStats;
   waitUntilReady(timeoutMs?: number): Promise<void>;
-  killWorker(index: number): void;
   shutdown(): Promise<void>;
 };
 

@@ -694,7 +694,9 @@ describe("Processor", () => {
       expect(retries).toHaveLength(1);
       expect(retries[0]).toMatchObject({
         runId: "run-processor-retry",
-        reason: "Too Many Requests",
+        // The wire value is the typed Retry.Reason literal — a subset of the
+        // protocol's z.string(), so no schema change.
+        reason: "rate_limit",
       });
       expect(retries[0]?.backoffMs).toBeGreaterThan(0);
       expect(rateLimits).toHaveLength(1);
@@ -703,6 +705,54 @@ describe("Processor", () => {
         provider: "anthropic",
         retryAfterMs: retries[0]?.backoffMs,
       });
+    });
+
+    test("publishes RateLimited for a real Anthropic 429 rate_limit_error body", async () => {
+      // Pin (#532-3): Anthropic sends {type:"error",error:{type:"rate_limit_error"}}
+      // with status 429. Under prose classification the generic body.error
+      // sniff outranked the 429 status ("Provider Server Error"), so the
+      // string-matched RateLimited publish silently skipped a genuine rate
+      // limit. The typed reason switch must catch it.
+      let attemptCount = 0;
+      const rateLimits: Array<{ provider: string; retryAfterMs: number }> = [];
+      const unsubRateLimit = Bus.subscribe(LlmCall.RateLimited, (event) => {
+        rateLimits.push(event);
+      });
+
+      const processor = createProcessor({
+        trace: {
+          traceId: "trace-processor-429",
+          sessionId: "session-456",
+          provider: "anthropic",
+        },
+        createStream: async () => ({
+          fullStream: (async function* () {
+            attemptCount++;
+            if (attemptCount === 1) {
+              throw new APIError({
+                message: JSON.stringify({
+                  type: "error",
+                  error: {
+                    type: "rate_limit_error",
+                    message: "Number of request tokens has exceeded your per-minute rate limit",
+                  },
+                }),
+                statusCode: 429,
+                isRetryable: true,
+                responseHeaders: { "retry-after-ms": "1" },
+              });
+            }
+            yield { type: "finish" };
+          })(),
+        }),
+      });
+
+      await processor.process({ system: "" });
+      unsubRateLimit();
+
+      expect(attemptCount).toBe(2);
+      expect(rateLimits).toHaveLength(1);
+      expect(rateLimits[0]).toMatchObject({ provider: "anthropic", retryAfterMs: 1 });
     });
 
     test("throws original error instance for non-retryable errors and settles cleanly", async () => {

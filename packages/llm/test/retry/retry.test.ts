@@ -84,92 +84,55 @@ describe("Retry", () => {
     });
   });
 
-  describe("delay(attempt, error?)", () => {
-    test("exponential backoff without error", () => {
-      const delay1 = Retry.delay(1);
-      expect(delay1).toBe(2000); // 2000 * 2^0
+  describe("decide(attempt, error) delay computation", () => {
+    function retryableError(headers?: Record<string, string>): InstanceType<typeof APIError> {
+      return new APIError({
+        message: "Rate limited",
+        isRetryable: true,
+        ...(headers && { responseHeaders: headers }),
+      });
+    }
 
-      const delay2 = Retry.delay(2);
-      expect(delay2).toBe(4000); // 2000 * 2^1
+    function delayOf(attempt: number, error: unknown): number {
+      const decision = Retry.decide(attempt, error);
+      if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
+      return decision.delayMs;
+    }
 
-      const delay3 = Retry.delay(3);
-      expect(delay3).toBe(8000); // 2000 * 2^2
-
-      const delay4 = Retry.delay(4);
-      expect(delay4).toBe(16000); // 2000 * 2^3
+    test("exponential backoff without headers", () => {
+      expect(delayOf(1, retryableError())).toBe(2000); // 2000 * 2^0
+      expect(delayOf(2, retryableError())).toBe(4000); // 2000 * 2^1
+      expect(delayOf(3, retryableError())).toBe(8000); // 2000 * 2^2
+      expect(delayOf(4, retryableError())).toBe(16000); // 2000 * 2^3
     });
 
     test("caps exponential backoff at RETRY_MAX_DELAY_NO_HEADERS", () => {
-      // Calculate attempt that would exceed max
-      const delay = Retry.delay(20);
-      expect(delay).toBeLessThanOrEqual(Retry.RETRY_MAX_DELAY_NO_HEADERS);
+      expect(delayOf(20, retryableError())).toBeLessThanOrEqual(Retry.RETRY_MAX_DELAY_NO_HEADERS);
     });
 
     test("uses Retry-After-Ms header if present", () => {
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-        responseHeaders: {
-          "retry-after-ms": "5000",
-        },
-      });
-
-      const delay = Retry.delay(1, error);
-      expect(delay).toBe(5000);
+      expect(delayOf(1, retryableError({ "retry-after-ms": "5000" }))).toBe(5000);
     });
 
     test("uses Retry-After header (seconds) if Retry-After-Ms not present", () => {
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-        responseHeaders: {
-          "retry-after": "10",
-        },
-      });
-
-      const delay = Retry.delay(1, error);
-      expect(delay).toBe(10000); // 10 seconds converted to ms
+      expect(delayOf(1, retryableError({ "retry-after": "10" }))).toBe(10000);
     });
 
     test("parses Retry-After as HTTP date if not a number", () => {
       const futureDate = new Date(Date.now() + 5000).toUTCString();
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-        responseHeaders: {
-          "retry-after": futureDate,
-        },
-      });
-
-      const delay = Retry.delay(1, error);
-      expect(delay).toBeGreaterThan(4000);
-      expect(delay).toBeLessThanOrEqual(5000);
+      const delayMs = delayOf(1, retryableError({ "retry-after": futureDate }));
+      expect(delayMs).toBeGreaterThan(4000);
+      expect(delayMs).toBeLessThanOrEqual(5000);
     });
 
     test("falls back to exponential backoff if Retry-After is invalid", () => {
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-        responseHeaders: {
-          "retry-after": "invalid",
-        },
-      });
-
-      const delay = Retry.delay(2, error);
-      expect(delay).toBe(4000); // 2000 * 2^1
+      expect(delayOf(2, retryableError({ "retry-after": "invalid" }))).toBe(4000);
     });
 
     test("caps the fallback backoff even when headers are present", () => {
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-        responseHeaders: {
-          "retry-after": "invalid",
-        },
-      });
-
-      const delay = Retry.delay(20, error);
-      expect(delay).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS);
+      expect(delayOf(20, retryableError({ "retry-after": "invalid" }))).toBe(
+        Retry.RETRY_MAX_DELAY_NO_HEADERS,
+      );
     });
 
     test("does not throw when error payload code fields are not strings", () => {
@@ -181,51 +144,50 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      expect(Retry.isRetryable(error)).toBe("Provider Server Error");
+      expect(Retry.decide(1, error)).toMatchObject({ retry: true, reason: "server_error" });
     });
 
     test("prioritizes Retry-After-Ms over Retry-After", () => {
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-        responseHeaders: {
-          "retry-after-ms": "3000",
-          "retry-after": "10",
-        },
-      });
-
-      const delay = Retry.delay(1, error);
-      expect(delay).toBe(3000);
+      expect(delayOf(1, retryableError({ "retry-after-ms": "3000", "retry-after": "10" }))).toBe(
+        3000,
+      );
     });
 
     test("handles missing headers gracefully", () => {
-      const error = new APIError({
-        message: "Rate limited",
-        isRetryable: true,
-      });
+      expect(delayOf(2, retryableError())).toBe(4000);
+    });
 
-      const delay = Retry.delay(2, error);
-      expect(delay).toBe(4000); // Falls back to exponential backoff
+    test("does not expose the removed delay dual path", async () => {
+      // decide() is the single retry decision surface; the standalone
+      // uncapped delay() had no src consumer and is gone.
+      const retrySource = await Bun.file(
+        new URL("../../src/retry/index.ts", import.meta.url),
+      ).text();
+      expect(Object.hasOwn(Retry, "delay")).toBe(false);
+      expect(retrySource).not.toMatch(/\bexport function delay\b/);
     });
   });
 
-  describe("isRetryable(error)", () => {
-    test("returns undefined if error is not APIError", () => {
-      const error = new Error("Retry failed");
+  describe("decide(attempt, error) reason classification", () => {
+    function reasonOf(error: unknown): Retry.Reason {
+      return Retry.decide(1, error).reason;
+    }
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBeUndefined();
+    test("classifies non-APIError as non_retryable", () => {
+      expect(Retry.decide(1, new Error("Retry failed"))).toEqual({
+        retry: false,
+        reason: "non_retryable",
+      });
     });
 
-    test("returns undefined if APIError.isRetryable is false", () => {
+    test("classifies APIError with isRetryable false as non_retryable", () => {
       const error = new APIError({
         message: "Not found",
         statusCode: 404,
         isRetryable: false,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBeUndefined();
+      expect(reasonOf(error)).toBe("non_retryable");
     });
 
     test("falls back to status classification when message is not JSON", () => {
@@ -235,7 +197,7 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      expect(Retry.isRetryable(error)).toBe("Provider Server Error");
+      expect(reasonOf(error)).toBe("server_error");
     });
 
     test("classifies 429 by status when payload is opaque", () => {
@@ -245,7 +207,23 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      expect(Retry.isRetryable(error)).toBe("Rate Limited");
+      expect(reasonOf(error)).toBe("rate_limit");
+    });
+
+    test("classifies 429 by status when the JSON body has no specific signal", () => {
+      // The prose classifier let the generic body.error sniff outrank the 429
+      // status ("Provider Server Error"), so real Anthropic rate limits
+      // ({error:{type:"rate_limit_error"}}) skipped the RateLimited path.
+      const error = new APIError({
+        message: JSON.stringify({
+          type: "error",
+          error: { message: "request tokens exceeded your per-minute rate limit" },
+        }),
+        statusCode: 429,
+        isRetryable: true,
+      });
+
+      expect(reasonOf(error)).toBe("rate_limit");
     });
 
     test("classifies from responseBody when message is opaque", () => {
@@ -258,7 +236,7 @@ describe("Retry", () => {
         }),
       });
 
-      expect(Retry.isRetryable(error)).toBe("Too Many Requests");
+      expect(reasonOf(error)).toBe("rate_limit");
     });
 
     test("detects too_many_requests in JSON response", () => {
@@ -270,11 +248,10 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBe("Too Many Requests");
+      expect(reasonOf(error)).toBe("rate_limit");
     });
 
-    test("detects rate_limit in JSON response", () => {
+    test("detects rate_limit in JSON error code", () => {
       const error = new APIError({
         message: JSON.stringify({
           type: "error",
@@ -283,8 +260,19 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBe("Rate Limited");
+      expect(reasonOf(error)).toBe("rate_limit");
+    });
+
+    test("detects rate_limit in JSON error type (Anthropic rate_limit_error)", () => {
+      const error = new APIError({
+        message: JSON.stringify({
+          type: "error",
+          error: { type: "rate_limit_error", message: "rate limited" },
+        }),
+        isRetryable: true,
+      });
+
+      expect(reasonOf(error)).toBe("rate_limit");
     });
 
     test("detects server_error in JSON response", () => {
@@ -296,8 +284,7 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBe("Provider Server Error");
+      expect(reasonOf(error)).toBe("server_error");
     });
 
     test("detects exhausted in error code", () => {
@@ -308,8 +295,7 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBe("Provider is overloaded");
+      expect(reasonOf(error)).toBe("overloaded");
     });
 
     test("detects unavailable in error code", () => {
@@ -320,8 +306,7 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBe("Provider is overloaded");
+      expect(reasonOf(error)).toBe("overloaded");
     });
 
     test("detects no_kv_space in error message", () => {
@@ -332,8 +317,7 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      const result = Retry.isRetryable(error);
-      expect(result).toBe("Provider Server Error");
+      expect(reasonOf(error)).toBe("server_error");
     });
 
     test("trusts the provider retryable flag when payload and status are opaque", () => {
@@ -348,8 +332,12 @@ describe("Retry", () => {
         isRetryable: true,
       });
 
-      expect(Retry.isRetryable(plainText)).toBe("Provider Error");
-      expect(Retry.isRetryable(invalidJson)).toBe("Provider Error");
+      expect(Retry.decide(1, plainText)).toMatchObject({ retry: true, reason: "server_error" });
+      expect(Retry.decide(1, invalidJson)).toMatchObject({ retry: true, reason: "server_error" });
+    });
+
+    test("does not expose the folded-away prose classifier", () => {
+      expect(Object.hasOwn(Retry, "isRetryable")).toBe(false);
     });
   });
 
@@ -365,7 +353,7 @@ describe("Retry", () => {
   });
 });
 
-describe("Retry.delay ratelimit-reset parsing (#532 candidate 3)", () => {
+describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   function apiError(headers: Record<string, string>): InstanceType<typeof APIError> {
     return new APIError({
       name: "APIError",
@@ -376,25 +364,36 @@ describe("Retry.delay ratelimit-reset parsing (#532 candidate 3)", () => {
     });
   }
 
+  function delayOf(headers: Record<string, string>): number {
+    const decision = Retry.decide(1, apiError(headers));
+    if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
+    return decision.delayMs;
+  }
+
   test("x-ratelimit-reset-requests duration is used when retry-after is absent", () => {
-    expect(Retry.delay(1, apiError({ "x-ratelimit-reset-requests": "3s" }))).toBe(3000);
+    expect(delayOf({ "x-ratelimit-reset-requests": "3s" })).toBe(3000);
   });
 
   test("x-ratelimit-reset duration with compound units parses", () => {
-    expect(Retry.delay(1, apiError({ "x-ratelimit-reset-tokens": "1m30s" }))).toBe(90_000);
+    // 1m30s parses to 90s — above the header cap, so the inferred reset
+    // demotes to backoff with the over-cap flag proving the parse happened.
+    expect(Retry.decide(1, apiError({ "x-ratelimit-reset-tokens": "1m30s" }))).toEqual({
+      retry: true,
+      reason: "rate_limit",
+      delayMs: Retry.RETRY_INITIAL_DELAY,
+      retryAfterOverCap: true,
+    });
   });
 
   test("anthropic-ratelimit reset timestamp is used when retry-after is absent", () => {
     const resetAt = new Date(Date.now() + 5000).toISOString();
-    const ms = Retry.delay(1, apiError({ "anthropic-ratelimit-requests-reset": resetAt }));
+    const ms = delayOf({ "anthropic-ratelimit-requests-reset": resetAt });
     expect(ms).toBeGreaterThan(3500);
     expect(ms).toBeLessThanOrEqual(5100);
   });
 
   test("retry-after still wins over ratelimit resets", () => {
-    expect(
-      Retry.delay(1, apiError({ "retry-after": "2", "x-ratelimit-reset-requests": "9s" })),
-    ).toBe(2000);
+    expect(delayOf({ "retry-after": "2", "x-ratelimit-reset-requests": "9s" })).toBe(2000);
   });
 });
 
@@ -411,36 +410,36 @@ describe("Retry.decide (#532 candidate 3)", () => {
 
   test("non-retryable errors decide against retry", () => {
     const decision = Retry.decide(1, new Error("plain"));
-    expect(decision.retryable).toBe(false);
+    expect(decision.retry).toBe(false);
   });
 
   test("header delay within the cap is honored", () => {
     const decision = Retry.decide(1, apiError({ "retry-after": "45" }));
     expect(decision).toEqual({
-      retryable: true,
-      reason: "Rate Limited",
+      retry: true,
+      reason: "rate_limit",
       delayMs: 45_000,
-      source: "header",
     });
   });
 
   test("header delay above the cap fails fast instead of silently stalling", () => {
     const decision = Retry.decide(1, apiError({ "retry-after": "3600" }));
-    expect(decision.retryable).toBe(false);
-    if (!decision.retryable) {
-      expect(decision.reason).toContain("3600000");
+    expect(decision.retry).toBe(false);
+    if (!decision.retry) {
+      // The typed reason stays a branchable literal; prose lives in detail.
+      expect(decision.reason).toBe("rate_limit");
+      expect(decision.detail).toContain("3600000");
     }
   });
 
   test("headless retry keeps the exponential backoff and its 30s cap", () => {
     expect(Retry.decide(1, apiError())).toEqual({
-      retryable: true,
-      reason: "Rate Limited",
+      retry: true,
+      reason: "rate_limit",
       delayMs: Retry.RETRY_INITIAL_DELAY,
-      source: "backoff",
     });
     const late = Retry.decide(10, apiError());
-    if (late.retryable) {
+    if (late.retry) {
       expect(late.delayMs).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS);
     }
   });
@@ -460,20 +459,19 @@ describe("Retry.decide cap semantics for inferred resets", () => {
   test("an out-of-range ratelimit reset demotes to backoff instead of failing", () => {
     const decision = Retry.decide(1, apiError({ "x-ratelimit-reset-requests": "30m" }));
     expect(decision).toEqual({
-      retryable: true,
-      reason: "Rate Limited",
+      retry: true,
+      reason: "rate_limit",
       delayMs: Retry.RETRY_INITIAL_DELAY,
-      source: "backoff",
+      retryAfterOverCap: true,
     });
   });
 
   test("bare numbers in reset headers are never parsed as years", () => {
     const decision = Retry.decide(1, apiError({ "x-ratelimit-reset-requests": "2027" }));
     expect(decision).toEqual({
-      retryable: true,
-      reason: "Rate Limited",
+      retry: true,
+      reason: "rate_limit",
       delayMs: Retry.RETRY_INITIAL_DELAY,
-      source: "backoff",
     });
   });
 });
