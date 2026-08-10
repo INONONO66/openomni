@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786354200695,
+  "lastUpdate": 1786354469010,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40897,6 +40897,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514956,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d15bfe21f6143a6c3c7eb988965e8ba7a75c6426",
+          "message": "chore(ci): stop dist test double-execution, tighten coverage floors (#577)\n\n* fix(build): stop bun test double-executing stale dist test copies\n\nbun test picked up compiled dist/**/*.test.js alongside the sources (26\nstale copies at head; CI's per-package cwd runs included them too). The\npinned bun 1.3.6 has no test-exclusion key (test.pathIgnorePatterns\nlanded in 1.3.11), so the load-bearing fix is build-side: every\ntsc-emitting package builds through a tsconfig.build.json that excludes\n**/*.test.ts, behind an rm -rf dist clean step that purges copies from\nolder builds. The root bunfig pathIgnorePatterns entry is\nforward-compatible defense for repo-root runs on bun >= 1.3.11.\n\nRed: seeded packages/agent/dist/fake.test.js failed under\n'bun test packages/agent'. Green: after the fix the seed is not\ndiscovered and a full rebuild emits zero dist test files.\n\nRegistered on #552 (Q2 review follow-up).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ci): shrink coverage ratchet floors for llm and session\n\nThe ratchet reported IMPROVED for both packages. Local CI-mirror runs\nmeasure llm 92.28% (1840/1994) and session 94.16% (4857/5158), matching\nthe CI-suggested values exactly. Floors are set 0.4pp under the\nmeasurement (llm 91.88, session 93.76): a full 0.5pp margin would sit\nexactly on the > TOLERANCE_PP improvement boundary and float-drift into\na perpetual IMPROVED nag, while 0.4pp stays inside the band and still\nleaves ~0.9pp of dip headroom before the gate fires.\n\nAutonomous shrink per script/check-coverage-ratchet.ts; targeted edit\ninstead of --update because --update rewrites all nine entries from\nlocal (macOS) reports and would clobber the other packages' CI floors.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ci): add informational issue-breadcrumb report\n\nscript/report-breadcrumbs.ts lists #NNN comment refs across\npackages/apps/script grouped by issue. Issue state (OPEN vs CLOSED) has\nno robust offline source, so this is deliberately a local report, not a\nCI gate: with gh available it resolves states in one GraphQL call and\nmarks CLOSED/MERGED refs PRUNE (opt-in --strict exits 1 on them);\noffline it degrades to a stateless listing and always exits 0. Current\nhead: 39 distinct refs, 379 occurrences, 247 referencing closed items.\n\nRegistered on #552 item 3; --self-test covers the comment scanner.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T09:33:08Z",
+          "tree_id": "a007c8e6b6e6074a16ff0b8e13f36155924dabf9",
+          "url": "https://github.com/INONONO66/openomni/commit/d15bfe21f6143a6c3c7eb988965e8ba7a75c6426"
+        },
+        "date": 1786354468263,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 635,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9839,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2959,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2460,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15350,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8128,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 822,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 696,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1368,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2324,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10924,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516888,
             "unit": "ns/op"
           }
         ]
