@@ -40,6 +40,9 @@ yarn-error.log*
 # Local AI instructions (not committed)
 *.local.md
 
+# Research clones pinned by commit (#533) — never a dependency, never scanned
+/tmp/
+
 # Misc
 .DS_Store
 *.pem
