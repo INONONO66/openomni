@@ -58,11 +58,12 @@ describe("McpToolProvider canonical policy trace", () => {
       );
 
       const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      // #522 defect 2: ToolExecution.Completed is emitted solely by the
+      // worker-side executor dispatching this provider — not by this layer.
       expect(auditEvents.map((event) => event.name)).toEqual([
         PolicyEvent.Evaluated.name,
         PolicyEvent.DecisionComposed.name,
         PolicyEvent.ActionRequested.name,
-        ToolExecution.Completed.name,
         Mcp.ToolCompleted.name,
       ]);
       for (const event of auditEvents) {
@@ -145,7 +146,6 @@ describe("McpToolProvider canonical policy trace", () => {
         PolicyEvent.Evaluated.name,
         PolicyEvent.DecisionComposed.name,
         PolicyEvent.ActionRequested.name,
-        ToolExecution.Completed.name,
         Mcp.ToolCompleted.name,
       ]);
       expectFallbackAuditIdentity(auditEvents, "session-mcp-fallback");
@@ -196,6 +196,9 @@ describe("McpToolProvider canonical policy trace", () => {
 
       // Then
       expect(result.output).toBe("search ok");
+      // #522 defect 2: no ToolExecution.Completed at this layer — the
+      // worker-side executor owns it. The provider's own audit trail keeps
+      // one fallback trace across policy and MCP-domain events.
       const relevantNames = new Set([
         PolicyEvent.ActionRequested.name,
         Mcp.ToolCalled.name,
@@ -206,7 +209,6 @@ describe("McpToolProvider canonical policy trace", () => {
       expect(relevantEvents.map((event) => event.name)).toEqual([
         PolicyEvent.ActionRequested.name,
         Mcp.ToolCalled.name,
-        ToolExecution.Completed.name,
         Mcp.ToolCompleted.name,
       ]);
       const traceIds = new Set(relevantEvents.map((event) => event.payload.traceId));
@@ -216,14 +218,9 @@ describe("McpToolProvider canonical policy trace", () => {
       expect(traceId).not.toBe("");
 
       const action = relevantEvents[0]?.payload;
-      const completion = relevantEvents[2]?.payload;
       expect(action?.sessionId).not.toBe("spoofed-session");
       expect(typeof action?.sessionId).toBe("string");
       expect(typeof action?.runId).toBe("string");
-      expect(completion).toMatchObject({
-        sessionId: action?.sessionId,
-        runId: action?.runId,
-      });
     } finally {
       stop();
     }

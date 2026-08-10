@@ -106,6 +106,11 @@ export namespace WorkerRunner {
         const systemTools = systemProvider.listTools();
         const proxyTools = mcpProxyProvider.listTools();
         let childParentTools: readonly NativeTool[] = [];
+        // #522 defect 2 scope: middleware is assembled ONCE by this host.
+        // Children reference a subset of the parent assembly — the
+        // injection-queue drain policy stays parent-only, because it drains
+        // shared host state and persists drained responses into the parent
+        // session's transcript.
         const middleware = [
           createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
           ...buildWorkerMiddleware({
@@ -114,6 +119,9 @@ export namespace WorkerRunner {
             ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),
           }),
         ];
+        const childMiddleware = middleware.filter(
+          (registration) => registration.name !== "builtin:injection-queue-drain",
+        );
         childAgentRuntime = createChildAgentRuntime({
           model: request.model,
           systemPrompt: request.systemPrompt,
@@ -127,7 +135,7 @@ export namespace WorkerRunner {
           allowAuthFallback: false,
           ...(request.budget ? { budget: request.budget } : {}),
           ...(request.providerOptions ? { providerOptions: request.providerOptions } : {}),
-          middleware,
+          middleware: childMiddleware,
           createAgent,
         });
         agentProvider.register(createChildAgentTool(childAgentRuntime));

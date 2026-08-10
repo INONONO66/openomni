@@ -1,5 +1,5 @@
 import type { Tool } from "@openomni/protocol";
-import { Mcp, PolicyDecision, PolicyEvent, ToolExecution } from "@openomni/protocol";
+import { Mcp, PolicyDecision, PolicyEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
@@ -55,16 +55,11 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   const result = await tool.execute({ ...call, tool: tool.spec.name }, executionContext);
   const durationMs = Date.now() - startTime;
 
-  Bus.publish(ToolExecution.Completed, {
-    ...audit,
-    time: Date.now(),
-    actor,
-    toolCallId: call.id,
-    toolName: tool.spec.name,
-    durationMs,
-    isError: result.isError ?? false,
-  });
-
+  // #522 defect 2: ToolExecution.Started/Completed for MCP calls are emitted
+  // solely by the worker-side executor that dispatches this provider's tools
+  // (packages/openomni execution-runtime/tool/executor.ts). This layer keeps
+  // MCP-prefix authorization audit (PolicyEvent.*) and the MCP-domain
+  // Mcp.ToolCompleted event only.
   if (!result.isError) {
     const resultSummary = createResultSummary(result.output);
     const serverName = tool.spec.name.split(".")[0] ?? "unknown";

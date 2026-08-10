@@ -32,28 +32,32 @@ describe("McpToolProvider", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const policyAndToolEvents = events.filter(
+      // #522 defect 2: this layer keeps authorization audit and MCP-domain
+      // events only; ToolExecution.Completed comes solely from the
+      // worker-side executor dispatching these tools.
+      const auditEvents = events.filter(
         (event) =>
-          event.name === "policy.action.requested" || event.name === "tool.execution.completed",
+          event.name === "policy.action.requested" ||
+          event.name === "tool.execution.completed" ||
+          event.name === "mcp.tool.completed",
       );
-      expect(policyAndToolEvents.map((event) => event.name)).toEqual([
+      expect(auditEvents.map((event) => event.name)).toEqual([
         "policy.action.requested",
-        "tool.execution.completed",
+        "mcp.tool.completed",
       ]);
-      expect(policyAndToolEvents[0].payload).toMatchObject({
+      expect(auditEvents[0].payload).toMatchObject({
         action: "mcp.tool.call",
         resource: "search.query",
       });
-      expect(policyAndToolEvents[1].payload).toMatchObject({
+      expect(auditEvents[1].payload).toMatchObject({
         toolCallId: "call-bus-success",
-        isError: false,
       });
     } finally {
       stop();
     }
   });
 
-  it("publishes completion events for error results without Mcp.ToolCompleted", async () => {
+  it("publishes no completion events for error results", async () => {
     const provider = new McpToolProvider();
     const session = createLedgerSession();
     const execute = mock(
@@ -87,11 +91,10 @@ describe("McpToolProvider", () => {
       expect(result.isError).toBeTruthy();
       const mcpCompleted = events.find((event) => event.name === "mcp.tool.completed");
       expect(mcpCompleted).toBeUndefined();
+      // #522 defect 2: no provider-layer ToolExecution.Completed — the
+      // worker-side executor is the sole emitter.
       const toolCompleted = events.find((event) => event.name === "tool.execution.completed");
-      expect(toolCompleted?.payload).toMatchObject({
-        toolCallId: "call-bus-error",
-        isError: true,
-      });
+      expect(toolCompleted).toBeUndefined();
     } finally {
       stop();
     }

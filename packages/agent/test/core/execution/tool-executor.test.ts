@@ -29,26 +29,30 @@ async function flushBus(): Promise<void> {
 }
 
 describe("createToolExecutor bus events", () => {
-  it("publishes Started then Completed on successful execution", async () => {
+  // #522 defect 2: the worker-side executor beneath this wrapper is the sole
+  // emitter of ToolExecution.Started/Completed. This layer delegates with
+  // trace context and emits no execution events of its own; the composed
+  // one-pair-per-call pin lives in tool-executor-sole-emitter.test.ts.
+  it("emits no ToolExecution events and delegates with trace context", async () => {
     Bus.reset();
-    const started: unknown[] = [];
-    const completed: unknown[] = [];
     const publishedNames: string[] = [];
     const stopObserve = Bus.observe((event) => {
       if (!event.name.startsWith("operational.")) {
         publishedNames.push(event.name);
       }
     });
-    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
-    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+    const delegatedContexts: unknown[] = [];
 
     const executor = createToolExecutor({
-      toolExecutor: async (call) => ({
-        id: "r1",
-        toolCallId: call.id,
-        output: "ok",
-        isError: false,
-      }),
+      toolExecutor: async (call, context) => {
+        delegatedContexts.push(context?.traceContext);
+        return {
+          id: "r1",
+          toolCallId: call.id,
+          output: "ok",
+          isError: false,
+        };
+      },
       engine: makeEngine(),
       traceContext: { traceId: "trace-1", sessionId: "sess-1" },
     });
@@ -57,30 +61,12 @@ describe("createToolExecutor bus events", () => {
     await flushBus();
     stopObserve();
 
-    expect(started).toHaveLength(1);
-    expect(completed).toHaveLength(1);
-    expect(publishedNames).toEqual(["tool.execution.started", "tool.execution.completed"]);
-    expect(publishedNames).not.toContain("agent.tool.invoked");
-
-    const s = started[0] as {
-      traceId: string;
-      sessionId: string;
-      toolName: string;
-      toolCallId: string;
-      inputSummary: string;
-    };
-    expect(s.traceId).toBe("trace-1");
-    expect(s.sessionId).toBe("sess-1");
-    expect(s.toolName).toBe("bash");
-    expect(s.toolCallId).toBe("call-1");
-    expect(s.inputSummary).toBe('{"command":"ls"}');
-
-    const c = completed[0] as { isError: boolean; durationMs: number };
-    expect(c.isError).toBe(false);
-    expect(typeof c.durationMs).toBe("number");
+    expect(publishedNames).toEqual([]);
+    expect(delegatedContexts).toHaveLength(1);
+    expect(delegatedContexts[0]).toMatchObject({ traceId: "trace-1", sessionId: "sess-1" });
   });
 
-  it("publishes Completed with isError:true when tool result has error", async () => {
+  it("emits no Completed itself when tool result has error", async () => {
     Bus.reset();
     const completed: unknown[] = [];
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
@@ -96,11 +82,11 @@ describe("createToolExecutor bus events", () => {
       traceContext: { traceId: "trace-2", sessionId: "sess-2" },
     });
 
-    await executor(makeCall("call-err"));
+    const result = await executor(makeCall("call-err"));
     await flushBus();
 
-    expect(completed).toHaveLength(1);
-    expect((completed[0] as { isError: boolean }).isError).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(completed).toHaveLength(0);
   });
 
   it("publishes PermissionDenied and no Started on abort", async () => {
@@ -142,7 +128,7 @@ describe("createToolExecutor bus events", () => {
     expect(d.toolCallId).toBe("call-deny");
   });
 
-  it("publishes Completed with isError:true when toolExecutor throws", async () => {
+  it("rethrows and emits no ToolExecution events when toolExecutor throws", async () => {
     Bus.reset();
     const started: unknown[] = [];
     const completed: unknown[] = [];
@@ -160,9 +146,8 @@ describe("createToolExecutor bus events", () => {
     await expect(executor(makeCall("call-throw"))).rejects.toThrow("boom");
     await flushBus();
 
-    expect(started).toHaveLength(1);
-    expect(completed).toHaveLength(1);
-    expect((completed[0] as { isError: boolean }).isError).toBe(true);
+    expect(started).toHaveLength(0);
+    expect(completed).toHaveLength(0);
   });
 
   it("reports tool duration for budget accounting on success and failure", async () => {
@@ -193,49 +178,35 @@ describe("createToolExecutor bus events", () => {
     expect(durations.every((duration) => duration >= 0)).toBe(true);
   });
 
-  it("falls back to generated traceId when no traceContext provided", async () => {
+  it("falls back to generated trace identities when no traceContext provided", async () => {
     Bus.reset();
-    const started: unknown[] = [];
-    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
+    const delegatedContexts: Array<{ traceId?: string; sessionId?: string } | undefined> = [];
 
     const executor = createToolExecutor({
-      toolExecutor: async (call) => ({
-        id: "r1",
-        toolCallId: call.id,
-        output: "ok",
-        isError: false,
-      }),
+      toolExecutor: async (call, context) => {
+        delegatedContexts.push(context?.traceContext);
+        return {
+          id: "r1",
+          toolCallId: call.id,
+          output: "ok",
+          isError: false,
+        };
+      },
       engine: makeEngine(),
     });
 
     await executor(makeCall());
     await flushBus();
 
-    expect(started).toHaveLength(1);
-    const s = started[0] as { traceId: string; sessionId: string };
-    expect(s.traceId.length).toBeGreaterThan(0);
-    expect(s.sessionId.length).toBeGreaterThan(0);
+    expect(delegatedContexts).toHaveLength(1);
+    expect(delegatedContexts[0]?.traceId?.length).toBeGreaterThan(0);
+    expect(delegatedContexts[0]?.sessionId?.length).toBeGreaterThan(0);
   });
 
-  it("publishes actor from trace context", async () => {
+  it("publishes actor from trace context on PermissionDenied", async () => {
     Bus.reset();
-    const started: unknown[] = [];
     const denied: unknown[] = [];
-    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
     Bus.subscribe(ToolExecution.PermissionDenied, (d) => denied.push(d));
-
-    const allowExecutor = createToolExecutor({
-      toolExecutor: async (call) => ({
-        id: "r1",
-        toolCallId: call.id,
-        output: "ok",
-        isError: false,
-      }),
-      engine: makeEngine(),
-      traceContext: { traceId: "trace-5", sessionId: "sess-5", agentName: "coder" },
-    });
-
-    await allowExecutor(makeCall("call-actor"));
 
     const denyEngine = makeEngine();
     denyEngine.register(abortMiddleware("Blocked: actor rule"));
@@ -248,9 +219,6 @@ describe("createToolExecutor bus events", () => {
     await denyExecutor(makeCall("call-denied-actor"));
     await flushBus();
 
-    expect((started[0] as { actor: Record<string, unknown> }).actor).toEqual({
-      agentName: "coder",
-    });
     expect((denied[0] as { actor: Record<string, unknown> }).actor).toEqual({
       agentName: "reviewer",
     });
