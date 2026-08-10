@@ -1,15 +1,5 @@
 import { PolicyDecision, type Tool } from "@openomni/protocol";
-import {
-  createAbortError,
-  enforceTimeoutAndAbort,
-  isAbortError,
-  linkAbortSignals,
-} from "./executor-abort.js";
-import {
-  buildDispatchTable,
-  injectImplicitInputs,
-  resolveDispatchedCall,
-} from "./executor-dispatch.js";
+import { WorkspaceLock } from "../workspace-lock.js";
 import {
   buildActor,
   createEventBase,
@@ -21,15 +11,224 @@ import {
   publishToolStarted,
   publishToolTimedOut,
 } from "./executor-events.js";
-import {
-  hasUnknownSettlement,
-  markUnsafeWorkspaceForUnsettledTool,
-  waitForToolSettlement,
-} from "./executor-settlement.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
-import type { NativeTool, ToolExecutionContext, ToolExecutorConfig } from "./types.js";
+import type {
+  ImplicitInputSource,
+  NativeTool,
+  ToolExecutionContext,
+  ToolExecutorConfig,
+  ToolRuntimeContext,
+} from "./types.js";
 
 const DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS = 5_000;
+
+function createAbortError(): Error {
+  const error = new Error("Tool execution aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason;
+}
+
+function linkAbortSignals(
+  localSignal: AbortSignal,
+  parentSignal: AbortSignal | undefined,
+): { readonly signal: AbortSignal; readonly cleanup: () => void } {
+  if (!parentSignal) return { signal: localSignal, cleanup: () => undefined };
+
+  const linked = new AbortController();
+  const forwardLocalAbort = () => {
+    if (!linked.signal.aborted) linked.abort(abortReason(localSignal));
+  };
+  const forwardParentAbort = () => {
+    if (!linked.signal.aborted) linked.abort(abortReason(parentSignal));
+  };
+
+  if (localSignal.aborted) forwardLocalAbort();
+  if (parentSignal.aborted) forwardParentAbort();
+
+  localSignal.addEventListener("abort", forwardLocalAbort, { once: true });
+  parentSignal.addEventListener("abort", forwardParentAbort, { once: true });
+
+  return {
+    signal: linked.signal,
+    cleanup: () => {
+      localSignal.removeEventListener("abort", forwardLocalAbort);
+      parentSignal.removeEventListener("abort", forwardParentAbort);
+    },
+  };
+}
+
+export async function enforceTimeoutAndAbort<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  onTimeout: (error: ToolRuntimePolicyMiddleware.TimeoutError) => void,
+): Promise<T> {
+  if (signal?.aborted) throw createAbortError();
+
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timeoutFired = false;
+    const cleanup = () => {
+      globalThis.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+    const onAbort = () => finish(() => reject(createAbortError()));
+    const timer = globalThis.setTimeout(() => {
+      timeoutFired = true;
+      const error = new ToolRuntimePolicyMiddleware.TimeoutError(timeoutMs);
+      finish(() => reject(error));
+      try {
+        onTimeout(error);
+      } catch {
+        return;
+      }
+    }, timeoutMs);
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => {
+        if (timeoutFired) return;
+        finish(() => reject(error));
+      },
+    );
+  });
+}
+
+function buildDispatchTable(tools: readonly NativeTool[]): Map<string, NativeTool> {
+  const dispatch = new Map<string, NativeTool>();
+  for (const tool of tools) {
+    dispatch.set(tool.spec.name, tool);
+    const sanitized = tool.spec.name.replace(/\./g, "_");
+    if (sanitized !== tool.spec.name) dispatch.set(sanitized, tool);
+  }
+  return dispatch;
+}
+
+function resolveImplicitValue(
+  source: ImplicitInputSource,
+  runtime: ToolRuntimeContext,
+): string | undefined {
+  switch (source) {
+    case "sessionId":
+      return runtime.sessionId;
+    case "runId":
+      return runtime.runId;
+    case "agentName":
+      return runtime.agentName;
+    case "workspaceRoot":
+      return runtime.workspaceRoot;
+  }
+}
+
+function injectImplicitInputs(
+  call: Tool.Call,
+  tool: NativeTool,
+  runtime: ToolRuntimeContext | undefined,
+): Tool.Call {
+  if (!tool.implicitInputs || !runtime) return call;
+
+  const injected: Record<string, unknown> = { ...call.input };
+  for (const [param, source] of Object.entries(tool.implicitInputs)) {
+    const value = resolveImplicitValue(source, runtime);
+    if (value !== undefined) injected[param] = value;
+  }
+  return { ...call, input: injected };
+}
+
+function resolveDispatchedCall(call: Tool.Call, tool: NativeTool): Tool.Call {
+  const originalName = tool.spec.name;
+  return originalName === call.tool ? call : { ...call, tool: originalName };
+}
+
+type ToolSettlementOutcome =
+  | { readonly settled: true; readonly output: string }
+  | {
+      readonly settled: false;
+      readonly clearWhenToolSettles: boolean;
+      readonly unsafeToken?: string;
+    };
+
+function hasUnknownSettlement(result: Tool.Result): boolean {
+  return result.settlement === "unknown";
+}
+
+function waitForToolSettlement(
+  promise: Promise<Tool.Result>,
+  graceMs: number,
+): Promise<ToolSettlementOutcome> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = globalThis.setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      resolve({ settled: false, clearWhenToolSettles: true });
+    }, graceMs);
+    const finish = (outcome: ToolSettlementOutcome) => {
+      if (resolved) return;
+      resolved = true;
+      globalThis.clearTimeout(timer);
+      resolve(outcome);
+    };
+
+    promise.then(
+      (result) => {
+        if (hasUnknownSettlement(result)) {
+          finish({
+            settled: false,
+            clearWhenToolSettles: false,
+            unsafeToken: result.toolCallId || result.id,
+          });
+          return;
+        }
+        finish({ settled: true, output: result.output });
+      },
+      (error: unknown) =>
+        finish({
+          settled: true,
+          output: error instanceof Error ? error.message : String(error),
+        }),
+    );
+  });
+}
+
+function markUnsafeWorkspaceForUnsettledTool(args: {
+  readonly workspaceRoot: string | undefined;
+  readonly lockAcquired: boolean;
+  readonly toolName: string;
+  readonly toolCallId: string;
+  readonly outcome: Extract<ToolSettlementOutcome, { readonly settled: false }>;
+  readonly toolExecution: Promise<Tool.Result>;
+}): void {
+  if (!args.workspaceRoot || !args.lockAcquired) return;
+
+  const workspaceRoot = args.workspaceRoot;
+  const unsafeToken = args.outcome.unsafeToken ?? args.toolCallId;
+  WorkspaceLock.markUnsafe(
+    workspaceRoot,
+    `tool "${args.toolName}" did not settle after timeout/abort grace`,
+    unsafeToken,
+  );
+  if (args.outcome.clearWhenToolSettles) {
+    void args.toolExecution
+      .finally(() => WorkspaceLock.clearUnsafe(workspaceRoot, unsafeToken))
+      .catch(() => undefined);
+  }
+}
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
