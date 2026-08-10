@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786348380717,
+  "lastUpdate": 1786348955686,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40401,6 +40401,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 530817,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f6ce18b5613cbc25e4c9d63e092f2045d8d08a2",
+          "message": "refactor(openomni,agent,server): executor re-merge and sole tool-event emitter (#573)\n\n* refactor(openomni): merge executor satellites into executor.ts\n\nexecutor-abort/dispatch/settlement each had exactly one importer\n(executor.ts). executor-events.ts stays separate as the sole emitter\nsurface.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): merge resident runtime satellites into runtime.ts\n\nruntime-abort/runtime-agent-config/runtime-types importers were all\ncluster-internal; runtime-types held mutable activation state only\nruntime.ts touches. Doc-comment path references updated.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(server): fold ToolProxyProvider into createMcpProxyProvider\n\ntool-proxy-provider.ts had one production importer (worker-runner-ipc).\nUnit tests move with the code, retargeted at the folded IPC surface;\nthe descriptor-preservation pin moves there too.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): fold tool/shared input/result helpers into define.ts\n\nThe shared/ dir held builtin authoring helpers with define.ts as the\nnatural home (every builtin already imports defineTool). Tests merged\ninto define.test.ts; no shared name survives.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,server): worker executor is sole ToolExecution emitter\n\nCloses the #522 defect-2 double emission: the agent-side wrapper kept\nStarted/Completed re-emission on top of the worker executor's pair (MCP\nprovider added a third Completed). The worker-side executor\n(execution-runtime/tool/executor.ts) is now the sole emitter; the agent\nwrapper keeps policy dispatch, decision recording, and blocked-result\nconstruction; the MCP provider keeps prefix-authorization audit and\nMcp.* domain events. Child agents now reference a subset of the\nhost-assembled middleware, excluding the parent-only injection-queue\ndrain policy. Red-first pin: one native call emits exactly one\nStarted/Completed pair (failed with 2 before the fix).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T08:01:21Z",
+          "tree_id": "c07c6a8a8da9cf3334f4b1cb24b3c866f95cde02",
+          "url": "https://github.com/INONONO66/openomni/commit/1f6ce18b5613cbc25e4c9d63e092f2045d8d08a2"
+        },
+        "date": 1786348954641,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 350,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4834,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8185,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2037,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12334,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6569,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 653,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1205,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 15479,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1787,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8406,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 80188,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 402180,
             "unit": "ns/op"
           }
         ]
