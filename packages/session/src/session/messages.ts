@@ -162,7 +162,7 @@ export async function resume(id: string): Promise<RecoveredMessage[]> {
   //     synthesizes message.created/part.appended/message.finished — #562);
   //   - resident direct runs: projection-only via
   //     SessionBridge.storeDirectResult (post-writeback output, own message
-  //     id — see defaultRunAgent in resident/runtime-agent-config.ts);
+  //     id — see defaultRunAgent in resident/runtime.ts);
   //   - ingress writeback of worker output (handlers.ts storeDirectResult
   //     calls): projection-only, but it DUPLICATES the worker's final
   //     fact-recorded turn (post-writeback-policy text), so dropping it from

@@ -185,7 +185,7 @@ export namespace WorkerRunner {
             // injection-queue persistResponse seam (#562). Resident direct
             // runs stay sinkless on purpose and child-agent streams record
             // nothing (bounded) — see defaultRunAgent in
-            // packages/openomni/src/resident/runtime-agent-config.ts and the
+            // packages/openomni/src/resident/runtime.ts and the
             // writer census in Session.resume.
             onFact: (fact) => TranscriptStore.record(sessionId, fact),
           },

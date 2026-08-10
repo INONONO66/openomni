@@ -1,23 +1,151 @@
-import { IngressEvent } from "@openomni/protocol";
+import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
+import {
+  type Ingress,
+  IngressEvent,
+  type TraceContext as TraceContextProtocol,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
-import { abortRace, createAbortError, throwIfAborted } from "./runtime-abort";
-import { buildResidentAgentConfig, defaultRunAgent } from "./runtime-agent-config";
-import type {
-  ActivationRecord,
-  ResidentLifecycle,
-  ResidentRunContext,
-  ResidentRunResult,
-  ResidentRuntimeOptions,
-  SlotWaiter,
-} from "./runtime-types";
 
-export type {
-  ResidentLifecycle,
-  ResidentRunContext,
-  ResidentRunResult,
-  ResidentRuntimeOptions,
-} from "./runtime-types";
+export type ResidentLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "releasing";
+
+export interface ResidentRunContext {
+  readonly sessionId: string;
+  readonly event: Ingress.ResolvedInboundEvent;
+  readonly traceContext?: TraceContextProtocol.Type;
+  readonly signal?: AbortSignal;
+}
+
+export interface ResidentRunResult {
+  readonly output: string;
+  readonly finishReason: string;
+  readonly runId: string;
+  readonly activationId: string;
+}
+
+export interface ResidentRuntimeOptions {
+  readonly maxActive?: number;
+  readonly idleTimeoutMs?: number;
+  readonly slotWaitTimeoutMs?: number;
+  readonly runAgent?: (
+    config: ChatAgentConfig,
+    input: ChatAgentInput,
+  ) => Promise<{
+    text: string;
+    finishReason: string;
+  }>;
+}
+
+interface ActivationRecord {
+  activationId: string;
+  lifecycle: ResidentLifecycle;
+  idleTimer?: ReturnType<typeof setTimeout>;
+  queue: Promise<unknown>;
+  lastUsedAt: number;
+}
+
+type SlotWaiter = {
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+};
+
+function createAbortError(): Error {
+  const error = new Error("resident run aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createAbortError();
+}
+
+function abortRace(signal: AbortSignal | undefined): {
+  readonly promise: Promise<never>;
+  readonly cleanup: () => void;
+} {
+  if (!signal) {
+    return {
+      promise: new Promise<never>(() => undefined),
+      cleanup: () => undefined,
+    };
+  }
+  if (signal.aborted) {
+    return { promise: Promise.reject(createAbortError()), cleanup: () => undefined };
+  }
+  let cleanup: () => void = () => undefined;
+  const promise = new Promise<never>((_, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(createAbortError());
+    };
+    cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return { promise, cleanup };
+}
+
+type RuntimeAgentDef = Ingress.AgentDef & {
+  readonly providerOptions?: Record<string, unknown>;
+};
+
+/**
+ * #562 F2: the resident direct path runs WITHOUT a transcript fact sink ON
+ * PURPOSE — not for layering reasons (this package already reaches
+ * TranscriptStore, and ResidentRuntimeOptions.runAgent is injectable from
+ * the server composition), but because the resident path's durable
+ * assistant write is SessionBridge.storeDirectResult at the ingress handler
+ * (ingress/handlers.ts handleResident): it persists the POST-writeback
+ * output (dispatchWritebackCommit policies may transform it) under its own message
+ * id, wrapped in the ingress audit envelope. Wiring a raw-stream sink here
+ * would (1) double-persist every resident turn — the streamed message id
+ * via facts plus the writeback message id via projection, with diverging
+ * raw-vs-committed text — and (2) give resident sessions their first
+ * transcript facts, flipping Session.resume off the projection fallback and
+ * silently dropping all pre-existing projection-only resident history.
+ * Recording facts for residents therefore rides a redesign of the writeback
+ * seam (record the committed writeback as the fact), not a sink here.
+ * Resident sessions stay all-projection, so resume's fallback covers them
+ * losslessly — see the writer census in Session.resume.
+ */
+function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
+  return ChatAgent.create(config).run(input);
+}
+
+function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatAgentConfig {
+  const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot ?? ctx.event.workspace;
+  const toolExecutor = ctx.event.agent.toolExecutorFactory
+    ? ctx.event.agent.toolExecutorFactory({
+        sessionId: ctx.sessionId,
+        runId,
+        agentName: extractAgentName(ctx.event),
+        workspaceRoot,
+      })
+    : ctx.event.agent.toolExecutor;
+  const agent = ctx.event.agent as RuntimeAgentDef;
+
+  return {
+    model: ctx.event.agent.model,
+    systemPrompt: ctx.event.agent.systemPrompt,
+    budget: ctx.event.agent.budget,
+    tools: ctx.event.agent.tools,
+    toolExecutor,
+    ...(ctx.signal ? { signal: ctx.signal } : {}),
+    ...(agent.providerOptions ? { providerOptions: agent.providerOptions } : {}),
+    middleware: buildWorkerMiddleware({
+      permissions: ctx.event.agent.permissions,
+      ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
+    }),
+  };
+}
+
+function extractAgentName(event: Ingress.ResolvedInboundEvent): string | undefined {
+  if (event.mode === "internal") {
+    return event.agentName;
+  }
+  const raw = event.meta?.agentName ?? event.meta?.agent;
+  return typeof raw === "string" ? raw : undefined;
+}
 
 export class ResidentRuntime {
   private readonly activations = new Map<string, ActivationRecord>();
