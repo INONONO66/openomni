@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786321786042,
+  "lastUpdate": 1786323008346,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39161,6 +39161,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516020,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eacb963b382b57bb9f427ea0b094e67d254d1098",
+          "message": "fix(openomni): fail-closed wait actions and 561 review follow-ups (#564)\n\n* fix(openomni): block explicit invalid wait actions\n\nBehavioral hardening over faithfully-ported legacy semantics: the\nrequested-action parser coerced a PRESENT-but-invalid action (e.g.\n{action:\"unknown\"}) to the report_result default, so an explicitly\ninvalid action against a wait allowing report_result ROUTED with\nmatched worker context instead of blocking.\n\nrequestedWaitAction is now a three-way parse: absent action defaults\nto report_result (unchanged), a valid Wait.AllowedAction member parses\nto itself, and a present-but-invalid action parses to the typed\n\"invalid\" sentinel (RequestedWaitAction = Wait.AllowedAction |\n\"invalid\"). The sentinel is a member of no allowedActions list, so\nevery gate treats it as disallowed:\n\n- resolve-route wait correlation blocks it with the same typed\n  wait_correlation decision as other disallowed actions (durable wait\n  AND frozen pending_interaction backings; wait.action:invalid fact);\n- dispatch pinned revalidation denies it\n  (dispatch.pending_interaction.action.denied);\n- the dispatch PI router leaves the command unrouted, so the default\n  dispatch authority denies it fail-closed.\n\nRed-first proof: the new kernel-routing pins failed pre-fix --\n{action:\"unknown\"} against a durable wait allowing report_result\ningested successfully (routed to the owner, error undefined), and the\nfrozen legacy row variant routed at wait_correlation and only died\nlater as dispatch_failed. Both now block as route_blocked at\nwait_correlation. No `as` casts; all three call sites handle the\nsentinel by type.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(openomni,docs): pr 561 review follow-ups\n\nCodeRabbit follow-ups on merged #561 (items 2-4; item 1 is the\nprevious commit):\n\n- docs/implementation-status.md: align every PendingInteraction row\n  with the frozen/read-only + Wait-owned reality. The PendingInteraction\n  row drops the stale \"status transitions only\" title and the\n  resolve/markFollowUp + boot-expiry-sweep claims (write surface fully\n  frozen behind the typed FrozenError, expiry is a read-time correlation\n  filter, boot emits a frozen no-op receipt, table is in the archive\n  manifest); the question-bridge row stops promising Owner-facing PI\n  creation (new questions are Wait-owned); the connector row scopes\n  report_result routing to frozen legacy rows; the #510 ledger row's D2b\n  scope drops the already-frozen PendingInteraction half.\n- test fixtures: the validated adapter-level legacy-row insertion is\n  extracted into the one shared helper\n  test/helpers/pending-interaction.ts and used from both the dispatch\n  runtime fixtures' former copy and the ingress kernel-routing seeder.\n- kernel-routing-waits: the #548 frozen-row regression pin now asserts\n  status === \"open\" (read-only, untransitioned) instead of mere\n  row existence.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T00:48:52Z",
+          "tree_id": "4843a315f1f79564c631ca4c8cbf1418517b6ba2",
+          "url": "https://github.com/INONONO66/openomni/commit/eacb963b382b57bb9f427ea0b094e67d254d1098"
+        },
+        "date": 1786323007480,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 587,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 695,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6264,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10907,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3052,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2570,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16145,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8436,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 890,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 767,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 52,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1593,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2112,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11369,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 109100,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 548185,
             "unit": "ns/op"
           }
         ]
