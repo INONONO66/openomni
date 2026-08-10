@@ -56,6 +56,27 @@ function makeAssistantMessage(text: string): Message.WithParts {
   return { info, parts: [part] };
 }
 
+function makeToolAssistantMessage(text: string, callID: string): Message.WithParts {
+  const base = makeAssistantMessage(text);
+  const toolPart: Message.ToolPart = {
+    id: nextId("tool-part"),
+    sessionID: "test",
+    messageID: base.info.id,
+    type: "tool",
+    callID,
+    tool: "read_file",
+    state: {
+      status: "completed",
+      input: { path: "/tmp/a" },
+      output: "file contents",
+      title: "read_file",
+      metadata: {},
+      time: { start: 1, end: 2 },
+    },
+  };
+  return { info: base.info, parts: [...base.parts, toolPart] };
+}
+
 describe("InMemoryCompactor", () => {
   describe("shouldCompact", () => {
     it("returns false when tokens are below threshold", () => {
@@ -221,6 +242,100 @@ describe("InMemoryCompactor", () => {
         protectRecentMessages: 6,
       });
       expect(result.compacted).toBe(false);
+    });
+  });
+
+  describe("commit boundary invariant", () => {
+    it("snaps the cutoff back to a user boundary when no summary anchors the kept window", async () => {
+      // onSummarize unset (it is optional everywhere): the natural cutoff lands
+      // on an assistant message, which no provider accepts as the first
+      // message of a conversation. The commit must snap back to the nearest
+      // user boundary instead of committing a leading-assistant window.
+      const messages = [
+        makeUserMessage("u0"),
+        makeAssistantMessage("a1"),
+        makeUserMessage("u2"),
+        makeAssistantMessage("a3"),
+        makeUserMessage("u4"),
+        makeToolAssistantMessage("a5", "call-1"),
+        makeUserMessage("u6"),
+        makeAssistantMessage("a7"),
+      ];
+      const result = await InMemoryCompactor.compact(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 3,
+      });
+      expect(result.compacted).toBe(true);
+      expect(result.messages[0]?.info.role).toBe("user");
+      expect(result.removedCount).toBe(4);
+      expect(result.messages).toHaveLength(4);
+      // The kept tool call and its result travel in the same WithParts message:
+      // message-boundary slicing cannot split the pair.
+      const toolParts = result.messages.flatMap((message) =>
+        message.parts.filter((part): part is Message.ToolPart => part.type === "tool"),
+      );
+      expect(toolParts).toHaveLength(1);
+      expect(toolParts[0]?.state.status).toBe("completed");
+    });
+
+    it("fails loudly with a typed error when no valid user boundary exists", async () => {
+      // No user message at or before the cutoff: there is no boundary that can
+      // anchor the kept window without a summary. Committing anyway would be
+      // commit-then-400; the compactor must refuse with a typed error instead.
+      const messages = Array.from({ length: 8 }, (_, i) => makeAssistantMessage(`a${i}`));
+      let caught: unknown;
+      try {
+        await InMemoryCompactor.compact(messages, {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 3,
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).name).toBe("CompactionBoundaryError");
+    });
+
+    it("keeps the natural cutoff when a summary user message anchors the window", async () => {
+      // Pin: with onSummarize present, the prepended summary user message makes
+      // any message-boundary cutoff provider-valid — no snap-back happens.
+      const messages = [
+        makeUserMessage("u0"),
+        makeAssistantMessage("a1"),
+        makeUserMessage("u2"),
+        makeAssistantMessage("a3"),
+        makeUserMessage("u4"),
+        makeAssistantMessage("a5"),
+        makeUserMessage("u6"),
+        makeAssistantMessage("a7"),
+      ];
+      const result = await InMemoryCompactor.compact(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 3,
+        onSummarize: async () => "anchored",
+      });
+      expect(result.compacted).toBe(true);
+      expect(result.removedCount).toBe(5);
+      expect(result.messages).toHaveLength(4);
+      expect(result.messages[0]?.info.role).toBe("user");
+    });
+
+    it("threads the history session id into the summary message", async () => {
+      const messages = Array.from({ length: 8 }, (_, i) =>
+        i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
+      );
+      const result = await InMemoryCompactor.compact(messages, {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 4,
+        onSummarize: async () => "summary",
+      });
+      const summary = result.messages[0];
+      expect(summary?.info.role).toBe("user");
+      // History carries sessionID "test"; the summary must not introduce a
+      // foreign session id into the compacted history.
+      expect(summary?.info.sessionID).toBe("test");
+      expect(summary?.parts[0]?.sessionID).toBe("test");
+      expect(summary?.parts[0]?.messageID).toBe(summary?.info.id);
     });
   });
 });
