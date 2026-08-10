@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786323008346,
+  "lastUpdate": 1786323204847,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39285,6 +39285,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 548185,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b20ffbc003e507038b0e9e03ad7b3d40ab6bca71",
+          "message": "feat(session,server): transcript fact persistence and resume-by-replay (#563)\n\n* feat(session): transcript fact table and append-only store (#547)\n\nPersist Transcript.Fact rows (attempt-attributed) in a new transcript_fact\ntable (migration 0015) and add TranscriptStore: record() fold-validates each\nfact against its attempt's persisted stream, appends the immutable row, and\nmaintains the message/part projection inside ONE Storage.transaction;\nprojectFrom escalates fold rejections to a loud TranscriptRecordingError;\nreplay() refolds the stream deterministically.\n\nDurability placement (the C3 design judgment): transcript facts are\nrecording tier per the kernel contract — they record what the stream did,\nthey never authorize action, so \"no record, no action\" does not bind them.\nThey deliberately do NOT ride Ledger.append: per-part-boundary streaming\nfacts on the decision ledger would serialize the streaming path onto\nper-session CAS heads and grow the boot-verified hash chain (verifyTail)\nwith streaming-volume rows, diluting the decision-class semantics pinned by\nscript/conformance/p2-ledger-baseline.test.ts. Instead the dedicated\nappend-only table is written INSIDE the same BEGIN IMMEDIATE transaction as\nthe projection on the synchronous=FULL primary connection — fact and\nprojection commit or roll back as one fsync unit, without competing on\ndecision streams.\n\nRed evidence: packages/session/test/session/transcript-store.test.ts failed\nbefore this commit (module absent — no fact persistence existed); the three\npins now pass: kill/reopen replay is byte-identical to the pre-kill\nprojection (tool-bearing turn and retry-attempt cases), out-of-order fact\nwrites throw and persist nothing, and fact rows are append-only with no\nupdate surface on the sub-adapter.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session): session resume replays the transcript fact stream (#547)\n\nSession.resume now refolds the persisted fact stream through\nTranscriptStore.replay (Transcript.fold) — the message/part tables are\nread-model projections, not the record. Sessions with an empty fact stream\n(pre-C3 history, projection-only writers like ingress) keep the projection\nread as fallback.\n\nThe resume pin now proves the source of truth: after a kill/reopen the test\ndrops the projection rows entirely and resume still recovers the assistant\ntext from the fact stream.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(server): wire worker run sink into transcript fact writer (#547)\n\nThe llm processor has offered Transcript.Fact through Sink.onFact since\n#557, consumer-less on the server side. The worker owns its session's LLM\nstream, so WorkerRunner.spawnRun is the single natural wiring point: the\nsink passed to agent.run records every fact for the run's session through\nTranscriptStore.record (fact + projection in one storage transaction). The\nagent trackingSink now forwards onFact untouched — facts pass through, only\nboundary snapshots are consumed locally.\n\nAlso moves the archive-manifest sourceSchemaVersion pin to the new latest\nmigration (0015_transcript_fact) — the migration count grows by exactly one.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(session): honest wiring scope and fallback removal condition (#547)\n\nAdversarial review follow-ups (comment-only, no code change):\n\n- worker-runner: the onFact wiring is the single wiring point for WORKER\n  sessions only — resident direct runs (defaultRunAgent, no sink) and\n  child-agent LLM streams are projection-only today (follow-up issue).\n- resume: the projection fallback survives until (a) all pre-0015 sessions\n  expire/archive AND (b) every assistant writer records facts\n  (injection-queue persistResponse is projection-only today). Mixed-source\n  sessions: facts win, projection-only assistant rows are NOT merged yet.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T00:52:11Z",
+          "tree_id": "3264410d2e7b138f52459babf9cade0a374c0ad5",
+          "url": "https://github.com/INONONO66/openomni/commit/b20ffbc003e507038b0e9e03ad7b3d40ab6bca71"
+        },
+        "date": 1786323204103,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 652,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5881,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10133,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3086,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8227,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 749,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 707,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2349,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10882,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102215,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514642,
             "unit": "ns/op"
           }
         ]
