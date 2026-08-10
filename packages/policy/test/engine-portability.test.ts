@@ -1,14 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
-import {
-  type GenericPolicyContext,
-  PolicyEngine,
-  type PolicyRegistrationGeneric,
-} from "@openomni/policy";
+import { Operational, PolicyDecision } from "@openomni/protocol";
+import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
 import { createPolicyRegistrationStore } from "../src/engine/registration";
 
 function createDispatchContext() {
   return {
+    sessionId: "session-portability",
+    runId: "run-portability",
+    turnIndex: 0,
     agentType: "resident",
     resourceDescriptor: {
       id: "dispatch:test",
@@ -30,135 +29,96 @@ function createAuditedEngine() {
   return { engine, events };
 }
 
+function capturedRegistrationError(register: () => void): PolicyRegistrationError {
+  try {
+    register();
+  } catch (error) {
+    expect(error).toBeInstanceOf(PolicyRegistrationError);
+    if (error instanceof PolicyRegistrationError) return error;
+    throw error;
+  }
+  throw new Error("Expected PolicyRegistrationError");
+}
+
 describe("PolicyEngine portability", () => {
-  it("resolves legacy mappings independently of mutable protocol contracts", () => {
-    const timing = "dispatch.authorize" as const;
-    const originalMapping = Policy.PolicyPoint.MigrationMapping[timing];
-
-    try {
-      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, ["run.lifecycle.pre"]);
-
-      expect(PolicyEngine.resolvePolicyPoints(timing)).toEqual(["dispatch.action.pre"]);
-      expect(PolicyEngine.resolvePolicyPoints("invoke.prepare", { resourceKind: "tool" })).toEqual([
-        "tool.native.pre",
-        "tool.mcp.pre",
-      ]);
-      expect(
-        PolicyEngine.resolvePolicyPoints("invoke.prepare", { resourceKind: "worker" }),
-      ).toEqual(["delegation.worker.pre"]);
-      expect(
-        PolicyEngine.resolvePolicyPoints("invoke.prepare", { resourceKind: "delegation" }),
-      ).toEqual([]);
-    } finally {
-      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, originalMapping);
-    }
-  });
-  it("does not match a scoped legacy registration when agentType is empty", async () => {
+  it("does not match a scoped canonical registration when agentType is empty", async () => {
     const engine = PolicyEngine.create();
     let invocationCount = 0;
 
     engine.register({
-      name: "scoped-legacy",
-      timing: "turn.start",
+      kind: "point",
+      name: "scoped-canonical",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       scope: { agentType: ["resident"] },
       fn: () => {
         invocationCount++;
-        return PolicyDecision.deny({ policyId: "scoped.legacy" });
+        return PolicyDecision.deny({ policyId: "scoped.canonical" });
       },
     });
 
-    const decision = await engine.dispatch("turn.start", { agentType: "" });
+    const decision = await engine.dispatchPoint("run.turn.pre", {
+      ...createDispatchContext(),
+      agentType: "",
+    });
 
     expect(decision.verdict).toBe("allow");
     expect(invocationCount).toBe(0);
   });
 
-  it("accepts legacy timing registrations unchanged", async () => {
+  it("rejects legacy timing registrations fail-closed at the trusted boundary", () => {
     const engine = PolicyEngine.create();
 
-    engine.register({
-      name: "legacy-registration",
-      timing: "turn.start",
-      priority: 100,
-      fn: () => PolicyDecision.deny({ policyId: "legacy.registration" }),
-    });
+    const error = capturedRegistrationError(() =>
+      Reflect.apply(engine.register, engine, [
+        {
+          name: "legacy-registration",
+          timing: "turn.start",
+          priority: 100,
+          fn: () => PolicyDecision.deny({ policyId: "legacy.registration" }),
+        },
+      ]),
+    );
 
-    const decision = await engine.dispatch("turn.start", {});
-
-    expect(decision.verdict).toBe("deny");
+    expect(error.code).toBe("legacy_timing_registration");
+    expect(error.registrationName).toBe("legacy-registration");
   });
 
-  it("snapshots negative legacy priorities and sorts them before zero", () => {
+  it("rejects negative canonical priorities at the registration boundary", () => {
     const store = createPolicyRegistrationStore();
-    const early: PolicyRegistrationGeneric<GenericPolicyContext> = {
-      name: "early",
-      timing: "turn.start",
-      priority: -10,
-      fn: () => PolicyDecision.allow({ policyId: "early" }),
-    };
-    const normal: PolicyRegistrationGeneric<GenericPolicyContext> = {
-      name: "normal",
-      timing: "turn.start",
-      priority: 0,
-      fn: () => PolicyDecision.allow({ policyId: "normal" }),
-    };
 
-    store.register(normal);
-    store.register(early);
-    early.priority = 100;
-    const selected = store.selectLegacy("turn.start", undefined);
+    const error = capturedRegistrationError(() =>
+      store.register({
+        kind: "point",
+        name: "early",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": [] },
+        priority: -10,
+        fn: () => PolicyDecision.allow({ policyId: "early" }),
+      }),
+    );
 
-    expect(selected.map(({ name }) => name)).toEqual(["early", "normal"]);
-    expect(selected[0]?.priority).toBe(-10);
-    expect(Object.isFrozen(selected[0])).toBe(true);
+    expect(error.code).toBe("invalid_canonical_registration");
+    expect(store.selectPoint("run.turn.pre")).toHaveLength(0);
   });
 
-  it("preserves legacy empty names and non-finite numeric priorities", () => {
+  it("rejects non-finite canonical priorities at the registration boundary", () => {
     const store = createPolicyRegistrationStore();
-    const registration: PolicyRegistrationGeneric<GenericPolicyContext> = {
-      name: "",
-      timing: "turn.start",
-      priority: Number.POSITIVE_INFINITY,
-      fn: () => PolicyDecision.allow({ policyId: "legacy-runtime-shape" }),
-    };
 
-    store.register(registration);
-    registration.name = "changed";
-    registration.priority = 0;
-    const stored = store.selectLegacy("turn.start", undefined)[0];
+    const error = capturedRegistrationError(() =>
+      store.register({
+        kind: "point",
+        name: "non-finite-priority",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": [] },
+        priority: Number.POSITIVE_INFINITY,
+        fn: () => PolicyDecision.allow({ policyId: "non-finite-priority" }),
+      }),
+    );
 
-    expect(stored?.name).toBe("");
-    expect(stored?.priority).toBe(Number.POSITIVE_INFINITY);
-    expect(Object.isFrozen(stored)).toBe(true);
-  });
-
-  it("captures each external legacy timing array value once", () => {
-    const store = createPolicyRegistrationStore();
-    let lengthReads = 0;
-    let elementReads = 0;
-    const timing = new Proxy<Policy.Timing[]>(["turn.start"], {
-      get: (target, property, receiver) => {
-        if (property === "length") lengthReads += 1;
-        if (property === "0") {
-          elementReads += 1;
-          return elementReads === 1 ? "turn.start" : "error";
-        }
-        return Reflect.get(target, property, receiver);
-      },
-    });
-
-    store.register({
-      name: "single-read-timing",
-      timing,
-      priority: 0,
-      fn: () => PolicyDecision.allow({ policyId: "single-read-timing" }),
-    });
-    const stored = store.selectLegacy("turn.start", undefined)[0];
-
-    expect(stored?.timing).toEqual(["turn.start"]);
-    expect(lengthReads).toBe(1);
-    expect(elementReads).toBe(1);
+    expect(error.code).toBe("invalid_canonical_registration");
+    expect(store.selectPoint("run.turn.pre")).toHaveLength(0);
   });
 
   it("creates independent engine instances with no shared state", async () => {
@@ -166,23 +126,27 @@ describe("PolicyEngine portability", () => {
     const { engine: engine2, events: events2 } = createAuditedEngine();
 
     engine1.register({
+      kind: "point",
       name: "policy-1",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.allow({ policyId: "engine1.policy" }),
     });
 
     engine2.register({
+      kind: "point",
       name: "policy-2",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.deny({ policyId: "engine2.policy" }),
     });
 
     const ctx = createDispatchContext();
 
-    const decision1 = await engine1.dispatch("turn.start", ctx);
-    const decision2 = await engine2.dispatch("turn.start", ctx);
+    const decision1 = await engine1.dispatchPoint("run.turn.pre", ctx);
+    const decision2 = await engine2.dispatchPoint("run.turn.pre", ctx);
 
     expect(decision1.verdict).toBe("allow");
     expect(decision2.verdict).toBe("deny");
@@ -200,13 +164,15 @@ describe("PolicyEngine portability", () => {
     const { engine, events } = createAuditedEngine();
 
     engine.register({
+      kind: "point",
       name: "test-policy",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.allow({ policyId: "test.allow" }),
     });
 
-    const decision = await engine.dispatch("turn.start", createDispatchContext());
+    const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
 
     expect(decision.verdict).toBe("allow");
     expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
@@ -216,13 +182,15 @@ describe("PolicyEngine portability", () => {
     const { engine, events } = createAuditedEngine();
 
     engine.register({
+      kind: "point",
       name: "deny-policy",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.deny({ policyId: "test.deny" }),
     });
 
-    const decision = await engine.dispatch("turn.start", createDispatchContext());
+    const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
 
     expect(decision.verdict).toBe("deny");
     expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
@@ -232,8 +200,10 @@ describe("PolicyEngine portability", () => {
     const { engine, events } = createAuditedEngine();
 
     engine.register({
+      kind: "point",
       name: "standalone-policy",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: (ctx) => {
         expect(ctx.agentType).toBeDefined();
@@ -242,7 +212,7 @@ describe("PolicyEngine portability", () => {
       },
     });
 
-    const decision = await engine.dispatch("turn.start", createDispatchContext());
+    const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
 
     expect(decision.verdict).toBe("allow");
     expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);

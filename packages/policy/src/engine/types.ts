@@ -57,26 +57,6 @@ export interface PolicyEngineConfig {
   readonly auditEmit?: AuditEmit;
 }
 
-export interface PolicyEngineCompatibilityGeneric<TCtx extends GenericPolicyContext> {
-  readonly includeLegacyAtPoint?: boolean;
-  readonly resolvePointForLegacyDispatch?: (
-    timing: Policy.Timing,
-    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
-  ) => PolicyPointId | undefined;
-}
-
-export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
-  name: string;
-  timing: Policy.Timing | Policy.Timing[];
-  priority: number;
-  scope?: Policy.Scope;
-  failPolicy?: Policy.FailPolicy;
-  fn(
-    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
-  ): Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
-  propagate?: boolean;
-}
-
 export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
   readonly kind: "point";
   readonly name: string;
@@ -93,18 +73,16 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
   readonly propagate?: boolean;
 }
 
+/**
+ * Canonical-only since #530: the legacy timing-based registration shape and
+ * the legacy `dispatch(timing)` entry point are gone; `register()` rejects
+ * timing shapes fail-closed at the trusted boundary.
+ */
 export type PolicyEngineRegistrationGeneric<TCtx extends GenericPolicyContext> =
-  | PolicyRegistrationGeneric<TCtx>
-  | CanonicalPolicyRegistrationGeneric<TCtx>;
+  CanonicalPolicyRegistrationGeneric<TCtx>;
 
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
-  register(reg: PolicyRegistrationGeneric<TCtx>): void;
   register(reg: CanonicalPolicyRegistrationGeneric<TCtx>): void;
-  register(reg: PolicyEngineRegistrationGeneric<TCtx>): void;
-  dispatch(
-    timing: Policy.Timing,
-    ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
-  ): Promise<Policy.PolicyDecision>;
   dispatchPoint<TPointId extends PolicyPointId>(
     pointId: TPointId,
     ctx: DispatchPointContextGeneric<TCtx, TPointId>,

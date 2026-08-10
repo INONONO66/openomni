@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { type Policy, PolicyDecision } from "@openomni/protocol";
-import { createPolicyRegistrationStore } from "../src/engine/registration";
+import { createPolicyRegistrationStore, PolicyRegistrationError } from "../src/engine/registration";
 
 interface ReadCounts {
   length: number;
@@ -56,20 +56,30 @@ test("captures canonical nested arrays once before validation", () => {
   expect(scopeReads).toEqual({ length: 1, element: 1 });
 });
 
-test("captures legacy scope agent types once before validation", () => {
+test("rejects legacy timing registrations fail-closed before capturing scope", () => {
   const scopeReads: ReadCounts = { length: 0, element: 0 };
   const agentTypes = changingArray("resident", "worker", scopeReads);
   const store = createPolicyRegistrationStore();
 
-  store.register({
-    name: "nested-legacy-snapshot",
-    timing: "turn.start",
-    priority: Number.NaN,
-    scope: { agentType: agentTypes },
-    fn: () => PolicyDecision.allow({ policyId: "nested-legacy-snapshot" }),
-  });
-  const [stored] = store.selectLegacy("turn.start", "resident");
+  let rejection: unknown;
+  try {
+    Reflect.apply(store.register, store, [
+      {
+        name: "nested-legacy-snapshot",
+        timing: "turn.start",
+        priority: Number.NaN,
+        scope: { agentType: agentTypes },
+        fn: () => PolicyDecision.allow({ policyId: "nested-legacy-snapshot" }),
+      },
+    ]);
+  } catch (error) {
+    rejection = error;
+  }
 
-  expect(stored?.scope?.agentType).toEqual(["resident"]);
-  expect(scopeReads).toEqual({ length: 1, element: 1 });
+  // Fail-closed since #530: legacy shapes are rejected from classification
+  // fields alone; caller-owned scope arrays are never read.
+  expect(rejection).toBeInstanceOf(PolicyRegistrationError);
+  expect((rejection as PolicyRegistrationError).code).toBe("legacy_timing_registration");
+  expect(store.selectPoint("run.turn.pre", "resident")).toHaveLength(0);
+  expect(scopeReads).toEqual({ length: 0, element: 0 });
 });

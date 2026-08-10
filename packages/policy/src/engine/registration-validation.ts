@@ -1,10 +1,5 @@
 import { Policy } from "@openomni/protocol";
-import type {
-  CanonicalPolicyRegistrationGeneric,
-  GenericPolicyContext,
-  PolicyEngineRegistrationGeneric,
-  PolicyRegistrationGeneric,
-} from "./types";
+import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "./types";
 import { captureFrozenArray } from "./array-snapshot";
 import { snapshotCanonicalBindings } from "./registration-snapshot";
 
@@ -64,7 +59,6 @@ function isObject(value: unknown): value is object {
 }
 
 const canonicalMetadataSchema = Policy.Definition.omit({ timing: true });
-const policyTimingValues: ReadonlySet<string> = new Set(Object.values(Policy.Timing));
 
 function registrationName(name: unknown): string {
   return typeof name === "string" ? name : "<unknown>";
@@ -110,27 +104,6 @@ function isCanonicalPolicyFunction<TCtx extends GenericPolicyContext>(
   return typeof value === "function";
 }
 
-function isLegacyPolicyFunction<TCtx extends GenericPolicyContext>(
-  value: unknown,
-): value is PolicyRegistrationGeneric<TCtx>["fn"] {
-  return typeof value === "function";
-}
-
-function isPolicyTiming(value: unknown): value is Policy.Timing {
-  return typeof value === "string" && policyTimingValues.has(value);
-}
-
-type LegacyTimingSnapshot =
-  | { readonly success: true; readonly value: Policy.Timing | Policy.Timing[] }
-  | { readonly success: false };
-
-function captureLegacyTiming(value: unknown): LegacyTimingSnapshot {
-  if (isPolicyTiming(value)) return { success: true, value };
-  const captured = captureFrozenArray(value);
-  if (!captured.success || !captured.value.every(isPolicyTiming)) return { success: false };
-  return { success: true, value: captured.value };
-}
-
 function captureScope(value: unknown): unknown {
   if (!isObject(value)) return value;
   const agentType = Reflect.get(value, "agentType");
@@ -149,20 +122,10 @@ function frozenScope(scope: Policy.Scope | undefined): Policy.Scope | undefined 
   return Object.freeze(snapshot);
 }
 
-export type PreparedPolicyRegistration<TCtx extends GenericPolicyContext> =
-  | {
-      readonly kind: "legacy";
-      readonly registration: PolicyRegistrationGeneric<TCtx>;
-    }
-  | {
-      readonly kind: "point";
-      readonly registration: CanonicalPolicyRegistrationGeneric<TCtx>;
-    };
-
 function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
   registration: object,
   classification: ClassificationFields,
-): PreparedPolicyRegistration<TCtx> {
+): CanonicalPolicyRegistrationGeneric<TCtx> {
   const name = registrationName(classification.name);
   if (classification.kind === undefined) {
     throw registrationError(name, "invalid_canonical_registration");
@@ -204,52 +167,12 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     fn: fields.fn,
     ...(fields.propagate === undefined ? {} : { propagate: fields.propagate }),
   } satisfies CanonicalPolicyRegistrationGeneric<TCtx>);
-  return { kind: "point", registration: trusted };
-}
-
-function prepareLegacyRegistration<TCtx extends GenericPolicyContext>(
-  registration: object,
-  classification: ClassificationFields,
-): PreparedPolicyRegistration<TCtx> {
-  const fields = {
-    name: classification.name,
-    timing: Reflect.get(registration, "timing"),
-    ...readSharedMetadataFields(registration),
-  };
-  const name = registrationName(fields.name);
-  const timing = captureLegacyTiming(fields.timing);
-  const scopeResult =
-    fields.scope === undefined ? undefined : Policy.Scope.safeParse(captureScope(fields.scope));
-  const failPolicyResult =
-    fields.failPolicy === undefined ? undefined : Policy.FailPolicy.safeParse(fields.failPolicy);
-  if (
-    typeof fields.name !== "string" ||
-    !timing.success ||
-    typeof fields.priority !== "number" ||
-    scopeResult?.success === false ||
-    failPolicyResult?.success === false ||
-    !isLegacyPolicyFunction<TCtx>(fields.fn) ||
-    (fields.propagate !== undefined && typeof fields.propagate !== "boolean")
-  ) {
-    throw registrationError(name, "invalid_canonical_registration");
-  }
-  const scope = scopeResult?.success === true ? frozenScope(scopeResult.data) : undefined;
-  const failPolicy = failPolicyResult?.success === true ? failPolicyResult.data : undefined;
-  const trusted = Object.freeze({
-    name: fields.name,
-    timing: timing.value,
-    priority: fields.priority,
-    ...(scope === undefined ? {} : { scope }),
-    ...(failPolicy === undefined ? {} : { failPolicy }),
-    fn: fields.fn,
-    ...(fields.propagate === undefined ? {} : { propagate: fields.propagate }),
-  } satisfies PolicyRegistrationGeneric<TCtx>);
-  return { kind: "legacy", registration: trusted };
+  return trusted;
 }
 
 export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
-  registration: PolicyEngineRegistrationGeneric<TCtx>,
-): PreparedPolicyRegistration<TCtx> {
+  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
+): CanonicalPolicyRegistrationGeneric<TCtx> {
   if (!isObject(registration)) {
     throw registrationError("<unknown>", "invalid_canonical_registration");
   }
@@ -258,7 +181,11 @@ export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
     classification.kind !== undefined ||
     classification.pointIds !== undefined ||
     classification.effectCapabilities !== undefined;
-  return hasCanonicalFields
-    ? prepareCanonicalRegistration<TCtx>(registration, classification)
-    : prepareLegacyRegistration<TCtx>(registration, classification);
+  if (!hasCanonicalFields) {
+    // Fail-closed since #530: a timing-based (legacy) registration is
+    // rejected outright instead of accepted-then-skipped at dispatch, which
+    // would be a silent policy bypass.
+    throw registrationError(registrationName(classification.name), "legacy_timing_registration");
+  }
+  return prepareCanonicalRegistration<TCtx>(registration, classification);
 }

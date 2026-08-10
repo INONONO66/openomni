@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type Policy, PolicyDecision } from "@openomni/protocol";
-import {
-  type GenericPolicyContext,
-  PolicyEngine,
-  type PolicyRegistrationGeneric,
-  PolicyRegistrationError,
-} from "@openomni/policy";
+import { PolicyDecision } from "@openomni/protocol";
+import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
 import { createPolicyRegistrationStore } from "../src/engine/registration";
 import { dispatchContext } from "./point-test-fixtures";
 
@@ -157,7 +152,7 @@ test("reads each canonical boundary field once and stores the first trusted snap
   });
 });
 
-test("does not reclassify a captured legacy registration when its proxy view changes", async () => {
+test("rejects a legacy-shaped proxy fail-closed without reclassifying its later canonical view", async () => {
   let exposeCanonical = false;
   let canonicalInvocations = 0;
   let hasProbes = 0;
@@ -194,69 +189,55 @@ test("does not reclassify a captured legacy registration when its proxy view cha
   );
   const engine = PolicyEngine.create();
 
-  Reflect.apply(engine.register, engine, [registration]);
+  let rejection: unknown;
+  try {
+    Reflect.apply(engine.register, engine, [registration]);
+  } catch (error) {
+    rejection = error;
+  }
   exposeCanonical = true;
   const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
 
+  // Fail-closed since #530: the legacy-shaped view is rejected at the
+  // boundary from a single classification read, so the later canonical proxy
+  // view never registers or dispatches.
+  expect(rejection).toBeInstanceOf(PolicyRegistrationError);
+  expect((rejection as PolicyRegistrationError).code).toBe("legacy_timing_registration");
   expect(decision.verdict).toBe("allow");
   expect(canonicalInvocations).toBe(0);
   expect(hasProbes).toBe(0);
-  for (const field of [
-    "kind",
-    "name",
-    "pointIds",
-    "effectCapabilities",
-    "timing",
-    "priority",
-    "scope",
-    "failPolicy",
-    "fn",
-    "propagate",
-  ]) {
+  for (const field of ["kind", "name", "pointIds", "effectCapabilities"]) {
     expect(reads[field]).toBe(1);
+  }
+  for (const field of ["timing", "priority", "scope", "failPolicy", "fn", "propagate"]) {
+    expect(reads[field]).toBeUndefined();
   }
 });
 
-test("stores a frozen legacy snapshot without retaining caller-owned metadata", () => {
+test("rejects legacy timing snapshot registrations fail-closed without storing them", () => {
   const store = createPolicyRegistrationStore();
-  const timing: Policy.Timing[] = ["turn.start"];
-  const agentTypes = ["resident"];
-  const originalFn = () => PolicyDecision.allow({ policyId: "legacy-snapshot" });
-  const registration: PolicyRegistrationGeneric<GenericPolicyContext> = {
-    name: "legacy-snapshot",
-    timing,
-    priority: 10,
-    scope: { agentType: agentTypes },
-    failPolicy: "fail-open",
-    propagate: true,
-    fn: originalFn,
-  };
-
-  store.register(registration);
-  const stored = store.selectLegacy("turn.start", "resident")[0];
-  if (stored === undefined) throw new Error("Missing legacy snapshot");
-  registration.name = "changed";
-  registration.priority = 0;
-  registration.failPolicy = "fail-closed";
-  registration.propagate = false;
-  registration.fn = () => PolicyDecision.deny({ policyId: "changed" });
-  timing.splice(0, 1, "error");
-  agentTypes.splice(0, 1, "worker");
-
-  expect(stored).toMatchObject({
+  const registration = {
     name: "legacy-snapshot",
     timing: ["turn.start"],
     priority: 10,
+    scope: { agentType: ["resident"] },
     failPolicy: "fail-open",
     propagate: true,
-  });
-  expect(stored.scope?.agentType).toEqual(["resident"]);
-  expect(stored.fn).toBe(originalFn);
-  expect(Object.isFrozen(stored)).toBe(true);
-  expect(Object.isFrozen(stored.timing)).toBe(true);
-  expect(Object.isFrozen(stored.scope)).toBe(true);
-  expect(Object.isFrozen(stored.scope?.agentType)).toBe(true);
-  expect(store.selectLegacy("turn.start", "resident")).toEqual([stored]);
+    fn: () => PolicyDecision.allow({ policyId: "legacy-snapshot" }),
+  };
+
+  let rejection: unknown;
+  try {
+    Reflect.apply(store.register, store, [registration]);
+  } catch (error) {
+    rejection = error;
+  }
+
+  expect(rejection).toBeInstanceOf(PolicyRegistrationError);
+  expect((rejection as PolicyRegistrationError).code).toBe("legacy_timing_registration");
+  expect((rejection as PolicyRegistrationError).registrationName).toBe("legacy-snapshot");
+  // "turn.start" maps to run.turn.pre; nothing may be stored for it.
+  expect(store.selectPoint("run.turn.pre", "resident")).toHaveLength(0);
 });
 
 test("rejects canonical point arrays with unsafe proxy lengths", () => {

@@ -45,7 +45,7 @@ describe("PolicyEngine canonical registration", () => {
     ).not.toThrow();
   });
 
-  test("does not invoke canonical registrations through legacy timing dispatch", async () => {
+  test("exposes no legacy timing dispatch entry point around canonical registrations", async () => {
     const engine = PolicyEngine.create();
     let invocationCount = 0;
 
@@ -60,10 +60,17 @@ describe("PolicyEngine canonical registration", () => {
       },
     });
 
-    const decision = await engine.dispatch("turn.start", {});
+    // The legacy dispatch(timing) member was deleted in #530, so the legacy
+    // bypass this test previously pinned is structurally impossible.
+    expect(Reflect.get(engine, "dispatch")).toBeUndefined();
+    const decision = await engine.dispatchPoint("run.turn.pre", {
+      sessionId: "session-1",
+      runId: "run-1",
+      turnIndex: 0,
+    });
 
-    expect(decision.verdict).toBe("allow");
-    expect(invocationCount).toBe(0);
+    expect(decision.verdict).toBe("deny");
+    expect(invocationCount).toBe(1);
   });
 
   test("snapshots canonical capability declarations at registration", () => {

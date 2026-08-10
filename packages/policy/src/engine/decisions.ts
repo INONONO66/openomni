@@ -1,19 +1,12 @@
-import { Policy, PolicyDecision, type RuntimeResource } from "@openomni/protocol";
+import { Policy, PolicyDecision } from "@openomni/protocol";
 import { composeEffects } from "../effects";
-import {
-  allowedEffectTypes,
-  allowedEffectTypesAtPoint,
-  isPreBoundary,
-  policyPointIdsForDescriptor,
-} from "./points";
+import { allowedEffectTypesAtPoint } from "./points";
 import type { PolicyPointId } from "./types";
 
 export const COMPOSED_POLICY_ID = "agent.policy.composed";
 
 const EFFECT_VALIDATION_REASON = "policy.effect_not_allowed";
-const MIDDLEWARE_ERROR_REASON = "middleware-error";
 
-type RegistrationMeta = { readonly name: string; readonly priority: number };
 type EffectMembership = {
   readonly has: (effectType: Policy.PolicyEffectType) => boolean;
 };
@@ -80,20 +73,6 @@ function composedDecision(
   };
 }
 
-export function composeFinalDecision(
-  decisions: readonly Policy.PolicyDecision[],
-  timing: Policy.Timing,
-  descriptor: RuntimeResource.Descriptor | undefined,
-): Policy.PolicyDecision {
-  const allowed = allowedEffectTypes(timing, descriptor);
-  const pointId = policyPointIdsForDescriptor(timing, descriptor)[0];
-  const effective = composeEffects([...decisions]);
-  const decision =
-    validationFailure(effective.mergedEffects, allowed, pointId ?? timing) ??
-    composedDecision(effective, decisions);
-  return enforceDenyAbort(decision, allowed, isPreBoundary(timing, descriptor));
-}
-
 export function composeFinalPointDecision(
   decisions: readonly Policy.PolicyDecision[],
   pointId: PolicyPointId,
@@ -105,74 +84,4 @@ export function composeFinalPointDecision(
     validationFailure(effective.mergedEffects, allowed, pointId) ??
     composedDecision(effective, decisions);
   return enforceDenyAbort(decision, allowed, contract.sideEffectBoundary);
-}
-
-export function middlewareErrorDecision(
-  reg: RegistrationMeta,
-  durationMs: number,
-  timing: Policy.Timing,
-  descriptor: RuntimeResource.Descriptor | undefined,
-): Policy.PolicyDecision {
-  const effects: Policy.PolicyEffect[] = [
-    {
-      type: "audit.annotate",
-      annotation: `${reg.name}: ${MIDDLEWARE_ERROR_REASON}`,
-      severity: "error",
-    },
-  ];
-  if (allowedEffectTypes(timing, descriptor).has("run.abort")) {
-    effects.unshift({ type: "run.abort", reason: MIDDLEWARE_ERROR_REASON });
-  }
-
-  return PolicyDecision.deny({
-    policyId: reg.name,
-    reasonCodes: [MIDDLEWARE_ERROR_REASON],
-    durationMs,
-    priority: reg.priority,
-    effects,
-  });
-}
-
-function invalidDecision(
-  reg: RegistrationMeta,
-  durationMs: number,
-  timing: Policy.Timing,
-  descriptor: RuntimeResource.Descriptor | undefined,
-): Policy.PolicyDecision {
-  const reason = "policy.invalid_decision";
-  const effects: Policy.PolicyEffect[] = [
-    {
-      type: "audit.annotate",
-      annotation: `${reg.name}: ${reason}`,
-      severity: "error",
-    },
-  ];
-  if (allowedEffectTypes(timing, descriptor).has("run.abort")) {
-    effects.unshift({ type: "run.abort", reason });
-  }
-
-  return PolicyDecision.deny({
-    policyId: reg.name,
-    reasonCodes: [reason],
-    durationMs,
-    priority: reg.priority,
-    effects,
-  });
-}
-
-export function normalizeDecision(
-  decision: unknown,
-  reg: RegistrationMeta,
-  durationMs: number,
-  timing: Policy.Timing,
-  descriptor: RuntimeResource.Descriptor | undefined,
-): Policy.PolicyDecision {
-  const parsed = Policy.PolicyDecision.safeParse(decision);
-  if (!parsed.success) return invalidDecision(reg, durationMs, timing, descriptor);
-
-  return {
-    ...parsed.data,
-    durationMs,
-    priority: reg.priority,
-  };
 }
