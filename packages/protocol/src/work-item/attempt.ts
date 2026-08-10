@@ -281,6 +281,39 @@ export const Attempt = z
 export type Attempt = z.infer<typeof Attempt>;
 
 // ---------------------------------------------------------------------------
+// attempt terminal record (#510 D2b — worker-run cutover)
+// ---------------------------------------------------------------------------
+
+/**
+ * Terminal outcome vocabulary of ONE attempt execution. This is the honest
+ * fold of the retired worker-run terminal states (`succeeded`/`failed`/
+ * `cancelled`/`interrupted`) onto the attempt lifecycle; the non-terminal
+ * worker-run states have existing homes in the WorkItem fold (started ↔
+ * running, waiting_input ↔ unresolved `waiting_input` blocker).
+ */
+export const AttemptOutcome = z.enum(["succeeded", "failed", "cancelled", "interrupted"]);
+export type AttemptOutcome = z.infer<typeof AttemptOutcome>;
+
+/**
+ * #510 D2b — projection of the `work_item.attempt_finished` decision-class
+ * fact: the current attempt's terminal record. `endedAt` and
+ * `lastMessageId` moved here from the worker-run store's in-memory
+ * `runExtras` map (lost on restart before the cutover) — they are attempt
+ * lifecycle data with no other home in the WorkItem vocabulary. Cleared by
+ * the next `work_item.attempt_allocated` fact (a new execution instance).
+ */
+export const AttemptTerminal = z
+  .object({
+    attemptId: AttemptId,
+    outcome: AttemptOutcome,
+    endedAt: z.number(),
+    lastMessageId: z.string().min(1).optional(),
+    error: z.string().optional(),
+  })
+  .strict();
+export type AttemptTerminal = z.infer<typeof AttemptTerminal>;
+
+// ---------------------------------------------------------------------------
 // cacheKey — dormant vocabulary (schema only in C2)
 // ---------------------------------------------------------------------------
 
