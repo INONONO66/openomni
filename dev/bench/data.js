@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786320857835,
+  "lastUpdate": 1786321786042,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39037,6 +39037,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 529328,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "54ddc3a1874e2a2602890ba336582be2ae50d6c0",
+          "message": "refactor(openomni,session): retire pending-interaction into Wait (#561)\n\n* test(openomni,session): red-first pending-interaction freeze pins (#548)\n\nPins ahead of the #548 cutover (pending-interaction retires into Wait):\n\n- regression pin (green now, green after): an inbound reply correlating to\n  an adapter-seeded legacy pending-interaction row still routes via the\n  upcast read path, and upcast-on-read is deterministic and write-free;\n- red pins: every PendingInteractionStore write method throws the typed\n  Communication.PendingInteraction.FrozenError and persists/publishes\n  nothing (store + conformance surfaces); a new interaction lives in the\n  durable wait table only, with zero pending_interaction rows; boot\n  recovery records a frozen-store no-op receipt instead of the expiry\n  sweep; the archive manifest enumerates the frozen pending_interaction\n  table with a deterministic range hash.\n\nThe protocol FrozenError/WriteMethod vocabulary lands here (inert schema,\npending-ask precedent #510 D2a) so the pins compile; the store freeze and\nconsumer cutover follow. 5 pins red by design at this commit.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni,session): retire pending-interaction into Wait (#548)\n\nCommunication.PendingInteraction stops being a live store.\n\n- PendingInteractionStore write surface (create/resolve/markFollowUp/\n  cancel/cleanupExpired) throws the typed FrozenError and persists\n  nothing (pending-ask precedent, #510 D2a); get/findByCorrelation keep\n  serving historical rows, with expiry enforced at read time by the\n  existing follow-up-window filter instead of by mutation.\n- Dispatch cutover: markRoutedPendingInteraction (the resolve/\n  markFollowUp writer behind routed matches) is deleted - routing a\n  frozen legacy row is read-only via the #215 upcast correlation lookup;\n  the routed command is the only trace a match leaves. Correlation,\n  sender matching, and the pinned revalidation reads are unchanged.\n- requestedPendingInteractionAction moves to wait/requested-action.ts as\n  requestedWaitAction (Wait.AllowedAction is the one vocabulary),\n  removing the ingress/routing-runtime -> dispatch/\n  pending-interaction-routing reverse import; routing-runtime now types\n  the legacy record straight from protocol.\n- Server recovery replaces the cleanupExpired boot sweep with a frozen-\n  store no-op receipt (Operational.Info); #217 boot-restoration\n  semantics untouched.\n- The archive manifest enumerates the frozen pending_interaction table.\n\nPin flips (documented behavior change, frozen rows never transition):\npost-route status assertions flip resolved->open in kernel-routing-waits\nand runtime-pending-interaction-routing tests; the recovery boot-expiry\ntest is replaced by the frozen no-op receipt pin (coordinator accounting\nkeeps its own pin); tests seed legacy rows at the adapter layer, exactly\nas pre-freeze rows persist on disk. All #548 red pins are green here\nexcept the resolveRoute fallthrough change (next commit).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): drop pending_interaction routing fallthrough (#548)\n\nBehavior change, pinned: resolveRoute's wait_correlation stage kept one\ndeliberate non-fail-closed path — a matched legacy pending-interaction\nrow whose requested action was disallowed fell through to surface\nrouting (channel_ceiling and beyond). With the legacy store frozen\n(previous commit) that fallthrough is dead code: no live writer can mint\nrows that depend on it, and a frozen match must fail exactly like a\ndurable wait. A disallowed action on a matched pending_interaction\nbacking now blocks at the wait_correlation stage with the same typed\ndecision as the durable-wait backing, making wait correlation uniformly\nfail-closed for all backings.\n\nThe old fallthrough-permitting pin in kernel-routing-waits flips\naccordingly (channel_ceiling block with carried wait facts ->\nwait_correlation block); the flip is the documented proof of the\nbehavior change, not an accidental regression.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: reflect frozen pending-interaction store (#548)\n\nimplementation-status boot-restoration row and the two AGENTS.md\nPendingInteraction rows described the pre-#548 live store (boot\ncleanupExpired sweep, kernel-owned lifecycle transitions, durable\nregistry). Rewritten to the shipped state: writes frozen with the typed\nFrozenError, recovery emits a frozen-store no-op receipt, expiry is a\nread-time correlation filter, and lifecycle belongs to the durable Wait\nprimitive.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T00:28:36Z",
+          "tree_id": "a0d3e54bb63751b7e7e428f1e948231d5448fc65",
+          "url": "https://github.com/INONONO66/openomni/commit/54ddc3a1874e2a2602890ba336582be2ae50d6c0"
+        },
+        "date": 1786321785176,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5953,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2972,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2425,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1425,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 739,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20581,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2332,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102065,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516020,
             "unit": "ns/op"
           }
         ]
