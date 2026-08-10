@@ -373,6 +373,107 @@ describe("server recovery", () => {
     ).toBe(true);
   });
 
+  it("replays interrupted inbound messages through the retry queue handler", async () => {
+    const session = Session.create({
+      title: "surface:retry-queue",
+      model: { providerID: "test", modelID: "test" },
+    });
+    Session.addMessage(
+      session.id,
+      {
+        id: "msg-retry-1",
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "server-test",
+        model: { providerID: "test", modelID: "test" },
+      },
+      { status: "processing" },
+    );
+    Session.addPart("msg-retry-1", {
+      id: "part-retry-1",
+      sessionID: session.id,
+      messageID: "msg-retry-1",
+      type: "text",
+      text: "please finish this",
+    });
+
+    const handled: Array<{ id: string; text: string; surfaceKey: string }> = [];
+    await runRecovery({
+      handler: async (message) => {
+        handled.push({ id: message.id, text: message.text, surfaceKey: message.surfaceKey });
+      },
+      traceId: "trace-retry-queue",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [],
+        }),
+      },
+    });
+
+    expect(handled).toEqual([
+      { id: "msg-retry-1", text: "please finish this", surfaceKey: "surface:retry-queue" },
+    ]);
+  });
+
+  it("swallows a throwing retry handler and finishes recovery", async () => {
+    const session = Session.create({
+      title: "surface:retry-throw",
+      model: { providerID: "test", modelID: "test" },
+    });
+    Session.addMessage(
+      session.id,
+      {
+        id: "msg-retry-throw",
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "server-test",
+        model: { providerID: "test", modelID: "test" },
+      },
+      { status: "processing" },
+    );
+    Session.addPart("msg-retry-throw", {
+      id: "part-retry-throw",
+      sessionID: session.id,
+      messageID: "msg-retry-throw",
+      type: "text",
+      text: "explode",
+    });
+
+    const events: string[] = [];
+    const errors: string[] = [];
+    Bus.observe((event, payload) => {
+      events.push(event.name);
+      if (event.name === "operational.error") {
+        errors.push(String((payload as { msg?: unknown }).msg));
+      }
+    });
+
+    await expect(
+      runRecovery({
+        handler: async () => {
+          throw new Error("surface unavailable");
+        },
+        traceId: "trace-retry-throw",
+        completionRuntime: {
+          recoverRecordedWorkItemCompletions: async () => ({
+            recovered: 0,
+            skipped: 0,
+            failures: [],
+          }),
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(errors.some((msg) => msg.includes("recovery retry failed for msg-retry-throw"))).toBe(
+      true,
+    );
+    expect(events).toContain("operational.recovery.completed");
+  });
+
   // The pre-#548 boot expiry sweep test lived here; the frozen-store no-op
   // receipt pin above replaces it. Coordinator accounting keeps its own pin:
   it("reports coordinator-recovered sessions in the completion event", async () => {

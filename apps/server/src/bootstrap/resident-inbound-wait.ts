@@ -31,10 +31,12 @@ export function createResidentInboundWaitHandler(
 
     // #510 D2b — the run view is the WorkItem attempt projection (frozen
     // legacy worker_run_state rows upcast to terminal views, which the
-    // acquire below rejects as no longer active).
+    // acquire below rejects as no longer active). A missing runId, an
+    // unknown run, and a run without a parent Resident session are ONE
+    // rejection: no runId means no run means no parent.
     const run = runId ? WorkItemAttemptRun.find(sessionId, runId) : undefined;
     const mainSessionId = run?.parentSessionId;
-    if (!mainSessionId) {
+    if (!runId || !mainSessionId) {
       return {
         requestId,
         accepted: false,
@@ -42,9 +44,6 @@ export function createResidentInboundWaitHandler(
       };
     }
 
-    if (!runId || !run) {
-      return { requestId, accepted: false, error: "worker.inbound_wait requires runId" };
-    }
     // Acquire the wait: ONE serialized head CAS on the work stream (the
     // waiting_input blocker fact). A run that is terminal, already waiting,
     // or transitioned concurrently loses the acquire.

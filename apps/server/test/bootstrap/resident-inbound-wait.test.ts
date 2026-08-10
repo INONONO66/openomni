@@ -328,6 +328,71 @@ describe("resident inbound wait kernel dispatch", () => {
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects a run without a parent Resident session and a missing runId alike", async () => {
+    const run = await createActiveRun("run-parentless");
+    // A run whose WorkItem carries no originSessionId has no Resident to ask.
+    const orphan = await WorkItemStore.create({
+      name: "orphan run",
+      sourceMessageId: "seed:run-orphan",
+      sourceChannel: "ingress",
+      intent: "worker.dispatch",
+      goal: "ask nobody",
+      sessionId: run.workerSessionId,
+      workSessionId: run.workerSessionId,
+      workerRunId: "run-orphan",
+      executorKind: "internal_chat_agent",
+      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+    });
+    await WorkItemStore.start(orphan.hash);
+    const submit = mock(
+      async (): Promise<Dispatch.Result> => ({ dispatchId: "never", status: "completed" }),
+    );
+    const handler = createHandler(submit);
+
+    const orphaned = await handler({ ...waitParams(run), runId: "run-orphan" });
+    expect(orphaned).toMatchObject({
+      accepted: false,
+      error: "worker.inbound_wait requires a worker run with parent Resident session: run-orphan",
+    });
+
+    const { runId: _omitted, ...paramsWithoutRunId } = waitParams(run);
+    const missingRunId = await handler(paramsWithoutRunId);
+    expect(missingRunId).toMatchObject({
+      accepted: false,
+      error: "worker.inbound_wait requires a worker run with parent Resident session: unknown",
+    });
+    expect(submit).toHaveBeenCalledTimes(0);
+    // Neither rejection touched the healthy run.
+    expect(currentStatus(run)).toBe("running");
+    expect(waitBlockers(run)).toHaveLength(0);
+  });
+
+  it("normalizes resident.ask outputs: nested envelope unwraps, non-string falls to empty", async () => {
+    const nestedRun = await createActiveRun("run-nested-output");
+    const nested = await createHandler(
+      mock(
+        async (): Promise<Dispatch.Result> => ({
+          dispatchId: "resident-ask-nested",
+          status: "completed",
+          output: { output: "nested answer" },
+        }),
+      ),
+    )(waitParams(nestedRun));
+    expect(nested).toMatchObject({ accepted: true, output: "nested answer" });
+
+    const numericRun = await createActiveRun("run-numeric-output");
+    const numeric = await createHandler(
+      mock(
+        async (): Promise<Dispatch.Result> => ({
+          dispatchId: "resident-ask-numeric",
+          status: "completed",
+          output: 42 as unknown as string,
+        }),
+      ),
+    )(waitParams(numericRun));
+    expect(numeric).toMatchObject({ accepted: true, output: "" });
+  });
+
   it("rejects an already-aborted wait without dispatching or changing run state", async () => {
     // Given
     const run = await createActiveRun("run-aborted");
