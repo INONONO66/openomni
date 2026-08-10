@@ -1,7 +1,7 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
 import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
 import { Bus, PendingInteractionStore, Storage, TraceContext } from "@openomni/session";
-import { requestedWaitAction } from "../wait/index.js";
+import { requestedWaitAction, type RequestedWaitAction } from "../wait/index.js";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
 import { routePendingInteraction } from "./pending-interaction-routing.js";
 import { createDefaultDispatchPolicy, type DispatchPolicyContext } from "./policy.js";
@@ -124,7 +124,7 @@ type PinnedInteractionValidation =
 
 function revalidatePinnedInteraction(
   pinned: PendingInteractionStore.Record,
-  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+  requestedAction: RequestedWaitAction,
   now = Date.now(),
 ): PinnedInteractionValidation {
   const current = PendingInteractionStore.get(pinned.id);
@@ -155,7 +155,10 @@ function revalidatePinnedInteraction(
   if (current.workerRunId !== pinned.workerRunId) {
     return { reason: "dispatch.pending_interaction.run_mismatch" };
   }
-  if (!current.allowedActions.includes(requestedAction)) {
+  // The "invalid" sentinel (explicit but unparseable action) is a member of
+  // no allowedActions list — it denies exactly like any other disallowed
+  // action instead of coercing to the report_result default.
+  if (requestedAction === "invalid" || !current.allowedActions.includes(requestedAction)) {
     return { reason: "dispatch.pending_interaction.action.denied" };
   }
   return { record: current };

@@ -24,6 +24,7 @@ import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { IngressRoutingError } from "../../src/ingress/routing-execution";
 import { createExistingAgentMessaging } from "../../src/messaging/index";
 import { WaitService } from "../../src/wait/index";
+import { seedPendingInteraction } from "../helpers/pending-interaction";
 import {
   kernelEngine,
   makeKernelRoutingEngine,
@@ -94,25 +95,18 @@ async function seedFrozenPending(
   await WorkerRun.updateStatus(session.id, runId, "starting");
   await WorkerRun.updateStatus(session.id, runId, "running");
   await WorkerRun.updateStatus(session.id, runId, "waiting_input");
-  const adapter = Storage.getAdapter().pendingInteraction;
-  if (!adapter) throw new Error("pendingInteraction adapter missing");
-  adapter.create(
-    Communication.PendingInteraction.Record.parse({
-      id,
-      workerRunId: runId,
-      sessionId: session.id,
-      endpointId: correlation.endpointId,
-      channelId: correlation.channelId,
-      correlation: { tokenHash: correlation.tokenHash },
-      allowedActions,
-      targetActorId,
-      status: "open",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      expiresAt: Number.MAX_SAFE_INTEGER,
-      followUpWindow: 60_000,
-    }),
-  );
+  seedPendingInteraction({
+    id,
+    workerRunId: runId,
+    sessionId: session.id,
+    endpointId: correlation.endpointId,
+    channelId: correlation.channelId,
+    correlation: { tokenHash: correlation.tokenHash },
+    allowedActions,
+    targetActorId,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    followUpWindow: 60_000,
+  });
   return session.id;
 }
 
@@ -239,8 +233,10 @@ describe("IngressEngine wait routing", () => {
     });
     expect(routed).toHaveLength(1);
     expect(result.sessionId).toBe(sessionId);
-    // The frozen row stays readable; routing never depends on mutating it.
-    expect(PendingInteractionStore.get("pi-frozen-legacy")).toBeDefined();
+    // The frozen row stays readable AND untransitioned (#548 read-only pin):
+    // routing never depends on mutating it, so the row remains exactly as
+    // persisted — still open, not resolved.
+    expect(PendingInteractionStore.get("pi-frozen-legacy")?.status).toBe("open");
   });
 
   test("normalizes a plain-text worker reply for the default worker.complete handler", async () => {
@@ -314,6 +310,49 @@ describe("IngressEngine wait routing", () => {
     });
     expect(calls).toBe(0);
     expect(PendingInteractionStore.get("pi-denied-action")?.status).toBe("open");
+  });
+
+  test("blocks an explicitly invalid action on a matched frozen legacy row instead of coercing to report_result", async () => {
+    // Fail-closed hardening over the ported legacy default: a PRESENT but
+    // invalid `action` is the typed "invalid" sentinel, disallowed by every
+    // allowedActions gate — it must never coerce to report_result and route
+    // with matched worker context.
+    await seedFrozenPending("pi-invalid-action", "run-invalid-action", ["report_result"]);
+    const runtime = new DispatchRuntime();
+    let calls = 0;
+    runtime.register("worker.complete", () => {
+      calls += 1;
+      return { output: "must not execute" };
+    });
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(
+        kernelEngine().ingest(
+          replyEvent("inbound-invalid-action", { action: "unknown", output: "SN-A2334" }),
+        ),
+      );
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait does not allow the requested action");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "block",
+      factsUsed: [
+        "wait:pending_interaction:pi-invalid-action",
+        "wait.action:invalid",
+        "wait.action:disallowed",
+      ],
+    });
+    expect(calls).toBe(0);
+    expect(PendingInteractionStore.get("pi-invalid-action")?.status).toBe("open");
   });
 
   test("routes an allowed connector clarification through resident.ask", async () => {
@@ -1140,6 +1179,43 @@ describe("IngressEngine durable wait routing", () => {
     // No surface routing happened: the resident runtime never executed.
     expect(residentExecutions).toEqual([]);
     const record = WaitStore.get("wait-disallowed-action");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(0);
+  });
+
+  test("blocks an explicitly invalid action on a matched durable wait instead of coercing to report_result", async () => {
+    // Red-first proof of the fail-closed hardening: pre-fix, {action:"unknown"}
+    // coerced to the report_result default and ROUTED to the owner session of a
+    // wait allowing report_result. It must block at wait_correlation with the
+    // same typed decision as any other disallowed action.
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-invalid-action");
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(
+        kernelEngine().ingest(
+          replyEvent("inbound-wait-invalid-action", { action: "unknown", output: "SN-A2334" }),
+        ),
+      );
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait does not allow the requested action");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "block",
+      factsUsed: ["wait:wait:wait-invalid-action", "wait.action:invalid", "wait.action:disallowed"],
+    });
+    // No routing happened: the resident runtime never executed and the wait
+    // recorded no reply.
+    expect(residentExecutions).toEqual([]);
+    const record = WaitStore.get("wait-invalid-action");
     expect(record).toMatchObject({ status: "open" });
     expect(record?.replies).toHaveLength(0);
   });

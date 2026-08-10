@@ -2,11 +2,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { PolicyDecision, Dispatch as DispatchProtocol } from "@openomni/protocol";
 import { PendingInteractionStore, Storage } from "@openomni/session";
 import { DispatchRuntime, submitPinnedPendingInteraction } from "../../src/dispatch/runtime";
-import {
-  createWorkerRunFixture,
-  resetDispatchTestState,
-  seedPendingInteraction,
-} from "./runtime-test-fixtures";
+import { seedPendingInteraction } from "../helpers/pending-interaction";
+import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
@@ -248,6 +245,51 @@ describe("DispatchRuntime", () => {
     expect(routedCommand?.actor.trustTier).toBe("assigned_worker");
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-dispatch-clarification")?.status).toBe("open");
+  });
+
+  test("denies an explicitly invalid action instead of coercing it to report_result", async () => {
+    // The "invalid" sentinel is disallowed by every gate: the pinned
+    // revalidation refuses it exactly like any other disallowed action, so
+    // the command stays unrouted and the default dispatch authority denies
+    // it fail-closed before routing can attach worker context.
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-invalid-action");
+    const pinned = seedPendingInteraction({
+      id: "pi-dispatch-invalid-action",
+      workerRunId: "run-pi-invalid-action",
+      sessionId: session.id,
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "message-out-invalid" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("worker.complete", () => {
+      called = true;
+      return { output: "must not execute" };
+    });
+
+    const result = await submitPinnedPendingInteraction(
+      runtime,
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: { action: "unknown", output: "SN-A2334" },
+      },
+      pinned,
+      {
+        actorKind: "resident",
+        actorId: "resident:main",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.pending_interaction.required");
+    expect(called).toBe(false);
+    expect(PendingInteractionStore.get(pinned.id)?.status).toBe("open");
   });
 
   test("denies unmatched actor.message from unknown actors", async () => {

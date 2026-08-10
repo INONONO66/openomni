@@ -7,4 +7,4 @@ export {
   targetsOfWait,
 } from "./matcher.js";
 export { WaitService } from "./lifecycle.js";
-export { requestedWaitAction } from "./requested-action.js";
+export { requestedWaitAction, type RequestedWaitAction } from "./requested-action.js";

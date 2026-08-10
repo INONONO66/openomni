@@ -1,8 +1,4 @@
-import {
-  Communication,
-  PolicyDecision,
-  type Dispatch as DispatchProtocol,
-} from "@openomni/protocol";
+import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import type { DispatchPolicyRegistration } from "../../src/dispatch/policy";
 
@@ -21,24 +17,6 @@ export async function createWorkerRunFixture(runId = "run-1", sessionTitle = `${
   });
   await WorkerRun.create(session.id, { runId, title: runId, prompt: "test" });
   return session;
-}
-
-// PendingInteractionStore writes are frozen (#548) — historical rows are
-// seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
-export function seedPendingInteraction(
-  input: Omit<Communication.PendingInteraction.Record, "status" | "createdAt" | "updatedAt"> &
-    Partial<Pick<Communication.PendingInteraction.Record, "status" | "createdAt" | "updatedAt">>,
-): Communication.PendingInteraction.Record {
-  const adapter = Storage.getAdapter().pendingInteraction;
-  if (!adapter) throw new Error("pendingInteraction adapter missing");
-  const record = Communication.PendingInteraction.Record.parse({
-    status: "open",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...input,
-  });
-  adapter.create(record);
-  return record;
 }
 
 export function input(action = "resident.ask"): DispatchProtocol.Input {
