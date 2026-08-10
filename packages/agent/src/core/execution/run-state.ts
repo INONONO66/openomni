@@ -34,6 +34,13 @@ export interface RunState {
 export interface TurnArtifacts {
   readonly runInput: RunInput;
   readonly trackingSink: Sink;
+  /**
+   * The turn's assistant message as projected by the llm fold (#557): the
+   * latest boundary snapshot, immutable, with all parts (tool + reasoning
+   * included). This is the single source of truth for what enters history
+   * at turn end (#546).
+   */
+  readonly turnAssistant: { message?: Message.WithParts };
   readonly turnUsage: TokenUsage;
   readonly turnToolCalls: Array<{
     toolCallId: string;

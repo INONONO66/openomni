@@ -176,7 +176,15 @@ export async function buildTurn(
   };
   const turnToolCalls: TurnArtifacts["turnToolCalls"] = [];
   const turnToolResults: TurnArtifacts["turnToolResults"] = [];
-  const trackingSink = createTrackingSink(state, sink, turnUsage, turnToolCalls, turnToolResults);
+  const turnAssistant: TurnArtifacts["turnAssistant"] = {};
+  const trackingSink = createTrackingSink(
+    state,
+    sink,
+    turnUsage,
+    turnToolCalls,
+    turnToolResults,
+    turnAssistant,
+  );
 
   return {
     type: "ready",
@@ -201,6 +209,7 @@ export async function buildTurn(
         },
       },
       trackingSink,
+      turnAssistant,
       turnUsage,
       turnToolCalls,
       turnToolResults,
@@ -215,6 +224,7 @@ function createTrackingSink(
   turnUsage: TokenUsage,
   turnToolCalls: TurnArtifacts["turnToolCalls"],
   turnToolResults: TurnArtifacts["turnToolResults"],
+  turnAssistant: TurnArtifacts["turnAssistant"],
 ): Sink {
   let prevInputTokens = 0;
   let prevOutputTokens = 0;
@@ -222,6 +232,13 @@ function createTrackingSink(
   return {
     onMessage: (message: Message.WithParts) => {
       if (message.info.role === "assistant") {
+        // Boundary snapshots are immutable fold states (#557); the latest one
+        // IS the turn's assistant message — full parts, tool use included.
+        // Holding it (instead of re-extracting text) keeps one source of
+        // truth for what enters history at turn end (#546).
+        turnAssistant.message = message;
+        // Tokens arrive once, stamped by message.finished; intermediate
+        // boundary snapshots carry zeros, so this delta fires once per attempt.
         const tokens = message.info.tokens;
         const deltaInput = tokens.input - prevInputTokens;
         const deltaOutput = tokens.output - prevOutputTokens;
