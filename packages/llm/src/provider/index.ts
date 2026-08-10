@@ -78,7 +78,6 @@ export namespace Provider {
     options: z.record(z.string(), z.unknown()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     release_date: z.string().optional(),
-    variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   });
   export type Model = z.infer<typeof Model>;
 
@@ -145,7 +144,6 @@ export namespace Provider {
         interleaved: model.interleaved ?? false,
       },
       release_date: model.release_date ?? "",
-      variants: model.variants ?? {},
     };
   }
 
