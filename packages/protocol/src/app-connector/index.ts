@@ -1,5 +1,6 @@
+import * as Schema from "./definition.js";
 import { Events as EventDescriptors } from "./events.js";
-import * as Schema from "./schemas.js";
+import * as InstallationSchema from "./installation.js";
 
 export namespace AppConnector {
   export const EvidenceEmitter = Schema.EvidenceEmitter;
@@ -47,20 +48,20 @@ export namespace AppConnector {
   export const Definition = Schema.Definition;
   export type Definition = Schema.Definition;
 
-  export const InstallationStatus = Schema.InstallationStatus;
-  export type InstallationStatus = Schema.InstallationStatus;
+  export const InstallationStatus = InstallationSchema.InstallationStatus;
+  export type InstallationStatus = InstallationSchema.InstallationStatus;
 
-  export const Consent = Schema.Consent;
-  export type Consent = Schema.Consent;
+  export const Consent = InstallationSchema.Consent;
+  export type Consent = InstallationSchema.Consent;
 
-  export const WorkspaceIdentity = Schema.WorkspaceIdentity;
-  export type WorkspaceIdentity = Schema.WorkspaceIdentity;
+  export const WorkspaceIdentity = InstallationSchema.WorkspaceIdentity;
+  export type WorkspaceIdentity = InstallationSchema.WorkspaceIdentity;
 
-  export const Installation = Schema.Installation;
-  export type Installation = Schema.Installation;
+  export const Installation = InstallationSchema.Installation;
+  export type Installation = InstallationSchema.Installation;
 
-  export const VerificationFailureReason = Schema.VerificationFailureReason;
-  export type VerificationFailureReason = Schema.VerificationFailureReason;
+  export const VerificationFailureReason = InstallationSchema.VerificationFailureReason;
+  export type VerificationFailureReason = InstallationSchema.VerificationFailureReason;
 
   export const Events = EventDescriptors;
 }

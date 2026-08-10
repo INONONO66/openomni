@@ -1,13 +1,12 @@
-import type { z } from "zod";
+import { z } from "zod";
 import { PolicyDecisionHelpers } from "./decision.js";
 import { PolicyDefinition } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
 import { PolicyPermission } from "./permission.js";
-import { PolicyPlanModule } from "./plan.js";
 import { PolicyPointModule } from "./policy-point.js";
 
 export { RuntimeResource } from "./resource.js";
-export { policyKernelVersion } from "./version.js";
+export { policyKernelVersion } from "./definition.js";
 
 export namespace Policy {
   export const Label = PolicyPermission.Label;
@@ -52,7 +51,17 @@ export namespace Policy {
   export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint> &
     Pick<typeof PolicyPointModule.PolicyPoint, "MigrationMapping">;
   export type PolicyPointInputMap = PolicyPointModule.PolicyPointInputMap;
-  export const PolicyPlan = PolicyPlanModule.PolicyPlan;
+  export const PolicyPlan = z.object({
+    policies: z.array(
+      z.object({
+        id: z.string().min(1),
+        required: z.boolean(),
+        config: z.record(z.string(), z.unknown()).optional(),
+      }),
+    ),
+    labels: z.array(z.string()),
+    registryVersion: z.string().optional(),
+  });
   export type PolicyPlan = z.infer<typeof PolicyPlan>;
 }
 
