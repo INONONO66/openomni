@@ -348,6 +348,14 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   private ensureSupervisor(slot: WorkerSlot): WorkerSupervisor {
     if (slot.supervisor?.isActive() === true) return slot.supervisor;
 
+    // A non-active supervisor still occupying the slot is one that crashed and
+    // is sitting in restart backoff with its restart timer armed. Replacing it
+    // without disposing first orphans that timer — it keeps re-spawning forever
+    // and double-spawns on the slot's single socket path. dispose() flips
+    // `stopping` (which neutralizes the pending restart) and kills any lingering
+    // process, so exactly one supervisor owns the slot after this point.
+    slot.supervisor?.dispose();
+
     slot.supervisor = new WorkerSupervisor({
       id: slot.id,
       script: this.workerScript,

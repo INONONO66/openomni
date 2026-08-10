@@ -76,6 +76,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
             toolCallSettlements.set(toolCallId, resolve);
           });
           toolRelayResult = await server.call("worker.tool_call", {
+            authToken: ipcAuthToken,
             runId: relayRunId,
             sessionId: "spoofed-session",
             callId: toolCallId,

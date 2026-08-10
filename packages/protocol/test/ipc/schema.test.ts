@@ -222,6 +222,20 @@ describe("Ipc.Methods param schemas", () => {
     ).toBe(true);
   });
 
+  test("worker.tool_call requires an auth token like other worker verbs", () => {
+    const base = {
+      runId: "run-1",
+      sessionId: "session-1",
+      callId: "call-1",
+      tool: "fs.read",
+      input: { path: "/tmp/x" },
+    };
+    expect(
+      Ipc.Methods["worker.tool_call"].params.safeParse({ authToken: "t", ...base }).success,
+    ).toBe(true);
+    expect(Ipc.Methods["worker.tool_call"].params.safeParse(base).success).toBe(false);
+  });
+
   test("worker.inbound_wait_cancel params valid", () => {
     expect(
       Ipc.Methods["worker.inbound_wait_cancel"].params.safeParse({

@@ -107,6 +107,7 @@ const methods = {
   },
   "worker.tool_call": {
     params: z.object({
+      authToken: z.string(),
       runId: z.string(),
       sessionId: z.string(),
       callId: z.string(),

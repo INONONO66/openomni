@@ -55,6 +55,7 @@ function makeProvider(
   const provider = createMcpProxyProvider({
     toolCatalog: entries,
     server,
+    ipcAuthToken: "test-ipc-token",
     runId: "run-1",
     sessionId: "session-1",
   });
@@ -99,6 +100,7 @@ describe("createMcpProxyProvider", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("worker.tool_call");
     expect(calls[0]?.params).toMatchObject({
+      authToken: "test-ipc-token",
       tool: "filesystem.read_file",
       input: { path: "/tmp/test.txt" },
       runId: "run-1",

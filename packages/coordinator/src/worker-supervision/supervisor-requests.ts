@@ -1,10 +1,11 @@
+import { Ipc } from "@openomni/protocol";
 import type {
   ActiveRequest,
   InboundWaitHandler,
   InboundWaitResult,
   ToolCallCancelParams,
   ToolCallHandler,
-  ToolCallParams,
+  ToolCallResult,
 } from "./supervisor-types.js";
 
 type RequestContext = {
@@ -81,7 +82,23 @@ function handleToolCall(
     respond(null);
     return;
   }
-  const p = params as ToolCallParams;
+  // Parse-don't-cast at the boundary (#QB1 BUG2): tool execution is the most
+  // dangerous worker verb, so a malformed frame must never throw across the
+  // handler (that TypeError crashed the coordinator). safeParse + a typed
+  // error frame keep the handler total.
+  const parsed = Ipc.Methods["worker.tool_call"].params.safeParse(params);
+  if (!parsed.success) {
+    respond(toolCallError(params, "invalid worker.tool_call params"));
+    return;
+  }
+  const p = parsed.data;
+  // Authenticate like every other worker→coordinator verb (see handleInboundWait
+  // and worker-bootstrap-handler): the env-injected token proves the request
+  // came from the worker this supervisor spawned.
+  if (p.authToken !== context.authToken) {
+    respond(toolCallError(p, "unauthorized worker request"));
+    return;
+  }
   const controller = new AbortController();
   const active: ActiveRequest = {
     runId: p.runId,
@@ -93,7 +110,17 @@ function handleToolCall(
   };
   context.activeToolCalls.set(p.callId, active);
   context
-    .toolCallHandler(p, { signal: controller.signal })
+    .toolCallHandler(
+      {
+        runId: p.runId,
+        sessionId: p.sessionId,
+        callId: p.callId,
+        tool: p.tool,
+        input: p.input,
+        ...(typeof p.workspaceRoot === "string" ? { workspaceRoot: p.workspaceRoot } : {}),
+      },
+      { signal: controller.signal },
+    )
     .then((result) => respondAndForget(context.activeToolCalls, p.callId, active, result))
     .catch((err) =>
       respondAndForget(context.activeToolCalls, p.callId, active, {
@@ -196,6 +223,15 @@ function handleInboundWait(
     .finally(() => {
       context.activeInboundWaitCalls.delete(callId);
     });
+}
+
+/** Typed rejection frame for a tool call — a Tool.Result the sender can parse. */
+function toolCallError(
+  source: Record<string, unknown> | undefined,
+  message: string,
+): ToolCallResult {
+  const callId = typeof source?.callId === "string" ? source.callId : "invalid";
+  return { id: callId, toolCallId: callId, output: message, isError: true, settlement: "unknown" };
 }
 
 function respondAndForget(

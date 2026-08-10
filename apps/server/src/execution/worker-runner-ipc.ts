@@ -96,11 +96,12 @@ export function createWorkerDispatchRuntime(options: {
 export function createMcpProxyProvider(options: {
   readonly toolCatalog: WorkerBootstrap.RuntimeToolCatalogEntry[];
   readonly server: WorkerRunIpcServer;
+  readonly ipcAuthToken: string;
   readonly runId: string;
   readonly sessionId: string;
   readonly workspaceRoot?: string;
 }): { listTools(): NativeTool[] } {
-  const { toolCatalog, server, runId, sessionId, workspaceRoot } = options;
+  const { toolCatalog, server, ipcAuthToken, runId, sessionId, workspaceRoot } = options;
   const callTool = async (
     toolName: string,
     toolArgs: Record<string, unknown>,
@@ -128,6 +129,7 @@ export function createMcpProxyProvider(options: {
           server.call(
             "worker.tool_call",
             {
+              authToken: ipcAuthToken,
               runId,
               sessionId,
               callId,

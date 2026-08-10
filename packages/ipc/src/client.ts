@@ -97,7 +97,22 @@ export function connectIpcClient(
             const respond = (result: unknown) => {
               socket.write(encode(Ipc.createResponse(request.data.id, result)));
             };
-            opts.onRequest(request.data.method, request.data.params, respond);
+            // A throwing handler must never escape the socket 'data' listener —
+            // that tears down the connection (and can crash the process). Turn
+            // it into a typed error response instead, mirroring the server side.
+            try {
+              opts.onRequest(request.data.method, request.data.params, respond);
+            } catch (err) {
+              socket.write(
+                encode(
+                  Ipc.createErrorResponse(
+                    request.data.id,
+                    1000,
+                    err instanceof Error ? err.message : String(err),
+                  ),
+                ),
+              );
+            }
           }
           continue;
         }
