@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786353926297,
+  "lastUpdate": 1786354200695,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40773,6 +40773,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524968,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de8579045918e5d23817b476e675060e654f3573",
+          "message": "refactor(coordinator): narrow public surface to driver shape (#553) (#576)\n\nC9: the package barrel now exports exactly the Execution.Driver-shaped\ndelivery core — createWorkerManager plus the six-method WorkerManager\ntype (deliver/cancel/send/stats/waitUntilReady/shutdown) and its\nparameter/result types (DeliverTask, WorkerManagerStats, port\nparam/result types InboundWait*/ToolCall*).\n\n- WorkerManagerConfig and WorkerPorts fold into factory-private config:\n  callers pass literals; slotWaitTimeoutMs/maxQueuedDeliveries remain\n  pool-internal knobs reachable only from the coordinator's own tests.\n- killWorker leaves the public WorkerManager type; the crash-recovery\n  test reaches the chaos hook via killWorkerForTest on the internal\n  worker-manager barrel (instanceof-guarded, no casts).\n- ToolCallCancelParams drops out of the re-export chain end to end.\n- worker-pool.ts stops re-exporting types, resolving the two\n  grandfathered DeliverTask dead-export entries (baseline 21 -> 19).\n- facade-removal test now pins the runtime export list to exactly\n  [\"createWorkerManager\"].\n\nConsumers re-mapped at head: apps/server worker-full-stack fake drops\nkillWorker; all other sites compile unchanged. No as-bridges, no\npass-through wrappers.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T09:28:52Z",
+          "tree_id": "c7f074df48c48e333dcce4f9d18dbc902a6e09ca",
+          "url": "https://github.com/INONONO66/openomni/commit/de8579045918e5d23817b476e675060e654f3573"
+        },
+        "date": 1786354199778,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 637,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5930,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10266,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8261,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 840,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 695,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2321,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10905,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103023,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514956,
             "unit": "ns/op"
           }
         ]
