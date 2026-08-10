@@ -1,6 +1,6 @@
 # packages/coordinator
 
-Multiprocess execution coordinator runtime. This package owns on-demand worker process lifecycle, IPC transport, primitive run delivery, and worker supervision used by OpenOmni/server execution (interrupted-run recovery lives server-side in `apps/server/src/execution/recovery.ts` since #477). Per the runtime substrate design (see `docs/architecture.md`; ADR-008 retired into it): workers spawn on demand and idle-shutdown; there is no fixed pool.
+Multiprocess execution coordinator runtime. This package owns on-demand worker process lifecycle, primitive run delivery, and worker supervision used by OpenOmni/server execution (the IPC transport itself is `@openomni/ipc` since #496) (interrupted-run recovery lives server-side in `apps/server/src/execution/recovery.ts` since #477). Per the runtime substrate design (see `docs/architecture.md`; ADR-008 retired into it): workers spawn on demand and idle-shutdown; there is no fixed pool.
 
 The coordinator is an executor, not the communication kernel. It must not decide actor authority, PendingInteraction/PendingAsk routing, channel/session targets, worker grants, or writeback policy. Those product semantics belong in `@openomni/openomni`.
 
@@ -9,14 +9,13 @@ The coordinator is an executor, not the communication kernel. It must not decide
 ```
 src/
 ├── index.ts              # Package barrel
-├── ipc/                  # Unix socket transport + framing + protocol errors
 ├── worker-manager/       # ⭐ LIVE: worker pool — spawn on demand, slots, idle shutdown
-└── worker-supervision/   # Worker supervisor internals
+└── worker-supervision/   # Worker supervisor internals (IPC client side via @openomni/ipc)
 ```
 
 ## DEPENDENCIES
 
-Depends on `@openomni/protocol` **only** — a ring-2 process driver (#462). Every environment edge (ledger event sink, tool relay, inbound-wait bridge) is injected as a `WorkerPorts` object by the composition root (`apps/server/src/bootstrap`); the CI dep ratchet (`script/check-deps.ts`) enforces protocol-only. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/session`, `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
+Depends on `@openomni/protocol` and `@openomni/ipc` **only** — a ring-2 process driver (#462; IPC transport extracted in #496). Every environment edge (ledger event sink, tool relay, inbound-wait bridge) is injected as a `WorkerPorts` object by the composition root (`apps/server/src/bootstrap`); the CI dep ratchet (`script/check-deps.ts`) enforces protocol+ipc-only. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/session`, `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
 
 ## MODULES
 
@@ -24,7 +23,7 @@ Depends on `@openomni/protocol` **only** — a ring-2 process driver (#462). Eve
 |--------|---------|
 | `worker-manager/worker-pool.ts` | **Primary API.** One pool module (#462 step 4: the former manager/slot-coordinator split is merged; the class is not exported). `createWorkerManager(config, ports)`: one verb — `deliver(runId, task)` (plus `cancel`/`send`/`stats`), typed `WorkerDeliveryError` rejections, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts. Emits `WorkerDriver` lifecycle events (`worker.spawned/ready/exited/restarted`, `run.delivered/settled`, `worker.queue_saturated`) through the injected events sink; wall-time is driver physics — ceiling = budget + margin (unlimited/absent budgets get the 600s backstop), breach = SIGKILL + `wall_time_exceeded` (#462 step 5) |
 | `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop. Constructed from a `WorkerSupervisorOptions` object; the worker RPCs (`deliver`/`cancel`/`send`) live here (#462 step 4) |
-| `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
+| (`@openomni/ipc`) | Request/response framing, bidirectional client/server transport, protocol errors — standalone package since #496, consumed here by `worker-supervision/` |
 
 
 ## WORKER LIFECYCLE (worker-manager)
@@ -49,11 +48,11 @@ Observability is ledger events, not push maps (#462 §4): the supervisor publish
 
 `apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager(config, ports)` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; ports: `events` = `Bus.publish`, `toolRelay`, `inboundWait`) and owns delivery, cancellation, message send, stats, and recovery wiring (recovery itself lives server-side in `apps/server/src/execution/recovery.ts`).
 
-Barrel exports (`src/index.ts`): `createWorkerManager` (live; the pool class itself is not exported), `createIpcServer`, plus types. `worker-supervision/` is internal — not exported from the root barrel.
+Barrel exports (`src/index.ts`): `createWorkerManager` (live; the pool class itself is not exported), plus types. `createIpcServer` moved to `@openomni/ipc` (#496) — the coordinator re-exports no IPC surface. `worker-supervision/` is internal — not exported from the root barrel.
 
 ## TESTS
 
-Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` delivery/crash behavior, `worker-supervision/` supervisor contracts, barrel contracts, recovery, and harness smoke coverage.
+Tests are split by module: inline supervisor tests live beside source (IPC transport tests moved to `packages/ipc/test/` in #496), while `test/` covers `worker-manager/` delivery/crash behavior, `worker-supervision/` supervisor contracts, barrel contracts, recovery, and harness smoke coverage.
 
 ## ANTI-PATTERNS
 

@@ -177,7 +177,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
               );
             } catch (error) {
               console.warn(
-                "coordinator IPC notification handler failed:",
+                "IPC notification handler failed:",
                 error instanceof Error ? error.message : String(error),
               );
             }
@@ -238,9 +238,9 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
 
 // merged from codec.ts (#453 hygiene: sub-30-LOC single-importer)
 
-export type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
+type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
 
-export function decodeMessage(raw: unknown): IpcMessage {
+function decodeMessage(raw: unknown): IpcMessage {
   const req = Ipc.Request.safeParse(raw);
   if (req.success) return req.data;
 

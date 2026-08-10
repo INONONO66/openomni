@@ -7,8 +7,7 @@ import {
   WorkerDriver,
   type WorkerBootstrap,
 } from "@openomni/protocol";
-import { connectIpcClient, type IpcClient } from "../ipc/client";
-import { IpcTimeoutError } from "../ipc/errors";
+import { connectIpcClient, type IpcClient, IpcTimeoutError } from "@openomni/ipc";
 import {
   buildWorkerEnv,
   isBootstrapAccepted,

@@ -1,4 +1,3 @@
-export { createIpcServer } from "./ipc";
 export { createWorkerManager } from "./worker-manager";
 export type {
   InboundWaitParams,

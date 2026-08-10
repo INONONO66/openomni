@@ -11,6 +11,7 @@
   "dependencies": {
     "@openomni/agent": "workspace:*",
     "@openomni/coordinator": "workspace:*",
+    "@openomni/ipc": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/openomni": "workspace:*",
     "@openomni/policy": "workspace:*",

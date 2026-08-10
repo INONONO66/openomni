@@ -10,9 +10,14 @@
     "pct": 92.95
   },
   "packages/coordinator": {
-    "linesFound": 1374,
-    "linesHit": 1089,
-    "pct": 79.26
+    "linesFound": 1045,
+    "linesHit": 836,
+    "pct": 80
+  },
+  "packages/ipc": {
+    "linesFound": 330,
+    "linesHit": 270,
+    "pct": 81.82
   },
   "packages/llm": {
     "linesFound": 1813,

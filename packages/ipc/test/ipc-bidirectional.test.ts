@@ -1,8 +1,8 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import os from "node:os";
 import path from "node:path";
-import { connectIpcClient } from "./client";
-import { createIpcServer } from "./server";
+import { connectIpcClient } from "../src/client";
+import { createIpcServer } from "../src/server";
 
 function tmpSocketPath(label: string): string {
   return path.join(os.tmpdir(), `omo-ipc-bidir-${label}-${process.pid}.sock`);

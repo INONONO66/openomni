@@ -1,4 +1,4 @@
-import { createIpcServer } from "../../src/ipc";
+import { createIpcServer } from "@openomni/ipc";
 
 function readCliArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
