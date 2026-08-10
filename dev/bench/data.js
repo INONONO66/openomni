@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786324287217,
+  "lastUpdate": 1786324819437,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39657,6 +39657,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 515157,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7cc004176b472f5b1a5de65a030eb74b129774c",
+          "message": "fix(ci): resolve workspace packages in pristine dist build (#567)\n\n@openomni/protocol is the only workspace package whose package.json\npoints at tsc output (dist/index.js), so Bun.build in build-dist.ts\ncould not resolve it in a pristine checkout — the merged smoke-dist job\n(#566) installs frozen and builds immediately, while dev machines had a\npreviously built packages/protocol/dist masking the failure. Bundle\nprotocol from src via an onResolve plugin, like every other workspace\npackage, making build:dist self-contained for CI, prepack, and release.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T01:19:04Z",
+          "tree_id": "53fd3f0fbe97bbbf423451a860b4cad568360aa4",
+          "url": "https://github.com/INONONO66/openomni/commit/e7cc004176b472f5b1a5de65a030eb74b129774c"
+        },
+        "date": 1786324819071,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 650,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5918,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9494,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2943,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2429,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15357,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8063,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 834,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 699,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1375,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20513,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2294,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10924,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101961,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517769,
             "unit": "ns/op"
           }
         ]
