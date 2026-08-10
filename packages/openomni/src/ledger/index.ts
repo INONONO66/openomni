@@ -14,7 +14,6 @@ import { createStakesWindow } from "./stakes-hash.js";
 import { computeStakes, serializeStakes, StakesComputationError } from "./stakes-compute.js";
 import { createStakesBroker, StakesBrokerError } from "./stakes-seams.js";
 import { assessStakesCriterion } from "./stakes-assessment.js";
-import { runStakesDriver } from "./stakes-driver.js";
 
 export const Stakes = Object.freeze({
   Action: StakesAction,
@@ -64,6 +63,3 @@ export type {
   VoiceAuthorizationSnapshot,
 } from "./stakes-seams.js";
 export type { StakesCriterionAssessment } from "./stakes-assessment.js";
-export { runStakesDriver };
-export type { StakesDriverExecution } from "./stakes-driver.js";
-export type { StakesDriverScenario } from "./stakes-driver-scenarios.js";

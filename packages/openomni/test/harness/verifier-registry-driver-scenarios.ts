@@ -1,11 +1,11 @@
 import { Tool } from "@openomni/protocol";
-import { canonicalJson } from "./verifier-conformance.js";
+import { canonicalJson } from "../../src/evidence/verifier-conformance.js";
 import type {
   VerifierRegistryDriverScenario,
   VerifierRegistryScenarioObservation,
   VerifierRegistryScenarioReceipt,
 } from "./verifier-registry-driver-contract.js";
-import { VerifierRegistry } from "./verifier-registry.js";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 
 const nativeCall = Object.freeze({
   id: "call-native-467",

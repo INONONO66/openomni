@@ -1,6 +1,6 @@
 import { Tool } from "@openomni/protocol";
 import { z } from "zod";
-import { VerifierRegistry } from "./verifier-registry.js";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 
 export const VerifierRegistryDriverScenarios = [
   "valid-native-round-trip",

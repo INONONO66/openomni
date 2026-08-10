@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
-import * as OpenOmni from "../../src/index.js";
+import { runCompletionAdmissionDriver } from "../harness/completion-admission-driver.js";
 import {
   completionAdmissionScenarioReceipt,
   runAllOriginsCompletionAdmissionScenario,
-} from "../../src/work-item/completion-admission-driver-scenarios.js";
+} from "../harness/completion-admission-driver-scenarios.js";
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const SCENARIOS = [
@@ -22,14 +22,11 @@ type DriverExecution = Readonly<{ exitCode: 0 | 1; stdout: string }>;
 type Driver = (args: readonly string[]) => Promise<DriverExecution>;
 
 function publicDriver(): Driver {
-  const rootDriver = Reflect.get(OpenOmni, "runCompletionAdmissionDriver");
-  const domainDriver = Reflect.get(WorkItemPublic, "runCompletionAdmissionDriver");
-  expect(rootDriver, "package root must export runCompletionAdmissionDriver").toBeFunction();
-  expect(domainDriver, "work-item barrel must export runCompletionAdmissionDriver").toBe(
-    rootDriver,
-  );
-  if (typeof rootDriver !== "function") throw new Error("missing completion admission driver");
-  return rootDriver as Driver;
+  expect(
+    runCompletionAdmissionDriver,
+    "harness must export runCompletionAdmissionDriver",
+  ).toBeFunction();
+  return runCompletionAdmissionDriver as Driver;
 }
 
 async function scenarioReceipt(scenario: Scenario): Promise<Record<string, unknown>> {
@@ -297,8 +294,7 @@ describe("WorkItem completion admission driver", () => {
   });
 
   test("supports direct execution for help, invalid input, and self-test", async () => {
-    const entry = new URL("../../src/work-item/completion-admission-driver.ts", import.meta.url)
-      .pathname;
+    const entry = new URL("../harness/completion-admission-driver.ts", import.meta.url).pathname;
     const help = Bun.spawnSync([process.execPath, "run", entry, "--help"], {
       cwd: new URL("../..", import.meta.url).pathname,
       stdout: "pipe",

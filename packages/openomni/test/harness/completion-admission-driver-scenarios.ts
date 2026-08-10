@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
-import { createDefaultDispatchRuntime } from "../dispatch/setup.js";
-import { VerifierRegistry } from "../evidence/verifier-registry.js";
+import { createDefaultDispatchRuntime } from "../../src/dispatch/setup.js";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 import {
   CompletionAdmissionError,
   type CompletionResultAuthorityPort,
@@ -13,7 +13,7 @@ import {
   completionRequestRoot,
   createCompletionAdmissionService,
   createCompletionDecision,
-} from "./completion-admission.js";
+} from "../../src/work-item/completion-admission.js";
 import {
   CompletionAdmissionDriverNow,
   captureCompletionAdmissionDriverCode,
@@ -33,7 +33,7 @@ import {
   requiredCompletionAdmissionDriverItem,
   withCompletionAdmissionDriverStorage,
 } from "./completion-admission-driver-fixtures.js";
-import { evaluateCompletion } from "./completion-admission-fold.js";
+import { evaluateCompletion } from "../../src/work-item/completion-admission-fold.js";
 
 // ---------------------------------------------------------------------------
 // Contract

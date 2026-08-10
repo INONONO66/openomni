@@ -1,7 +1,7 @@
-import type { StakesAction } from "./stakes-contract.js";
-import { hashStakesValue } from "./stakes-digest.js";
-import { createStakesWindow } from "./stakes-hash.js";
-import { createStakesBroker } from "./stakes-seams.js";
+import type { StakesAction } from "../../src/ledger/stakes-contract.js";
+import { hashStakesValue } from "../../src/ledger/stakes-digest.js";
+import { createStakesWindow } from "../../src/ledger/stakes-hash.js";
+import { createStakesBroker } from "../../src/ledger/stakes-seams.js";
 
 const driverWindow = createStakesWindow({
   ownerKey: "owner:469",

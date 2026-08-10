@@ -104,28 +104,10 @@ export type {
   DispatchToolRuntime,
 } from "./execution-runtime";
 
-export {
-  ReadBackExecutor,
-  VerifierConformance,
-  VerifierRegistry,
-  runVerifierRegistryDriver,
-} from "./evidence";
-export type {
-  VerifierRegistryDriverExecution,
-  VerifierRegistryDriverScenario,
-} from "./evidence";
+export { ReadBackExecutor, VerifierConformance, VerifierRegistry } from "./evidence";
 
-export {
-  CompletionAdmissionDriverScenarios,
-  CompletionSourceOrigin,
-  projectCompletionOrigin,
-  runCompletionAdmissionDriver,
-} from "./work-item";
-export type {
-  CompletionAdmissionDriverExecution,
-  CompletionAdmissionDriverScenario,
-  WorkItemCompletionRecoveryReceipt,
-} from "./work-item";
+export { CompletionSourceOrigin, projectCompletionOrigin } from "./work-item";
+export type { WorkItemCompletionRecoveryReceipt } from "./work-item";
 
 // Dispatch runtime
 export {

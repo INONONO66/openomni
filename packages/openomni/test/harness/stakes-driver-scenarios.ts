@@ -3,9 +3,9 @@ import {
   STAKES_EPSILON,
   STAKES_THETA,
   type StakesValue,
-} from "./stakes-contract.js";
-import { computeStakes, serializeStakes } from "./stakes-compute.js";
-import { hashStakesValue } from "./stakes-digest.js";
+} from "../../src/ledger/stakes-contract.js";
+import { computeStakes, serializeStakes } from "../../src/ledger/stakes-compute.js";
+import { hashStakesValue } from "../../src/ledger/stakes-digest.js";
 import {
   stakesDriverStatus,
   type StakesDriverReceipt,
@@ -20,7 +20,10 @@ import {
   driverState,
   driverVoiceBinding,
 } from "./stakes-driver-fixture.js";
-import type { CompletionStakesInjection, VoiceStakesInjection } from "./stakes-seams.js";
+import type {
+  CompletionStakesInjection,
+  VoiceStakesInjection,
+} from "../../src/ledger/stakes-seams.js";
 
 export { stakesDriverStatus };
 export type { StakesDriverReceipt, StakesDriverScenario };
