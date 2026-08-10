@@ -1,22 +1,16 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { snapshotFirstJsonSchema } from "../evidence/verifier-conformance-canonical.js";
+import { STAKES_POLICY_VERSION, STAKES_THETA } from "./stakes-constants.js";
 import {
   expectedStakesComparison,
   expectedStakesReference,
   expectedWindowRef,
 } from "./stakes-reference.js";
 
-export const STAKES_POLICY_VERSION = "stakes-policy-v1";
-export const STAKES_THETA = 1_000;
+export { STAKES_POLICY_VERSION, STAKES_THETA, hashStakesValue } from "./stakes-constants.js";
+
 export const STAKES_EPSILON = 1;
 export const STAKES_AMOUNT_DENOMINATION = "owner_base_budget_micro_unit";
-
-export type StakesHashValue = null | boolean | number | string | readonly StakesHashValue[];
-
-export function hashStakesValue(value: StakesHashValue): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
-}
 
 export function createStakesSchemaPrimitives() {
   return {

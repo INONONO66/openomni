@@ -2,8 +2,7 @@ import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { Auth } from "../auth/storage";
-import { Provider } from "./index";
-import type { ModelsDev } from "../model";
+import type { Provider } from "./index";
 
 type SdkOptions = {
   apiKey?: string;
@@ -163,25 +162,4 @@ function resolveLanguageModel(
 
 function isOpenAIProvider(sdk: ProviderSDK): sdk is OpenAIProvider {
   return "responses" in sdk;
-}
-
-export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {
-  const models: Record<string, Provider.Model> = {};
-
-  if (provider.models) {
-    for (const [id, rawModel] of Object.entries(provider.models)) {
-      const isValid = typeof rawModel === "object" && rawModel !== null;
-      if (!isValid) continue;
-
-      models[id] = Provider.fromModelsDevModel(provider, rawModel as ModelsDev.Model);
-    }
-  }
-
-  return {
-    id: provider.id,
-    name: provider.name,
-    env: provider.env ?? [],
-    npm: provider.npm,
-    models,
-  };
 }
