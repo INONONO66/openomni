@@ -66,7 +66,6 @@ export type {
 // Execution runtime
 export {
   AgentToolProvider,
-  ToolProxyProvider,
   SystemToolProvider,
   CronJobRegistry,
   CronJobRunner,

@@ -15,7 +15,6 @@ export type {
 } from "./child-agent/index.js";
 export {
   AgentToolProvider,
-  ToolProxyProvider,
   SystemToolProvider,
   Tool,
   buildToolCatalog,
