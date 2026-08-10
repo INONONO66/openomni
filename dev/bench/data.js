@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786323204847,
+  "lastUpdate": 1786324087015,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39409,6 +39409,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514642,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3e5c227f64ab00c3e8202483fa229fb86569d47",
+          "message": "feat(agent): enforce compaction commit-boundary invariant (#565)\n\n* test(agent): pin compaction commit-boundary hazards red (#531)\n\nRed pins at the InMemoryCompactor commit seam, representable since #557/#560\nmade history carry tool-bearing WithParts:\n\n- kept window starting with an assistant message when onSummarize is unset\n  (leading-assistant hazard; onSummarize is optional everywhere)\n- no typed refusal when no user boundary exists at or before the cutoff\n- buildSummaryMessage hardcodes sessionID \"chat-agent\", mixing session ids\n  into compacted history\n- policyPlan backdoor (#546 review F5): defaultRegistry() registers\n  builtin:compaction, so an external plan activates compaction with the same\n  boundary hazard over tool-bearing history\n\nGreen pin: a summary user message anchors the window, so the natural cutoff\nstays valid with onSummarize present.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(agent): enforce compaction commit-boundary invariant (#531)\n\nAt the InMemoryCompactor commit seam:\n\n- Snap the cutoff back to the nearest user boundary when no summary user\n  message anchors the kept window (onSummarize unset), so a committed window\n  never starts with an assistant message. Snapping to index 0 degrades to a\n  no-op (compacted: false) instead of an empty removal.\n- Throw typed CompactionBoundaryError (new export) when no user boundary\n  exists at or before the cutoff — nothing committed; the fail-closed\n  run.completion.pre contract converts the throw into a deny plus a published\n  middleware error, never commit-then-400.\n- Thread the compacted history's real sessionID into buildSummaryMessage\n  instead of the hardcoded \"chat-agent\".\n- Document (verified, not guarded): tool-pair splits are unrepresentable at\n  WithParts granularity — results live in ToolPart.state on the calling\n  assistant message — and toModelMessages synthesizes interrupted results for\n  kept pending/running parts, so no pair/terminality guard is added.\n\nCovers the policyPlan backdoor (#546 review F5): defaultRegistry() exposes\nbuiltin:compaction, and the invariant holds on that activation path over\ntool-bearing history.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T01:06:17Z",
+          "tree_id": "dd165a308b2f17ab9e78abb7cd87154d8e497655",
+          "url": "https://github.com/INONONO66/openomni/commit/d3e5c227f64ab00c3e8202483fa229fb86569d47"
+        },
+        "date": 1786324086630,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5913,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10056,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2517,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2477,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8156,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 855,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20441,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10967,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102813,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518557,
             "unit": "ns/op"
           }
         ]
