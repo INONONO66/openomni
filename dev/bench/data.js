@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786363721361,
+  "lastUpdate": 1786364311426,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41393,6 +41393,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 536354,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a946fefc2216df1121a404f0016840e41d8c831b",
+          "message": "chore: break the two value-import cycles, add cycle ratchet (#582)\n\n* refactor(openomni): break stakes contract/reference import cycle\n\nstakes-contract.ts and stakes-reference.ts value-imported each other; the\ncycle only worked because the back references sit inside superRefine\nclosures while createStakesSchemas() runs at contract module init - one\nrefactor away from a TDZ crash. Extract the shared leaf values\n(STAKES_POLICY_VERSION, STAKES_THETA, hashStakesValue) into\ndependency-free stakes-constants.ts; contract re-exports them so the\npublic API is unchanged and only contract -> reference remains. The\nStakesHashValue helper type moves with hashStakesValue and is not\nre-exported from contract: nothing ever imported it, and knip flags the\nwould-be re-export as a new dead export.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(llm): break provider index/sdk import cycle\n\nsdk.ts value-imported the Provider namespace from the barrel index.ts,\nwhich imports fromModelsDevProvider back from sdk.ts. That function's only\nconsumer is index.ts (it is not on the package surface - src/index.ts\nre-exports Provider and ModelsDev only), so move it into the Provider\nnamespace as a non-exported helper next to fromModelsDevModel, the single\nsymbol it needed from the namespace. sdk.ts now imports Provider type-only,\nleaving zero value edges between index and sdk. No API change.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ci): add import-cycle ratchet (baseline 0)\n\nHand-rolled DFS over the eager value-import graph of packages/*/src and\napps/*/src (relative + workspace specifiers, type-only and lazy edges\nexcluded) - no new dependencies. Red on the pre-fix tree (found exactly\nthe stakes contract/reference and llm provider index/sdk cycles), green\nafter; --self-test proves discrimination on synthetic graphs. Wired into\nthe CI Quality job next to the other check-* steps.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T12:17:14Z",
+          "tree_id": "f0af57056fc6248922ef883f37399a0d9141b37c",
+          "url": "https://github.com/INONONO66/openomni/commit/a946fefc2216df1121a404f0016840e41d8c831b"
+        },
+        "date": 1786364310894,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 652,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10252,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3037,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1475,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10980,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102423,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517278,
             "unit": "ns/op"
           }
         ]
