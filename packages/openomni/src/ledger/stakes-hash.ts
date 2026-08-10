@@ -1,10 +1,10 @@
 import {
   STAKES_POLICY_VERSION,
   createStakesSchemas,
+  hashStakesValue,
   type StakesWindow as StakesWindowType,
   type StakesWindowInput,
 } from "./stakes-contract.js";
-import { hashStakesValue } from "./stakes-digest.js";
 import { expectedStakesComparison, expectedWindowRef } from "./stakes-reference.js";
 
 export { hashStakesValue };

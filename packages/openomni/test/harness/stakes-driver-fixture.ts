@@ -1,5 +1,5 @@
 import type { StakesAction } from "../../src/ledger/stakes-contract.js";
-import { hashStakesValue } from "../../src/ledger/stakes-digest.js";
+import { hashStakesValue } from "../../src/ledger/stakes-contract.js";
 import { createStakesWindow } from "../../src/ledger/stakes-hash.js";
 import { createStakesBroker } from "../../src/ledger/stakes-seams.js";
 

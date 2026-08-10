@@ -5,7 +5,7 @@ import {
   type StakesValue,
 } from "../../src/ledger/stakes-contract.js";
 import { computeStakes, serializeStakes } from "../../src/ledger/stakes-compute.js";
-import { hashStakesValue } from "../../src/ledger/stakes-digest.js";
+import { hashStakesValue } from "../../src/ledger/stakes-contract.js";
 import {
   stakesDriverStatus,
   type StakesDriverReceipt,

@@ -2,11 +2,11 @@ import { z } from "zod";
 import { snapshotFirstJsonSchema } from "../evidence/verifier-conformance-canonical.js";
 import {
   STAKES_POLICY_VERSION,
+  createStakesSchemaPrimitives,
   type StakesAction,
   type StakesValue,
   type StakesWindowedLedgerState,
 } from "./stakes-contract.js";
-import { createStakesSchemaPrimitives } from "./stakes-schema-primitives.js";
 
 const { digest, identifier, sequence } = createStakesSchemaPrimitives();
 const bindingFields = {

@@ -1,5 +1,4 @@
-import { hashStakesValue } from "./stakes-digest.js";
-import { STAKES_POLICY_VERSION, STAKES_THETA } from "./stakes-policy.js";
+import { STAKES_POLICY_VERSION, STAKES_THETA, hashStakesValue } from "./stakes-contract.js";
 
 type WindowIdentity = Readonly<{
   ownerKey: string;
