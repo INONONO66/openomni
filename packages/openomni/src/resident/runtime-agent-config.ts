@@ -14,7 +14,7 @@ type RuntimeAgentDef = Ingress.AgentDef & {
  * the server composition), but because the resident path's durable
  * assistant write is SessionBridge.storeDirectResult at the ingress handler
  * (ingress/handlers.ts handleResident): it persists the POST-writeback
- * output (commitWriteback policies may transform it) under its own message
+ * output (dispatchWritebackCommit policies may transform it) under its own message
  * id, wrapped in the ingress audit envelope. Wiring a raw-stream sink here
  * would (1) double-persist every resident turn — the streamed message id
  * via facts plus the writeback message id via projection, with diverging

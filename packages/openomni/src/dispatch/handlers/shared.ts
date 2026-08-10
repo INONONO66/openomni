@@ -1,16 +1,5 @@
-export function extractText(payload: unknown): string {
-  if (typeof payload === "string") return payload;
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "text" in payload &&
-    typeof (payload as { text?: unknown }).text === "string"
-  ) {
-    return (payload as { text: string }).text;
-  }
-  if (payload === null || payload === undefined) return "";
-  return JSON.stringify(payload) ?? "";
-}
+// Inbound payload-text parsing is owned by ingress (the boundary that mints
+// the payload shape): import extractText from ../../ingress/handlers.js.
 
 export function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
