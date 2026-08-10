@@ -131,8 +131,7 @@ export function resolveRoute(inbound: RouteInbound, state: RouteState): RoutingD
           if (action === undefined || !state.wait.allowed.includes(action)) {
             // Fail closed: a matched durable wait never falls through to
             // surface routing — a disallowed action is a typed block, mirroring
-            // the owner gate below. (Frozen legacy PendingInteraction matches
-            // keep their historical surface fallthrough.)
+            // the owner gate below.
             return {
               ...common,
               stage: "wait_correlation",
@@ -193,40 +192,48 @@ export function resolveRoute(inbound: RouteInbound, state: RouteState): RoutingD
           };
         case "pending_interaction": {
           const action = inbound.requestedAction;
-          if (action !== undefined && state.wait.allowed.includes(action)) {
+          if (action === undefined || !state.wait.allowed.includes(action)) {
+            // Fail closed (#548): the legacy store is frozen, so the
+            // historical surface fallthrough for a disallowed action is dead
+            // code — a matched frozen row blocks exactly like a durable wait,
+            // making wait correlation uniformly fail-closed for all backings.
             return {
               ...common,
               stage: "wait_correlation",
-              outcome: "route",
-              target: `worker-session:${state.wait.sessionId}`,
-              sessionId: state.wait.sessionId,
-              runId: state.wait.runId,
-              pendingInteractionId: state.wait.recordId,
-              ...(state.wait.targetActorId === undefined
-                ? {}
-                : { actorId: state.wait.targetActorId }),
-              trustTier: "assigned_worker",
-              inboundTreatment: "full_access",
-              reason: "Inbound action matched a pending interaction",
+              outcome: "block",
+              reason: "Matched wait does not allow the requested action",
               factsUsed: [
                 `wait:${state.wait.key}`,
-                `wait.action:${action}`,
-                `wait.session:${state.wait.sessionId}`,
-                `wait.run:${state.wait.runId}`,
+                `wait.action:${action ?? "missing"}`,
+                "wait.action:disallowed",
               ],
             };
           }
-          waitFacts.push(
-            `wait:${state.wait.key}`,
-            `wait.action:${action ?? "missing"}`,
-            "wait.action:disallowed",
-          );
-          break;
+          return {
+            ...common,
+            stage: "wait_correlation",
+            outcome: "route",
+            target: `worker-session:${state.wait.sessionId}`,
+            sessionId: state.wait.sessionId,
+            runId: state.wait.runId,
+            pendingInteractionId: state.wait.recordId,
+            ...(state.wait.targetActorId === undefined
+              ? {}
+              : { actorId: state.wait.targetActorId }),
+            trustTier: "assigned_worker",
+            inboundTreatment: "full_access",
+            reason: "Inbound action matched a pending interaction",
+            factsUsed: [
+              `wait:${state.wait.key}`,
+              `wait.action:${action}`,
+              `wait.session:${state.wait.sessionId}`,
+              `wait.run:${state.wait.runId}`,
+            ],
+          };
         }
         default:
           return unreachable(state.wait);
       }
-      break;
     }
     default:
       return unreachable(state.wait);

@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { BlacklistStore, PendingInteractionStore, Storage } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
-import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
+import {
+  createWorkerRunFixture,
+  resetDispatchTestState,
+  seedPendingInteraction,
+} from "./runtime-test-fixtures";
 
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
@@ -23,7 +27,7 @@ describe("DispatchRuntime", () => {
       createdBy: "act_owner",
     });
     const session = await createWorkerRunFixture("run-pi-blacklisted-endpoint");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-blacklisted-endpoint",
       workerRunId: "run-pi-blacklisted-endpoint",
       sessionId: session.id,
@@ -75,7 +79,7 @@ describe("DispatchRuntime", () => {
       createdBy: "act_owner",
     });
     const session = await createWorkerRunFixture("run-pi-blacklisted-channel");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-blacklisted-channel",
       workerRunId: "run-pi-blacklisted-channel",
       sessionId: session.id,
@@ -120,7 +124,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-forged");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-forged",
       workerRunId: "run-pi-forged",
       sessionId: session.id,

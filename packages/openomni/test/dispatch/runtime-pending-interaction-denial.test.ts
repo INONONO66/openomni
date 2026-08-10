@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PendingInteractionStore, Storage } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
-import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
+import {
+  createWorkerRunFixture,
+  resetDispatchTestState,
+  seedPendingInteraction,
+} from "./runtime-test-fixtures";
 
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
@@ -49,7 +53,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-disallowed");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-disallowed",
       workerRunId: "run-pi-disallowed",
       sessionId: session.id,
@@ -96,7 +100,7 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     const session = await createWorkerRunFixture("run-pi-disallowed-trusted");
-    PendingInteractionStore.create({
+    seedPendingInteraction({
       id: "pi-dispatch-disallowed-trusted",
       workerRunId: "run-pi-disallowed-trusted",
       sessionId: session.id,

@@ -1,12 +1,9 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
 import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
 import { Bus, PendingInteractionStore, Storage, TraceContext } from "@openomni/session";
+import { requestedWaitAction } from "../wait/index.js";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
-import {
-  markRoutedPendingInteraction,
-  requestedPendingInteractionAction,
-  routePendingInteraction,
-} from "./pending-interaction-routing.js";
+import { routePendingInteraction } from "./pending-interaction-routing.js";
 import { createDefaultDispatchPolicy, type DispatchPolicyContext } from "./policy.js";
 import { registerDispatchPolicy, type DispatchPolicyRegistration } from "./policy-registration.js";
 import { DispatchRegistry, type DispatchHandler, type DispatchHandlerContext } from "./registry.js";
@@ -242,7 +239,7 @@ export class DispatchRuntime {
     const parsed = DispatchProtocol.Input.parse(input);
     const trace = options.traceId ? { traceId: options.traceId } : TraceContext.create();
     const actor = deriveActorContext(options);
-    const requestedPendingAction = requestedPendingInteractionAction(parsed.payload);
+    const requestedPendingAction = requestedWaitAction(parsed.payload);
     const initialPinnedValidation = pendingInteraction
       ? revalidatePinnedInteraction(pendingInteraction, requestedPendingAction)
       : undefined;
@@ -362,10 +359,9 @@ export class DispatchRuntime {
       });
     }
 
-    // No await sits between the post-policy revalidation above and this point;
-    // markRoutedPendingInteraction is our own deterministic transition, so a
-    // third re-validation here would only re-check our own mutation.
-    markRoutedPendingInteraction(command);
+    // #548: routing a frozen legacy PendingInteraction match records no state
+    // transition — the store is read-only and correlation is gated at read
+    // time, so the routed command is the only trace the match leaves here.
     Bus.publish(DispatchProtocol.Events.Routed, { ...eventBase(command), handler: command.action });
 
     try {

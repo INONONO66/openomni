@@ -6,14 +6,8 @@ import {
   type RoutingDecisionPayload,
   type Wait,
 } from "@openomni/protocol";
-import {
-  BlacklistStore,
-  ChannelGrantStore,
-  type PendingInteractionStore,
-  SurfaceKey,
-} from "@openomni/session";
-import { requestedPendingInteractionAction } from "../dispatch/pending-interaction-routing.js";
-import { findWaitCandidates, type WaitResolution } from "../wait/index.js";
+import { BlacklistStore, ChannelGrantStore, SurfaceKey } from "@openomni/session";
+import { findWaitCandidates, requestedWaitAction, type WaitResolution } from "../wait/index.js";
 import { applyChannelGrantTreatment } from "./middleware/ingress-authority.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { IngressSessionResolver } from "./session-resolver.js";
@@ -27,14 +21,14 @@ export type KernelWaitExecution =
       // message id, a channel may deliver the reply matched on
       // externalMessageId alone, with no correlation envelope.
       correlation?: Dispatch.Correlation;
-      requestedAction: PendingInteractionStore.Record["allowedActions"][number];
+      requestedAction: Wait.AllowedAction;
       record: Wait.Record;
     }>
   | Readonly<{
       kind: "pending_interaction";
       correlation: Dispatch.Correlation;
-      requestedAction: PendingInteractionStore.Record["allowedActions"][number];
-      record: PendingInteractionStore.Record;
+      requestedAction: Wait.AllowedAction;
+      record: Communication.PendingInteraction.Record;
     }>
   | Readonly<{
       kind: "pending_ask";
@@ -108,7 +102,7 @@ function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
 function kernelWaitExecution(
   resolution: WaitResolution,
   correlation: Dispatch.Correlation | undefined,
-  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+  requestedAction: Wait.AllowedAction,
 ): KernelWaitExecution {
   switch (resolution.kind) {
     case "none":
@@ -245,7 +239,7 @@ function blacklistState(
 function rejectUnsupportedPendingInteractionAction(
   decision: RoutingDecisionPayload,
   wait: RouteState["wait"],
-  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+  requestedAction: Wait.AllowedAction,
 ): RoutingDecisionPayload {
   if (
     decision.outcome !== "route" ||
@@ -279,7 +273,7 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
   traceId: string,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
-  const requestedAction = requestedPendingInteractionAction(event.payload);
+  const requestedAction = requestedWaitAction(event.payload);
   const gatheredWait = findWaitCandidates({
     ...(correlation === undefined ? {} : { correlation }),
     externalMessageId: event.id,
