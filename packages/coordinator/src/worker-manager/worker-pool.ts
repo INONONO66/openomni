@@ -28,25 +28,24 @@ import {
   type WorkerSlot,
 } from "./worker-manager-types";
 
-export type {
-  DeliverTask,
-  InboundWaitParams,
-  InboundWaitResult,
-  ToolCallCancelParams,
-  ToolCallContext,
-  ToolCallParams,
-  ToolCallResult,
-  WorkerManager,
-  WorkerManagerConfig,
-  WorkerManagerStats,
-  WorkerPorts,
-} from "./worker-manager-types";
-
 export function createWorkerManager(
   config: WorkerManagerConfig,
   ports: WorkerPorts,
 ): WorkerManager {
   return new WorkerPool(config, ports);
+}
+
+/**
+ * Test-only chaos hook (#553 C9): `killWorker` is not part of the public
+ * driver shape, so the coordinator's own crash-recovery test reaches the
+ * pool internals through this function instead. Exported from the internal
+ * worker-manager barrel only — never from the package barrel.
+ */
+export function killWorkerForTest(manager: WorkerManager, index: number): void {
+  if (!(manager instanceof WorkerPool)) {
+    throw new Error("killWorkerForTest requires a coordinator WorkerPool instance");
+  }
+  manager.killWorker(index);
 }
 
 // One pool module, one concept (#462 §3): the slot state machine
