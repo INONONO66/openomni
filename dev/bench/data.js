@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786349526839,
+  "lastUpdate": 1786353926297,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40649,6 +40649,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511580,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dede3f3134b881497de7fc036973e9d55e081188",
+          "message": "feat(llm): realize typed retry semantics with Retry.Reason literals (#575)\n\nRetry.Decision.reason was prose (\"Rate Limited\", \"Too Many Requests\",\ntemplate strings) and consumers branched on string equality, so a typo or\nan unmatched variant silently killed the branch: a real Anthropic 429 body\n({error:{type:\"rate_limit_error\"}}) classified as \"Provider Server\nError\" via the generic body.error sniff and skipped the RateLimited\nevent entirely (pinned red-first in processor.test.ts).\n\n- Retry.Reason = \"rate_limit\" | \"overloaded\" | \"server_error\" |\n  \"non_retryable\"; Decision = { retry:false, reason, detail? } |\n  { retry:true, reason, delayMs, retryAfterOverCap? }. Prose lives only\n  in detail, never in the discriminant.\n- classify(): specific payload signals (too_many_requests, rate_limit\n  type/code, exhausted/unavailable, no_kv_space, server_error) first;\n  the generic body.error sniff no longer outranks a 429 status.\n- Processor branches through an exhaustive switch (publishesRateLimited)\n  with a satisfies-never tail — a new reason member fails to compile\n  instead of silently skipping the publish.\n- Wire values on LlmCall.RetryDecided stay within the protocol's\n  z.string() (typed literal subset — no protocol change).\n- Delete the dead Retry.delay dual path (zero src consumers, uncapped)\n  and fold isRetryable into the private classifier; their coverage moves\n  onto decide().\n\nRefs #532\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T09:24:14Z",
+          "tree_id": "97f00c09b0fb7e30cd07ca91af862d454dbc162c",
+          "url": "https://github.com/INONONO66/openomni/commit/dede3f3134b881497de7fc036973e9d55e081188"
+        },
+        "date": 1786353925501,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 748,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6228,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10838,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3474,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16375,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8458,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 755,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1627,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 744,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20152,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2275,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10897,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524968,
             "unit": "ns/op"
           }
         ]
