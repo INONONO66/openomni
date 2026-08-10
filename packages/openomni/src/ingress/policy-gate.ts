@@ -10,9 +10,18 @@ import { Policy, PolicyDecision, type Ingress, type TraceContext } from "@openom
  * `session.inbound.pre` contract requires an `actorId`, but anonymous
  * senders are legal at this boundary by design (channel grants materialize
  * default-tier strangers), and no session exists yet at routed pre-run time.
- * So the kernel owns its own two admission gates with the same composition
+ * So the kernel owns its own admission gates with the same composition
  * semantics: ascending priority, deny-wins short circuit, fail-closed error
- * containment, per-decision observer fan-out.
+ * containment, per-decision observer fan-out, and per-gate effect
+ * allowlists (a composed effect outside the gate's allowlist denies with
+ * policy.effect_not_declared, matching the canonical engine's vocabulary).
+ *
+ * Deliberate delta from the retired legacy engine: the old composed path
+ * also injected a run.abort effect into pre-boundary deny decisions
+ * (enforceDenyAbort). All three gate consumers act on the composed VERDICT
+ * only (throwAbort / assertInboundAllowed / resolveWritebackDecision check
+ * isBlocking, never the effects), so that injection is dead machinery here
+ * and is intentionally not reimplemented.
  */
 export namespace IngressPolicyGate {
   const COMPOSED_POLICY_ID = "ingress.policy.composed";
@@ -64,6 +73,21 @@ export namespace IngressPolicyGate {
     ) => Policy.PolicyDecision | Promise<Policy.PolicyDecision>;
   }
 
+  /**
+   * Effects a gate may let through in its composed decision — the union of
+   * what the kernel's own policies emit and what the gate's consumer reads:
+   * pre-run/inbound abort decisions and the runner's fail-closed
+   * containment emit run.abort + audit.annotate; the writeback consumer
+   * additionally honors writeback.rewrite / writeback.suppress.
+   */
+  const gateEffectAllowlists: Readonly<
+    Record<IngressPolicy["gate"], ReadonlySet<Policy.PolicyEffectType>>
+  > = {
+    "pre-run": new Set(["run.abort", "audit.annotate"]),
+    inbound: new Set(["run.abort", "audit.annotate"]),
+    writeback: new Set(["run.abort", "audit.annotate", "writeback.rewrite", "writeback.suppress"]),
+  };
+
   function select(
     policies: readonly IngressPolicy[] | undefined,
     gate: IngressPolicy["gate"],
@@ -100,11 +124,30 @@ export namespace IngressPolicyGate {
     }
   }
 
-  function compose(decisions: readonly Policy.PolicyDecision[]): Policy.PolicyDecision {
+  function compose(
+    decisions: readonly Policy.PolicyDecision[],
+    gate: IngressPolicy["gate"],
+  ): Policy.PolicyDecision {
     if (decisions.length === 0) {
       return PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID });
     }
     const effective = composeEffects([...decisions]);
+    const allowed = gateEffectAllowlists[gate];
+    const invalid = effective.mergedEffects.find((effect) => !allowed.has(effect.type));
+    if (invalid !== undefined) {
+      return PolicyDecision.deny({
+        policyId: COMPOSED_POLICY_ID,
+        reasonCodes: ["policy.effect_not_declared"],
+        effects: [
+          {
+            type: "audit.annotate",
+            annotation: `policy.effect_not_declared: ${invalid.type} is not allowed at the ${gate} gate`,
+            severity: "error",
+          },
+        ],
+        durationMs: decisions.reduce((total, decision) => total + (decision.durationMs ?? 0), 0),
+      });
+    }
     const reasonSources =
       effective.verdict === "allow"
         ? decisions
@@ -125,12 +168,13 @@ export namespace IngressPolicyGate {
     ctx: InboundContext | WritebackContext | PreRunContext,
     onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>,
   ): Promise<Policy.PolicyDecision> {
+    const frozenCtx = Object.freeze({ ...ctx });
     const decisions: Policy.PolicyDecision[] = [];
     for (const policy of select(policies, ctx.gate)) {
       const startTime = Date.now();
       let decision: Policy.PolicyDecision;
       try {
-        const returned = await policy.fn(ctx);
+        const returned = await policy.fn(frozenCtx);
         const parsed = Policy.PolicyDecision.safeParse(returned);
         decision = parsed.success
           ? parsed.data
@@ -148,6 +192,6 @@ export namespace IngressPolicyGate {
       notify(onDecision, normalized);
       if (normalized.verdict === "deny") break;
     }
-    return compose(decisions);
+    return compose(decisions, ctx.gate);
   }
 }

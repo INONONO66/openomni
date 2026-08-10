@@ -8,6 +8,14 @@ class PolicyPointTimingError extends Error {
   }
 }
 
+/** Fail-closed dispatch rejection for grid-retired points (#530). */
+class PolicyPointRetiredError extends Error {
+  constructor(readonly pointId: string) {
+    super(`Policy point is retired from the dispatch grid: ${pointId}`);
+    this.name = "PolicyPointRetiredError";
+  }
+}
+
 /**
  * #530 points disposition: `session.inbound.pre` and `session.writeback.pre`
  * are declared in the protocol point registry but have zero dispatchers and
@@ -58,6 +66,7 @@ const canonicalTimingByPointId: ReadonlyMap<string, Policy.Timing> = new Map(
 export function timingForPolicyPoint(pointId: PolicyPointId): Policy.Timing {
   const contract = Policy.PolicyPoint.Registry[pointId];
   if (contract === undefined) throw new PolicyPointTimingError(pointId);
+  if (isRetiredPolicyPoint(contract.id)) throw new PolicyPointRetiredError(contract.id);
   const timing = canonicalTimingByPointId.get(contract.id);
   if (timing !== undefined) return timing;
   throw new PolicyPointTimingError(contract.id);

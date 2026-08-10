@@ -51,7 +51,7 @@ describe("retired policy points (post-#530)", () => {
         inboundEvent: { type: "message" },
         writebackPayload: "output",
       } as never),
-    ).rejects.toThrow(`Registered policy point has no canonical timing: ${pointId}`);
+    ).rejects.toThrow(`Policy point is retired from the dispatch grid: ${pointId}`);
   });
 
   it("keeps every non-retired protocol point registrable", () => {
