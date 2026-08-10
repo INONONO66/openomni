@@ -75,6 +75,10 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
   function removeConnection(id: string, reason: string): void {
     connections.delete(id);
     if (id === activeConnectionId) {
+      // Clear the pin: leaving it set to a now-dead connection wedges
+      // getActiveSocket() (it resolves the stale id, finds nothing, and never
+      // falls through to a surviving connection), so no next connection binds.
+      activeConnectionId = undefined;
       failAllPending(new IpcConnectionError(reason));
       return;
     }
