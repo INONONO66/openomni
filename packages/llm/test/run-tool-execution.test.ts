@@ -48,7 +48,6 @@ describe("run() tool execution ownership", () => {
     onToolResult: (result) => {
       capturedToolResults.push(result);
     },
-    onSnapshot: () => undefined,
   };
 
   beforeAll(async () => {

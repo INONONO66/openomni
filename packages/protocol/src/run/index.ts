@@ -1,14 +1,6 @@
 import { z } from "zod";
 
 export namespace Run {
-  export const Snapshot = z.object({
-    id: z.string(),
-    sessionID: z.string(),
-    timestamp: z.number(),
-    state: z.record(z.string(), z.unknown()),
-  });
-  export type Snapshot = z.infer<typeof Snapshot>;
-
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
     z.object({ type: z.literal("continue") }),

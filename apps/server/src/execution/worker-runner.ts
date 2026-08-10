@@ -183,7 +183,6 @@ export namespace WorkerRunner {
             onMessage: () => undefined,
             onToolCall: () => undefined,
             onToolResult: () => undefined,
-            onSnapshot: () => undefined,
             // #547 C3: the wiring point for WORKER sessions where the
             // transcript fact stream meets durable recording —
             // TranscriptStore.record commits the fact and its message/part

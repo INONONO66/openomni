@@ -41,7 +41,6 @@ describe("run() streamText arguments", () => {
     onMessage: () => undefined,
     onToolCall: () => undefined,
     onToolResult: () => undefined,
-    onSnapshot: () => undefined,
   };
 
   beforeEach(() => {

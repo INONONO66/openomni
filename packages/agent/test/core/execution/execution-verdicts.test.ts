@@ -52,7 +52,6 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
       onMessage: () => undefined,
       onToolCall: () => undefined,
       onToolResult: () => undefined,
-      onSnapshot: () => undefined,
     },
     turnAssistant: {},
     turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },

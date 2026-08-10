@@ -738,7 +738,6 @@
   "Run.Outcome#3": ["type"],
   "Run.Outcome#4": ["error", "type"],
   "Run.RetryPolicy": ["backoffMs", "maxAttempts", "retryOn"],
-  "Run.Snapshot": ["id", "sessionID", "state", "timestamp"],
   "RuntimeResource.ActorDescriptor": [
     "actorId",
     "actorType",
