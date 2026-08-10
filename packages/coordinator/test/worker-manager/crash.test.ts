@@ -1,7 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
+import {
+  createWorkerManager,
+  killWorkerForTest,
+  type WorkerManager,
+} from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
@@ -32,7 +36,7 @@ describe("worker manager crash recovery", () => {
     });
 
     await new Promise<void>((r) => setTimeout(r, 50));
-    manager.killWorker(0);
+    killWorkerForTest(manager, 0);
 
     let errorMessage: string | undefined;
     try {

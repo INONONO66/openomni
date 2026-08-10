@@ -15,8 +15,6 @@
     "exports packages/session/src/bus-persistence/event-query.ts toEventRecord",
     "exports packages/session/src/storage/sqlite-part-adapter.ts getPartStartTime",
     "files packages/openomni/test/dispatch/policy-registration.contract-test.ts",
-    "types packages/coordinator/src/worker-manager/index.ts DeliverTask",
-    "types packages/coordinator/src/worker-manager/worker-pool.ts DeliverTask",
     "types packages/openomni/src/execution-runtime/child-agent/types.ts ChildStatus",
     "types packages/openomni/src/execution-runtime/child-agent/types.ts DelegationPolicyPointId",
     "types packages/openomni/src/ingress/audit-envelope.ts IngressAuditEvent"

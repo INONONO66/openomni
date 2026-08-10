@@ -10,7 +10,7 @@
     "./messaging": "./src/messaging/index.ts"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "check-types": "tsc --noEmit -p tsconfig.contract-test.json",
     "lint": "bunx biome check ./src",
     "test": "bun test",
