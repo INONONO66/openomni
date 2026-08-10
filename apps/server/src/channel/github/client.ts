@@ -1,9 +1,12 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { fetchWithRetry } from "../../shared/fetch-retry";
+import type { PublishPort } from "../types";
 
 export class GitHubClient {
-  constructor(private readonly token?: string) {}
+  constructor(
+    private readonly publish: PublishPort,
+    private readonly token?: string,
+  ) {}
 
   async postComment(repo: string, issueNumber: number, body: string): Promise<void> {
     if (!this.token) return;
@@ -29,7 +32,7 @@ export class GitHubClient {
       throw new Error(`GitHub API failed (${response.status}): ${text}`);
     }
 
-    Bus.publish(Operational.Debug, {
+    this.publish(Operational.Debug, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",

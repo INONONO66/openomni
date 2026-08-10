@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
 import { DiscordGateway } from "../../src/channel/discord/gateway";
 import { GatewayOp } from "../../src/channel/discord/types";
+import type { PublishPort } from "../../src/channel/types";
+
+const noopPublish: PublishPort = () => undefined;
 
 /**
  * #520 state-machine pins over a real WebSocket against a scripted fake
@@ -130,10 +133,15 @@ describe("discord gateway state machine (#520)", () => {
       onIdentify: (ws) => sendReady(ws, local.url, "sess-1"),
     });
     fake = local;
-    gateway = new DiscordGateway("test-token", () => Promise.resolve(local.url), {
-      onDispatch: () => undefined,
-      onReady: () => undefined,
-    });
+    gateway = new DiscordGateway(
+      "test-token",
+      () => Promise.resolve(local.url),
+      {
+        onDispatch: () => undefined,
+        onReady: () => undefined,
+      },
+      noopPublish,
+    );
 
     await gateway.start();
     const identify = await local.waitFor((p) => p.op === GatewayOp.IDENTIFY);
@@ -156,10 +164,15 @@ describe("discord gateway state machine (#520)", () => {
       onIdentify: (ws) => sendReady(ws, local.url, "sess-2"),
     });
     fake = local;
-    gateway = new DiscordGateway("test-token", () => Promise.resolve(local.url), {
-      onDispatch: () => undefined,
-      onReady: () => undefined,
-    });
+    gateway = new DiscordGateway(
+      "test-token",
+      () => Promise.resolve(local.url),
+      {
+        onDispatch: () => undefined,
+        onReady: () => undefined,
+      },
+      noopPublish,
+    );
 
     await gateway.start();
     const closeCode = await local.waitForClose();
@@ -188,10 +201,15 @@ describe("discord gateway state machine (#520)", () => {
       },
     });
     fake = local;
-    gateway = new DiscordGateway("test-token", () => Promise.resolve(local.url), {
-      onDispatch: () => undefined,
-      onReady: () => undefined,
-    });
+    gateway = new DiscordGateway(
+      "test-token",
+      () => Promise.resolve(local.url),
+      {
+        onDispatch: () => undefined,
+        onReady: () => undefined,
+      },
+      noopPublish,
+    );
 
     await gateway.start();
     // Reconnect backoff for attempt 1 is 2s + up to 1s jitter.
@@ -222,10 +240,15 @@ describe("discord gateway state machine (#520)", () => {
       },
     });
     fake = local;
-    gateway = new DiscordGateway("test-token", () => Promise.resolve(local.url), {
-      onDispatch: () => undefined,
-      onReady: () => undefined,
-    });
+    gateway = new DiscordGateway(
+      "test-token",
+      () => Promise.resolve(local.url),
+      {
+        onDispatch: () => undefined,
+        onReady: () => undefined,
+      },
+      noopPublish,
+    );
 
     await gateway.start();
     const deadline = Date.now() + 8000;

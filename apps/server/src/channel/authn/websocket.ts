@@ -1,12 +1,13 @@
 import { Operational } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { WebSocketToken } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver, WebSocketAuthResult } from "./types";
+import type { PublishPort } from "../types";
 
 interface WebSocketAuthState {
   readonly request: Request;
+  readonly publish: PublishPort;
   readonly token?: string;
   headers?: Record<string, string>;
   response?: Response;
@@ -44,7 +45,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
   const subprotocolAuth = readSubprotocolAuth(state.request);
   const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
   if (provided !== state.token) {
-    Bus.publish(Operational.Warn, {
+    state.publish(Operational.Warn, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -73,7 +74,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
     });
   }
 
-  Bus.publish(Operational.Warn, {
+  state.publish(Operational.Warn, {
     traceId: crypto.randomUUID(),
     time: Date.now(),
     component: "server",
@@ -91,12 +92,14 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
 
 export function authenticateWebSocketUpgrade(input: {
   readonly request: Request;
+  readonly publish: PublishPort;
   readonly token?: string;
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }): WebSocketAuthResult {
   const startedAt = Date.now();
   const state: WebSocketAuthState = {
     request: input.request,
+    publish: input.publish,
     ...(input.token !== undefined ? { token: input.token } : {}),
   };
   const verdict = evaluateWebSocketToken(state);

@@ -1,12 +1,11 @@
-import type { Adapter } from "@openomni/protocol";
-import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
 import { Dedupe } from "../../shared/dedupe";
 import { splitText } from "../../shared/chunk-text";
 import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
 import type { TelegramMessage } from "./types";
+import type { PublishPort } from "../types";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
@@ -34,9 +33,10 @@ export class TelegramAdapter implements Adapter.Surface {
   constructor(
     token: string,
     readonly config: Adapter.Config,
+    private readonly publish: PublishPort,
     private readonly authOptions: TelegramAuthOptions = {},
   ) {
-    this.client = new TelegramClient(token);
+    this.client = new TelegramClient(token, publish);
   }
 
   onMessage(handler: Adapter.MessageHandler): void {
@@ -52,7 +52,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const botId = String(me.id);
     const botUsername = me.username ?? "";
     this.botUsername = botUsername;
-    Bus.publish(Operational.Info, {
+    this.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -66,27 +66,31 @@ export class TelegramAdapter implements Adapter.Surface {
       triggers: this.config.triggers,
     });
 
-    this.poller = new TelegramPoller(this.client, {
-      onMessage: (message) => {
-        if (this.dedupe.isDuplicate(String(message.message_id))) return;
-        this.handleMessage(message).catch((err) => {
-          Bus.publish(Operational.Error, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            component: "server",
-            msg: "telegram message handling failed",
-            context: { err: String(err) },
+    this.poller = new TelegramPoller(
+      this.client,
+      {
+        onMessage: (message) => {
+          if (this.dedupe.isDuplicate(String(message.message_id))) return;
+          this.handleMessage(message).catch((err) => {
+            this.publish(Operational.Error, {
+              traceId: crypto.randomUUID(),
+              time: Date.now(),
+              component: "server",
+              msg: "telegram message handling failed",
+              context: { err: String(err) },
+            });
           });
-        });
+        },
       },
-    });
+      this.publish,
+    );
 
     this.poller.start();
   }
 
   stop(): void {
     this.poller?.stop();
-    Bus.publish(Operational.Info, {
+    this.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -95,8 +99,7 @@ export class TelegramAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    const { SurfaceKey } = await import("@openomni/session");
-    const parsed = SurfaceKey.parse(surfaceKey);
+    const parsed = Adapter.SurfaceKey.parse(surfaceKey);
     const chatId = parsed.id ?? "";
     await this.sendOutbound(chatId, message);
   }
@@ -137,7 +140,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
-    Bus.publish(Operational.Debug, {
+    this.publish(Operational.Debug, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -154,7 +157,7 @@ export class TelegramAdapter implements Adapter.Surface {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound);
     } catch (err) {
-      Bus.publish(Operational.Error, {
+      this.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",

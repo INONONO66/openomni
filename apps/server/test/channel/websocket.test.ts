@@ -1,15 +1,20 @@
 import { describe, expect, it } from "bun:test";
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
+import type { PublishPort } from "../../src/channel/types";
 import { WebSocketHandler } from "../../src/channel/websocket";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
-function createHandler(decisions: ChannelAuthnDecision[] = []): WebSocketHandler {
+const noopPublish: PublishPort = () => undefined;
+
+function createHandler(
+  decisions: ChannelAuthnDecision[] = [],
+  publish: PublishPort = noopPublish,
+): WebSocketHandler {
   const handler: Adapter.MessageHandler = async () => ({ text: "ok" });
-  return new WebSocketHandler(handler, {
+  return new WebSocketHandler(handler, publish, {
     token: "secret-token",
     onAuthDecision: (decision) => {
       decisions.push(decision);
@@ -61,9 +66,13 @@ describe("WebSocketHandler authentication", () => {
   });
 
   it("keeps query token fallback and publishes a deprecation warning", () => {
-    const events: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Warn, (data) => events.push(data));
-    const handler = createHandler();
+    const warnings: string[] = [];
+    const collector: PublishPort = (event, data) => {
+      if (event.name === Operational.Warn.name) {
+        warnings.push((data as { msg: string }).msg);
+      }
+    };
+    const handler = createHandler([], collector);
     const upgrade = createUpgradeServer();
     const req = new Request("http://localhost/ws?token=secret-token");
 
@@ -72,11 +81,11 @@ describe("WebSocketHandler authentication", () => {
     expect(res).toBeUndefined();
     expect(upgrade.options?.headers).toBeUndefined();
     expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
-    unsub();
+    expect(warnings).toEqual(["websocket query token auth is deprecated"]);
   });
 
   it("marks websocket connections unauthenticated when token auth is not configured", () => {
-    const handler = new WebSocketHandler(async () => ({ text: "ok" }));
+    const handler = new WebSocketHandler(async () => ({ text: "ok" }), noopPublish);
     const upgrade = createUpgradeServer();
     const req = new Request("http://localhost/ws");
 
@@ -87,7 +96,9 @@ describe("WebSocketHandler authentication", () => {
   });
 
   it("marks websocket connections unauthenticated when token auth is configured as empty", () => {
-    const handler = new WebSocketHandler(async () => ({ text: "ok" }), { token: "" });
+    const handler = new WebSocketHandler(async () => ({ text: "ok" }), noopPublish, {
+      token: "",
+    });
     const upgrade = createUpgradeServer();
     const req = new Request("http://localhost/ws");
 
@@ -102,7 +113,7 @@ describe("WebSocketHandler authentication", () => {
     const handler = new WebSocketHandler(async (inbound) => {
       message = inbound;
       return { text: "ok" };
-    });
+    }, noopPublish);
     const sent: string[] = [];
     const ws = {
       data: { surfaceKey: "ws:test", authenticated: true },

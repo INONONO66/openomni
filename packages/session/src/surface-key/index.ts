@@ -1,120 +1,21 @@
 /**
- * SurfaceKey index: N:1 mapping from surface-specific keys to session IDs.
+ * SurfaceKey store: N:1 mapping from surface-specific keys to session IDs.
  * Provides bidirectional lookup for routing events to sessions.
  *
- * Key format: `<surface-type>:<surface-specific-path>`
- *
- * Channel/peer kind encoding:
- *   - DM:      slack:workspaceA:dm:U123
- *   - Group:   slack:workspaceA:group:C123
- *   - Thread:  slack:workspaceA:group:C123:thread:171000
- *   - Channel: slack:workspaceA:channel:C123
- *   - TUI:     tui:/Users/ino/Develop/OpenOmni
- *   - Chat:    telegram:botId:chat:chatId
- *
- * The `ChannelKind` type defines recognized channel/peer kinds.
- * Use `SurfaceKey.fromChannel()` for structured creation with explicit kind.
+ * Storage semantics only — the pure string codec (parse/fromChannel/create
+ * and the key-format documentation) lives in the protocol adapter domain
+ * (`Adapter.SurfaceKey`, #499 precursor); this store imports it for format
+ * validation.
  *
  * Storage: uses Storage.Adapter.surfaceKey (SQLite); a missing sub-adapter
  * fails closed — routing must never fabricate ownership answers (#522).
  */
 
+import { Adapter } from "@openomni/protocol";
 import { requireSubAdapter } from "../storage/timestamped-store";
 import { Storage } from "../storage/storage";
 
-type ChannelKind = "dm" | "group" | "channel" | "thread" | "chat";
-
-interface ParsedKey {
-  readonly surface: string;
-  readonly namespace: string;
-  readonly kind: ChannelKind | undefined;
-  readonly id: string | undefined;
-  readonly threadId: string | undefined;
-}
-
 export namespace SurfaceKey {
-  export interface ChannelDescriptor {
-    /** Surface type (e.g., "slack", "telegram", "tui") */
-    surface: string;
-    /** Namespace/workspace/bot identifier */
-    namespace: string;
-    kind: ChannelKind;
-    id: string;
-    /** Optional thread identifier (creates a sub-key under the channel) */
-    threadId?: string;
-  }
-
-  function validateFormat(key: string): boolean {
-    return key.includes(":");
-  }
-
-  /**
-   * Create a surfaceKey from parts.
-   * @param parts - Array of strings to join with colons
-   * @returns Formatted surfaceKey
-   * @throws Error if parts is empty or validation fails
-   */
-  export function create(parts: string[]): string {
-    if (parts.length === 0) {
-      throw new Error("SurfaceKey parts cannot be empty");
-    }
-
-    const key = parts.join(":");
-
-    if (!validateFormat(key)) {
-      throw new Error(
-        `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
-      );
-    }
-
-    return key;
-  }
-
-  const KNOWN_KINDS: ReadonlySet<string> = new Set<ChannelKind>([
-    "dm",
-    "group",
-    "channel",
-    "thread",
-    "chat",
-  ]);
-
-  export function fromChannel(descriptor: ChannelDescriptor): string {
-    const parts = [descriptor.surface, descriptor.namespace, descriptor.kind, descriptor.id];
-    if (descriptor.threadId) {
-      parts.push("thread", descriptor.threadId);
-    }
-    return create(parts);
-  }
-
-  export function parse(key: string): ParsedKey {
-    const segments = key.split(":");
-    const surface = segments[0] ?? "";
-    const namespace = segments[1] ?? "";
-
-    let kind: ChannelKind | undefined;
-    let id: string | undefined;
-    let threadId: string | undefined;
-
-    for (let i = 2; i < segments.length; i++) {
-      const seg = segments[i];
-      if (seg == null) {
-        continue;
-      }
-      if (KNOWN_KINDS.has(seg)) {
-        if (seg === "thread") {
-          threadId = segments[i + 1];
-          i++;
-        } else {
-          kind = seg as ChannelKind;
-          id = segments[i + 1];
-          i++;
-        }
-      }
-    }
-
-    return { surface, namespace, kind, id, threadId };
-  }
-
   function subAdapter(): NonNullable<Storage.Adapter["surfaceKey"]> {
     return requireSubAdapter(
       Storage.get().surfaceKey,
@@ -133,12 +34,7 @@ export namespace SurfaceKey {
    * @param sessionId - The session ID
    */
   export function register(key: string, sessionId: string): void {
-    if (!validateFormat(key)) {
-      throw new Error(
-        `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
-      );
-    }
-
+    Adapter.SurfaceKey.assertWellFormed(key);
     subAdapter().register(key, sessionId);
   }
 
@@ -149,12 +45,7 @@ export namespace SurfaceKey {
    * Returns the session ID that owns the key after the claim attempt.
    */
   export function claim(key: string, sessionId: string, expectedSessionId?: string): string {
-    if (!validateFormat(key)) {
-      throw new Error(
-        `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
-      );
-    }
-
+    Adapter.SurfaceKey.assertWellFormed(key);
     return subAdapter().claim(key, sessionId, expectedSessionId);
   }
 

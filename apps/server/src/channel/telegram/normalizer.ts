@@ -1,5 +1,4 @@
-import type { Adapter } from "@openomni/protocol";
-import { SurfaceKey } from "@openomni/session";
+import { Adapter } from "@openomni/protocol";
 import { normalizeContent } from "../../shared/trigger";
 import type { InboundNormalizer } from "../types";
 import type { TelegramMessage } from "./types";
@@ -24,7 +23,7 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
     const content = normalizeContent(text, this.ctx.triggers, this.ctx.botUsername);
     if (!content) return null;
 
-    const surfaceKey = SurfaceKey.fromChannel({
+    const surfaceKey = Adapter.SurfaceKey.fromChannel({
       surface: "telegram",
       namespace: this.ctx.botId,
       kind: "chat",
