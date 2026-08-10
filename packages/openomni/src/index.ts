@@ -2,13 +2,8 @@
 export {
   CronAdapter,
   createIngressEngine,
-  IngressEventProjector,
   IngressAuthorityMiddleware,
-  IngressHandlers,
-  IngressSessionResolver,
   SessionBridge,
-  resolveTarget,
-  targetKey,
 } from "./ingress";
 export type {
   AgentResolver,
@@ -55,7 +50,6 @@ export type {
   ReconcileSummary,
 } from "./effect";
 
-export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,
   PolicyResolverInstance,
@@ -67,7 +61,6 @@ export type {
 export {
   AgentToolProvider,
   SystemToolProvider,
-  CronJobRegistry,
   CronJobRunner,
   InjectionQueue,
   Tool,
@@ -78,8 +71,6 @@ export {
   createChildAgentTool,
   createDispatchTool,
   createToolExecutor,
-  defineTool,
-  ToolRuntimePolicyMiddleware,
   resolveMeta,
   resolveCategory,
   resolveToolSelection,
@@ -104,24 +95,21 @@ export type {
   DispatchToolRuntime,
 } from "./execution-runtime";
 
-export { ReadBackExecutor, VerifierConformance, VerifierRegistry } from "./evidence";
+// Evidence conformance vocabulary (#493-owned dormant replay types ride this
+// namespace; the entry re-export keeps them public until archived replay lands)
+export * as VerifierConformance from "./evidence/verifier-conformance";
 
-export { CompletionSourceOrigin, projectCompletionOrigin } from "./work-item";
 export type { WorkItemCompletionRecoveryReceipt } from "./work-item";
 
 // Dispatch runtime
 export {
   DEFAULT_DISPATCH_MODEL,
-  DispatchPolicyRegistrationError,
   DispatchRuntime,
-  DispatchRegistry,
   createDefaultDispatchRuntime,
   createDefaultDispatchPolicy,
   createDeviceDispatchHandlers,
   createOutboundDispatchHandlers,
   createResidentDispatchHandlers,
-  deriveActorContext,
-  registerBuiltInDispatchHandlers,
 } from "./dispatch";
 export type {
   BuiltInDispatchOptions,

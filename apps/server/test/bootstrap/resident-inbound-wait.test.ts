@@ -2,11 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   AgentToolProvider,
   type DispatchRuntime,
-  IngressEventProjector,
-  IngressHandlers,
   ResidentRuntime,
   SystemToolProvider,
 } from "@openomni/openomni";
+import { IngressEventProjector, IngressHandlers } from "../../../../packages/openomni/src/ingress";
 import type { Dispatch } from "@openomni/protocol";
 import { Bus, PendingAskStore, Session, Storage, SurfaceKey, WorkerRun } from "@openomni/session";
 import { createResidentInboundWaitHandler } from "../../src/bootstrap/resident-inbound-wait";

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { SurfaceKey, Storage, Session } from "@openomni/session";
-import { IngressSessionResolver } from "../../src/ingress/session-resolver";
+import { IngressSessionResolver } from "../../src/ingress";
 
 describe("IngressSessionResolver", () => {
   beforeEach(() => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { deriveActorContext } from "../../src/dispatch/actor";
+import { deriveActorContext } from "../../src/dispatch";
 
 describe("deriveActorContext", () => {
   test("derives worker actor from runtime session and run context", () => {

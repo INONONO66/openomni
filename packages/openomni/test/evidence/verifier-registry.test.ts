@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { VerifierConformance } from "../../src";
+import * as VerifierConformance from "../../src/evidence/verifier-conformance";
 import { FrozenNliSourceDigest } from "../../src/evidence/verifier-frozen-nli-model";
 import { VerifierRegistry } from "../../src/evidence/verifier-registry";
 
