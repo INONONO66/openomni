@@ -68,8 +68,6 @@ describe("PolicyEngine dispatchPoint selection", () => {
     });
 
     expect(Policy.PolicyPoint.MigrationMapping[timing]).toEqual(["run.completion.pre"]);
-    expect(PolicyEngine.resolvePolicyPoints(timing)).toEqual(["run.completion.pre"]);
-    expect(PolicyEngine.resolvePolicyPoints(timing, { resourceKind: "work" })).toEqual([]);
     expect(Object.values(Policy.PolicyPoint.MigrationMapping).flat()).not.toContain(
       "work.complete.pre",
     );
@@ -177,34 +175,42 @@ describe("PolicyEngine dispatchPoint selection", () => {
     expect(agentTypeReads).toBe(1);
   });
 
-  test("keeps legacy and canonical dispatch selection isolated", async () => {
+  test("keeps point selection isolated with no legacy dispatch member", async () => {
     const engine = PolicyEngine.create();
     const invocations: string[] = [];
     engine.register({
-      name: "legacy",
-      timing: "dispatch.authorize",
-      priority: 0,
-      fn: () => {
-        invocations.push("legacy");
-        return PolicyDecision.allow({ policyId: "legacy" });
-      },
-    });
-    engine.register({
       kind: "point",
-      name: "canonical",
+      name: "action-policy",
       pointIds: ["dispatch.action.pre"],
       effectCapabilities: { "dispatch.action.pre": [] },
       priority: 0,
       fn: () => {
-        invocations.push("canonical");
-        return PolicyDecision.allow({ policyId: "canonical" });
+        invocations.push("action-policy");
+        return PolicyDecision.allow({ policyId: "action-policy" });
+      },
+    });
+    engine.register({
+      kind: "point",
+      name: "turn-policy",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
+      priority: 0,
+      fn: () => {
+        invocations.push("turn-policy");
+        return PolicyDecision.allow({ policyId: "turn-policy" });
       },
     });
 
+    // The legacy dispatch(timing) member was deleted in #530.
+    expect(Reflect.get(engine, "dispatch")).toBeUndefined();
     await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
-    await engine.dispatch("dispatch.authorize", dispatchContext);
+    await engine.dispatchPoint("run.turn.pre", {
+      sessionId: "session-1",
+      runId: "run-1",
+      turnIndex: 0,
+    });
 
-    expect(invocations).toEqual(["canonical", "legacy"]);
+    expect(invocations).toEqual(["action-policy", "turn-policy"]);
   });
 
   test("allows valid canonical dispatches with no matching registrations", async () => {

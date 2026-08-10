@@ -51,11 +51,13 @@ describe("policy pipeline integration", () => {
 
     const registry = defaultRegistry();
     registry.register("test:github-surface-guard", () => ({
+      kind: "point",
       name: "test:github-surface-guard",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["run.abort"] },
       priority: 0,
       failPolicy: "fail-closed",
-      fn: (ctx: PolicyContext) => {
+      fn: (ctx) => {
         const hasGitHubLabel =
           ctx.labels?.some((label) => label.value === "surface.github") ?? false;
         if (hasGitHubLabel) {
@@ -79,10 +81,12 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatch(
-      "turn.start",
-      baseCtx({ agentType: "reviewer", labels: labelEntries(plan.labels) }),
-    );
+    const verdict = await engine.dispatchPoint("run.turn.pre", {
+      ...baseCtx({ agentType: "reviewer", labels: labelEntries(plan.labels) }),
+      sessionId: "session",
+      runId: "run",
+      turnIndex: 0,
+    });
 
     expect(verdict).toMatchObject({
       verdict: "deny",
@@ -108,11 +112,16 @@ describe("policy pipeline integration", () => {
 
     const registry = defaultRegistry();
     registry.register("policy:github-review-readonly", () => ({
+      kind: "point",
       name: "policy:github-review-readonly",
-      timing: "invoke.prepare",
-      priority: -10,
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["run.abort"] },
+      // Canonical priorities are non-negative; legacy -10 renumbered to 0.
+      // builtin:tool-permission (also priority 0, default config) allows this
+      // tool, so the composed deny reason still comes from this policy.
+      priority: 0,
       failPolicy: "fail-closed",
-      fn: (ctx: PolicyContext) => {
+      fn: (ctx) => {
         const isWriteTool = ctx.toolLabels?.includes("capability.write") ?? false;
         if (isWriteTool) {
           return PolicyDecision.deny({
@@ -130,17 +139,19 @@ describe("policy pipeline integration", () => {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch(
-      "invoke.prepare",
-      baseCtx({
+    const verdict = await engine.dispatchPoint("tool.native.pre", {
+      ...baseCtx({
         agentType: "reviewer",
         labels: labelEntries(plan.labels),
         toolName: "github.create_review_comment",
         toolCallId: "call-review-comment",
         toolLabels: ["surface.github", "capability.write"],
-        toolInput: { body: "Please change this implementation." },
       }),
-    );
+      sessionId: "session",
+      runId: "run",
+      toolId: "github.create_review_comment",
+      toolInput: { body: "Please change this implementation." },
+    });
 
     expect(verdict).toMatchObject({
       verdict: "deny",
@@ -156,18 +167,17 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatch(
-      "invoke.prepare",
-      baseCtx({
-        sessionId: "session-permissions-only",
-        runId: "run-permissions-only",
+    const verdict = await engine.dispatchPoint("tool.native.pre", {
+      ...baseCtx({
         toolName: "github.create_issue_comment",
-        toolId: "github.create_issue_comment",
         toolCallId: "call-comment",
         toolLabels: ["surface.github", "capability.write"],
-        toolInput: { body: "Looks good." },
       }),
-    );
+      sessionId: "session-permissions-only",
+      runId: "run-permissions-only",
+      toolId: "github.create_issue_comment",
+      toolInput: { body: "Looks good." },
+    });
 
     expect(verdict.verdict).toBe("deny");
     expect(PolicyDecision.reason(verdict)).toBe("allowlist_miss");

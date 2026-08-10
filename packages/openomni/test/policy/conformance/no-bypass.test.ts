@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { PolicyRegistration } from "@openomni/agent";
 import { PolicyDecision, type Ingress } from "@openomni/protocol";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { createIngressEngine } from "../../../src/ingress/engine";
+import type { IngressPolicyGate } from "../../../src/ingress/policy-gate";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
-function inboundDenyAll(reason: string): PolicyRegistration {
+function inboundDenyAll(reason: string): IngressPolicyGate.IngressPolicy {
   return {
     name: "conformance:deny-all:inbound.receive",
-    timing: "inbound.receive",
+    gate: "inbound",
     priority: 0,
     failPolicy: "fail-closed",
     fn: () =>

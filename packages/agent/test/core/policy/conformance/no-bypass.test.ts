@@ -12,20 +12,45 @@ const documentedSkip = () => {
   void 0;
 };
 
-function denyAll(timing: PolicyRegistration["timing"], reason: string): PolicyRegistration {
+/**
+ * Canonical equivalent of the legacy `invoke.prepare` deny-all: one
+ * registration bound to every invoke-boundary pre point, so no tool or
+ * delegation path can route around the deny by picking a different point.
+ */
+function denyAllInvokePre(reason: string): PolicyRegistration {
   return {
-    name: `conformance:deny-all:${timing}`,
-    timing,
+    kind: "point",
+    name: "conformance:deny-all:invoke-pre",
+    pointIds: ["tool.native.pre", "tool.mcp.pre", "delegation.worker.pre"],
+    effectCapabilities: {
+      "tool.native.pre": ["run.abort"],
+      "tool.mcp.pre": ["run.abort"],
+      "delegation.worker.pre": ["run.abort"],
+    },
     priority: 0,
     failPolicy: "fail-closed",
     fn: () =>
       PolicyDecision.deny({
-        policyId: `conformance.${timing}.deny-all`,
+        policyId: "conformance.invoke-pre.deny-all",
         reasonCodes: [reason],
-        effects:
-          timing === "context.prepare"
-            ? [{ type: "audit.annotate", annotation: reason, severity: "error" }]
-            : [{ type: "run.abort", reason }],
+        effects: [{ type: "run.abort", reason }],
+      }),
+  };
+}
+
+function denyAllContextPre(reason: string): PolicyRegistration {
+  return {
+    kind: "point",
+    name: "conformance:deny-all:prompt.context.pre",
+    pointIds: ["prompt.context.pre"],
+    effectCapabilities: { "prompt.context.pre": ["audit.annotate"] },
+    priority: 0,
+    failPolicy: "fail-closed",
+    fn: () =>
+      PolicyDecision.deny({
+        policyId: "conformance.prompt.context.pre.deny-all",
+        reasonCodes: [reason],
+        effects: [{ type: "audit.annotate", annotation: reason, severity: "error" }],
       }),
   };
 }
@@ -52,7 +77,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
       }),
     );
     const engine = PolicyEngine.create();
-    engine.register(denyAll("invoke.prepare", "native tool denied by conformance policy"));
+    engine.register(denyAllInvokePre("native tool denied by conformance policy"));
 
     const executor = createToolExecutor({ toolExecutor: nativeExecutor, engine });
     const result = await executor({ id: "native-call", tool: "bash", input: { command: "date" } });
@@ -74,7 +99,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     const capturedLabels: string[][] = [];
     const engine = PolicyEngine.create();
     engine.register({
-      ...denyAll("invoke.prepare", "mcp tool denied by conformance policy"),
+      ...denyAllInvokePre("mcp tool denied by conformance policy"),
       fn: (ctx) => {
         capturedLabels.push(ctx.toolLabels ?? []);
         return PolicyDecision.deny({
@@ -100,9 +125,14 @@ describe("policy no-bypass conformance — agent governed paths", () => {
 
   it("blocks system prompt composition before prompt content is returned", async () => {
     const engine = PolicyEngine.create();
-    engine.register(denyAll("context.prepare", "system prompt denied by conformance policy"));
+    engine.register(denyAllContextPre("system prompt denied by conformance policy"));
 
-    const decision = await engine.dispatch("context.prepare", basePolicyContext());
+    const decision = await engine.dispatchPoint("prompt.context.pre", {
+      ...basePolicyContext(),
+      sessionId: "session",
+      runId: "run",
+      turnIndex: 0,
+    });
     expect(decision.verdict).toBe("deny");
     expect(decision.reasonCodes).toContain("system prompt denied by conformance policy");
   });

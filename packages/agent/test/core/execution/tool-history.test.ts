@@ -3,6 +3,7 @@ import type { Message, Sink } from "@openomni/protocol";
 import type { Provider } from "@openomni/llm";
 import { toModelMessages } from "@openomni/llm/src/message";
 import { ChatAgent } from "../../../src/core/chat-agent";
+import type { PolicyRegistration } from "../../../src/core/policy";
 import { createErrorOutcome, createStopOutcome, type MockLlmFn } from "../../helpers/mock-llm";
 import { allow, continueWithPrompt } from "../../helpers/policy-decision";
 
@@ -113,16 +114,13 @@ function sessionAndParent(messages: Message.WithParts[]): { sessionID: string; p
   };
 }
 
-function injectOnceMiddleware(): {
-  name: string;
-  timing: "turn.finish";
-  priority: number;
-  fn: () => ReturnType<typeof allow>;
-} {
+function injectOnceMiddleware(): PolicyRegistration {
   let injected = false;
   return {
+    kind: "point",
     name: "test:inject-once",
-    timing: "turn.finish",
+    pointIds: ["run.turn.post"],
+    effectCapabilities: { "run.turn.post": ["run.continue_with_prompt"] },
     priority: 100,
     fn: () => {
       if (injected) return allow();
@@ -210,8 +208,10 @@ describe("tool-bearing history (#546)", () => {
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
         {
+          kind: "point",
           name: "test:capture-final-history",
-          timing: "run.finish",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
           priority: 100,
           fn: (ctx) => {
             finalMessages = [
@@ -265,8 +265,10 @@ describe("tool-bearing history (#546)", () => {
       middleware: [
         injectOnceMiddleware(),
         {
+          kind: "point",
           name: "test:capture-pre-turn",
-          timing: "turn.start",
+          pointIds: ["run.turn.pre"],
+          effectCapabilities: { "run.turn.pre": [] },
           priority: 100,
           fn: (ctx) => {
             const context = ctx as unknown as {
@@ -282,8 +284,10 @@ describe("tool-bearing history (#546)", () => {
           },
         },
         {
+          kind: "point",
           name: "test:fast-retry",
-          timing: "error",
+          pointIds: ["run.error.error"],
+          effectCapabilities: { "run.error.error": ["run.retry_after"] },
           priority: 100,
           fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
         },
@@ -337,8 +341,12 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
         {
+          kind: "point",
           name: "test:replace-keep-all",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: {
+            "run.turn.post": ["run.replace_messages", "run.continue_with_prompt"],
+          },
           priority: 100,
           fn: (ctx) => {
             if (replaced) return allow();
@@ -386,8 +394,10 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
         {
+          kind: "point",
           name: "test:run-start-inject",
-          timing: "run.start",
+          pointIds: ["run.lifecycle.pre"],
+          effectCapabilities: { "run.lifecycle.pre": ["prompt.inject_message"] },
           priority: 100,
           fn: () =>
             allow("test.pre-run", "inject", [
@@ -395,8 +405,10 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
             ]),
         },
         {
+          kind: "point",
           name: "test:fast-retry",
-          timing: "error",
+          pointIds: ["run.error.error"],
+          effectCapabilities: { "run.error.error": ["run.retry_after"] },
           priority: 100,
           fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
         },
@@ -436,8 +448,10 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       middleware: [
         injectOnceMiddleware(),
         {
+          kind: "point",
           name: "test:capture-final-history",
-          timing: "run.finish",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
           priority: 100,
           fn: (ctx) => {
             finalMessages = [

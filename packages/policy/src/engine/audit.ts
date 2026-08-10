@@ -1,5 +1,4 @@
 import { Operational, Policy, PolicyEvent, type TraceContext } from "@openomni/protocol";
-import { auditPoint } from "./points";
 import type {
   AuditDispatchContextGeneric,
   GenericPolicyContext,
@@ -35,11 +34,13 @@ function auditReason(decision: Policy.PolicyDecision): string {
   return decision.verdict;
 }
 
-function resolveAuditPoint(
-  timing: Policy.Timing,
-  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
-): ReturnType<typeof auditPoint> {
-  if (ctx.pointId === undefined) return auditPoint(timing, ctx.resourceDescriptor);
+function resolveAuditPoint(ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>): {
+  readonly pointId?: string;
+  readonly pointVersion?: number;
+} {
+  // Every dispatch is canonical since #530, so the audit context always
+  // carries its point; the guard only covers hand-built audit contexts.
+  if (ctx.pointId === undefined) return {};
   return {
     pointId: ctx.pointId,
     pointVersion: Policy.PolicyPoint.Registry[ctx.pointId].version,
@@ -75,7 +76,7 @@ export function publishPolicyEvent(
     reasonCodes: decision.reasonCodes,
     ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
     durationMs: decision.durationMs,
-    ...resolveAuditPoint(ctx.timing, ctx),
+    ...resolveAuditPoint(ctx),
     ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
   });
 }
@@ -108,7 +109,7 @@ export function publishComposedDecision(
     ...(decision.obligations !== undefined && { obligations: decision.obligations }),
     ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
     durationMs: decision.durationMs,
-    ...resolveAuditPoint(timing, ctx),
+    ...resolveAuditPoint(ctx),
     ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
   });
 }

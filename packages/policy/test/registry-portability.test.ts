@@ -8,15 +8,19 @@ describe("PolicyRegistry portability", () => {
     const registry2 = PolicyRegistry.create();
 
     registry1.register("policy-a", () => ({
+      kind: "point",
       name: "policy-a",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.allow({ policyId: "a" }),
     }));
 
     registry2.register("policy-b", () => ({
+      kind: "point",
       name: "policy-b",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.allow({ policyId: "b" }),
     }));
@@ -33,15 +37,19 @@ describe("PolicyRegistry portability", () => {
     const registry = PolicyRegistry.create();
 
     registry.register("policy-1", () => ({
+      kind: "point",
       name: "policy-1",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.allow({ policyId: "1" }),
     }));
 
     registry.register("policy-2", () => ({
+      kind: "point",
       name: "policy-2",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 200,
       fn: () => PolicyDecision.allow({ policyId: "2" }),
     }));
@@ -80,8 +88,10 @@ describe("PolicyRegistry portability", () => {
     const registry = PolicyRegistry.create();
 
     registry.register("policy-1", () => ({
+      kind: "point",
       name: "policy-1",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: () => PolicyDecision.allow({ policyId: "1" }),
     }));

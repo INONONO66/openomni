@@ -74,8 +74,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-turn-inject",
-      timing: "turn.finish",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
       priority: 100,
       fn: () => inject("continue working", "test.inject", "continuation"),
     });
@@ -104,8 +106,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const replacement = [createUserMessage("turn replacement", "test")];
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-turn-replace",
-      timing: "turn.finish",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["run.replace_messages"] },
       priority: 100,
       fn: () => replaceMessages(replacement, "test.turn", "replace"),
     });
@@ -124,8 +128,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-turn-abort",
-      timing: "turn.finish",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["run.abort"] },
       priority: 100,
       fn: () => abortRun("test.abort", "force-stop"),
     });
@@ -148,8 +154,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-stalled",
-      timing: "turn.finish",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["run.abort"] },
       priority: 100,
       fn: () => abortRun("test.stalled", "stalled"),
     });
@@ -173,8 +181,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-run-transform",
-      timing: "run.finish",
+      pointIds: ["run.lifecycle.post"],
+      effectCapabilities: { "run.lifecycle.post": [] },
       priority: 100,
       fn: () => allow("test.post-run", "observe-final"),
     });

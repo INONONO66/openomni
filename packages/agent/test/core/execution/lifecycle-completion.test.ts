@@ -14,8 +14,10 @@ describe("completion.prepare dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-compaction",
-      timing: "completion.prepare",
+      pointIds: ["run.completion.pre"],
+      effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
       priority: 100,
       fn: () => replaceMessages(compactedMessages, "test.compact", "compact"),
     });
@@ -31,8 +33,10 @@ describe("completion.prepare dispatch", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-compaction-context",
-      timing: "completion.prepare",
+      pointIds: ["run.completion.pre"],
+      effectCapabilities: { "run.completion.pre": ["prompt.append_context"] },
       priority: 100,
       fn: () => appendContext("compaction context", "test.compact", "append"),
     });
@@ -50,8 +54,10 @@ describe("completion.prepare dispatch", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-compaction-bad-replacement",
-      timing: "completion.prepare",
+      pointIds: ["run.completion.pre"],
+      effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
       priority: 100,
       fn: () =>
         allow("test.compact", "bad-replace", [
@@ -73,8 +79,10 @@ describe("completion.prepare dispatch", () => {
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-post-compaction-noop",
-      timing: "completion.prepare",
+      pointIds: ["run.completion.pre"],
+      effectCapabilities: { "run.completion.pre": [] },
       priority: 100,
       fn,
     });

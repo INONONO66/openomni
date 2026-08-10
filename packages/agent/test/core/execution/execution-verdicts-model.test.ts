@@ -19,7 +19,14 @@ describe("model execution deny verdicts", () => {
     Bus.reset();
     const fn = mock(() => deny("test.deny", "provider-blocked"));
     const engine = PolicyEngine.create();
-    engine.register({ name: "deny-model-request", timing: "model.request", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "deny-model-request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": ["audit.annotate"] },
+      priority: 100,
+      fn,
+    });
 
     const result = await dispatchModelRequest(makeState(), engine, makeConfig());
 
@@ -80,8 +87,10 @@ describe("model execution deny verdicts", () => {
 function responseDenyEngine(): ReturnType<typeof PolicyEngine.create> {
   const engine = PolicyEngine.create();
   engine.register({
+    kind: "point",
     name: "deny-model-response",
-    timing: "model.response",
+    pointIds: ["connection.llm.post"],
+    effectCapabilities: { "connection.llm.post": ["audit.annotate"] },
     priority: 100,
     fn: () => deny("test.deny", "after-provider"),
   });

@@ -68,14 +68,16 @@ describe("Ingress channel grants", () => {
     });
     testState.responseQueue.push("ok");
     let capturedLabels: unknown;
-    let capturedToolInput: unknown;
+    let capturedContext: unknown;
     const engine = getIngressEngine({
       name: "test:capture-channel-grant-context",
-      timing: "inbound.receive",
+      gate: "inbound",
       priority: 0,
       fn: (ctx) => {
-        capturedLabels = ctx.labels;
-        capturedToolInput = ctx.toolInput;
+        if (ctx.gate === "inbound") {
+          capturedLabels = ctx.labels;
+          capturedContext = ctx;
+        }
         return ProtocolPolicyDecision.allow({
           policyId: "test.capture-channel-grant-context",
           reasonCodes: ["captured"],
@@ -105,7 +107,7 @@ describe("Ingress channel grants", () => {
         value: "inbound.evidence_only",
         source: "system",
       });
-      expect(capturedToolInput).toMatchObject({
+      expect(capturedContext).toMatchObject({
         inboundTreatment: "evidence_only",
         channelGrantId: "grant-discord-guild-dev",
         channelGrantKind: "broadcast_channel",

@@ -2,11 +2,9 @@ export { PolicyEngine, PolicyRegistrationError } from "./engine";
 export type {
   PolicyDecision,
   PolicyEngineConfig,
-  PolicyEngineCompatibilityGeneric,
   GenericPolicyContext,
   CanonicalPolicyRegistrationGeneric,
   PolicyEngineRegistrationGeneric,
-  PolicyRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
   DispatchPointContextGeneric,

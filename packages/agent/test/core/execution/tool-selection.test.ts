@@ -50,8 +50,10 @@ function makeState() {
 
 function filterPolicy(filteredTools: string[]): PolicyRegistration {
   return {
+    kind: "point",
     name: "test-filter",
-    timing: "resources.prepare",
+    pointIds: ["tool.catalog.pre"],
+    effectCapabilities: { "tool.catalog.pre": ["tool.filter"] },
     priority: 0,
     fn: async () => filterTools(filteredTools, "test-filter", "test-filter"),
   };
@@ -59,8 +61,10 @@ function filterPolicy(filteredTools: string[]): PolicyRegistration {
 
 function abortSelectionPolicy(reason: string): PolicyRegistration {
   return {
+    kind: "point",
     name: "test-abort-selection",
-    timing: "resources.prepare",
+    pointIds: ["tool.catalog.pre"],
+    effectCapabilities: { "tool.catalog.pre": ["run.abort"] },
     priority: 0,
     fn: async () => abortRun("test-abort-selection", reason),
   };
@@ -171,8 +175,10 @@ describe("resources.prepare dispatch", () => {
     let capturedCtx: Record<string, unknown> | undefined;
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "capture-ctx",
-      timing: "resources.prepare",
+      pointIds: ["tool.catalog.pre"],
+      effectCapabilities: { "tool.catalog.pre": [] },
       priority: 0,
       fn: async (ctx) => {
         capturedCtx = ctx as unknown as Record<string, unknown>;
@@ -209,8 +215,10 @@ describe("resources.prepare dispatch", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "transform-no-tools",
-      timing: "resources.prepare",
+      pointIds: ["tool.catalog.pre"],
+      effectCapabilities: { "tool.catalog.pre": [] },
       priority: 0,
       fn: async () => allow("test", "test"),
     });

@@ -1,14 +1,8 @@
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import {
-  COMPOSED_POLICY_ID,
-  composeFinalDecision,
-  composeFinalPointDecision,
-  middlewareErrorDecision,
-  normalizeDecision,
-} from "./decisions";
-import { defaultFailPolicy, timingForPolicyPoint } from "./points";
+import { COMPOSED_POLICY_ID, composeFinalPointDecision } from "./decisions";
+import { timingForPolicyPoint } from "./points";
 import { createPolicyRegistrationStore } from "./registration";
-import { immutablePointSnapshot, immutableSnapshot } from "./context";
+import { immutablePointSnapshot } from "./context";
 import { publishComposedDecision } from "./audit";
 import { publishMiddlewareDebug, publishMiddlewareError, recordDecision } from "./telemetry";
 import {
@@ -18,119 +12,18 @@ import {
   undeclaredEffectDecision,
 } from "./point-decisions";
 import type {
-  DispatchContextGeneric,
+  CanonicalPolicyRegistrationGeneric,
   DispatchPointContextGeneric,
   GenericPolicyContext,
   PolicyEngineConfig,
-  PolicyEngineCompatibilityGeneric,
-  PolicyEngineRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   PolicyPointId,
 } from "./types";
 
 export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   options: PolicyEngineConfig = {},
-  compatibility: PolicyEngineCompatibilityGeneric<TCtx> = {},
 ): PolicyEngineInstanceGeneric<TCtx> {
   const registrations = createPolicyRegistrationStore<TCtx>();
-
-  async function dispatch(
-    timing: Policy.Timing,
-    ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
-  ): Promise<Policy.PolicyDecision> {
-    const fullCtx = immutableSnapshot({
-      ...ctx,
-      timing,
-    });
-    const pointId = compatibility.resolvePointForLegacyDispatch?.(timing, fullCtx);
-    const pointSnapshot =
-      pointId === undefined
-        ? undefined
-        : immutablePointSnapshot<TCtx>(fullCtx, { pointId, timing });
-    const auditCtx = pointId === undefined ? fullCtx : Object.freeze({ ...fullCtx, pointId });
-    let canonicalContractFailure: Policy.PolicyDecision | undefined;
-    if (pointId !== undefined && pointSnapshot !== undefined) {
-      canonicalContractFailure = pointSnapshot.success
-        ? validatePointContract(pointId, pointSnapshot.value)
-        : pointContractDecision(pointId, "policy.input_invalid");
-    }
-    const selected =
-      pointId === undefined
-        ? registrations.selectLegacy(timing, fullCtx.agentType)
-        : registrations.selectLegacyCompatible(timing, fullCtx.agentType, pointId);
-    const decisions: Policy.PolicyDecision[] = [];
-    let canonicalContractRecorded = false;
-
-    function composeAndPublish(): Policy.PolicyDecision {
-      const decision = composeFinalDecision(decisions, timing, ctx.resourceDescriptor);
-      publishComposedDecision(options, timing, auditCtx, decision);
-      return decision;
-    }
-
-    if (selected.length === 0) {
-      if (canonicalContractFailure !== undefined) {
-        decisions.push(
-          recordDecision(
-            options,
-            { name: "policy.point.contract" },
-            auditCtx,
-            canonicalContractFailure,
-          ),
-        );
-        return composeAndPublish();
-      }
-      const decision = PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID });
-      publishComposedDecision(options, timing, auditCtx, decision);
-      return decision;
-    }
-
-    for (const reg of selected) {
-      const startTime = Date.now();
-      let decision: Policy.PolicyDecision | undefined;
-      const isCanonical = "kind" in reg;
-      if (isCanonical) {
-        if (pointId === undefined || pointSnapshot === undefined) continue;
-        if (canonicalContractFailure !== undefined) {
-          if (canonicalContractRecorded) continue;
-          canonicalContractRecorded = true;
-          decision = canonicalContractFailure;
-        } else if (pointSnapshot.success) {
-          decision = await evaluateCanonical(reg, pointId, () => reg.fn(pointSnapshot.value));
-        } else {
-          continue;
-        }
-      } else {
-        try {
-          decision = await reg.fn(fullCtx);
-        } catch (err) {
-          const durationMs = Date.now() - startTime;
-          const failPolicy = reg.failPolicy ?? defaultFailPolicy(timing, ctx.resourceDescriptor);
-          const error = err instanceof Error ? err : new Error(String(err));
-          publishMiddlewareError(options, timing, reg.name, error, failPolicy, durationMs);
-          if (failPolicy === "fail-open") continue;
-
-          decision = middlewareErrorDecision(reg, durationMs, timing, ctx.resourceDescriptor);
-        }
-      }
-
-      if (decision === undefined) continue;
-
-      const durationMs = Date.now() - startTime;
-      const normalized = isCanonical
-        ? decision
-        : normalizeDecision(decision, reg, durationMs, timing, ctx.resourceDescriptor);
-      const auditRegistration =
-        normalized.policyId === "policy.point.contract" ? { name: "policy.point.contract" } : reg;
-      decisions.push(recordDecision(options, auditRegistration, auditCtx, normalized));
-      if (!isCanonical) {
-        publishMiddlewareDebug(options, timing, reg.name, normalized.verdict, durationMs);
-      }
-
-      if (normalized.verdict === "deny") return composeAndPublish();
-    }
-
-    return composeAndPublish();
-  }
 
   async function dispatchPoint<TPointId extends PolicyPointId>(
     pointId: TPointId,
@@ -170,9 +63,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       return composeAndPublish();
     }
 
-    const selected = compatibility.includeLegacyAtPoint
-      ? registrations.selectPointCompatible(pointId, fullCtx.agentType)
-      : registrations.selectPoint(pointId, fullCtx.agentType);
+    const selected = registrations.selectPoint(pointId, fullCtx.agentType);
     if (selected.length === 0) {
       const decision = PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID });
       publishComposedDecision(options, timing, fullCtx, decision);
@@ -191,7 +82,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   }
 
   async function evaluateCanonical(
-    reg: PolicyEngineRegistrationGeneric<TCtx>,
+    reg: CanonicalPolicyRegistrationGeneric<TCtx>,
     pointId: PolicyPointId,
     invoke: () => Promise<Policy.PolicyDecision> | Policy.PolicyDecision,
   ): Promise<Policy.PolicyDecision | undefined> {
@@ -216,7 +107,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       engineDecision === undefined
         ? normalizePointDecision(middlewareDecision, reg, pointId, durationMs)
         : { decision: engineDecision };
-    const declaredEffects = declaredEffectsFor(reg, pointId, contract.allowedEffects);
+    const declaredEffects = reg.effectCapabilities[pointId] ?? [];
     const undeclared = normalized.parsed?.effects.find(
       (effect) => !declaredEffects.includes(effect.type),
     );
@@ -232,7 +123,6 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     register(reg) {
       registrations.register(reg);
     },
-    dispatch,
     dispatchPoint,
   };
 }
@@ -280,12 +170,4 @@ function validatePointContract(
     return pointContractDecision(pointId, "policy.input_invalid");
   }
   return undefined;
-}
-
-function declaredEffectsFor<TCtx extends GenericPolicyContext>(
-  registration: PolicyEngineRegistrationGeneric<TCtx>,
-  pointId: PolicyPointId,
-  legacyEffects: readonly Policy.PolicyEffectType[],
-): readonly Policy.PolicyEffectType[] {
-  return "kind" in registration ? (registration.effectCapabilities[pointId] ?? []) : legacyEffects;
 }

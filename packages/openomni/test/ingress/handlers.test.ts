@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Execution, type Message, type Ingress } from "@openomni/protocol";
-import type { PolicyRegistration } from "@openomni/agent";
+import type { IngressPolicyGate } from "../../src/ingress/policy-gate";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
@@ -365,8 +365,8 @@ describe("IngressHandlers", () => {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
     };
-    const policies: PolicyRegistration[] = [
-      { name: "test-writeback", timing: "writeback.commit", priority: 100, fn: policyFn },
+    const policies: IngressPolicyGate.IngressPolicy[] = [
+      { name: "test-writeback", gate: "writeback", priority: 100, fn: policyFn },
     ];
 
     const result = await IngressHandlers.handleDirect({
@@ -399,10 +399,10 @@ describe("IngressHandlers", () => {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
     };
-    const policies: PolicyRegistration[] = [
+    const policies: IngressPolicyGate.IngressPolicy[] = [
       {
         name: "test-deny-writeback",
-        timing: "writeback.commit",
+        gate: "writeback",
         priority: 0,
         fn: () =>
           PolicyDecision.deny({
@@ -439,10 +439,10 @@ describe("IngressHandlers", () => {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
     };
-    const policies: PolicyRegistration[] = [
+    const policies: IngressPolicyGate.IngressPolicy[] = [
       {
         name: "test-suppress-writeback",
-        timing: "writeback.commit",
+        gate: "writeback",
         priority: 0,
         fn: () =>
           PolicyDecision.allow({
@@ -479,10 +479,10 @@ describe("IngressHandlers", () => {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
     };
-    const policies: PolicyRegistration[] = [
+    const policies: IngressPolicyGate.IngressPolicy[] = [
       {
         name: "test-retry-writeback",
-        timing: "writeback.commit",
+        gate: "writeback",
         priority: 0,
         fn: () =>
           PolicyDecision.pending({

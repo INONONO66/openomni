@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyEngine, type PolicyContext, type PolicyRegistration } from "@openomni/agent";
+import {
+  PolicyEngine,
+  type CanonicalPolicyRegistration,
+  type PolicyContext,
+} from "@openomni/agent";
 import { PolicyDecision, type Ingress, type RuntimeResource } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
@@ -48,17 +52,21 @@ describe("cross-middleware deny-wins", () => {
   test("deny-wins across policy engine boundaries with mixed verdicts", async () => {
     const engine = PolicyEngine.create({ audit: false });
 
-    const allowPolicy: PolicyRegistration = {
+    const allowPolicy: CanonicalPolicyRegistration = {
+      kind: "point",
       name: "allow-policy",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": [] },
       priority: 0,
       failPolicy: "fail-closed",
       fn: () => PolicyDecision.allow({ policyId: "allow-policy", reasonCodes: ["allowed"] }),
     };
 
-    const denyPolicy: PolicyRegistration = {
+    const denyPolicy: CanonicalPolicyRegistration = {
+      kind: "point",
       name: "deny-policy",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["run.abort"] },
       priority: 10,
       failPolicy: "fail-closed",
       fn: () =>
@@ -72,8 +80,11 @@ describe("cross-middleware deny-wins", () => {
     engine.register(allowPolicy);
     engine.register(denyPolicy);
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const verdict = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
+      sessionId: "session",
+      runId: "run",
+      toolId: "some_tool",
       toolName: "some_tool",
       toolInput: {},
     });
@@ -90,7 +101,7 @@ describe("cross-middleware deny-wins", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const reg of workerRegs) engine.register(reg);
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const verdict = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
       sessionId: "session-worker-middleware",
       runId: "run-worker-middleware",

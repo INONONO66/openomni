@@ -1,5 +1,3 @@
-import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import type { PolicyRegistration } from "@openomni/agent";
 import {
   Ingress as IngressNamespace,
   type Ingress,
@@ -10,6 +8,7 @@ import {
 } from "@openomni/protocol";
 import { Bus, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
+import { IngressPolicyGate } from "./policy-gate";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
 import { resolveIngressActor } from "./actor-resolver";
@@ -28,8 +27,6 @@ import { targetKey } from "./target";
 
 export type { CoordinatorLike };
 
-const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-
 export interface AgentResolver {
   resolve(agentName: string, event: Ingress.InternalEvent): Promise<Ingress.AgentDef>;
 }
@@ -44,8 +41,8 @@ export interface IngressEngineDeps {
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
   readonly agentResolver?: AgentResolver;
   readonly dispatchRuntime?: DispatchRuntime;
-  readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
-  readonly policies?: readonly PolicyRegistration[];
+  readonly onPolicyDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+  readonly policies?: readonly IngressPolicyGate.IngressPolicy[];
 }
 
 export interface IngressEngine {
@@ -59,13 +56,13 @@ export interface IngressEngine {
   ): Promise<Ingress.IngressResult>;
 }
 
-function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
+function assertInboundAllowed(decision: Policy.PolicyDecision): void {
   if (!Decision.isBlocking(decision)) return;
-  throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
+  throw new Error(Decision.reason(decision, "ingress inbound policy denied"));
 }
 
 export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine {
-  const ingressPolicies: readonly PolicyRegistration[] = [...(deps.policies ?? [])];
+  const ingressPolicies: readonly IngressPolicyGate.IngressPolicy[] = [...(deps.policies ?? [])];
 
   async function ingestResolved(
     inboundEvent: Ingress.ResolvedInboundEvent,
@@ -91,15 +88,6 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
     });
 
     if (ingressPolicies.length > 0) {
-      const engine = PolicyEngine.create({
-        traceContext: trace,
-        onDecision: deps.onPolicyDecision,
-        auditEmit: Bus.publish,
-      });
-      for (const reg of ingressPolicies) {
-        engine.register(reg);
-      }
-
       const labels: Policy.LabelEntry[] = [
         { value: `surface.${inboundEvent.surface}`, source: "system" },
         { value: `target.${target.kind}`, source: "system" },
@@ -113,27 +101,31 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       const role = inboundEvent.meta?.actor?.role;
       if (role) labels.push({ value: `actor.${role}`, source: "system" });
 
-      const decision = await engine.dispatch("inbound.receive", {
-        steps: [],
-        usage: emptyUsage,
-        turnCount: 0,
-        isCompletion: false,
-        continuationCount: 0,
-        elapsedMs: 0,
+      const gateContext: IngressPolicyGate.InboundContext = {
+        gate: "inbound",
+        ...(inboundEvent.meta?.actor !== undefined && { actor: inboundEvent.meta.actor }),
+        surface: inboundEvent.surface,
+        mode: inboundEvent.mode,
+        target: target.kind,
+        ...(typeof inboundEvent.meta?.inboundTreatment === "string" && {
+          inboundTreatment: inboundEvent.meta.inboundTreatment,
+        }),
+        ...(typeof inboundEvent.meta?.channelGrantId === "string" && {
+          channelGrantId: inboundEvent.meta.channelGrantId,
+        }),
+        ...(typeof inboundEvent.meta?.channelGrantKind === "string" && {
+          channelGrantKind: inboundEvent.meta.channelGrantKind,
+        }),
         labels,
-        toolInput: {
-          actor: inboundEvent.meta?.actor,
-          surface: inboundEvent.surface,
-          mode: inboundEvent.mode,
-          target: target.kind,
-          inboundTreatment: inboundEvent.meta?.inboundTreatment,
-          channelGrantId: inboundEvent.meta?.channelGrantId,
-          channelGrantKind: inboundEvent.meta?.channelGrantKind,
-        },
         traceContext: trace,
-      });
+      };
+      const decision = await IngressPolicyGate.evaluate(
+        ingressPolicies,
+        gateContext,
+        deps.onPolicyDecision,
+      );
 
-      assertInboundReceiveAllowed(decision);
+      assertInboundAllowed(decision);
     }
 
     const agentModel = inboundEvent.agent.model;

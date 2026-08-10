@@ -118,8 +118,10 @@ describe("ChatAgent", () => {
       budget: { maxTurns: 1, maxToolCalls: 10 },
       middleware: [
         {
+          kind: "point",
           name: "test:inject-continue",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": ["run.continue_with_prompt"] },
           priority: 250,
           fn: async () => continueWithPrompt("continue", "test.step-guard", "continue-after-step"),
         },
@@ -203,8 +205,10 @@ describe("ChatAgent", () => {
       },
       middleware: [
         {
+          kind: "point",
           name: "test:conditional-inject",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": ["run.continue_with_prompt"] },
           priority: 250,
           fn: async () => {
             guardInvocations += 1;

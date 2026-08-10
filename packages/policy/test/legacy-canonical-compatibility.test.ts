@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyDecision, PolicyEvent } from "@openomni/protocol";
-import {
-  type GenericPolicyContext,
-  PolicyEngine,
-  type PolicyEngineCompatibilityGeneric,
-} from "@openomni/policy";
+import { type Policy, PolicyDecision, PolicyEvent } from "@openomni/protocol";
+import { type GenericPolicyContext, PolicyEngine } from "@openomni/policy";
 
 interface TestContext extends GenericPolicyContext {
   readonly sessionId?: string;
@@ -12,24 +8,12 @@ interface TestContext extends GenericPolicyContext {
   readonly turnIndex?: number;
 }
 
-const compatibility = {
-  resolvePointForLegacyDispatch: (timing) =>
-    timing === "context.prepare"
-      ? "prompt.context.pre"
-      : timing === "invoke.prepare"
-        ? "tool.native.pre"
-        : undefined,
-} satisfies PolicyEngineCompatibilityGeneric<TestContext>;
-
 function createAuditedEngine(id: string) {
   const events: Array<{ readonly name: string; readonly data: unknown }> = [];
-  const engine = PolicyEngine.create<TestContext>(
-    {
-      traceContext: { traceId: `trace-${id}`, sessionId: `session-${id}` },
-      auditEmit: (event, data) => events.push({ name: event.name, data }),
-    },
-    compatibility,
-  );
+  const engine = PolicyEngine.create<TestContext>({
+    traceContext: { traceId: `trace-${id}`, sessionId: `session-${id}` },
+    auditEmit: (event, data) => events.push({ name: event.name, data }),
+  });
   return { engine, events };
 }
 
@@ -39,16 +23,22 @@ const promptContext = {
   turnIndex: 0,
 } as const;
 
-describe("PolicyEngine legacy-to-canonical compatibility", () => {
-  test("denies a mapped fail-closed contract when no registrations match", async () => {
+// The legacy timing dispatch compatibility layer was deleted in #530. These
+// tests pin the canonical dispatchPoint contract semantics that replaced it.
+describe("PolicyEngine canonical point contracts", () => {
+  test("denies a fail-closed contract with audit evidence when context is missing", async () => {
     // Given
-    const { engine, events } = createAuditedEngine("legacy-canonical-fail-closed");
+    const { engine, events } = createAuditedEngine("canonical-fail-closed");
 
     // When
-    const decision = await engine.dispatch("invoke.prepare", {});
+    const decision = await engine.dispatchPoint(
+      "tool.native.pre",
+      {} as unknown as Policy.PolicyPointInputMap["tool.native.pre"],
+    );
 
     // Then
     expect(decision.verdict).toBe("deny");
+    expect(decision.policyId).toBe("agent.policy.composed");
     expect(decision.reasonCodes).toContain("policy.context_missing");
     const evaluated = PolicyEvent.Evaluated.schema.parse(
       events.find(({ name }) => name === PolicyEvent.Evaluated.name)?.data,
@@ -61,12 +51,12 @@ describe("PolicyEngine legacy-to-canonical compatibility", () => {
     });
   });
 
-  test("accepts valid mapped canonical context when no registrations match", async () => {
+  test("accepts valid canonical context without audit evidence when no registrations match", async () => {
     // Given
-    const { engine, events } = createAuditedEngine("legacy-canonical-contract");
+    const { engine, events } = createAuditedEngine("canonical-contract");
 
     // When
-    const decision = await engine.dispatch("context.prepare", promptContext);
+    const decision = await engine.dispatchPoint("prompt.context.pre", promptContext);
 
     // Then
     expect(decision.verdict).toBe("allow");
@@ -74,9 +64,9 @@ describe("PolicyEngine legacy-to-canonical compatibility", () => {
     expect(events.some(({ name }) => name === PolicyEvent.Evaluated.name)).toBe(false);
   });
 
-  test("enforces canonical required context before invoking middleware", async () => {
+  test("enforces required context before invoking middleware at fail-open points", async () => {
     // Given
-    const engine = PolicyEngine.create<TestContext>({}, compatibility);
+    const engine = PolicyEngine.create<TestContext>();
     let invoked = false;
     engine.register({
       kind: "point",
@@ -91,36 +81,14 @@ describe("PolicyEngine legacy-to-canonical compatibility", () => {
     });
 
     // When
-    const decision = await engine.dispatch("context.prepare", {});
+    const decision = await engine.dispatchPoint(
+      "prompt.context.pre",
+      {} as unknown as Policy.PolicyPointInputMap["prompt.context.pre"],
+    );
 
     // Then
     expect(invoked).toBe(false);
     expect(decision.verdict).toBe("allow");
     expect(decision.reasonCodes).toContain("policy.context_missing");
-  });
-
-  test("rejects canonical effects undeclared at registration", async () => {
-    // Given
-    const engine = PolicyEngine.create<TestContext>({}, compatibility);
-    engine.register({
-      kind: "point",
-      name: "canonical-undeclared-effect",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.allow({
-          policyId: "canonical-undeclared-effect",
-          effects: [{ type: "prompt.inject_message", message: "hidden" }],
-        }),
-    });
-
-    // When
-    const decision = await engine.dispatch("context.prepare", promptContext);
-
-    // Then
-    expect(decision.verdict).toBe("deny");
-    expect(decision.reasonCodes).toContain("policy.effect_not_declared");
-    expect(decision.effects.some((effect) => effect.type === "prompt.inject_message")).toBe(false);
   });
 });

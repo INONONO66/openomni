@@ -13,7 +13,14 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-pre-turn", timing: "turn.start", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-pre-turn",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     const config = makeConfig();
@@ -37,8 +44,10 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-budget-reassurance",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
       priority: 100,
       fn: () =>
         allow("test-budget-reassurance", "budget_reassurance", [
@@ -67,8 +76,10 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-budget-warning",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
       priority: 100,
       fn: () =>
         allow("test-budget-warning", "budget_warning", [
@@ -97,8 +108,10 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-unrelated-inject",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
       priority: 100,
       fn: () =>
         allow("test-unrelated-inject", "idle_nudge", [
@@ -130,8 +143,10 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-pre-turn-abort",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["run.abort"] },
       priority: 100,
       fn: () => abortRun("test.abort", "pre-turn-block"),
     });
@@ -157,8 +172,10 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-turn-context",
-      timing: "turn.start",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": ["prompt.append_context"] },
       priority: 100,
       fn: () => appendContext("turn context", "test.context", "append"),
     });

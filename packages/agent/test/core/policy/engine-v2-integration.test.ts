@@ -5,8 +5,10 @@ import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
 import { allow, deny, inject, rewriteToolInput } from "../../helpers/policy-decision";
 
-function baseCtx(): Omit<PolicyContext, "timing"> {
+function baseCtx(): Omit<PolicyContext, "timing"> & { sessionId: string; runId: string } {
   return {
+    sessionId: "session",
+    runId: "run",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -27,23 +29,30 @@ function systemToolDescriptor(name: string): RuntimeResource.Descriptor {
   };
 }
 
-describe("PolicyEngine.dispatch", () => {
+describe("PolicyEngine.dispatchPoint", () => {
   it("composes canonical policy decisions", async () => {
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "context-note",
-      timing: "model.request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
       priority: 20,
       fn: () => inject("Prefer read-only tools.", "policy.context-note", "safe-default"),
     });
     engine.register({
+      kind: "point",
       name: "request-budget",
-      timing: "model.request",
+      pointIds: ["connection.llm.pre"],
+      effectCapabilities: { "connection.llm.pre": [] },
       priority: 10,
       fn: () => allow("policy.request-budget"),
     });
 
-    const decision = await engine.dispatch("model.request", baseCtx());
+    const decision = await engine.dispatchPoint("connection.llm.pre", {
+      ...baseCtx(),
+      modelId: "model",
+    });
 
     expect(decision).toMatchObject({
       policyId: "agent.policy.composed",
@@ -54,50 +63,64 @@ describe("PolicyEngine.dispatch", () => {
     expect(typeof decision.durationMs).toBe("number");
   });
 
-  it("fails closed when an effect is not allowed at the policy point", async () => {
+  it("fails closed when an effect is not declared for the policy point", async () => {
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "bad-run-injection",
-      timing: "run.finish",
+      pointIds: ["run.lifecycle.post"],
+      // prompt.inject_message is not an allowed effect at run.lifecycle.post, so it
+      // cannot be declared here; returning it must trip the undeclared-effect guard.
+      effectCapabilities: { "run.lifecycle.post": ["audit.annotate"] },
       priority: 0,
       fn: () => inject("not valid here", "policy.bad-run", "bad-run-effect"),
     });
 
-    const decision = await engine.dispatch("run.finish", baseCtx());
+    const decision = await engine.dispatchPoint("run.lifecycle.post", {
+      ...baseCtx(),
+      runOutcome: { type: "stop" },
+    });
 
     expect(decision.verdict).toBe("deny");
     expect(decision.policyId).toBe("agent.policy.composed");
+    // Canonical semantics: undeclared effects are denied per middleware with
+    // "policy.effect_not_declared" (was composed-level "policy.effect_not_allowed").
     expect(decision.effects).toEqual([
       {
         type: "audit.annotate",
-        annotation:
-          "policy.effect_not_allowed: prompt.inject_message is not allowed at run.lifecycle.post",
+        annotation: "run.lifecycle.post: policy.effect_not_declared: prompt.inject_message",
         severity: "error",
       },
     ]);
-    expect(decision.reasonCodes).toEqual(["policy.effect_not_allowed"]);
+    expect(decision.reasonCodes).toEqual(["policy.effect_not_declared"]);
   });
 
-  it("injects run.abort when composition deny occurs at pre-boundary timing", async () => {
+  it("injects run.abort when composition deny occurs at a pre-boundary point", async () => {
     const descriptor = systemToolDescriptor("shell");
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "rewrite-shell-a",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
       priority: 0,
       fn: () => rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell-a", "rewrite-shell-a"),
     });
     engine.register({
+      kind: "point",
       name: "rewrite-shell-b",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
       priority: 0,
       fn: () =>
         rewriteToolInput({ command: "whoami" }, "policy.rewrite-shell-b", "rewrite-shell-b"),
     });
 
-    const decision = await engine.dispatch("invoke.prepare", {
+    const decision = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
+      toolId: "shell",
       toolName: "shell",
+      toolInput: { command: "ls" },
       resourceDescriptor: descriptor,
     });
 
@@ -106,27 +129,36 @@ describe("PolicyEngine.dispatch", () => {
     expect(decision.effects.some((effect) => effect.type === "audit.annotate")).toBe(true);
   });
 
-  it("does not inject run.abort when composition deny occurs at post-boundary timing", async () => {
+  it("does not inject run.abort when composition deny occurs at a post-boundary point", async () => {
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "deny-run-finish",
-      timing: "run.finish",
+      pointIds: ["run.lifecycle.post"],
+      effectCapabilities: { "run.lifecycle.post": ["audit.annotate"] },
       priority: 0,
       fn: () => deny("policy.deny-run-finish", "blocked-run-finish"),
     });
 
-    const decision = await engine.dispatch("run.finish", baseCtx());
+    const decision = await engine.dispatchPoint("run.lifecycle.post", {
+      ...baseCtx(),
+      runOutcome: { type: "stop" },
+    });
 
     expect(decision.verdict).toBe("deny");
     expect(decision.effects.some((effect) => effect.type === "run.abort")).toBe(false);
   });
 
-  it("injects run.abort on validation failure deny at pre-boundary timing", async () => {
+  it("injects run.abort on undeclared-effect deny at a pre-boundary point", async () => {
     const descriptor = systemToolDescriptor("shell");
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "invalid-shell-prompt",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      // prompt.replace is not an allowed effect at tool.native.pre, so it cannot be
+      // declared; returning it denies with the undeclared-effect guard (fail-closed).
+      effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
       priority: 0,
       fn: () =>
         allow("policy.invalid-shell-prompt", "invalid-shell-prompt", [
@@ -134,9 +166,11 @@ describe("PolicyEngine.dispatch", () => {
         ]),
     });
 
-    const decision = await engine.dispatch("invoke.prepare", {
+    const decision = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
+      toolId: "shell",
       toolName: "shell",
+      toolInput: { command: "ls" },
       resourceDescriptor: descriptor,
     });
 
@@ -153,15 +187,19 @@ describe("PolicyEngine.dispatch", () => {
     });
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "rewrite-tool-input",
-      timing: "invoke.prepare",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
       priority: 0,
       fn: received,
     });
 
-    const decision = await engine.dispatch("invoke.prepare", {
+    const decision = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
+      toolId: "shell",
       toolName: "shell",
+      toolInput: { command: "ls" },
       resourceDescriptor: descriptor,
     });
 
@@ -190,21 +228,27 @@ describe("PolicyEngine.dispatch", () => {
       const afterDeny = mock(() => allow());
       const engine = PolicyEngine.create({ auditEmit: Bus.publish });
       engine.register({
+        kind: "point",
         name: "deny-shell",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
         priority: 0,
         fn: () => deny("policy.deny-shell", "blocked-shell"),
       });
       engine.register({
+        kind: "point",
         name: "after-deny",
-        timing: "invoke.prepare",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": [] },
         priority: 10,
         fn: afterDeny,
       });
 
-      const decision = await engine.dispatch("invoke.prepare", {
+      const decision = await engine.dispatchPoint("tool.native.pre", {
         ...baseCtx(),
+        toolId: "shell",
         toolName: "shell",
+        toolInput: { command: "ls" },
         resourceDescriptor: descriptor,
         traceContext: {
           traceId: "trace-deny",

@@ -77,7 +77,16 @@ describe("run.start middleware dispatch", () => {
 
     await collectEvents({
       ...defaultConfig,
-      middleware: [{ name: "test:run.start", timing: "run.start", priority: 100, fn: preRunFn }],
+      middleware: [
+        {
+          kind: "point",
+          name: "test:run.start",
+          pointIds: ["run.lifecycle.pre"],
+          effectCapabilities: { "run.lifecycle.pre": [] },
+          priority: 100,
+          fn: preRunFn,
+        },
+      ],
     });
 
     expect(preRunFn).toHaveBeenCalledTimes(1);
@@ -93,8 +102,10 @@ describe("run.start middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:run.start_abort",
-          timing: "run.start",
+          pointIds: ["run.lifecycle.pre"],
+          effectCapabilities: { "run.lifecycle.pre": ["run.abort"] },
           priority: 100,
           fn: () => abortRun("test.run-start-abort", "blocked"),
         },
@@ -115,8 +126,10 @@ describe("run.start middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:run.start_inject",
-          timing: "run.start",
+          pointIds: ["run.lifecycle.pre"],
+          effectCapabilities: { "run.lifecycle.pre": ["prompt.inject_message"] },
           priority: 100,
           fn: () => inject(injectedContent, "test.pre-run-inject", "inject-pre-run-context"),
         },
@@ -140,7 +153,16 @@ describe("run.finish middleware dispatch", () => {
 
     await collectEvents({
       ...defaultConfig,
-      middleware: [{ name: "test:run.finish", timing: "run.finish", priority: 100, fn: postRunFn }],
+      middleware: [
+        {
+          kind: "point",
+          name: "test:run.finish",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
+          priority: 100,
+          fn: postRunFn,
+        },
+      ],
     });
 
     expect(postRunFn).toHaveBeenCalledTimes(1);
@@ -157,7 +179,14 @@ describe("run.finish middleware dispatch", () => {
       ...defaultConfig,
       budget: { maxTurns: 0 },
       middleware: [
-        { name: "test:run.finish_budget", timing: "run.finish", priority: 100, fn: postRunFn },
+        {
+          kind: "point",
+          name: "test:run.finish_budget",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
+          priority: 100,
+          fn: postRunFn,
+        },
       ],
     });
 
@@ -176,12 +205,21 @@ describe("run.finish middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:turn.start_abort",
-          timing: "turn.start",
+          pointIds: ["run.turn.pre"],
+          effectCapabilities: { "run.turn.pre": ["run.abort"] },
           priority: 100,
           fn: () => abortRun("test.turn-start-abort", "blocked"),
         },
-        { name: "test:run.finish_watcher", timing: "run.finish", priority: 100, fn: postRunFn },
+        {
+          kind: "point",
+          name: "test:run.finish_watcher",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
+          priority: 100,
+          fn: postRunFn,
+        },
       ],
     });
 
@@ -195,12 +233,21 @@ describe("run.finish middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:turn.finish_abort",
-          timing: "turn.finish",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": ["run.abort"] },
           priority: 100,
           fn: () => abortRun("test.turn-finish-abort", "blocked"),
         },
-        { name: "test:run.finish_watcher", timing: "run.finish", priority: 100, fn: postRunFn },
+        {
+          kind: "point",
+          name: "test:run.finish_watcher",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
+          priority: 100,
+          fn: postRunFn,
+        },
       ],
     });
 
@@ -212,8 +259,10 @@ describe("run.finish middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
+          kind: "point",
           name: "test:run.finish_observe",
-          timing: "run.finish",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
           priority: 100,
           fn: () => allow("test.post-run-observe", "observe-result"),
         },
