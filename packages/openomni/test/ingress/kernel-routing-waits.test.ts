@@ -297,15 +297,19 @@ describe("IngressEngine wait routing", () => {
 
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait does not allow the requested action");
     expect(observed.decisions).toHaveLength(1);
+    // #548 pin flip: the legacy fallthrough to surface routing is removed —
+    // a matched frozen row with a disallowed action blocks at the
+    // wait_correlation stage exactly like a durable wait (uniformly
+    // fail-closed; pre-#548 this fell through to the channel_ceiling stage).
     expect(observed.decisions[0]).toMatchObject({
-      stage: "channel_ceiling",
+      stage: "wait_correlation",
       outcome: "block",
       factsUsed: [
         "wait:pending_interaction:pi-denied-action",
         "wait.action:ask_clarification",
         "wait.action:disallowed",
-        "channel:missing",
       ],
     });
     expect(calls).toBe(0);
