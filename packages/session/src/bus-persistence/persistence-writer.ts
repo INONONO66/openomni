@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { getDatabase } from "./database.js";
 import { GENESIS_SEED, computeEventHash } from "./hash.js";
-import { categoryOf, getNumberTraceField, getTraceField } from "./record-helpers.js";
+import { categoryOf, getNumberTraceField, getTraceField } from "./record-fields.js";
 import { redactForPersistence } from "./redaction.js";
 import type { PersistInput } from "./types.js";
 

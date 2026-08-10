@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { fetchWithRetry } from "../../shared/fetch-retry";
+import { fetchWithRetry } from "../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../types";
 
 const BASE_URL = "https://discord.com/api/v10";
@@ -65,6 +65,7 @@ export class DiscordClient implements ChannelClient {
         body: JSON.stringify(body),
       },
       {
+        publish: this.publish,
         parseRetryAfter: (data) => {
           const r = data as { retry_after?: number };
           return r.retry_after ?? 5;

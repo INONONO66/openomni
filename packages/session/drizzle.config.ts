@@ -7,7 +7,7 @@ import { defineConfig } from "drizzle-kit";
  * migration/0013_ledger/migration.sql run by the existing BEGIN IMMEDIATE
  * migration runner. Never wire drizzle-kit migrate/push at runtime.
  *
- * `casing` must stay identical to createLedgerDb (src/ledger-core/db.ts).
+ * `casing` must stay identical to createLedgerDb (test/ledger-core/db.ts).
  */
 export default defineConfig({
   dialect: "sqlite",

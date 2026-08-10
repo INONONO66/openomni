@@ -1,6 +1,6 @@
 import { EventVisibility, type EventRecord, type QueryOptions } from "./query-contracts.js";
 import { buildEventFilters, limitClause } from "./event-query-filter.js";
-import { getDatabase } from "./query-database.js";
+import { getDatabase } from "./database.js";
 import type { BusEventRow } from "./query-rows.js";
 
 export function listBySession(sessionId: string, options?: QueryOptions): Promise<EventRecord[]> {

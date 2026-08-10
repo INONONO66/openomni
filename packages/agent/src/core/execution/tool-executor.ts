@@ -5,7 +5,16 @@ import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
 import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
-import { summarizeInput } from "./shared";
+
+// merged from shared.ts (fragment sweep); also consumed by policy/builtin/tool-guard.ts
+export function summarizeInput(input: Record<string, unknown>): string {
+  try {
+    const str = JSON.stringify(input);
+    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
+  } catch {
+    return "[unserializable]";
+  }
+}
 
 type BlockedResultMetadata = {
   verdict: Policy.PolicyDecision["verdict"];

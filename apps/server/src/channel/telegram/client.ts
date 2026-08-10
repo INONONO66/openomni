@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { fetchWithRetry } from "../../shared/fetch-retry";
+import { fetchWithRetry } from "../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../types";
 import type { TelegramResponse, TelegramUser } from "./types";
 
@@ -65,6 +65,7 @@ export class TelegramClient implements ChannelClient {
         signal,
       },
       {
+        publish: this.publish,
         parseRetryAfter: (body) => {
           const r = body as { parameters?: { retry_after?: number } };
           return r.parameters?.retry_after ?? 5;

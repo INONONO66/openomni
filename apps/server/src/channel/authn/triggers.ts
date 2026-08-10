@@ -1,5 +1,5 @@
 import type { Adapter, Policy } from "@openomni/protocol";
-import { evaluateTriggers } from "../../shared/trigger";
+import { evaluateTriggers } from "../support/trigger";
 import { DiscordTriggers, GitHubTriggers, TelegramTriggers } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type {

@@ -105,7 +105,7 @@ export namespace BusQuery {
 
 // merged from stats-query.ts (#453 hygiene: sub-30-LOC single-importer)
 import type { QueryStats } from "./query-contracts.js";
-import { getDatabase } from "./query-database.js";
+import { getDatabase } from "./database.js";
 import type { CategoryCountRow, CountRow, TypeCountRow } from "./query-rows.js";
 
 function queryStats(sessionId: string): Promise<QueryStats> {

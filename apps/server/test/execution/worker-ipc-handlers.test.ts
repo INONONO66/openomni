@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { InjectionQueue } from "@openomni/openomni";
 import { WorkerIpcHandlers } from "../../src/execution/worker-ipc-handlers";
-import type { WorkerRunState } from "../../src/execution/worker-run-state";
+import type { WorkerRunState } from "../../src/execution/worker-runner-types";
 
 type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
 

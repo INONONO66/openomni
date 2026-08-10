@@ -29,8 +29,10 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
+      // run.completion.pre contract guarantees a non-empty sessionId on
+      // every canonical dispatch; "" only surfaces on a non-contract invocation.
       ctx.eventEmitter?.emit("agent.compaction", {
-        sessionId: "chat-agent",
+        sessionId: ctx.sessionId ?? "",
         time: Date.now(),
         messagesBefore: ctx.messages.length,
         messagesAfter: result.messages.length,

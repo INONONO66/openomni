@@ -5,14 +5,32 @@ export type {
   PolicyFn,
   PolicyRegistration,
 } from "./types";
-export { PolicyEngine } from "./engine";
 export type { PolicyDecision, PolicyAuditConfig, PolicyEngineConfig } from "@openomni/policy";
 export { PolicyRegistry, defaultRegistry } from "./registry";
 export type { PolicyFactory, PolicyRegistryInstance } from "./registry";
 export * from "./builtin";
 
+import {
+  PolicyEngine as GenericPolicyEngine,
+  type PolicyEngineConfig,
+  type DispatchContextGeneric,
+  type PolicyEngineInstanceGeneric,
+} from "@openomni/policy";
+import { agentPolicyCompatibility } from "./compatibility";
 import type { PolicyContext, PolicyEngineRegistration } from "./types";
-import type { DispatchContextGeneric, PolicyEngineInstanceGeneric } from "@openomni/policy";
+
+export const PolicyEngine = {
+  create(options: PolicyEngineConfig = {}) {
+    const engine = GenericPolicyEngine.create<PolicyContext>(options, agentPolicyCompatibility);
+    return {
+      register(registration: PolicyEngineRegistration): void {
+        engine.register(registration);
+      },
+      dispatch: engine.dispatch,
+      dispatchPoint: engine.dispatchPoint,
+    };
+  },
+} as const;
 
 /** Agent-scoped convenience alias: dispatch context typed to the full agent PolicyContext. */
 export type DispatchContext = DispatchContextGeneric<PolicyContext>;

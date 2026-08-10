@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { fetchWithRetry } from "../../shared/fetch-retry";
+import { fetchWithRetry } from "../support/fetch-retry";
 import type { PublishPort } from "../types";
 
 export class GitHubClient {
@@ -24,7 +24,10 @@ export class GitHubClient {
         },
         body: JSON.stringify({ body }),
       },
-      { label: "github/postComment" },
+      {
+        publish: this.publish,
+        label: "github/postComment",
+      },
     );
 
     if (!response.ok) {

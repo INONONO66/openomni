@@ -2,8 +2,18 @@ import type { ChatAgent } from "@openomni/agent";
 import type { Auth } from "@openomni/llm";
 import type { InjectionQueue } from "@openomni/openomni";
 import type { WorkerBootstrap } from "@openomni/protocol";
-import type { WorkerRunState } from "./worker-run-state";
 import type { WorkerRunIpcServer } from "./worker-runner-ipc";
+
+// merged from worker-run-state.ts (fragment sweep)
+export namespace WorkerRunState {
+  interface ActiveRun {
+    readonly sessionId: string;
+    readonly controller: AbortController;
+  }
+
+  export type ActiveRunRegistry = Map<string, ActiveRun>;
+  export type ReadableActiveRuns = Pick<ActiveRunRegistry, "get" | "entries" | "size">;
+}
 
 type WorkerRunnerChatAgentOptions = Parameters<typeof ChatAgent.create>[0];
 type WorkerRunnerAgent = Pick<ReturnType<typeof ChatAgent.create>, "run">;

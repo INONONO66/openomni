@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { sleep } from "../../shared/sleep";
+import { sleep } from "../support/fetch-retry";
 import type { PublishPort } from "../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
 

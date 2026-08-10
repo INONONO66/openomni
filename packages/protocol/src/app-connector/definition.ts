@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { Policy } from "../policy/index.js";
-import { commandArgs, nonEmptyString, positiveInteger } from "./schema-primitives.js";
+
+export const nonEmptyString = z.string().min(1);
+const commandArgs = z.array(nonEmptyString);
+export const positiveInteger = z.number().int().positive();
 
 export const EvidenceEmitter = z.enum([
   "exit_code",

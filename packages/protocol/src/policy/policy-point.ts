@@ -5,7 +5,7 @@ import {
   type PolicyPointInputMap as PolicyPointInputMapType,
 } from "./point-input-schemas.js";
 import { PolicyPointRegistryModule } from "./point-registry.js";
-import { policyKernelVersion } from "./version.js";
+import { policyKernelVersion } from "./definition.js";
 
 export namespace PolicyPointModule {
   type Timing = PolicyPointContractModule.Timing;

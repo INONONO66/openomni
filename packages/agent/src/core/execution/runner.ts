@@ -1,10 +1,9 @@
-import { run as llmRun } from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/protocol";
 import { Bus, TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
-import { resolveProviderModel } from "./shared";
 import { emitRunStarted, emitTurnStart } from "./run-events";
 import { handleCompact, handleContinue, handleError, handleStop } from "./turn-outcome";
 import { assertToolExecutor, buildTurn, resolveToolChoice } from "./turn-prepare";
@@ -169,6 +168,30 @@ function unknownOutcomeType(value: unknown): string {
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+// merged from shared.ts (fragment sweep: single-consumer fn)
+async function resolveProviderModel(model: {
+  provider: string;
+  id: string;
+}): Promise<Provider.Model> {
+  const data = await ModelsDev.get();
+  const providerData = data[model.provider];
+
+  if (!providerData) {
+    throw new Error(`Provider not found: ${model.provider}`);
+  }
+
+  const rawModel = providerData.models?.[model.id];
+  if (rawModel) {
+    return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
+  }
+
+  const proxyModels = await Provider.listModels(model.provider, "proxy").catch(() => []);
+  const match = proxyModels.find((m) => m.id === model.id);
+  if (match) return match;
+
+  throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
 // merged from policy-engine-builder.ts (250-LOC split refold: single-importer stage)
