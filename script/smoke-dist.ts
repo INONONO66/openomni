@@ -4,11 +4,31 @@
  * gate — it proves the bundle layout (worker entry + migration resolution)
  * actually starts, not just that the build emitted files.
  */
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
+
+// #552: the published surface stays bin-only until a library surface is
+// deliberately frozen. A root `exports`/`main`/`types`/`module` field would
+// silently publish importable internals, so it fails the gate here.
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as Record<
+  string,
+  unknown
+>;
+if (!pkg.bin || typeof pkg.bin !== "object") {
+  console.error("package.json must declare a bin entry — the published surface is the CLI");
+  process.exit(1);
+}
+const libraryFields = ["exports", "main", "types", "module"].filter((field) => field in pkg);
+if (libraryFields.length > 0) {
+  console.error(
+    `package.json declares ${libraryFields.join(", ")} — the published surface is bin-only (#552); remove the field(s) or deliberately freeze a library surface first`,
+  );
+  process.exit(1);
+}
+
 const cli = join(root, "dist", "bin", "cli.js");
 if (!existsSync(cli)) {
   console.error("dist/bin/cli.js missing — run script/build-dist.ts first");
