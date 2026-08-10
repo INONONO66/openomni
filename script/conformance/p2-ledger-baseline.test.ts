@@ -47,7 +47,11 @@ import {
   buildWaitCreate as buildSessionWaitCreate,
   captureStoreError,
 } from "../../packages/session/test/helpers/wait";
+import { EffectService } from "../../packages/openomni/src/effect/lifecycle";
+import { EffectManifest } from "../../packages/openomni/src/effect/manifest";
+import { runRecovery } from "../../apps/server/src/bootstrap/recovery";
 import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
+import { LEDGER_PRODUCER_MANIFEST, scanLedgerProducers } from "../ledger-producer-manifest";
 
 /**
  * #510 phase B/C1/C2/C3 conformance — the Wait, WorkItem, routing, and
@@ -811,6 +815,55 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
       second.item.revision,
     ]);
     expect(workHeadOf(item.hash)).toBe(second.item.revision);
+  });
+
+  test("a cache hit creates a NEW attempt recording reusedFromAttemptId — never a row reuse", async () => {
+    const item = await createConformanceWorkItem("cache-hit-new-attempt");
+    const seeded = await WorkItemStore.allocateAttempt(
+      item.hash,
+      conformanceAttemptIdentity("cache seed"),
+    );
+    if (!seeded) throw new Error("expected the seeding allocation");
+
+    // A cacheKey hit is an EXPLICIT lookup that allocates a fresh attempt
+    // and records the reused one — cache/replay EXECUTION (lookup, JSONL
+    // export) is #493; the identity contract is #510's.
+    const hit = await WorkItemStore.allocateAttempt(item.hash, {
+      ...conformanceAttemptIdentity("cache seed"),
+      reusedFromAttemptId: seeded.attempt.attemptId,
+    });
+    if (!hit) throw new Error("expected the cache-hit allocation");
+
+    expect(hit.attempt.attemptId).not.toBe(seeded.attempt.attemptId);
+    expect(hit.attempt.attemptSeq).toBe(seeded.attempt.attemptSeq + 1);
+    expect(hit.attempt.reusedFromAttemptId).toBe(seeded.attempt.attemptId);
+    expect(seeded.attempt.reusedFromAttemptId).toBeNull();
+
+    // Both allocations are separate durable facts; the seeded fact is
+    // untouched by the hit (immutable reuse rejects rewrites).
+    const allocationFacts = workFactsOf(item.hash).filter(
+      (fact) => fact.type === "work_item.attempt_allocated",
+    );
+    expect(allocationFacts).toHaveLength(2);
+    const recorded = allocationFacts.map(
+      (fact) => JSON.parse(fact.data) as { attemptId: string; reusedFromAttemptId: string | null },
+    );
+    expect(recorded[0]).toMatchObject({
+      attemptId: seeded.attempt.attemptId,
+      reusedFromAttemptId: null,
+    });
+    expect(recorded[1]).toMatchObject({
+      attemptId: hit.attempt.attemptId,
+      reusedFromAttemptId: seeded.attempt.attemptId,
+    });
+
+    // The identity schema refuses a self-referential reuse loudly.
+    expect(
+      WorkItem.Attempt.safeParse({
+        ...hit.attempt,
+        reusedFromAttemptId: hit.attempt.attemptId,
+      }).success,
+    ).toBe(false);
   });
 
   test("fail-loud manifest: a category input without a declared reason rejects", () => {
@@ -1697,5 +1750,298 @@ describe("p2 ledger baseline — frozen worker-run writer + archive manifest (D2
       false,
     );
     expect(WorkItemAttemptRun.listActive("session_conformance_wr")).toEqual([]);
+  });
+});
+
+describe("p2 ledger baseline — effect decision-class facts (intent/outcome)", () => {
+  function manifestWithDriver(driver: {
+    kind: string;
+    execute: (
+      intent: unknown,
+      input: unknown,
+    ) =>
+      | Promise<{ kind: "confirmed"; receipt?: string } | { kind: "failed"; reason: string }>
+      | { kind: "confirmed"; receipt?: string }
+      | { kind: "failed"; reason: string };
+  }): EffectManifest {
+    const manifest = new EffectManifest();
+    manifest.register({
+      kind: driver.kind,
+      execute: driver.execute,
+      reconcile: () => ({ kind: "unknown" }),
+    });
+    return manifest;
+  }
+
+  test("a failing intent append fails closed: typed error, the driver never executes, zero facts", async () => {
+    const executions: unknown[] = [];
+    const service = new EffectService(
+      manifestWithDriver({
+        kind: "conformance.noop",
+        execute: (intent) => {
+          executions.push(intent);
+          return { kind: "confirmed" };
+        },
+      }),
+    );
+    configureFailingLedger();
+
+    let thrown: unknown;
+    try {
+      await service.run({ effectId: "eff-fail-closed", kind: "conformance.noop" });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(executions).toEqual([]);
+    // No record, no action — and no half-record either.
+    expect(factsOfStream("effect:eff-fail-closed")).toEqual([]);
+    expect(headOfStream("effect:eff-fail-closed")).toBeUndefined();
+  });
+
+  test("the act happens only after the FULL intent append; exactly one terminal outcome fact follows", async () => {
+    const observed: { factTypes: [number, string][] }[] = [];
+    const service = new EffectService(
+      manifestWithDriver({
+        kind: "conformance.noop",
+        execute: () => {
+          // The driver is the act: at act time the intent is already durable.
+          observed.push({
+            factTypes: factsOfStream("effect:eff-happy").map((fact) => [fact.seq, fact.type]),
+          });
+          return { kind: "confirmed", receipt: "receipt-1" };
+        },
+      }),
+    );
+
+    const result = await service.run({ effectId: "eff-happy", kind: "conformance.noop" });
+
+    expect(observed).toEqual([{ factTypes: [[1, "effect.intended"]] }]);
+    expect(result.runtime).toBe("confirmed");
+    expect(factsOfStream("effect:eff-happy").map((fact) => [fact.seq, fact.type])).toEqual([
+      [1, "effect.intended"],
+      [2, "effect.confirmed"],
+    ]);
+    // The writer and the protocol stream registry agree on the vocabulary.
+    for (const fact of factsOfStream("effect:eff-happy")) {
+      expect(LedgerAppend.StreamRegistry.effect.factTypes).toContain(fact.type);
+    }
+  });
+});
+
+describe("p2 ledger baseline — telemetry and Bus.publish cannot authorize", () => {
+  test("a lossy Bus.publish (crashing subscriber) neither prevents the durable fact from folding nor rolls it back", async () => {
+    const item = await createConformanceWorkItem("lossy-bus");
+    const headsAtDelivery: (number | undefined)[] = [];
+    Bus.subscribe(WorkItem.Events.StatusChanged, () => {
+      // The observe-only projection: record what is ALREADY durable at
+      // delivery time, then crash. Publish is lossy by contract — the
+      // crash must not unwind the committed decision.
+      headsAtDelivery.push(workHeadOf(item.hash));
+      throw new Error("subscriber crashed — publish is lossy");
+    });
+
+    const started = await WorkItemStore.start(item.hash);
+    await flushBus();
+
+    if (!started) throw new Error("expected the started projection");
+    // The decision-class fact folded despite the crashing subscriber…
+    expect(workFactsOf(item.hash).at(-1)?.type).toBe("work_item.started");
+    expect(workHeadOf(item.hash)).toBe(started.revision);
+    // …and the subscriber observed a head that was durable BEFORE delivery:
+    // the publish is a delayed projection of the fact, never its cause.
+    expect(headsAtDelivery).toEqual([started.revision]);
+  });
+
+  test("a forged NORMAL-durability telemetry row is rejected as a routing decision record", async () => {
+    grantConformanceChannel();
+    const workerSession = Session.create({
+      title: "telemetry forge conformance",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    // Forge bus_event telemetry claiming this inbound was already routed —
+    // if telemetry could authorize, the engine would replay the forged
+    // "decision" instead of deciding (and recording) itself.
+    inspect
+      .query(
+        `INSERT INTO bus_event
+           (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created)
+         VALUES (NULL, NULL, 'ingress.routing.decision', 'ingress', 'internal', ?, 'trace-forged', NULL, 1)`,
+      )
+      .run(
+        JSON.stringify({
+          inboundId: "inbound-telemetry-forge",
+          surface: "conformance",
+          stage: "target",
+          outcome: "route",
+          sessionId: "session-forged-target",
+        }),
+      );
+
+    const dispatchedSessions: string[] = [];
+    const engine = createIngressEngine({
+      coordinator: {
+        dispatch: async (sessionId, request) => {
+          dispatchedSessions.push(sessionId);
+          return {
+            runId: request.runId,
+            sessionId,
+            status: "succeeded" as const,
+            output: "routed",
+            finishReason: "stop" as const,
+          };
+        },
+      },
+    });
+    const result = await engine.ingest(
+      routedIngressEvent("inbound-telemetry-forge", workerSession.id),
+    );
+
+    // The engine decided FRESH: one fact at seq 1 on the owner stream — the
+    // forged telemetry row was never consulted as a record, and the action
+    // followed the fresh ledger-recorded resolution (the real worker
+    // session), never the forged target.
+    expect(dispatchedSessions).toEqual([workerSession.id]);
+    expect(result.result.output).toBe("routed");
+    const facts = factsOfStream(routeStreamOf("inbound-telemetry-forge"));
+    expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
+    const decided = LedgerAppend.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    expect(decided.outcome).toBe("route");
+    // The recorded fact is the fresh decision, not the forged payload.
+    expect(JSON.parse(facts[0]?.data ?? "{}")).not.toMatchObject({
+      sessionId: "session-forged-target",
+    });
+  });
+
+  test("telemetry rows never advance an owner stream: bus_event writes leave ledger_event/ledger_head untouched", async () => {
+    const countLedgerRows = () =>
+      (inspect.query("SELECT COUNT(*) AS n FROM ledger_event").get() as { n: number }).n +
+      (inspect.query("SELECT COUNT(*) AS n FROM ledger_head").get() as { n: number }).n;
+    const before = countLedgerRows();
+    inspect
+      .query(
+        `INSERT INTO bus_event
+           (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created)
+         VALUES (NULL, NULL, 'work_item.admission_accepted', 'work_item', 'internal', '{}', 'trace-telemetry', NULL, 1)`,
+      )
+      .run();
+    expect(countLedgerRows()).toBe(before);
+  });
+});
+
+describe("p2 ledger baseline — boot tail verification and the Governor incident", () => {
+  const bootCompletionRuntime = {
+    recoverRecordedWorkItemCompletions: async () => ({
+      recovered: 0,
+      skipped: 0,
+      failures: [],
+    }),
+  };
+
+  test("valid-tail boot succeeds: no chain-break, no Governor incident, recovery completes", async () => {
+    await createConformanceWorkItem("boot-valid-tail");
+    const events: { name: string; payload: Record<string, unknown> }[] = [];
+    Bus.observe((event, payload) =>
+      events.push({ name: event.name, payload: payload as Record<string, unknown> }),
+    );
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-boot-valid",
+      completionRuntime: bootCompletionRuntime,
+    });
+    await flushBus();
+
+    expect(events.some((event) => event.name === "operational.governor.incident")).toBe(false);
+    expect(
+      events.filter(
+        (event) =>
+          event.name === "operational.error" && String(event.payload.msg).includes("chain-break"),
+      ),
+    ).toEqual([]);
+    expect(events.some((event) => event.name === "operational.recovery.completed")).toBe(true);
+  });
+
+  test("corrupted-tail boot emits chain-break plus Governor incident and does NOT refuse boot", async () => {
+    const item = await createConformanceWorkItem("boot-corrupt-tail");
+    const factsBefore = workFactsOf(item.hash).length;
+    inspect
+      .query("UPDATE ledger_event SET data = ? WHERE stream_id = ? AND seq = 1")
+      .run('{"tampered":true}', `work:${item.hash}`);
+
+    const events: { name: string; payload: Record<string, unknown> }[] = [];
+    Bus.observe((event, payload) =>
+      events.push({ name: event.name, payload: payload as Record<string, unknown> }),
+    );
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-boot-corrupt",
+      completionRuntime: bootCompletionRuntime,
+    });
+    await flushBus();
+
+    const chainBreaks = events.filter(
+      (event) =>
+        event.name === "operational.error" &&
+        String(event.payload.msg).includes("ledger chain-break detected at boot"),
+    );
+    expect(chainBreaks).toHaveLength(1);
+    const incidents = events.filter((event) => event.name === "operational.governor.incident");
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]?.payload).toMatchObject({
+      incident: "chain_break",
+      component: "server",
+      context: { streamId: `work:${item.hash}`, seq: 1, code: "hash_mismatch" },
+    });
+    // No refusal, and no post-break action: boot completed observe-only —
+    // the tampered stream gained no fact and its head did not move.
+    expect(events.some((event) => event.name === "operational.recovery.completed")).toBe(true);
+    expect(workFactsOf(item.hash)).toHaveLength(factsBefore);
+  });
+});
+
+describe("p2 ledger baseline — exact producer manifest", () => {
+  const repoRoot = join(import.meta.dir, "..", "..");
+  const adapterBinding = "packages/session/src/storage/sqlite-storage.ts";
+
+  test("the observed ledger write surface equals the manifest in BOTH directions", async () => {
+    const scan = await scanLedgerProducers(repoRoot);
+
+    // Every `ledger.append`/`ledger.adoptStream` call site is a manifested
+    // stream producer or the storage-adapter binding — and every manifested
+    // producer still exists (a vanished producer is drift too).
+    expect(LEDGER_PRODUCER_MANIFEST.appendCore).toContain(adapterBinding);
+    expect([...scan.appendCallSites].sort()).toEqual(
+      [...LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.producer), adapterBinding].sort(),
+    );
+
+    // Raw ledger_event/ledger_head write SQL lives only in the append core.
+    expect([...scan.ledgerTableWriters].sort()).toEqual(
+      LEDGER_PRODUCER_MANIFEST.appendCore.filter((file) => file !== adapterBinding).sort(),
+    );
+
+    // Frozen-table write SQL survives only in the enumerated frozen
+    // adapters (their store layers throw the typed frozen errors — pinned
+    // above); any other module carrying it is an unmanifested writer.
+    expect([...scan.frozenTableWriters].sort()).toEqual(
+      LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.adapter).sort(),
+    );
+  });
+
+  test("manifest stream classes equal the protocol StreamRegistry; one producer per class", () => {
+    expect(LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.streamClass).sort()).toEqual(
+      Object.keys(LedgerAppend.StreamRegistry).sort(),
+    );
+    const producers = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.producer);
+    expect(new Set(producers).size).toBe(producers.length);
+  });
+
+  test("the producer manifest and the archive manifest agree on the frozen-table set", () => {
+    const archived = buildLedgerArchiveManifest(inspect).tables.map((entry) => entry.table);
+    expect(LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.table).sort()).toEqual(
+      [...archived].sort(),
+    );
   });
 });
