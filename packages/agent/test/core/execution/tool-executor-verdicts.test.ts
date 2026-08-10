@@ -441,6 +441,29 @@ describe("createToolExecutor effect application", () => {
     expect(capturedSources).toEqual(["mcp"]);
   });
 
+  it("denies a tool.mcp.pre with an absent mcpServerId (context_missing, fail-closed)", async () => {
+    // Pins the invariant the narrowed `& { mcpServerId: string }` cast in
+    // dispatchToolPre relies on: an mcp target with no resolvable server id
+    // (source.mcp label but no `mcp.<id>` label) omits mcpServerId, so the
+    // fail-closed tool.mcp.pre contract denies via context_missing BEFORE the
+    // tool runs — never a silent allow.
+    let invoked = 0;
+    const executor = createToolExecutor({
+      engine: PolicyEngine.create(),
+      getToolLabels: () => ["source.mcp"],
+      toolExecutor: async (call) => {
+        invoked += 1;
+        return { id: "r", toolCallId: call.id, output: "should not run" };
+      },
+    });
+
+    const result = await executor({ id: "mcp-no-server", tool: "fixture_read", input: {} });
+
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("[Denied:");
+    expect(invoked).toBe(0);
+  });
+
   describe("invoke.result run.abort propagation", () => {
     it("invoke.result deny with run.abort returns blocked result", async () => {
       let calls = 0;

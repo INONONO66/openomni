@@ -407,8 +407,11 @@ async function dispatchToolPost(
       ...input,
       ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
     };
-    // See dispatchToolPre: the single-field narrowing is confined to the one
-    // runtime-resolved boundary value; absence is denied by the point contract.
+    // Single-field narrowing as in dispatchToolPre. tool.mcp.post is a
+    // FAIL-OPEN post boundary (defaultFailPolicy "fail-open"), so an absent
+    // mcpServerId → context_missing → ALLOW, not deny. That is acceptable here:
+    // post is a post-hoc observation point, not an authorization gate — the
+    // gate already ran at the fail-closed tool.mcp.pre.
     return engine.dispatchPoint(
       "tool.mcp.post",
       mcpInput as typeof mcpInput & { mcpServerId: string },
