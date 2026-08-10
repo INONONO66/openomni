@@ -1,5 +1,5 @@
 import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
-import { WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
@@ -130,17 +130,24 @@ function assertWorkerCompletionWorkItemAuthority(
   ) {
     throw new Error("worker.complete actor is not authorized for this Worker result");
   }
-  const workerRun = WorkerRunStateStore.get(payload.result.sessionId, payload.result.runId);
-  if (!workerRun) {
+  // #510 D2b — run state is the WorkItem attempt projection, never a
+  // worker_run_state read. The run must be the item's own attempt-fact view
+  // (a frozen legacy row cannot authorize a live completion) and active.
+  const run = WorkItemAttemptRun.find(payload.result.sessionId, payload.result.runId);
+  if (
+    run?.source !== "attempt_facts" ||
+    run.workItemHash !== workItem.hash ||
+    run.attemptId === undefined
+  ) {
     throw new Error(`worker.complete WorkerRun not found: ${payload.result.runId}`);
   }
-  if (
-    (workerRun.executorKind !== undefined && workerRun.executorKind !== workItem.executorKind) ||
-    (workerRun.assignedStepId !== undefined && workerRun.assignedStepId !== workItem.hash) ||
-    (workerRun.status !== "running" && workerRun.status !== "waiting_input")
-  ) {
+  // Active runs complete; a terminal-SUCCEEDED run additionally passes
+  // through so a resubmission after a crash between admission and the
+  // attempt-terminal fact is answered by the projection's deterministic
+  // idempotent receipt (#510) instead of stranding.
+  if (run.status !== "running" && run.status !== "waiting_input" && run.status !== "succeeded") {
     throw new Error(
-      `worker.complete WorkerRun is not assigned to this active WorkItem: executor=${workerRun.executorKind ?? "missing"} assignedStep=${workerRun.assignedStepId ?? "missing"} status=${workerRun.status}`,
+      `worker.complete WorkerRun is not assigned to this active WorkItem: executor=${run.executorKind ?? "missing"} status=${run.status}`,
     );
   }
 }
@@ -200,13 +207,25 @@ export function createWorkerDispatchHandlers(
       try {
         result = await coordinator.dispatch(request.sessionId, request);
       } catch (err) {
+        // A thrown dispatch is an interrupted execution instance (#510 D2b):
+        // the attempt terminal fact folds the item to failed with the reason.
         try {
-          await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+          await WorkItemAttemptRun.finish(request.sessionId, request.runId, "interrupted", {
+            endedAt: Date.now(),
+            error: err instanceof Error ? err.message : String(err),
+          });
         } catch (reflectionFailure) {
           throwWithWorkItemReflectionFailure(err, reflectionFailure);
         }
         throw err;
       }
+      // The execution instance ended (#510 D2b): record the attempt terminal
+      // fact before completion reflection — admission stays the separate
+      // #490 verdict on the same work stream.
+      await WorkItemAttemptRun.finish(request.sessionId, request.runId, result.status, {
+        endedAt: Date.now(),
+        ...(result.status !== "succeeded" && result.error ? { error: result.error } : {}),
+      });
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
         completionService: options.completionService,
         verifierRegistry,
@@ -234,6 +253,26 @@ export function createWorkerDispatchHandlers(
       const workItem = resolveCompletedWorkItem(command, payload);
       assertWorkerCompletionWorkItemAuthority(payload, workItem);
       const workItemHash = workItem.hash;
+      // #510 D2b attempt-terminal ordering (deterministic idempotent
+      // receipt): a NON-succeeded result definitively ends the execution
+      // instance, so its terminal fact lands before the projection folds the
+      // item the same direction. A succeeded result finishes only AFTER an
+      // UNBLOCKED projection — a blocked admission keeps the attempt ACTIVE
+      // so the worker's corrected same-attempt resubmission stays a live
+      // path, and a crash on either side of the admission is answered by
+      // the projection's idempotent durable receipt (the terminal-succeeded
+      // authority arm above readmits the retry).
+      if (payload.result.status !== "succeeded") {
+        await WorkItemAttemptRun.finish(
+          payload.result.sessionId,
+          payload.result.runId,
+          payload.result.status,
+          {
+            endedAt: Date.now(),
+            ...(payload.result.error ? { error: payload.result.error } : {}),
+          },
+        );
+      }
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
         completionService: options.completionService,
         verifierRegistry,
@@ -242,6 +281,16 @@ export function createWorkerDispatchHandlers(
         readBackRecorder: options.readBackRecorder,
         now: options.now,
       });
+      if (payload.result.status === "succeeded" && !projection.reflection.completionBlocked) {
+        await WorkItemAttemptRun.finish(
+          payload.result.sessionId,
+          payload.result.runId,
+          "succeeded",
+          {
+            endedAt: Date.now(),
+          },
+        );
+      }
       return {
         output: {
           workItemHash,

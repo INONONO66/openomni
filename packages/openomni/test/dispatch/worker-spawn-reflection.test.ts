@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import {
   createDefaultDispatchRuntime as createDefaultDispatchRuntimeProduction,
   registerBuiltInDispatchHandlers as registerBuiltInDispatchHandlersProduction,
 } from "../../src/dispatch/setup";
-import { command, expectRejectsWithMessage } from "./helpers";
+import { allocateTestAttempt, command, expectRejectsWithMessage } from "./helpers";
 
 let completionWriter: Storage.WorkItemCompletionWriter;
 
@@ -61,40 +61,16 @@ function criterionFacts(evidenceId: string) {
   ] as const;
 }
 
+// #510 D2b — the assigned run is the WorkItem attempt: the worker-run store
+// is frozen, so fixtures that need an ACTIVE run allocate an attempt on the
+// target WorkItem (see allocateTestAttempt) instead of seeding a
+// worker_run_state row. This builder only shapes the authorized actor.
 function assignedWorkerCommand(
   target: Parameters<typeof command>[1],
   payload: unknown,
   sessionId: string,
   runId: string,
-  registerRun = true,
 ) {
-  if (registerRun && !WorkerRunStateStore.get(sessionId, runId)) {
-    const sessionAdapter = Storage.getAdapter().session;
-    if (!sessionAdapter.get(sessionId)) {
-      sessionAdapter.set(sessionId, {
-        id: sessionId,
-        title: "Connector completion fixture",
-        model: { providerID: "test", modelID: "test" },
-        time: { created: Date.now(), updated: Date.now() },
-        spawnDepth: 0,
-      });
-    }
-    WorkerRunStateStore.create(sessionId, {
-      runId,
-      agentName: "connector-worker",
-      status: "running",
-      executorKind: "connector_endpoint",
-      assignedStepId:
-        typeof payload === "object" &&
-        payload !== null &&
-        "workItemHash" in payload &&
-        typeof payload.workItemHash === "string"
-          ? payload.workItemHash
-          : undefined,
-      title: "Connector completion fixture",
-      prompt: "complete the assigned connector WorkItem",
-    });
-  }
   return {
     ...command("worker.complete", target, payload),
     actor: {
@@ -447,6 +423,7 @@ describe("worker.spawn result reflection", () => {
     });
     const connectorItem = await WorkItemStore.start(connectorCreated.hash);
     if (!connectorItem) throw new Error("missing connector WorkItem");
+    await allocateTestAttempt(connectorItem.hash);
     const connectorEvidence = await WorkItemStore.addEvidence(connectorItem.hash, {
       kind: "verification",
       description: "kernel-recorded verifier input",
@@ -492,6 +469,91 @@ describe("worker.spawn result reflection", () => {
     });
     expect(connectorStored?.completionTerminalReceipt).toBeUndefined();
     expect(connectorStored?.completionReport).toBeUndefined();
+  });
+
+  test("worker.complete answers a blocked-then-retried completion with one admission", async () => {
+    // #510 deterministic-idempotent-receipt pin: a blocked first submission
+    // (a designed live path) must NOT terminalize the attempt — the worker's
+    // corrected resubmission of the SAME attempt completes with exactly one
+    // recorded admission.
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry);
+    const created = await WorkItemStore.create({
+      name: "Blocked-then-retried connector completion",
+      sourceMessageId: "dispatch:blocked-retry-completion",
+      sourceChannel: "dispatch",
+      intent: "worker.complete",
+      goal: "retry a blocked completion on the same attempt",
+      executorKind: "connector_endpoint",
+      workSessionId: "session:blocked-retry",
+      workerRunId: "run:blocked-retry",
+      acceptanceCriteria: ["recorded numeric operands satisfy eq"],
+    });
+    const item = await WorkItemStore.start(created.hash);
+    if (!item) throw new Error("missing blocked-retry WorkItem");
+    await allocateTestAttempt(item.hash);
+    const withEvidence = await WorkItemStore.addEvidence(item.hash, {
+      kind: "verification",
+      description: "kernel-recorded verifier input",
+      passed: true,
+      detail: recordedVerifierEvidence(item),
+    });
+    const evidenceId = withEvidence?.evidence.at(-1)?.id;
+    if (!evidenceId) throw new Error("missing blocked-retry evidence");
+
+    const submit = (output: string) =>
+      registry.get("worker.complete")?.(
+        assignedWorkerCommand(
+          { kind: "worker", runId: "run:blocked-retry", sessionId: "session:blocked-retry" },
+          {
+            workItemHash: item.hash,
+            result: {
+              runId: "run:blocked-retry",
+              sessionId: "session:blocked-retry",
+              status: "succeeded" as const,
+              output,
+            },
+          },
+          "session:blocked-retry",
+          "run:blocked-retry",
+        ),
+      ) as Promise<{ output: { reflection: { completionBlocked: boolean } } }>;
+
+    // First submission: not a completion envelope — admission blocks.
+    const blocked = await submit("not a completion envelope");
+    expect(blocked.output.reflection.completionBlocked).toBe(true);
+    // The attempt is still the live execution instance: no terminal record.
+    expect(WorkItemStore.get(item.hash)?.attemptTerminal).toBeUndefined();
+
+    // Resolve the block (the #490 active_blocker admission rule is the
+    // pre-existing unblock step, not D2b scope), then resubmit the SAME
+    // attempt with the corrected envelope: admitted once.
+    const blocker = WorkItemStore.get(item.hash)?.blockers.find(
+      (candidate) => candidate.resolvedAt === undefined,
+    );
+    if (!blocker) throw new Error("missing completion blocker after the blocked submission");
+    await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+    const retried = await submit(
+      JSON.stringify({
+        completionReport: {
+          summary: "Corrected completion envelope after the blocked attempt.",
+          claims: [
+            { statement: "recorded numeric operands satisfy eq", evidenceIds: [evidenceId] },
+          ],
+        },
+        criterionFacts: criterionFacts(evidenceId),
+      }),
+    );
+    expect(retried.output.reflection.completionBlocked).toBe(false);
+
+    const stored = WorkItemStore.get(item.hash);
+    if (!stored) throw new Error("blocked-retry WorkItem disappeared");
+    expect(WorkItem.deriveStatus(stored)).toBe("completed");
+    expect(
+      stored.completionFacts.admissions.filter((admission) => admission.decision === "admit"),
+    ).toHaveLength(1);
+    // The attempt terminal lands with the admitted completion.
+    expect(stored.attemptTerminal?.outcome).toBe("succeeded");
   });
 
   test("worker.complete requires one WorkItem bound to its target and result run", async () => {
@@ -674,7 +736,6 @@ describe("worker.spawn result reflection", () => {
             },
             "session:missing-worker-run",
             "run:missing-worker-run",
-            false,
           ),
         ),
       "WorkerRun not found",
@@ -893,6 +954,7 @@ describe("worker.spawn result reflection", () => {
       workerRunId: "run:connector-evidence",
       acceptanceCriteria: ["connector evidence persists"],
     });
+    await allocateTestAttempt(item.hash);
     const workItemAdapter = Storage.getAdapter().workItem;
     if (!workItemAdapter) throw new Error("missing work item adapter");
     workItemAdapter.compareAndSet = () => {

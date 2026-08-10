@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { NamedError } from "../error/index.js";
 import { WorkItem } from "../work-item/index.js";
 
 const BaseEvent = z.object({
@@ -38,6 +39,29 @@ export namespace WorkerRun {
     resumeCount: z.number().int().min(0).default(0),
   });
   export type Info = z.infer<typeof Info>;
+
+  export const WriteMethod = z.enum(["create", "updateStatus", "updateStatusIfCurrent"]);
+  export type WriteMethod = z.infer<typeof WriteMethod>;
+
+  /**
+   * #510 D2b — worker-run is a frozen legacy writer. Its live production
+   * consumers cut over to WorkItem attempt facts (`work_item.attempt_*` on
+   * the `work:<hash>` owner stream), so every worker-run store write method
+   * throws this typed error. Callers branch on `data.code`, never message
+   * text. Historical `worker_run_state` rows stay readable through the
+   * store's read methods and the upcast-on-read attempt-run view; the
+   * archive manifest (script/generate-ledger-archive-manifest.ts) records
+   * their range identity and integrity hash.
+   */
+  export const FrozenError = NamedError.create(
+    "WorkerRunFrozenError",
+    z.object({
+      message: z.string(),
+      code: z.literal("worker_run_frozen"),
+      method: WriteMethod,
+    }),
+  );
+  export type FrozenError = InstanceType<typeof FrozenError>;
 
   export namespace Events {
     export const Started = BusEvent.define(

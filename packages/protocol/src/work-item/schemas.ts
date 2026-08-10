@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AttemptTerminal } from "./attempt.js";
 import {
   CompletionContract,
   CompletionFacts,
@@ -200,6 +201,13 @@ const InfoShape = z.object({
    */
   lastAttemptSeq: z.number().int().nonnegative().default(0),
   currentAttemptId: z.string().min(1).optional(),
+  /**
+   * #510 D2b — the current attempt's terminal record, projected from
+   * `work_item.attempt_finished` and cleared by the next allocation. This is
+   * where the retired worker-run ledger's terminal state (outcome, endedAt,
+   * error) lives after the cutover.
+   */
+  attemptTerminal: AttemptTerminal.optional(),
   timestamps: z.object({
     created: z.number(),
     updated: z.number(),

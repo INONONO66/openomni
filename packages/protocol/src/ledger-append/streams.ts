@@ -61,6 +61,7 @@ export const StreamRegistry = {
       "work_item.admission_accepted",
       "work_item.admission_refused",
       "work_item.attempt_allocated",
+      "work_item.attempt_finished",
     ],
     status: "shipped",
   },

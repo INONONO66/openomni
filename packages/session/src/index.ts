@@ -16,6 +16,8 @@ export * from "./worker-run/index.js";
 export { WorkerRunStateStore } from "./worker-run/state-store.js";
 export { TraceContext } from "./trace/index.js";
 export { WorkItemStore } from "./work-item/index.js";
+export { WorkItemAttemptRun } from "./work-item/attempt-run.js";
+export type { AttemptRunStatus, AttemptRunView } from "./work-item/attempt-run.js";
 export { hasRetryExhaustionBlocker } from "./work-item/retry-policy.js";
 export { WaitStore } from "./wait/index.js";
 export { EffectStore, EffectStoreError } from "./effect/index.js";

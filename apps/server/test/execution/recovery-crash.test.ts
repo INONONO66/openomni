@@ -1,42 +1,78 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Bus, Storage, WorkerRun, WorkerRunStateStore } from "@openomni/session";
-import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
+import { Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { recoverInterruptedRuns } from "../../src/execution/recovery";
 
-function seedSession(id: string): void {
-  Storage.getAdapter().session.set(id, {
-    id,
-    title: "test",
-    model: { providerID: "test", modelID: "test" },
-    time: { created: Date.now(), updated: Date.now() },
-    spawnDepth: 0,
-  });
+/**
+ * #510 D2b — boot recovery over WorkItem attempt facts. The worker-run
+ * store is frozen: recovery scans active attempts (allocated, unfinished)
+ * and records `interrupted` terminal facts for in-process executors only.
+ */
+
+function attemptIdentity(prompt: string) {
+  return {
+    contentFingerprint: WorkItem.contentFingerprintOf({
+      workInput: prompt,
+      handlerKind: "internal_chat_agent",
+      handlerCodeRef: { absent: true, reason: "not captured in tests" },
+      model: {
+        provider: "test",
+        id: "test-model",
+        parameters: { absent: true, reason: "no parameters configured" },
+      },
+      upstreamFingerprints: { absent: true, reason: "no upstream attempts" },
+      dependencyLock: { absent: true, reason: "not read in tests" },
+    }),
+    environmentFingerprint: WorkItem.environmentFingerprintOf({
+      os: process.platform,
+      arch: process.arch,
+      bunVersion: process.versions.bun ?? process.version,
+      workspaceRoot: { absent: true, reason: "no workspace in tests" },
+      schemaVersions: { policyKernel: 1 },
+      policy: { absent: true, reason: "no policy plan in tests" },
+      toolVersions: { absent: true, reason: "not enumerated in tests" },
+      verifierVersions: { absent: true, reason: "not enumerated in tests" },
+      providerParameters: { absent: true, reason: "no provider parameters" },
+      configRef: { absent: true, reason: "no config identity in tests" },
+    }),
+  };
 }
 
-async function seedRunAtStatus(
+type RunState = "allocated" | "waiting_input" | WorkItem.AttemptOutcome;
+
+async function seedAttemptRun(
   sessionId: string,
   runId: string,
-  targetStatus:
-    | "queued"
-    | "starting"
-    | "running"
-    | "waiting_input"
-    | "succeeded"
-    | "failed"
-    | "cancelled"
-    | "interrupted",
-): Promise<void> {
-  await WorkerRun.create(sessionId, { runId, title: "task", prompt: "do it" });
-  if (targetStatus === "queued") return;
-  await WorkerRun.updateStatus(sessionId, runId, "starting");
-  if (targetStatus === "starting") return;
-  await WorkerRun.updateStatus(sessionId, runId, "running");
-  if (targetStatus === "running") return;
-  if (targetStatus === "waiting_input") {
-    await WorkerRun.updateStatus(sessionId, runId, "waiting_input");
-    return;
+  state: RunState | "unallocated",
+  executorKind: WorkItem.ExecutorKind = "internal_chat_agent",
+): Promise<string> {
+  const created = await WorkItemStore.create({
+    name: `run ${runId}`,
+    sourceMessageId: `seed:${runId}`,
+    sourceChannel: "ingress",
+    intent: "worker.dispatch",
+    goal: "do it",
+    sessionId,
+    workSessionId: sessionId,
+    workerRunId: runId,
+    executorKind,
+    acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+  });
+  await WorkItemStore.start(created.hash);
+  if (state === "unallocated") return created.hash;
+  const allocation = await WorkItemStore.allocateAttempt(created.hash, attemptIdentity("do it"));
+  if (!allocation) throw new Error(`attempt allocation failed for ${runId}`);
+  if (state === "allocated") return created.hash;
+  if (state === "waiting_input") {
+    if (!(await WorkItemAttemptRun.beginWait(sessionId, runId))) {
+      throw new Error(`beginWait failed for ${runId}`);
+    }
+    return created.hash;
   }
-  await WorkerRun.updateStatus(sessionId, runId, targetStatus, { endedAt: Date.now() });
+  if (!(await WorkItemAttemptRun.finish(sessionId, runId, state, { endedAt: Date.now() }))) {
+    throw new Error(`finish failed for ${runId}`);
+  }
+  return created.hash;
 }
 
 beforeEach(() => {
@@ -49,150 +85,115 @@ afterEach(() => {
 });
 
 describe("recoverInterruptedRuns", () => {
-  test("marks running runs as interrupted", async () => {
-    seedSession("s1");
-    await seedRunAtStatus("s1", "r1", "running");
+  test("marks active runs as interrupted with the terminal attempt fact", async () => {
+    await seedAttemptRun("s1", "r1", "allocated");
 
     const result = await recoverInterruptedRuns();
 
-    const run = await WorkerRun.get("s1", "r1");
+    const run = WorkItemAttemptRun.find("s1", "r1");
     expect(run?.status).toBe("interrupted");
     expect(run?.endedAt).toBeGreaterThan(0);
+    expect(run?.error).toBe("coordinator restarted: run interrupted");
     expect(result.recovered).toBe(1);
     expect(result.sessions).toEqual(["s1"]);
   });
 
-  test("marks starting runs as interrupted", async () => {
-    seedSession("s2");
-    await seedRunAtStatus("s2", "r2", "starting");
+  test("marks waiting_input runs as interrupted and releases the wait blocker", async () => {
+    const hash = await seedAttemptRun("s-waiting", "r-waiting", "waiting_input");
 
     const result = await recoverInterruptedRuns();
 
-    const run = await WorkerRun.get("s2", "r2");
+    const run = WorkItemAttemptRun.find("s-waiting", "r-waiting");
     expect(run?.status).toBe("interrupted");
     expect(result.recovered).toBe(1);
+    const item = WorkItemStore.get(hash);
+    expect(item?.blockers.every((blocker) => blocker.resolvedAt !== undefined)).toBe(true);
   });
 
-  test("marks waiting_input runs as interrupted", async () => {
-    seedSession("s-waiting");
-    await seedRunAtStatus("s-waiting", "r-waiting", "waiting_input");
-
-    const result = await recoverInterruptedRuns();
-
-    const run = await WorkerRun.get("s-waiting", "r-waiting");
-    expect(run?.status).toBe("interrupted");
-    expect(result.recovered).toBe(1);
-  });
-
-  test("publishes WorkerRunFailed event for each interrupted run", async () => {
-    seedSession("s3");
-    await seedRunAtStatus("s3", "r3a", "running");
-    await seedRunAtStatus("s3", "r3b", "running");
-
-    const events: Array<{ sessionId: string; runId: string; error?: string }> = [];
-    const unsub = Bus.subscribe(WorkerRunProtocol.Events.Failed, (data) => {
-      events.push(data.payload);
-    });
+  test("records the interrupted attempt fact on the work stream for each recovered run", async () => {
+    await seedAttemptRun("s3", "r3a", "allocated");
+    await seedAttemptRun("s3", "r3b", "allocated");
 
     await recoverInterruptedRuns();
-    unsub();
 
-    expect(events).toHaveLength(2);
-    expect(events.every((e) => e.sessionId === "s3")).toBe(true);
-    expect(events.map((e) => e.runId).sort()).toEqual(["r3a", "r3b"].sort());
-    expect(events.every((e) => e.error === "coordinator restarted: run interrupted")).toBe(true);
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    const finished = ledger
+      .factsByType("work_item.attempt_finished")
+      .map((fact) => fact.data as { outcome?: string; error?: string });
+    expect(finished).toHaveLength(2);
+    expect(
+      finished.every(
+        (fact) =>
+          fact.outcome === "interrupted" && fact.error === "coordinator restarted: run interrupted",
+      ),
+    ).toBe(true);
   });
 
   test("terminal runs are not affected", async () => {
-    seedSession("s4");
-    await seedRunAtStatus("s4", "r-succeeded", "succeeded");
-    await seedRunAtStatus("s4", "r-failed", "failed");
-    await seedRunAtStatus("s4", "r-cancelled", "cancelled");
-    await seedRunAtStatus("s4", "r-interrupted", "interrupted");
+    await seedAttemptRun("s4", "r-succeeded", "succeeded");
+    await seedAttemptRun("s4", "r-failed", "failed");
+    await seedAttemptRun("s4", "r-cancelled", "cancelled");
+    await seedAttemptRun("s4", "r-interrupted", "interrupted");
 
     const result = await recoverInterruptedRuns();
 
     expect(result.recovered).toBe(0);
     expect(result.sessions).toHaveLength(0);
-
-    const statuses = await Promise.all([
-      WorkerRun.get("s4", "r-succeeded"),
-      WorkerRun.get("s4", "r-failed"),
-      WorkerRun.get("s4", "r-cancelled"),
-      WorkerRun.get("s4", "r-interrupted"),
-    ]);
-    expect(statuses.map((r) => r?.status)).toEqual([
-      "succeeded",
-      "failed",
-      "cancelled",
-      "interrupted",
-    ]);
+    expect(
+      ["r-succeeded", "r-failed", "r-cancelled", "r-interrupted"].map(
+        (runId) => WorkItemAttemptRun.find("s4", runId)?.status,
+      ),
+    ).toEqual(["succeeded", "failed", "cancelled", "interrupted"]);
   });
 
-  test("queued runs are not affected", async () => {
-    seedSession("s5");
-    await seedRunAtStatus("s5", "r5", "queued");
+  test("runs without an allocated attempt are not affected", async () => {
+    const hash = await seedAttemptRun("s5", "r5", "unallocated");
 
     const result = await recoverInterruptedRuns();
 
     expect(result.recovered).toBe(0);
-    const run = await WorkerRun.get("s5", "r5");
-    expect(run?.status).toBe("queued");
+    expect(WorkItemStore.get(hash)?.attemptTerminal).toBeUndefined();
   });
 
-  test("skips runs changed by an active writer after the recovery scan", async () => {
-    seedSession("s-active");
-    await seedRunAtStatus("s-active", "r-active", "running");
+  test("connector-endpoint attempts survive a kernel restart", async () => {
+    await seedAttemptRun("s-connector", "r-connector", "allocated", "connector_endpoint");
 
-    const workerRunState = Storage.get().workerRunState;
-    if (!workerRunState) throw new Error("workerRunState adapter missing");
+    const result = await recoverInterruptedRuns();
 
-    const listBySession = workerRunState.listBySession.bind(workerRunState);
-    let changedAfterScan = false;
-    workerRunState.listBySession = (sessionId) => {
-      const rows = listBySession(sessionId);
-      if (sessionId === "s-active" && !changedAfterScan) {
-        changedAfterScan = true;
-        WorkerRunStateStore.updateStatus(sessionId, "r-active", "succeeded");
+    expect(result.recovered).toBe(0);
+    expect(WorkItemAttemptRun.find("s-connector", "r-connector")?.status).toBe("running");
+  });
+
+  test("skips runs finished by an active writer after the recovery scan", async () => {
+    await seedAttemptRun("s-active", "r-active", "allocated");
+
+    const workItemAdapter = Storage.get().workItem;
+    if (!workItemAdapter) throw new Error("workItem adapter missing");
+    const list = workItemAdapter.list.bind(workItemAdapter);
+    let finishedAfterScan = false;
+    workItemAdapter.list = (filter) => {
+      const rows = list(filter);
+      if (!finishedAfterScan) {
+        finishedAfterScan = true;
+        // The concurrent writer wins the head CAS between scan and write.
+        void WorkItemAttemptRun.finish("s-active", "r-active", "succeeded", {
+          endedAt: Date.now(),
+        });
       }
       return rows;
     };
 
     const result = await recoverInterruptedRuns();
 
-    const run = await WorkerRun.get("s-active", "r-active");
-    expect(run?.status).toBe("succeeded");
+    expect(WorkItemAttemptRun.find("s-active", "r-active")?.status).toBe("succeeded");
     expect(result.recovered).toBe(0);
     expect(result.sessions).toEqual([]);
   });
 
-  test("status precondition rejects runs touched without a status change", async () => {
-    seedSession("s-touch");
-    await seedRunAtStatus("s-touch", "r-touch", "running");
-
-    const scanned = WorkerRunStateStore.get("s-touch", "r-touch");
-    expect(scanned?.status).toBe("running");
-    if (!scanned) throw new Error("r-touch not found before active write");
-    WorkerRunStateStore.updateStatus("s-touch", "r-touch", "running");
-
-    const interrupted = await WorkerRun.updateStatusIfCurrent(
-      "s-touch",
-      "r-touch",
-      { status: scanned.status, timeUpdated: scanned.timeUpdated },
-      "interrupted",
-      { endedAt: Date.now(), error: "stale recovery update" },
-    );
-
-    const run = await WorkerRun.get("s-touch", "r-touch");
-    expect(run?.status).toBe("running");
-    expect(run?.timeUpdated).toBeGreaterThan(scanned.timeUpdated);
-    expect(interrupted).toBe(false);
-  });
-
   test("deduplicates sessions in result when multiple runs recovered from same session", async () => {
-    seedSession("s6");
-    await seedRunAtStatus("s6", "r6a", "running");
-    await seedRunAtStatus("s6", "r6b", "running");
+    await seedAttemptRun("s6", "r6a", "allocated");
+    await seedAttemptRun("s6", "r6b", "allocated");
 
     const result = await recoverInterruptedRuns();
 
@@ -202,8 +203,7 @@ describe("recoverInterruptedRuns", () => {
 
   test("recovery completes in under 10 seconds", async () => {
     for (let i = 0; i < 20; i++) {
-      seedSession(`perf-s${i}`);
-      await seedRunAtStatus(`perf-s${i}`, `perf-r${i}`, "running");
+      await seedAttemptRun(`perf-s${i}`, `perf-r${i}`, "allocated");
     }
 
     const start = Date.now();

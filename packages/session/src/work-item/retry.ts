@@ -47,6 +47,7 @@ export function retryWorkItem(
       "executorKind",
       "workerRunId",
       "workSessionId",
+      "attemptTerminal",
     ],
     {
       type: "work_item.retried",
@@ -107,6 +108,10 @@ function retryableItem(existing: WorkItem.Info, now: number): WorkItem.Info {
     workerRunId: undefined,
     workSessionId: undefined,
     executorKind: undefined,
+    // The retried item starts a fresh execution: the prior attempt's
+    // terminal record (#510 D2b) is history on the work stream, not the
+    // state of the next attempt.
+    attemptTerminal: undefined,
     failureReason: undefined,
     timestamps: {
       ...existing.timestamps,

@@ -1,6 +1,6 @@
 import type { InboundWaitParams, InboundWaitResult } from "@openomni/coordinator";
 import type { DispatchRuntime } from "@openomni/openomni";
-import { WorkerRun } from "@openomni/session";
+import { WorkItemAttemptRun } from "@openomni/session";
 import type { ServerConfig } from "../config";
 
 export type ResidentInboundWaitConfig = {
@@ -29,9 +29,14 @@ export function createResidentInboundWaitHandler(
       return { requestId, accepted: false, error: "worker.inbound_wait aborted" };
     }
 
-    const run = runId ? await WorkerRun.get(sessionId, runId) : undefined;
+    // #510 D2b — the run view is the WorkItem attempt projection (frozen
+    // legacy worker_run_state rows upcast to terminal views, which the
+    // acquire below rejects as no longer active). A missing runId, an
+    // unknown run, and a run without a parent Resident session are ONE
+    // rejection: no runId means no run means no parent.
+    const run = runId ? WorkItemAttemptRun.find(sessionId, runId) : undefined;
     const mainSessionId = run?.parentSessionId;
-    if (!mainSessionId) {
+    if (!runId || !mainSessionId) {
       return {
         requestId,
         accepted: false,
@@ -39,31 +44,10 @@ export function createResidentInboundWaitHandler(
       };
     }
 
-    if (!runId || !run) {
-      return { requestId, accepted: false, error: "worker.inbound_wait requires runId" };
-    }
-    if (run.status === "starting") {
-      const acquiredRunning = await WorkerRun.updateStatusIfCurrent(
-        sessionId,
-        runId,
-        { status: "starting", timeUpdated: run.timeUpdated },
-        "running",
-      );
-      if (!acquiredRunning) {
-        return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
-      }
-    }
-
-    const running = await WorkerRun.get(sessionId, runId);
-    if (running?.status !== "running") {
-      return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
-    }
-    const acquiredWait = await WorkerRun.updateStatusIfCurrent(
-      sessionId,
-      runId,
-      { status: "running", timeUpdated: running.timeUpdated },
-      "waiting_input",
-    );
+    // Acquire the wait: ONE serialized head CAS on the work stream (the
+    // waiting_input blocker fact). A run that is terminal, already waiting,
+    // or transitioned concurrently loses the acquire.
+    const acquiredWait = await WorkItemAttemptRun.beginWait(sessionId, runId);
     if (!acquiredWait) {
       return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
     }
@@ -104,15 +88,9 @@ export function createResidentInboundWaitHandler(
         output: residentAskOutput(dispatchResult.output),
       };
     } finally {
-      const after = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-      if (runId && after?.status === "waiting_input") {
-        await WorkerRun.updateStatusIfCurrent(
-          sessionId,
-          runId,
-          { status: "waiting_input", timeUpdated: after.timeUpdated },
-          "running",
-        );
-      }
+      // Release the wait if it is still ours; a run finished mid-wait keeps
+      // its terminal record (endWait is a no-op receipt then).
+      await WorkItemAttemptRun.endWait(sessionId, runId);
     }
   };
 }

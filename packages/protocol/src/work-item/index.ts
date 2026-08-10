@@ -116,6 +116,12 @@ export namespace WorkItem {
   export const Attempt = AttemptContract.Attempt;
   export type Attempt = AttemptContract.Attempt;
 
+  export const AttemptOutcome = AttemptContract.AttemptOutcome;
+  export type AttemptOutcome = AttemptContract.AttemptOutcome;
+
+  export const AttemptTerminal = AttemptContract.AttemptTerminal;
+  export type AttemptTerminal = AttemptContract.AttemptTerminal;
+
   export const ContentFingerprintInputs = AttemptContract.ContentFingerprintInputs;
   export type ContentFingerprintInputs = AttemptContract.ContentFingerprintInputs;
 

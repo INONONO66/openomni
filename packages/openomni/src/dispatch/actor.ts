@@ -1,5 +1,5 @@
 import { type Actor, Dispatch } from "@openomni/protocol";
-import { WorkerRunStateStore } from "@openomni/session";
+import { WorkItemAttemptRun } from "@openomni/session";
 
 export interface DispatchRuntimeContext {
   readonly sessionId?: string;
@@ -21,10 +21,12 @@ function actorKindFromAgent(agentName: string | undefined): Dispatch.ActorKind {
   return "worker";
 }
 
+// #510 D2b — run existence derives from WorkItem attempt facts; frozen
+// legacy worker_run_state rows keep answering through the upcast view.
 function lookupWorkerRun(sessionId: string | undefined, runId: string | undefined) {
   if (!sessionId || !runId) return undefined;
   try {
-    return WorkerRunStateStore.get(sessionId, runId);
+    return WorkItemAttemptRun.find(sessionId, runId);
   } catch {
     return undefined;
   }

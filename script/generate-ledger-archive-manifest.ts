@@ -7,8 +7,7 @@
 // ever be deleted. This script produces that durable artifact as JSON:
 //
 //   - one entry per frozen table (pending_ask since #510 D2a,
-//     pending_interaction since #548; worker_run_state joins when its
-//     writer freezes);
+//     pending_interaction since #548, worker_run_state since #510 D2b);
 //   - sourceSchemaVersion: the last applied migration name from `_migrations`
 //     at generation time — the schema the frozen rows were persisted under;
 //   - rowCount + idRange (first/last id in id order): range identity;
@@ -34,6 +33,7 @@ import { WorkItem } from "../packages/protocol/src/index";
 const FROZEN_TABLES: readonly { table: string; idColumn: string }[] = [
   { table: "pending_ask", idColumn: "id" },
   { table: "pending_interaction", idColumn: "id" },
+  { table: "worker_run_state", idColumn: "run_id" },
 ];
 
 export interface LedgerArchiveTableEntry {
