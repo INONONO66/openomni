@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786359667369,
+  "lastUpdate": 1786363721361,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41269,6 +41269,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 544336,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "462b4ce9ab7eea9217e9d8ac34a0b0d9e129546b",
+          "message": "fix(session,protocol,llm): pure TTL reads, dead sink hook, ghost parts (#581)\n\n* fix(session): pure TTL expiry reads, deletion via explicit sweep\n\nSession.get() deleted the row when it found it expired and Session.list()\nremoved rows inside its own filter callback — reads that write, the\ndelete-while-iterating defect class. Reads now only filter expired rows;\nphysical deletion moves to Session.sweepExpired(), invoked from the boot\nrecovery sweep next to WaitService.sweepExpired (no periodic scheduler is\nintroduced; re-sweep between restarts is a follow-up).\n\nRed-first pins: get() on an expired session returns undefined WITHOUT\ndeleting it, list() excludes expired rows without mutating storage or\npublishing session.deleted, and interleaved get/list during expiry leave\nevery row intact until the sweep.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol,llm,agent): drop dead Sink.onSnapshot\n\nSink.onSnapshot's only production consumer was a no-op (worker-runner) and\nthe agent trackingSink merely forwarded it; the llm processor was the sole\nproducer. The callback and Run.Snapshot are removed. The busy/retry/idle\nrun-status telemetry it carried survives as the same \"sink.snapshot\"\nOperational.Info publish, now emitted directly by the processor instead of\nthrough the sink hop (tests pin busy/idle order on the bus).\n\nonToolCall/onToolResult stay: they are NOT duplication of onFact — they\ncarry the executor-boundary correlation guarantee (every result pairs with\na preceding call; unmatched tool-results emit facts but no callback,\n#532-6) that feeds the agent's public tool_call_start/tool_call_complete\nevents and the sink.tool.* operational telemetry. Documented on the\ninterface.\n\nschema-snapshot.json: surgical removal of the Run.Snapshot entry only\n(Owner-sign-off surface; a full --update regeneration would bundle ~800\nlines of unrelated additive drift).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol): delete ghost SnapshotPart/CompactionPart\n\nZero producers and zero consumers repo-wide (verified: definitions, union\nmembership, dead fold switch cases, and their own schema tests were the\nonly references; storage reads cast JSON without zod-parsing, so no stored\nrow can hit the removed union members). #497's kill list already marks\nthem; the transcript fold entanglement was clean dead-case removal\n(punctual-part groups in isAppendableInitialState/advancePart), so deleted\nnow instead of waiting for #497.\n\nschema-snapshot.json: surgical removal of the Message.SnapshotPart,\nMessage.CompactionPart, and Message.Part#6/#7 entries (Owner-sign-off\nsurface).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T12:07:29Z",
+          "tree_id": "753c84dfc975b06fdd279d619fc43e60a1421b85",
+          "url": "https://github.com/INONONO66/openomni/commit/462b4ce9ab7eea9217e9d8ac34a0b0d9e129546b"
+        },
+        "date": 1786363720458,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9671,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2833,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15192,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7975,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 799,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 699,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2376,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11004,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102164,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 536354,
             "unit": "ns/op"
           }
         ]
