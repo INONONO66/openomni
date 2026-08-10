@@ -85,7 +85,9 @@ describe("timeout and protocol errors over a real socket", () => {
     });
     try {
       const client = await connectIpcClient(socketPath);
-      expect(client.call("coordinator.bootstrap", {}, 50)).rejects.toBeInstanceOf(IpcTimeoutError);
+      await expect(client.call("coordinator.bootstrap", {}, 50)).rejects.toBeInstanceOf(
+        IpcTimeoutError,
+      );
       client.close();
     } finally {
       server.close();
@@ -96,7 +98,9 @@ describe("timeout and protocol errors over a real socket", () => {
     const socketPath = tmpSocketPath("noclient");
     const server = createIpcServer(socketPath, () => undefined);
     try {
-      expect(server.call("worker.deliver_message", {})).rejects.toBeInstanceOf(IpcConnectionError);
+      await expect(server.call("worker.deliver_message", {})).rejects.toBeInstanceOf(
+        IpcConnectionError,
+      );
     } finally {
       server.close();
     }
