@@ -6,26 +6,10 @@ import {
 } from "@openomni/protocol";
 import { Bus, Session } from "@openomni/session";
 import { createIngressAudit, summarizeText } from "./audit-envelope";
+import { extractText } from "./handlers";
 import { resolveTarget } from "./target";
 
 export namespace IngressEventProjector {
-  function extractTextPayload(event: Ingress.ResolvedInboundEvent): string {
-    if (typeof event.payload === "string") {
-      return event.payload;
-    }
-
-    if (
-      typeof event.payload === "object" &&
-      event.payload !== null &&
-      "text" in event.payload &&
-      typeof (event.payload as Record<string, unknown>).text === "string"
-    ) {
-      return (event.payload as Record<string, unknown>).text as string;
-    }
-
-    return JSON.stringify(event.payload) ?? "";
-  }
-
   export function project(
     event: Ingress.ResolvedInboundEvent,
     sessionId: string,
@@ -43,7 +27,7 @@ export namespace IngressEventProjector {
       model,
     };
 
-    const textPayload = extractTextPayload(event);
+    const textPayload = extractText(event.payload);
     const part: Message.TextPart = {
       id: crypto.randomUUID(),
       sessionID: sessionId,
