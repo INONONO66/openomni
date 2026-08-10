@@ -24,7 +24,10 @@ export class GitHubClient {
         },
         body: JSON.stringify({ body }),
       },
-      { label: "github/postComment" },
+      {
+        publish: this.publish,
+        label: "github/postComment",
+      },
     );
 
     if (!response.ok) {

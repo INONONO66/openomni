@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import type { PublishPort } from "../types";
 
 // merged from sleep.ts (fragment sweep); also consumed by channel pollers
 export function sleep(ms: number): Promise<void> {
@@ -16,6 +16,8 @@ export async function fetchWithRetry(
     parseRetryAfter?: (body: unknown) => number;
     retries?: number;
     label?: string;
+    /** band contract: telemetry goes through the injected observation port */
+    publish?: PublishPort;
   },
 ): Promise<Response> {
   const retries = options?.retries ?? 0;
@@ -40,7 +42,7 @@ export async function fetchWithRetry(
       }
     }
 
-    Bus.publish(Operational.Warn, {
+    options?.publish?.(Operational.Warn, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",

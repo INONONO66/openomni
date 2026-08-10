@@ -65,6 +65,7 @@ export class DiscordClient implements ChannelClient {
         body: JSON.stringify(body),
       },
       {
+        publish: this.publish,
         parseRetryAfter: (data) => {
           const r = data as { retry_after?: number };
           return r.retry_after ?? 5;
