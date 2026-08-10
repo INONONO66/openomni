@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage, TranscriptStore } from "@openomni/session";
+import type { Message, Transcript } from "@openomni/protocol";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "../../src/execution-runtime/middleware/injection-queue-policy.js";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware.js";
@@ -31,6 +32,87 @@ async function dispatchTurnFinish(
   const engine = PolicyEngine.create({ audit: false });
   engine.register(createInjectionQueueDrainPolicy(queue));
   return engine.dispatchPoint("run.turn.post", baseContext(runId, sessionId));
+}
+
+function assistantInfo(sessionID: string, messageID: string): Message.AssistantMessage {
+  return {
+    id: messageID,
+    sessionID,
+    role: "assistant",
+    time: { created: 1_000 },
+    parentID: "user-1",
+    modelID: "test-model",
+    providerID: "test",
+    agent: "worker",
+    path: { cwd: "/tmp", root: "/tmp" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  };
+}
+
+/** One complete tool-bearing worker turn recorded as transcript facts. */
+function recordToolTurn(sessionID: string, messageID: string): void {
+  const attemptId = `${messageID}#1`;
+  const facts: Transcript.Fact[] = [
+    { type: "message.created", attemptId, message: assistantInfo(sessionID, messageID) },
+    {
+      type: "part.appended",
+      attemptId,
+      messageId: messageID,
+      part: {
+        id: `${messageID}-text`,
+        sessionID,
+        messageID,
+        type: "text",
+        text: "",
+        time: { start: 1_010 },
+      },
+    },
+    {
+      type: "part.advanced",
+      attemptId,
+      messageId: messageID,
+      partId: `${messageID}-text`,
+      transition: { to: "completed", at: 1_020, output: "worker turn output" },
+    },
+    {
+      type: "part.appended",
+      attemptId,
+      messageId: messageID,
+      part: {
+        id: `${messageID}-tool`,
+        sessionID,
+        messageID,
+        type: "tool",
+        callID: `${messageID}-call`,
+        tool: "bash",
+        state: { status: "pending", input: { command: "ls" } },
+      },
+    },
+    {
+      type: "part.advanced",
+      attemptId,
+      messageId: messageID,
+      partId: `${messageID}-tool`,
+      transition: { to: "running", at: 1_030 },
+    },
+    {
+      type: "part.advanced",
+      attemptId,
+      messageId: messageID,
+      partId: `${messageID}-tool`,
+      transition: { to: "completed", at: 1_040, output: "file-a", title: "bash" },
+    },
+    {
+      type: "message.finished",
+      attemptId,
+      messageId: messageID,
+      at: 1_050,
+      finish: "stop",
+      usage: { input: 12, output: 7, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+  ];
+  for (const fact of facts) TranscriptStore.record(sessionID, fact);
 }
 
 describe("createInjectionQueueDrainPolicy", () => {
@@ -108,6 +190,32 @@ describe("createInjectionQueueDrainPolicy", () => {
     ]);
   });
 
+  // #562 F3 red pin: injected responses land in the SAME worker session that
+  // records transcript facts. Resume replays the fact stream once one exists,
+  // so a projection-only injected write silently vanishes from recovery. The
+  // seam must record the injected response as synthesized facts.
+  it("resume keeps injected responses in a fact-bearing session, in recording order", async () => {
+    const session = Session.create({
+      title: "Resume Merge",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    recordToolTurn(session.id, "msg-turn");
+    const queue = InjectionQueue.create();
+    queue.enqueue("run-resume", {
+      messageId: "msg-injected",
+      output: "resident answer",
+      injectToHistory: true,
+      timestamp: 2_000,
+    });
+
+    await dispatchTurnFinish(queue, "run-resume", session.id);
+
+    const recovered = await Session.resume(session.id);
+    // Ordering rule: replay order is the session fact-stream seq (recording
+    // order) — the injected response drains after the turn that asked for it.
+    expect(recovered.map((entry) => entry.text)).toEqual(["worker turn output", "resident answer"]);
+  });
+
   it("still emits drained responses when history persistence fails", async () => {
     const queue = InjectionQueue.create();
     queue.enqueue("run-storage-failure", {
@@ -116,7 +224,7 @@ describe("createInjectionQueueDrainPolicy", () => {
       injectToHistory: true,
       timestamp: 4,
     });
-    const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
+    const recordSpy = spyOn(TranscriptStore, "record").mockImplementation(() => {
       throw new Error("storage unavailable");
     });
 
@@ -124,7 +232,7 @@ describe("createInjectionQueueDrainPolicy", () => {
     try {
       decision = await dispatchTurnFinish(queue, "run-storage-failure", "session-storage-failure");
     } finally {
-      addMessageSpy.mockRestore();
+      recordSpy.mockRestore();
     }
 
     expect(decision.effects).toEqual([

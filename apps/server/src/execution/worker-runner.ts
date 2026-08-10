@@ -176,13 +176,17 @@ export namespace WorkerRunner {
             onToolCall: () => undefined,
             onToolResult: () => undefined,
             onSnapshot: () => undefined,
-            // #547 C3: the single wiring point for WORKER sessions where the
+            // #547 C3: the wiring point for WORKER sessions where the
             // transcript fact stream meets durable recording —
             // TranscriptStore.record commits the fact and its message/part
             // projection in one storage transaction (recording tier;
-            // packages/session/src/session/transcript.ts). Resident direct
-            // runs (defaultRunAgent, no sink) and child-agent LLM streams are
-            // projection-only today (follow-up issue).
+            // packages/session/src/session/transcript.ts). Injected
+            // responses into this session record synthesized facts at the
+            // injection-queue persistResponse seam (#562). Resident direct
+            // runs stay sinkless on purpose and child-agent streams record
+            // nothing (bounded) — see defaultRunAgent in
+            // packages/openomni/src/resident/runtime-agent-config.ts and the
+            // writer census in Session.resume.
             onFact: (fact) => TranscriptStore.record(sessionId, fact),
           },
         );
