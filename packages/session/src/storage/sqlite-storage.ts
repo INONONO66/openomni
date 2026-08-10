@@ -18,6 +18,7 @@ import {
 } from "./sqlite-schema-lifecycle";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
+import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
@@ -40,6 +41,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly session: Storage.Adapter["session"];
   readonly message: Storage.Adapter["message"];
   readonly part: Storage.Adapter["part"];
+  readonly transcriptFact: NonNullable<Storage.Adapter["transcriptFact"]>;
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
   readonly artifact: NonNullable<Storage.Adapter["artifact"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
@@ -80,6 +82,9 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.session = createSqliteSessionAdapter(this.db);
     this.message = createSqliteMessageAdapter(this.db);
     this.part = createSqlitePartAdapter(this.db);
+    // Transcript facts share the primary connection: the record path commits
+    // fact append + message/part projection inside one transaction (#547 C3).
+    this.transcriptFact = createSqliteTranscriptFactAdapter(this.db);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
     this.artifact = createSqliteArtifactAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);

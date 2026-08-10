@@ -19,6 +19,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0012_wait/migration.sql" },
   { name: "0013_ledger/migration.sql" },
   { name: "0014_work_item_revision/migration.sql" },
+  { name: "0015_transcript_fact/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -44,6 +45,7 @@ const CLEAR_ORDER = [
   "task",
   "artifact",
   "surface_key",
+  "transcript_fact",
   "part",
   "message",
   "session",

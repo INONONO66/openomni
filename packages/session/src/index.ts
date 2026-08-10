@@ -5,6 +5,7 @@ export { BusQuery } from "./bus-persistence/query";
 export { Storage, SqliteStorageAdapter, initialize } from "./storage";
 export type { InitializeOptions } from "./storage";
 export { Session } from "./session";
+export { TranscriptRecordingError, TranscriptStore } from "./session/transcript";
 export { SurfaceKey } from "./surface-key";
 export { Artifact } from "./artifact/index";
 export { AppConnectorInstallationStore } from "./app-connector/index.js";
