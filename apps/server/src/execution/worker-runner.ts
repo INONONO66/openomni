@@ -8,6 +8,7 @@ import {
 } from "@openomni/openomni";
 import type { NativeTool } from "@openomni/openomni";
 import { Execution } from "@openomni/protocol";
+import { TranscriptStore } from "@openomni/session";
 import { createContextMiddleware } from "../context/index";
 import {
   publishWorkerRunCancelled,
@@ -165,10 +166,24 @@ export namespace WorkerRunner {
           ...(request.providerOptions ? { providerOptions: request.providerOptions } : {}),
           middleware,
         });
-        const runResult = await agent.run({
-          messages,
-          traceContext: { traceId, sessionId, runId },
-        });
+        const runResult = await agent.run(
+          {
+            messages,
+            traceContext: { traceId, sessionId, runId },
+          },
+          {
+            onMessage: () => undefined,
+            onToolCall: () => undefined,
+            onToolResult: () => undefined,
+            onSnapshot: () => undefined,
+            // #547 C3: the worker owns this session's LLM stream, so this is
+            // the single wiring point where the transcript fact stream meets
+            // durable recording — TranscriptStore.record commits the fact and
+            // its message/part projection in one storage transaction
+            // (recording tier; packages/session/src/session/transcript.ts).
+            onFact: (fact) => TranscriptStore.record(sessionId, fact),
+          },
+        );
         if (controller.signal.aborted) {
           publishWorkerRunCancelled({ traceId, sessionId, runId });
 
