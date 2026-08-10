@@ -51,7 +51,14 @@ import { EffectService } from "../../packages/openomni/src/effect/lifecycle";
 import { EffectManifest } from "../../packages/openomni/src/effect/manifest";
 import { runRecovery } from "../../apps/server/src/bootstrap/recovery";
 import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
-import { LEDGER_PRODUCER_MANIFEST, scanLedgerProducers } from "../ledger-producer-manifest";
+import {
+  LEDGER_PRODUCER_MANIFEST,
+  matchesFrozenTableWriteSql,
+  matchesLedgerTableWriteSql,
+  matchesLedgerWriteCall,
+  matchesMigrationTableWriteSql,
+  scanLedgerProducers,
+} from "../ledger-producer-manifest";
 
 /**
  * #510 phase B/C1/C2/C3 conformance — the Wait, WorkItem, routing, and
@@ -2027,6 +2034,46 @@ describe("p2 ledger baseline — exact producer manifest", () => {
     // above); any other module carrying it is an unmanifested writer.
     expect([...scan.frozenTableWriters].sort()).toEqual(
       LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.adapter).sort(),
+    );
+
+    // Runtime-executed migration SQL is part of the write surface too: only
+    // the enumerated historical backfills may write manifested tables.
+    expect([...scan.migrationSqlWriters].sort()).toEqual(
+      LEDGER_PRODUCER_MANIFEST.migrationSqlWriters.map((entry) => entry.file).sort(),
+    );
+  });
+
+  test("red proofs: the scan catches the known evasion shapes", () => {
+    // Multi-line, lowercase, OR REPLACE, against ledger_head.
+    expect(
+      matchesLedgerTableWriteSql(
+        `db.query(\`insert or replace\n  into\n  ledger_head\n  (stream_id, head) VALUES (?, ?)\`)`,
+      ),
+    ).toBe(true);
+    // Plain REPLACE INTO and UPDATE across line breaks.
+    expect(matchesLedgerTableWriteSql("run(`REPLACE\nINTO ledger_event VALUES (?)`)")).toBe(true);
+    expect(matchesFrozenTableWriteSql("db.exec(`UPDATE\n\tworker_run_state SET status=?`)")).toBe(
+      true,
+    );
+    // Aliased receiver and bracket access.
+    expect(matchesLedgerWriteCall("const out = subLedger.append(event, 0);")).toBe(true);
+    expect(matchesLedgerWriteCall('ledger["append"]({ streamId }, 0);')).toBe(true);
+    expect(matchesLedgerWriteCall('store["adoptStream"](id, 3, genesis);')).toBe(true);
+    expect(
+      matchesLedgerWriteCall("adapter.adoptStream(\n  streamId,\n  head,\n  genesis,\n)"),
+    ).toBe(true);
+    // Migration SQL (the 0005 shape) is caught after `--` comment stripping.
+    expect(
+      matchesMigrationTableWriteSql(
+        "-- backfill\nUPDATE worker_run_state SET executor_kind = 'internal_chat_agent';",
+      ),
+    ).toBe(true);
+    // Non-writes stay quiet: comment mentions, SELECTs, and prefix-named
+    // tables (pending_ask_new) never trip the gate.
+    expect(matchesLedgerWriteCall("// calls Ledger.append(event, expectedHead) later")).toBe(false);
+    expect(matchesLedgerTableWriteSql("db.query(`SELECT * FROM ledger_event`)")).toBe(false);
+    expect(matchesMigrationTableWriteSql("INSERT INTO pending_ask_new (id) VALUES (1);")).toBe(
+      false,
     );
   });
 
