@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786318232114,
+  "lastUpdate": 1786320857835,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -38913,6 +38913,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 394561,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "37fdaba39b0f0d00b8a4b4311447c4450d5a4775",
+          "message": "feat(agent): tool-bearing history and unconditional append (#560)\n\n* test(agent): pin tool-history loss (red)\n\nThree red tests freezing today's defects (#546):\n- a turn's tool call + result never reach the next turn's model input\n  (trackingSink extracts text only),\n- a plain-stop turn's assistant message is built and thrown away\n  (conditional append in turn-outcome),\n- agent-level retry rebuilds RunState, discarding history/budget/usage.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(agent): tool-bearing history and unconditional append (#546)\n\nThe model now sees its own prior tool use:\n\n- trackingSink holds the llm fold's boundary WithParts snapshot (immutable,\n  all parts) as the turn's assistant message — one source of truth, no\n  local re-fold and no text-only rebuild except as fallback for runs whose\n  llm never emitted a snapshot. Token-delta accounting is unchanged; with\n  boundary snapshots the usage arrives once at message.finished.\n- handleStop appends the assistant WithParts to history unconditionally;\n  continuation stays a separate decision appended after it. llm's\n  toModelMessages tool expansion is now reachable from history.\n- RunState is created once per run: agent-level retry regenerates only the\n  attempt, preserving messages and accumulating budget/usage (no\n  double-billing reset).\n\nTurns the #546 red pins green; llm-layer retry untouched.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): append before dispatch and hoist pre-run effects (#546)\n\nAdversarial-review fixes, each pinned red-first:\n\n- F1: the assistant WithParts now enters history BEFORE run.turn.post\n  dispatch, so a turn.finish run.replace_messages policy sees it — a\n  keep-all rewrite no longer deletes the just-appended assistant and\n  orphans continuation parents.\n- F2: run.lifecycle.pre dispatch (and the policy engine) are hoisted out\n  of the retry loop with the run state — run.start prompt injections\n  apply exactly once per run, not once per attempt.\n- F3: the text-only fallback in handleStop is marked test-stub-only,\n  publishes Operational.Error, and builds from empty text instead of\n  lastAssistantText (which could resurrect the previous turn's text).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T00:12:57Z",
+          "tree_id": "58e6585cb7874a76ebb9b85a27581112058d573d",
+          "url": "https://github.com/INONONO66/openomni/commit/37fdaba39b0f0d00b8a4b4311447c4450d5a4775"
+        },
+        "date": 1786320856600,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8913,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2651,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2341,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7892,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 787,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 689,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1256,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 694,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20109,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2272,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 529328,
             "unit": "ns/op"
           }
         ]
