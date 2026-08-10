@@ -1,12 +1,12 @@
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
 import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
-import { Stakes } from "../ledger/index.js";
+import { Stakes } from "../../src/ledger/index.js";
 import type {
   CompletionResultAuthorityCandidate,
   CompletionResultAuthorityPort,
   CompletionStakesResolver,
-} from "./completion-admission.js";
+} from "../../src/work-item/completion-admission.js";
 
 export const CompletionAdmissionDriverNow = 4_900;
 

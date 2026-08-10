@@ -1,12 +1,12 @@
 import { Tool } from "@openomni/protocol";
-import { hashCanonicalJson } from "./verifier-conformance-canonical.js";
+import { hashCanonicalJson } from "../../src/evidence/verifier-conformance-canonical.js";
 import {
   type VerifierRegistryScenarioReceipt,
   VerifierRegistryDriverSurface,
   VerifierRegistryScenarioReceiptSchema,
 } from "./verifier-registry-driver-contract.js";
-import { VerifierRegistry } from "./verifier-registry.js";
-import { verificationBasisHash } from "./verifier-registry-core.js";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
+import { verificationBasisHash } from "../../src/evidence/verifier-registry-core.js";
 
 type ExpectedStatus = "verified" | "refuted" | "asserted";
 type Fixture = Readonly<{

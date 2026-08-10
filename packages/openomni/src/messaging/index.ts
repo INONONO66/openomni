@@ -2,15 +2,6 @@
 // exported as the `@openomni/openomni/messaging` subpath.
 export { Events as MessagingEvents } from "./events.js";
 export {
-  ExistingAgentMessageDriverScenarios,
-  ExistingAgentMessageDriverVersion,
-  runExistingAgentMessageDriver,
-} from "./existing-agent-message-driver.js";
-export type {
-  ExistingAgentMessageDriverExecution,
-  ExistingAgentMessageDriverScenario,
-} from "./existing-agent-message-driver.js";
-export {
   AwaitSpec,
   MessageDenialCode,
   MessageOperation,

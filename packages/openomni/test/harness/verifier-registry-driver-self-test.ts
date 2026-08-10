@@ -11,7 +11,7 @@ import {
   upcastOnRead,
   type CommutativeEvent,
   type JsonValue,
-} from "./verifier-conformance.js";
+} from "../../src/evidence/verifier-conformance.js";
 import { measureVerifierRegistryBenchmark } from "./verifier-registry-benchmark.js";
 import {
   type VerifierRegistryDriverExecution,
@@ -21,7 +21,7 @@ import {
   driverExecution,
 } from "./verifier-registry-driver-contract.js";
 import { scenarioReceipt } from "./verifier-registry-driver-scenarios.js";
-import { VerifierRegistry } from "./verifier-registry.js";
+import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 
 const digestA = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;

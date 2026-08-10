@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Stakes, runStakesDriver } from "@openomni/openomni/ledger";
-import { stakesDriverStatus } from "../../src/ledger/stakes-driver-scenarios.js";
+import { Stakes } from "@openomni/openomni/ledger";
+import { runStakesDriver } from "../harness/stakes-driver.js";
+import { stakesDriverStatus } from "../harness/stakes-driver-scenarios.js";
 import { registerStakesBoundaryCases } from "./stakes-boundary-cases.js";
 import { registerStakesContractCases } from "./stakes-contract-cases.js";
 import { registerStakesIdentityCases } from "./stakes-identity-cases.js";

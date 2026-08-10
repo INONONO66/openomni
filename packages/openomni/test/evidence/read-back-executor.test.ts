@@ -6,7 +6,7 @@ import { Socket } from "node:net";
 import { afterEach, describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { Storage, WorkItemStore } from "@openomni/session";
-import { ReadBackExecutor } from "../../src/index";
+import { ReadBackExecutor } from "../../src/evidence/read-back-executor";
 // Deliberate white-box seam: transport and clock injection belong to the private HTTP helper,
 // not the kernel package API, and are required for deterministic deadline coverage.
 import { loadReadBackUrl } from "../../src/evidence/read-back-http.js";

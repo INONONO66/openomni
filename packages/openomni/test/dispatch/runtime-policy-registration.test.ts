@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
-import { DispatchPolicyRegistrationError } from "../../src/index";
+import { DispatchPolicyRegistrationError } from "../../src/dispatch";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
 function submitUntrustedPolicy(policy: unknown): {

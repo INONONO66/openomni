@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { snapshotFirstJsonSchema } from "../evidence/verifier-conformance-canonical.js";
-import { createStakesSchemas, type StakesValue } from "./stakes-contract.js";
+import {
+  createStakesSchemaPrimitives,
+  createStakesSchemas,
+  type StakesValue,
+} from "./stakes-contract.js";
 import { computeStakes } from "./stakes-compute.js";
-import { createStakesSchemaPrimitives } from "./stakes-schema-primitives.js";
 import {
   assertStakesBinding,
   createCapabilityToken,

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type VerifierRegistryDriverScenario, runVerifierRegistryDriver } from "../../src";
-import { VerifierRegistryDriverScenarios } from "../../src/evidence/verifier-registry-driver-contract";
+import {
+  type VerifierRegistryDriverScenario,
+  runVerifierRegistryDriver,
+} from "../harness/verifier-registry-driver-api";
+import { VerifierRegistryDriverScenarios } from "../harness/verifier-registry-driver-contract";
 
 describe("VerifierRegistry driver", () => {
   test("publishes strict machine-readable CLI scenario and self-test receipts", () => {

@@ -18,30 +18,26 @@ import {
   findWaitCandidates,
   responderCandidates,
   targetsOfWait,
-} from "../wait/index.js";
-import type { SenderTargetGrant } from "./schema.js";
-import { type OutboundMessage, createExistingAgentMessaging } from "./send.js";
+} from "../../src/wait/index.js";
+import type { SenderTargetGrant } from "../../src/messaging/schema.js";
+import { type OutboundMessage, createExistingAgentMessaging } from "../../src/messaging/send.js";
 
 /**
  * Manual QA driver for #215 existing-agent messaging (issue-specified path).
  *
- *   bun run packages/openomni/src/messaging/existing-agent-message-driver.ts \
+ *   bun run packages/openomni/test/harness/existing-agent-message-driver.ts \
  *     --scenario restart-quorum --json
- *   bun run packages/openomni/src/messaging/existing-agent-message-driver.ts \
+ *   bun run packages/openomni/test/harness/existing-agent-message-driver.ts \
  *     --scenario duplicate-ambiguous --json
  *
  * All timestamps are injected (DriverNow-relative); no wall-clock value,
  * elapsed time, or model prose is an oracle. Receipts are deterministic JSON.
  */
 
-export const ExistingAgentMessageDriverVersion = "existing-agent-message-driver-v1" as const;
+const ExistingAgentMessageDriverVersion = "existing-agent-message-driver-v1" as const;
 
-export const ExistingAgentMessageDriverScenarios = [
-  "restart-quorum",
-  "duplicate-ambiguous",
-] as const;
-export type ExistingAgentMessageDriverScenario =
-  (typeof ExistingAgentMessageDriverScenarios)[number];
+const ExistingAgentMessageDriverScenarios = ["restart-quorum", "duplicate-ambiguous"] as const;
+type ExistingAgentMessageDriverScenario = (typeof ExistingAgentMessageDriverScenarios)[number];
 
 const USAGE = `Usage: existing-agent-message-driver --scenario <${ExistingAgentMessageDriverScenarios.join("|")}> --json`;
 

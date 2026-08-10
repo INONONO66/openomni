@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Stakes, runStakesDriver } from "@openomni/openomni/ledger";
+import { Stakes } from "@openomni/openomni/ledger";
+import { runStakesDriver } from "../harness/stakes-driver.js";
 import { hashStakesInputs } from "../../src/ledger/stakes-compute.js";
 import {
   boundaryAction,

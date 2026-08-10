@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { runExistingAgentMessageDriver } from "../../src/messaging/index.js";
+import { runExistingAgentMessageDriver } from "../harness/existing-agent-message-driver.js";
 
 /**
  * Manual QA driver scenarios via direct invocation (#215). The driver runs
