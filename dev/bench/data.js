@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786365898107,
+  "lastUpdate": 1786371393621,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41641,6 +41641,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524589,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c52d6c36974756752394c3a89e01224c899c9c46",
+          "message": "fix(openomni,session): cron single-backing, fail-closed corrupt-row reads (#584)\n\n* fix(openomni): make cron registry storage-only, fail-closed\n\nThe cron registry wrote both a module-level Map and Storage but read/\nlisted from Storage only, so a job registered before Storage.initialize\nwas stranded once reads switched to Storage, and clear() emptied only the\nMap, leaving orphaned rows. A cron job is durable by definition, so a\nvolatile Map can never be its canonical source.\n\nCollapse to a single canonical backing: Storage. Every read/write/clear\ngoes through Storage.get().cronJob, which fails closed before init (a\nloud boot-order bug, never a silent in-memory fallback), matching the\n#522/#547 durability contract and the adapter's existing CronJob.Info\nzod validation. Both consumers already run after init (CronJobRunner.start\nat bootstrap, dispatch schedule handlers at runtime), and tick() already\ntreats a throw here as a logged Operational.Error.\n\nRed-first: register-before-init now raises a typed error instead of\nstranding a volatile job; clear() empties the single backing.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(session): parse-don't-cast on sqlite row reads\n\nThe worker_grant, message, and part sqlite adapters blind-cast\n`JSON.parse(row.data) as T` on read, unlike the wait/blacklist adapters\nwhich re-validate through zod across the persistence boundary. A corrupt\nworker_grant row was therefore returned UNVALIDATED and fed straight into\nWorkerGrantStore.evaluate — silent wrong authorization on corruption.\n\nValidate every row through its zod schema on read (WorkerGrant.Record /\nMessage.Info / Message.Part). A row that fails validation is now a loud\ntyped error (recording/corruption defect), never a silently-trusted value.\nworker_grant is the authz-critical case; message/part are the same class.\nThis only makes the READ fail closed; lifting the verdict out of session\nremains a separate item.\n\nRed-first: a corrupted worker_grant/message/part row now rejects on read\ninstead of surfacing an unvalidated object (worker_grant to evaluate()).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T14:15:11Z",
+          "tree_id": "25a2265996b3e4424e72667468a480a7769e77ea",
+          "url": "https://github.com/INONONO66/openomni/commit/c52d6c36974756752394c3a89e01224c899c9c46"
+        },
+        "date": 1786371391794,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 650,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5921,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3044,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2487,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8146,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1475,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 50245,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2409,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10866,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101291,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513454,
             "unit": "ns/op"
           }
         ]
