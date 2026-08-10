@@ -6,30 +6,6 @@ import type {
   PolicyPointId,
 } from "./types";
 
-export function immutableSnapshot<TCtx extends GenericPolicyContext>(
-  value: AuditDispatchContextGeneric<TCtx>,
-): Readonly<AuditDispatchContextGeneric<TCtx>> {
-  const snapshot = {
-    ...value,
-    ...(value.toolInput !== undefined && { toolInput: cloneRecord(value.toolInput) }),
-    ...(isPlainRecord(value.usage) && { usage: cloneRecord(value.usage) }),
-    ...(value.toolLabels !== undefined && { toolLabels: [...value.toolLabels] }),
-    ...(value.messages !== undefined && { messages: [...value.messages] }),
-    ...(value.traceContext !== undefined && {
-      traceContext: Object.freeze({ ...value.traceContext }),
-    }),
-    ...(value.labels !== undefined && {
-      labels: value.labels.map((entry) => Object.freeze({ ...entry })),
-    }),
-  };
-
-  if (snapshot.toolLabels !== undefined) Object.freeze(snapshot.toolLabels);
-  if (snapshot.messages !== undefined) Object.freeze(snapshot.messages);
-  if (snapshot.labels !== undefined) Object.freeze(snapshot.labels);
-
-  return Object.freeze(snapshot);
-}
-
 type ImmutablePointSnapshot<TValue extends object> =
   | { readonly success: true; readonly value: Readonly<TValue> }
   | { readonly success: false };

@@ -101,26 +101,27 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       const role = inboundEvent.meta?.actor?.role;
       if (role) labels.push({ value: `actor.${role}`, source: "system" });
 
+      const gateContext: IngressPolicyGate.InboundContext = {
+        gate: "inbound",
+        ...(inboundEvent.meta?.actor !== undefined && { actor: inboundEvent.meta.actor }),
+        surface: inboundEvent.surface,
+        mode: inboundEvent.mode,
+        target: target.kind,
+        ...(typeof inboundEvent.meta?.inboundTreatment === "string" && {
+          inboundTreatment: inboundEvent.meta.inboundTreatment,
+        }),
+        ...(typeof inboundEvent.meta?.channelGrantId === "string" && {
+          channelGrantId: inboundEvent.meta.channelGrantId,
+        }),
+        ...(typeof inboundEvent.meta?.channelGrantKind === "string" && {
+          channelGrantKind: inboundEvent.meta.channelGrantKind,
+        }),
+        labels,
+        traceContext: trace,
+      };
       const decision = await IngressPolicyGate.evaluate(
         ingressPolicies,
-        {
-          gate: "inbound",
-          ...(inboundEvent.meta?.actor !== undefined && { actor: inboundEvent.meta.actor }),
-          surface: inboundEvent.surface,
-          mode: inboundEvent.mode,
-          target: target.kind,
-          ...(typeof inboundEvent.meta?.inboundTreatment === "string" && {
-            inboundTreatment: inboundEvent.meta.inboundTreatment,
-          }),
-          ...(typeof inboundEvent.meta?.channelGrantId === "string" && {
-            channelGrantId: inboundEvent.meta.channelGrantId,
-          }),
-          ...(typeof inboundEvent.meta?.channelGrantKind === "string" && {
-            channelGrantKind: inboundEvent.meta.channelGrantKind,
-          }),
-          labels,
-          traceContext: trace,
-        },
+        gateContext,
         deps.onPolicyDecision,
       );
 

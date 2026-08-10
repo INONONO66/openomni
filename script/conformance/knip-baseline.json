@@ -12,7 +12,6 @@
     "exports packages/openomni/src/execution-runtime/tool/builtins/read.ts READ_PROMPT",
     "exports packages/openomni/src/execution-runtime/tool/builtins/write.ts WRITE_PROMPT",
     "exports packages/openomni/src/execution-runtime/tool/executor.ts createErrorResult",
-    "exports packages/policy/src/engine/index.ts resolvePolicyPoints",
     "exports packages/session/src/bus-persistence/event-query.ts toEventRecord",
     "exports packages/session/src/storage/sqlite-part-adapter.ts getPartStartTime",
     "files packages/openomni/test/dispatch/policy-registration.contract-test.ts",

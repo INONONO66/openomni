@@ -21,7 +21,7 @@ class PolicyPointTimingError extends Error {
  * edited here — redesigning the admission-point input schema is flagged as
  * protocol work in #530.
  */
-export type RetiredPolicyPointId = "session.inbound.pre" | "session.writeback.pre";
+type RetiredPolicyPointId = "session.inbound.pre" | "session.writeback.pre";
 const retiredPolicyPoints: ReadonlySet<string> = new Set<RetiredPolicyPointId>([
   "session.inbound.pre",
   "session.writeback.pre",

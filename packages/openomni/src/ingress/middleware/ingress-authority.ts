@@ -207,9 +207,13 @@ export namespace IngressAuthorityMiddleware {
     // No canonical policy point fits this boundary honestly — the event is
     // pre-schema-validation, pre-session, and pre-run, and anonymous actors
     // are legal here — so this is deliberately NOT a policy-engine dispatch.
+    const gateContext: IngressPolicyGate.PreRunContext = {
+      gate: "pre-run",
+      ...(ctx.traceContext !== undefined && { traceContext: ctx.traceContext }),
+    };
     const decision = await IngressPolicyGate.evaluate(
       routedPreRunPolicies(state),
-      { gate: "pre-run", traceContext: ctx.traceContext },
+      gateContext,
       ctx.onDecision,
     );
 

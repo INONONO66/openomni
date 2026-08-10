@@ -51,25 +51,22 @@ export namespace IngressPolicyGate {
     readonly traceContext?: TraceContext.Type;
   }
 
-  export type Context = InboundContext | WritebackContext | PreRunContext;
-  export type GateId = Context["gate"];
-
   export interface IngressPolicy {
     readonly name: string;
     /** Which ingress boundary this policy runs at. */
-    readonly gate: GateId;
+    readonly gate: "inbound" | "writeback" | "pre-run";
     /** Ascending execution order; equal priorities keep registration order. */
     readonly priority: number;
     /** Defaults to fail-closed: a thrown policy denies the gate. */
     readonly failPolicy?: Policy.FailPolicy;
-    readonly fn: (ctx: Readonly<Context>) => Policy.PolicyDecision | Promise<Policy.PolicyDecision>;
+    readonly fn: (
+      ctx: Readonly<InboundContext | WritebackContext | PreRunContext>,
+    ) => Policy.PolicyDecision | Promise<Policy.PolicyDecision>;
   }
 
-  export type OnDecision = (decision: Policy.PolicyDecision) => void | Promise<void>;
-
-  export function select(
+  function select(
     policies: readonly IngressPolicy[] | undefined,
-    gate: GateId,
+    gate: IngressPolicy["gate"],
   ): IngressPolicy[] {
     return (policies ?? [])
       .map((policy, index) => ({ policy, index }))
@@ -90,6 +87,8 @@ export namespace IngressPolicyGate {
       ],
     });
   }
+
+  type OnDecision = (decision: Policy.PolicyDecision) => void | Promise<void>;
 
   function notify(onDecision: OnDecision | undefined, decision: Policy.PolicyDecision): void {
     if (!onDecision) return;
@@ -123,8 +122,8 @@ export namespace IngressPolicyGate {
   /** Evaluate one gate and return the composed decision. */
   export async function evaluate(
     policies: readonly IngressPolicy[] | undefined,
-    ctx: Context,
-    onDecision?: OnDecision,
+    ctx: InboundContext | WritebackContext | PreRunContext,
+    onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>,
   ): Promise<Policy.PolicyDecision> {
     const decisions: Policy.PolicyDecision[] = [];
     for (const policy of select(policies, ctx.gate)) {

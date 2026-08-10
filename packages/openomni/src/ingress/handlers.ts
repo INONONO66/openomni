@@ -104,21 +104,22 @@ export namespace IngressHandlers {
     if (!ctx.policies?.length) return output;
 
     const target = resolveTarget(ctx.event).kind;
+    const gateContext: IngressPolicyGate.WritebackContext = {
+      gate: "writeback",
+      sessionId: ctx.sessionId,
+      surface: ctx.event.surface,
+      mode: ctx.event.mode,
+      target,
+      output,
+      labels: [
+        { value: `surface.${ctx.event.surface}`, source: "system" },
+        { value: `target.${target}`, source: "system" },
+      ],
+      ...(ctx.traceContext !== undefined && { traceContext: ctx.traceContext }),
+    };
     const decision = await IngressPolicyGate.evaluate(
       ctx.policies,
-      {
-        gate: "writeback",
-        sessionId: ctx.sessionId,
-        surface: ctx.event.surface,
-        mode: ctx.event.mode,
-        target,
-        output,
-        labels: [
-          { value: `surface.${ctx.event.surface}`, source: "system" },
-          { value: `target.${target}`, source: "system" },
-        ],
-        ...(ctx.traceContext !== undefined && { traceContext: ctx.traceContext }),
-      },
+      gateContext,
       ctx.onPolicyDecision,
     );
 
