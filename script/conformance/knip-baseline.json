@@ -22,7 +22,6 @@
     "types packages/coordinator/src/worker-manager/worker-pool.ts DeliverTask",
     "types packages/openomni/src/execution-runtime/child-agent/types.ts ChildStatus",
     "types packages/openomni/src/execution-runtime/child-agent/types.ts DelegationPolicyPointId",
-    "types packages/openomni/src/ingress/audit-envelope.ts IngressAuditEvent",
-    "types packages/openomni/src/ingress/routing-runtime.ts KernelWaitExecution"
+    "types packages/openomni/src/ingress/audit-envelope.ts IngressAuditEvent"
   ]
 }

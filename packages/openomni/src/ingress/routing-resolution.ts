@@ -43,7 +43,7 @@ export class IngressRoutingError extends Error {
   }
 }
 
-export type KernelWaitExecution =
+type KernelWaitExecution =
   | Readonly<{ kind: "none" }>
   | Readonly<{
       kind: "wait";
