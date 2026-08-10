@@ -49,7 +49,6 @@ function capture(): Capture {
       onMessage: (message) => messages.push(message),
       onToolCall: () => undefined,
       onToolResult: (result) => toolResults.push(result),
-      onSnapshot: () => undefined,
       onFact: (fact) => facts.push(fact),
     },
     messages,

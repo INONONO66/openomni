@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { LlmCall, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { LlmCall, type Message, type Sink, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
@@ -52,7 +52,6 @@ describe("run", () => {
   let capturedMessages: Message.WithParts[];
   let capturedToolCalls: Tool.Call[];
   let capturedToolResults: Tool.Result[];
-  let capturedSnapshots: Run.Snapshot[];
 
   beforeAll(async () => {
     ({ run } = await import("../src/run"));
@@ -64,7 +63,6 @@ describe("run", () => {
     capturedMessages = [];
     capturedToolCalls = [];
     capturedToolResults = [];
-    capturedSnapshots = [];
     aiCapture.__openomniAiStreamArgs = undefined;
 
     mockSink = {
@@ -76,9 +74,6 @@ describe("run", () => {
       },
       onToolResult: (result: Tool.Result) => {
         capturedToolResults.push(result);
-      },
-      onSnapshot: (snapshot: Run.Snapshot) => {
-        capturedSnapshots.push(snapshot);
       },
     };
   });
@@ -230,7 +225,7 @@ describe("run", () => {
 
     await run(input, mockSink);
 
-    expect(capturedSnapshots.length).toBeGreaterThan(0);
+    expect(capturedMessages.length).toBeGreaterThan(0);
     expect(capturedToolCalls.length).toBe(0);
   });
 

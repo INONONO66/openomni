@@ -109,7 +109,6 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
         onMessage: () => undefined,
         onToolCall: () => undefined,
         onToolResult: () => undefined,
-        onSnapshot: () => undefined,
       },
       createStream: async () => ({
         fullStream: (async function* () {

@@ -284,7 +284,6 @@ function createTrackingSink(
       turnToolResults.push({ toolCallId: result.toolCallId, result });
       sink?.onToolResult(result);
     },
-    onSnapshot: sink?.onSnapshot ?? (() => undefined),
     // #547 C3: the fact stream passes through untouched — the transcript
     // record family subscribes to facts, not boundary snapshots.
     onFact: (fact) => sink?.onFact?.(fact),

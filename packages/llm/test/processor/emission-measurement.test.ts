@@ -82,7 +82,6 @@ describe("Processor emission measurement (#545 T2)", () => {
       },
       onToolCall: () => undefined,
       onToolResult: () => undefined,
-      onSnapshot: () => undefined,
     };
 
     const processor = Processor.create({

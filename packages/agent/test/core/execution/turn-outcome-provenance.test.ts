@@ -25,7 +25,6 @@ function makeTurnArtifacts(): TurnArtifacts {
       onMessage: () => undefined,
       onToolCall: () => undefined,
       onToolResult: () => undefined,
-      onSnapshot: () => undefined,
     },
     turnAssistant: {},
     turnUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },

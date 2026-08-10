@@ -263,40 +263,6 @@ describe("Message.ToolPart", () => {
   });
 });
 
-describe("Message.SnapshotPart", () => {
-  test("parses valid snapshot part", () => {
-    const part = Message.SnapshotPart.parse({
-      ...base,
-      type: "snapshot",
-      snapshot: '{"ctx":"data"}',
-    });
-
-    expect(part.type).toBe("snapshot");
-    expect(part.snapshot).toBe('{"ctx":"data"}');
-  });
-
-  test("rejects missing snapshot", () => {
-    expect(() => Message.SnapshotPart.parse({ ...base, type: "snapshot" })).toThrow();
-  });
-});
-
-describe("Message.CompactionPart", () => {
-  test("parses valid compaction part", () => {
-    const part = Message.CompactionPart.parse({
-      ...base,
-      type: "compaction",
-      auto: true,
-    });
-
-    expect(part.type).toBe("compaction");
-    expect(part.auto).toBe(true);
-  });
-
-  test("rejects missing auto", () => {
-    expect(() => Message.CompactionPart.parse({ ...base, type: "compaction" })).toThrow();
-  });
-});
-
 describe("Message.Part", () => {
   test("rejects unknown type literal", () => {
     expect(() => Message.Part.parse({ ...base, type: "unknown" })).toThrow();

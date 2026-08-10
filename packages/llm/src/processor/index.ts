@@ -3,7 +3,6 @@ import {
   Operational,
   Transcript,
   type Message,
-  type Run,
   type Sink,
   type Tool,
 } from "@openomni/protocol";
@@ -103,7 +102,7 @@ export namespace Processor {
       },
 
       async process(streamInput: StreamInput): Promise<void> {
-        publishStatus(sink, sessionID, { type: "busy" });
+        publishStatus(sessionID, trace?.traceId, "busy");
         let attempt = 0;
         let attemptSeq = 0;
 
@@ -238,18 +237,13 @@ export namespace Processor {
                 }
               }
 
-              publishStatus(sink, sessionID, {
-                type: "retry",
-                attempt,
-                message: retryReason,
-                next: Date.now() + delayMs,
-              });
+              publishStatus(sessionID, trace?.traceId, "retry");
 
               await Retry.sleep(delayMs, abort);
             }
           }
         } finally {
-          publishStatus(sink, sessionID, { type: "idle" });
+          publishStatus(sessionID, trace?.traceId, "idle");
         }
       },
     };
@@ -324,11 +318,6 @@ export namespace Processor {
           isError: result.isError,
         });
       },
-
-      onSnapshot(snapshot: Run.Snapshot) {
-        sink.onSnapshot(snapshot);
-        publish("sink.snapshot", { stateType: String(snapshot.state.type ?? "unknown") });
-      },
     };
   }
 
@@ -337,17 +326,17 @@ export namespace Processor {
       onMessage: () => void 0,
       onToolCall: () => void 0,
       onToolResult: () => void 0,
-      onSnapshot: () => void 0,
     };
   }
 
-  function publishStatus(sink: Sink, sessionID: string, state: Record<string, unknown>): void {
-    sink.onSnapshot({
-      id: crypto.randomUUID(),
-      sessionID,
-      timestamp: Date.now(),
-      state,
-    });
+  /**
+   * Run-status telemetry (busy / retry / idle). This used to ride
+   * Sink.onSnapshot, but every production consumer was a no-op, so the sink
+   * hop was removed; the operational publish — the only observable effect it
+   * ever had — stays, under the same msg name for log continuity.
+   */
+  function publishStatus(sessionID: string, traceId: string | undefined, stateType: string): void {
+    publishInfo(sessionID, traceId, "sink.snapshot", { stateType });
   }
 
   function summarizeRecord(input: Record<string, unknown>): string {

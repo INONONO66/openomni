@@ -141,7 +141,6 @@ describe("tool permission integration via toolExecutor", () => {
         onToolResult: (result) => {
           observedToolResult = result;
         },
-        onSnapshot: () => undefined,
       },
     );
 
@@ -199,7 +198,6 @@ describe("tool permission integration via toolExecutor", () => {
         onToolResult: (result) => {
           observedToolResult = result;
         },
-        onSnapshot: () => undefined,
       },
     );
 
@@ -257,7 +255,6 @@ describe("tool permission integration via toolExecutor", () => {
         onToolResult: (result) => {
           observedToolResult = result;
         },
-        onSnapshot: () => undefined,
       },
     );
 
@@ -314,7 +311,6 @@ describe("tool permission integration via toolExecutor", () => {
         onToolResult: (result) => {
           observedToolResult = result;
         },
-        onSnapshot: () => undefined,
       },
     );
 
@@ -371,7 +367,6 @@ describe("tool permission integration via toolExecutor", () => {
         onToolResult: (result) => {
           observedToolResult = result;
         },
-        onSnapshot: () => undefined,
       },
     );
 
