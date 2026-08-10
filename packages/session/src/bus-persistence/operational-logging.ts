@@ -1,4 +1,4 @@
-import { toRecord } from "./record-helpers.js";
+import { toRecord } from "./record-fields.js";
 import { redactForPersistence } from "./redaction.js";
 
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;

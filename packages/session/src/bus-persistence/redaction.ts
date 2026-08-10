@@ -1,4 +1,4 @@
-import { toRecord } from "./record-helpers.js";
+import { toRecord } from "./record-fields.js";
 
 const sensitiveKeyPattern =
   /authorization|cookie|credential|password|secret|token|api[_-]?key|access[_-]?key/i;
