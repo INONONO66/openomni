@@ -1,4 +1,4 @@
-import { createIpcServer } from "@openomni/coordinator";
+import { createIpcServer } from "@openomni/ipc";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import { InjectionQueue, WorkspaceLock } from "@openomni/openomni";

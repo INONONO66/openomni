@@ -118,7 +118,7 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
     documentedSkip,
   );
   itSkip(
-    "UNGOVERNED: Worker IPC dispatch packages/coordinator/src/ipc/server.ts — no policy check",
+    "UNGOVERNED: Worker IPC dispatch packages/ipc/src/server.ts — no policy check",
     documentedSkip,
   );
   itSkip("UNGOVERNED: Direct LLM run packages/llm/src/run.ts — no policy check", documentedSkip);

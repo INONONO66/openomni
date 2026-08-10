@@ -8,7 +8,7 @@
  * boundary and resolves to active policy registrations in a real spawned
  * worker process.
  */
-import { createIpcServer } from "@openomni/coordinator";
+import { createIpcServer } from "@openomni/ipc";
 import { Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 

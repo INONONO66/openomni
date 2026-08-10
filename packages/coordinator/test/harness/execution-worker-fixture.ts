@@ -1,4 +1,4 @@
-import { createIpcServer } from "../../src/ipc";
+import { createIpcServer } from "@openomni/ipc";
 
 const args = process.argv.slice(2);
 const socketPath = args[args.indexOf("--socket") + 1];

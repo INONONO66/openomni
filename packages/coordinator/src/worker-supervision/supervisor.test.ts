@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { type BusEvent, Operational } from "@openomni/protocol";
-import type { IpcClient } from "../ipc/client";
+import type { IpcClient } from "@openomni/ipc";
 import { WorkerSupervisor } from "./supervisor";
 
 const originalStopGraceMs = process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
