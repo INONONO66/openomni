@@ -509,7 +509,6 @@
     "time",
     "tokens"
   ],
-  "Message.CompactionPart": ["auto", "id", "messageID", "sessionID", "type"],
   "Message.Info#0": [
     "agent",
     "id",
@@ -581,8 +580,6 @@
     "tool",
     "type"
   ],
-  "Message.Part#6": ["id", "messageID", "sessionID", "snapshot", "type"],
-  "Message.Part#7": ["auto", "id", "messageID", "sessionID", "type"],
   "Message.ReasoningPart": [
     "id",
     "messageID",
@@ -601,7 +598,6 @@
     "time",
     "type"
   ],
-  "Message.SnapshotPart": ["id", "messageID", "sessionID", "snapshot", "type"],
   "Message.StepFinishPart": [
     "cost",
     "id",

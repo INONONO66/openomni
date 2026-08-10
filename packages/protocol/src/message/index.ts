@@ -77,18 +77,6 @@ export namespace Message {
   });
   export type ToolPart = z.infer<typeof ToolPart>;
 
-  export const SnapshotPart = PartBase.extend({
-    type: z.literal("snapshot"),
-    snapshot: z.string(),
-  });
-  export type SnapshotPart = z.infer<typeof SnapshotPart>;
-
-  export const CompactionPart = PartBase.extend({
-    type: z.literal("compaction"),
-    auto: z.boolean(),
-  });
-  export type CompactionPart = z.infer<typeof CompactionPart>;
-
   export const Part = z.discriminatedUnion("type", [
     TextPart,
     ReasoningPart,
@@ -96,8 +84,6 @@ export namespace Message {
     StepFinishPart,
     RetryPart,
     ToolPart,
-    SnapshotPart,
-    CompactionPart,
   ]);
   export type Part = z.infer<typeof Part>;
 
