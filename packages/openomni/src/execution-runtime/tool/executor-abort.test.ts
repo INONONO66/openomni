@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { enforceTimeoutAndAbort } from "./executor-abort.js";
+import { enforceTimeoutAndAbort } from "./executor.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 
 describe("enforceTimeoutAndAbort", () => {

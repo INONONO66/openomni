@@ -1,7 +1,9 @@
-import { describe, expect, it, mock } from "bun:test";
-import type { Tool } from "@openomni/protocol";
-import type { WorkerBootstrap } from "@openomni/protocol";
-import { ToolProxyProvider } from "./tool-proxy-provider.js";
+import { describe, expect, it } from "bun:test";
+import type { RuntimeResource, Tool, WorkerBootstrap } from "@openomni/protocol";
+import {
+  createMcpProxyProvider,
+  type WorkerRunIpcServer,
+} from "../../src/execution/worker-runner-ipc";
 
 type RuntimeToolCatalogEntry = WorkerBootstrap.RuntimeToolCatalogEntry;
 
@@ -25,10 +27,41 @@ function makeCall(toolName: string, input: Record<string, unknown>): Tool.Call {
   return { id: crypto.randomUUID(), tool: toolName, input };
 }
 
-function getTool(
-  tools: ReturnType<ReturnType<typeof ToolProxyProvider.create>["listTools"]>,
-  index: number,
-) {
+interface RecordedCall {
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+function makeServer(result?: Tool.Result): { server: WorkerRunIpcServer; calls: RecordedCall[] } {
+  const calls: RecordedCall[] = [];
+  const server: WorkerRunIpcServer = {
+    call: (method, params) => {
+      calls.push({ method, ...(params !== undefined && { params }) });
+      return Promise.resolve(result ?? { id: "r1", toolCallId: "c1", output: "" });
+    },
+    notify: () => undefined,
+  };
+  return { server, calls };
+}
+
+function makeProvider(
+  entries: RuntimeToolCatalogEntry[],
+  result?: Tool.Result,
+): {
+  tools: ReturnType<ReturnType<typeof createMcpProxyProvider>["listTools"]>;
+  calls: RecordedCall[];
+} {
+  const { server, calls } = makeServer(result);
+  const provider = createMcpProxyProvider({
+    toolCatalog: entries,
+    server,
+    runId: "run-1",
+    sessionId: "session-1",
+  });
+  return { tools: provider.listTools(), calls };
+}
+
+function getTool<T>(tools: readonly T[], index: number): T {
   const tool = tools[index];
   if (tool == null) {
     throw new Error(`expected tool at index ${index}`);
@@ -36,18 +69,14 @@ function getTool(
   return tool;
 }
 
-describe("ToolProxyProvider", () => {
+describe("createMcpProxyProvider", () => {
   it("listTools returns all entries regardless of source", () => {
     const systemEntry = makeEntry({
       source: "system",
       canonicalName: "bash",
       spec: { name: "bash", description: "Run bash", inputSchema: {} },
     });
-    const mcpEntry = makeEntry();
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-
-    const provider = ToolProxyProvider.create([systemEntry, mcpEntry], callTool);
-    const tools = provider.listTools();
+    const { tools } = makeProvider([systemEntry, makeEntry()]);
 
     expect(tools).toHaveLength(2);
     expect(getTool(tools, 0).spec.name).toBe("bash");
@@ -56,56 +85,46 @@ describe("ToolProxyProvider", () => {
     expect(getTool(tools, 1).source).toBe("mcp");
   });
 
-  it("execute calls callTool with canonical name and input", async () => {
+  it("execute sends worker.tool_call with canonical name and input", async () => {
     const mockResult: Tool.Result = {
       id: crypto.randomUUID(),
       toolCallId: "call-1",
       output: "file content",
     };
-    const callTool = mock(async (_name: string, _args: Record<string, unknown>) => mockResult);
+    const { tools, calls } = makeProvider([makeEntry()], mockResult);
+    const tool = getTool(tools, 0);
 
-    const provider = ToolProxyProvider.create([makeEntry()], callTool);
-    const tool = getTool(provider.listTools(), 0);
+    const result = await tool.execute(makeCall("filesystem.read_file", { path: "/tmp/test.txt" }));
 
-    const call = makeCall("filesystem.read_file", { path: "/tmp/test.txt" });
-    const result = await tool.execute(call);
-
-    expect(callTool).toHaveBeenCalledTimes(1);
-    expect(callTool).toHaveBeenCalledWith("filesystem.read_file", { path: "/tmp/test.txt" });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("worker.tool_call");
+    expect(calls[0]?.params).toMatchObject({
+      tool: "filesystem.read_file",
+      input: { path: "/tmp/test.txt" },
+      runId: "run-1",
+      sessionId: "session-1",
+    });
     expect(result).toEqual(mockResult);
   });
 
-  it("execute forwards execution context to the proxy caller", async () => {
+  it("execute short-circuits on a pre-aborted execution context", async () => {
     const controller = new AbortController();
-    const mockResult: Tool.Result = {
-      id: crypto.randomUUID(),
-      toolCallId: "call-1",
-      output: "file content",
-    };
-    const callTool = mock(
-      async (_name: string, _args: Record<string, unknown>, _context?: { signal?: AbortSignal }) =>
-        mockResult,
-    );
-
-    const provider = ToolProxyProvider.create([makeEntry()], callTool);
-    const tool = getTool(provider.listTools(), 0);
+    controller.abort();
+    const { tools, calls } = makeProvider([makeEntry()]);
+    const tool = getTool(tools, 0);
 
     const result = await tool.execute(makeCall("filesystem.read_file", { path: "/tmp/test.txt" }), {
       signal: controller.signal,
     });
 
-    expect(result).toEqual(mockResult);
-    expect(callTool).toHaveBeenCalledWith(
-      "filesystem.read_file",
-      { path: "/tmp/test.txt" },
-      { signal: controller.signal },
-    );
+    expect(calls).toHaveLength(0);
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("Tool call aborted");
   });
 
   it("returns empty list when no entries", () => {
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-    const provider = ToolProxyProvider.create([], callTool);
-    expect(provider.listTools()).toHaveLength(0);
+    const { tools } = makeProvider([]);
+    expect(tools).toHaveLength(0);
   });
 
   it("each tool delegates to the correct canonical name", async () => {
@@ -117,22 +136,13 @@ describe("ToolProxyProvider", () => {
       canonicalName: "server-b.tool_two",
       spec: { name: "server-b.tool_two", description: "Tool two", inputSchema: {} },
     });
-    const callTool = mock(async (name: string) => ({
-      id: crypto.randomUUID(),
-      toolCallId: "c",
-      output: name,
-    }));
+    const { tools, calls } = makeProvider([entryA, entryB]);
 
-    const provider = ToolProxyProvider.create([entryA, entryB], callTool);
-    const tools = provider.listTools();
-    const toolA = getTool(tools, 0);
-    const toolB = getTool(tools, 1);
+    await getTool(tools, 0).execute(makeCall("server-a.tool_one", {}));
+    await getTool(tools, 1).execute(makeCall("server-b.tool_two", {}));
 
-    await toolA.execute(makeCall("server-a.tool_one", {}));
-    await toolB.execute(makeCall("server-b.tool_two", {}));
-
-    expect(callTool.mock.calls[0]?.[0]).toBe("server-a.tool_one");
-    expect(callTool.mock.calls[1]?.[0]).toBe("server-b.tool_two");
+    expect(calls[0]?.params?.tool).toBe("server-a.tool_one");
+    expect(calls[1]?.params?.tool).toBe("server-b.tool_two");
   });
 
   it("proxies all entries regardless of source", () => {
@@ -151,35 +161,28 @@ describe("ToolProxyProvider", () => {
       canonicalName: "filesystem.read",
       spec: { name: "filesystem.read", description: "Read file", inputSchema: {} },
     });
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-
-    const provider = ToolProxyProvider.create([systemEntry, agentEntry, mcpEntry], callTool);
-    const tools = provider.listTools();
+    const { tools } = makeProvider([systemEntry, agentEntry, mcpEntry]);
 
     expect(tools).toHaveLength(3);
-    expect(getTool(tools, 0).spec.name).toBe("bash");
     expect(getTool(tools, 0).source).toBe("system");
-    expect(getTool(tools, 1).spec.name).toBe("dispatch");
     expect(getTool(tools, 1).source).toBe("agent");
-    expect(getTool(tools, 2).spec.name).toBe("filesystem.read");
     expect(getTool(tools, 2).source).toBe("mcp");
   });
 
-  it("execute returns exact result from callTool without mutation", async () => {
+  it("execute returns the parsed IPC result unchanged", async () => {
     const mockResult: Tool.Result = {
       id: crypto.randomUUID(),
       toolCallId: "call-123",
       output: "exact output",
       isError: false,
     };
-    const callTool = mock(async () => mockResult);
+    const { tools } = makeProvider([makeEntry()], mockResult);
 
-    const provider = ToolProxyProvider.create([makeEntry()], callTool);
-    const tool = getTool(provider.listTools(), 0);
+    const result = await getTool(tools, 0).execute(
+      makeCall("filesystem.read_file", { path: "/test" }),
+    );
 
-    const result = await tool.execute(makeCall("filesystem.read_file", { path: "/test" }));
-
-    expect(result).toBe(mockResult);
+    expect(result).toEqual(mockResult);
     expect(result.output).toBe("exact output");
     expect(result.isError).toBe(false);
   });
@@ -199,10 +202,7 @@ describe("ToolProxyProvider", () => {
         spec: { name: "fs.delete", description: "Delete", inputSchema: {} },
       }),
     ];
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-
-    const provider = ToolProxyProvider.create(entries, callTool);
-    const tools = provider.listTools();
+    const { tools } = makeProvider(entries);
 
     expect(tools).toHaveLength(3);
     expect(getTool(tools, 0).spec.name).toBe("fs.read");
@@ -224,11 +224,8 @@ describe("ToolProxyProvider", () => {
         required: ["path"],
       },
     };
-    const entry = makeEntry({ spec });
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-
-    const provider = ToolProxyProvider.create([entry], callTool);
-    const tool = getTool(provider.listTools(), 0);
+    const { tools } = makeProvider([makeEntry({ spec })]);
+    const tool = getTool(tools, 0);
 
     expect(tool.spec).toEqual(spec);
     expect(tool.spec.name).toBe("custom.tool");
@@ -241,10 +238,7 @@ describe("ToolProxyProvider", () => {
       makeEntry({ riskTier: 1, canonicalName: "medium.risk" }),
       makeEntry({ riskTier: 2, canonicalName: "high.risk" }),
     ];
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-
-    const provider = ToolProxyProvider.create(entries, callTool);
-    const tools = provider.listTools();
+    const { tools } = makeProvider(entries);
 
     expect(getTool(tools, 0).riskTier).toBe(0);
     expect(getTool(tools, 1).riskTier).toBe(1);
@@ -252,14 +246,39 @@ describe("ToolProxyProvider", () => {
   });
 
   it("isReadOnly, isDestructive, isConcurrencySafe are hardcoded false", () => {
-    const entry = makeEntry();
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
-
-    const provider = ToolProxyProvider.create([entry], callTool);
-    const tool = getTool(provider.listTools(), 0);
+    const { tools } = makeProvider([makeEntry()]);
+    const tool = getTool(tools, 0);
 
     expect(tool.isReadOnly).toBe(false);
     expect(tool.isDestructive).toBe(false);
     expect(tool.isConcurrencySafe).toBe(false);
+  });
+
+  it("preserves descriptors when proxying worker tools", () => {
+    const descriptor: RuntimeResource.Descriptor = {
+      id: "tool:server:remote.echo",
+      kind: "tool",
+      source: { type: "server" },
+      labels: ["tool:remote.echo", "risk:tier-1"],
+      capabilities: ["write"],
+      effects: [],
+      risk: 1,
+    };
+    const entry: RuntimeToolCatalogEntry = {
+      canonicalName: "remote.echo",
+      exposedName: "remote_echo",
+      source: "server",
+      category: "custom",
+      riskTier: 1,
+      spec: {
+        name: "remote.echo",
+        inputSchema: { type: "object", properties: {} },
+        labels: descriptor.labels,
+      },
+      descriptor,
+    };
+    const { tools } = makeProvider([entry]);
+
+    expect(getTool(tools, 0)?.descriptor).toBe(descriptor);
   });
 });

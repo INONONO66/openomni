@@ -1,8 +1,7 @@
-import { describe, expect, it, mock } from "bun:test";
-import { RuntimeResource, type Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { describe, expect, it } from "bun:test";
+import { RuntimeResource, type Tool } from "@openomni/protocol";
 import { defineTool } from "../../src/execution-runtime/tool/define.js";
 import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/middleware/tool-runtime-policy.js";
-import { ToolProxyProvider } from "../../src/execution-runtime/tool/tool-proxy-provider.js";
 
 const inputSchema = {
   type: "object",
@@ -69,33 +68,6 @@ describe("native tool runtime descriptors", () => {
       risk: 2,
     });
     expect(RuntimeResource.Descriptor.safeParse(descriptor).success).toBe(true);
-  });
-
-  it("preserves descriptors when proxying worker tools", () => {
-    const descriptor: RuntimeResource.Descriptor = {
-      id: "tool:server:remote.echo",
-      kind: "tool",
-      source: { type: "server" },
-      labels: ["tool:remote.echo", "risk:tier-1"],
-      capabilities: ["write"],
-      effects: [],
-      risk: 1,
-    };
-    const entry: WorkerBootstrap.RuntimeToolCatalogEntry = {
-      canonicalName: "remote.echo",
-      exposedName: "remote_echo",
-      source: "server",
-      category: "custom",
-      riskTier: 1,
-      spec: { name: "remote.echo", inputSchema, labels: descriptor.labels },
-      descriptor,
-    };
-    const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "ok" }));
-
-    const provider = ToolProxyProvider.create([entry], callTool);
-    const [tool] = provider.listTools();
-
-    expect(tool?.descriptor).toBe(descriptor);
   });
 
   it("resolves runtime policy risk from descriptor before legacy riskTier", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
 import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
-import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { buildPolicyEngine } from "../../../src/core/execution/runner";
@@ -140,12 +140,9 @@ describe("canonical tool policy execution", () => {
       readonly sessionId: unknown;
       readonly runId: unknown;
     }> = [];
-    const startedEvents: unknown[] = [];
+    const delegatedContexts: Array<{ sessionId?: string; runId?: string } | undefined> = [];
     const warningErrors: unknown[] = [];
     const observerFailure = { toString: () => "observer-failure" };
-    const unsubscribeStarted = Bus.subscribe(ToolExecution.Started, (event) => {
-      startedEvents.push(event);
-    });
     const unsubscribeWarnings = Bus.subscribe(Operational.Warn, (event) => {
       warningErrors.push(event.context?.error);
     });
@@ -176,7 +173,10 @@ describe("canonical tool policy execution", () => {
       onDecision: () => {
         throw observerFailure;
       },
-      toolExecutor: async (call) => ({ id: "result", toolCallId: call.id, output: "ok" }),
+      toolExecutor: async (call, context) => {
+        delegatedContexts.push(context?.traceContext);
+        return { id: "result", toolCallId: call.id, output: "ok" };
+      },
     });
 
     try {
@@ -188,12 +188,11 @@ describe("canonical tool policy execution", () => {
       expect(policyIdentities).toHaveLength(1);
       expect(typeof policyIdentities[0]?.sessionId).toBe("string");
       expect(typeof policyIdentities[0]?.runId).toBe("string");
-      expect(startedEvents).toHaveLength(1);
-      expect(typeof startedEvents[0]?.sessionId).toBe("string");
-      expect(typeof startedEvents[0]?.runId).toBe("string");
+      expect(delegatedContexts).toHaveLength(1);
+      expect(typeof delegatedContexts[0]?.sessionId).toBe("string");
+      expect(typeof delegatedContexts[0]?.runId).toBe("string");
       expect(warningErrors).toEqual(["observer-failure", "observer-failure"]);
     } finally {
-      unsubscribeStarted();
       unsubscribeWarnings();
     }
   });

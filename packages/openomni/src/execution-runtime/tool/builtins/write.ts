@@ -1,8 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { defineTool } from "../define.js";
-import { requireString } from "../shared/input.js";
-import { fromError, successResult } from "../shared/result.js";
+import { defineTool, requireString, fromError, successResult } from "../define.js";
 import { resolveContainedPathForCreate } from "../../filesystem/workspace-path.js";
 export function createWriteTool(workspaceRoot: string) {
   return defineTool<{ path: string; content: string }>({

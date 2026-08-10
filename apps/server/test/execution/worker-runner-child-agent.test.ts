@@ -73,6 +73,70 @@ describe("WorkerRunner", () => {
     expect(agentConfigs[1]?.tools).toEqual([]);
   });
 
+  it("assembles middleware once; child references the parent subset without the drain policy", async () => {
+    // #522 defect 2 scope: the injection-queue drain policy drains shared
+    // host state and persists into the parent session, so it stays
+    // parent-only; every child registration must be one of the parent's.
+    const responses: unknown[] = [];
+    const agentConfigs: ChatAgentConfig[] = [];
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...createValidRequest(),
+          tools: [{ name: "child_agent", inputSchema: {} }],
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          server: {
+            async call() {
+              throw new Error("unexpected server call");
+            },
+            notify() {
+              return undefined;
+            },
+          },
+          createAgent: (options) => ({
+            async run() {
+              agentConfigs.push(options);
+              const childAgentTool = options.tools?.find((tool) => tool.name === "child_agent");
+              if (!childAgentTool) return successfulResult;
+              if (!options.toolExecutor) throw new Error("tool executor missing");
+              const spawn = await options.toolExecutor({
+                id: "child-mw-spawn",
+                tool: "child_agent",
+                input: { action: "spawn", prompt: "inspect middleware" },
+              });
+              const childId = JSON.parse(spawn.output).childId;
+              await options.toolExecutor({
+                id: "child-mw-await",
+                tool: "child_agent",
+                input: { action: "await", ids: [childId] },
+              });
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+    expect(agentConfigs).toHaveLength(2);
+    const parentMiddleware = agentConfigs[0]?.middleware ?? [];
+    const childMiddleware = agentConfigs[1]?.middleware ?? [];
+    expect(parentMiddleware.map((reg) => reg.name)).toContain("builtin:injection-queue-drain");
+    expect(childMiddleware.map((reg) => reg.name)).not.toContain("builtin:injection-queue-drain");
+    for (const registration of childMiddleware) {
+      expect(parentMiddleware).toContain(registration);
+    }
+  });
+
   it("cancels unawaited child agents when the worker run finishes", async () => {
     const responses: unknown[] = [];
     let childSignal: AbortSignal | undefined;

@@ -207,14 +207,10 @@ export function createToolExecutor(
     const rewriteInput = effectOf(preDecision, "tool.rewrite_input");
     const effectiveCall = rewriteInput ? { ...call, input: rewriteInput.input } : call;
 
-    Bus.publish(ToolExecution.Started, {
-      ...eventBase,
-      toolCallId: call.id,
-      toolName: policyToolName,
-      inputSummary: summarizeInput(effectiveCall.input),
-      time: Date.now(),
-    });
-
+    // #522 defect 2: ToolExecution.Started/Completed are emitted SOLELY by
+    // the worker-side executor this wrapper delegates to (packages/openomni
+    // execution-runtime/tool/executor.ts) — this layer keeps policy point
+    // dispatch, decision recording, and effect application only.
     const startMs = Date.now();
     let result: Tool.Result;
     try {
@@ -223,29 +219,11 @@ export function createToolExecutor(
         traceContext: activeTraceContext,
       });
     } catch (err) {
-      const durationMs = Date.now() - startMs;
-      onToolComplete?.(durationMs);
-      Bus.publish(ToolExecution.Completed, {
-        ...eventBase,
-        toolCallId: call.id,
-        toolName: policyToolName,
-        durationMs,
-        isError: true,
-        time: Date.now(),
-      });
+      onToolComplete?.(Date.now() - startMs);
       throw err;
     }
 
-    const durationMs = Date.now() - startMs;
-    onToolComplete?.(durationMs);
-    Bus.publish(ToolExecution.Completed, {
-      ...eventBase,
-      toolCallId: call.id,
-      toolName: policyToolName,
-      durationMs,
-      isError: result.isError ?? false,
-      time: Date.now(),
-    });
+    onToolComplete?.(Date.now() - startMs);
 
     const postDecision = await dispatchToolPost(
       engine,

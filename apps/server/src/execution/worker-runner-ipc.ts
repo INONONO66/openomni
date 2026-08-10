@@ -2,9 +2,10 @@ import {
   DispatchRuntime,
   type DispatchHandler,
   type DispatchToolRuntime,
-  ToolProxyProvider,
+  type NativeTool,
+  type ToolExecutionContext,
 } from "@openomni/openomni";
-import { Tool } from "@openomni/protocol";
+import { Tool, type WorkerBootstrap } from "@openomni/protocol";
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
 const WORKER_RESIDENT_ASK_IPC_TIMEOUT_MS = 5 * 60_000;
@@ -93,14 +94,18 @@ export function createWorkerDispatchRuntime(options: {
 }
 
 export function createMcpProxyProvider(options: {
-  readonly toolCatalog: Parameters<typeof ToolProxyProvider.create>[0];
+  readonly toolCatalog: WorkerBootstrap.RuntimeToolCatalogEntry[];
   readonly server: WorkerRunIpcServer;
   readonly runId: string;
   readonly sessionId: string;
   readonly workspaceRoot?: string;
-}): ReturnType<typeof ToolProxyProvider.create> {
+}): { listTools(): NativeTool[] } {
   const { toolCatalog, server, runId, sessionId, workspaceRoot } = options;
-  return ToolProxyProvider.create(toolCatalog, async (toolName, toolArgs, context) => {
+  const callTool = async (
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+    context?: ToolExecutionContext,
+  ): Promise<Tool.Result> => {
     const callId = crypto.randomUUID();
     if (context?.signal?.aborted) {
       return {
@@ -145,7 +150,26 @@ export function createMcpProxyProvider(options: {
         settlement: "unknown",
       };
     }
-  });
+  };
+
+  const tools: NativeTool[] = toolCatalog.map((entry) => ({
+    spec: entry.spec,
+    riskTier: entry.riskTier,
+    isReadOnly: false,
+    isDestructive: false,
+    isConcurrencySafe: false,
+    labels: entry.spec.labels,
+    ...(entry.descriptor !== undefined && { descriptor: entry.descriptor }),
+    source: entry.source,
+    execute: (call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> =>
+      context === undefined
+        ? callTool(entry.canonicalName, call.input as Record<string, unknown>)
+        : callTool(entry.canonicalName, call.input as Record<string, unknown>, context),
+  }));
+
+  return {
+    listTools: () => tools,
+  };
 }
 
 function createToolCallAbortError(): Error {

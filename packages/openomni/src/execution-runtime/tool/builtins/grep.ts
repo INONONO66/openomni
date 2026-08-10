@@ -1,8 +1,14 @@
 import { statSync } from "node:fs";
 import type { Tool } from "@openomni/protocol";
-import { defineTool } from "../define.js";
-import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
-import { errorResult, fromError, successResult } from "../shared/result.js";
+import {
+  defineTool,
+  optionalBoolean,
+  optionalString,
+  requireString,
+  errorResult,
+  fromError,
+  successResult,
+} from "../define.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
 import type { NativeTool, ToolExecutionContext } from "../types.js";
 type MatchResult = { file: string; line: number; text: string };

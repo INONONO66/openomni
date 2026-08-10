@@ -8,7 +8,6 @@ export { buildToolCatalog, resolveCategory, resolveToolSelection } from "./catal
 export { Tool, defineTool, resolveMeta } from "./define.js";
 export { createToolExecutor } from "./executor.js";
 export { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
-export { ToolProxyProvider } from "./tool-proxy-provider.js";
 export { SystemToolProvider } from "./system/index.js";
 export type { CatalogEntry } from "./catalog.js";
 export type { ToolExecutorContext } from "./executor.js";

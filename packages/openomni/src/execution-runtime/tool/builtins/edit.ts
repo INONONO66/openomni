@@ -1,6 +1,12 @@
-import { defineTool } from "../define.js";
-import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
-import { errorResult, fromError, successResult } from "../shared/result.js";
+import {
+  defineTool,
+  optionalBoolean,
+  optionalString,
+  requireString,
+  errorResult,
+  fromError,
+  successResult,
+} from "../define.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
 function replaceOnce(
   text: string,
