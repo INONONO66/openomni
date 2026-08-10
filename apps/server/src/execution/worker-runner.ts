@@ -86,6 +86,7 @@ export namespace WorkerRunner {
         const mcpProxyProvider = createMcpProxyProvider({
           toolCatalog: bootstrap?.toolCatalog ?? [],
           server,
+          ipcAuthToken,
           runId,
           sessionId,
           ...(workspaceRoot ? { workspaceRoot } : {}),
