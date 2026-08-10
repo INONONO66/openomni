@@ -33,6 +33,7 @@ declare const Bun: {
 
 type PackageKey =
   | "protocol"
+  | "ipc"
   | "policy"
   | "session"
   | "llm"
@@ -69,6 +70,15 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageJsonPath: "packages/protocol/package.json",
     packageName: "@openomni/protocol",
     allowedDeps: "none",
+  },
+  ipc: {
+    displayName: "ipc",
+    packageJsonPath: "packages/ipc/package.json",
+    packageName: "@openomni/ipc",
+    // Worker-process transport contract (#496): protocol only. Driver-band
+    // packages (channels, remote, browser, machines, …) consume it as a
+    // published contract — it must never grow a kernel/ledger/policy import.
+    allowedDeps: new Set(["@openomni/protocol"]),
   },
   session: {
     displayName: "session",
@@ -109,9 +119,10 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "coordinator",
     packageJsonPath: "packages/coordinator/package.json",
     packageName: "@openomni/coordinator",
-    // Ring-2 process driver: protocol only (#462 step 1 made it session-free;
-    // this ratchet keeps it that way — widening requires Owner sign-off).
-    allowedDeps: new Set(["@openomni/protocol"]),
+    // Ring-2 process driver: protocol + ipc only (#462 step 1 made it
+    // session-free; #496 moved the IPC transport into @openomni/ipc; this
+    // ratchet keeps it that way — widening requires Owner sign-off).
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
   },
   server: {
     displayName: "server",
@@ -490,6 +501,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
 const TRACKED_DOCS = [
   "AGENTS.md",
   "packages/protocol/AGENTS.md",
+  "packages/ipc/AGENTS.md",
   "packages/session/AGENTS.md",
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",

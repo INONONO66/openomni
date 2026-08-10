@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@openomni/coordinator": "workspace:*",
+    "@openomni/ipc": "workspace:*",
     "@types/bun": "latest"
   }
 }

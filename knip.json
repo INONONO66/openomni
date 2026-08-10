@@ -24,6 +24,7 @@
         "src/index.ts",
         "src/cli.ts",
         "src/execution/worker-entry.ts",
+        "src/manual/*.ts",
         "test/**/*.test.ts",
         "test/e2e/*.ts"
       ],
@@ -31,6 +32,10 @@
     },
     "packages/coordinator": {
       "entry": ["src/index.ts", "test/**/*.test.ts", "test/harness/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/ipc": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/protocol": {
