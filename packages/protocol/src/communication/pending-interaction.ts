@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { NamedError } from "../error/index.js";
 
 export const Status = z.enum(["open", "resolved", "follow_up", "expired", "cancelled"]);
 export type Status = z.infer<typeof Status>;
@@ -56,6 +57,33 @@ export const Create = Record.omit({
   updatedAt: z.number().optional(),
 });
 export type Create = z.infer<typeof Create>;
+
+export const WriteMethod = z.enum([
+  "create",
+  "resolve",
+  "markFollowUp",
+  "cancel",
+  "cleanupExpired",
+]);
+export type WriteMethod = z.infer<typeof WriteMethod>;
+
+/**
+ * #548 — PendingInteraction is a frozen legacy writer. Its dispatch-side
+ * consumers cut over to durable Wait correlation (#215 vocabulary), so every
+ * `PendingInteractionStore` write method throws this typed error. Callers
+ * branch on `data.code`, never message text. Historical rows stay readable
+ * through the store's read methods and the upcast-on-read Wait view; the
+ * archive manifest (script/generate-ledger-archive-manifest.ts) records
+ * their range identity and integrity hash.
+ */
+export const FrozenError = NamedError.create(
+  "PendingInteractionFrozenError",
+  z.object({
+    message: z.string(),
+    code: z.literal("pending_interaction_frozen"),
+    method: WriteMethod,
+  }),
+);
 
 export const CorrelationQuery = z
   .object({

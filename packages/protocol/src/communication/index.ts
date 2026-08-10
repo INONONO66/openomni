@@ -51,6 +51,12 @@ export namespace Communication {
     export const CorrelationQuery = PendingInteractionSchema.CorrelationQuery;
     export type CorrelationQuery = PendingInteractionSchema.CorrelationQuery;
 
+    export const WriteMethod = PendingInteractionSchema.WriteMethod;
+    export type WriteMethod = PendingInteractionSchema.WriteMethod;
+
+    export const FrozenError = PendingInteractionSchema.FrozenError;
+    export type FrozenError = InstanceType<typeof PendingInteractionSchema.FrozenError>;
+
     export const Events = PendingInteractionSchema.Events;
   }
 

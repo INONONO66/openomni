@@ -23,6 +23,7 @@ import {
   Bus,
   ChannelGrantStore,
   PendingAskStore,
+  PendingInteractionStore,
   Session,
   SqliteStorageAdapter,
   Storage,
@@ -36,7 +37,10 @@ import {
   hasRetryExhaustionBlocker,
   isRetryExhausted,
 } from "../../packages/session/src/work-item/retry-policy";
-import { waitViewOfPendingAsk } from "../../packages/openomni/src/wait/upcast";
+import {
+  waitViewOfPendingAsk,
+  waitViewOfPendingInteraction,
+} from "../../packages/openomni/src/wait/upcast";
 import {
   buildReplyInput,
   buildWaitCreate as buildSessionWaitCreate,
@@ -1388,6 +1392,125 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
     expect(inspect.query("SELECT COUNT(*) AS n FROM wait").get()).toEqual({ n: 0 });
     expect(
       inspect.query("SELECT data, time_updated FROM pending_ask WHERE id = 'ask-upcast'").get(),
+    ).toEqual({ data: JSON.stringify(record), time_updated: 100 });
+  });
+
+  // PendingInteractionStore writes are frozen (#548) — historical rows are
+  // seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
+  async function seedFrozenPendingInteraction(
+    id: string,
+    overrides: Partial<Communication.PendingInteraction.Record> = {},
+  ): Promise<Communication.PendingInteraction.Record> {
+    const adapter = Storage.getAdapter().pendingInteraction;
+    if (!adapter) throw new Error("conformance storage misses the pendingInteraction sub-adapter");
+    const session = Session.create({
+      title: `pi-conformance-${id}`,
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    await WorkerRun.create(session.id, { runId: `run-${id}`, title: id, prompt: "test" });
+    const record = Communication.PendingInteraction.Record.parse({
+      id,
+      workerRunId: `run-${id}`,
+      sessionId: session.id,
+      endpointId: "telegram:conformance",
+      channelId: "telegram:dm",
+      correlation: { tokenHash: `tok-${id}` },
+      allowedActions: ["report_result"],
+      status: "open",
+      createdAt: 100,
+      updatedAt: 100,
+      expiresAt: 9_999_999_999_999,
+      followUpWindow: 100,
+      ...overrides,
+    });
+    adapter.create(record);
+    return record;
+  }
+
+  test("frozen writer (#548): PendingInteractionStore writes throw the typed frozen error; archived rows stay readable", async () => {
+    const record = await seedFrozenPendingInteraction("pi-frozen");
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      PendingInteractionStore.resolve("pi-frozen", { resolvedAt: 5 });
+    } catch (error) {
+      thrown = error;
+    }
+
+    if (!Communication.PendingInteraction.FrozenError.isInstance(thrown)) {
+      throw new Error("expected the typed PendingInteractionFrozenError");
+    }
+    expect(thrown.data.code).toBe("pending_interaction_frozen");
+    expect(thrown.data.method).toBe("resolve");
+    await flushBus();
+    expect(events).toEqual([]);
+    // The frozen row is untouched and still served by every read surface.
+    expect(PendingInteractionStore.get("pi-frozen")?.updatedAt).toBe(record.updatedAt);
+    expect(
+      PendingInteractionStore.findByCorrelation({
+        endpointId: "telegram:conformance",
+        channelId: "telegram:dm",
+        tokenHash: "tok-pi-frozen",
+      }),
+    ).toHaveLength(1);
+  });
+
+  test("archive manifest covers frozen pending_interaction rows: deterministic range hash, tamper mismatch", async () => {
+    await seedFrozenPendingInteraction("pi-b");
+    await seedFrozenPendingInteraction("pi-c", { status: "resolved", resolvedAt: 200 });
+    await seedFrozenPendingInteraction("pi-a", { status: "cancelled", cancelledAt: 150 });
+
+    const manifest = buildLedgerArchiveManifest(inspect);
+    const entry = manifest.tables.find((table) => table.table === "pending_interaction");
+    if (!entry) throw new Error("manifest misses the frozen pending_interaction table");
+    expect(entry).toMatchObject({
+      table: "pending_interaction",
+      rowCount: 3,
+      idRange: { first: "pi-a", last: "pi-c" },
+    });
+    expect(entry.integrityHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    // Regenerating over the same rows reproduces the hash byte-for-byte.
+    const regenerated = buildLedgerArchiveManifest(inspect).tables.find(
+      (table) => table.table === "pending_interaction",
+    );
+    expect(regenerated?.integrityHash).toBe(entry.integrityHash);
+
+    // A tampered archived row breaks the range hash.
+    inspect.query("UPDATE pending_interaction SET status = 'resolved' WHERE id = 'pi-b'").run();
+    const tampered = buildLedgerArchiveManifest(inspect).tables.find(
+      (table) => table.table === "pending_interaction",
+    );
+    expect(tampered?.integrityHash).not.toBe(entry.integrityHash);
+    expect(tampered?.rowCount).toBe(3);
+  });
+
+  test("pending_interaction upcast-on-read is deterministic and never materializes archive rows", async () => {
+    const record = await seedFrozenPendingInteraction("pi-upcast", {
+      status: "follow_up",
+      resolvedAt: 120,
+    });
+
+    const first = waitViewOfPendingInteraction(record);
+    const reread = PendingInteractionStore.get("pi-upcast");
+    if (!reread) throw new Error("frozen row must stay readable");
+    const second = waitViewOfPendingInteraction(reread);
+
+    // Deterministic: the same archived row always upcasts to the same view.
+    expect(second).toEqual(first);
+    // Legacy "follow_up" folds to resolved in the Wait vocabulary.
+    expect(first.status).toBe("resolved");
+    expect(first.revision).toBe(0);
+
+    // The read wrote nothing: no active wait row appeared and the archived
+    // row's stored bytes are unchanged.
+    expect(inspect.query("SELECT COUNT(*) AS n FROM wait").get()).toEqual({ n: 0 });
+    expect(
+      inspect
+        .query("SELECT data, time_updated FROM pending_interaction WHERE id = 'pi-upcast'")
+        .get(),
     ).toEqual({ data: JSON.stringify(record), time_updated: 100 });
   });
 

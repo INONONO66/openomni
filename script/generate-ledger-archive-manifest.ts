@@ -6,8 +6,9 @@
 // version, range identity, and an integrity hash BEFORE the writer/table can
 // ever be deleted. This script produces that durable artifact as JSON:
 //
-//   - one entry per frozen table (pending_ask now; worker_run_state and
-//     pending_interaction join at D2b when their writers freeze);
+//   - one entry per frozen table (pending_ask since #510 D2a,
+//     pending_interaction since #548; worker_run_state joins when its
+//     writer freezes);
 //   - sourceSchemaVersion: the last applied migration name from `_migrations`
 //     at generation time — the schema the frozen rows were persisted under;
 //   - rowCount + idRange (first/last id in id order): range identity;
@@ -29,9 +30,10 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { WorkItem } from "../packages/protocol/src/index";
 
-/** Frozen legacy tables enumerated by the manifest (grows at D2b). */
+/** Frozen legacy tables enumerated by the manifest (grows as writers freeze). */
 const FROZEN_TABLES: readonly { table: string; idColumn: string }[] = [
   { table: "pending_ask", idColumn: "id" },
+  { table: "pending_interaction", idColumn: "id" },
 ];
 
 export interface LedgerArchiveTableEntry {
