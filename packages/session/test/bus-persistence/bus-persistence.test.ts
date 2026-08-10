@@ -6,6 +6,7 @@ import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
+import { WorkItemStore } from "../../src/work-item/index.js";
 import "../../src/storage/initialize.js";
 
 interface BusEventRow {
@@ -368,6 +369,45 @@ describe("BusPersistence", () => {
       "pending_ask.opened",
       "worker_grant.evaluated",
     ]);
+  });
+
+  test("resolves workerRunId through the fact-backed WorkItem projection (no worker_run_state row)", async () => {
+    // #510 D2b: new runs never write worker_run_state — the canonical read
+    // for a run's session is the fact-bound WorkItem projection.
+    const workSession = createSession();
+    const item = await WorkItemStore.create({
+      name: "fact-backed-run",
+      sourceMessageId: "msg_fact_backed_run",
+      sourceChannel: "test",
+      intent: "verify",
+      goal: "resolve telemetry attribution from attempt facts",
+      sessionId: "session-origin",
+      acceptanceCriteria: ["session attribution rides the projection"],
+    });
+    await WorkItemStore.assignExecution(item.hash, {
+      executorKind: "internal_chat_agent",
+      workerRunId: "worker-run-fact",
+      workSessionId: workSession.id,
+    });
+    const event = BusEvent.define(
+      "worker_grant.evaluated",
+      z.object({
+        workerRunId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+      }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(event, {
+      workerRunId: "worker-run-fact",
+      traceId: "trace-fact-backed",
+      time: 3,
+    });
+
+    const persisted = await waitForRows(1);
+    const grantRow = persisted.find((row) => row.event_type === "worker_grant.evaluated");
+    expect(grantRow?.session_id).toBe(workSession.id);
   });
 
   test("continues when worker run session lookup fails", async () => {
