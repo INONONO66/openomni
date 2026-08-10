@@ -109,6 +109,79 @@ describe("IngressPolicyGate effect allowlist (#530 review)", () => {
     expect(abort.reasonCodes).toContain("denied");
   });
 
+  it("contains a thrown fail-closed policy as a middleware-error deny", async () => {
+    const decisions: unknown[] = [];
+    const decision = await IngressPolicyGate.evaluate(
+      [
+        {
+          name: "test:boom",
+          gate: "inbound",
+          priority: 0,
+          fn: () => {
+            throw new Error("boom");
+          },
+        },
+      ],
+      inboundCtx(),
+      (recorded) => {
+        decisions.push(recorded);
+      },
+    );
+
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("middleware-error");
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({ policyId: "test:boom", verdict: "deny" });
+  });
+
+  it("skips a thrown fail-open policy and continues the chain", async () => {
+    let after = false;
+    const decision = await IngressPolicyGate.evaluate(
+      [
+        {
+          name: "test:boom-open",
+          gate: "inbound",
+          priority: 0,
+          failPolicy: "fail-open",
+          fn: () => {
+            throw new Error("boom");
+          },
+        },
+        {
+          name: "test:after",
+          gate: "inbound",
+          priority: 10,
+          fn: () => {
+            after = true;
+            return PolicyDecision.allow({ policyId: "test.after", reasonCodes: ["after"] });
+          },
+        },
+      ],
+      inboundCtx(),
+    );
+
+    expect(decision.verdict).toBe("allow");
+    expect(decision.reasonCodes).toContain("after");
+    expect(after).toBe(true);
+  });
+
+  it("normalizes a non-decision return to a fail-closed policy.invalid_decision deny", async () => {
+    const decision = await IngressPolicyGate.evaluate(
+      [
+        {
+          name: "test:garbage",
+          gate: "inbound",
+          priority: 0,
+          fn: () => ({ nonsense: true }) as never,
+        },
+      ],
+      inboundCtx(),
+    );
+
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("policy.invalid_decision");
+  });
+
   it("passes a frozen context to gate policies", async () => {
     let frozen = false;
     await IngressPolicyGate.evaluate(
