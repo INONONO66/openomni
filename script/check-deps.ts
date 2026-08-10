@@ -402,11 +402,9 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 
 // See docs/golden-principles.local.md for the full list.
 
-// Allowed `as any` locations:
-// - protocol/error: sole exception per golden-principles.local.md #5
-// - remaining entries: pre-existing tech debt (do not extend)
+// Allowed `as any` locations (pre-existing tech debt — do not extend).
+// protocol/error was removed 2026-08 (#552 item 5): zero remaining hits.
 const ALLOWED_AS_ANY_FILES = new Set([
-  "packages/protocol/src/error/index.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/agent/src/runtime/messenger/transport.ts",
 ]);
