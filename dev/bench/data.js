@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786354469010,
+  "lastUpdate": 1786359199299,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41021,6 +41021,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516888,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd717f973c5d09bc7b46bf0c4d8bb32f0db73118",
+          "message": "refactor(agent,policy,openomni): retire the legacy policy bridge (#579)\n\n* refactor(agent): delete legacy-dispatch compatibility bridge (#530)\n\nOwner ruling 2026-08-10: the bridge dies; builtins stay in agent.\n\n- Delete packages/agent/src/core/policy/compatibility.ts (47 LOC:\n  matchingPoint/isMcpContext/resolveLegacyPoint/agentPolicyCompatibility,\n  born in #484 as a transition aid; the transition is complete).\n- Agent PolicyEngine.create() now returns only { register, dispatchPoint }.\n  register() rejects timing-based (legacy) shapes with a typed fail-closed\n  PolicyRegistrationError (code legacy_timing_registration) instead of\n  accepting-then-skipping them at dispatch, a silent policy bypass.\n  Red-first pin: registration-fail-closed.test.ts (3 rejection pins failed\n  against the bridge, green after).\n- Narrow agent PolicyRegistration / PolicyEngineRegistration to canonical;\n  narrow the generic PolicyRegistry factory surface to canonical (all\n  production factories already were).\n- Migrate the agent/openomni test surface off legacy register/dispatch:\n  12 policy test files + 17 middleware-config fixtures + resident/registry\n  tests. registration-compatibility.test.ts and\n  legacy-dispatch-canonical-enforcement.test.ts die with the bridge; their\n  priority-ordering semantics port to point-only pins (the canonical\n  boundary is stricter: non-negative-integer priorities only, so NaN, both\n  infinities and negatives are now rejection pins, not ordering cases).\n\nTransitional in this commit (removed two commits later): the generic\nengine still accepts legacy registrations for the surviving kernel-ingress\nconsumers; openomni ingress still type-imports the agent registration\nalias.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): move ingress off legacy policy dispatch (#530)\n\nThe three surviving generic legacy dispatch() consumers were all kernel\ningress: ingress-authority runRoutedPreRun (\"run.start\", load-bearing on\nevery routed external event) and the construction-injected inbound/\nwriteback gates (\"inbound.receive\"/\"writeback.commit\", zero production\nregistrants). All three now run on a kernel-local gate runner\n(ingress/policy-gate.ts) with identical composition semantics: ascending\npriority, deny-wins short circuit, pending blocks, fail-closed error\ncontainment, invalid-decision normalization, per-decision observer\nfan-out, writeback rewrite/suppress effects.\n\nWhy not canonical dispatchPoint (the judged branch of #530): no point in\nthe grid honestly fits these boundaries.\n- runRoutedPreRun runs pre-schema-validation, pre-session and pre-run;\n  run.lifecycle.pre requires actorId+sessionId+runId and\n  session.inbound.pre requires actorId+sessionId — none exist yet.\n- Anonymous senders are legal at ingress by design (channel grants\n  materialize default-tier strangers; actor-resolver sanitization pins\n  observe id-less actors flowing through the inbound gate), so the\n  actorId-required contracts would fail-closed-deny legitimate traffic.\n- session.writeback.pre requires a single runId; resident, cancel and\n  delivery writebacks have zero or many runs.\nDispatching those points with fabricated ids would be vocabulary gaming;\nthe kernel gates stay kernel-owned instead. Point-ifying ingress needs a\nprotocol-side admission contract first (flagged in #530).\n\nAlso removed: the ingress type-import of the agent registration alias\n(issue #530 step 4) — gate policies are typed by the kernel, not by agent\nterritory. Test flips are shape-only (gate/ctx fields replace\ntiming/toolInput); every assertion message and expected value is\nunchanged, and the ingress-authority suites pass unmodified except for\nthose registration shapes.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(policy): collapse the legacy dispatch ladder (#530)\n\nWith zero legacy consumers left (agent commit 1, kernel ingress commit 2),\none canonical path survives:\n\n- Delete the legacy dispatch(timing) body — the duplicated\n  start-time -> failPolicy -> publish -> normalize sequence that shadowed\n  evaluateCanonical — plus the compatibility hooks\n  (PolicyEngineCompatibilityGeneric, includeLegacyAtPoint,\n  resolvePointForLegacyDispatch) and the dispatch member of\n  PolicyEngineInstanceGeneric.\n- Delete the legacy registration shape (PolicyRegistrationGeneric) and its\n  store paths (selectLegacy/selectLegacyCompatible/selectPointCompatible,\n  matchesTiming, prepareLegacyRegistration, captureLegacyTiming).\n  prepareRegistrationBoundary now throws the typed fail-closed\n  PolicyRegistrationError (legacy_timing_registration) for timing shapes —\n  the generic boundary takes over the pin, so the agent wrapper's duplicate\n  guard from commit 1 is removed.\n- Delete legacy-only decision helpers (composeFinalDecision,\n  middlewareErrorDecision, normalizeDecision/invalidDecision) and\n  timing-resolution vocabulary (resolvePolicyPoints,\n  policyPointIdsForDescriptor, auditPoint, defaultFailPolicy,\n  allowedEffectTypes, isPreBoundary). Point audits always carry pointId now.\n- packages/policy tests: legacy-acceptance pins become fail-closed\n  rejection pins; compatibility-layer tests re-expressed as direct\n  dispatchPoint contract pins where not already covered; protocol\n  MigrationMapping stability pins kept on the protocol export.\n\nNet: dispatch.ts 291 -> 178 lines, registration store single-array,\npublic surface loses the legacy union and the timing-resolution API.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(policy): retire the two consumer-less session points (#530)\n\nPoints disposition per #530 item 5. Re-verified at head:\nsession.inbound.pre and session.writeback.pre have zero dispatchers and\nzero registrants repo-wide. The ingress-authority migration (previous\ncommit) did NOT become session.inbound.pre's first dispatcher — judged\ndishonest: the contract requires actorId+sessionId, but anonymous senders\nare legal at ingress by design (channel-grant default tiers; pinned by the\nactor-resolver sanitization suite) and no session exists at routed pre-run\ntime. session.writeback.pre requires a single runId; resident, cancel and\ndelivery writebacks have zero or many. Vocabulary without consumers is\nremoved from the grid:\n\n- points.ts drops both entries from canonicalTimingEntries (grid type now\n  Exclude<PolicyPointId, RetiredPolicyPointId>); dispatchPoint at a\n  retired point fails closed (PolicyPointTimingError).\n- Registration at a retired point is rejected at the trusted boundary with\n  a typed PolicyRegistrationError (new code retired_point_id) instead of\n  accepting a policy that could never be dispatched.\n- Pins: retired-points.test.ts (rejection + dispatch fail-closed + exact\n  retirement set); the deny-wins point table drops the two retired rows.\n\nFLAG (protocol side, not edited here): the protocol point registry and\ninput schemas still declare both points. Redesigning the admission-point\ncontract so the kernel ingress boundary can honestly dispatch it\n(optional/absent actor identity, no fabricated session/run ids) is\nprotocol-territory follow-up work.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(policy): trim gate surface for the dead-export ratchet (#530)\n\nRatchet-driven follow-up to the #530 series:\n\n- IngressPolicyGate: drop the unused exported vocabulary (Context, GateId,\n  OnDecision, select) — inlined or private now; the three gate context\n  types are referenced at their construction sites (engine/handlers/\n  ingress-authority annotate the contexts they build).\n- Delete immutableSnapshot (legacy-dispatch-only context snapshotting);\n  un-export RetiredPolicyPointId (internal to the grid).\n- Dead-export baseline regenerated: 20 known issues, none new, one stale\n  entry removed (net shrink by 1).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): gate effect allowlist and honest retired-point rejection\n\nReview fixes on the #530 series (MAJOR-1, MINOR-2, MINOR-5):\n\n- MAJOR-1: IngressPolicyGate now validates composed effects against a\n  per-gate allowlist and denies with policy.effect_not_declared (canonical\n  vocabulary). Allowlists enumerate what the kernel policies emit plus what\n  each consumer reads: pre-run/inbound = run.abort + audit.annotate;\n  writeback adds writeback.rewrite + writeback.suppress. Red-first: two\n  smuggled-effect pins in policy-gate.test.ts failed before the allowlist.\n  Deny->run.abort injection (old enforceDenyAbort) is judged dead machinery\n  at all three gates — every consumer acts on the composed verdict only —\n  and is documented as a deliberate delta in the gate header instead of\n  reimplemented.\n- MINOR-2: dispatching a grid-retired point now throws a dedicated\n  PolicyPointRetiredError (\"Policy point is retired from the dispatch\n  grid: <id>\"), consistent with the registration-side retired_point_id.\n- MINOR-5: the gate context passed to policies is now a frozen shallow\n  snapshot (pinned).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(policy): recalibrate coverage floor after legacy ladder removal\n\nCI coverage ratchet fell 0.52pp on packages/policy (77.3 -> 76.78,\ntolerance 0.5). Diagnosis with the CI-mirror command at base f8e62c3d\n(scratch worktree) vs head, per file:\n\n- packages/policy: base 1776 found / 1373 hit (77.31 local), head\n  1430 / 1098 (76.78 local, identical to CI). No file gained uncovered\n  lines (decisions.ts misses 58 -> 11, dispatch.ts 7 -> 0, points.ts\n  15 -> 0; registration-snapshot's +5 new lines are covered). The deleted\n  legacy ladder was 79.5% covered (275 covered / 346 deleted) — better\n  than the package average — so removing it shrank the numerator faster\n  than the denominator. Case 1: recalibrate, mirroring the C4 precedent\n  (deleting covered lines is not new debt). Floor set to 76.7 = the\n  CI-observed 76.78 minus a small platform margin; lesson retained: the\n  baseline was recorded from ubuntu CI numbers and macOS runs sit ~0.45pp\n  lower, so floors come from CI observations, not local runs.\n\n- packages/openomni (surfaced by the same local sweep, 95.6 -> 95.09):\n  ten genuinely new uncovered lines, all in policy-gate.ts fail-closed\n  containment (failClosedDecision body + the thrown-policy catch). Those\n  are covered with targeted pins instead of recalibrated: thrown\n  fail-closed policy -> middleware-error deny + observer fan-out, thrown\n  fail-open policy skipped, non-decision return -> policy.invalid_decision\n  deny. policy-gate.ts now 100/100 lines; openomni 95.16 local.\n\nLocal ratchet green: policy 76.78 vs 76.7 floor, openomni 95.16,\nall other packages at or above baseline.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T10:52:08Z",
+          "tree_id": "96993d367a6db29c849d952f7e391c945385ded1",
+          "url": "https://github.com/INONONO66/openomni/commit/cd717f973c5d09bc7b46bf0c4d8bb32f0db73118"
+        },
+        "date": 1786359198135,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 616,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5896,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9990,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2848,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2410,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15168,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8024,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 841,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 696,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20576,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2268,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11083,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102749,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518903,
             "unit": "ns/op"
           }
         ]
