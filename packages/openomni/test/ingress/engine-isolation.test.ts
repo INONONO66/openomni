@@ -52,7 +52,7 @@ describe("ingress engine instance isolation", () => {
       policies: [
         {
           name: "test:deny-engine-a",
-          timing: "inbound.receive",
+          gate: "inbound",
           priority: 0,
           fn: () =>
             PolicyDecision.deny({

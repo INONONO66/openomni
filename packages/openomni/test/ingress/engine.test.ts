@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
 import {
   IngressEvent,
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
+  type Policy,
 } from "@openomni/protocol";
+import type { IngressPolicyGate } from "../../src/ingress/policy-gate";
 import { Bus, ChannelGrantStore, Session, Storage } from "@openomni/session";
 import {
   defaultRunFn,
@@ -175,7 +176,7 @@ describe("IngressEngine", () => {
   });
 
   it("rejects missing coordinator through ingress middleware", async () => {
-    const decisions: PolicyDecision[] = [];
+    const decisions: Policy.PolicyDecision[] = [];
     engine = makeEngine({
       coordinator: undefined,
       onPolicyDecision: (decision) => {
@@ -265,7 +266,7 @@ describe("IngressEngine", () => {
       policies: [
         {
           name: "test:deny-inbound",
-          timing: "inbound.receive",
+          gate: "inbound",
           priority: 0,
           fn: () =>
             ProtocolPolicyDecision.deny({
@@ -314,7 +315,7 @@ describe("IngressEngine", () => {
       policies: [
         {
           name: "test:retry-inbound",
-          timing: "inbound.receive",
+          gate: "inbound",
           priority: 0,
           fn: () =>
             ProtocolPolicyDecision.pending({
@@ -452,10 +453,10 @@ describe("IngressEngine", () => {
       };
     }
 
-    function abortPolicy(reason: string): PolicyRegistration {
+    function abortPolicy(reason: string): IngressPolicyGate.IngressPolicy {
       return {
         name: "test:ingress-abort",
-        timing: "inbound.receive",
+        gate: "inbound",
         priority: 0,
         failPolicy: "fail-closed",
         fn: () =>
@@ -467,10 +468,10 @@ describe("IngressEngine", () => {
       };
     }
 
-    function continuePolicy(): PolicyRegistration {
+    function continuePolicy(): IngressPolicyGate.IngressPolicy {
       return {
         name: "test:ingress-continue",
-        timing: "inbound.receive",
+        gate: "inbound",
         priority: 0,
         fn: () => ProtocolPolicyDecision.allow({ policyId: "test.continue", reasonCodes: ["ok"] }),
       };
@@ -496,7 +497,7 @@ describe("IngressEngine", () => {
     });
 
     it("records inbound.receive decision through observer", async () => {
-      const decisions: PolicyDecision[] = [];
+      const decisions: Policy.PolicyDecision[] = [];
       engine = makeEngine({
         onPolicyDecision: (d) => {
           decisions.push(d);
@@ -519,10 +520,10 @@ describe("IngressEngine", () => {
         policies: [
           {
             name: "test:label-capture",
-            timing: "inbound.receive",
+            gate: "inbound",
             priority: 0,
             fn: (ctx) => {
-              capturedLabels = ctx.labels;
+              if (ctx.gate === "inbound") capturedLabels = ctx.labels;
               return ProtocolPolicyDecision.allow({
                 policyId: "test.labels",
                 reasonCodes: ["captured"],

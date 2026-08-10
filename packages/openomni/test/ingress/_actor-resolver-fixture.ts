@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, mock } from "bun:test";
-import type { PolicyContext, PolicyRegistration } from "@openomni/agent";
 import {
   Ingress as IngressNamespace,
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
 } from "@openomni/protocol";
 import { ActorRegistry, Bus, ChannelGrantStore, Storage } from "@openomni/session";
+import type { IngressPolicyGate } from "../../src/ingress/policy-gate";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -71,7 +71,7 @@ export function setupIngressActorResolverTest(): void {
  * Builds a fresh engine instance for the current test with the shared mock
  * resident runtime; inbound policies are construction-injected (#549).
  */
-export function getIngressEngine(...policies: PolicyRegistration[]): IngressEngine {
+export function getIngressEngine(...policies: IngressPolicyGate.IngressPolicy[]): IngressEngine {
   return createIngressEngine({
     residentRuntime: ResidentRuntime.create({
       runAgent: async (_config, input) => {
@@ -102,13 +102,13 @@ export function makeEvent(
 
 export function captureActorPolicy(
   onActor: (actor: Ingress.Actor | undefined) => void,
-): PolicyRegistration {
+): IngressPolicyGate.IngressPolicy {
   return {
     name: "test:capture-actor",
-    timing: "inbound.receive",
+    gate: "inbound",
     priority: 0,
-    fn: (ctx: PolicyContext) => {
-      const actor = ctx.toolInput?.actor;
+    fn: (ctx) => {
+      const actor = ctx.gate === "inbound" ? ctx.actor : undefined;
       onActor(actor === undefined ? undefined : IngressNamespace.ActorSchema.parse(actor));
       return ProtocolPolicyDecision.allow({
         policyId: "test.capture-actor",

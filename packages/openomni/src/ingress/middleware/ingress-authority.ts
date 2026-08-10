@@ -1,9 +1,8 @@
-import type { PolicyRegistration } from "@openomni/agent";
-import { PolicyEngine } from "@openomni/policy";
 import { type Actor, Ingress, Policy, PolicyDecision, type TraceContext } from "@openomni/protocol";
 import type { ChannelGrantStore } from "@openomni/session";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
+import { IngressPolicyGate } from "../policy-gate";
 import { resolveTarget, targetKey } from "../target";
 import {
   actionLabels,
@@ -14,8 +13,6 @@ import {
   isAuthorizedTopLevelActor,
   targetRequiresCoordinator,
 } from "./ingress-authority-actor";
-
-const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 interface PreRunState {
   readonly input: unknown;
@@ -61,7 +58,7 @@ function requireParsedEvent(state: PreRunState): Ingress.DirectEvent {
 
 function throwAbort(decision: Policy.PolicyDecision, state: PreRunState): never {
   if (state.schemaError) throw state.schemaError;
-  throw new Error(PolicyDecision.reason(decision, "ingress run.start middleware aborted"));
+  throw new Error(PolicyDecision.reason(decision, "ingress routed pre-run policy aborted"));
 }
 
 // Blacklist and channel-grant enforcement is owned by the routing pipeline
@@ -204,55 +201,17 @@ export function applyChannelGrantTreatment(
 }
 
 export namespace IngressAuthorityMiddleware {
-  export const CoordinatorPresence = {
-    name: "ingress:coordinator-presence",
-    timing: "run.start",
-    priority: 10,
-    failPolicy: "fail-closed",
-  } as const satisfies Policy.Definition;
-
-  export const SchemaValidation = {
-    name: "ingress:schema-validation",
-    timing: "run.start",
-    priority: 0,
-    failPolicy: "fail-closed",
-  } as const satisfies Policy.Definition;
-
-  export const AuthorityCheck = {
-    name: "ingress:authority",
-    timing: "run.start",
-    priority: 20,
-    failPolicy: "fail-closed",
-  } as const satisfies Policy.Definition;
-
-  export const ModeDispatch = {
-    name: "ingress:mode-dispatch",
-    timing: "run.start",
-    priority: 35,
-    failPolicy: "fail-closed",
-  } as const satisfies Policy.Definition;
-
   export async function runRoutedPreRun(ctx: PreRunContext): Promise<PreRunResult> {
     const state: PreRunState = { input: ctx.event, coordinator: ctx.coordinator };
-    const engine = PolicyEngine.create({
-      traceContext: ctx.traceContext,
-      onDecision: ctx.onDecision,
-    });
-
-    for (const registration of routedRegistrations(state)) {
-      engine.register(registration);
-    }
-
-    const decision = await engine.dispatch("run.start", {
-      steps: [],
-      usage: emptyUsage,
-      turnCount: 0,
-      isCompletion: false,
-      continuationCount: 0,
-      elapsedMs: 0,
-      toolInput: { event: ctx.event },
-      traceContext: ctx.traceContext,
-    });
+    // #530: the routed pre-run checks run on the kernel-local gate runner.
+    // No canonical policy point fits this boundary honestly — the event is
+    // pre-schema-validation, pre-session, and pre-run, and anonymous actors
+    // are legal here — so this is deliberately NOT a policy-engine dispatch.
+    const decision = await IngressPolicyGate.evaluate(
+      routedPreRunPolicies(state),
+      { gate: "pre-run", traceContext: ctx.traceContext },
+      ctx.onDecision,
+    );
 
     if (PolicyDecision.isBlocking(decision)) throwAbort(decision, state);
     if (!state.parsedEvent || !state.mode) {
@@ -271,7 +230,7 @@ export namespace IngressAuthorityMiddleware {
     };
   }
 
-  function routedRegistrations(state: PreRunState): PolicyRegistration[] {
+  function routedPreRunPolicies(state: PreRunState): IngressPolicyGate.IngressPolicy[] {
     return [
       createSchemaValidation(state),
       createCoordinatorPresence(state),
@@ -280,9 +239,11 @@ export namespace IngressAuthorityMiddleware {
     ];
   }
 
-  function createSchemaValidation(state: PreRunState): PolicyRegistration {
+  function createSchemaValidation(state: PreRunState): IngressPolicyGate.IngressPolicy {
     return {
-      ...SchemaValidation,
+      name: "ingress:schema-validation",
+      gate: "pre-run",
+      priority: 0,
       failPolicy: "fail-closed",
       fn: () => {
         const parsed = Ingress.DirectEventSchema.safeParse(state.input);
@@ -297,9 +258,11 @@ export namespace IngressAuthorityMiddleware {
     };
   }
 
-  function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
+  function createCoordinatorPresence(state: PreRunState): IngressPolicyGate.IngressPolicy {
     return {
-      ...CoordinatorPresence,
+      name: "ingress:coordinator-presence",
+      gate: "pre-run",
+      priority: 10,
       failPolicy: "fail-closed",
       fn: () => {
         const event = requireParsedEvent(state);
@@ -326,9 +289,11 @@ export namespace IngressAuthorityMiddleware {
     };
   }
 
-  function createAuthorityCheck(state: PreRunState): PolicyRegistration {
+  function createAuthorityCheck(state: PreRunState): IngressPolicyGate.IngressPolicy {
     return {
-      ...AuthorityCheck,
+      name: "ingress:authority",
+      gate: "pre-run",
+      priority: 20,
       failPolicy: "fail-closed",
       fn: () => {
         const event = requireParsedEvent(state);
@@ -338,9 +303,11 @@ export namespace IngressAuthorityMiddleware {
     };
   }
 
-  function createModeDispatch(state: PreRunState): PolicyRegistration {
+  function createModeDispatch(state: PreRunState): IngressPolicyGate.IngressPolicy {
     return {
-      ...ModeDispatch,
+      name: "ingress:mode-dispatch",
+      gate: "pre-run",
+      priority: 35,
       failPolicy: "fail-closed",
       fn: () => {
         const event = requireParsedEvent(state);

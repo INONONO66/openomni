@@ -1,15 +1,15 @@
-import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import type { PolicyRegistration } from "@openomni/agent";
 import {
   IngressEvent,
   PolicyDecision as Decision,
   type Execution,
   type Ingress,
+  type Policy,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, WorkerRun } from "@openomni/session";
 import type { ResidentRuntime } from "../resident/runtime";
 import type { CoordinatorLike } from "./coordinator-like";
+import { IngressPolicyGate } from "./policy-gate";
 import { SessionBridge } from "./session-bridge";
 import { resolveTarget } from "./target";
 
@@ -46,8 +46,8 @@ export namespace IngressHandlers {
     coordinator?: CoordinatorLike;
     residentRuntime?: Pick<ResidentRuntime, "run">;
     traceContext?: TraceContextProtocol.Type;
-    policies?: readonly PolicyRegistration[];
-    onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
+    policies?: readonly IngressPolicyGate.IngressPolicy[];
+    onPolicyDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   // ---- observe-only ingress lifecycle events ----
@@ -98,52 +98,40 @@ export namespace IngressHandlers {
     });
   }
 
-  // ---- writeback.commit policy gate ----
-
-  const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  // ---- writeback policy gate ----
 
   async function dispatchWritebackCommit(ctx: HandlerContext, output: string): Promise<string> {
     if (!ctx.policies?.length) return output;
 
-    const engine = PolicyEngine.create({
-      traceContext: ctx.traceContext,
-      onDecision: ctx.onPolicyDecision,
-    });
-    for (const reg of ctx.policies) {
-      engine.register(reg);
-    }
-
-    const decision = await engine.dispatch("writeback.commit", {
-      steps: [],
-      usage: emptyUsage,
-      turnCount: 0,
-      isCompletion: true,
-      continuationCount: 0,
-      elapsedMs: 0,
-      labels: [
-        { value: `surface.${ctx.event.surface}`, source: "system" },
-        { value: `target.${resolveTarget(ctx.event).kind}`, source: "system" },
-      ],
-      toolInput: {
+    const target = resolveTarget(ctx.event).kind;
+    const decision = await IngressPolicyGate.evaluate(
+      ctx.policies,
+      {
+        gate: "writeback",
         sessionId: ctx.sessionId,
-        mode: ctx.event.mode,
-        target: resolveTarget(ctx.event).kind,
         surface: ctx.event.surface,
+        mode: ctx.event.mode,
+        target,
         output,
+        labels: [
+          { value: `surface.${ctx.event.surface}`, source: "system" },
+          { value: `target.${target}`, source: "system" },
+        ],
+        ...(ctx.traceContext !== undefined && { traceContext: ctx.traceContext }),
       },
-      traceContext: ctx.traceContext,
-    });
+      ctx.onPolicyDecision,
+    );
 
     return resolveWritebackDecision(decision, output);
   }
 
-  function resolveWritebackDecision(decision: Decision, output: string): string {
+  function resolveWritebackDecision(decision: Policy.PolicyDecision, output: string): string {
     if (Decision.isBlocking(decision)) {
-      throw new Error(Decision.reason(decision, "writeback.commit policy denied"));
+      throw new Error(Decision.reason(decision, "ingress writeback policy denied"));
     }
     const suppress = decision.effects.find((effect) => effect.type === "writeback.suppress");
     if (suppress?.type === "writeback.suppress") {
-      throw new Error(suppress.reason ?? "writeback.commit policy suppressed output");
+      throw new Error(suppress.reason ?? "ingress writeback policy suppressed output");
     }
     const rewrite = decision.effects.find((effect) => effect.type === "writeback.rewrite");
     return rewrite?.type === "writeback.rewrite" ? rewrite.output : output;

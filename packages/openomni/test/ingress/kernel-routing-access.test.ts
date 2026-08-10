@@ -30,11 +30,13 @@ function captureRoutedFacts(captured: { actor?: unknown; treatment?: unknown }):
     policies: [
       {
         name: "test:capture-routed-facts",
-        timing: "inbound.receive",
+        gate: "inbound",
         priority: 0,
         fn: (context) => {
-          captured.actor = context.toolInput?.actor;
-          captured.treatment = context.toolInput?.inboundTreatment;
+          if (context.gate === "inbound") {
+            captured.actor = context.actor;
+            captured.treatment = context.inboundTreatment;
+          }
           return PolicyDecision.allow({ policyId: "test.capture-routed-facts" });
         },
       },
