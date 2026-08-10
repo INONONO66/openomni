@@ -184,8 +184,8 @@ export namespace Processor {
               const apiError = coerceApiError(e);
               const decision = Retry.decide(attempt + 1, apiError ?? e);
 
-              if (!decision.retryable || ++attempt > retryAttemptLimit) {
-                if (!decision.retryable && decision.reason !== "non_retryable" && trace) {
+              if (!decision.retry || ++attempt > retryAttemptLimit) {
+                if (!decision.retry && decision.reason !== "non_retryable" && trace) {
                   // A retryable error declined for another reason (e.g. the
                   // server-directed wait exceeded the cap) must say why.
                   Bus.publish(Operational.Error, {
@@ -194,7 +194,10 @@ export namespace Processor {
                     sessionId: trace.sessionId,
                     component: "llm.retry",
                     msg: "retry declined",
-                    error: decision.reason,
+                    error:
+                      decision.detail === undefined
+                        ? decision.reason
+                        : `${decision.reason}: ${decision.detail}`,
                   });
                 }
                 const aborted = e instanceof DOMException && e.name === "AbortError";
@@ -223,7 +226,7 @@ export namespace Processor {
                   time: Date.now(),
                 });
 
-                if (retryReason === "Too Many Requests" || retryReason === "Rate Limited") {
+                if (publishesRateLimited(retryReason)) {
                   Bus.publish(LlmCall.RateLimited, {
                     traceId: trace.traceId,
                     sessionId: trace.sessionId,
@@ -238,7 +241,7 @@ export namespace Processor {
               publishStatus(sink, sessionID, {
                 type: "retry",
                 attempt,
-                message: String(retryReason),
+                message: retryReason,
                 next: Date.now() + delayMs,
               });
 
@@ -250,6 +253,22 @@ export namespace Processor {
         }
       },
     };
+  }
+
+  /**
+   * Exhaustive over Retry.RetryableReason — no default, so a new reason
+   * member fails to compile here instead of silently skipping the
+   * RateLimited publish (the exact hazard the old prose string-match had).
+   */
+  function publishesRateLimited(reason: Retry.RetryableReason): boolean {
+    switch (reason) {
+      case "rate_limit":
+        return true;
+      case "overloaded":
+      case "server_error":
+        return false;
+    }
+    return reason satisfies never;
   }
 
   function publishInfo(
