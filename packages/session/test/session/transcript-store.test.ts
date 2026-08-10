@@ -244,6 +244,74 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
   });
 });
 
+describe("TranscriptStore record-path fold cache (#562 F7)", () => {
+  test("kill/reopen mid-attempt: recording continues and replay matches the projection", async () => {
+    const session = createSession();
+    const facts = toolTurnFacts(session.id, "msg-cache", "msg-cache#1");
+
+    for (const fact of facts.slice(0, 3)) TranscriptStore.record(session.id, fact);
+    reopenStorage();
+    for (const fact of facts.slice(3)) TranscriptStore.record(session.id, fact);
+
+    const replayed = TranscriptStore.replay(session.id);
+    const projection = await Session.hydrateMessages(Session.getMessages(session.id));
+    expect(JSON.stringify(replayed)).toBe(JSON.stringify(projection));
+    const [message] = replayed;
+    expect(message?.info.role === "assistant" ? message.info.finish : undefined).toBe("stop");
+  });
+
+  test("outer-transaction rollback: count continuity refolds instead of trusting the cache", async () => {
+    const session = createSession();
+    const facts = toolTurnFacts(session.id, "msg-rollback", "msg-rollback#1");
+    const [created, appended, ...rest] = facts;
+    if (!created || !appended) throw new Error("fixture shape");
+    TranscriptStore.record(session.id, created);
+
+    // The savepoint commits inside record(), the cache advances, then the
+    // OUTER transaction rolls everything back — cache and disk now disagree.
+    const adapter = Storage.getAdapter();
+    expect(() =>
+      adapter.transaction(() => {
+        TranscriptStore.record(session.id, appended);
+        throw new Error("outer rollback");
+      }),
+    ).toThrow("outer rollback");
+    expect(Storage.getAdapter().transcriptFact?.list(session.id)).toHaveLength(1);
+
+    // Re-recording the same fact must refold from the stored stream (count
+    // mismatch), not double-apply the cached state.
+    for (const fact of [appended, ...rest]) TranscriptStore.record(session.id, fact);
+
+    const replayed = TranscriptStore.replay(session.id);
+    const projection = await Session.hydrateMessages(Session.getMessages(session.id));
+    expect(JSON.stringify(replayed)).toBe(JSON.stringify(projection));
+    expect(replayed[0]?.parts.map((part) => part.id)).toEqual([
+      "msg-rollback-text",
+      "msg-rollback-tool",
+    ]);
+  });
+
+  test("cached-path fold rejection stays loud and persists nothing", () => {
+    const session = createSession();
+    TranscriptStore.record(session.id, {
+      type: "message.created",
+      attemptId: "msg-dup#1",
+      message: assistantInfo(session.id, "msg-dup"),
+    });
+
+    // Second message.created on the same (now cached) attempt: the O(1)
+    // cached fold must escalate exactly like the refold path.
+    expect(() =>
+      TranscriptStore.record(session.id, {
+        type: "message.created",
+        attemptId: "msg-dup#1",
+        message: assistantInfo(session.id, "msg-dup"),
+      }),
+    ).toThrow(TranscriptRecordingError);
+    expect(Storage.getAdapter().transcriptFact?.list(session.id)).toHaveLength(1);
+  });
+});
+
 describe("TranscriptStore recording defects (pin 2)", () => {
   test("out-of-order fact write escalates to a loud throw and persists nothing", () => {
     const session = createSession();
@@ -347,6 +415,12 @@ describe("TranscriptStore append-only fact rows (pin 3)", () => {
   test("the fact sub-adapter exposes no update or delete surface", () => {
     const facts = Storage.getAdapter().transcriptFact;
     expect(facts).toBeDefined();
-    expect(Object.keys(facts ?? {}).sort()).toEqual(["append", "list", "listByAttempt"]);
+    // countByAttempt (#562 F7) is read-only — still no update/delete surface.
+    expect(Object.keys(facts ?? {}).sort()).toEqual([
+      "append",
+      "countByAttempt",
+      "list",
+      "listByAttempt",
+    ]);
   });
 });

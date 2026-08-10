@@ -100,6 +100,35 @@ function maintainProjection(
   }
 }
 
+/**
+ * #562 F7: attemptId-keyed in-memory fold-state cache for the record path.
+ * Without it every record refolds the attempt's whole persisted stream
+ * inside BEGIN IMMEDIATE — O(n²) JSON.parse + fold per attempt. With it,
+ * one fact folds onto the cached state in O(1); the stored-fact COUNT
+ * (index-only) is the continuity check.
+ *
+ * Correctness envelope:
+ *   - the cache is written ONLY after the storage transaction committed, so
+ *     it always equals the fold of the attempt's durable facts;
+ *   - continuity check: cached.factCount must equal the stored count read
+ *     inside the same transaction — any divergence (process restart with a
+ *     different DB, an outer transaction that rolled a committed savepoint
+ *     back, a concurrent writer) falls back to the full refold. Restart
+ *     safety is preserved on top of that: the llm processor issues fresh
+ *     attemptIds after a restart, so a rebooted process never even hits a
+ *     stale key;
+ *   - message.finished evicts (the attempt is terminal — the fold rejects
+ *     any later fact), and the cache is FIFO-bounded as a leak backstop for
+ *     attempts that never finish.
+ */
+type FoldCacheEntry = { state: Message.WithParts; factCount: number };
+const foldStateCache = new Map<string, FoldCacheEntry>();
+const FOLD_CACHE_LIMIT = 256;
+
+function foldCacheKey(sessionID: string, attemptId: string): string {
+  return `${sessionID}\u0000${attemptId}`;
+}
+
 export namespace TranscriptStore {
   /**
    * Pure fold driver over an ordered fact stream. State is keyed by
@@ -149,14 +178,31 @@ export namespace TranscriptStore {
     }
     const adapter = Storage.get();
     const facts = requireFacts(adapter);
-    return adapter.transaction(() => {
-      const stream = facts.listByAttempt(sessionID, parsed.attemptId).map(parseRow);
-      const projected = projectFrom([...stream, parsed]);
-      const state = projected.at(-1);
-      if (state === undefined) {
-        // Unreachable: projectFrom either threw or produced this attempt's
-        // message state — kept as the explosive backstop.
-        throw new TranscriptRecordingError("unknown_message", parsed.type);
+    const cacheKey = foldCacheKey(sessionID, parsed.attemptId);
+    const committed = adapter.transaction(() => {
+      // #562 F7: O(1) hot path — fold the one new fact onto the cached
+      // attempt state when the stored-fact count confirms continuity;
+      // anything else refolds the attempt's persisted stream (cold start,
+      // restart, rolled-back outer transaction, foreign writer).
+      const storedCount = facts.countByAttempt(sessionID, parsed.attemptId);
+      const cached = foldStateCache.get(cacheKey);
+      let state: Message.WithParts;
+      if (cached !== undefined && cached.factCount === storedCount) {
+        const outcome = Transcript.fold(cached.state, parsed);
+        if ("rejected" in outcome) {
+          throw new TranscriptRecordingError(outcome.reason, parsed.type);
+        }
+        state = outcome.state;
+      } else {
+        const stream = facts.listByAttempt(sessionID, parsed.attemptId).map(parseRow);
+        const projected = projectFrom([...stream, parsed]);
+        const refolded = projected.at(-1);
+        if (refolded === undefined) {
+          // Unreachable: projectFrom either threw or produced this attempt's
+          // message state — kept as the explosive backstop.
+          throw new TranscriptRecordingError("unknown_message", parsed.type);
+        }
+        state = refolded;
       }
       facts.append({
         sessionID,
@@ -167,8 +213,20 @@ export namespace TranscriptStore {
         timeCreated: Date.now(),
       });
       maintainProjection(adapter, sessionID, parsed, state);
-      return state;
+      return { state, factCount: storedCount + 1 };
     });
+    // Cache write only AFTER the transaction returned (committed, or — under
+    // an outer transaction — reached a savepoint whose later rollback the
+    // count continuity check catches on the next record).
+    foldStateCache.delete(cacheKey);
+    if (parsed.type !== "message.finished") {
+      foldStateCache.set(cacheKey, committed);
+      if (foldStateCache.size > FOLD_CACHE_LIMIT) {
+        const oldest = foldStateCache.keys().next().value;
+        if (oldest !== undefined) foldStateCache.delete(oldest);
+      }
+    }
+    return committed.state;
   }
 
   /**

@@ -13,6 +13,12 @@
 -- The composite PK (session_id, seq) is the backstop against seq reuse; the
 -- table carries no UPDATE path by design — later lifecycle steps are NEW
 -- part.advanced facts, never rewrites of stored rows.
+--
+-- #562 F5 — cascade intent: transcript facts deliberately carry no FK and
+-- no ON DELETE CASCADE. The record outlives its projection ("기록은 남는다"):
+-- deleting a session cascades the message/part read-model rows away
+-- (0001 FKs plus explicit lifecycle deletes), but the recorded fact stream
+-- persists — facts persist, projection cascades.
 
 CREATE TABLE IF NOT EXISTS transcript_fact (
   session_id TEXT NOT NULL,

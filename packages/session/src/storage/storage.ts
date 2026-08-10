@@ -66,6 +66,12 @@ export namespace Storage {
       }): number;
       list(sessionID: string): TranscriptFactRow[];
       listByAttempt(sessionID: string, attemptID: string): TranscriptFactRow[];
+      /**
+       * #562 F7: stored-fact count for one attempt — the record path's
+       * continuity check for its in-memory fold-state cache (an index count,
+       * never a row read). Still read-only surface: no update, no delete.
+       */
+      countByAttempt(sessionID: string, attemptID: string): number;
     };
 
     // Optional here for test fakes only — SurfaceKey operations fail closed

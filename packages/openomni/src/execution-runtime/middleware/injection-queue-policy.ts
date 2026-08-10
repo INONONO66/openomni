@@ -1,6 +1,6 @@
 import type { Message, Policy } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Storage, TranscriptStore } from "@openomni/session";
 import type { CanonicalPolicyRegistration, PolicyContext } from "@openomni/agent";
 import type { InjectionQueue } from "../injection-queue.js";
 
@@ -63,6 +63,23 @@ function contextString(
   return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * #562 F3: injected responses are recorded as SYNTHESIZED TRANSCRIPT FACTS
+ * (message.created + part.appended + message.finished), not as
+ * projection-only message/part rows. This seam writes into the same worker
+ * session whose own turns record facts via the worker-runner onFact sink;
+ * Session.resume replays the fact stream once one exists, so a
+ * projection-only write here would silently vanish from recovery.
+ * TranscriptStore.record commits each fact and its message/part projection
+ * in one storage transaction — one source of truth, and one more assistant
+ * writer off the projection-fallback removal condition (see
+ * packages/session/src/session/messages.ts resume()).
+ *
+ * The attemptId is derived from the injected messageId: injected responses
+ * arrive whole (no retries, no streaming), so one message = one attempt, and
+ * a duplicate drain of the same messageId rejects loudly in the fold
+ * (created-on-existing) instead of duplicating history.
+ */
 function persistResponse(
   sessionId: string,
   agentName: string,
@@ -72,7 +89,7 @@ function persistResponse(
     id: response.messageId,
     sessionID: sessionId,
     role: "assistant",
-    time: { created: response.timestamp, completed: response.timestamp },
+    time: { created: response.timestamp },
     parentID: "",
     modelID: "",
     providerID: "",
@@ -81,12 +98,32 @@ function persistResponse(
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   };
-  Session.addMessage(sessionId, message);
-  Session.addPart(response.messageId, {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    messageID: response.messageId,
-    type: "text",
-    text: response.output,
+  const attemptId = `${response.messageId}#inject`;
+  // One injected response = one all-or-nothing unit: the outer transaction
+  // makes the three per-fact transactions degrade to savepoints, so a
+  // failure never strands a created-but-unfinished injected message.
+  Storage.get().transaction(() => {
+    TranscriptStore.record(sessionId, { type: "message.created", attemptId, message });
+    TranscriptStore.record(sessionId, {
+      type: "part.appended",
+      attemptId,
+      messageId: response.messageId,
+      part: {
+        id: `${response.messageId}-text`,
+        sessionID: sessionId,
+        messageID: response.messageId,
+        type: "text",
+        text: response.output,
+        time: { start: response.timestamp },
+      },
+    });
+    TranscriptStore.record(sessionId, {
+      type: "message.finished",
+      attemptId,
+      messageId: response.messageId,
+      at: response.timestamp,
+      finish: "stop",
+      usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    });
   });
 }

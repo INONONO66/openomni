@@ -7,6 +7,25 @@ type RuntimeAgentDef = Ingress.AgentDef & {
   readonly providerOptions?: Record<string, unknown>;
 };
 
+/**
+ * #562 F2: the resident direct path runs WITHOUT a transcript fact sink ON
+ * PURPOSE — not for layering reasons (this package already reaches
+ * TranscriptStore, and ResidentRuntimeOptions.runAgent is injectable from
+ * the server composition), but because the resident path's durable
+ * assistant write is SessionBridge.storeDirectResult at the ingress handler
+ * (ingress/handlers.ts handleResident): it persists the POST-writeback
+ * output (commitWriteback policies may transform it) under its own message
+ * id, wrapped in the ingress audit envelope. Wiring a raw-stream sink here
+ * would (1) double-persist every resident turn — the streamed message id
+ * via facts plus the writeback message id via projection, with diverging
+ * raw-vs-committed text — and (2) give resident sessions their first
+ * transcript facts, flipping Session.resume off the projection fallback and
+ * silently dropping all pre-existing projection-only resident history.
+ * Recording facts for residents therefore rides a redesign of the writeback
+ * seam (record the committed writeback as the fact), not a sink here.
+ * Resident sessions stay all-projection, so resume's fallback covers them
+ * losslessly — see the writer census in Session.resume.
+ */
 export function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
   return ChatAgent.create(config).run(input);
 }

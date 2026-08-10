@@ -148,13 +148,33 @@ export function getParts(messageID: string): Message.Part[] {
 export async function resume(id: string): Promise<RecoveredMessage[]> {
   // #547 C3: resume replays the persisted Transcript.Fact stream through the
   // fold — the message/part tables are read-model projections of it, never
-  // the record. Sessions with an empty fact stream (history recorded before
-  // the transcript record family, or projection-only writers like ingress)
-  // fall back to the projection read. The projection fallback survives until
-  // (a) all pre-0015 sessions expire/archive AND (b) every assistant writer
-  // records facts (injection-queue persistResponse is projection-only today —
-  // see follow-up issue). Mixed-source sessions: facts win, projection-only
-  // assistant rows are NOT merged yet.
+  // the record. Replay order is the session fact-stream seq (recording
+  // order): messages appear in first message.created order, so an injected
+  // response sorts after the turn that drained it. Sessions with an empty
+  // fact stream (history recorded before the transcript record family, or
+  // projection-only writers) fall back to the projection read.
+  //
+  // Projection fallback removal condition (#562): the fallback dies when
+  // (a) all pre-0015 sessions are expired/archived AND (b) every assistant
+  // writer records facts. Writer census as of #562:
+  //   - worker turns: facts (worker-runner onFact sink);
+  //   - injected responses: facts (injection-queue persistResponse
+  //     synthesizes message.created/part.appended/message.finished — #562);
+  //   - resident direct runs: projection-only via
+  //     SessionBridge.storeDirectResult (post-writeback output, own message
+  //     id — see defaultRunAgent in resident/runtime-agent-config.ts);
+  //   - ingress writeback of worker output (handlers.ts storeDirectResult
+  //     calls): projection-only, but it DUPLICATES the worker's final
+  //     fact-recorded turn (post-writeback-policy text), so dropping it from
+  //     replay loses no substance;
+  //   - child-agent streams: record nothing (no sink, no session writes) —
+  //     bounded, because child output reaches the parent as tool results,
+  //     which the parent's fact-recorded turns carry.
+  // Mixed-source sessions: facts win, projection-only assistant rows are
+  // NOT merged — every fact-recording session must therefore keep all its
+  // NON-duplicate assistant writers on the fact path (true for worker
+  // sessions since #562; resident sessions record no facts, so they always
+  // fall back).
   const replayed = TranscriptStore.replay(id);
   const source = replayed.length > 0 ? replayed : await hydrateMessages(getMessages(id));
 
