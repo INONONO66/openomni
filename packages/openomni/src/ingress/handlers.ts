@@ -14,6 +14,27 @@ import { SessionBridge } from "./session-bridge";
 import { resolveTarget } from "./target";
 
 /**
+ * THE canonical inbound payload-text parser: a string payload is the text, a
+ * `{ text: string }` envelope unwraps, anything else round-trips through
+ * JSON (nullish and non-serializable payloads fail safe to ""). Ingress owns
+ * it — the payload shape is minted at the ingress boundary — and dispatch
+ * imports it rather than keeping a drifted copy.
+ */
+export function extractText(payload: unknown): string {
+  if (typeof payload === "string") return payload;
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "text" in payload &&
+    typeof (payload as { text?: unknown }).text === "string"
+  ) {
+    return (payload as { text: string }).text;
+  }
+  if (payload === null || payload === undefined) return "";
+  return JSON.stringify(payload) ?? "";
+}
+
+/**
  * The single ingress dispatch lifecycle: payload extraction, mode events,
  * writeback policy, durable worker-run bookkeeping, and the resident/direct
  * handlers that consume them.
@@ -27,21 +48,6 @@ export namespace IngressHandlers {
     traceContext?: TraceContextProtocol.Type;
     policies?: readonly PolicyRegistration[];
     onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
-  }
-
-  // ---- inbound payload text ----
-
-  function extractPrompt(payload: unknown): string {
-    if (typeof payload === "string") return payload;
-    if (
-      payload &&
-      typeof payload === "object" &&
-      "text" in payload &&
-      typeof (payload as { text: unknown }).text === "string"
-    ) {
-      return (payload as { text: string }).text;
-    }
-    return JSON.stringify(payload);
   }
 
   // ---- observe-only ingress lifecycle events ----
@@ -158,7 +164,7 @@ export namespace IngressHandlers {
     ctx: HandlerContext,
     request: Execution.Request,
   ): Promise<void> {
-    const prompt = extractPrompt(ctx.event.payload);
+    const prompt = extractText(ctx.event.payload);
     await WorkerRun.create(ctx.sessionId, {
       runId: request.runId,
       title: prompt.slice(0, 80) || "Worker run",
@@ -278,7 +284,7 @@ export namespace IngressHandlers {
 
     const raw = await ctx.coordinator.deliverMessage(
       ctx.sessionId,
-      extractPrompt(ctx.event.payload),
+      extractText(ctx.event.payload),
       ctx.event.runtime?.runId,
     );
     const accepted =
@@ -337,7 +343,7 @@ export namespace IngressHandlers {
       runId: crypto.randomUUID(),
       sessionId: ctx.sessionId,
       mode: "direct",
-      prompt: extractPrompt(ctx.event.payload),
+      prompt: extractText(ctx.event.payload),
       model: ctx.event.agent.model,
       systemPrompt: ctx.event.agent.systemPrompt,
       tools: ctx.event.agent.tools,

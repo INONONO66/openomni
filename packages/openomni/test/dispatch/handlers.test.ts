@@ -6,7 +6,7 @@ import { createIngressEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
-import { extractText } from "../../src/dispatch/handlers/shared";
+import { extractText } from "../../src/ingress/handlers";
 import { command, createSessionFixture, expectRejectsWithMessage } from "./helpers";
 
 describe("built-in dispatch handlers", () => {

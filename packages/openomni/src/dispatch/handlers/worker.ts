@@ -19,7 +19,7 @@ import {
   createWorkerSpawnWorkItem,
   throwWithWorkItemReflectionFailure,
 } from "./worker-work-item.js";
-import { extractText } from "./shared.js";
+import { extractText } from "../../ingress/handlers.js";
 
 export interface WorkerDispatchHandlerOptions
   extends Omit<WorkerCompletionOptions, "sourceOrigin" | "verifierRegistry"> {

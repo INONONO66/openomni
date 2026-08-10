@@ -1,7 +1,8 @@
 import { CronJob, type Dispatch } from "@openomni/protocol";
 import type { DispatchSchedulerOwner } from "../owners.js";
 import type { DispatchHandler } from "../registry.js";
-import { asRecord, extractText } from "./shared.js";
+import { extractText } from "../../ingress/handlers.js";
+import { asRecord } from "./shared.js";
 
 export interface ScheduleDispatchHandlerOptions {
   readonly scheduler?: DispatchSchedulerOwner;
