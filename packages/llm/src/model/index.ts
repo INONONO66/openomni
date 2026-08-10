@@ -54,7 +54,6 @@ export namespace ModelsDev {
     options: z.record(z.string(), z.unknown()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string() }).optional(),
-    variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   });
   export type Model = z.infer<typeof Model>;
 

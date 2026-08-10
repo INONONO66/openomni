@@ -83,8 +83,6 @@ mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
   ProviderTransform: {
-    resolveVariant: () => ({}),
-    variants: () => ({}),
     temperature: () => undefined,
     topP: () => undefined,
     topK: () => undefined,

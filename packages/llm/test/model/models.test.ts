@@ -109,17 +109,6 @@ describe("ModelsDev", () => {
       expect(ModelsDev.ModelStatus).toBe(Model.Status);
     });
 
-    it("should validate Model with variants", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test",
-        name: "Test",
-        variants: {
-          "test:thinking": { reasoning: true },
-        },
-      });
-      expect(result.success).toBe(true);
-    });
-
     it("should validate Provider with api field", () => {
       const result = ModelsDev.Provider.safeParse({
         id: "anthropic",

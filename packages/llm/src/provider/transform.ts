@@ -1,4 +1,3 @@
-import { Model } from "@openomni/protocol";
 import type { SDKMessage } from "../message";
 import type { Provider } from "./index";
 
@@ -37,83 +36,6 @@ export namespace ProviderTransform {
     }
 
     return msgs;
-  }
-
-  export function variants(model: Provider.Model): Record<string, Record<string, unknown>> {
-    if (!model.capabilities?.reasoning) return {};
-
-    const npm = model.api?.npm;
-
-    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-      return {
-        high: {
-          thinking: {
-            type: "enabled",
-            budgetTokens: Math.min(16_000, Math.floor((model.limit?.output ?? 0) / 2 - 1)),
-          },
-        },
-        max: {
-          thinking: {
-            type: "enabled",
-            budgetTokens: Math.min(31_999, (model.limit?.output ?? 0) - 1),
-          },
-        },
-      };
-    }
-
-    if (npm === "@ai-sdk/openai") {
-      return {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-        },
-      };
-    }
-
-    return {};
-  }
-
-  export function resolveVariant(model: Provider.Model, variant?: string): Record<string, unknown>;
-  export function resolveVariant(model: Model.Ref, variant?: string): Record<string, unknown>;
-  export function resolveVariant(
-    model: Provider.Model | Model.Ref,
-    variant?: string,
-  ): Record<string, unknown> {
-    if (!variant) return {};
-    if (isProviderModel(model)) {
-      return variants(model)[variant] ?? {};
-    }
-    if (!Model.isRef(model)) return {};
-
-    const providerName = model.provider;
-    const npm =
-      providerName === "anthropic"
-        ? "@ai-sdk/anthropic"
-        : providerName === "openai"
-          ? "@ai-sdk/openai"
-          : undefined;
-    if (!npm) return {};
-    const syntheticModel: Provider.Model = {
-      id: model.id,
-      providerID: model.provider,
-      name: model.id,
-      api: { npm },
-      capabilities: { reasoning: true },
-      limit: { output: 64_000 },
-    };
-    return variants(syntheticModel)[variant] ?? {};
-  }
-
-  function isProviderModel(model: Provider.Model | Model.Ref): model is Provider.Model {
-    return "providerID" in model;
   }
 
   function isAnthropicPackage(npm: string | undefined): boolean {
