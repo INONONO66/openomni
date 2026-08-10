@@ -3,7 +3,6 @@ import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
 import { Auth } from "../auth/storage";
-import { fromModelsDevProvider } from "./sdk";
 import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
 
 export namespace Provider {
@@ -147,6 +146,27 @@ export namespace Provider {
       },
       release_date: model.release_date ?? "",
       variants: model.variants ?? {},
+    };
+  }
+
+  function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const models: Record<string, Model> = {};
+
+    if (provider.models) {
+      for (const [id, rawModel] of Object.entries(provider.models)) {
+        const isValid = typeof rawModel === "object" && rawModel !== null;
+        if (!isValid) continue;
+
+        models[id] = fromModelsDevModel(provider, rawModel as ModelsDev.Model);
+      }
+    }
+
+    return {
+      id: provider.id,
+      name: provider.name,
+      env: provider.env ?? [],
+      npm: provider.npm,
+      models,
     };
   }
 
