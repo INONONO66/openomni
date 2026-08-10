@@ -150,7 +150,11 @@ export async function resume(id: string): Promise<RecoveredMessage[]> {
   // fold — the message/part tables are read-model projections of it, never
   // the record. Sessions with an empty fact stream (history recorded before
   // the transcript record family, or projection-only writers like ingress)
-  // fall back to the projection read.
+  // fall back to the projection read. The projection fallback survives until
+  // (a) all pre-0015 sessions expire/archive AND (b) every assistant writer
+  // records facts (injection-queue persistResponse is projection-only today —
+  // see follow-up issue). Mixed-source sessions: facts win, projection-only
+  // assistant rows are NOT merged yet.
   const replayed = TranscriptStore.replay(id);
   const source = replayed.length > 0 ? replayed : await hydrateMessages(getMessages(id));
 

@@ -176,11 +176,13 @@ export namespace WorkerRunner {
             onToolCall: () => undefined,
             onToolResult: () => undefined,
             onSnapshot: () => undefined,
-            // #547 C3: the worker owns this session's LLM stream, so this is
-            // the single wiring point where the transcript fact stream meets
-            // durable recording — TranscriptStore.record commits the fact and
-            // its message/part projection in one storage transaction
-            // (recording tier; packages/session/src/session/transcript.ts).
+            // #547 C3: the single wiring point for WORKER sessions where the
+            // transcript fact stream meets durable recording —
+            // TranscriptStore.record commits the fact and its message/part
+            // projection in one storage transaction (recording tier;
+            // packages/session/src/session/transcript.ts). Resident direct
+            // runs (defaultRunAgent, no sink) and child-agent LLM streams are
+            // projection-only today (follow-up issue).
             onFact: (fact) => TranscriptStore.record(sessionId, fact),
           },
         );
