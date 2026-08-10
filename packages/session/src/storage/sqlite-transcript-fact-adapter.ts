@@ -47,5 +47,17 @@ export function createSqliteTranscriptFactAdapter(
            WHERE session_id = ? AND attempt_id = ? ORDER BY seq ASC`,
         )
         .all(sessionID, attemptID) as Storage.TranscriptFactRow[],
+
+    // #562 F7: continuity check for the record path's fold-state cache — a
+    // covering-index count (idx_transcript_fact_attempt), no row payloads.
+    countByAttempt: (sessionID, attemptID): number => {
+      const row = db
+        .query(
+          `SELECT COUNT(*) AS count FROM transcript_fact
+           WHERE session_id = ? AND attempt_id = ?`,
+        )
+        .get(sessionID, attemptID) as { count: number };
+      return row.count;
+    },
   };
 }
