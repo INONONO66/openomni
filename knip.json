@@ -24,6 +24,7 @@
         "src/index.ts",
         "src/cli.ts",
         "src/execution/worker-entry.ts",
+        "src/manual/*.ts",
         "test/**/*.test.ts",
         "test/e2e/*.ts"
       ],
