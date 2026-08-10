@@ -35,6 +35,21 @@ const result = await Bun.build({
     "process.env.OPENOMNI_CLI_BUNDLE": JSON.stringify("1"),
     "process.env.OPENOMNI_CLI_VERSION": JSON.stringify(pkg.version),
   },
+  plugins: [
+    {
+      // @openomni/protocol is the one workspace package whose package.json
+      // points at tsc output (./dist/index.js), which does not exist in a
+      // pristine checkout (CI, fresh clone) — Bun.build then fails with
+      // `Could not resolve: "@openomni/protocol"`. Bundle it from source,
+      // exactly like every other workspace package already resolves.
+      name: "workspace-protocol-from-src",
+      setup(build) {
+        build.onResolve({ filter: /^@openomni\/protocol$/ }, () => ({
+          path: join(root, "packages/protocol/src/index.ts"),
+        }));
+      },
+    },
+  ],
 });
 
 if (!result.success) {
