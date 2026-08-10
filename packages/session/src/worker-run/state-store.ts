@@ -3,26 +3,29 @@ import { z } from "zod";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
-const transitions: Record<WorkerRun.Status, readonly WorkerRun.Status[]> = {
-  queued: ["starting"],
-  starting: ["running", "failed", "cancelled", "interrupted"],
-  running: ["waiting_input", "succeeded", "failed", "cancelled", "interrupted"],
-  waiting_input: ["running", "failed", "cancelled", "interrupted"],
-  succeeded: [],
-  failed: [],
-  cancelled: [],
-  interrupted: [],
-};
-
-function isValidTransition(current: WorkerRun.Status, next: WorkerRun.Status): boolean {
-  return current === next || transitions[current].includes(next);
-}
+/**
+ * #510 D2b — WorkerRunStateStore is FROZEN: every write surface throws the
+ * typed `WorkerRun.FrozenError` and persists nothing (the worker-run
+ * transition table died with the writes — run transition legality lives in
+ * the WorkItem fold). Reads keep serving the immutable historical
+ * `worker_run_state` rows for the upcast-on-read attempt-run view and the
+ * archive manifest. Historical rows are seeded in tests at the adapter
+ * layer, exactly as pre-freeze rows persist on disk.
+ */
 
 function requireAdapter(): WorkerRunStateStore.Adapter {
   return requireSubAdapter(
     Storage.get().workerRunState,
     "Storage adapter does not implement workerRunState",
   );
+}
+
+function frozenWrite(method: WorkerRun.WriteMethod): never {
+  throw new WorkerRun.FrozenError({
+    message: `WorkerRunStateStore is frozen (#510 D2b): ${method} is retired — historical worker_run_state rows are read-only archive`,
+    code: "worker_run_frozen",
+    method,
+  });
 }
 
 export namespace WorkerRunStateStore {
@@ -75,45 +78,27 @@ export namespace WorkerRunStateStore {
     listByStatus(status: Status): Record[];
   }
 
-  export function create(sessionId: string, record: CreateRecord): void {
-    const adapter = requireAdapter();
-    if (adapter.get(sessionId, record.runId)) {
-      throw new Error(`Worker run ${record.runId} already exists in session ${sessionId}`);
-    }
-    adapter.create(sessionId, record);
+  export function create(_sessionId: string, _record: CreateRecord): never {
+    frozenWrite("create");
   }
 
   export function updateStatus(
-    sessionId: string,
-    runId: string,
-    status: Status,
-    extra?: StatusExtra,
-  ): void {
-    const adapter = requireAdapter();
-    const current = adapter.get(sessionId, runId);
-    if (!current) {
-      throw new Error(`Worker run ${runId} not found in session ${sessionId}`);
-    }
-    if (!isValidTransition(current.status, status)) {
-      throw new Error(`Invalid worker run status transition from ${current.status} to ${status}`);
-    }
-    adapter.updateStatus(sessionId, runId, status, extra);
+    _sessionId: string,
+    _runId: string,
+    _status: Status,
+    _extra?: StatusExtra,
+  ): never {
+    frozenWrite("updateStatus");
   }
 
   export function updateStatusIfCurrent(
-    sessionId: string,
-    runId: string,
-    expected: StatusPrecondition,
-    status: Status,
-    extra?: StatusExtra,
-  ): boolean {
-    const parsedExpected = StatusPrecondition.parse(expected);
-    if (!isValidTransition(parsedExpected.status, status)) {
-      throw new Error(
-        `Invalid worker run status transition from ${parsedExpected.status} to ${status}`,
-      );
-    }
-    return requireAdapter().updateStatusIfCurrent(sessionId, runId, parsedExpected, status, extra);
+    _sessionId: string,
+    _runId: string,
+    _expected: StatusPrecondition,
+    _status: Status,
+    _extra?: StatusExtra,
+  ): never {
+    frozenWrite("updateStatusIfCurrent");
   }
 
   export function get(sessionId: string, runId: string): Record | undefined {

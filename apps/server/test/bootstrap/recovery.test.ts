@@ -13,7 +13,6 @@ import {
   Session,
   Storage,
   WaitStore,
-  WorkerRun,
 } from "@openomni/session";
 import { assembleEffectRuntime } from "../../src/bootstrap/effects";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "../../src/bootstrap/recovery";
@@ -42,7 +41,18 @@ async function seedFrozenPendingInteractionFixture(
     title: `${id}-session`,
     model: { providerID: "test", modelID: "test" },
   });
-  await WorkerRun.create(session.id, { runId: `${id}-run`, title: id, prompt: "test" });
+  // The worker-run store is frozen (#510 D2b) — the FK row is seeded at the
+  // adapter layer, exactly as pre-freeze rows persist on disk.
+  const workerRunAdapter = Storage.getAdapter().workerRunState;
+  if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
+  workerRunAdapter.create(session.id, {
+    runId: `${id}-run`,
+    agentName: "worker",
+    status: "queued",
+    executorKind: "internal_chat_agent",
+    title: id,
+    prompt: "test",
+  });
   const adapter = Storage.getAdapter().pendingInteraction;
   if (!adapter) throw new Error("pendingInteraction adapter missing");
   adapter.create(

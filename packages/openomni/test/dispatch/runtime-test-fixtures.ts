@@ -1,5 +1,5 @@
 import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
-import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
+import { Bus, Session, Storage } from "@openomni/session";
 import type { DispatchPolicyRegistration } from "../../src/dispatch/policy";
 
 export const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
@@ -10,12 +10,24 @@ export function resetDispatchTestState(): void {
   Storage.initialize({ dbPath: ":memory:" });
 }
 
+// The worker-run store is frozen (#510 D2b) — historical rows are seeded at
+// the adapter layer, exactly as pre-freeze rows persist on disk (they also
+// satisfy the pending_interaction FK on worker_run_state).
 export async function createWorkerRunFixture(runId = "run-1", sessionTitle = `${runId}-session`) {
   const session = Session.create({
     title: sessionTitle,
     model: { providerID: "test", modelID: "test" },
   });
-  await WorkerRun.create(session.id, { runId, title: runId, prompt: "test" });
+  const adapter = Storage.getAdapter().workerRunState;
+  if (!adapter) throw new Error("workerRunState sub-adapter missing");
+  adapter.create(session.id, {
+    runId,
+    agentName: "worker",
+    status: "queued",
+    executorKind: "internal_chat_agent",
+    title: runId,
+    prompt: "test",
+  });
   return session;
 }
 

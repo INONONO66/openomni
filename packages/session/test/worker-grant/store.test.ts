@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Bus, Session, Storage, WorkerGrantStore, WorkerRun } from "../../src/index";
+import { Bus, Session, Storage, WorkerGrantStore } from "../../src/index";
 
 beforeEach(() => {
   Bus.reset();
@@ -12,12 +12,23 @@ afterEach(() => {
   Bus.reset();
 });
 
+// The worker-run store is frozen (#510 D2b) — the FK row is seeded at the
+// adapter layer, exactly as pre-freeze rows persist on disk.
 async function createWorkerRun(runId: string, sessionId = `${runId}-session`): Promise<void> {
   const session = Session.create({
     title: sessionId,
     model: { providerID: "test", modelID: "test" },
   });
-  await WorkerRun.create(session.id, { runId, title: runId, prompt: "test" });
+  const adapter = Storage.getAdapter().workerRunState;
+  if (!adapter) throw new Error("workerRunState sub-adapter missing");
+  adapter.create(session.id, {
+    runId,
+    agentName: "worker",
+    status: "queued",
+    executorKind: "internal_chat_agent",
+    title: runId,
+    prompt: "test",
+  });
 }
 
 describe("WorkerGrantStore", () => {

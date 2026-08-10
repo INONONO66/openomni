@@ -28,7 +28,6 @@ import {
   SqliteStorageAdapter,
   Storage,
   WaitStore,
-  WorkerRun,
   WorkerRunStateStore,
   WorkItemStore,
 } from "../../packages/session/src/index";
@@ -708,7 +707,7 @@ function conformanceAttemptIdentity(workInput: string) {
 }
 
 describe("p2 ledger baseline — attempt identity decision-class facts (C2)", () => {
-  test("worker.spawn appends work_item.attempt_allocated before the WorkerRun record exists", async () => {
+  test("worker.spawn appends work_item.attempt_allocated before the executor acts — no WorkerRun rows", async () => {
     const observations: {
       factTypes: string[];
       factAttemptId?: string;
@@ -732,14 +731,9 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
                 : undefined,
               workerRunExisted: WorkerRunStateStore.get(sessionId, request.runId) !== undefined,
             });
-            // The executor acts only now — this is where the durable
-            // WorkerRun record is created today, strictly AFTER the
-            // appended attempt fact (append-before-act at the spawn site).
-            await WorkerRun.create(sessionId, {
-              runId: request.runId,
-              title: "conformance worker",
-              prompt: request.prompt,
-            });
+            // The executor acts only now — strictly AFTER the appended
+            // attempt fact. #510 D2b: the run lifecycle IS the attempt
+            // facts; no worker_run_state row is ever written.
             return { runId: request.runId, sessionId, status: "succeeded", output: "done" };
           },
         },
@@ -770,7 +764,12 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
     // attemptId is threaded alongside workerRunId and matches the appended fact.
     expect(result.output.attemptId).toBeDefined();
     expect(observed?.factAttemptId).toBe(result.output.attemptId);
-    expect(WorkerRunStateStore.get(result.output.sessionId, result.output.runId)).toBeDefined();
+    // #510 D2b: the frozen worker_run_state table gains no row — the
+    // execution instance lives entirely on the work stream.
+    expect(WorkerRunStateStore.get(result.output.sessionId, result.output.runId)).toBeUndefined();
+    expect(factsOfStream(`work:${result.output.workItemHash}`).map((fact) => fact.type)).toContain(
+      "work_item.attempt_finished",
+    );
     // Head↔revision binding holds through the allocation fact.
     expect(workHeadOf(result.output.workItemHash)).toBe(
       WorkItemStore.get(result.output.workItemHash)?.revision,
@@ -1407,7 +1406,18 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
       title: `pi-conformance-${id}`,
       model: { providerID: "test", modelID: "test-model" },
     });
-    await WorkerRun.create(session.id, { runId: `run-${id}`, title: id, prompt: "test" });
+    // The worker-run store is frozen (#510 D2b) — the FK row is seeded at
+    // the adapter layer, exactly as pre-freeze rows persist on disk.
+    const workerRunAdapter = Storage.getAdapter().workerRunState;
+    if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
+    workerRunAdapter.create(session.id, {
+      runId: `run-${id}`,
+      agentName: "worker",
+      status: "queued",
+      executorKind: "internal_chat_agent",
+      title: id,
+      prompt: "test",
+    });
     const record = Communication.PendingInteraction.Record.parse({
       id,
       workerRunId: `run-${id}`,

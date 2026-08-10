@@ -5,7 +5,6 @@ import { Bus, BusEvent } from "../../src/bus/index.js";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
-import { WorkerRunStateStore } from "../../src/worker-run/state-store.js";
 import { Storage } from "../../src/storage/storage.js";
 import "../../src/storage/initialize.js";
 
@@ -319,7 +318,11 @@ describe("BusPersistence", () => {
 
   test("resolves communication events by originSessionId and workerRunId", async () => {
     const session = createSession();
-    WorkerRunStateStore.create(session.id, {
+    // The worker-run store is frozen (#510 D2b) — the row is seeded at the
+    // adapter layer, exactly as pre-freeze rows persist on disk.
+    const workerRunAdapter = Storage.getAdapter().workerRunState;
+    if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
+    workerRunAdapter.create(session.id, {
       runId: "worker-run-1",
       agentName: "worker",
       status: "running",

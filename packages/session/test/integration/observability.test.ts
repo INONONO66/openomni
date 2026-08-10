@@ -6,7 +6,6 @@ import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
-import { WorkerRun } from "../../src/worker-run/index.js";
 import "../../src/storage/initialize.js";
 
 function db(): Database {
@@ -115,20 +114,23 @@ describe("Observability Pipeline Integration", () => {
     });
   });
 
-  describe("WorkerRun lifecycle without EventLog", () => {
-    test("creates and updates worker run via state store", async () => {
+  describe("WorkerRun history without EventLog", () => {
+    test("reads frozen worker run rows via the history query", async () => {
       const session = createSession("worker-run");
       const sessionId = session.id;
       const runId = "run-wr-1";
 
-      await WorkerRun.create(sessionId, {
+      // The worker-run store is frozen (#510 D2b) — the historical row is
+      // seeded at the adapter layer, exactly as pre-freeze rows persist.
+      const workerRunAdapter = Storage.getAdapter().workerRunState;
+      if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
+      workerRunAdapter.create(sessionId, {
         runId,
+        agentName: "worker",
+        status: "succeeded",
         title: "Test Worker",
         prompt: "Do the thing",
       });
-      await WorkerRun.updateStatus(sessionId, runId, "starting");
-      await WorkerRun.updateStatus(sessionId, runId, "running");
-      await WorkerRun.updateStatus(sessionId, runId, "succeeded");
 
       const history = await BusQuery.getWorkerRunHistory(sessionId);
       expect(history).toHaveLength(1);
