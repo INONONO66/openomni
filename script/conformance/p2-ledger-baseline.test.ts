@@ -18,7 +18,7 @@ import { DispatchRegistry } from "../../packages/openomni/src/dispatch/registry"
 import { CommandRecordError, DispatchRuntime } from "../../packages/openomni/src/dispatch/runtime";
 import { registerBuiltInDispatchHandlers } from "../../packages/openomni/src/dispatch/setup";
 import { createIngressEngine } from "../../packages/openomni/src/ingress/engine";
-import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing-execution";
+import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing-resolution";
 import {
   Bus,
   ChannelGrantStore,

@@ -65,7 +65,7 @@ function throwAbort(decision: Policy.PolicyDecision, state: PreRunState): never 
 }
 
 // Blacklist and channel-grant enforcement is owned by the routing pipeline
-// (routing-runtime + resolve-route); this middleware only covers the routed
+// (routing-resolution + resolve-route); this middleware only covers the routed
 // pre-run checks that run after routing has admitted the event.
 const authorityInputRules = [
   {

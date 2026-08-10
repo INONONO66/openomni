@@ -21,7 +21,7 @@ import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createDefaultDispatchRuntime } from "../../src/dispatch/setup";
 
 import { IngressEventProjector } from "../../src/ingress/event-projector";
-import { IngressRoutingError } from "../../src/ingress/routing-execution";
+import { IngressRoutingError } from "../../src/ingress/routing-resolution";
 import { createExistingAgentMessaging } from "../../src/messaging/index";
 import { WaitService } from "../../src/wait/index";
 import { seedPendingInteraction } from "../helpers/pending-interaction";

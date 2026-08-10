@@ -8,7 +8,7 @@ import {
   targetsOfPendingInteraction,
   targetsOfWait,
 } from "../wait/index.js";
-import type { KernelRouteResolution } from "./routing-runtime.js";
+import { IngressRoutingError, type KernelRouteResolution } from "./routing-resolution.js";
 
 type RoutedDecision = Extract<RoutingDecisionPayload, { readonly outcome: "route" }>;
 
@@ -17,30 +17,6 @@ type BlacklistDropDecision = Extract<
   { readonly stage: "blacklist"; readonly outcome: "drop" }
 >;
 type AcceptedDecision = RoutedDecision | BlacklistDropDecision;
-
-export type IngressRoutingErrorCode =
-  | "route_blocked"
-  | "route_ambiguous"
-  | "route_record_failed"
-  /** Redelivered inbound whose fresh decision diverges from the recorded route.decided fact — fail closed, no action, no second fact (#510 review fix F2). */
-  | "route_replay_divergent"
-  | "dispatch_runtime_missing"
-  | "dispatch_route_invalid"
-  | "dispatch_failed"
-  | "dispatch_output_unsupported"
-  | "wait_reply_rejected";
-
-export class IngressRoutingError extends Error {
-  readonly code: IngressRoutingErrorCode;
-  readonly decision: RoutingDecisionPayload;
-
-  constructor(code: IngressRoutingErrorCode, message: string, decision: RoutingDecisionPayload) {
-    super(message);
-    this.name = "IngressRoutingError";
-    this.code = code;
-    this.decision = decision;
-  }
-}
 
 function factValue(decision: RoutingDecisionPayload, prefix: string): string | undefined {
   const fact = decision.factsUsed.find((candidate) => candidate.startsWith(prefix));
