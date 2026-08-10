@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { InMemoryCompactor } from "../../../src/core/execution/compaction";
+import { CompactionBoundaryError, InMemoryCompactor } from "../../../src/core/execution/compaction";
 
 let idCounter = 0;
 
@@ -292,7 +292,7 @@ describe("InMemoryCompactor", () => {
       } catch (error) {
         caught = error;
       }
-      expect(caught).toBeInstanceOf(Error);
+      expect(caught).toBeInstanceOf(CompactionBoundaryError);
       expect((caught as Error).name).toBe("CompactionBoundaryError");
     });
 
