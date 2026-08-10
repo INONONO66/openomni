@@ -1,7 +1,7 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
+import type { PublishPort } from "./types";
 
 export interface WebSocketConfig {
   token?: string;
@@ -21,6 +21,7 @@ interface WebSocketUpgradeOptions {
 export class WebSocketHandler {
   constructor(
     private readonly handler: Adapter.MessageHandler,
+    private readonly publish: PublishPort,
     private readonly config: WebSocketConfig = {},
   ) {}
 
@@ -29,7 +30,7 @@ export class WebSocketHandler {
     return {
       message(ws: { data: WsConnectionData; send(msg: string): void }, data: string | Buffer) {
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
-        Bus.publish(Operational.Debug, {
+        self.publish(Operational.Debug, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
@@ -43,7 +44,7 @@ export class WebSocketHandler {
           surfaceKey: ws.data.surfaceKey,
           authenticated: ws.data.authenticated,
         };
-        Bus.publish(Operational.Info, {
+        self.publish(Operational.Info, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
@@ -52,7 +53,7 @@ export class WebSocketHandler {
         });
       },
       close(ws: { data: WsConnectionData }) {
-        Bus.publish(Operational.Info, {
+        self.publish(Operational.Info, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
@@ -69,6 +70,7 @@ export class WebSocketHandler {
   ): Response | undefined {
     const auth = ChannelAuthnMiddleware.authenticateWebSocketUpgrade({
       request: req,
+      publish: this.publish,
       ...(this.config.token !== undefined ? { token: this.config.token } : {}),
       ...(this.config.onAuthDecision !== undefined
         ? { onDecision: this.config.onAuthDecision }

@@ -1,10 +1,10 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import type { DiscordMessage } from "./types";
+import type { PublishPort } from "../types";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
 
 export interface DiscordAuthOptions {
@@ -30,29 +30,35 @@ export class DiscordAdapter implements Adapter.Surface {
   constructor(
     token: string,
     readonly config: Adapter.Config,
+    private readonly publish: PublishPort,
     private readonly authOptions: DiscordAuthOptions = {},
   ) {
-    this.client = new DiscordClient(token);
-    this.gateway = new DiscordGateway(token, () => this.client.fetchGatewayUrl(), {
-      onReady: ({ botId, botUsername }) => {
-        this.botId = botId;
-        this.normalizer = new DiscordNormalizer({
-          botId,
-          triggers: this.config.triggers,
-        });
-        Bus.publish(Operational.Info, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          component: "server",
-          msg: "discord bot started",
-          context: { username: botUsername, botId },
-        });
+    this.client = new DiscordClient(token, publish);
+    this.gateway = new DiscordGateway(
+      token,
+      () => this.client.fetchGatewayUrl(),
+      {
+        onReady: ({ botId, botUsername }) => {
+          this.botId = botId;
+          this.normalizer = new DiscordNormalizer({
+            botId,
+            triggers: this.config.triggers,
+          });
+          this.publish(Operational.Info, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "discord bot started",
+            context: { username: botUsername, botId },
+          });
+        },
+        onDispatch: (event, data) => {
+          if (event !== "MESSAGE_CREATE") return;
+          this.handleMessageCreate(data as DiscordMessage);
+        },
       },
-      onDispatch: (event, data) => {
-        if (event !== "MESSAGE_CREATE") return;
-        this.handleMessageCreate(data as DiscordMessage);
-      },
-    });
+      publish,
+    );
   }
 
   onMessage(handler: Adapter.MessageHandler): void {
@@ -68,7 +74,7 @@ export class DiscordAdapter implements Adapter.Surface {
 
   stop(): void {
     this.gateway.stop();
-    Bus.publish(Operational.Info, {
+    this.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -128,7 +134,7 @@ export class DiscordAdapter implements Adapter.Surface {
     if (!inbound) return;
 
     this.handleIncoming(inbound, message.channel_id).catch((err) => {
-      Bus.publish(Operational.Error, {
+      this.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
@@ -139,7 +145,7 @@ export class DiscordAdapter implements Adapter.Surface {
   }
 
   private async handleIncoming(inbound: Adapter.InboundMessage, channelId: string): Promise<void> {
-    Bus.publish(Operational.Debug, {
+    this.publish(Operational.Debug, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -159,7 +165,7 @@ export class DiscordAdapter implements Adapter.Surface {
       const outbound = await handler(inbound);
       if (outbound) await sendDiscordMessage(this.client, channelId, outbound);
     } catch (err) {
-      Bus.publish(Operational.Error, {
+      this.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",

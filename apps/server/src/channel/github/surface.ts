@@ -1,9 +1,9 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
 import type { GitHubEventContent, GitHubIssueCommentPayload, GitHubIssuesPayload } from "./types";
+import type { PublishPort } from "../types";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
 
 export interface GitHubAuthOptions {
@@ -27,11 +27,12 @@ export class GitHubAdapter implements Adapter.Surface {
   constructor(
     private readonly secret: string,
     readonly config: Adapter.Config,
+    private readonly publish: PublishPort,
     githubToken?: string,
     private readonly botUsername?: string,
     private readonly authOptions: GitHubAuthOptions = {},
   ) {
-    this.client = new GitHubClient(githubToken);
+    this.client = new GitHubClient(publish, githubToken);
     this.normalizer = new GitHubNormalizer({
       botUsername,
       triggers: config.triggers,
@@ -46,7 +47,7 @@ export class GitHubAdapter implements Adapter.Surface {
     if (!this.handler) {
       throw new Error("[github] No message handler registered. Call onMessage() before start().");
     }
-    Bus.publish(Operational.Info, {
+    this.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -65,7 +66,7 @@ export class GitHubAdapter implements Adapter.Surface {
     const issueNumber = Number.parseInt(issueId ?? "", 10);
 
     if (Number.isNaN(issueNumber)) {
-      Bus.publish(Operational.Error, {
+      this.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
@@ -102,7 +103,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
     const payload = JSON.parse(body) as Record<string, unknown>;
     const eventKey = `${event}.${payload.action}`;
-    Bus.publish(Operational.Info, {
+    this.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -133,7 +134,7 @@ export class GitHubAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(content, eventKey, deliveryId ?? undefined);
     if (!inbound) return new Response("Filtered", { status: 200 });
 
-    Bus.publish(Operational.Debug, {
+    this.publish(Operational.Debug, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "server",
@@ -151,7 +152,7 @@ export class GitHubAdapter implements Adapter.Surface {
         await this.client.postComment(content.repo, content.issueNumber, outbound.text);
       }
     } catch (err) {
-      Bus.publish(Operational.Error, {
+      this.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",

@@ -146,7 +146,7 @@ function createAdapter(
   decisions: ChannelAuthnDecision[],
   adapterConfig: Adapter.Config = config,
 ): GitHubAdapter {
-  return new GitHubAdapter(secret, adapterConfig, undefined, undefined, {
+  return new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
     onDecision: (decision) => {
       decisions.push(decision);
     },

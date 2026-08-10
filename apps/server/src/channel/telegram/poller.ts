@@ -1,6 +1,6 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
+import type { PublishPort } from "../types";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage, TelegramUpdate } from "./types";
 
@@ -16,6 +16,7 @@ export class TelegramPoller {
   constructor(
     private readonly client: TelegramClient,
     private readonly callbacks: PollerCallbacks,
+    private readonly publish: PublishPort,
   ) {}
 
   start(): void {
@@ -45,7 +46,7 @@ export class TelegramPoller {
         }
       } catch (err) {
         if (!this.running) break;
-        Bus.publish(Operational.Warn, {
+        this.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
