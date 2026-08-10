@@ -19,6 +19,12 @@ export namespace Storage {
     more: boolean;
   };
 
+  /** One stored transcript fact: session-stream seq + the fact's JSON bytes. */
+  export type TranscriptFactRow = {
+    seq: number;
+    data: string;
+  };
+
   export interface Adapter {
     transaction<T>(operation: () => T): T;
     session: {
@@ -42,6 +48,24 @@ export namespace Storage {
       list(messageID: string): Message.Part[];
       listByMessageIDs?(messageIDs: string[]): Message.Part[];
       remove(messageID: string, partID: string): boolean;
+    };
+    // #547 C3: append-only Transcript.Fact rows (recording tier). The surface
+    // is deliberately append + read ONLY — a recorded fact is immutable and
+    // later lifecycle steps are NEW facts (part.advanced), never updates of
+    // stored rows. Optional here for test fakes only — TranscriptStore fails
+    // closed when it is missing; production adapters wire it as required
+    // (SqliteStorageAdapter).
+    transcriptFact?: {
+      append(row: {
+        sessionID: string;
+        messageID: string;
+        attemptID: string;
+        type: string;
+        data: string;
+        timeCreated: number;
+      }): number;
+      list(sessionID: string): TranscriptFactRow[];
+      listByAttempt(sessionID: string, attemptID: string): TranscriptFactRow[];
     };
 
     // Optional here for test fakes only — SurfaceKey operations fail closed
