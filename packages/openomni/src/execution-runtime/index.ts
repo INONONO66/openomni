@@ -21,8 +21,6 @@ export {
   createChildAgentTool,
   createDispatchTool,
   createToolExecutor,
-  defineTool,
-  ToolRuntimePolicyMiddleware,
   resolveMeta,
   resolveCategory,
   resolveToolSelection,
