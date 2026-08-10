@@ -261,11 +261,15 @@ describe("server recovery", () => {
       .run(JSON.stringify({ note: "tampered" }), "wait:boot-tamper");
 
     const errorPayloads: Array<Record<string, unknown>> = [];
+    const incidentPayloads: Array<Record<string, unknown>> = [];
     const events: string[] = [];
     Bus.observe((event, payload) => {
       events.push(event.name);
       if (event.name === "operational.error") {
         errorPayloads.push(payload as Record<string, unknown>);
+      }
+      if (event.name === "operational.governor.incident") {
+        incidentPayloads.push(payload as Record<string, unknown>);
       }
     });
 
@@ -291,6 +295,14 @@ describe("server recovery", () => {
       streamId: "wait:boot-tamper",
       seq: 1,
       code: "hash_mismatch",
+    });
+    // #510 Done-means: the break also raises exactly one Governor incident
+    // (typed, persisted telemetry for the Governor's post-hoc analysis).
+    expect(incidentPayloads).toHaveLength(1);
+    expect(incidentPayloads[0]).toMatchObject({
+      incident: "chain_break",
+      component: "server",
+      context: { streamId: "wait:boot-tamper", seq: 1, code: "hash_mismatch" },
     });
     // Boot proceeds: recovery completed despite the recorded break.
     expect(events).toContain("operational.recovery.completed");

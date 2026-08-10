@@ -73,9 +73,11 @@ export async function startInboundSurfacesAfterRecovery<T>(
 
 /**
  * Boot ledger tail verification (#510 D1): records every chain-break as an
- * observe-only Operational event and RETURNS — a broken tail never refuses
- * boot (the Governor incident is a later phase; full-chain verification is
- * the #226 offline restore drill).
+ * observe-only Operational event PLUS one `Operational.GovernorIncident`
+ * (the #510 contract: "a corrupted tail emits a chain-break event plus
+ * Governor incident without refusing boot") and RETURNS — a broken tail
+ * never refuses boot (full-chain verification is the #226 offline restore
+ * drill).
  */
 function recordLedgerChainBreaks(traceId: string): void {
   try {
@@ -96,6 +98,18 @@ function recordLedgerChainBreaks(traceId: string): void {
         time: Date.now(),
         component: "server",
         msg: `ledger chain-break detected at boot: ${chainBreak.streamId} seq ${chainBreak.seq} (${chainBreak.code})`,
+        context: { ...chainBreak },
+      });
+      // The Governor incident (#510 Done-means): a typed, persisted
+      // (NORMAL-durability telemetry) record for the Governor role's
+      // post-hoc analysis. Observe-only — it never refuses boot and never
+      // authorizes anything.
+      Bus.publish(Operational.GovernorIncident, {
+        traceId,
+        time: Date.now(),
+        component: "server",
+        incident: "chain_break",
+        msg: `ledger chain-break at boot: ${chainBreak.streamId} seq ${chainBreak.seq} (${chainBreak.code})`,
         context: { ...chainBreak },
       });
     }
