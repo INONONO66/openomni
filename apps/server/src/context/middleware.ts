@@ -1,10 +1,30 @@
 import type { CanonicalPolicyRegistration } from "@openomni/agent";
 import { PolicyDecision } from "@openomni/protocol";
-import { ContextAssembler } from "./assembler";
+import { InstructionLoader } from "./instructions";
+import { SkillLoader } from "./skills";
 
 export interface ContextMiddlewareConfig {
   workspaceRoot: string;
   globalConfigDir?: string;
+}
+
+// merged from assembler.ts (fragment sweep: single-consumer module)
+export namespace ContextAssembler {
+  export function assemble(config: ContextMiddlewareConfig): string {
+    const { workspaceRoot, globalConfigDir } = config;
+
+    const instructionFiles = InstructionLoader.discover(workspaceRoot, globalConfigDir);
+    const instructionText = InstructionLoader.load(instructionFiles);
+
+    const skills = SkillLoader.discover(workspaceRoot, globalConfigDir);
+    const skillsText = SkillLoader.format(skills);
+
+    if (!instructionText && !skillsText) return "";
+    if (!skillsText) return instructionText;
+    if (!instructionText) return skillsText;
+
+    return `${instructionText}\n\n${skillsText}`;
+  }
 }
 
 export function createContextMiddleware(

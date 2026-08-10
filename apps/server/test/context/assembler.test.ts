@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ContextAssembler } from "../../src/context/assembler";
+import { ContextAssembler } from "../../src/context/middleware";
 
 let tempRoot: string;
 

@@ -1,5 +1,5 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe } from "../../shared/dedupe";
+import { Dedupe } from "../support/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
@@ -180,7 +180,7 @@ export class DiscordAdapter implements Adapter.Surface {
 }
 
 // merged from formatter.ts (#453 hygiene: sub-30-LOC single-importer)
-import { splitText } from "../../shared/chunk-text";
+import { splitText } from "../support/chunk-text";
 import type { ChannelClient } from "../types";
 
 const DISCORD_MESSAGE_LIMIT = 2000;

@@ -1,5 +1,5 @@
 import { Adapter } from "@openomni/protocol";
-import { normalizeContent } from "../../shared/trigger";
+import { normalizeContent } from "../support/trigger";
 import type { InboundNormalizer } from "../types";
 import type { DiscordMessage } from "./types";
 

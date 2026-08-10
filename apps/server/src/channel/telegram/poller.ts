@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { sleep } from "../../shared/sleep";
+import { sleep } from "../support/fetch-retry";
 import type { PublishPort } from "../types";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage, TelegramUpdate } from "./types";

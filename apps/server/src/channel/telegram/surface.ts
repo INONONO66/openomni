@@ -1,6 +1,6 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe } from "../../shared/dedupe";
-import { splitText } from "../../shared/chunk-text";
+import { Dedupe } from "../support/dedupe";
+import { splitText } from "../support/chunk-text";
 import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";

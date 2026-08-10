@@ -1,6 +1,10 @@
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { sleep } from "./sleep";
+
+// merged from sleep.ts (fragment sweep); also consumed by channel pollers
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const MAX_API_RETRIES = 3;
 
