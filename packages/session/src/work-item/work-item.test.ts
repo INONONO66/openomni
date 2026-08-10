@@ -414,6 +414,7 @@ describe("WorkItemStore", () => {
       "executorKind",
       "workerRunId",
       "workSessionId",
+      "attemptTerminal",
     ]);
     await expect(
       WorkItemStore.addEvidence(

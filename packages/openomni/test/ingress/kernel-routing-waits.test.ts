@@ -14,7 +14,6 @@ import {
   Session,
   Storage,
   WaitStore,
-  WorkerRun,
   WorkItemStore,
 } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
@@ -24,6 +23,7 @@ import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { IngressRoutingError } from "../../src/ingress/routing-resolution";
 import { createExistingAgentMessaging } from "../../src/messaging/index";
 import { WaitService } from "../../src/wait/index";
+import { allocateTestAttempt } from "../dispatch/helpers";
 import { seedPendingInteraction } from "../helpers/pending-interaction";
 import {
   kernelEngine,
@@ -86,15 +86,34 @@ async function seedFrozenPending(
     title: id,
     model: { providerID: "test", modelID: "test-model" },
   });
-  await WorkerRun.create(session.id, {
+  // #510 D2b — the run's live state is a connector WorkItem with an
+  // allocated attempt; the frozen worker_run_state row is seeded at the
+  // adapter layer only for the pending_interaction FK, exactly as pre-freeze
+  // rows persist on disk.
+  const workerRunAdapter = Storage.getAdapter().workerRunState;
+  if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
+  workerRunAdapter.create(session.id, {
     runId,
+    agentName: "worker",
+    status: "waiting_input",
+    executorKind: "connector_endpoint",
     title: runId,
     prompt: "complete assigned work",
-    executorKind: "connector_endpoint",
   });
-  await WorkerRun.updateStatus(session.id, runId, "starting");
-  await WorkerRun.updateStatus(session.id, runId, "running");
-  await WorkerRun.updateStatus(session.id, runId, "waiting_input");
+  const workItem = await WorkItemStore.create({
+    name: `Connector run ${runId}`,
+    sourceMessageId: `seed:${id}`,
+    sourceChannel: "dispatch",
+    intent: "worker.complete",
+    goal: "complete assigned work",
+    sessionId: session.id,
+    workSessionId: session.id,
+    workerRunId: runId,
+    executorKind: "connector_endpoint",
+    acceptanceCriteria: ["the assigned Worker reports terminal state"],
+  });
+  await WorkItemStore.start(workItem.hash);
+  await allocateTestAttempt(workItem.hash);
   seedPendingInteraction({
     id,
     workerRunId: runId,
@@ -241,18 +260,12 @@ describe("IngressEngine wait routing", () => {
 
   test("normalizes a plain-text worker reply for the default worker.complete handler", async () => {
     const sessionId = await seedFrozenPending("pi-plain-text", "run-plain-text");
-    const workItem = await WorkItemStore.create({
-      name: "plain-text connector completion",
-      sourceMessageId: "outbound-plain-text",
-      sourceChannel: "telegram",
-      intent: "worker.spawn",
-      goal: "complete assigned work",
-      executorKind: "connector_endpoint",
-      acceptanceCriteria: ["report completion"],
-      workSessionId: sessionId,
-      workerRunId: "run-plain-text",
-    });
-    await WorkItemStore.start(workItem.hash);
+    // seedFrozenPending created the connector WorkItem with an allocated
+    // attempt (#510 D2b) — worker.complete requires exactly one per run.
+    const workItem = WorkItemStore.list().find(
+      (item) => item.workerRunId === "run-plain-text" && item.workSessionId === sessionId,
+    );
+    if (!workItem) throw new Error("missing seeded connector WorkItem");
     makeKernelRoutingEngine({
       dispatchRuntime: createDefaultDispatchRuntime({ completionWriter }),
     });

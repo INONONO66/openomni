@@ -3,10 +3,10 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers as registerBuiltInDispatchHandlersProduction } from "../../src/dispatch/setup";
-import { command } from "./helpers";
+import { allocateTestAttempt, command } from "./helpers";
 
 const servers: Server[] = [];
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -295,15 +295,9 @@ describe("worker.spawn read-back completion gate", () => {
       time: { created: 1, updated: 1 },
       spawnDepth: 0,
     });
-    WorkerRunStateStore.create("session:connector-read-back", {
-      runId: "run:connector-read-back",
-      agentName: "connector-worker",
-      status: "running",
-      executorKind: "connector_endpoint",
-      assignedStepId: connector.hash,
-      title: "Connector read-back composition",
-      prompt: "complete the connector read-back WorkItem",
-    });
+    // #510 D2b — the active run is the WorkItem attempt, not a
+    // worker_run_state row (the worker-run store is frozen).
+    await allocateTestAttempt(connector.hash);
     await registry.get("worker.complete")?.({
       ...command(
         "worker.complete",

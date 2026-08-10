@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import {
   createDefaultDispatchRuntime as createDefaultDispatchRuntimeProduction,
   registerBuiltInDispatchHandlers as registerBuiltInDispatchHandlersProduction,
 } from "../../src/dispatch/setup";
-import { command, expectRejectsWithMessage } from "./helpers";
+import { allocateTestAttempt, command, expectRejectsWithMessage } from "./helpers";
 
 let completionWriter: Storage.WorkItemCompletionWriter;
 
@@ -61,40 +61,16 @@ function criterionFacts(evidenceId: string) {
   ] as const;
 }
 
+// #510 D2b — the assigned run is the WorkItem attempt: the worker-run store
+// is frozen, so fixtures that need an ACTIVE run allocate an attempt on the
+// target WorkItem (see allocateTestAttempt) instead of seeding a
+// worker_run_state row. This builder only shapes the authorized actor.
 function assignedWorkerCommand(
   target: Parameters<typeof command>[1],
   payload: unknown,
   sessionId: string,
   runId: string,
-  registerRun = true,
 ) {
-  if (registerRun && !WorkerRunStateStore.get(sessionId, runId)) {
-    const sessionAdapter = Storage.getAdapter().session;
-    if (!sessionAdapter.get(sessionId)) {
-      sessionAdapter.set(sessionId, {
-        id: sessionId,
-        title: "Connector completion fixture",
-        model: { providerID: "test", modelID: "test" },
-        time: { created: Date.now(), updated: Date.now() },
-        spawnDepth: 0,
-      });
-    }
-    WorkerRunStateStore.create(sessionId, {
-      runId,
-      agentName: "connector-worker",
-      status: "running",
-      executorKind: "connector_endpoint",
-      assignedStepId:
-        typeof payload === "object" &&
-        payload !== null &&
-        "workItemHash" in payload &&
-        typeof payload.workItemHash === "string"
-          ? payload.workItemHash
-          : undefined,
-      title: "Connector completion fixture",
-      prompt: "complete the assigned connector WorkItem",
-    });
-  }
   return {
     ...command("worker.complete", target, payload),
     actor: {
@@ -447,6 +423,7 @@ describe("worker.spawn result reflection", () => {
     });
     const connectorItem = await WorkItemStore.start(connectorCreated.hash);
     if (!connectorItem) throw new Error("missing connector WorkItem");
+    await allocateTestAttempt(connectorItem.hash);
     const connectorEvidence = await WorkItemStore.addEvidence(connectorItem.hash, {
       kind: "verification",
       description: "kernel-recorded verifier input",
@@ -674,7 +651,6 @@ describe("worker.spawn result reflection", () => {
             },
             "session:missing-worker-run",
             "run:missing-worker-run",
-            false,
           ),
         ),
       "WorkerRun not found",
@@ -893,6 +869,7 @@ describe("worker.spawn result reflection", () => {
       workerRunId: "run:connector-evidence",
       acceptanceCriteria: ["connector evidence persists"],
     });
+    await allocateTestAttempt(item.hash);
     const workItemAdapter = Storage.getAdapter().workItem;
     if (!workItemAdapter) throw new Error("missing work item adapter");
     workItemAdapter.compareAndSet = () => {

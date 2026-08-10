@@ -139,12 +139,15 @@ export async function allocateWorkItemAttempt(
     });
     allocated = attempt;
     return {
-      changedFields: ["lastAttemptSeq", "currentAttemptId", "timestamps"],
+      changedFields: ["lastAttemptSeq", "currentAttemptId", "attemptTerminal", "timestamps"],
       fact: attemptAllocatedFact(existing, attempt),
       updated: {
         ...existing,
         lastAttemptSeq: attempt.attemptSeq,
         currentAttemptId: attempt.attemptId,
+        // A new execution instance begins: the previous attempt's terminal
+        // record (#510 D2b) no longer describes the current attempt.
+        attemptTerminal: undefined,
         timestamps: { ...existing.timestamps, updated: now },
       },
     };

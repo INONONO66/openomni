@@ -6,14 +6,27 @@ import {
   SystemToolProvider,
 } from "@openomni/openomni";
 import { IngressEventProjector, IngressHandlers } from "../../../../packages/openomni/src/ingress";
-import type { Dispatch } from "@openomni/protocol";
-import { Bus, PendingAskStore, Session, Storage, SurfaceKey, WorkerRun } from "@openomni/session";
+import { WorkItem, type Dispatch } from "@openomni/protocol";
+import {
+  Bus,
+  PendingAskStore,
+  Session,
+  Storage,
+  SurfaceKey,
+  WorkItemAttemptRun,
+  WorkItemStore,
+} from "@openomni/session";
 import { createResidentInboundWaitHandler } from "../../src/bootstrap/resident-inbound-wait";
 import type { ServerConfig } from "../../src/config";
 import { CustomToolProvider } from "../../src/tool/custom";
 import { McpToolProvider } from "../../src/tool/mcp";
 
-type WorkerStatus = Parameters<typeof WorkerRun.updateStatus>[2];
+/**
+ * #510 D2b — the inbound wait acquires and releases the run's wait through
+ * WorkItem attempt facts (waiting_input blocker on the work stream), never
+ * through worker_run_state writes (the worker-run store is frozen).
+ */
+
 type SubmitArgs = Parameters<DispatchRuntime["submit"]>;
 
 const serverConfig: ServerConfig = {
@@ -27,32 +40,19 @@ const serverConfig: ServerConfig = {
   discord: { allowedUsers: [] },
 };
 
-const originalUpdateStatus = WorkerRun.updateStatus;
-const originalUpdateStatusIfCurrent = WorkerRun.updateStatusIfCurrent;
+const originalBeginWait = WorkItemAttemptRun.beginWait;
+const originalEndWait = WorkItemAttemptRun.endWait;
 const originalPendingCreate = PendingAskStore.create;
 const originalPendingAnswer = PendingAskStore.answer;
 const originalPendingExpire = PendingAskStore.expire;
 const originalSurfaceList = SurfaceKey.listBySession;
 const originalProject = IngressEventProjector.project;
 const originalHandleResident = IngressHandlers.handleResident;
-let statusHistory: WorkerStatus[] = [];
 
 beforeEach(() => {
   Bus.reset();
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  statusHistory = [];
-  WorkerRun.updateStatus = mock(async (...args: Parameters<typeof originalUpdateStatus>) => {
-    statusHistory.push(args[2]);
-    await originalUpdateStatus(...args);
-  });
-  WorkerRun.updateStatusIfCurrent = mock(
-    async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
-      const updated = await originalUpdateStatusIfCurrent(...args);
-      if (updated) statusHistory.push(args[3]);
-      return updated;
-    },
-  );
   PendingAskStore.create = mock(originalPendingCreate);
   PendingAskStore.answer = mock(originalPendingAnswer);
   PendingAskStore.expire = mock(originalPendingExpire);
@@ -62,8 +62,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  WorkerRun.updateStatus = originalUpdateStatus;
-  WorkerRun.updateStatusIfCurrent = originalUpdateStatusIfCurrent;
+  WorkItemAttemptRun.beginWait = originalBeginWait;
+  WorkItemAttemptRun.endWait = originalEndWait;
   PendingAskStore.create = originalPendingCreate;
   PendingAskStore.answer = originalPendingAnswer;
   PendingAskStore.expire = originalPendingExpire;
@@ -74,7 +74,36 @@ afterEach(() => {
   Storage.reset();
 });
 
-async function createStartingRun(runId: string) {
+function attemptIdentity(prompt: string) {
+  return {
+    contentFingerprint: WorkItem.contentFingerprintOf({
+      workInput: prompt,
+      handlerKind: "internal_chat_agent",
+      handlerCodeRef: { absent: true, reason: "not captured in tests" },
+      model: {
+        provider: "test",
+        id: "worker-model",
+        parameters: { absent: true, reason: "no parameters configured" },
+      },
+      upstreamFingerprints: { absent: true, reason: "no upstream attempts" },
+      dependencyLock: { absent: true, reason: "not read in tests" },
+    }),
+    environmentFingerprint: WorkItem.environmentFingerprintOf({
+      os: process.platform,
+      arch: process.arch,
+      bunVersion: process.versions.bun ?? process.version,
+      workspaceRoot: { absent: true, reason: "no workspace in tests" },
+      schemaVersions: { policyKernel: 1 },
+      policy: { absent: true, reason: "no policy plan in tests" },
+      toolVersions: { absent: true, reason: "not enumerated in tests" },
+      verifierVersions: { absent: true, reason: "not enumerated in tests" },
+      providerParameters: { absent: true, reason: "no provider parameters" },
+      configRef: { absent: true, reason: "no config identity in tests" },
+    }),
+  };
+}
+
+async function createActiveRun(runId: string) {
   const residentSession = Session.create({
     title: "resident",
     model: { providerID: "test", modelID: "resident-model" },
@@ -83,14 +112,31 @@ async function createStartingRun(runId: string) {
     title: "worker",
     model: { providerID: "test", modelID: "worker-model" },
   });
-  await WorkerRun.create(workerSession.id, {
-    runId,
-    parentSessionId: residentSession.id,
-    title: "worker run",
-    prompt: "ask the Resident",
+  const created = await WorkItemStore.create({
+    name: `worker run ${runId}`,
+    sourceMessageId: `seed:${runId}`,
+    sourceChannel: "ingress",
+    intent: "worker.dispatch",
+    goal: "ask the Resident",
+    sessionId: workerSession.id,
+    originSessionId: residentSession.id,
+    workSessionId: workerSession.id,
+    workerRunId: runId,
+    executorKind: "internal_chat_agent",
+    acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
   });
-  await WorkerRun.updateStatus(workerSession.id, runId, "starting");
-  return { residentSessionId: residentSession.id, workerSessionId: workerSession.id, runId };
+  await WorkItemStore.start(created.hash);
+  const allocation = await WorkItemStore.allocateAttempt(
+    created.hash,
+    attemptIdentity("ask the Resident"),
+  );
+  if (!allocation) throw new Error("attempt allocation failed");
+  return {
+    residentSessionId: residentSession.id,
+    workerSessionId: workerSession.id,
+    runId,
+    workItemHash: created.hash,
+  };
 }
 
 function createHandler(submit: DispatchRuntime["submit"]) {
@@ -109,7 +155,7 @@ function createHandler(submit: DispatchRuntime["submit"]) {
   return createResidentInboundWaitHandler(config);
 }
 
-function waitParams(run: Awaited<ReturnType<typeof createStartingRun>>, signal?: AbortSignal) {
+function waitParams(run: Awaited<ReturnType<typeof createActiveRun>>, signal?: AbortSignal) {
   return {
     workerId: "worker-1",
     sessionId: run.workerSessionId,
@@ -120,17 +166,25 @@ function waitParams(run: Awaited<ReturnType<typeof createStartingRun>>, signal?:
   };
 }
 
-async function currentStatus(run: Awaited<ReturnType<typeof createStartingRun>>) {
-  return (await WorkerRun.get(run.workerSessionId, run.runId))?.status;
+function currentStatus(run: Awaited<ReturnType<typeof createActiveRun>>) {
+  return WorkItemAttemptRun.find(run.workerSessionId, run.runId)?.status;
+}
+
+function waitBlockers(run: Awaited<ReturnType<typeof createActiveRun>>) {
+  return (WorkItemStore.get(run.workItemHash)?.blockers ?? []).filter(
+    (blocker) => blocker.kind === "waiting_input",
+  );
 }
 
 describe("resident inbound wait kernel dispatch", () => {
-  it("submits resident.ask through the shared runtime and restores the WorkerRun", async () => {
+  it("submits resident.ask through the shared runtime and restores the run", async () => {
     // Given
-    const run = await createStartingRun("run-success");
+    const run = await createActiveRun("run-success");
     const calls: SubmitArgs[] = [];
     const submit = mock(async (...args: SubmitArgs): Promise<Dispatch.Result> => {
       calls.push(args);
+      // The run holds the wait while the Resident answers.
+      expect(currentStatus(run)).toBe("waiting_input");
       return { dispatchId: "resident-ask", status: "completed", output: "Proceed carefully." };
     });
     const handler = createHandler(submit);
@@ -139,8 +193,12 @@ describe("resident inbound wait kernel dispatch", () => {
     const result = await handler(waitParams(run));
 
     // Then
-    expect(statusHistory).toEqual(["starting", "running", "waiting_input", "running"]);
-    expect(await currentStatus(run)).toBe("running");
+    expect(currentStatus(run)).toBe("running");
+    // The wait acquire/release is durable attempt-fact history: one
+    // waiting_input blocker, added and resolved on the work stream.
+    const blockers = waitBlockers(run);
+    expect(blockers).toHaveLength(1);
+    expect(blockers[0]?.resolvedAt).toBeDefined();
     expect(calls).toHaveLength(1);
     const call = calls[0];
     if (!call) throw new Error("expected shared dispatch call");
@@ -173,9 +231,9 @@ describe("resident inbound wait kernel dispatch", () => {
     expect(IngressHandlers.handleResident).toHaveBeenCalledTimes(0);
   });
 
-  it("returns a shared dispatch failure and restores waiting_input to running", async () => {
+  it("returns a shared dispatch failure and restores the wait to running", async () => {
     // Given
-    const run = await createStartingRun("run-failure");
+    const run = await createActiveRun("run-failure");
     const submit = mock(
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-failed",
@@ -190,14 +248,16 @@ describe("resident inbound wait kernel dispatch", () => {
 
     // Then
     expect(result).toMatchObject({ accepted: false, error: "Resident unavailable" });
-    expect(statusHistory).toEqual(["starting", "running", "waiting_input", "running"]);
-    expect(await currentStatus(run)).toBe("running");
+    expect(currentStatus(run)).toBe("running");
+    expect(waitBlockers(run)[0]?.resolvedAt).toBeDefined();
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
-  it("does not transition a starting run that is cancelled before the running transition", async () => {
-    // Given
-    const run = await createStartingRun("run-cancelled-before-running");
+  it("rejects a run whose attempt already ended before the wait", async () => {
+    const run = await createActiveRun("run-cancelled-before-wait");
+    await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", {
+      endedAt: Date.now(),
+    });
     const submit = mock(
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-after-cancel",
@@ -205,29 +265,19 @@ describe("resident inbound wait kernel dispatch", () => {
         output: "Already cancelled.",
       }),
     );
-    WorkerRun.updateStatusIfCurrent = mock(
-      async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
-        await originalUpdateStatus(run.workerSessionId, run.runId, "cancelled");
-        return originalUpdateStatusIfCurrent(...args);
-      },
-    );
-    const handler = createHandler(submit);
 
-    // When
-    const result = await handler(waitParams(run));
+    const result = await createHandler(submit)(waitParams(run));
 
-    // Then
     expect(result).toMatchObject({
       accepted: false,
       error: "worker.inbound_wait run is no longer active",
     });
-    expect(statusHistory).toEqual(["starting"]);
-    expect(await currentStatus(run)).toBe("cancelled");
+    expect(currentStatus(run)).toBe("cancelled");
     expect(submit).toHaveBeenCalledTimes(0);
   });
 
-  it("does not enter waiting_input when cancellation wins the running transition race", async () => {
-    const run = await createStartingRun("run-cancelled-entering-wait");
+  it("does not enter the wait when cancellation wins the acquire race", async () => {
+    const run = await createActiveRun("run-cancelled-entering-wait");
     const submit = mock(
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-after-entry-cancel",
@@ -235,14 +285,13 @@ describe("resident inbound wait kernel dispatch", () => {
         output: "Already cancelled.",
       }),
     );
-    WorkerRun.updateStatusIfCurrent = mock(
-      async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
-        if (args[2].status === "running") {
-          await originalUpdateStatus(run.workerSessionId, run.runId, "cancelled");
-        }
-        return originalUpdateStatusIfCurrent(...args);
-      },
-    );
+    WorkItemAttemptRun.beginWait = mock(async (...args: Parameters<typeof originalBeginWait>) => {
+      // The cancel lands between the handler's read and the acquire CAS.
+      await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", {
+        endedAt: Date.now(),
+      });
+      return originalBeginWait(...args);
+    });
 
     const result = await createHandler(submit)(waitParams(run));
 
@@ -250,12 +299,12 @@ describe("resident inbound wait kernel dispatch", () => {
       accepted: false,
       error: "worker.inbound_wait run is no longer active",
     });
-    expect(await currentStatus(run)).toBe("cancelled");
+    expect(currentStatus(run)).toBe("cancelled");
     expect(submit).toHaveBeenCalledTimes(0);
   });
 
-  it("does not restore running when cancellation wins the waiting_input transition race", async () => {
-    const run = await createStartingRun("run-cancelled-restoring-wait");
+  it("keeps the terminal record when cancellation wins the release race", async () => {
+    const run = await createActiveRun("run-cancelled-restoring-wait");
     const submit = mock(
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-before-restoration-cancel",
@@ -263,24 +312,25 @@ describe("resident inbound wait kernel dispatch", () => {
         output: "Answer delivered.",
       }),
     );
-    WorkerRun.updateStatusIfCurrent = mock(
-      async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
-        if (args[2].status === "waiting_input") {
-          await originalUpdateStatus(run.workerSessionId, run.runId, "cancelled");
-        }
-        return originalUpdateStatusIfCurrent(...args);
-      },
-    );
+    WorkItemAttemptRun.endWait = mock(async (...args: Parameters<typeof originalEndWait>) => {
+      // The cancel lands while the Resident's answer is in flight: the
+      // terminal fact resolves the wait, so the release is a no-op receipt.
+      await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", {
+        endedAt: Date.now(),
+      });
+      return originalEndWait(...args);
+    });
 
     const result = await createHandler(submit)(waitParams(run));
 
     expect(result).toMatchObject({ accepted: true, output: "Answer delivered." });
-    expect(await currentStatus(run)).toBe("cancelled");
+    expect(currentStatus(run)).toBe("cancelled");
     expect(submit).toHaveBeenCalledTimes(1);
   });
-  it("rejects an already-aborted wait without dispatching or changing WorkerRun state", async () => {
+
+  it("rejects an already-aborted wait without dispatching or changing run state", async () => {
     // Given
-    const run = await createStartingRun("run-aborted");
+    const run = await createActiveRun("run-aborted");
     const controller = new AbortController();
     controller.abort();
     const submit = mock(
@@ -296,8 +346,8 @@ describe("resident inbound wait kernel dispatch", () => {
 
     // Then
     expect(result).toMatchObject({ accepted: false, error: "worker.inbound_wait aborted" });
-    expect(statusHistory).toEqual(["starting"]);
-    expect(await currentStatus(run)).toBe("starting");
+    expect(currentStatus(run)).toBe("running");
+    expect(waitBlockers(run)).toHaveLength(0);
     expect(submit).toHaveBeenCalledTimes(0);
   });
 });

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Execution, type Message, type Ingress } from "@openomni/protocol";
 import type { IngressPolicyGate } from "../../src/ingress/policy-gate";
-import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
+import { Bus, Session, Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
 
@@ -43,6 +43,14 @@ function createSession(): string {
     title: "Handlers Test Session",
     model: { providerID: "anthropic", modelID: "claude-3-haiku-20240307" },
   }).id;
+}
+
+// #510 D2b — the durable run record of a worker ingress dispatch is the
+// WorkItem attempt projection, never a worker_run_state row.
+function workRunItems(sessionId: string) {
+  return WorkItemStore.list().filter(
+    (item) => item.workSessionId === sessionId && item.workerRunId !== undefined,
+  );
 }
 
 function addTextMessage(sessionId: string, role: "user" | "assistant", text: string): void {
@@ -216,7 +224,7 @@ describe("IngressHandlers", () => {
 
     expect(deliverMessage).toHaveBeenCalledWith(sessionId, "adjust your plan", undefined);
     expect(dispatch).not.toHaveBeenCalled();
-    expect(await WorkerRun.listBySession(sessionId)).toHaveLength(0);
+    expect(workRunItems(sessionId)).toHaveLength(0);
     expect(result.result.finishReason).toBe("delivered");
     expect(storeDirectResultMock).toHaveBeenCalled();
   });
@@ -254,7 +262,7 @@ describe("IngressHandlers", () => {
 
     expect(deliverMessage).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledTimes(1);
-    expect((await WorkerRun.listBySession(sessionId))[0]?.status).toBe("succeeded");
+    expect(workRunItems(sessionId)[0]?.attemptTerminal?.outcome).toBe("succeeded");
     expect(result.result.output).toBe("resumed");
   });
 
@@ -300,13 +308,18 @@ describe("IngressHandlers", () => {
       status: "started",
       sessionId,
     });
-    expect((await WorkerRun.listBySession(sessionId))[0]?.status).toBe("starting");
+    // Admission recorded the active run (attempt allocated, no terminal).
+    const admitted = workRunItems(sessionId);
+    expect(admitted).toHaveLength(1);
+    expect(admitted[0]?.currentAttemptId).toBeDefined();
+    expect(admitted[0]?.attemptTerminal).toBeUndefined();
+    expect(WorkItemAttemptRun.listActive(sessionId)).toHaveLength(1);
 
     await dispatchStarted.promise;
     releaseDispatch?.();
 
     const deadline = Date.now() + 1_000;
-    while ((await WorkerRun.listBySession(sessionId))[0]?.status !== "succeeded") {
+    while (workRunItems(sessionId)[0]?.attemptTerminal?.outcome !== "succeeded") {
       if (Date.now() > deadline) throw new Error("background run did not complete");
       await new Promise<void>((resolve) => setTimeout(resolve, 10));
     }
@@ -338,10 +351,10 @@ describe("IngressHandlers", () => {
     }).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(Error);
-    const runs = await WorkerRun.listBySession(sessionId);
+    const runs = workRunItems(sessionId);
     expect(runs).toHaveLength(1);
-    expect(runs[0]?.status).toBe("interrupted");
-    expect(runs[0]?.error).toBe("socket closed before delivery");
+    expect(runs[0]?.attemptTerminal?.outcome).toBe("interrupted");
+    expect(runs[0]?.attemptTerminal?.error).toBe("socket closed before delivery");
   });
 
   it("handleDirect dispatches writeback.commit before storing output", async () => {

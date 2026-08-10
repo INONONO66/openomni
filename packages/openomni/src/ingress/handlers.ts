@@ -6,7 +6,8 @@ import {
   type Policy,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, WorkerRun } from "@openomni/session";
+import { Bus, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { allocateWorkerSpawnAttempt } from "../dispatch/handlers/worker-work-item";
 import type { ResidentRuntime } from "../resident/runtime";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressPolicyGate } from "./policy-gate";
@@ -36,7 +37,8 @@ export function extractText(payload: unknown): string {
 
 /**
  * The single ingress dispatch lifecycle: payload extraction, mode events,
- * writeback policy, durable worker-run bookkeeping, and the resident/direct
+ * writeback policy, durable attempt-run bookkeeping (#510 D2b: WorkItem
+ * attempt facts, never worker_run_state rows), and the resident/direct
  * handlers that consume them.
  */
 export namespace IngressHandlers {
@@ -138,51 +140,54 @@ export namespace IngressHandlers {
     return rewrite?.type === "writeback.rewrite" ? rewrite.output : output;
   }
 
-  // ---- durable worker-run lifecycle ----
+  // ---- durable run lifecycle (#510 D2b: WorkItem attempt facts) ----
 
-  type TerminalWorkerRunStatus = "succeeded" | "failed" | "cancelled" | "interrupted";
-
-  const terminalWorkerRunStatuses = new Set<string>([
-    "succeeded",
-    "failed",
-    "cancelled",
-    "interrupted",
-  ]);
-
-  async function createDurableWorkerRun(
+  /**
+   * #510 D2b — the durable run record for a worker-targeted ingress dispatch
+   * is a WorkItem with an allocated attempt on the `work:<hash>` owner
+   * stream. NO worker_run_state row is written: the attempt identity fact is
+   * appended before the executor acts, and the terminal outcome (endedAt,
+   * error — the fields that used to sit in the in-memory runExtras map)
+   * lands as the `work_item.attempt_finished` fact.
+   */
+  async function createDurableAttemptRun(
     ctx: HandlerContext,
     request: Execution.Request,
   ): Promise<void> {
     const prompt = extractText(ctx.event.payload);
-    await WorkerRun.create(ctx.sessionId, {
-      runId: request.runId,
-      title: prompt.slice(0, 80) || "Worker run",
-      prompt,
-      agentName: request.agentName ?? "worker",
-      parentSessionId:
-        typeof ctx.event.meta?.actor === "object" && ctx.event.meta.actor !== null
-          ? String((ctx.event.meta.actor as Record<string, unknown>).sessionId ?? "") || undefined
-          : undefined,
+    const parentSessionId =
+      typeof ctx.event.meta?.actor === "object" && ctx.event.meta.actor !== null
+        ? String((ctx.event.meta.actor as Record<string, unknown>).sessionId ?? "") || undefined
+        : undefined;
+    const workItem = await WorkItemStore.create({
+      name: `Ingress worker ${request.agentName ?? "worker"}`,
+      sourceMessageId: ctx.event.id,
+      sourceChannel: ctx.event.surface,
+      intent: "worker.dispatch",
+      // The content fingerprint's canonical work input rejects the empty
+      // string; an empty ingress payload is declared as such.
+      goal: prompt || "(empty ingress payload)",
+      assigneeId: request.agentName,
+      sessionId: ctx.sessionId,
+      originSessionId: parentSessionId,
+      workSessionId: ctx.sessionId,
+      workerRunId: request.runId,
+      executorKind: "internal_chat_agent",
+      // Ingress dispatch carries no caller acceptance criteria; the run's
+      // terminal truth is its attempt outcome, not a completion admission.
+      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
     });
-    await WorkerRun.updateStatus(ctx.sessionId, request.runId, "starting");
-  }
-
-  async function completeDurableWorkerRun(
-    ctx: HandlerContext,
-    request: Execution.Request,
-    status: TerminalWorkerRunStatus,
-    error?: string,
-  ): Promise<void> {
-    const existing = await WorkerRun.get(ctx.sessionId, request.runId);
-    if (!existing) return;
-    if (terminalWorkerRunStatuses.has(existing.status)) return;
-    if (existing.status === "starting" && status === "succeeded") {
-      await WorkerRun.updateStatus(ctx.sessionId, request.runId, "running");
-    }
-    await WorkerRun.updateStatus(ctx.sessionId, request.runId, status, {
-      endedAt: Date.now(),
-      ...(error ? { error } : {}),
-    });
+    await WorkItemStore.start(workItem.hash);
+    await allocateWorkerSpawnAttempt(
+      workItem.hash,
+      prompt || "(empty ingress payload)",
+      "internal_chat_agent",
+      {
+        model: ctx.event.agent.model,
+        policyPlan: ctx.event.agent.policyPlan,
+        workspaceRoot: ctx.event.agent.toolConfig?.workspaceRoot,
+      },
+    );
   }
 
   async function finishCoordinatorDispatch(
@@ -190,16 +195,12 @@ export namespace IngressHandlers {
     request: Execution.Request,
     coordinatorResult: Execution.Result,
   ): Promise<void> {
-    if (coordinatorResult.status !== "succeeded") {
-      await completeDurableWorkerRun(
-        ctx,
-        request,
-        coordinatorResult.status,
-        coordinatorResult.error,
-      );
-      return;
-    }
-    await completeDurableWorkerRun(ctx, request, "succeeded");
+    await WorkItemAttemptRun.finish(ctx.sessionId, request.runId, coordinatorResult.status, {
+      endedAt: Date.now(),
+      ...(coordinatorResult.status !== "succeeded" && coordinatorResult.error
+        ? { error: coordinatorResult.error }
+        : {}),
+    });
   }
 
   async function markDispatchThrown(
@@ -207,10 +208,12 @@ export namespace IngressHandlers {
     request: Execution.Request,
     error: unknown,
   ): Promise<void> {
-    const existing = await WorkerRun.get(ctx.sessionId, request.runId);
-    if (!existing || terminalWorkerRunStatuses.has(existing.status)) return;
     const message = error instanceof Error ? error.message : String(error);
-    await completeDurableWorkerRun(ctx, request, "interrupted", message);
+    // finish() is a no-op receipt (false) when the run already ended.
+    await WorkItemAttemptRun.finish(ctx.sessionId, request.runId, "interrupted", {
+      endedAt: Date.now(),
+      error: message,
+    });
   }
 
   // ---- worker cancel / delivery / background dispatch ----
@@ -228,10 +231,8 @@ export namespace IngressHandlers {
     }
 
     const requestedRunId = ctx.event.runtime?.runId;
-    const active = (await WorkerRun.listBySession(ctx.sessionId)).filter(
-      (run) =>
-        ["starting", "running", "waiting_input"].includes(run.status) &&
-        (!requestedRunId || run.runId === requestedRunId),
+    const active = WorkItemAttemptRun.listActive(ctx.sessionId).filter(
+      (run) => !requestedRunId || run.runId === requestedRunId,
     );
     const results = await Promise.all(
       active.map(async (run) => {
@@ -241,7 +242,7 @@ export namespace IngressHandlers {
           typeof result === "object" &&
           (result as { cancelled?: unknown }).cancelled === true;
         if (cancelled) {
-          await WorkerRun.updateStatus(ctx.sessionId, run.runId, "cancelled", {
+          await WorkItemAttemptRun.finish(ctx.sessionId, run.runId, "cancelled", {
             endedAt: Date.now(),
           });
         }
@@ -393,7 +394,7 @@ export namespace IngressHandlers {
 
     const request = buildExecutionRequest(ctx);
     if (!ctx.coordinator) throw new Error("coordinator is required for worker-targeted ingress");
-    await createDurableWorkerRun(ctx, request);
+    await createDurableAttemptRun(ctx, request);
     if (isBackgroundWorkerIngress(ctx)) {
       startBackgroundWorkerDispatch(ctx, request, target, start);
       const output = await dispatchWritebackCommit(

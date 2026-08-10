@@ -145,6 +145,7 @@ export async function updateWorkItem(
     "attempt",
     "lastAttemptSeq",
     "currentAttemptId",
+    "attemptTerminal",
     "maxAttempts",
     "executorKind",
     "workerRunId",
