@@ -189,6 +189,25 @@ function isTestFile(path: string): boolean {
   );
 }
 
+/**
+ * Paths never scanned: build output, dependencies, tests, the gate scripts
+ * themselves, and untracked local dirs — research clones pinned under tmp/
+ * (#533) and nested worktrees under .claude/ — which would otherwise break
+ * local runs while CI stays green (#552).
+ */
+function isExcludedFromScan(filePath: string): boolean {
+  return (
+    filePath.includes("/node_modules/") ||
+    filePath.startsWith("node_modules/") ||
+    filePath.includes("/dist/") ||
+    filePath.startsWith("dist/") ||
+    filePath.startsWith("tmp/") ||
+    filePath.startsWith(".claude/") ||
+    isTestFile(filePath) ||
+    filePath.startsWith("script/")
+  );
+}
+
 function lineNumberForOffset(source: string, offset: number): number {
   let line = 1;
   for (let i = 0; i < offset; i += 1) {
@@ -261,14 +280,7 @@ async function validateSourceImportDirection(): Promise<string[]> {
     onlyFiles: true,
     followSymlinks: false,
   })) {
-    if (
-      filePath.includes("/node_modules/") ||
-      filePath.startsWith("node_modules/") ||
-      filePath.includes("/dist/") ||
-      filePath.startsWith("dist/") ||
-      isTestFile(filePath) ||
-      filePath.startsWith("script/")
-    ) {
+    if (isExcludedFromScan(filePath)) {
       continue;
     }
 
@@ -307,14 +319,7 @@ async function validateDeepImports(): Promise<string[]> {
     onlyFiles: true,
     followSymlinks: false,
   })) {
-    if (
-      filePath.includes("/node_modules/") ||
-      filePath.startsWith("node_modules/") ||
-      filePath.includes("/dist/") ||
-      filePath.startsWith("dist/") ||
-      isTestFile(filePath) ||
-      filePath.startsWith("script/")
-    ) {
+    if (isExcludedFromScan(filePath)) {
       continue;
     }
 
@@ -357,14 +362,7 @@ async function validateDeepRelativeImports(): Promise<string[]> {
     onlyFiles: true,
     followSymlinks: false,
   })) {
-    if (
-      filePath.includes("/node_modules/") ||
-      filePath.startsWith("node_modules/") ||
-      filePath.includes("/dist/") ||
-      filePath.startsWith("dist/") ||
-      isTestFile(filePath) ||
-      filePath.startsWith("script/")
-    ) {
+    if (isExcludedFromScan(filePath)) {
       continue;
     }
 
@@ -404,11 +402,9 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 
 // See docs/golden-principles.local.md for the full list.
 
-// Allowed `as any` locations:
-// - protocol/error: sole exception per golden-principles.local.md #5
-// - remaining entries: pre-existing tech debt (do not extend)
+// Allowed `as any` locations (pre-existing tech debt — do not extend).
+// protocol/error was removed 2026-08 (#552 item 5): zero remaining hits.
 const ALLOWED_AS_ANY_FILES = new Set([
-  "packages/protocol/src/error/index.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/agent/src/runtime/messenger/transport.ts",
 ]);
@@ -431,14 +427,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
     onlyFiles: true,
     followSymlinks: false,
   })) {
-    if (
-      filePath.includes("/node_modules/") ||
-      filePath.startsWith("node_modules/") ||
-      filePath.includes("/dist/") ||
-      filePath.startsWith("dist/") ||
-      isTestFile(filePath) ||
-      filePath.startsWith("script/")
-    ) {
+    if (isExcludedFromScan(filePath)) {
       continue;
     }
 
