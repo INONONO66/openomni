@@ -224,6 +224,14 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
 
     reopenStorage();
 
+    // Drop the read-model projection rows: resume must recover from the
+    // fact stream itself (the record), not from the projection tables.
+    const adapter = Storage.getAdapter();
+    for (const part of adapter.part.list("msg-1")) {
+      adapter.part.remove("msg-1", part.id);
+    }
+    adapter.message.remove(session.id, "msg-1");
+
     await expect(Session.resume(session.id)).resolves.toEqual([
       {
         role: "assistant",

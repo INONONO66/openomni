@@ -2,6 +2,7 @@ import type { Message } from "@openomni/protocol";
 import { Bus } from "../bus";
 import { Storage } from "../storage/storage";
 import { Event } from "./events";
+import { TranscriptStore } from "./transcript";
 
 type RecoveredMessage = {
   role: "assistant";
@@ -145,14 +146,22 @@ export function getParts(messageID: string): Message.Part[] {
 }
 
 export async function resume(id: string): Promise<RecoveredMessage[]> {
+  // #547 C3: resume replays the persisted Transcript.Fact stream through the
+  // fold — the message/part tables are read-model projections of it, never
+  // the record. Sessions with an empty fact stream (history recorded before
+  // the transcript record family, or projection-only writers like ingress)
+  // fall back to the projection read.
+  const replayed = TranscriptStore.replay(id);
+  const source = replayed.length > 0 ? replayed : await hydrateMessages(getMessages(id));
+
   const recovered: RecoveredMessage[] = [];
   let sequence = 1;
 
-  for (const message of getMessages(id)) {
-    if (message.role !== "assistant") {
+  for (const message of source) {
+    if (message.info.role !== "assistant") {
       continue;
     }
-    const text = getParts(message.id)
+    const text = message.parts
       .filter((part): part is Message.TextPart => part.type === "text")
       .map((part) => part.text)
       .join("\n");
@@ -161,7 +170,7 @@ export async function resume(id: string): Promise<RecoveredMessage[]> {
     recovered.push({
       role: "assistant",
       text,
-      timestamp: new Date(message.time.created).toISOString(),
+      timestamp: new Date(message.info.time.created).toISOString(),
       sequence,
       turnIndex: sequence - 1,
     });
