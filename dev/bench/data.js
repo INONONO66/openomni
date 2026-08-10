@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786324087015,
+  "lastUpdate": 1786324287217,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39533,6 +39533,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518557,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98097508d6e330c88bcc76db3f39a06d2ecbe510",
+          "message": "chore(ci): early gate batch — dist smoke, schema drift, scanner scope (#566)\n\n* feat(ci): assert bin-only publish surface, run dist smoke in CI\n\n#552 items 2+3. smoke-dist now fails when root package.json declares\nexports/main/types/module or drops bin — the published surface stays\nbin-only until a library surface is deliberately frozen. New Dist Smoke\nCI job runs build:dist + smoke:dist (previously prepack-only).\n\nRed proof: adding an exports field fails the gate before boot.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session): add ledger DDL drift check to CI\n\n#552 item 4 decision: keep createLedgerDb, gate the parity it promises.\nschema.ts is the DDL source of truth and the hand migration SQL is the\napplied truth (blueprint 'Storage decisions'); the check applies both\nto in-memory DBs — full migration chain via the real lifecycle runner\nvs drizzle-kit generated DDL — and compares introspected table shapes.\nDeclared pk columns count as NOT NULL on both sides (SQLite legacy\nquirk; applied migrations are immutable). Runs in the Quality job.\n\nRed proof: renaming a schema.ts column or dropping a notNull fails.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(ci): exclude tmp/ and .claude/ from check-deps scans\n\n#552 comment item (PR #558 follow-up). Research clones pinned under\ntmp/ (#533 convention) and nested worktrees under .claude/ broke local\ncheck-deps runs while CI stayed green. The four duplicated skip blocks\ncollapse into one isExcludedFromScan helper that also skips tmp/ and\n.claude/; tmp/ is gitignored so the root ultracite lint (VCS\nuseIgnoreFile) ignores it too (.claude already was).\n\nRed proof: tmp/x/deep/file.ts with a ../../../ import and 'as any'\nfails the pre-change script and passes the new one.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore: drop stale protocol error as-any exception\n\n#552 item 5. packages/protocol/src/error/index.ts has zero 'as any'\nhits; the allowed-exception in check-deps was stale. Gate still green.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T01:10:10Z",
+          "tree_id": "7d6000f898070c9a29ae7fc97d4c6335cf8df8ec",
+          "url": "https://github.com/INONONO66/openomni/commit/98097508d6e330c88bcc76db3f39a06d2ecbe510"
+        },
+        "date": 1786324286643,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 628,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9240,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2370,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15289,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1300,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 741,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2297,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102182,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 515157,
             "unit": "ns/op"
           }
         ]
