@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createIngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import type { Execution, Ingress, Tool } from "@openomni/protocol";
@@ -46,20 +46,9 @@ const mockWorkerManagerFactory: WorkerManagerFactory = (_config, ports) => {
   };
 };
 
-const noopCoordinator = {
-  async dispatch(_sessionId: string, request: Execution.Request): Promise<Execution.Result> {
-    return {
-      runId: request.runId,
-      sessionId: request.sessionId,
-      status: "succeeded",
-      output: "noop",
-      finishReason: "stop",
-    };
-  },
-};
-
 beforeEach(() => {
-  IngressEngine.reset();
+  Storage.reset();
+  Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
   ChannelGrantStore.put({
     id: "grant-test",
@@ -68,7 +57,6 @@ beforeEach(() => {
     defaultTier: "owner",
     createdBy: "act_owner",
   });
-  IngressEngine.setCoordinator(noopCoordinator);
   capturedOnToolCall = undefined;
   mockPoolDispatch = async (_sessionId, _runId, params) => ({
     runId: params.runId,
@@ -77,10 +65,6 @@ beforeEach(() => {
     output: "pool-result",
     finishReason: "stop",
   });
-});
-
-afterEach(() => {
-  IngressEngine.setCoordinator(noopCoordinator);
 });
 
 function makeDirectEvent(): Ingress.DirectEvent {
@@ -262,12 +246,12 @@ describe("concurrent sessions with tools", () => {
       },
     };
 
-    IngressEngine.setCoordinator(mockCoordinator);
+    const engine = createIngressEngine({ coordinator: mockCoordinator });
 
     const results = await Promise.all([
-      IngressEngine.ingest(makeDirectEvent()),
-      IngressEngine.ingest(makeDirectEvent()),
-      IngressEngine.ingest(makeDirectEvent()),
+      engine.ingest(makeDirectEvent()),
+      engine.ingest(makeDirectEvent()),
+      engine.ingest(makeDirectEvent()),
     ]);
 
     expect(results).toHaveLength(3);

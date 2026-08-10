@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { PolicyRegistration } from "@openomni/agent";
 import { PolicyDecision, type Ingress } from "@openomni/protocol";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
-import { IngressEngine } from "../../../src/ingress/engine";
+import { createIngressEngine } from "../../../src/ingress/engine";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
@@ -44,7 +44,7 @@ async function catchError(promise: Promise<unknown>): Promise<unknown> {
 
 beforeEach(() => {
   Bus.reset();
-  IngressEngine.reset();
+  Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
   ChannelGrantStore.put({
     id: "grant-tui",
@@ -58,29 +58,28 @@ beforeEach(() => {
 afterEach(() => {
   Bus.reset();
   Storage.reset();
-  IngressEngine.reset();
 });
 
 describe("policy no-bypass conformance — openomni governed paths", () => {
   it("blocks ingress receive before dispatching to the coordinator", async () => {
     let dispatchCalled = false;
-    IngressEngine.setCoordinator({
-      async dispatch(_sessionId, request) {
-        dispatchCalled = true;
-        return {
-          runId: request.runId,
-          sessionId: request.sessionId,
-          status: "succeeded" as const,
-          output: "should not dispatch",
-          finishReason: "stop" as const,
-        };
+    const engine = createIngressEngine({
+      coordinator: {
+        async dispatch(_sessionId, request) {
+          dispatchCalled = true;
+          return {
+            runId: request.runId,
+            sessionId: request.sessionId,
+            status: "succeeded" as const,
+            output: "should not dispatch",
+            finishReason: "stop" as const,
+          };
+        },
       },
+      policies: [inboundDenyAll("ingress receive denied by conformance policy")],
     });
-    IngressEngine.registerIngressPolicy(
-      inboundDenyAll("ingress receive denied by conformance policy"),
-    );
 
-    const error = await catchError(IngressEngine.ingest(inboundEvent()));
+    const error = await catchError(engine.ingest(inboundEvent()));
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("ingress receive denied by conformance policy");

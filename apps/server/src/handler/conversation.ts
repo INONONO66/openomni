@@ -1,5 +1,5 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
-import { IngressEngine } from "@openomni/openomni";
+import type { IngressEngine } from "@openomni/openomni";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational, WorkItem } from "@openomni/protocol";
 import { Bus, hasRetryExhaustionBlocker, SurfaceKey, WorkItemStore } from "@openomni/session";
@@ -120,6 +120,7 @@ function listOpenTasks(): string {
 async function processMessage(
   message: Adapter.InboundMessage,
   deps: BridgeDeps,
+  ingress: Pick<IngressEngine, "ingest">,
 ): Promise<string | null> {
   try {
     if (normalizeCommand(message.text) === "show open tasks") {
@@ -128,7 +129,7 @@ async function processMessage(
     }
     const event = buildInboundEvent(message, deps);
     event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
-    return toResponseText(await IngressEngine.ingest(event));
+    return toResponseText(await ingress.ingest(event));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     Bus.publish(Operational.Error, {
@@ -142,7 +143,12 @@ async function processMessage(
   }
 }
 
-export function createMessageHandler(deps: BridgeDeps): Adapter.MessageHandler {
+export interface MessageHandlerDeps extends BridgeDeps {
+  /** The single kernel ingress instance this handler routes through (#549). */
+  readonly ingress: Pick<IngressEngine, "ingest">;
+}
+
+export function createMessageHandler(deps: MessageHandlerDeps): Adapter.MessageHandler {
   const queues = new Map<string, Promise<void>>();
   return async (message) => {
     const key = message.surfaceKey;
@@ -151,7 +157,7 @@ export function createMessageHandler(deps: BridgeDeps): Adapter.MessageHandler {
     const current: Promise<void> = prev
       .catch(() => undefined)
       .then(async () => {
-        text = await processMessage(message, deps);
+        text = await processMessage(message, deps, deps.ingress);
       });
     queues.set(key, current);
     try {

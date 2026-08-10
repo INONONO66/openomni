@@ -17,7 +17,7 @@ import {
 import { DispatchRegistry } from "../../packages/openomni/src/dispatch/registry";
 import { CommandRecordError, DispatchRuntime } from "../../packages/openomni/src/dispatch/runtime";
 import { registerBuiltInDispatchHandlers } from "../../packages/openomni/src/dispatch/setup";
-import { IngressEngine } from "../../packages/openomni/src/ingress/engine";
+import { createIngressEngine } from "../../packages/openomni/src/ingress/engine";
 import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing-execution";
 import {
   Bus,
@@ -892,12 +892,8 @@ function configureFailingLedger(): void {
 }
 
 describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
-  afterEach(() => {
-    IngressEngine.clearCoordinator();
-    IngressEngine.clearResidentRuntime();
-    IngressEngine.clearDispatchRuntime();
-  });
-
+  // #549: the engine is an instance — each scenario constructs its own with
+  // explicit deps instead of mutating module-global setters.
   test("route.decided is durable before the routed action's effects are observable", async () => {
     grantConformanceChannel();
     const workerSession = Session.create({
@@ -905,28 +901,30 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     const observed: { factTypes: string[]; parsedOutcome?: string }[] = [];
-    IngressEngine.setCoordinator({
-      dispatch: async (sessionId, request) => {
-        const facts = factsOfStream(routeStreamOf("inbound-route-1"));
-        const first = facts[0] ? (JSON.parse(facts[0].data) as Record<string, unknown>) : undefined;
-        const decided = first === undefined ? undefined : LedgerAppend.RouteDecided.parse(first);
-        observed.push({
-          factTypes: facts.map((fact) => fact.type),
-          ...(decided === undefined ? {} : { parsedOutcome: decided.outcome }),
-        });
-        return {
-          runId: request.runId,
-          sessionId,
-          status: "succeeded" as const,
-          output: "routed",
-          finishReason: "stop" as const,
-        };
+    const engine = createIngressEngine({
+      coordinator: {
+        dispatch: async (sessionId, request) => {
+          const facts = factsOfStream(routeStreamOf("inbound-route-1"));
+          const first = facts[0]
+            ? (JSON.parse(facts[0].data) as Record<string, unknown>)
+            : undefined;
+          const decided = first === undefined ? undefined : LedgerAppend.RouteDecided.parse(first);
+          observed.push({
+            factTypes: facts.map((fact) => fact.type),
+            ...(decided === undefined ? {} : { parsedOutcome: decided.outcome }),
+          });
+          return {
+            runId: request.runId,
+            sessionId,
+            status: "succeeded" as const,
+            output: "routed",
+            finishReason: "stop" as const,
+          };
+        },
       },
     });
 
-    const result = await IngressEngine.ingest(
-      routedIngressEvent("inbound-route-1", workerSession.id),
-    );
+    const result = await engine.ingest(routedIngressEvent("inbound-route-1", workerSession.id));
 
     // The executor saw the durable route.decided fact BEFORE it acted.
     expect(observed).toEqual([{ factTypes: ["route.decided"], parsedOutcome: "route" }]);
@@ -947,7 +945,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // ceiling. The block is a decision — it must be recorded like a route.
     let thrown: unknown;
     try {
-      await IngressEngine.ingest({
+      await createIngressEngine().ingest({
         id: "inbound-route-blocked-1",
         surface: "conformance",
         workspace: "team-conformance",
@@ -978,21 +976,23 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     });
     let dispatches = 0;
     const dispatchedSessions: string[] = [];
-    IngressEngine.setCoordinator({
-      dispatch: async (sessionId, request) => {
-        dispatches += 1;
-        dispatchedSessions.push(sessionId);
-        return {
-          runId: request.runId,
-          sessionId,
-          status: "succeeded" as const,
-          output: "routed",
-          finishReason: "stop" as const,
-        };
+    const engine = createIngressEngine({
+      coordinator: {
+        dispatch: async (sessionId, request) => {
+          dispatches += 1;
+          dispatchedSessions.push(sessionId);
+          return {
+            runId: request.runId,
+            sessionId,
+            status: "succeeded" as const,
+            output: "routed",
+            finishReason: "stop" as const,
+          };
+        },
       },
     });
 
-    const first = await IngressEngine.ingest(
+    const first = await engine.ingest(
       routedIngressEvent("inbound-route-replay-1", workerSession.id),
     );
     // Channel redelivery of the SAME inbound (e.g. the delivery crashed
@@ -1000,7 +1000,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // one, so the equivalence gate lets the redelivery proceed with its
     // FRESH resolution and the owner receives the action again — the #519
     // crash-window recovery path, not a refusal (review fix F2).
-    const second = await IngressEngine.ingest(
+    const second = await engine.ingest(
       routedIngressEvent("inbound-route-replay-1", workerSession.id),
     );
 
@@ -1017,7 +1017,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // First delivery: no channel grant — the block is decided and recorded.
     let firstThrown: unknown;
     try {
-      await IngressEngine.ingest({
+      await createIngressEngine().ingest({
         id: "inbound-route-replay-divergent-1",
         surface: "conformance",
         workspace: "team-conformance",
@@ -1044,16 +1044,18 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     let dispatches = 0;
-    IngressEngine.setCoordinator({
-      dispatch: async (sessionId, request) => {
-        dispatches += 1;
-        return {
-          runId: request.runId,
-          sessionId,
-          status: "succeeded" as const,
-          output: "routed",
-          finishReason: "stop" as const,
-        };
+    const engine = createIngressEngine({
+      coordinator: {
+        dispatch: async (sessionId, request) => {
+          dispatches += 1;
+          return {
+            runId: request.runId,
+            sessionId,
+            status: "succeeded" as const,
+            output: "routed",
+            finishReason: "stop" as const,
+          };
+        },
       },
     });
     const events: string[] = [];
@@ -1061,9 +1063,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
 
     let secondThrown: unknown;
     try {
-      await IngressEngine.ingest(
-        routedIngressEvent("inbound-route-replay-divergent-1", workerSession.id),
-      );
+      await engine.ingest(routedIngressEvent("inbound-route-replay-divergent-1", workerSession.id));
     } catch (error) {
       secondThrown = error;
     }
@@ -1092,9 +1092,10 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       meta: { actor: { role: "user" } },
       agent: { model: { provider: "test", id: "test-model" } },
     });
+    const engine = createIngressEngine();
     let firstThrown: unknown;
     try {
-      await IngressEngine.ingest(blockedEvent());
+      await engine.ingest(blockedEvent());
     } catch (error) {
       firstThrown = error;
     }
@@ -1103,7 +1104,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
 
     let secondThrown: unknown;
     try {
-      await IngressEngine.ingest(blockedEvent());
+      await engine.ingest(blockedEvent());
     } catch (error) {
       secondThrown = error;
     }
@@ -1123,16 +1124,18 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     let dispatches = 0;
-    IngressEngine.setCoordinator({
-      dispatch: async (sessionId, request) => {
-        dispatches += 1;
-        return {
-          runId: request.runId,
-          sessionId,
-          status: "succeeded" as const,
-          output: "routed",
-          finishReason: "stop" as const,
-        };
+    const engine = createIngressEngine({
+      coordinator: {
+        dispatch: async (sessionId, request) => {
+          dispatches += 1;
+          return {
+            runId: request.runId,
+            sessionId,
+            status: "succeeded" as const,
+            output: "routed",
+            finishReason: "stop" as const,
+          };
+        },
       },
     });
     configureFailingLedger();
@@ -1141,7 +1144,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
 
     let thrown: unknown;
     try {
-      await IngressEngine.ingest(routedIngressEvent("inbound-route-fail-1", workerSession.id));
+      await engine.ingest(routedIngressEvent("inbound-route-fail-1", workerSession.id));
     } catch (error) {
       thrown = error;
     }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, Policy } from "@openomni/protocol";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
-import { IngressEngine } from "../../src/ingress/engine";
+import { createIngressEngine } from "../../src/ingress/engine";
 import {
   applyChannelGrantTreatment,
   IngressAuthorityMiddleware,
@@ -209,12 +209,14 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
 
 describe("IngressEngine channel default tier composite (e2e)", () => {
   beforeEach(() => {
-    IngressEngine.reset();
+    Storage.reset();
+    Bus.reset();
     Storage.initialize({ dbPath: ":memory:" });
   });
 
   afterEach(() => {
-    IngressEngine.reset();
+    Storage.reset();
+    Bus.reset();
   });
 
   test("trusted_channel defaultTier observer admits an unregistered actor at the channel ceiling, then the authority check denies", async () => {
@@ -245,7 +247,7 @@ describe("IngressEngine channel default tier composite (e2e)", () => {
       // routes with the channel default tier), but the unregistered actor is
       // then denied by the ingress authority check — the composite that keeps
       // defaultTier a routing fact, never a work-creation authorization.
-      await expect(IngressEngine.ingest(event)).rejects.toThrow(
+      await expect(createIngressEngine().ingest(event)).rejects.toThrow(
         "actor is not authorized to create top-level inbound work",
       );
     } finally {

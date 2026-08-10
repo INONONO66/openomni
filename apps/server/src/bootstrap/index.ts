@@ -6,12 +6,13 @@ import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
   createDefaultDispatchRuntime,
+  createIngressEngine,
   CronAdapter,
   CronJobRunner,
-  IngressEngine,
   ResidentRuntime,
   SystemToolProvider,
   type DispatchRuntime,
+  type IngressEngine,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/index";
@@ -37,6 +38,7 @@ function createRoutingHandler(
   systemProvider: SystemToolProvider,
   agentProvider: AgentToolProvider,
   mcpProvider: McpToolProvider,
+  ingress: Pick<IngressEngine, "ingest">,
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
@@ -48,6 +50,7 @@ function createRoutingHandler(
     customProvider,
     defaultModel,
     workspaceRoot,
+    ingress,
   });
 }
 
@@ -89,7 +92,6 @@ export async function main(options: MainOptions = {}): Promise<void> {
     maxActive: 10,
     idleTimeoutMs: Number(process.env.OPENOMNI_RESIDENT_IDLE_TIMEOUT_MS ?? 30_000),
   });
-  IngressEngine.setResidentRuntime(residentRuntime);
 
   Bus.publish(Operational.Info, {
     traceId: crypto.randomUUID(),
@@ -128,7 +130,6 @@ export async function main(options: MainOptions = {}): Promise<void> {
     maxWorkers: 10,
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
-  IngressEngine.setCoordinator(coordinator);
   const residentAgentResolver = {
     resolve: async (agentName: string, event: Ingress.InternalEvent) =>
       buildAgentDef(agentName, {
@@ -141,12 +142,24 @@ export async function main(options: MainOptions = {}): Promise<void> {
         workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
       }),
   };
+  // The ingress engine and the dispatch runtime reference each other at
+  // command time (resident.ask executes through the engine; the engine
+  // executes wait routes through the runtime), so the dispatch side receives
+  // the engine through the same fail-closed ref seam as the runtime above.
+  const ingressEngineRef: { current?: IngressEngine } = {};
+  const requireIngressEngine = (): IngressEngine => {
+    if (!ingressEngineRef.current) throw new Error("ingress engine is not configured");
+    return ingressEngineRef.current;
+  };
   const dispatchOwners = createServerDispatchOwners({
     coordinator,
     residentRuntime,
     credentials: bootstrap.credentials,
     model,
     residentAgentResolver,
+    ingress: {
+      ingestInternal: (event, runtime) => requireIngressEngine().ingestInternal(event, runtime),
+    },
   });
   const sharedDispatchRuntime = createDefaultDispatchRuntime({
     completionWriter,
@@ -156,14 +169,20 @@ export async function main(options: MainOptions = {}): Promise<void> {
     dispatchRuntime: sharedDispatchRuntime,
   });
   dispatchRuntimeRef.current = sharedDispatchRuntime;
-  IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
-  IngressEngine.setAgentResolver(residentAgentResolver);
+  const ingressEngine = createIngressEngine({
+    coordinator,
+    residentRuntime,
+    agentResolver: residentAgentResolver,
+    dispatchRuntime: sharedDispatchRuntime,
+  });
+  ingressEngineRef.current = ingressEngine;
 
   const routingHandler = model
     ? createRoutingHandler(
         systemProvider,
         requireAgentProvider(),
         mcpProvider,
+        ingressEngine,
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
         customProvider,
@@ -272,7 +291,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
   const cronRunner = CronJobRunner.start({
     fire: async (job) => {
-      await CronAdapter.fire(job);
+      await CronAdapter.fire(job, ingressEngine);
     },
   });
 

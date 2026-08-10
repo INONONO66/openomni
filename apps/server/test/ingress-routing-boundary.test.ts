@@ -75,11 +75,26 @@ function staticMember(expression: ts.Expression): StaticMember | undefined {
 
 type Binding = Readonly<{
   name: string;
-  importKind?: "engine" | "namespace" | "store";
+  importKind?: "engine" | "namespace" | "kernel-namespace" | "store";
   importedName?: string;
   initializer?: ts.Expression;
   propertyName?: string;
 }>;
+
+// #549: the kernel engine is an injected instance. The single approved
+// conversation seam is the `ingress` parameter of processMessage — that
+// parameter (and only that one) carries engine provenance.
+function isProcessMessageIngressParameter(
+  node: ts.SignatureDeclaration,
+  parameter: ts.ParameterDeclaration,
+): boolean {
+  return (
+    ts.isFunctionDeclaration(node) &&
+    node.name?.text === "processMessage" &&
+    ts.isIdentifier(parameter.name) &&
+    parameter.name.text === "ingress"
+  );
+}
 
 type LexicalScope = {
   parent?: LexicalScope;
@@ -159,16 +174,20 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
               importKind: "namespace",
             });
           }
+          if (moduleName === "@openomni/openomni") {
+            addBinding(scope, {
+              name: clause.namedBindings.name.text,
+              importKind: "kernel-namespace",
+            });
+          }
         } else {
           for (const element of clause.namedBindings.elements) {
             if (element.isTypeOnly) continue;
             const importedName = element.propertyName?.text ?? element.name.text;
             const importKind =
-              moduleName === "@openomni/openomni" && importedName === "IngressEngine"
-                ? "engine"
-                : moduleName === "@openomni/session" && ROUTING_STORES.has(importedName)
-                  ? "store"
-                  : undefined;
+              moduleName === "@openomni/session" && ROUTING_STORES.has(importedName)
+                ? "store"
+                : undefined;
             if (importKind) {
               addBinding(scope, {
                 name: element.name.text,
@@ -197,7 +216,11 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
       }
       for (const parameter of node.parameters) {
         scopes.set(parameter, functionScope);
-        declareBindingName(functionScope, parameter.name, parameter.initializer);
+        if (isProcessMessageIngressParameter(node, parameter)) {
+          addBinding(functionScope, { name: "ingress", importKind: "engine" });
+        } else {
+          declareBindingName(functionScope, parameter.name, parameter.initializer);
+        }
       }
       ts.forEachChild(node, (child) => {
         if (!node.parameters.includes(child as ts.ParameterDeclaration)) walk(child, functionScope);
@@ -267,7 +290,10 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
   return { scopeOf, resolveIdentifier };
 }
 
-type Provenance = Readonly<{ kind: "engine" | "method" | "namespace" | "store"; name?: string }>;
+type Provenance = Readonly<{
+  kind: "engine" | "method" | "namespace" | "kernel-namespace" | "engine-factory" | "store";
+  name?: string;
+}>;
 
 function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenance | undefined {
   const memo = new Map<Binding, Provenance | undefined>();
@@ -283,6 +309,9 @@ function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenan
     if (receiver?.kind === "namespace" && ROUTING_STORES.has(member.name)) {
       return { kind: "store", name: member.name };
     }
+    if (receiver?.kind === "kernel-namespace" && member.name === "createIngressEngine") {
+      return { kind: "engine-factory" };
+    }
     return undefined;
   };
   const resolve = (binding: Binding | undefined): Provenance | undefined => {
@@ -293,6 +322,7 @@ function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenan
     let result: Provenance | undefined;
     if (binding.importKind === "engine") result = { kind: "engine" };
     else if (binding.importKind === "namespace") result = { kind: "namespace" };
+    else if (binding.importKind === "kernel-namespace") result = { kind: "kernel-namespace" };
     else if (binding.importKind === "store") result = { kind: "store", name: binding.importedName };
     else if (binding.initializer) {
       const source = expressionProvenance(binding.initializer);
@@ -301,6 +331,11 @@ function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenan
         result = { kind: "method" };
       } else if (source?.kind === "namespace" && ROUTING_STORES.has(binding.propertyName)) {
         result = { kind: "store", name: binding.propertyName };
+      } else if (
+        source?.kind === "kernel-namespace" &&
+        binding.propertyName === "createIngressEngine"
+      ) {
+        result = { kind: "engine-factory" };
       }
     }
     active.delete(binding);
@@ -378,16 +413,23 @@ function detectRoutingBoundaryViolations(parsed: readonly ParsedSource[]): reado
         !statement.importClause ||
         statement.importClause.isTypeOnly ||
         !ts.isStringLiteral(statement.moduleSpecifier) ||
-        statement.moduleSpecifier.text !== "@openomni/session" ||
         !statement.importClause.namedBindings ||
         !ts.isNamedImports(statement.importClause.namedBindings)
       ) {
         continue;
       }
+      const moduleName = statement.moduleSpecifier.text;
+      if (moduleName !== "@openomni/session" && moduleName !== "@openomni/openomni") continue;
       for (const element of statement.importClause.namedBindings.elements) {
         const importedName = element.propertyName?.text ?? element.name.text;
-        if (!element.isTypeOnly && ROUTING_STORES.has(importedName)) {
+        if (element.isTypeOnly) continue;
+        if (moduleName === "@openomni/session" && ROUTING_STORES.has(importedName)) {
           violations.push(`${path}: imports ${importedName}`);
+        }
+        // #549: bridge/conversation receive the engine instance — they never
+        // construct their own.
+        if (moduleName === "@openomni/openomni" && importedName === "createIngressEngine") {
+          violations.push(`${path}: imports createIngressEngine`);
         }
       }
     }
@@ -442,6 +484,22 @@ function detectRoutingBoundaryViolations(parsed: readonly ParsedSource[]): reado
           ROUTING_STORES.has(member.name)
         ) {
           violations.push(`${path}: accesses routing store ${member.name}`);
+        }
+        // #558 review: `import * as OO` + OO.createIngressEngine bypassed the
+        // named-import rule — flag namespace-qualified factory access too.
+        if (
+          member &&
+          expressionProvenance(member.receiver)?.kind === "kernel-namespace" &&
+          member.name === "createIngressEngine"
+        ) {
+          violations.push(`${path}: imports createIngressEngine`);
+        }
+      }
+
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        const callee = resolve(model.resolveIdentifier(node.expression));
+        if (callee?.kind === "engine-factory") {
+          violations.push(`${path}: imports createIngressEngine`);
         }
       }
 
@@ -633,6 +691,16 @@ describe("server ingress routing ownership boundary", () => {
       'import * as Session from "@openomni/session"; ((Session as typeof Session)!)[("ChannelGrantStore" as const)].get("id");',
       "accesses routing store ChannelGrantStore",
     ],
+    [
+      "namespace-qualified engine construction",
+      'import * as OpenOmni from "@openomni/openomni"; const engine = OpenOmni.createIngressEngine();',
+      "imports createIngressEngine",
+    ],
+    [
+      "destructured namespace engine factory alias",
+      'import * as OpenOmni from "@openomni/openomni"; const { createIngressEngine: make } = OpenOmni; make();',
+      "imports createIngressEngine",
+    ],
   ] as const;
 
   for (const [name, text, violation] of routingStoreFixtures) {
@@ -658,6 +726,22 @@ describe("server ingress routing ownership boundary", () => {
   it("ignores routing-store imports from non-canonical modules", () => {
     const path = SOURCE_FILES[1];
     const text = 'import { PendingAskStore } from "other-session"; PendingAskStore.get("id");';
+    expect(detectRoutingBoundaryViolations([parseSource(path, text)])).toEqual([]);
+  });
+
+  it("flags value imports of createIngressEngine in conversation sources", () => {
+    const path = SOURCE_FILES[1];
+    const text =
+      'import { createIngressEngine } from "@openomni/openomni"; const engine = createIngressEngine();';
+    expect(detectRoutingBoundaryViolations([parseSource(path, text)])).toContain(
+      `${path}: imports createIngressEngine`,
+    );
+  });
+
+  it("allows type-only engine imports in conversation sources", () => {
+    const path = SOURCE_FILES[1];
+    const text =
+      'import type { IngressEngine } from "@openomni/openomni"; import { type IngressEngineDeps } from "@openomni/openomni"; export type Seam = Pick<IngressEngine, "ingest">;';
     expect(detectRoutingBoundaryViolations([parseSource(path, text)])).toEqual([]);
   });
 
@@ -752,41 +836,44 @@ describe("server ingress routing ownership boundary", () => {
 
   const kernelIngressFixtures = [
     ["zero ingest", "return null;", 0],
-    ["duplicate direct", "IngressEngine.ingest(a); IngressEngine.ingest(b);", 2],
-    ["duplicate bracket", 'IngressEngine["ingest"](a); IngressEngine["ingest"](b);', 2],
-    ["engine alias", "const engine = IngressEngine; engine.ingest(event);", 1],
-    ["direct method alias", "const runIngress = IngressEngine.ingest; runIngress(event);", 1],
+    ["duplicate direct", "ingress.ingest(a); ingress.ingest(b);", 2],
+    ["duplicate bracket", 'ingress["ingest"](a); ingress["ingest"](b);', 2],
+    ["engine alias", "const engine = ingress; engine.ingest(event);", 1],
+    ["direct method alias", "const runIngress = ingress.ingest; runIngress(event);", 1],
     [
       "method alias",
-      "const { ingest: runIngress } = IngressEngine; const invoke = runIngress; invoke(event);",
+      "const { ingest: runIngress } = ingress; const invoke = runIngress; invoke(event);",
       1,
     ],
-    ["imported engine alias", "Kernel.ingest(event);", 1],
-    ["dynamic ingest member", "IngressEngine[method](event);", 0],
+    [
+      "engine alias chain",
+      "const kernel = ingress; const engine = kernel; engine.ingest(event);",
+      1,
+    ],
+    ["dynamic ingest member", "ingress[method](event);", 0],
     [
       "wrapped engine receiver",
-      "((IngressEngine as typeof IngressEngine) satisfies typeof IngressEngine)!.ingest(event);",
+      "((ingress as typeof ingress) satisfies typeof ingress)!.ingest(event);",
       1,
     ],
     [
       "wrapped ingest method and callee",
-      "const runIngress = ((IngressEngine.ingest as typeof IngressEngine.ingest) satisfies typeof IngressEngine.ingest)!; (runIngress as typeof runIngress)!(event);",
+      "const runIngress = ((ingress.ingest as typeof ingress.ingest) satisfies typeof ingress.ingest)!; (runIngress as typeof runIngress)!(event);",
       1,
     ],
-    ["wrapped static ingest member", 'IngressEngine[("ingest" as const)](event);', 1],
+    ["wrapped static ingest member", 'ingress[("ingest" as const)](event);', 1],
     [
       "duplicate wrapped ingest",
-      "((IngressEngine as typeof IngressEngine)!).ingest(first); const invoke = (IngressEngine.ingest satisfies typeof IngressEngine.ingest); (invoke!)(second);",
+      "((ingress as typeof ingress)!).ingest(first); const invoke = (ingress.ingest satisfies typeof ingress.ingest); (invoke!)(second);",
       2,
     ],
-    ["type-asserted engine receiver", "(<typeof IngressEngine>IngressEngine).ingest(event);", 1],
+    ["type-asserted engine receiver", "(<typeof ingress>ingress).ingest(event);", 1],
   ] as const;
 
   for (const [name, body, expectedCalls] of kernelIngressFixtures) {
     it(`counts ${name} calls`, () => {
       const text = `
-        import { IngressEngine, IngressEngine as Kernel } from "@openomni/openomni";
-        function processMessage() { ${body} }
+        function processMessage(message, deps, ingress) { ${body} }
       `;
       const calls = kernelIngressCallCount(parseSource(SOURCE_FILES[1], text).source);
       expect(calls).toBe(expectedCalls);
@@ -795,14 +882,14 @@ describe("server ingress routing ownership boundary", () => {
 
   it("counts outer canonical calls despite a nested same-name parameter", () => {
     const text = `
-      import { IngressEngine } from "@openomni/openomni";
-      function processMessage() {
-        const engine = IngressEngine;
+      function processMessage(message, deps, ingress) {
+        const engine = ingress;
         engine.ingest(first);
-        IngressEngine.ingest(second);
-        function nested(engine: unknown) {
+        ingress.ingest(second);
+        function nested(engine: unknown, ingress: unknown) {
           const alias = engine;
           alias.ingest(shadow);
+          ingress.ingest(shadow);
         }
       }
     `;
@@ -811,11 +898,10 @@ describe("server ingress routing ownership boundary", () => {
 
   it("isolates same-name engine aliases in sibling blocks", () => {
     const text = `
-      import { IngressEngine } from "@openomni/openomni";
-      function processMessage() {
-        { const engine = IngressEngine; engine.ingest(first); }
+      function processMessage(message, deps, ingress) {
+        { const engine = ingress; engine.ingest(first); }
         { const engine = fakeEngine; engine.ingest(shadow); }
-        { const engine = IngressEngine; const invoke = engine.ingest; invoke(second); }
+        { const engine = ingress; const invoke = engine.ingest; invoke(second); }
       }
     `;
     expect(kernelIngressCallCount(parseSource(SOURCE_FILES[1], text).source)).toBe(2);
@@ -834,9 +920,8 @@ describe("server ingress routing ownership boundary", () => {
   for (const [name, shadow] of lexicalOwnerFixtures) {
     it(`isolates ${name} engine shadows from an outer canonical alias`, () => {
       const text = `
-        import { IngressEngine } from "@openomni/openomni";
-        function processMessage() {
-          const engine = IngressEngine;
+        function processMessage(message, deps, ingress) {
+          const engine = ingress;
           engine.ingest(first);
           ${shadow}
           engine.ingest(second);
@@ -848,17 +933,20 @@ describe("server ingress routing ownership boundary", () => {
 
   const rejectedIngressProvenanceFixtures = [
     [
-      "wrong-module engine",
-      'import { IngressEngine } from "other-kernel"; function processMessage() { IngressEngine.ingest(event); }',
-    ],
-    ["missing import", "function processMessage() { IngressEngine.ingest(event); }"],
-    [
-      "locally shadowed canonical import",
-      'import { IngressEngine } from "@openomni/openomni"; function processMessage() { const IngressEngine = fakeEngine; IngressEngine.ingest(event); }',
+      "module-level ingress shadow",
+      "const ingress = fakeEngine; function processMessage() { ingress.ingest(event); }",
     ],
     [
-      "type-only canonical import",
-      'import type { IngressEngine } from "@openomni/openomni"; function processMessage() { IngressEngine.ingest(event); }',
+      "missing ingress parameter",
+      "function processMessage(message, deps) { IngressEngine.ingest(event); }",
+    ],
+    [
+      "locally shadowed ingress parameter",
+      "function processMessage(message, deps, ingress) { const ingress2 = ingress; { const ingress = fakeEngine; ingress.ingest(event); } }",
+    ],
+    [
+      "nested function ingress parameter",
+      "function processMessage(message, deps) { function inner(ingress: unknown) { ingress.ingest(event); } inner(fakeEngine); }",
     ],
   ] as const;
 

@@ -1,7 +1,7 @@
 // Ingress
 export {
   CronAdapter,
-  IngressEngine,
+  createIngressEngine,
   IngressEventProjector,
   IngressAuthorityMiddleware,
   IngressHandlers,
@@ -10,7 +10,12 @@ export {
   resolveTarget,
   targetKey,
 } from "./ingress";
-export type { CoordinatorLike } from "./ingress";
+export type {
+  AgentResolver,
+  CoordinatorLike,
+  IngressEngine,
+  IngressEngineDeps,
+} from "./ingress";
 
 // Resident activation/runtime
 export { ResidentRuntime } from "./resident";

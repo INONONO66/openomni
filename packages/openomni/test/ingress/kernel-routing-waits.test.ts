@@ -19,12 +19,14 @@ import {
 } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createDefaultDispatchRuntime } from "../../src/dispatch/setup";
-import { IngressEngine } from "../../src/ingress/engine";
+
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { IngressRoutingError } from "../../src/ingress/routing-execution";
 import { createExistingAgentMessaging } from "../../src/messaging/index";
 import { WaitService } from "../../src/wait/index";
 import {
+  kernelEngine,
+  makeKernelRoutingEngine,
   resetKernelRoutingState,
   residentExecutions,
   routingDecisions,
@@ -169,12 +171,12 @@ describe("IngressEngine wait routing", () => {
       handlerWorkspaceRoot = context?.workspaceRoot;
       return { output: "accepted" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
 
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest(replyEvent("inbound-exact"));
+      result = await kernelEngine().ingest(replyEvent("inbound-exact"));
     } finally {
       observed.unsubscribe();
       publish.mockRestore();
@@ -210,9 +212,11 @@ describe("IngressEngine wait routing", () => {
       workerRunId: "run-plain-text",
     });
     await WorkItemStore.start(workItem.hash);
-    IngressEngine.setDispatchRuntime(createDefaultDispatchRuntime({ completionWriter }));
+    makeKernelRoutingEngine({
+      dispatchRuntime: createDefaultDispatchRuntime({ completionWriter }),
+    });
 
-    const result = await IngressEngine.ingest(
+    const result = await kernelEngine().ingest(
       replyEvent("inbound-plain-text", "completed successfully"),
     );
 
@@ -231,13 +235,13 @@ describe("IngressEngine wait routing", () => {
       calls += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
 
     let error: Error | undefined;
     try {
       error = await captureError(
-        IngressEngine.ingest(
+        kernelEngine().ingest(
           replyEvent("inbound-denied-action", { action: "ask_clarification", question: "Why?" }),
         ),
       );
@@ -272,9 +276,9 @@ describe("IngressEngine wait routing", () => {
       commands.push(command);
       return { output: "clarified" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
 
-    const result = await IngressEngine.ingest(
+    const result = await kernelEngine().ingest(
       replyEvent("inbound-connector-ask", {
         action: "ask_clarification",
         question: "Which connector?",
@@ -305,13 +309,13 @@ describe("IngressEngine wait routing", () => {
       dispatchExecutions += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
 
     let error: Error | undefined;
     try {
       error = await captureError(
-        IngressEngine.ingest(replyEvent(`inbound-unsupported-${suffix}`, { action })),
+        kernelEngine().ingest(replyEvent(`inbound-unsupported-${suffix}`, { action })),
       );
     } finally {
       observed.unsubscribe();
@@ -343,7 +347,7 @@ describe("IngressEngine wait routing", () => {
       handlerContext = { sessionId: context?.sessionId, runId: context?.runId };
       return { output: "accepted" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
     const inbound = {
       ...replyEvent("inbound-poisoned"),
@@ -361,7 +365,7 @@ describe("IngressEngine wait routing", () => {
 
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest(inbound);
+      result = await kernelEngine().ingest(inbound);
     } finally {
       observed.unsubscribe();
     }
@@ -413,7 +417,7 @@ describe("IngressEngine wait routing", () => {
     let result: Ingress.IngressResult;
     let projectedEvent: Parameters<typeof IngressEventProjector.project>[0] | undefined;
     try {
-      result = await IngressEngine.ingest(inbound);
+      result = await kernelEngine().ingest(inbound);
       expect(project).toHaveBeenCalledTimes(1);
       const projectedCall = project.mock.calls[0];
       if (projectedCall === undefined) throw new Error("expected projector call");
@@ -475,7 +479,7 @@ describe("IngressEngine wait routing", () => {
     let projectedEvent: Parameters<typeof IngressEventProjector.project>[0] | undefined;
     let projectedSessionId: string | undefined;
     try {
-      result = await IngressEngine.ingest(inbound);
+      result = await kernelEngine().ingest(inbound);
       expect(project).toHaveBeenCalledTimes(1);
       const projectedCall = project.mock.calls[0];
       if (projectedCall === undefined) throw new Error("expected projector call");
@@ -513,12 +517,12 @@ describe("IngressEngine wait routing", () => {
       calls += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
 
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(replyEvent("inbound-pi-ambiguous")));
+      error = await captureError(kernelEngine().ingest(replyEvent("inbound-pi-ambiguous")));
     } finally {
       observed.unsubscribe();
     }
@@ -547,7 +551,7 @@ describe("IngressEngine wait routing", () => {
 
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(replyEvent("inbound-combined")));
+      error = await captureError(kernelEngine().ingest(replyEvent("inbound-combined")));
     } finally {
       observed.unsubscribe();
     }
@@ -578,13 +582,13 @@ describe("IngressEngine wait routing", () => {
       dispatchExecutions += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
     const mark = spyOn(PendingAskStore, "markAmbiguous");
 
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(replyEvent("inbound-selected-ambiguity")));
+      error = await captureError(kernelEngine().ingest(replyEvent("inbound-selected-ambiguity")));
     } finally {
       observed.unsubscribe();
       mark.mockRestore();
@@ -632,11 +636,11 @@ describe("IngressEngine wait routing", () => {
       dispatchExecutions += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
 
     const error = await captureError(
-      IngressEngine.ingest({
+      kernelEngine().ingest({
         ...replyEvent("inbound-shared-channel-intruder"),
         userId: "intruder-2",
       }),
@@ -681,12 +685,12 @@ describe("IngressEngine wait routing", () => {
       dispatchExecutions += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const observed = routingDecisions();
 
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest(replyEvent("inbound-resolved-endpoint"));
+      result = await kernelEngine().ingest(replyEvent("inbound-resolved-endpoint"));
     } finally {
       observed.unsubscribe();
     }
@@ -725,7 +729,7 @@ describe("IngressEngine wait routing", () => {
       dispatchExecutions += 1;
       return { output: "must not execute" };
     });
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
     const pendingInteractionReads = spyOn(PendingInteractionStore, "findByCorrelation");
     const pendingAskReads = spyOn(PendingAskStore, "findByCorrelation");
     const markCalls: string[] = [];
@@ -740,7 +744,7 @@ describe("IngressEngine wait routing", () => {
     let pendingAskQueries: Communication.PendingAsk.CorrelationQuery[] = [];
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest({
+      result = await kernelEngine().ingest({
         ...replyEvent("inbound-blacklisted"),
         meta: {
           correlation: {
@@ -816,12 +820,12 @@ describe("IngressEngine wait routing", () => {
 
   test("leaves an authorized exact interaction open when no handler is selected", async () => {
     const sessionId = await createPending("pi-no-handler", "run-no-handler");
-    IngressEngine.setDispatchRuntime(new DispatchRuntime());
+    makeKernelRoutingEngine({ dispatchRuntime: new DispatchRuntime() });
     const observed = routingDecisions();
 
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(replyEvent("inbound-no-handler")));
+      error = await captureError(kernelEngine().ingest(replyEvent("inbound-no-handler")));
     } finally {
       observed.unsubscribe();
     }
@@ -847,9 +851,9 @@ describe("IngressEngine wait routing", () => {
     await createPending("pi-structured-output", "run-structured-output");
     const runtime = new DispatchRuntime();
     runtime.register("worker.complete", () => ({ output: { internal: "result" } }));
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
 
-    const result = await IngressEngine.ingest(replyEvent("inbound-structured-output"));
+    const result = await kernelEngine().ingest(replyEvent("inbound-structured-output"));
 
     expect(result.result.output).toBe("");
     expect(PendingInteractionStore.get("pi-structured-output")?.status).toBe("resolved");
@@ -859,9 +863,9 @@ describe("IngressEngine wait routing", () => {
     await createPending("pi-primitive-output", "run-primitive-output");
     const runtime = new DispatchRuntime();
     runtime.register("worker.complete", () => ({ output: 42 }));
-    IngressEngine.setDispatchRuntime(runtime);
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
 
-    const error = await captureError(IngressEngine.ingest(replyEvent("inbound-primitive-output")));
+    const error = await captureError(kernelEngine().ingest(replyEvent("inbound-primitive-output")));
 
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("dispatch_output_unsupported");
@@ -924,7 +928,7 @@ describe("IngressEngine durable wait routing", () => {
 
     let result: Ingress.IngressResult;
     try {
-      result = await IngressEngine.ingest(replyEvent("inbound-wait-reply"));
+      result = await kernelEngine().ingest(replyEvent("inbound-wait-reply"));
     } finally {
       observed.unsubscribe();
     }
@@ -961,7 +965,7 @@ describe("IngressEngine durable wait routing", () => {
       quorum: { expected: 3, threshold: 2 },
     });
 
-    const result = await IngressEngine.ingest(replyEvent("inbound-wait-quorum-first"));
+    const result = await kernelEngine().ingest(replyEvent("inbound-wait-quorum-first"));
 
     expect(result.sessionId).toBe(wait.ownerRef.id);
     const record = WaitStore.get("wait-quorum");
@@ -977,8 +981,8 @@ describe("IngressEngine durable wait routing", () => {
       quorum: { expected: 2, threshold: 2 },
     });
 
-    await IngressEngine.ingest(replyEvent("inbound-wait-duplicate"));
-    const error = await captureError(IngressEngine.ingest(replyEvent("inbound-wait-duplicate")));
+    await kernelEngine().ingest(replyEvent("inbound-wait-duplicate"));
+    const error = await captureError(kernelEngine().ingest(replyEvent("inbound-wait-duplicate")));
 
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
@@ -1003,7 +1007,7 @@ describe("IngressEngine durable wait routing", () => {
     });
     expect(early.kind).toBe("attached");
 
-    const error = await captureError(IngressEngine.ingest(replyEvent("inbound-wait-late")));
+    const error = await captureError(kernelEngine().ingest(replyEvent("inbound-wait-late")));
 
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
@@ -1019,13 +1023,13 @@ describe("IngressEngine durable wait routing", () => {
     registerResponder("actor-external-worker", "seller-1");
     const wait = openSessionWait("wait-redelivery");
 
-    const first = await IngressEngine.ingest(replyEvent("inbound-wait-redelivery"));
+    const first = await kernelEngine().ingest(replyEvent("inbound-wait-redelivery"));
     const resolvedRow = WaitStore.get("wait-redelivery");
     expect(resolvedRow).toMatchObject({ status: "resolved" });
     // Channel redelivery of the SAME reply (e.g. the owner delivery crashed
     // mid-projection): the fold short-circuits to already_resolved and the
     // owner receives the recorded resolution again.
-    const second = await IngressEngine.ingest(replyEvent("inbound-wait-redelivery"));
+    const second = await kernelEngine().ingest(replyEvent("inbound-wait-redelivery"));
 
     expect(first.sessionId).toBe(wait.ownerRef.id);
     expect(second.sessionId).toBe(wait.ownerRef.id);
@@ -1040,7 +1044,7 @@ describe("IngressEngine durable wait routing", () => {
     openSessionWait("wait-intruder", { expectedResponders: ["actor-someone-else"] });
 
     const error = await captureError(
-      IngressEngine.ingest({ ...replyEvent("inbound-wait-intruder"), userId: "intruder-2" }),
+      kernelEngine().ingest({ ...replyEvent("inbound-wait-intruder"), userId: "intruder-2" }),
     );
 
     expect(error).toBeInstanceOf(IngressRoutingError);
@@ -1059,7 +1063,7 @@ describe("IngressEngine durable wait routing", () => {
     let error: Error | undefined;
     try {
       error = await captureError(
-        IngressEngine.ingest(
+        kernelEngine().ingest(
           replyEvent("inbound-wait-disallowed", { action: "ask_clarification", question: "Why?" }),
         ),
       );
@@ -1094,7 +1098,7 @@ describe("IngressEngine durable wait routing", () => {
 
     let error: Error | undefined;
     try {
-      error = await captureError(IngressEngine.ingest(replyEvent("inbound-wait-work-item")));
+      error = await captureError(kernelEngine().ingest(replyEvent("inbound-wait-work-item")));
     } finally {
       observed.unsubscribe();
     }
@@ -1182,12 +1186,12 @@ describe("IngressEngine durable wait routing", () => {
       },
     });
 
-    const first = await IngressEngine.ingest(responderReply("inbound-wired-r1", "responder-1"));
+    const first = await kernelEngine().ingest(responderReply("inbound-wired-r1", "responder-1"));
     const afterFirst = WaitStore.get("wait-wired-quorum");
     expect(afterFirst).toMatchObject({ status: "open" });
     expect(afterFirst?.replies).toHaveLength(1);
 
-    const second = await IngressEngine.ingest(responderReply("inbound-wired-r2", "responder-2"));
+    const second = await kernelEngine().ingest(responderReply("inbound-wired-r2", "responder-2"));
 
     expect(first.sessionId).toBe(session.id);
     expect(second.sessionId).toBe(session.id);
@@ -1207,7 +1211,7 @@ describe("IngressEngine durable wait routing", () => {
     await createPending("pi-shadowed", "run-shadowed");
     const wait = openSessionWait("wait-tier-first");
 
-    const result = await IngressEngine.ingest(replyEvent("inbound-wait-tier"));
+    const result = await kernelEngine().ingest(replyEvent("inbound-wait-tier"));
 
     expect(result.sessionId).toBe(wait.ownerRef.id);
     expect(PendingInteractionStore.get("pi-shadowed")?.status).toBe("open");

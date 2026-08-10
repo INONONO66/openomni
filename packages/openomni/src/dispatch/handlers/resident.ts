@@ -1,6 +1,6 @@
 import type { Dispatch, Ingress, Model } from "@openomni/protocol";
 import type { ResidentRuntime } from "../../resident/runtime.js";
-import { type AgentResolver, IngressEngine } from "../../ingress/engine.js";
+import type { AgentResolver, IngressEngine } from "../../ingress/engine.js";
 import { WaitService } from "../../wait/index.js";
 import type { DispatchHandler } from "../registry.js";
 
@@ -8,6 +8,8 @@ export interface ResidentDispatchHandlerOptions {
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
   readonly defaultModel?: Model.Ref;
   readonly agentResolver?: AgentResolver;
+  /** Ingress engine instance owning resident execution (#549); fail-closed when absent. */
+  readonly ingress?: Pick<IngressEngine, "ingestInternal">;
 }
 
 function requireResidentRuntime(
@@ -15,6 +17,13 @@ function requireResidentRuntime(
 ): Pick<ResidentRuntime, "run"> {
   if (!residentRuntime) throw new Error("dispatch resident handler requires residentRuntime owner");
   return residentRuntime;
+}
+
+function requireIngress(
+  ingress: Pick<IngressEngine, "ingestInternal"> | undefined,
+): Pick<IngressEngine, "ingestInternal"> {
+  if (!ingress) throw new Error("dispatch resident handler requires ingress owner");
+  return ingress;
 }
 
 function fallbackAgentResolver(model: Model.Ref | undefined): AgentResolver | undefined {
@@ -88,9 +97,10 @@ export function createResidentDispatchHandlers(
       const sessionId = command.target.sessionId ?? command.sessionId ?? context?.sessionId;
       if (!sessionId)
         throw new Error("resident.ask requires target.sessionId or runtime sessionId");
+      const ingress = requireIngress(options.ingress);
       auditSyncAsk(command, sessionId, "opened");
       try {
-        const result = await IngressEngine.ingestInternal(eventFromCommand(command, context), {
+        const result = await ingress.ingestInternal(eventFromCommand(command, context), {
           residentRuntime,
           ...(agentResolver ? { agentResolver } : {}),
         });

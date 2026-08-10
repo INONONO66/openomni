@@ -10,6 +10,6 @@ export interface HandlerContext {
   coordinator?: CoordinatorLike;
   residentRuntime?: Pick<ResidentRuntime, "run">;
   traceContext?: TraceContextProtocol.Type;
-  policies?: PolicyRegistration[];
+  policies?: readonly PolicyRegistration[];
   onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
 }

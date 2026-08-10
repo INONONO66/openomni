@@ -3,6 +3,7 @@ import { WorkItem } from "@openomni/protocol";
 import type { Storage } from "@openomni/session";
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
 import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
+import { VerifierRegistry } from "../evidence/verifier-registry.js";
 import type { PolicyResolverInstance } from "../policy/index.js";
 import {
   createWorkItemCompletionGateway,
@@ -36,6 +37,11 @@ export interface BuiltInDispatchOptions {
   readonly now?: WorkerCompletionOptions["now"];
   /** Gate-side task policy stamping rules (#462 §7); defaults to the built-in required plan. */
   readonly policyResolver?: PolicyResolverInstance;
+  /**
+   * Shared deterministic verifier registry injected into worker completion
+   * projection (#549); constructed once here when not supplied.
+   */
+  readonly verifierRegistry?: VerifierRegistry.Registry;
 }
 
 function defaultCompletionAdmissionService(
@@ -57,13 +63,16 @@ export function registerBuiltInDispatchHandlers(
   const scheduler = owners.scheduler ?? CronJobRegistry;
   const completionService =
     options.completionAdmissionService ?? defaultCompletionAdmissionService(options);
+  const verifierRegistry = options.verifierRegistry ?? VerifierRegistry.create();
   const handlers = {
     ...createResidentDispatchHandlers({
       residentRuntime: owners.residentRuntime,
       defaultModel: owners.defaultModel,
+      ...(owners.ingress === undefined ? {} : { ingress: owners.ingress }),
     }),
     ...createWorkerDispatchHandlers({
       completionService,
+      verifierRegistry,
       coordinator: owners.coordinator,
       connectorEndpointDriver: owners.connectorEndpointDriver,
       defaultModel: owners.defaultModel,
@@ -115,6 +124,9 @@ export function createDefaultDispatchRuntime(
     readBackRecorder: options.readBackRecorder,
     now: options.now,
     policyResolver: options.policyResolver,
+    ...(options.verifierRegistry === undefined
+      ? {}
+      : { verifierRegistry: options.verifierRegistry }),
   });
   return Object.assign(runtime, {
     /**

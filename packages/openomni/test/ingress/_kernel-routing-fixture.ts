@@ -7,7 +7,11 @@ import {
   Storage,
   SurfaceKey,
 } from "@openomni/session";
-import { IngressEngine } from "../../src/ingress/engine";
+import {
+  createIngressEngine,
+  type IngressEngine,
+  type IngressEngineDeps,
+} from "../../src/ingress/engine";
 import { IngressSessionResolver } from "../../src/ingress/session-resolver";
 import { ResidentRuntime } from "../../src/resident/runtime";
 
@@ -25,18 +29,37 @@ export const ownerEvent = {
 
 export const residentExecutions: string[] = [];
 
+let engine: IngressEngine | undefined;
+
 export function resetKernelRoutingState(): void {
-  IngressEngine.reset();
+  Storage.reset();
+  Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
   residentExecutions.length = 0;
-  IngressEngine.setResidentRuntime(
-    ResidentRuntime.create({
+  engine = makeKernelRoutingEngine();
+}
+
+/** The engine created for the current test by resetKernelRoutingState(). */
+export function kernelEngine(): IngressEngine {
+  if (!engine) throw new Error("resetKernelRoutingState() must run before kernelEngine()");
+  return engine;
+}
+
+/**
+ * Rebuilds the current test's engine with extra construction deps (#549) —
+ * e.g. a dispatch runtime — keeping the shared recording resident runtime.
+ */
+export function makeKernelRoutingEngine(deps: IngressEngineDeps = {}): IngressEngine {
+  engine = createIngressEngine({
+    residentRuntime: ResidentRuntime.create({
       runAgent: async () => {
         residentExecutions.push("executed");
         return { text: "resident response", finishReason: "stop" };
       },
     }),
-  );
+    ...deps,
+  });
+  return engine;
 }
 
 export function registerOwnerDm(): void {

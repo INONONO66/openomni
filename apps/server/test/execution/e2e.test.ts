@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { IngressEngine } from "@openomni/openomni";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createIngressEngine, type IngressEngine } from "@openomni/openomni";
 import type { Execution, Ingress } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/session";
+import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 
 type CoordinatorLike = {
   dispatch(sessionId: string, request: Execution.Request): Promise<Execution.Result>;
@@ -22,8 +22,13 @@ function makeDirectEvent(): Ingress.DirectEvent {
   };
 }
 
+function makeEngine(coordinator?: CoordinatorLike): IngressEngine {
+  return createIngressEngine(coordinator === undefined ? {} : { coordinator });
+}
+
 beforeEach(() => {
-  IngressEngine.reset();
+  Storage.reset();
+  Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
   ChannelGrantStore.put({
     id: "grant-test",
@@ -32,11 +37,6 @@ beforeEach(() => {
     defaultTier: "owner",
     createdBy: "act_owner",
   });
-  IngressEngine.clearCoordinator();
-});
-
-afterEach(() => {
-  IngressEngine.clearCoordinator();
 });
 
 describe("coordinator dispatch path — direct mode", () => {
@@ -53,9 +53,9 @@ describe("coordinator dispatch path — direct mode", () => {
       },
     };
 
-    IngressEngine.setCoordinator(mockCoordinator);
+    const engine = makeEngine(mockCoordinator);
 
-    const result = await IngressEngine.ingest(makeDirectEvent());
+    const result = await engine.ingest(makeDirectEvent());
 
     expect(result.mode).toBe("direct");
     if (result.mode !== "direct") throw new Error("expected direct result");
@@ -65,7 +65,7 @@ describe("coordinator dispatch path — direct mode", () => {
 
 describe("no coordinator — error required", () => {
   test("throws when coordinator is not set", () => {
-    return expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
+    return expect(makeEngine().ingest(makeDirectEvent())).rejects.toThrow(
       "coordinator is required",
     );
   });
@@ -79,9 +79,9 @@ describe("coordinator failure — error propagated", () => {
       },
     };
 
-    IngressEngine.setCoordinator(failingCoordinator);
+    const engine = makeEngine(failingCoordinator);
 
-    return expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow("worker unreachable");
+    return expect(engine.ingest(makeDirectEvent())).rejects.toThrow("worker unreachable");
   });
 
   test("throws when coordinator returns non-succeeded status", () => {
@@ -96,10 +96,8 @@ describe("coordinator failure — error propagated", () => {
       },
     };
 
-    IngressEngine.setCoordinator(failingCoordinator);
+    const engine = makeEngine(failingCoordinator);
 
-    return expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
-      "Coordinator dispatch failed",
-    );
+    return expect(engine.ingest(makeDirectEvent())).rejects.toThrow("Coordinator dispatch failed");
   });
 });
