@@ -24,6 +24,7 @@ import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { IngressRoutingError } from "../../src/ingress/routing-execution";
 import { createExistingAgentMessaging } from "../../src/messaging/index";
 import { WaitService } from "../../src/wait/index";
+import { seedPendingInteraction } from "../helpers/pending-interaction";
 import {
   kernelEngine,
   makeKernelRoutingEngine,
@@ -94,25 +95,18 @@ async function seedFrozenPending(
   await WorkerRun.updateStatus(session.id, runId, "starting");
   await WorkerRun.updateStatus(session.id, runId, "running");
   await WorkerRun.updateStatus(session.id, runId, "waiting_input");
-  const adapter = Storage.getAdapter().pendingInteraction;
-  if (!adapter) throw new Error("pendingInteraction adapter missing");
-  adapter.create(
-    Communication.PendingInteraction.Record.parse({
-      id,
-      workerRunId: runId,
-      sessionId: session.id,
-      endpointId: correlation.endpointId,
-      channelId: correlation.channelId,
-      correlation: { tokenHash: correlation.tokenHash },
-      allowedActions,
-      targetActorId,
-      status: "open",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      expiresAt: Number.MAX_SAFE_INTEGER,
-      followUpWindow: 60_000,
-    }),
-  );
+  seedPendingInteraction({
+    id,
+    workerRunId: runId,
+    sessionId: session.id,
+    endpointId: correlation.endpointId,
+    channelId: correlation.channelId,
+    correlation: { tokenHash: correlation.tokenHash },
+    allowedActions,
+    targetActorId,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    followUpWindow: 60_000,
+  });
   return session.id;
 }
 
@@ -239,8 +233,10 @@ describe("IngressEngine wait routing", () => {
     });
     expect(routed).toHaveLength(1);
     expect(result.sessionId).toBe(sessionId);
-    // The frozen row stays readable; routing never depends on mutating it.
-    expect(PendingInteractionStore.get("pi-frozen-legacy")).toBeDefined();
+    // The frozen row stays readable AND untransitioned (#548 read-only pin):
+    // routing never depends on mutating it, so the row remains exactly as
+    // persisted — still open, not resolved.
+    expect(PendingInteractionStore.get("pi-frozen-legacy")?.status).toBe("open");
   });
 
   test("normalizes a plain-text worker reply for the default worker.complete handler", async () => {

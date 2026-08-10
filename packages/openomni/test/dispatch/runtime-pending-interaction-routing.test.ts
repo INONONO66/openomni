@@ -2,11 +2,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { PolicyDecision, Dispatch as DispatchProtocol } from "@openomni/protocol";
 import { PendingInteractionStore, Storage } from "@openomni/session";
 import { DispatchRuntime, submitPinnedPendingInteraction } from "../../src/dispatch/runtime";
-import {
-  createWorkerRunFixture,
-  resetDispatchTestState,
-  seedPendingInteraction,
-} from "./runtime-test-fixtures";
+import { seedPendingInteraction } from "../helpers/pending-interaction";
+import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
