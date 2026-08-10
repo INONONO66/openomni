@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786359199299,
+  "lastUpdate": 1786359667369,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41145,6 +41145,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518903,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f5e946d3e55e33139f7cb2aa5e673820bd77cd65",
+          "message": "feat(session,openomni,server): worker-run cutover to WorkItem attempts (D2b) (#580)\n\n* test(openomni,session): red pins for #510 D2b worker-run cutover\n\nPins (red at this commit, flipped by the cutover/freeze commits):\n(a) worker-run store writes throw typed worker_run_frozen on every write\n    surface; adapter-seeded legacy rows keep answering reads (3 red)\n(b) a new ingress worker execution produces NO worker_run_state row - its\n    lifecycle is work_item.attempt_allocated/attempt_finished facts (red)\n(c) terminal extras (endedAt, error) survive a process restart - today\n    they live in the in-memory runExtras Map at\n    packages/session/src/worker-run/index.ts:37 (red)\n(d) trustTier derives assigned_worker from attempt facts for a new run\n    (red) AND from the frozen-row upcast for a legacy row (green guard)\n\nSchema-only vocabulary shipped with the pins (no behavior change):\n- protocol WorkItem.AttemptOutcome + WorkItem.AttemptTerminal, projected\n  as the optional Info.attemptTerminal field (endedAt/lastMessageId have\n  no other home in the WorkItem vocabulary)\n- work stream registry gains work_item.attempt_finished\n- protocol WorkerRun.FrozenError (code worker_run_frozen) mirroring the\n  pending-ask/pending-interaction freeze precedent\n\nRed evidence: 6 fail / 2 pass across the three pin files at this commit.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(openomni,session,server): cut worker-run consumers to attempt facts\n\nand write the WorkItem attempt lifecycle on the work:<hash> owner stream\n(decision-class append + projection, head==revision) instead of the\nworker_run_state second ledger. New worker executions write NO\nworker_run_state rows.\n\nNew session surface: WorkItemAttemptRun (work-item/attempt-run.ts) -\nfind/listActive views, beginWait/endWait acquire semantics, and finish()\nappending ONE work_item.attempt_finished fact that carries endedAt/\nlastMessageId/error (previously the in-memory runExtras Map, lost on\nrestart) and folds the item honestly.\n\nHonest state mapping (legacy worker_run status -> work-item fold):\n- queued/starting/running -> allocated attempt on a started item\n  (\"running\"; the starting/running split had no decision content)\n- waiting_input -> unresolved waiting_input blocker carrying the\n  attempt-wait:<attemptId> marker (blocker_added/resolved facts)\n- succeeded -> attemptTerminal outcome succeeded (completion admission\n  stays the separate #490 verdict; ingress runs have no admission - their\n  terminal truth is the attempt outcome)\n- failed -> attemptTerminal failed + work_item failed timestamps/reason\n- cancelled -> attemptTerminal cancelled + work_item cancelled\n- interrupted -> attemptTerminal interrupted + work_item failed\n\nConsumers cut over:\n- kernel ingress/handlers.ts: createDurableAttemptRun (WorkItem + started\n  + attempt allocated before the executor acts), terminal finish on\n  dispatch result/throw, cancel over listActive\n- kernel dispatch/actor.ts: trustTier existence from the attempt-run view\n  (legacy rows answer via the frozen-row upcast)\n- kernel dispatch/handlers/worker.ts: worker.spawn records the attempt\n  terminal after coordinator dispatch (interrupted on throw);\n  worker.complete authority requires the item's own active attempt view\n  and records the connector attempt terminal before projection\n- server bootstrap/resident-inbound-wait.ts: single acquire CAS\n  (beginWait) replaces the starting/running/waiting_input ladder\n- server execution/recovery.ts: interrupts active internal_chat_agent\n  attempts only - connector-endpoint attempts survive a kernel restart\n  (the legacy sweep interrupted every non-terminal row; in production\n  those were exclusively ingress-created internal runs)\n\nPins (b), (c), (d) from the red-pin commit are green here; pin (a)\n(freeze) lands next.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session): freeze the worker-run store behind attempt facts\n\n#510 D2b freeze (pending-ask D2a / pending-interaction #548 precedent):\nevery WorkerRun and WorkerRunStateStore write surface now throws the\ntyped protocol WorkerRun.FrozenError (data.code worker_run_frozen) and\npersists nothing. Reads keep serving the immutable worker_run_state rows\nfor the deterministic upcast-on-read attempt-run view and the archive\nmanifest.\n\nDied with the writes:\n- the store's worker.run.* Bus lifecycle publishers (production\n  publishers of the retired write path; the protocol event schema stays\n  on #497's kill list)\n- the worker-run transition table (run transition legality lives in the\n  WorkItem fold)\n- the in-memory runExtras Map (endedAt/lastMessageId) - the completion\n  condition's zero in-memory run state: terminal extras are attempt-fact\n  fields since the cutover commit; legacy terminal rows derive endedAt\n  from their persisted update time\n\nTests: legacy live-store pins (worker-run.test.ts, state-store.test.ts)\nare retired with the behavior they pinned; frozen.test.ts (pin a, now\ngreen) and the new work-item/attempt-run.test.ts own the coverage\n(acquire/release CAS, idempotent finish, terminal fold, allocation\nclearing, listActive filtering, deterministic legacy upcast, durable\nlastMessageId round-trip). Fixtures that seeded live rows switch to\nadapter-layer seeding, exactly as pre-freeze rows persist on disk.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session,openomni): archive worker_run_state + conformance pins\n\n#510 D2b archive boundary: the frozen worker_run_state table joins the\nledger archive manifest (script/generate-ledger-archive-manifest.ts,\nidColumn run_id) with source schema version, range identity, and the\ncanonical-JSON sha256 range hash.\n\nConformance (script/conformance/p2-ledger-baseline.test.ts) gains the\nD2b block mirroring the D2a/pending-interaction receipts:\n- frozen writer: worker-run writes throw the typed worker_run_frozen\n  error, publish nothing, and leave archived rows readable\n- archive manifest: deterministic byte-for-byte range hash over the\n  frozen rows; a tampered archived row mismatches\n- upcast-on-read: terminal legacy statuses map 1:1 through the\n  attempt-run view, non-terminal folds to interrupted; the read\n  materializes no work_item row, appends no attempt fact, and leaves the\n  archived bytes unchanged; frozen rows can never re-animate through the\n  attempt surfaces (beginWait false, never listed active)\n\nThe existing C2 attempt-identity conformance case now pins the D2b\nno-rows invariant: worker.spawn leaves the frozen table empty and the\nrun's terminal truth is the work_item.attempt_finished fact.\n\ndocs/implementation-status.md rows (ledger phases, attempt model,\nexecutorKind, Wait absorption) synced to the shipped D2b state.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni,session): idempotent worker.complete, drop lastMessageId\n\nReview fixes 2-4 on the #510 D2b attempt-terminal contract.\n\nMAJOR 2 - worker.complete same-attempt resubmission: the old order\nassert(active) -> finish() -> projection terminalized the attempt on a\nBLOCKED first submission, permanently rejecting the corrected retry.\nFix (finish-after-unblocked-projection, chosen over a pure terminal\npass-through):\n- a succeeded result records work_item.attempt_finished only AFTER an\n  unblocked projection - a blocked admission keeps the attempt ACTIVE so\n  the corrected same-attempt resubmission follows the unchanged live\n  path (legacy parity: the run row never terminalized on block)\n- a non-succeeded result still finishes before projection (it ends the\n  execution definitively; the projection folds the item the same way)\n- authority gains a terminal-SUCCEEDED pass-through arm, so a crash\n  BETWEEN admission and the terminal fact is answered by the\n  projection's deterministic idempotent receipt (byte-identical replay\n  from durable state) instead of stranding - both crash windows recover\n- finish() allows the succeeded terminal on an admission-completed item\n  (admission-before-terminal is the normal worker.complete order)\nRed-first pin: blocked-then-retried completion admits exactly once\n(failed at the pre-fix head with attemptTerminal recorded on the\nblocked submission; the retry unblock step resolves the #490\nactive_blocker, which is pre-existing admission scope).\n\nMAJOR 3 - AttemptTerminal.lastMessageId DELETED: it has zero producers,\nand the retired runExtras plumbing never had a production writer for it\neither - the cutover commit's migration narrative overstated this; only\nendedAt/error (with verified producers) were genuinely promoted to\nattempt-fact fields. No vocabulary without a producer.\n\nMINOR 4 - attempt-run findItem now documents the O(N) scan plus the\nunbounded accumulation of forever-running succeeded ingress items as a\nrecorded #494 performance item (not optimized here).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): cover D2b recovery/inbound-wait branches for the ratchet\n\nBLOCKER 1 - apps/server line coverage fell to 87.39% (baseline 87.91,\ntolerance floor 87.41) after the D2b rewrites. Fixed by covering the new\ncode, not by rebaselining:\n\n- resident-inbound-wait: the no-parent-Resident rejection and the\n  missing-runId rejection are now pinned (and merged into ONE reachable\n  branch - the separate 'requires runId' return was dead code: a found\n  run implies a runId); resident.ask output normalization branches\n  (nested envelope unwrap, non-string fallback to \"\") are pinned\n- bootstrap recovery retry queue: interrupted inbound messages with a\n  text part replay through the handler, and a throwing retry handler is\n  swallowed with a loud per-message Operational.Error while recovery\n  completes (previously uncovered processRetryQueue paths)\n\nRatchet proof (local, per-package lcov over all nine baselined\npackages): OK at tolerance 0.5pp - apps/server 88.50% (+0.59pp over\nbaseline), packages/agent 92.82%, coordinator 80%, ipc 81.82%, llm\n92.28%, openomni 95.25%, policy 77.31%, protocol 97.5%, session 94.7%.\nBaseline file untouched (shrinking it is an Owner sign-off surface).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T10:59:48Z",
+          "tree_id": "f7561c7761656830147d44ae05f513a8a8210004",
+          "url": "https://github.com/INONONO66/openomni/commit/f5e946d3e55e33139f7cb2aa5e673820bd77cd65"
+        },
+        "date": 1786359666097,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6259,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11350,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2700,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3189,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8581,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 911,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 782,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 54,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 734,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19647,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11265,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 107777,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 544336,
             "unit": "ns/op"
           }
         ]
