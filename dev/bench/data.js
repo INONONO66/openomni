@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786347694843,
+  "lastUpdate": 1786348380717,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40277,6 +40277,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 517647,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e419c0bbbe433606946a5e0a81cb78f2b7e5add",
+          "message": "feat(ipc): extract @openomni/ipc as a published transport contract (#572)\n\n* chore: add ipc commitlint scope\n\nPrepares the scope enum for the @openomni/ipc package extraction (#496).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(ipc): extract @openomni/ipc from coordinator (#496)\n\nMove the worker-process IPC transport (NDJSON framing with 16 MiB cap,\nbidirectional Unix-socket client/server, typed transport errors) out of\npackages/coordinator/src/ipc/ into the standalone protocol-only package\n@openomni/ipc, history-preservingly. Serializable schemas stay in\n@openomni/protocol; the package is driver-band consumable as a published\ncontract and keeps reverse (server -> owner-device) connections.\n\n- coordinator: imports @openomni/ipc, barrel re-exports no IPC surface;\n  dep ratchet now enforces protocol + ipc only (source-level red/green\n  proven with a synthetic session import)\n- apps/server worker-entry and the openomni policy-echo harness import\n  createIpcServer from @openomni/ipc directly (coordinator import gone)\n- decodeMessage/IpcMessage de-exported (knip baseline shrinks by 2)\n- gates: check-deps ipc ring rule, knip workspace entry, CI ipc test\n  step, coverage baseline split (coordinator 1374->1045 lines, ipc 330)\n\nOwner-approved early start (2026-08-10 re-order): #496 pulled ahead of\nthe #494->#495 chain because it is mechanically independent.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(ipc): add #496 extraction contract test\n\nCovers framing round trips, malformed-frame (4001) and unknown-shape\n(4000) wire errors, IpcTimeoutError/IpcConnectionError, reverse-direction\nserver->client calls, and startup of the real apps/server worker-entry\nover @openomni/ipc with authentication rejection that leaks no token\nbytes.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(server): add ipc-worker-driver manual QA surface (#496)\n\nScenario driver over the real Execution.Driver and worker IPC boundary;\nexits zero after printing its JSON receipt and does not stay resident.\n\n- authenticated-request: boots the server execution composition root\n  (createExecutionCoordinator + real worker pool), delivers one\n  worker-backed request over a real socket, prints the correlated\n  response, IPC frame digest, protocol+ipc-only coordinator boundary,\n  and a zero direct coordinator-IPC import scan\n- invalid-generation-token: boots the REAL worker-entry over\n  @openomni/ipc and prints the typed authentication denial with\n  workerExecutions: 0 / ledgerCompletionRows: 0 and no secret bytes\n\nManual drivers are knip entrypoints (src/manual/*.ts).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(ipc): sync package maps for the @openomni/ipc extraction (#496)\n\nDependency graph, package ownership, and key-map rows now name\npackages/ipc; implementation-status records the shipped transport row\nwith its manual QA driver.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(ipc): await async rejection assertions\n\nReview MINOR-1 on the #496 extraction: the two rejects assertions at\nipc-extraction.test.ts detached from the test without await, so a\nregression could pass silently.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ipc): calibrate new coverage baseline to the CI platform\n\nThe fresh packages/ipc entry was seeded from a local macOS measurement\n(81.82) with zero margin; ubuntu measures 81.21 — 0.61pp under, past the\n0.5pp tolerance (exactly the review's MINOR-3 risk). A NEW entry's floor\nbelongs to the platform the ratchet runs on; calibrated to the observed\nCI value. Tightening back up rides future coverage gains.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T07:51:37Z",
+          "tree_id": "911fe8c59a22db40cefc3757b7e1189ff2d54f28",
+          "url": "https://github.com/INONONO66/openomni/commit/5e419c0bbbe433606946a5e0a81cb78f2b7e5add"
+        },
+        "date": 1786348379984,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 649,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10062,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2514,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3038,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15358,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 863,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1472,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 48,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1593,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20927,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2335,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10833,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 530817,
             "unit": "ns/op"
           }
         ]
