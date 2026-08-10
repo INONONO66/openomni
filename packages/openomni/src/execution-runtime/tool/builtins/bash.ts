@@ -1,7 +1,13 @@
 import { resolve } from "node:path";
-import { defineTool } from "../define.js";
-import { optionalPositiveNumber, optionalString, requireString } from "../shared/input.js";
-import { errorResult, fromError, successResult } from "../shared/result.js";
+import {
+  defineTool,
+  optionalPositiveNumber,
+  optionalString,
+  requireString,
+  errorResult,
+  fromError,
+  successResult,
+} from "../define.js";
 import type { NativeTool, ToolExecutionContext } from "../types.js";
 import { BASH_PROMPT } from "./bash-prompt.js";
 import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./bash-classify.js";

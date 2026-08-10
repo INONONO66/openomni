@@ -1,8 +1,13 @@
 import { statSync } from "node:fs";
 import type { Tool } from "@openomni/protocol";
-import { defineTool } from "../define.js";
-import { optionalString, requireString } from "../shared/input.js";
-import { errorResult, fromError, successResult } from "../shared/result.js";
+import {
+  defineTool,
+  optionalString,
+  requireString,
+  errorResult,
+  fromError,
+  successResult,
+} from "../define.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
 const MAX_RESULTS = 100;
 

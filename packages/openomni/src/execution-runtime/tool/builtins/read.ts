@@ -1,8 +1,12 @@
 import { readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { defineTool } from "../define.js";
-import { optionalPositiveInteger, requireString } from "../shared/input.js";
-import { fromError, successResult } from "../shared/result.js";
+import {
+  defineTool,
+  optionalPositiveInteger,
+  requireString,
+  fromError,
+  successResult,
+} from "../define.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
 async function readFile(path: string, offset?: number, limit?: number): Promise<string> {
   const text = await Bun.file(path).text();
