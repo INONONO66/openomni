@@ -2,7 +2,7 @@ import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentEventEmitter } from "../../types";
 import type { CanonicalPolicyRegistration } from "../types";
-import { summarizeInput } from "../../execution/shared";
+import { summarizeInput } from "../../execution/tool-executor";
 
 const TOOL_CALL_ACTION = "tool.call";
 

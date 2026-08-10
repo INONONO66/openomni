@@ -2,6 +2,16 @@ import { PolicyDecision } from "@openomni/protocol";
 import { checkBudget, describeBudgetRemaining, effectiveBudgetThresholds } from "../../budget";
 import type { CanonicalPolicyRegistration } from "../types";
 
+/**
+ * The run.turn.pre point contract requires a non-empty sessionId, so a
+ * canonical dispatch always carries the real id; the type just doesn't
+ * surface it on the agent PolicyContext.
+ */
+function contextSessionId(ctx: object): string {
+  const sessionId = Reflect.get(ctx, "sessionId");
+  return typeof sessionId === "string" ? sessionId : "";
+}
+
 export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
   let issued = false;
   return {
@@ -18,7 +28,7 @@ export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
         issued = true;
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
         ctx.eventEmitter?.emit("agent.budget.reassurance", {
-          sessionId: "chat-agent",
+          sessionId: contextSessionId(ctx),
           time: Date.now(),
           remaining,
           threshold: effectiveBudgetThresholds(ctx.budget).reassuranceThreshold,
@@ -55,7 +65,7 @@ export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
         issued = true;
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
         ctx.eventEmitter?.emit("agent.budget.warning", {
-          sessionId: "chat-agent",
+          sessionId: contextSessionId(ctx),
           time: Date.now(),
           remaining,
           threshold: effectiveBudgetThresholds(ctx.budget).warningThreshold,

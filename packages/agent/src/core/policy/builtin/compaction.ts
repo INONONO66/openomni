@@ -29,8 +29,11 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
+      // run.completion.pre contract requires a non-empty sessionId; the agent
+      // PolicyContext type just doesn't surface it.
+      const sessionId = Reflect.get(ctx, "sessionId");
       ctx.eventEmitter?.emit("agent.compaction", {
-        sessionId: "chat-agent",
+        sessionId: typeof sessionId === "string" ? sessionId : "",
         time: Date.now(),
         messagesBefore: ctx.messages.length,
         messagesAfter: result.messages.length,

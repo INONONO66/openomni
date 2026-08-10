@@ -83,7 +83,9 @@ export namespace InMemoryCompactor {
     const firstRemoved = toRemove[0];
     if (options.onSummarize && firstRemoved !== undefined) {
       const summaryText = await options.onSummarize(toRemove);
-      summaryMessages = [buildSummaryMessage(summaryText, firstRemoved.info.sessionID)];
+      summaryMessages = [
+        buildSummaryMessage(summaryText, firstRemoved.info.sessionID, firstRemoved.info.agent),
+      ];
     }
 
     const compacted = [...summaryMessages, ...toKeep];
@@ -136,7 +138,11 @@ function snapToUserBoundary(messages: Message.WithParts[], naturalCutoff: number
   );
 }
 
-function buildSummaryMessage(summaryText: string, sessionID: string): Message.WithParts {
+function buildSummaryMessage(
+  summaryText: string,
+  sessionID: string,
+  agent: string,
+): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
   const info: Message.UserMessage = {
@@ -144,7 +150,7 @@ function buildSummaryMessage(summaryText: string, sessionID: string): Message.Wi
     sessionID,
     role: "user",
     time: { created: now },
-    agent: "chat-agent",
+    agent,
     model: { providerID: "", modelID: "" },
     system: `[Conversation Summary]\n${summaryText}`,
   };
