@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786373535918,
+  "lastUpdate": 1786374049487,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -42013,6 +42013,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511334,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "76eecfe450dc6d8f6555f8501ad472edb9adaafd",
+          "message": "fix(agent,session): eliminate cast launder, split budget query/command, sanctioned telemetry accessor (#588)\n\n* fix(agent): narrow tool-executor mcp cast, drop as-unknown-as launder\n\nThe tool.mcp.pre/post dispatch cast `as unknown as\nPolicyPointInputMap[...] & PolicyContext` laundered the whole dispatch\ncontext through `unknown`, disabling type-checking of every field (the\nnative branch dispatches the same object with no cast). The only real\ngap is `mcpServerId`, a runtime-resolved boundary value that is optional\non the target. Narrow to that single field with `as typeof mcpInput &\n{ mcpServerId: string }`; when it is genuinely absent the engine's point\ncontract denies fail-closed (context_missing), so runtime is unchanged.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): split budget checkBudget query from telemetry command\n\ncheckBudget returned a status (query) while emitting Operational Bus\ntelemetry (command). Called once per turn by the lifecycle check AND by\nboth run.turn.pre budget builtins, it emitted the same threshold event\nup to 3x per turn. Extract a pure evaluateBudget, keep checkBudget as a\npure query (used by the builtins), and add publishBudgetTelemetry as the\ncommand invoked once by the per-turn lifecycle owner — the event now\nfires exactly once per turn. Red-first pin: checkBudget called twice\nasserts zero telemetry emits.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(session): add telemetryConnection accessor, drop private-field cast\n\nbus-persistence reached the SqliteStorageAdapter's `private readonly\ntelemetryDb`/`db` via `Storage.getAdapter() as PersistableAdapter` — a\nstructural cast that breaches the private boundary. Add a first-class\noptional `telemetryConnection(): Database` accessor on Storage.Adapter\n(implemented by SqliteStorageAdapter, returning the telemetry handle\nwhich already encodes the primary-connection fallback). getDatabase /\ngetOptionalDatabase now call it; the now-dead PersistableAdapter\ninterface is removed. The accessor is the single sanctioned path.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): correct mcp-post boundary comment, pin mcp-pre deny\n\nReview MINORs. (1) dispatchToolPost's comment wrongly claimed an absent\nmcpServerId is denied by the contract — tool.mcp.post is a fail-open post\nboundary, so absent id → context_missing → ALLOW; corrected to state that\nand why it is acceptable (post-hoc observation, not an authorization\ngate). (2) Add the missing pin for the invariant the narrowed cast relies\non: tool.mcp.pre with an absent mcpServerId denies via context_missing\n(fail-closed) before the tool runs.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T14:59:26Z",
+          "tree_id": "550d714dfcf6e3692ca9077ee3acd9cd6a3056a3",
+          "url": "https://github.com/INONONO66/openomni/commit/76eecfe450dc6d8f6555f8501ad472edb9adaafd"
+        },
+        "date": 1786374048813,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 687,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6203,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3077,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2479,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8376,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 831,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 785,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2326,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100837,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 510247,
             "unit": "ns/op"
           }
         ]
