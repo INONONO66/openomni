@@ -1,4 +1,4 @@
-import { getDatabase } from "./query-database.js";
+import { getDatabase } from "./database.js";
 import type { WorkerRunRow } from "./query-rows.js";
 
 interface WorkerRunHistory {

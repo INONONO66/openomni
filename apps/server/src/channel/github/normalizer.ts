@@ -1,6 +1,5 @@
-import type { Adapter } from "@openomni/protocol";
-import { SurfaceKey } from "@openomni/session";
-import { normalizeContent } from "../../shared/trigger";
+import { Adapter } from "@openomni/protocol";
+import { normalizeContent } from "../support/trigger";
 import type { GitHubEventContent } from "./types";
 
 export interface GitHubNormalizerContext {
@@ -16,7 +15,7 @@ export class GitHubNormalizer {
     eventKey: string,
     deliveryId?: string,
   ): Adapter.InboundMessage | null {
-    const surfaceKey = SurfaceKey.fromChannel({
+    const surfaceKey = Adapter.SurfaceKey.fromChannel({
       surface: "github",
       namespace: content.repo,
       kind: "channel",

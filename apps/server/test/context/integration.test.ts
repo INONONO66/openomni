@@ -4,24 +4,12 @@ import { join } from "node:path";
 
 const serverSrc = join(import.meta.dir, "../../src");
 
-describe("context barrel export", () => {
-  it("exports only production-facing context entrypoints", async () => {
-    const mod = await import("../../src/context/index");
-
-    expect(Object.keys(mod).sort()).toEqual(["McpConfigLoader", "createContextMiddleware"]);
-    expect(typeof mod.createContextMiddleware).toBe("function");
-    expect(typeof mod.McpConfigLoader).toBe("object");
-    expect(typeof mod.McpConfigLoader.discover).toBe("function");
-    expect(typeof mod.McpConfigLoader.merge).toBe("function");
-  });
-});
-
 describe("worker-entry wiring", () => {
   const workerRunnerSrc = readFileSync(join(serverSrc, "execution/worker-runner.ts"), "utf-8");
 
-  it("worker runner imports createContextMiddleware from context/index", () => {
+  it("worker runner imports createContextMiddleware from context/middleware", () => {
     expect(workerRunnerSrc).toContain("createContextMiddleware");
-    expect(workerRunnerSrc).toContain("../context/index");
+    expect(workerRunnerSrc).toContain("../context/middleware");
   });
 
   it("worker runner uses createContextMiddleware in middleware array", () => {
@@ -33,9 +21,9 @@ describe("worker-entry wiring", () => {
 describe("bootstrap/index.ts MCP config merging", () => {
   const bootstrapSrc = readFileSync(join(serverSrc, "bootstrap/index.ts"), "utf-8");
 
-  it("imports McpConfigLoader from context/index", () => {
+  it("imports McpConfigLoader from context/mcp-config", () => {
     expect(bootstrapSrc).toContain("McpConfigLoader");
-    expect(bootstrapSrc).toContain("../context/index");
+    expect(bootstrapSrc).toContain("../context/mcp-config");
   });
 
   it("calls McpConfigLoader.discover", () => {

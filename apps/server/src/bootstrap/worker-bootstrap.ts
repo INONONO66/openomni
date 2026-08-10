@@ -1,8 +1,7 @@
 import { Auth } from "@openomni/llm";
-import type { WorkerBootstrap } from "@openomni/protocol";
+import { WorkerBootstrap } from "@openomni/protocol";
 import { resolveCategory, type NativeTool } from "@openomni/openomni";
 import { createAllAgents } from "../agents";
-import { RuntimeAgentDefinition } from "../agents/runtime-definition";
 import type { CustomToolProvider } from "../tool/custom";
 import type { McpToolProvider } from "../tool/mcp";
 
@@ -19,7 +18,11 @@ export async function assembleBootstrap(
   authEntries?: Awaited<ReturnType<typeof Auth.all>>,
   customProvider?: Pick<CustomToolProvider, "listTools">,
 ): Promise<WorkerBootstrap.Bootstrap> {
-  const agents = [...createAllAgents().values()].map(RuntimeAgentDefinition.create);
+  // Sole server-to-worker agent egress boundary: protocol parsing projects the
+  // worker wire contract and intentionally strips server-only prompt metadata.
+  const agents = [...createAllAgents().values()].map((definition) =>
+    WorkerBootstrap.RuntimeAgentDefinition.parse(definition),
+  );
 
   const toolCatalog = [
     ...mcpProvider.listTools().map((tool) => createToolCatalogEntry(tool, "mcp")),

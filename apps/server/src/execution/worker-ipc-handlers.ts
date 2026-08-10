@@ -1,5 +1,5 @@
 import type { InjectionQueue } from "@openomni/openomni";
-import type { WorkerRunState } from "./worker-run-state";
+import type { WorkerRunState } from "./worker-runner-types";
 
 export namespace WorkerIpcHandlers {
   interface SharedOptions {

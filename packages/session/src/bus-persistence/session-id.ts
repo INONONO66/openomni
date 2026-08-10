@@ -1,6 +1,6 @@
 import type { Bus } from "../bus/index.js";
 import { getOptionalDatabase } from "./database.js";
-import { stringFromRecord, toRecord } from "./record-helpers.js";
+import { stringFromRecord, toRecord } from "./record-fields.js";
 
 export function defaultResolveSessionId(
   _event: Bus.PublishedDescriptor,

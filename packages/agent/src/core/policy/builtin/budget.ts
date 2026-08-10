@@ -17,8 +17,10 @@ export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
       if (status === "reassurance") {
         issued = true;
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
+        // run.turn.pre contract guarantees a non-empty sessionId on every
+        // canonical dispatch; "" only surfaces on a non-contract invocation.
         ctx.eventEmitter?.emit("agent.budget.reassurance", {
-          sessionId: "chat-agent",
+          sessionId: ctx.sessionId ?? "",
           time: Date.now(),
           remaining,
           threshold: effectiveBudgetThresholds(ctx.budget).reassuranceThreshold,
@@ -54,8 +56,10 @@ export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
       if (status === "warning") {
         issued = true;
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
+        // run.turn.pre contract guarantees a non-empty sessionId on every
+        // canonical dispatch; "" only surfaces on a non-contract invocation.
         ctx.eventEmitter?.emit("agent.budget.warning", {
-          sessionId: "chat-agent",
+          sessionId: ctx.sessionId ?? "",
           time: Date.now(),
           remaining,
           threshold: effectiveBudgetThresholds(ctx.budget).warningThreshold,

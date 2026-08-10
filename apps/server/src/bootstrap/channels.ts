@@ -1,5 +1,7 @@
 import type { Adapter } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "../channel";
+import type { PublishPort } from "../channel/types";
 import type { ServerConfig } from "../config";
 import type { ChannelDeliveryRoute } from "./messaging";
 
@@ -30,20 +32,28 @@ export function createChannelAdapters(
   const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
   let wsHandler: WebSocketHandler | undefined;
   let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
+  // Composition-root binding: channel adapters observe through an injected
+  // publish port; today it is the session Bus (same seam as the execution
+  // coordinator's events.publish, #462 §2).
+  const publish: PublishPort = Bus.publish;
 
   if (routingHandler) {
-    wsHandler = new WebSocketHandler(routingHandler, { token: config.server.wsToken });
+    wsHandler = new WebSocketHandler(routingHandler, publish, { token: config.server.wsToken });
   }
 
   if (config.telegram.token && routingHandler) {
-    const telegram = new TelegramAdapter(config.telegram.token, {
-      triggers: [
-        ...(config.telegram.allowedUsers.length > 0
-          ? [{ type: "sender" as const, allow: config.telegram.allowedUsers }]
-          : []),
-      ],
-      deliveryPolicy: "final",
-    });
+    const telegram = new TelegramAdapter(
+      config.telegram.token,
+      {
+        triggers: [
+          ...(config.telegram.allowedUsers.length > 0
+            ? [{ type: "sender" as const, allow: config.telegram.allowedUsers }]
+            : []),
+        ],
+        deliveryPolicy: "final",
+      },
+      publish,
+    );
     telegram.onMessage(routingHandler);
     channels.push(telegram);
     deliveryRoutes.set(telegram.id, (externalId, body) => telegram.deliver(externalId, body));
@@ -61,6 +71,7 @@ export function createChannelAdapters(
         ],
         deliveryPolicy: "final",
       },
+      publish,
       config.github.token,
       config.github.botUsername,
     );
@@ -70,15 +81,19 @@ export function createChannelAdapters(
   }
 
   if (config.discord.token && routingHandler) {
-    const discord = new DiscordAdapter(config.discord.token, {
-      triggers: [
-        { type: "mention" },
-        ...(config.discord.allowedUsers.length > 0
-          ? [{ type: "sender" as const, allow: config.discord.allowedUsers }]
-          : []),
-      ],
-      deliveryPolicy: "final",
-    });
+    const discord = new DiscordAdapter(
+      config.discord.token,
+      {
+        triggers: [
+          { type: "mention" },
+          ...(config.discord.allowedUsers.length > 0
+            ? [{ type: "sender" as const, allow: config.discord.allowedUsers }]
+            : []),
+        ],
+        deliveryPolicy: "final",
+      },
+      publish,
+    );
     discord.onMessage(routingHandler);
     channels.push(discord);
     deliveryRoutes.set(discord.id, (externalId, body) => discord.deliver(externalId, body));

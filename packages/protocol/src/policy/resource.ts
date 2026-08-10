@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { policyKernelVersion } from "./version.js";
+import { policyKernelVersion } from "./definition.js";
 
 export namespace RuntimeResource {
   export const schemaVersion = policyKernelVersion;

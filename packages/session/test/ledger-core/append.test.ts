@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GENESIS_SEED } from "../../src/bus-persistence/hash";
-import { createLedgerDb } from "../../src/ledger-core/db";
+import { createLedgerDb } from "./db";
 import { Ledger } from "../../src/ledger-core/index";
 import { ledgerEvent, ledgerHead } from "../../src/ledger-core/schema";
 import {

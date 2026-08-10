@@ -1,6 +1,6 @@
 import { GENESIS_SEED, computeEventHash } from "./hash.js";
 import type { AuditChainRecord, ChainIntegrityResult } from "./query-contracts.js";
-import { getDatabase } from "./query-database.js";
+import { getDatabase } from "./database.js";
 import type { AuditChainRow, HashChainRow } from "./query-rows.js";
 
 export function verifyChainIntegrity(sessionId?: string): Promise<ChainIntegrityResult> {

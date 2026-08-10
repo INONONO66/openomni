@@ -1,6 +1,6 @@
 import type { RunInput } from "@openomni/llm";
 import { type Message, PolicyDecision } from "@openomni/protocol";
-import type { Policy, Sink, TraceContext } from "@openomni/protocol";
+import type { Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
@@ -11,7 +11,6 @@ import {
   emitBudgetReassurance,
   emitBudgetWarning,
 } from "./run-events";
-import { buildSystemPrompt } from "../prompt-builder";
 import { PolicyEffectApplier } from "./policy-effects";
 import type { AgentRunBase, BuildTurnResult, RunState, TurnArtifacts } from "./run-state";
 import {
@@ -26,6 +25,21 @@ export function resolveToolChoice(
   config: ChatAgentConfig,
 ): "auto" | "required" | "none" | undefined {
   return config.toolChoice;
+}
+
+// merged from prompt-builder.ts (fragment sweep: single-caller fn)
+export function buildSystemPrompt(
+  basePrompt: string | undefined,
+  tools: Tool.Spec[],
+): string | undefined {
+  const toolPrompts = tools
+    .filter((t) => t.prompt)
+    .map((t) => `## Tool: ${t.name}\n${t.prompt}`)
+    .join("\n\n");
+
+  if (!toolPrompts) return basePrompt;
+  if (!basePrompt) return toolPrompts;
+  return `${basePrompt}\n\n---\n\n${toolPrompts}`;
 }
 
 export function assertToolExecutor(config: ChatAgentConfig): void {

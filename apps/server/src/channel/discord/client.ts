@@ -1,12 +1,14 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
-import { fetchWithRetry } from "../../shared/fetch-retry";
-import type { ChannelClient } from "../types";
+import { fetchWithRetry } from "../support/fetch-retry";
+import type { ChannelClient, PublishPort } from "../types";
 
 const BASE_URL = "https://discord.com/api/v10";
 
 export class DiscordClient implements ChannelClient {
-  constructor(private readonly token: string) {}
+  constructor(
+    private readonly token: string,
+    private readonly publish: PublishPort,
+  ) {}
 
   async send(channelId: string, text: string): Promise<string | undefined> {
     const message = (await this.api(`/channels/${channelId}/messages`, { content: text })) as {
@@ -20,7 +22,7 @@ export class DiscordClient implements ChannelClient {
       method: "POST",
       headers: { Authorization: `Bot ${this.token}` },
     }).catch((e) =>
-      Bus.publish(Operational.Warn, {
+      this.publish(Operational.Warn, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
@@ -63,6 +65,7 @@ export class DiscordClient implements ChannelClient {
         body: JSON.stringify(body),
       },
       {
+        publish: this.publish,
         parseRetryAfter: (data) => {
           const r = data as { retry_after?: number };
           return r.retry_after ?? 5;

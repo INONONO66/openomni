@@ -1,13 +1,15 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
-import { fetchWithRetry } from "../../shared/fetch-retry";
-import type { ChannelClient } from "../types";
+import { fetchWithRetry } from "../support/fetch-retry";
+import type { ChannelClient, PublishPort } from "../types";
 import type { TelegramResponse, TelegramUser } from "./types";
 
 export class TelegramClient implements ChannelClient {
   private readonly baseUrl: string;
 
-  constructor(token: string) {
+  constructor(
+    token: string,
+    private readonly publish: PublishPort,
+  ) {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
 
@@ -23,7 +25,7 @@ export class TelegramClient implements ChannelClient {
 
   async sendTyping(channelId: string): Promise<void> {
     await this.api("sendChatAction", { chat_id: channelId, action: "typing" }).catch((e) =>
-      Bus.publish(Operational.Warn, {
+      this.publish(Operational.Warn, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
@@ -63,6 +65,7 @@ export class TelegramClient implements ChannelClient {
         signal,
       },
       {
+        publish: this.publish,
         parseRetryAfter: (body) => {
           const r = body as { parameters?: { retry_after?: number } };
           return r.parameters?.retry_after ?? 5;

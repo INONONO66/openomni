@@ -15,7 +15,7 @@ import {
   type IngressEngine,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
-import { McpConfigLoader } from "../context/index";
+import { McpConfigLoader } from "../context/mcp-config";
 import { createMessageHandler } from "../handler/conversation";
 import { buildAgentDef } from "../ingress/bridge";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";

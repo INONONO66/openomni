@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { nonEmptyString, positiveInteger } from "./definition.js";
 import { VerificationFailureReason } from "./installation.js";
-import { nonEmptyString, positiveInteger } from "./schema-primitives.js";
 
 const VerificationEventBase = z.object({
   traceId: nonEmptyString,

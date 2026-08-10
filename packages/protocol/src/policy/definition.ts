@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const policyKernelVersion = 1;
+
 export namespace PolicyDefinition {
   export const Timing = {
     INBOUND_RECEIVE: "inbound.receive",

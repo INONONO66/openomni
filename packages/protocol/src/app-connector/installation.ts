@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { Policy } from "../policy/index.js";
-import { Definition } from "./definition.js";
-import { nonEmptyString, positiveInteger } from "./schema-primitives.js";
+import { Definition, nonEmptyString, positiveInteger } from "./definition.js";
 
 export const InstallationStatus = z.enum([
   "registered",

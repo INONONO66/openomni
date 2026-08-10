@@ -1,4 +1,4 @@
-import type { ResidentPromptVariant } from "./types";
+import type { ResidentPromptVariant } from "./index";
 
 export const GPT_RESIDENT_PROMPT_VARIANT: ResidentPromptVariant = {
   family: "gpt",

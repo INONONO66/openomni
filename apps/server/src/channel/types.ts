@@ -1,4 +1,13 @@
-import type { Adapter } from "@openomni/protocol";
+import type { Adapter, BusEvent } from "@openomni/protocol";
+
+/**
+ * Observation port: channel code reports Operational telemetry through this
+ * injected function instead of importing the session Bus directly (precedent:
+ * the execution coordinator's `events.publish` injection). The composition
+ * root (bootstrap/channels.ts) binds it to Bus.publish; tests bind a
+ * collector or noop. #499 promotes this to the Channel protocol contract.
+ */
+export type PublishPort = BusEvent.Sink["publish"];
 
 /**
  * Platform API calls: send messages, typing indicators, authentication, rate limiting.

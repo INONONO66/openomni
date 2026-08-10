@@ -1,6 +1,6 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
-import { sleep } from "../../shared/sleep";
+import { sleep } from "../support/fetch-retry";
+import type { PublishPort } from "../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
 
 export interface GatewayCallbacks {
@@ -31,6 +31,7 @@ export class DiscordGateway {
     private readonly token: string,
     private readonly fetchGatewayUrl: () => Promise<string>,
     private readonly callbacks: GatewayCallbacks,
+    private readonly publish: PublishPort,
   ) {}
 
   async start(): Promise<void> {
@@ -73,7 +74,7 @@ export class DiscordGateway {
         }
         if (FATAL_CLOSE_CODES.has(event.code)) {
           this.running = false;
-          Bus.publish(Operational.Error, {
+          this.publish(Operational.Error, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
             component: "server",
@@ -85,7 +86,7 @@ export class DiscordGateway {
         if (this.running) {
           this.reconnectAttempt++;
           const backoffMs = calculateBackoff(this.reconnectAttempt);
-          Bus.publish(Operational.Warn, {
+          this.publish(Operational.Warn, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
             component: "server",
@@ -98,7 +99,7 @@ export class DiscordGateway {
           await sleep(backoffMs);
           if (this.running)
             this.reconnect().catch((err) =>
-              Bus.publish(Operational.Error, {
+              this.publish(Operational.Error, {
                 traceId: crypto.randomUUID(),
                 time: Date.now(),
                 component: "server",
@@ -110,7 +111,7 @@ export class DiscordGateway {
       });
 
       ws.addEventListener("error", (err) =>
-        Bus.publish(Operational.Error, {
+        this.publish(Operational.Error, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
@@ -157,7 +158,7 @@ export class DiscordGateway {
         this.heartbeatAckReceived = true;
         return false;
       case GatewayOp.RECONNECT:
-        Bus.publish(Operational.Info, {
+        this.publish(Operational.Info, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
@@ -167,7 +168,7 @@ export class DiscordGateway {
         return false;
       case GatewayOp.INVALID_SESSION: {
         const resumable = payload.d as boolean;
-        Bus.publish(Operational.Warn, {
+        this.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
@@ -199,7 +200,7 @@ export class DiscordGateway {
     }
     if (event === "RESUMED") {
       this.reconnectAttempt = 0;
-      Bus.publish(Operational.Info, {
+      this.publish(Operational.Info, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
@@ -210,7 +211,7 @@ export class DiscordGateway {
     try {
       this.callbacks.onDispatch(event, data);
     } catch (err) {
-      Bus.publish(Operational.Error, {
+      this.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",

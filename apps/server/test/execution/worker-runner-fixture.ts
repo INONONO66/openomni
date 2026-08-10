@@ -2,7 +2,7 @@ import type { AgentResult } from "@openomni/agent";
 import { InjectionQueue } from "@openomni/openomni";
 import { Storage } from "@openomni/session";
 
-import type { WorkerRunState } from "../../src/execution/worker-run-state";
+import type { WorkerRunState } from "../../src/execution/worker-runner-types";
 import type { WorkerRunner } from "../../src/execution/worker-runner";
 
 export type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;

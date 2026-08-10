@@ -9,7 +9,26 @@ import {
 } from "../budget";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import type { DispatchContext } from "../policy";
-import { toMessagesWithParts } from "./shared";
+import { createUserMessage, createAssistantMessage } from "../message-factory";
+
+// merged from shared.ts (fragment sweep: single-consumer fn)
+function toMessagesWithParts(
+  messages: ChatAgentInput["messages"],
+  source: string,
+): Message.WithParts[] {
+  const output: Message.WithParts[] = [];
+
+  for (const message of messages) {
+    const parentID = output.at(-1)?.info.id ?? "";
+    output.push(
+      message.role === "user"
+        ? createUserMessage(message.content, source)
+        : createAssistantMessage(message.content, parentID, source),
+    );
+  }
+
+  return output;
+}
 
 export interface AgentRunBase {
   readonly traceId: string;

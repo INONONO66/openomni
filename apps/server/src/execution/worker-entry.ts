@@ -6,7 +6,7 @@ import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
 import { WorkerIpcHandlers } from "./worker-ipc-handlers";
-import type { WorkerRunState } from "./worker-run-state";
+import type { WorkerRunState } from "./worker-runner-types";
 import { WorkerRunner } from "./worker-runner";
 
 function readCliArg(name: string): string | undefined {

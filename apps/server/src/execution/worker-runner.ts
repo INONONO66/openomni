@@ -9,7 +9,7 @@ import {
 import type { NativeTool } from "@openomni/openomni";
 import { Execution } from "@openomni/protocol";
 import { TranscriptStore } from "@openomni/session";
-import { createContextMiddleware } from "../context/index";
+import { createContextMiddleware } from "../context/middleware";
 import {
   publishWorkerRunCancelled,
   publishWorkerRunFailed,
