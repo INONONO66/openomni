@@ -1,5 +1,4 @@
-import type { Adapter, Dispatch, Ingress } from "@openomni/protocol";
-import { SurfaceKey } from "@openomni/session";
+import { Adapter, type Dispatch, type Ingress } from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
@@ -100,7 +99,7 @@ function rawCorrelationToken(raw: unknown): string | undefined {
 
 function scopedCorrelation(
   message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof SurfaceKey.parse>,
+  descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
 ) {
   return {
     endpointId: descriptor.namespace || descriptor.surface,
@@ -110,7 +109,7 @@ function scopedCorrelation(
 
 function actorMessageCorrelation(
   message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof SurfaceKey.parse>,
+  descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
   threadId: string | undefined,
 ): Dispatch.Correlation {
   const token = rawCorrelationToken(message.raw);
@@ -125,7 +124,7 @@ function actorMessageCorrelation(
 
 function createBaseEvent(
   message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof SurfaceKey.parse>,
+  descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
   threadId: string | undefined,
 ): Omit<Ingress.DirectEvent, "mode" | "agent"> {
   return {
@@ -155,7 +154,7 @@ export function buildInboundEvent(
   message: Adapter.InboundMessage,
   deps: BridgeDeps,
 ): Ingress.DirectEvent {
-  const descriptor = SurfaceKey.parse(message.surfaceKey);
+  const descriptor = Adapter.SurfaceKey.parse(message.surfaceKey);
   const threadId = message.threadId ?? descriptor.threadId;
   const base = createBaseEvent(message, descriptor, threadId);
   const agent = buildResidentAgentDef(deps);

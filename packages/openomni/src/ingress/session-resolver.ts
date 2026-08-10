@@ -1,4 +1,5 @@
 import {
+  Adapter,
   type Ingress,
   IngressEvent,
   type TraceContext as TraceContextProtocol,
@@ -36,7 +37,7 @@ export namespace IngressSessionResolver {
     if (target && target.kind !== "resident") {
       parts.push("target", targetKey(target));
     }
-    return SurfaceKey.create(parts);
+    return Adapter.SurfaceKey.create(parts);
   }
 
   export function resolve(

@@ -1,8 +1,8 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
 import type { IngressEngine } from "@openomni/openomni";
-import type { Adapter, Ingress } from "@openomni/protocol";
-import { Operational, WorkItem } from "@openomni/protocol";
-import { Bus, hasRetryExhaustionBlocker, SurfaceKey, WorkItemStore } from "@openomni/session";
+import type { Ingress } from "@openomni/protocol";
+import { Adapter, Operational, WorkItem } from "@openomni/protocol";
+import { Bus, hasRetryExhaustionBlocker, WorkItemStore } from "@openomni/session";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 
@@ -41,7 +41,7 @@ function normalizeCommand(text: string): string {
 }
 
 function canReadTaskLedger(message: Adapter.InboundMessage): boolean {
-  const surface = SurfaceKey.parse(message.surfaceKey).surface;
+  const surface = Adapter.SurfaceKey.parse(message.surfaceKey).surface;
   if (surface !== "ws") return false;
   if (!isWebSocketRaw(message.raw)) return false;
   return message.raw.websocket.authenticated === true;

@@ -1,6 +1,5 @@
-import type { Adapter } from "@openomni/protocol";
-import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus, SurfaceKey } from "@openomni/session";
+import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
@@ -60,7 +59,7 @@ export class GitHubAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    const parsed = SurfaceKey.parse(surfaceKey);
+    const parsed = Adapter.SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
     const [, issueId] = (parsed.id ?? "").split("-");
     const issueNumber = Number.parseInt(issueId ?? "", 10);

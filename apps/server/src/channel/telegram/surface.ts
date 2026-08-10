@@ -1,5 +1,4 @@
-import type { Adapter } from "@openomni/protocol";
-import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { splitText } from "../../shared/chunk-text";
@@ -95,8 +94,7 @@ export class TelegramAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    const { SurfaceKey } = await import("@openomni/session");
-    const parsed = SurfaceKey.parse(surfaceKey);
+    const parsed = Adapter.SurfaceKey.parse(surfaceKey);
     const chatId = parsed.id ?? "";
     await this.sendOutbound(chatId, message);
   }
