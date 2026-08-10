@@ -212,11 +212,9 @@ describe("deny-wins composition", () => {
     // Canonical successors of the legacy Policy.Timing values (invoke.prepare /
     // invoke.result exercised through their tool.native representatives),
     // each dispatched with the point contract's required inputs.
+    // session.inbound.pre / session.writeback.pre are retired from the grid
+    // (#530 points disposition) and pinned in packages/policy retired-points.
     const pointCases = [
-      {
-        pointId: "session.inbound.pre",
-        ctx: { actorId: "actor", sessionId: "session", inboundEvent: { type: "message" } },
-      },
       {
         pointId: "run.lifecycle.pre",
         ctx: { actorId: "actor", sessionId: "session", runId: "run" },
@@ -255,10 +253,6 @@ describe("deny-wins composition", () => {
       {
         pointId: "run.completion.pre",
         ctx: { sessionId: "session", runId: "run", completionCandidate: { type: "stop" } },
-      },
-      {
-        pointId: "session.writeback.pre",
-        ctx: { sessionId: "session", runId: "run", writebackPayload: { text: "payload" } },
       },
       {
         pointId: "run.lifecycle.post",

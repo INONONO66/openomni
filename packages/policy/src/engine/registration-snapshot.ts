@@ -1,5 +1,6 @@
 import { Policy } from "@openomni/protocol";
 import { captureFrozenArray } from "./array-snapshot";
+import { isRetiredPolicyPoint } from "./points";
 import type { PolicyPointId } from "./types";
 
 type SnapshotErrorCode =
@@ -7,6 +8,7 @@ type SnapshotErrorCode =
   | "empty_point_ids"
   | "duplicate_point_id"
   | "unknown_point_id"
+  | "retired_point_id"
   | "empty_effect_capabilities"
   | "missing_effect_capabilities"
   | "unbound_effect_capabilities"
@@ -71,6 +73,13 @@ function snapshotPointIds(value: unknown, fail: SnapshotFailure): readonly Polic
   if (!pointIds.every(isPolicyPointId)) {
     const pointId = pointIds.find((value) => !isPolicyPointId(value));
     fail("unknown_point_id", pointId === undefined ? {} : { pointId });
+  }
+  const retired = pointIds.find(isRetiredPolicyPoint);
+  if (retired !== undefined) {
+    // #530 points disposition: protocol-declared but grid-retired points
+    // are not registrable — fail closed instead of accepting a policy that
+    // could never be dispatched.
+    fail("retired_point_id", { pointId: retired });
   }
   return Object.freeze(pointIds);
 }

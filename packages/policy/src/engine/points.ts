@@ -8,8 +8,30 @@ class PolicyPointTimingError extends Error {
   }
 }
 
+/**
+ * #530 points disposition: `session.inbound.pre` and `session.writeback.pre`
+ * are declared in the protocol point registry but have zero dispatchers and
+ * zero registrants repo-wide, and their only plausible dispatcher — the
+ * kernel ingress boundary — cannot satisfy their contracts honestly
+ * (`actorId` is required but anonymous senders are legal at ingress by
+ * design; `runId` is required but resident/cancel writebacks span zero or
+ * many runs). The kernel runs its own gates (openomni ingress/policy-gate)
+ * instead, so both points are retired from the dispatch grid: registration
+ * and dispatch at them fail closed. The protocol-side contracts are not
+ * edited here — redesigning the admission-point input schema is flagged as
+ * protocol work in #530.
+ */
+export type RetiredPolicyPointId = "session.inbound.pre" | "session.writeback.pre";
+const retiredPolicyPoints: ReadonlySet<string> = new Set<RetiredPolicyPointId>([
+  "session.inbound.pre",
+  "session.writeback.pre",
+]);
+
+export function isRetiredPolicyPoint(pointId: string): boolean {
+  return retiredPolicyPoints.has(pointId);
+}
+
 const canonicalTimingEntries = {
-  "session.inbound.pre": Policy.Timing.INBOUND_RECEIVE,
   "dispatch.action.pre": Policy.Timing.DISPATCH_AUTHORIZE,
   "run.lifecycle.pre": Policy.Timing.RUN_START,
   "run.turn.pre": Policy.Timing.TURN_START,
@@ -26,10 +48,9 @@ const canonicalTimingEntries = {
   "run.turn.post": Policy.Timing.TURN_FINISH,
   "run.completion.pre": Policy.Timing.COMPLETION_PREPARE,
   "work.complete.pre": Policy.Timing.COMPLETION_PREPARE,
-  "session.writeback.pre": Policy.Timing.WRITEBACK_COMMIT,
   "run.lifecycle.post": Policy.Timing.RUN_FINISH,
   "run.error.error": Policy.Timing.ERROR,
-} satisfies Readonly<Record<PolicyPointId, Policy.Timing>>;
+} satisfies Readonly<Record<Exclude<PolicyPointId, RetiredPolicyPointId>, Policy.Timing>>;
 const canonicalTimingByPointId: ReadonlyMap<string, Policy.Timing> = new Map(
   Object.entries(canonicalTimingEntries),
 );

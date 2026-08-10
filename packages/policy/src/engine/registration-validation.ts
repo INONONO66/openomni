@@ -10,6 +10,7 @@ type PolicyRegistrationErrorCode =
   | "empty_point_ids"
   | "duplicate_point_id"
   | "unknown_point_id"
+  | "retired_point_id"
   | "empty_effect_capabilities"
   | "missing_effect_capabilities"
   | "unbound_effect_capabilities"
