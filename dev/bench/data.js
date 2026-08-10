@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786364311426,
+  "lastUpdate": 1786365898107,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41517,6 +41517,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 517278,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98ea1e0d885fba7fa4d0db7f5164f1aa02e5a9d5",
+          "message": "feat(session,openomni,server): complete #510 — producer manifest, matrix, governor incident (#583)\n\n* feat(protocol,server): governor incident on boot chain-break (#510)\n\nThe #510 Done-means requires a corrupted ledger tail to emit a chain-break\nevent PLUS a Governor incident without refusing boot. Boot tail verification\nnow publishes one typed Operational.GovernorIncident\n(operational.governor.incident, incident chain_break, visibility internal so\nit persists as NORMAL-durability telemetry) per detected break, alongside\nthe existing Operational.Error — observe-only, never a decision fact, never\na boot refusal.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(session): fact-backed run session attribution (#510)\n\nTelemetry session attribution for workerRunId-only payloads read\nworker_run_state exclusively — frozen since D2b, so every NEW run's lookup\nsilently missed. The resolver now reads the fact-bound WorkItem projection\nfirst (workSessionId/workerRunId — head == revision, every input carried by\nwork: facts) and falls back to the immutable worker_run_state archive for\npre-freeze rows only. worker-run-history-query.ts records its\nfrozen-archive-read contract in its header (new runs' history lives in\nattempt facts; surfacing it is #493 projection scope).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(script): exact producer manifest + decision-write matrix (#510)\n\nscript/ledger-producer-manifest.ts is the executable half of the issue's\n'exact producer manifests': one producer module per decision-class stream\nfamily (must equal LedgerAppend.StreamRegistry), the ledger_event/\nledger_head append core, and the only modules still carrying frozen-table\nwrite SQL. The conformance gate scans the production source tree and fails\nclosed on divergence in EITHER direction (an unlisted producer and a\nvanished one are both drift), and cross-checks the frozen-table set against\nthe archive manifest.\n\np2-ledger-baseline.test.ts completes the issue's decision-write matrix:\n- effect intent/outcome: failing append fails closed (zero facts, driver\n  never executes); the act runs only after the FULL intent append with\n  exactly one terminal fact\n- lossy Bus.publish (crashing subscriber) cannot unwind a folded fact;\n  delivery observes an already-durable head\n- forged NORMAL telemetry is rejected as a decision record: a forged\n  routing decision never preempts the fresh route.decided append, and\n  bus_event writes never touch ledger_event/ledger_head\n- cache-hit new-attempt: a hit allocates a NEW attempt recording\n  reusedFromAttemptId; the prior fact is immutable; self-reuse rejects\n- valid-tail and corrupted-tail boot through the real runRecovery:\n  corrupted tail emits chain-break plus Governor incident and completes\n  boot with no post-break action\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: record the #510 completion round in implementation status\n\nThe clean-ledger row now records the Governor incident, the exact producer\nmanifest, the settled session-id consumer, and the completed conformance\nmatrix as shipped, and re-cuts the residual list into an explicit\n'NOT delivered by #510' ledger: policy-point grammar (Owner ruling),\nwhat-if/fork labels (reconcile with the #493 export freeze), frozen-table\ndeletion (#494, needs the replay-coverage proof), the deliberate scenario-\ndriver deviation, and cache/replay execution (#493).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(script): harden the producer-manifest scan, declare its bound (#510)\n\nReview MAJOR-1: the scan was evadable six ways. It now comment-strips and\nwhitespace-normalizes before matching and catches, case-insensitively and\nacross line breaks: INSERT [OR REPLACE|OR IGNORE|OR ...] INTO, REPLACE\nINTO, UPDATE [OR ...], DELETE FROM; dot AND bracket access; receiver\nidentifiers ending in 'ledger' (subLedger.append); any-receiver\nadoptStream; and runtime-executed migration .sql (0005's worker_run_state\nUPDATE is the one allowlisted historical backfill, now manifested as\nmigrationSqlWriters). Red-proof conformance cases pin every shape plus the\nnon-matches (comment mentions, SELECTs, prefix-named tables). The header\nnow declares the honest bound: a drift gate over enumerated shapes, not a\nsandbox — deliberate rebinding/fragment-assembled SQL is out of scope.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(script): ledger-append benchmark with committed artifact (#510)\n\nReview MAJOR-2: the receipt cited benchmark numbers with no in-branch\nbasis. script/bench-ledger-append.ts measures the real append core (FULL\nsynchronous decision connection, write-path hash chain) in both production\nshapes; the committed bench-ledger-append.result.json is the measured\nartifact the completion receipt cites (single-stream 5,282 appends/s at\n0.189ms avg, one-fact-per-stream 6,439/s at 0.155ms avg; darwin/arm64,\nbun 1.3.14, commit-stamped).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: producer-manifest bound, benchmark artifact, follow-ups (#510)\n\nRecords the review corrections: the manifest gate's declared drift-gate\nbound (enumerated shapes + red proofs, migration SQL included), benchmark\nevidence shipped as a committed artifact, and two one-line hardening\nfollow-ups (per-row degradation for /admin/ledger/attempts on a corrupt\nfact; durable incident custody vs boot re-emission for NORMAL-batch loss).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T12:43:28Z",
+          "tree_id": "3188a234414d4a0341605853ebd5647104512870",
+          "url": "https://github.com/INONONO66/openomni/commit/98ea1e0d885fba7fa4d0db7f5164f1aa02e5a9d5"
+        },
+        "date": 1786365897606,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 628,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9495,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2459,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15119,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8056,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 804,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 692,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 723,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20440,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2330,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102205,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524589,
             "unit": "ns/op"
           }
         ]
