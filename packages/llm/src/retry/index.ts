@@ -35,23 +35,33 @@ export namespace Retry {
    */
   export const RETRY_HEADER_DELAY_CAP = 60_000;
 
+  /**
+   * The retry vocabulary (#532 candidate 3). Every member has a producing
+   * branch in classify() and a consuming case in the processor's typed
+   * switch — reasons are branched on as literals, never as prose. Human
+   * prose lives only in Decision.detail.
+   */
+  export type Reason = "rate_limit" | "overloaded" | "server_error" | "non_retryable";
+  export type RetryableReason = Exclude<Reason, "non_retryable">;
+
   export type Decision =
     | {
-        readonly retryable: true;
-        readonly reason: string;
+        readonly retry: true;
+        readonly reason: RetryableReason;
         readonly delayMs: number;
-        readonly source: "header" | "backoff";
+        /** An inferred ratelimit reset exceeded the cap and was demoted to backoff. */
+        readonly retryAfterOverCap?: boolean;
       }
-    | { readonly retryable: false; readonly reason: string };
+    | { readonly retry: false; readonly reason: Reason; readonly detail?: string };
 
   /**
    * Typed retry decision (#532 candidate 3): classification + delay in one
    * call, failing fast when the server asks for a wait above the cap.
    */
   export function decide(attempt: number, error: unknown): Decision {
-    const reason = isRetryable(error);
-    if (reason === undefined) {
-      return { retryable: false, reason: "non_retryable" };
+    const reason = classify(error);
+    if (reason === "non_retryable") {
+      return { retry: false, reason };
     }
     const apiError = APIError.isInstance(error) ? error : undefined;
     const header = headerDelay(apiError);
@@ -62,32 +72,23 @@ export namespace Retry {
         // rather than killing the run.
         if (header.directive) {
           return {
-            retryable: false,
-            reason: `${reason}: server asked to wait ${header.ms}ms, above the ${RETRY_HEADER_DELAY_CAP}ms cap`,
+            retry: false,
+            reason,
+            detail: `server asked to wait ${header.ms}ms, above the ${RETRY_HEADER_DELAY_CAP}ms cap`,
           };
         }
-        return { retryable: true, reason, delayMs: backoffDelayMs(attempt), source: "backoff" };
+        return { retry: true, reason, delayMs: backoffDelayMs(attempt), retryAfterOverCap: true };
       }
-      return { retryable: true, reason, delayMs: Math.max(0, header.ms), source: "header" };
+      return { retry: true, reason, delayMs: Math.max(0, header.ms) };
     }
-    return { retryable: true, reason, delayMs: backoffDelayMs(attempt), source: "backoff" };
+    return { retry: true, reason, delayMs: backoffDelayMs(attempt) };
   }
 
-  export function delay(
-    attempt: number,
-    error?: InstanceType<typeof APIError>,
-    initialDelay?: number,
-  ): number {
-    const header = headerDelay(error);
-    if (header !== undefined) {
-      return header.ms;
-    }
-    return backoffDelayMs(attempt, initialDelay);
-  }
-
-  function backoffDelayMs(attempt: number, initialDelay?: number): number {
-    const baseDelay = initialDelay ?? RETRY_INITIAL_DELAY;
-    return Math.min(baseDelay * RETRY_BACKOFF_FACTOR ** (attempt - 1), RETRY_MAX_DELAY_NO_HEADERS);
+  function backoffDelayMs(attempt: number): number {
+    return Math.min(
+      RETRY_INITIAL_DELAY * RETRY_BACKOFF_FACTOR ** (attempt - 1),
+      RETRY_MAX_DELAY_NO_HEADERS,
+    );
   }
 
   /** directive: an explicit server instruction (retry-after) vs an inferred
@@ -155,13 +156,13 @@ export namespace Retry {
     return undefined;
   }
 
-  export function isRetryable(error: unknown): string | undefined {
+  function classify(error: unknown): Reason {
     if (!APIError.isInstance(error)) {
-      return undefined;
+      return "non_retryable";
     }
 
     if (!error.data.isRetryable) {
-      return undefined;
+      return "non_retryable";
     }
 
     const sniffed =
@@ -170,20 +171,21 @@ export namespace Retry {
       return sniffed;
     }
 
+    // Status outranks a payload the sniffer found no specific signal in: an
+    // Anthropic 429 body ({error:{type:"rate_limit_error"}}) must classify as
+    // a rate limit, not fall into the generic server-error bucket.
     const status = error.data.statusCode;
     if (status === 429) {
-      return "Rate Limited";
-    }
-    if (status !== undefined && status >= 500) {
-      return "Provider Server Error";
+      return "rate_limit";
     }
 
-    // The provider marked this retryable (408/409, x-should-retry, …) even
-    // though the payload carries no recognizable detail.
-    return "Provider Error";
+    // 5xx, plus the residue the provider marked retryable (408/409,
+    // x-should-retry, network failures) without a recognizable class — no
+    // consumer distinguishes these, so they share the server_error bucket.
+    return "server_error";
   }
 
-  function classifyErrorPayload(payload: string | undefined): string | undefined {
+  function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {
     if (!payload) return undefined;
 
     let json: unknown;
@@ -203,29 +205,31 @@ export namespace Retry {
       error?: { type?: unknown; code?: unknown; message?: unknown };
     };
     const code = typeof body.code === "string" ? body.code : "";
+    const errorType = typeof body.error?.type === "string" ? body.error.type : "";
     const errorCode = typeof body.error?.code === "string" ? body.error.code : "";
     const errorMessage = typeof body.error?.message === "string" ? body.error.message : "";
 
-    if (body.type === "error" && body.error?.type === "too_many_requests") {
-      return "Too Many Requests";
+    if (
+      body.type === "error" &&
+      (errorType === "too_many_requests" ||
+        errorType.includes("rate_limit") ||
+        errorCode.includes("rate_limit"))
+    ) {
+      return "rate_limit";
     }
 
     if (code.includes("exhausted") || code.includes("unavailable")) {
-      return "Provider is overloaded";
-    }
-
-    if (body.type === "error" && errorCode.includes("rate_limit")) {
-      return "Rate Limited";
+      return "overloaded";
     }
 
     if (
       errorMessage.includes("no_kv_space") ||
-      (body.type === "error" && body.error?.type === "server_error") ||
-      !!body.error
+      (body.type === "error" && errorType === "server_error")
     ) {
-      return "Provider Server Error";
+      return "server_error";
     }
 
+    // A generic error body carries no class of its own — defer to status.
     return undefined;
   }
 }

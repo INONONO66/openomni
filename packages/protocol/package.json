@@ -11,9 +11,9 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "check-types": "tsc --noEmit",
-    "dev": "tsc --watch",
+    "dev": "tsc --watch -p tsconfig.build.json",
     "lint": "bunx biome check ./src",
     "test": "bun test"
   },

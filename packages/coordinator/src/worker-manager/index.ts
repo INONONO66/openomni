@@ -1,14 +1,12 @@
-export {
-  createWorkerManager,
-  type DeliverTask,
-  type WorkerManager,
-  type WorkerManagerConfig,
-  type WorkerManagerStats,
-  type WorkerPorts,
-  type ToolCallCancelParams,
-  type ToolCallContext,
-  type ToolCallParams,
-  type ToolCallResult,
-  type InboundWaitParams,
-  type InboundWaitResult,
-} from "./worker-pool";
+export { createWorkerManager, killWorkerForTest } from "./worker-pool";
+export type {
+  DeliverTask,
+  InboundWaitParams,
+  InboundWaitResult,
+  ToolCallContext,
+  ToolCallParams,
+  ToolCallResult,
+  WorkerManager,
+  WorkerManagerStats,
+  WorkerPorts,
+} from "./worker-manager-types";

@@ -32,7 +32,6 @@ const mockWorkerManagerFactory: WorkerManagerFactory = (_config, ports) => {
       mockPoolDispatch(task.sessionId, runId, task),
     send: async () => ({ sent: true }),
     cancel: async () => ({ cancelled: true }),
-    killWorker: () => undefined,
     stats: () => ({
       workers: 1,
       active: 0,

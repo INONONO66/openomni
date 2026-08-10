@@ -9,5 +9,9 @@ describe("worker supervision public facade removal", () => {
     expect("createSessionRouting" in coordinator).toBe(false);
     expect("SessionRouting" in coordinator).toBe(false);
     expect("createWorkerManager" in coordinator).toBe(true);
+
+    // #553 C9: the delivery factory is the only runtime export — the rest of
+    // the public surface is types (driver shape + its parameter/result types).
+    expect(Object.keys(coordinator).sort()).toEqual(["createWorkerManager"]);
   });
 });
