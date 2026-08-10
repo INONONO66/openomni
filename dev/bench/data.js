@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786346735733,
+  "lastUpdate": 1786347379558,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40029,6 +40029,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513526,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f43ccdb69dc24238336fb892999cc9725f2c54dc",
+          "message": "refactor: fragment, wrapper, and banned-name sweep across five packages (#570)\n\n* refactor(protocol): merge fragment modules into their owning files\n\n- policy/version.ts (1 LOC const) -> policy/definition.ts\n- policy/plan.ts (single zod object) -> inlined in policy/index.ts\n- app-connector/schema-primitives.ts -> app-connector/definition.ts\n- app-connector/schemas.ts (pure re-export duplicate) deleted; index.ts\n  repointed to definition.js/installation.js\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(agent): fold fragments, thread real ids into events\n\n- core/policy/engine.ts (pass-through over GenericPolicyEngine) -> policy/index.ts\n- core/prompt-builder.ts -> execution/turn-prepare.ts (its single caller)\n- core/execution/shared.ts dispersed: resolveProviderModel -> runner.ts,\n  toMessagesWithParts -> run-state.ts, summarizeInput -> tool-executor.ts\n  (tool-guard repointed)\n- core/chat-agent.ts KEPT: package public entry; folding would push\n  streamAgent internals into the barrel\n- replace hardcoded \"chat-agent\" ids: budget/compaction policies emit the\n  dispatch-context sessionId (run.turn.pre / run.completion.pre contracts\n  guarantee it); compaction summary message carries the source message's\n  agent id; pinned by a red-first test on the budget warning event\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(server): sweep fragments, rename shared/ to channel/support/\n\n- execution/worker-run-state.ts -> worker-runner-types.ts (3 src + 3 test\n  importers repointed; audit counted 1)\n- shared/sleep.ts -> shared/fetch-retry.ts (channel pollers repointed)\n- context/assembler.ts + context/index.ts -> context/middleware.ts;\n  bootstrap imports mcp-config directly, worker-runner imports middleware\n  directly; barrel-shape integration test updated to the new wiring\n- agents/runtime-definition.ts (single parse delegation) inlined at\n  bootstrap/worker-bootstrap.ts with its egress-boundary comment; test\n  relocated to test/bootstrap/runtime-agent-egress.test.ts\n- src/shared/ -> src/channel/support/ (all importers are channel/*)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(session): merge bus DB accessors, rename record-fields\n\n- bus-persistence/query-database.ts folded into database.ts: both\n  accessors returned the same telemetry-first handle; query-side\n  importers repointed (4 files)\n- bus-persistence/record-helpers.ts -> record-fields.ts (4 importers)\n- ledger-core/db.ts relocated to test/ledger-core/db.ts: verified the\n  ledger DDL drift gate consumes schema.ts directly, and the only\n  consumer of createLedgerDb is append.test.ts; drizzle.config.ts\n  comment repointed\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): merge resident prompt fragments into index\n\nagents/resident/prompt/{shared,types}.ts folded into prompt/index.ts;\nbuildResidentPrompt/inferResidentPromptFamily become module-private,\nclaude/gpt variants take ResidentPromptVariant type-only from index\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): typed sessionId access in builtin policies\n\nExpose sessionId?: string on the agent PolicyContext (guaranteed\nnon-empty by the run.turn.pre / run.completion.pre point contracts and\nstamped by buildLifecyclePolicyContext) and replace the Reflect.get\ntyped-surface bypass in builtin budget/compaction policies with\nctx.sessionId ?? \"\" — no fabricated fallback.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(server): band-contract telemetry port in fetch-retry\n\nThe Q6 boundary gate caught the support/ relocation carrying\nfetch-retry's Bus import into the channel band. Telemetry now rides the\ninjected PublishPort (optional options.publish), threaded from the three\nchannel clients that already hold it.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T07:35:00Z",
+          "tree_id": "1e92fa212eef1331cf1a07013fc71037bea5b3d6",
+          "url": "https://github.com/INONONO66/openomni/commit/f43ccdb69dc24238336fb892999cc9725f2c54dc"
+        },
+        "date": 1786347378805,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9267,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3001,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15180,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8065,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 842,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1343,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20221,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11151,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102204,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 538650,
             "unit": "ns/op"
           }
         ]
