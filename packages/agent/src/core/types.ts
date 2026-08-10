@@ -9,7 +9,6 @@ import type {
 } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyEngineRegistration } from "./policy/types";
-import type { AgentRuntimeContext } from "./runtime-context";
 
 export interface AgentEventEmitter {
   emit(eventName: string, data: Record<string, unknown>): void;
@@ -37,7 +36,6 @@ export interface ChatAgentConfig {
   allowAuthFallback?: RunInput["allowAuthFallback"];
   toolChoice?: "auto" | "required" | "none";
   middleware?: PolicyEngineRegistration[];
-  context?: AgentRuntimeContext;
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
     resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;

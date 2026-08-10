@@ -12,16 +12,6 @@ export type {
   Sink,
   AgentEventEmitter,
 } from "./core/types";
-export {
-  createAgentRuntimeContext,
-  getDefaultContext,
-} from "./core/runtime-context";
-export type {
-  AgentRuntimeContext,
-  AgentRegistryStore,
-  RuntimeAgentInstance,
-  RuntimeInstanceStatus,
-} from "./core/runtime-context";
 export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
 export type {
   CanonicalPolicyRegistration,

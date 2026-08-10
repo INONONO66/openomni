@@ -12,7 +12,6 @@ src/
 │   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
-│   ├── runtime-context.ts      # Runtime context helpers for agent execution
 │   ├── prompt-builder.ts       # System prompt composition helpers
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
 │   ├── execution/              # The agent loop, decomposed: runner.ts (entry), turn-prepare.ts / turn-outcome.ts (turn loop), lifecycle-dispatch.ts / completion-policy.ts (run.lifecycle/completion points), policy-effects*.ts (effect application), prompt-policy.ts, tool-executor.ts (tool.native/mcp pre/post dispatch), run-state.ts / run-events.ts / run-result.ts, compaction.ts (InMemoryCompactor)
