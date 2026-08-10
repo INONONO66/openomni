@@ -49,7 +49,7 @@ export interface AttemptRunView {
   readonly source: "attempt_facts" | "worker_run_upcast";
 }
 
-export type AttemptRunTerminalExtra = Readonly<{
+type AttemptRunTerminalExtra = Readonly<{
   endedAt?: number;
   lastMessageId?: string;
   error?: string;

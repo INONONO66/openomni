@@ -8,6 +8,7 @@ import {
   LedgerAppend,
   PolicyDecision,
   Wait,
+  WorkerRun as WorkerRunProtocol,
   WorkItem,
 } from "../../packages/protocol/src/index";
 import {
@@ -29,6 +30,7 @@ import {
   Storage,
   WaitStore,
   WorkerRunStateStore,
+  WorkItemAttemptRun,
   WorkItemStore,
 } from "../../packages/session/src/index";
 import { Ledger } from "../../packages/session/src/ledger-core/index";
@@ -1560,5 +1562,140 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
     const exhausted = WorkItemStore.get(item.hash);
     if (!exhausted) throw new Error("exhausted projection must exist");
     expect(hasRetryExhaustionBlocker(exhausted)).toBe(true);
+  });
+});
+
+describe("p2 ledger baseline — frozen worker-run writer + archive manifest (D2b)", () => {
+  // WorkerRun writes are frozen (#510 D2b) — historical rows are seeded at
+  // the adapter layer, exactly as pre-freeze rows persist on disk.
+  function seedFrozenWorkerRun(
+    runId: string,
+    status: WorkerRunProtocol.Status,
+    sessionId = "session_conformance_wr",
+  ): void {
+    const storage = Storage.getAdapter();
+    if (!storage.session.get(sessionId)) {
+      storage.session.set(sessionId, {
+        id: sessionId,
+        title: sessionId,
+        model: { providerID: "test", modelID: "test-model" },
+        time: { created: 1, updated: 1 },
+        spawnDepth: 0,
+      });
+    }
+    const adapter = storage.workerRunState;
+    if (!adapter) throw new Error("conformance storage misses the workerRunState sub-adapter");
+    adapter.create(sessionId, {
+      runId,
+      parentSessionId: "resident-session",
+      agentName: "worker",
+      status,
+      executorKind: "internal_chat_agent",
+      title: runId,
+      prompt: "archived work",
+      timeCreated: 100,
+      timeUpdated: 100,
+    });
+  }
+
+  test("frozen writer (D2b): worker-run writes throw the typed frozen error; archived rows stay readable", async () => {
+    seedFrozenWorkerRun("run-frozen-conformance", "running");
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      WorkerRunStateStore.updateStatus(
+        "session_conformance_wr",
+        "run-frozen-conformance",
+        "succeeded",
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    if (!WorkerRunProtocol.FrozenError.isInstance(thrown)) {
+      throw new Error("expected the typed WorkerRunFrozenError");
+    }
+    expect(thrown.data.code).toBe("worker_run_frozen");
+    expect(thrown.data.method).toBe("updateStatus");
+    await flushBus();
+    expect(events).toEqual([]);
+    // The frozen row is untouched and still served by every read surface.
+    expect(
+      WorkerRunStateStore.get("session_conformance_wr", "run-frozen-conformance")?.status,
+    ).toBe("running");
+    expect(WorkerRunStateStore.listBySession("session_conformance_wr")).toHaveLength(1);
+  });
+
+  test("archive manifest covers frozen worker_run_state rows: deterministic range hash, tamper mismatch", async () => {
+    seedFrozenWorkerRun("run-wr-b", "succeeded");
+    seedFrozenWorkerRun("run-wr-c", "failed");
+    seedFrozenWorkerRun("run-wr-a", "waiting_input");
+
+    const manifest = buildLedgerArchiveManifest(inspect);
+    const entry = manifest.tables.find((table) => table.table === "worker_run_state");
+    if (!entry) throw new Error("manifest misses the frozen worker_run_state table");
+    expect(entry).toMatchObject({
+      table: "worker_run_state",
+      rowCount: 3,
+      idRange: { first: "run-wr-a", last: "run-wr-c" },
+    });
+    expect(entry.integrityHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    // Regenerating over the same rows reproduces the hash byte-for-byte.
+    const regenerated = buildLedgerArchiveManifest(inspect).tables.find(
+      (table) => table.table === "worker_run_state",
+    );
+    expect(regenerated?.integrityHash).toBe(entry.integrityHash);
+
+    // A tampered archived row breaks the range hash.
+    inspect
+      .query("UPDATE worker_run_state SET status = 'succeeded' WHERE run_id = 'run-wr-a'")
+      .run();
+    const tampered = buildLedgerArchiveManifest(inspect).tables.find(
+      (table) => table.table === "worker_run_state",
+    );
+    expect(tampered?.integrityHash).not.toBe(entry.integrityHash);
+    expect(tampered?.rowCount).toBe(3);
+  });
+
+  test("worker_run upcast-on-read is deterministic and never materializes archive rows", async () => {
+    seedFrozenWorkerRun("run-upcast-done", "succeeded");
+    seedFrozenWorkerRun("run-upcast-live", "running");
+
+    // Terminal statuses map 1:1 through the attempt-run view.
+    const done = WorkItemAttemptRun.find("session_conformance_wr", "run-upcast-done");
+    expect(done).toMatchObject({
+      status: "succeeded",
+      parentSessionId: "resident-session",
+      source: "worker_run_upcast",
+    });
+
+    // A non-terminal legacy status folds to interrupted: no live process
+    // can be executing a pre-freeze run.
+    const first = WorkItemAttemptRun.find("session_conformance_wr", "run-upcast-live");
+    expect(first?.status).toBe("interrupted");
+    const second = WorkItemAttemptRun.find("session_conformance_wr", "run-upcast-live");
+    expect(second).toEqual(first);
+
+    // The read wrote nothing: no WorkItem row appeared, no attempt fact was
+    // appended, and the archived row's stored bytes are unchanged.
+    expect(inspect.query("SELECT COUNT(*) AS n FROM work_item").get()).toEqual({ n: 0 });
+    expect(
+      inspect
+        .query("SELECT COUNT(*) AS n FROM ledger_event WHERE type LIKE 'work_item.attempt%'")
+        .get(),
+    ).toEqual({ n: 0 });
+    expect(
+      inspect
+        .query("SELECT status, time_updated FROM worker_run_state WHERE run_id = 'run-upcast-live'")
+        .get(),
+    ).toEqual({ status: "running", time_updated: 100 });
+    // And nothing frozen can be re-animated through the attempt surfaces.
+    expect(await WorkItemAttemptRun.beginWait("session_conformance_wr", "run-upcast-live")).toBe(
+      false,
+    );
+    expect(WorkItemAttemptRun.listActive("session_conformance_wr")).toEqual([]);
   });
 });
