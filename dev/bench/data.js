@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786371917772,
+  "lastUpdate": 1786373535918,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41889,6 +41889,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 519644,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eb5a3332ffb39afb309ebad998ccca48bc45fb2b",
+          "message": "chore(agent,llm): excise dead runtime-context and provider variant surface (#587)\n\n* refactor(agent): remove dead runtime-context surface\n\ncreateAgentRuntimeContext/getDefaultContext and the AgentRuntimeContext/\nAgentRegistryStore/RuntimeAgentInstance/RuntimeInstanceStatus types had zero\nnon-test consumers repo-wide. The inert ChatAgentConfig.context field was read\nonly by the module's own test. Delete the file, its barrel exports, the dead\nconfig field, the test, and the stale AGENTS.md map entry.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(llm): remove dead variant cluster and speculative schema\n\nProviderTransform.variants / resolveVariant (plus the isProviderModel guard)\nhad zero production readers — only their own tests and one over-provisioned\nopenomni test mock. The `variants` field on Provider.Model and ModelsDev.Model\nwas written from the models.dev mapping but never read anywhere. Delete the\ntransform methods, both schema fields, the mapping, and the matching test\nblocks. The live cache/transform path (normalizeMessages, applyAnthropicCaching,\nanthropicCacheOptions) is untouched.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(llm): remove variant residue the excision missed\n\n- drop resolveVariant/variants keys from the @openomni/llm test mock (symbols\n  deleted; runtime-only mock, no type binding)\n- delete the \"should validate Model with variants\" test — it asserted the\n  removed ModelsDev.Model.variants field, not strip-tolerance of unknown keys\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T14:51:00Z",
+          "tree_id": "9b439df3b0ccf2fc90a1ce31ea39d76c2f47b44f",
+          "url": "https://github.com/INONONO66/openomni/commit/eb5a3332ffb39afb309ebad998ccca48bc45fb2b"
+        },
+        "date": 1786373535527,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6206,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10004,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3136,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2559,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16273,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 725,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45259,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2336,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101380,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511334,
             "unit": "ns/op"
           }
         ]
