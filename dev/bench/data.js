@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786347379558,
+  "lastUpdate": 1786347694843,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40153,6 +40153,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 538650,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3785f1c97dad994ca88ccded4174f59841871f2e",
+          "message": "refactor(openomni): ingress cohesion — handler merge and routing re-cut (#571)\n\n* refactor(openomni): merge ingress handler stage files into handlers.ts\n\nThe dispatch lifecycle was chopped into 7 files (handlers, -events,\n-writeback, -worker-run, -worker-dispatch, -prompt, -types; 495 LOC)\nwith a 7-field HandlerContext type threaded through 5 stage files and\nhandler-worker-dispatch importing 6 siblings for its single importer.\nFold the stages back into one handlers.ts: bodies are byte-identical\n(only the commitWriteback import alias returns to its real name and\nthe finishCoordinatorDispatch argument list re-wraps), the stage\nhelpers become namespace-local, and the HandlerContext indirection\nfile dies. No behavior change; external surface stays\nIngressHandlers.{HandlerContext,buildExecutionRequest,handleResident,handleDirect}\n(the unused namespace dispatchWritebackCommit re-export wrapper is\ndropped — zero importers).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): re-cut routing on the resolution/execution axis\n\nrouting-runtime.ts vs routing-execution.ts was an arbitrary chop:\nexecution had a single importer (engine) and reached back into\nrouting-runtime for KernelRouteResolution, while engine.ts itself\nhosted ~120 LOC of resolution internals (route stream keying, replay\nequivalence, route.decided recording). Move the boundary to the\nsemantic axis:\n\n- routing-resolution.ts (was routing-runtime.ts): route-state assembly\n  + resolveRoute call + execution-plan types, now also owning the\n  durable half of resolution moved out of engine.ts (routeStreamId,\n  routeDecisionsEquivalent, recordRouteDecided, resolveAndRecordRoute)\n  and the IngressRoutingError vocabulary both halves throw.\n  resolveKernelRoute becomes module-private (record-before-act means\n  nobody may act on an unrecorded resolution).\n- routing-execution.ts: effect dispatch only; imports the error and\n  the resolution type one-way from routing-resolution.\n- engine.ts: pure orchestration (361 -> 240 LOC).\n\nAll moved bodies and comments are byte-identical. Test/conformance\nimports of IngressRoutingError follow the move.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): single canonical inbound payload-text parser\n\ningress extractPrompt (handlers.ts) and dispatch extractText\n(dispatch/handlers/shared.ts) were the same payload-shape logic\nmaintained twice. Ingress owns it (the payload shape is minted at the\ningress boundary): the canonical extractText now lives in\ningress/handlers.ts and dispatch imports it; shared.ts keeps asRecord\nonly.\n\nThe two copies differed solely on nullish payloads — extractPrompt\nreturned JSON.stringify output ('null' for null, and a type-lying\nruntime undefined for undefined) where extractText fails safe to .\nThe canonical takes the fail-safe body: the dispatch behavior is\ntest-pinned (extractText returns empty string for nullish payloads),\nno test pins the ingress 'null'-prompt artifact, and a literal 'null'\nprompt for a null payload was a latent bug, not a contract.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(openomni): unexport KernelWaitExecution, shrink dead baseline\n\nKernelWaitExecution was already baselined as a dead export on the old\nrouting-runtime.ts path (consumers use KernelRouteResolution[\"waitExecution\"]\nExtracts); the routing re-cut rename surfaced it as new. Make it\nmodule-private and drop the stale baseline entry — ratchet shrinks by\none, no new issues.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): fold third payload parser, fix stale alias comment\n\nevent-projector.ts extractTextPayload was a third copy of the\ncanonical parser (with the old null->'null' drift; undefined already\nfailed safe via ?? \"\") — repoint it to ingress/handlers.ts\nextractText. No test pins the projected 'null' artifact and no prod\ncomparison consumes it. Also update the runtime-agent-config.ts\ncomment that still referenced the retired commitWriteback alias.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T07:40:16Z",
+          "tree_id": "99660e03081a4aff93911a21462afcc9f35c2b63",
+          "url": "https://github.com/INONONO66/openomni/commit/3785f1c97dad994ca88ccded4174f59841871f2e"
+        },
+        "date": 1786347694315,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5886,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2355,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14901,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 788,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 680,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1277,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 749,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20324,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2263,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102061,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517647,
             "unit": "ns/op"
           }
         ]
