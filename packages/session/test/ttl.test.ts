@@ -2,8 +2,14 @@
 
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Session } from "../src/session";
+import { Bus } from "../src/bus";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
+
+/** Bus delivery is microtask-queued; flush before asserting on received events. */
+function flushBus(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe("Session TTL", () => {
   beforeEach(() => {
@@ -50,18 +56,29 @@ describe("Session TTL", () => {
       expect(retrieved?.id).toBe(session.id);
     });
 
-    test("should return undefined and remove session when expired", () => {
+    test("should return undefined for an expired session WITHOUT deleting it", async () => {
+      // Reads are pure: expiry filtering never writes. Deletion is the
+      // explicit sweep's job (sweepExpired below).
       const session = Session.create({
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -1000,
       });
 
+      const deleted: string[] = [];
+      const unsub = Bus.subscribe(Session.Event.Deleted, (data) => {
+        deleted.push(data.id);
+      });
+
       const retrieved = Session.get(session.id);
       expect(retrieved).toBeUndefined();
 
-      const checkAgain = Storage.getAdapter().session.get(session.id);
-      expect(checkAgain).toBeUndefined();
+      // The row survives the read; no delete event fired.
+      const stillStored = Storage.getAdapter().session.get(session.id);
+      expect(stillStored).toBeDefined();
+      await flushBus();
+      expect(deleted).toEqual([]);
+      unsub();
     });
 
     test("should return session without expiresAt normally", () => {
@@ -95,7 +112,7 @@ describe("Session TTL", () => {
       expect(sessions.find((s) => s.id === session2.id)).toBeDefined();
     });
 
-    test("should exclude expired sessions and remove them", () => {
+    test("should exclude expired sessions WITHOUT deleting them", async () => {
       const expiredSession = Session.create({
         title: "Expired Session",
         model: { providerID: "test", modelID: "test-model" },
@@ -108,15 +125,24 @@ describe("Session TTL", () => {
         ttlMs: 5000,
       });
 
+      const deleted: string[] = [];
+      const unsub = Bus.subscribe(Session.Event.Deleted, (data) => {
+        deleted.push(data.id);
+      });
+
       const sessions = Session.list();
       expect(sessions.length).toBe(1);
       expect(sessions[0].id).toBe(activeSession.id);
 
-      const checkExpired = Storage.getAdapter().session.get(expiredSession.id);
-      expect(checkExpired).toBeUndefined();
+      // list() is a pure read: the expired row survives until the sweep.
+      const stillStored = Storage.getAdapter().session.get(expiredSession.id);
+      expect(stillStored).toBeDefined();
+      await flushBus();
+      expect(deleted).toEqual([]);
+      unsub();
     });
 
-    test("should handle mixed sessions correctly", () => {
+    test("should handle mixed sessions correctly and stay stable across repeated reads", () => {
       const expired1 = Session.create({
         title: "Expired 1",
         model: { providerID: "test", modelID: "test-model" },
@@ -140,30 +166,66 @@ describe("Session TTL", () => {
         ttlMs: -2000,
       });
 
-      const sessions = Session.list();
-      expect(sessions.length).toBe(2);
-      expect(sessions.find((s) => s.id === active1.id)).toBeDefined();
-      expect(sessions.find((s) => s.id === noExpiry.id)).toBeDefined();
-      expect(sessions.find((s) => s.id === expired1.id)).toBeUndefined();
-      expect(sessions.find((s) => s.id === expired2.id)).toBeUndefined();
+      // Interleaved reads during expiry must not corrupt each other: a get()
+      // issued mid-listing (formerly a delete-while-iterating hazard) leaves
+      // every row intact, and a second list() sees the identical view.
+      const first = Session.list();
+      Session.get(expired1.id);
+      const second = Session.list();
+
+      for (const sessions of [first, second]) {
+        expect(sessions.length).toBe(2);
+        expect(sessions.find((s) => s.id === active1.id)).toBeDefined();
+        expect(sessions.find((s) => s.id === noExpiry.id)).toBeDefined();
+        expect(sessions.find((s) => s.id === expired1.id)).toBeUndefined();
+        expect(sessions.find((s) => s.id === expired2.id)).toBeUndefined();
+      }
+      expect(Storage.getAdapter().session.list().length).toBe(4);
     });
   });
 
-  describe("lazy deletion", () => {
-    test("should not auto-delete expired sessions until accessed", () => {
-      const session = Session.create({
-        title: "Test Session",
+  describe("sweepExpired", () => {
+    test("removes expired sessions and leaves the rest untouched", async () => {
+      const expired = Session.create({
+        title: "Expired",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -1000,
       });
+      const active = Session.create({
+        title: "Active",
+        model: { providerID: "test", modelID: "test-model" },
+        ttlMs: 5000,
+      });
+      const noExpiry = Session.create({
+        title: "No Expiry",
+        model: { providerID: "test", modelID: "test-model" },
+      });
 
-      const directCheck = Storage.getAdapter().session.get(session.id);
-      expect(directCheck).toBeDefined();
+      const deleted: string[] = [];
+      const unsub = Bus.subscribe(Session.Event.Deleted, (data) => {
+        deleted.push(data.id);
+      });
 
-      Session.get(session.id);
+      const swept = Session.sweepExpired();
 
-      const afterGet = Storage.getAdapter().session.get(session.id);
-      expect(afterGet).toBeUndefined();
+      expect(swept.map((s) => s.id)).toEqual([expired.id]);
+      await flushBus();
+      expect(deleted).toEqual([expired.id]);
+      expect(Storage.getAdapter().session.get(expired.id)).toBeUndefined();
+      expect(Storage.getAdapter().session.get(active.id)).toBeDefined();
+      expect(Storage.getAdapter().session.get(noExpiry.id)).toBeDefined();
+      unsub();
+    });
+
+    test("is a no-op when nothing is expired", () => {
+      Session.create({
+        title: "Active",
+        model: { providerID: "test", modelID: "test-model" },
+        ttlMs: 5000,
+      });
+
+      expect(Session.sweepExpired()).toEqual([]);
+      expect(Storage.getAdapter().session.list().length).toBe(1);
     });
   });
 });

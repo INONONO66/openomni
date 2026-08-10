@@ -69,29 +69,45 @@ export function createChild(input: CreateChildInput): SessionInfo {
   return child;
 }
 
+function isExpired(session: SessionInfo, now: number): boolean {
+  return session.expiresAt !== undefined && now > session.expiresAt;
+}
+
 export function get(id: string): SessionInfo | undefined {
   const session = Storage.getAdapter().session.get(id);
   if (!session) return undefined;
-
-  if (session.expiresAt !== undefined && Date.now() > session.expiresAt) {
-    remove(id);
-    return undefined;
-  }
-
+  // Reads are pure: an expired session is invisible but NOT deleted here —
+  // a get() that writes turns every read into a mutation (delete-during-get
+  // races, list() corrupting its own iteration). Physical deletion is
+  // sweepExpired()'s job, invoked from a deliberate caller.
+  if (isExpired(session, Date.now())) return undefined;
   return session;
 }
 
 export function list(): SessionInfo[] {
-  const sessions = Storage.getAdapter().session.list();
   const now = Date.now();
+  // Pure read: expired sessions are filtered out, never removed mid-filter.
+  return Storage.getAdapter()
+    .session.list()
+    .filter((session) => !isExpired(session, now));
+}
 
-  return sessions.filter((session) => {
-    if (session.expiresAt !== undefined && now > session.expiresAt) {
-      remove(session.id);
-      return false;
-    }
-    return true;
-  });
+/**
+ * Explicit expiry sweep: physically removes every expired session (message/
+ * part cascade included, via remove()). Reads (get/list) only FILTER expired
+ * rows; this is the single place expiry causes a write. Invoked from the boot
+ * recovery sweep (apps/server/src/bootstrap/recovery.ts) alongside
+ * WaitService.sweepExpired; there is no periodic scheduler yet, so long-lived
+ * processes re-sweep only on restart.
+ */
+export function sweepExpired(now = Date.now()): SessionInfo[] {
+  const expired = Storage.getAdapter()
+    .session.list()
+    .filter((session) => isExpired(session, now));
+  for (const session of expired) {
+    remove(session.id);
+  }
+  return expired;
 }
 
 export function listChildren(parentSessionId: string): SessionInfo[] {

@@ -5,7 +5,7 @@ import {
   type DefaultDispatchRuntime,
   type EffectReconciler,
 } from "@openomni/openomni";
-import { Bus, Storage } from "@openomni/session";
+import { Bus, Session, Storage } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
@@ -221,6 +221,18 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
         time: Date.now(),
         component: "server",
         msg: `recovery expired ${expiredWaits.length} wait(s)`,
+      });
+    }
+    // Session TTL expiry: reads (Session.get/list) only filter expired rows;
+    // this sweep is the one deliberate deletion point (same seam as the wait
+    // sweep above — boot-time only until a periodic scheduler exists).
+    const expiredSessions = Session.sweepExpired();
+    if (expiredSessions.length > 0) {
+      Bus.publish(Operational.Info, {
+        traceId: id,
+        time: Date.now(),
+        component: "server",
+        msg: `recovery removed ${expiredSessions.length} expired session(s)`,
       });
     }
 
