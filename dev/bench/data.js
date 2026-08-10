@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786371393621,
+  "lastUpdate": 1786371917772,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -41765,6 +41765,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513454,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "91343fff141e6a9ab9d204c037d555ab86412e28",
+          "message": "fix(coordinator,ipc,protocol): worker-delivery and transport correctness (#586)\n\n* fix(coordinator): dispose stale supervisor before replacing it\n\nA worker that crashed sits in restart backoff with its restart timer armed\nand `isActive()` false. `ensureSupervisor` replaced `slot.supervisor` on a\nsame-session re-deliver without disposing the old one, orphaning that timer\n(it re-spawns forever) and double-spawning on the slot's single socket path.\nDispose the inactive supervisor first — dispose() flips `stopping`, which\nneutralizes the pending restart, and kills any lingering process.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(coordinator): authenticate and validate worker.tool_call\n\nworker.tool_call was the only worker→coordinator verb with neither shape\nvalidation nor an authToken check: `params as ToolCallParams` on a malformed\nframe threw an uncaught TypeError (crashing the coordinator on the most\ndangerous verb), and a forged tool_call executed unauthenticated.\n\nParse the frame with the canonical zod schema and verify the env-injected\nauthToken like every other authenticated verb; reject malformed/forged calls\nwith a typed Tool.Result error frame instead of throwing. Add authToken to\nthe worker.tool_call protocol schema and thread it through the mcp proxy\nsender and the coordinator test fixture.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(ipc): contain throwing onRequest and clear stale active connection\n\nTwo transport defects in the ipc layer:\n\n- The client's onRequest dispatch ran unguarded inside the socket 'data'\n  listener, so a throwing handler tore down the connection (losing the\n  response) instead of replying. Wrap it and emit a typed error response,\n  mirroring the server side.\n- removeConnection never cleared activeConnectionId when the active\n  connection was removed, so getActiveSocket() stayed pinned to a dead id and\n  no surviving/next connection could bind. Clear it on that branch.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T14:23:56Z",
+          "tree_id": "b50f2b2d444680245da910b38a9bc5100cf11e68",
+          "url": "https://github.com/INONONO66/openomni/commit/91343fff141e6a9ab9d204c037d555ab86412e28"
+        },
+        "date": 1786371917246,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5945,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10577,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3183,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2487,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8172,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 856,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1623,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 723,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47804,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2359,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10964,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 519644,
             "unit": "ns/op"
           }
         ]
