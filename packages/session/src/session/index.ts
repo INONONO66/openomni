@@ -18,6 +18,7 @@ export namespace Session {
   export const updateWorkerMeta = Lifecycle.updateWorkerMeta;
   export const update = Lifecycle.update;
   export const remove = Lifecycle.remove;
+  export const sweepExpired = Lifecycle.sweepExpired;
   export const addMessage = Messages.addMessage;
   export const updateMessageStatus = Messages.updateMessageStatus;
   export const getMessages = Messages.getMessages;

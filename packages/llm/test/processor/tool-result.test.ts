@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import type { Message, Sink, Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";
@@ -40,13 +40,11 @@ describe("Processor tool result projection", () => {
   test("projects AI SDK tool-call and tool-result stream parts once", async () => {
     const toolCalls: Tool.Call[] = [];
     const toolResults: Tool.Result[] = [];
-    const snapshots: Run.Snapshot[] = [];
     const messages: Message.WithParts[] = [];
     const sink: Sink = {
       onMessage: (message) => messages.push(message),
       onToolCall: (call) => toolCalls.push(call),
       onToolResult: (result) => toolResults.push(result),
-      onSnapshot: (snapshot) => snapshots.push(snapshot),
     };
 
     const processor = Processor.create({
@@ -84,7 +82,6 @@ describe("Processor tool result projection", () => {
       toolCallId: "call-weather",
       output: "sunny",
     });
-    expect(snapshots.length).toBeGreaterThan(0);
     const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
     expect(toolPart).toMatchObject({
       callID: "call-weather",
@@ -112,7 +109,6 @@ describe("Processor tool result projection", () => {
       onMessage: (message) => messages.push(message),
       onToolCall: (call) => toolCalls.push(call),
       onToolResult: (result) => toolResults.push(result),
-      onSnapshot: () => undefined,
     };
 
     const processor = Processor.create({
@@ -154,7 +150,6 @@ describe("Processor tool result projection", () => {
       onMessage: (message) => messages.push(message),
       onToolCall: () => undefined,
       onToolResult: (result) => toolResults.push(result),
-      onSnapshot: () => undefined,
     };
 
     const processor = Processor.create({
@@ -202,7 +197,6 @@ describe("Processor tool result projection", () => {
       onMessage: (message) => messages.push(message),
       onToolCall: () => undefined,
       onToolResult: () => undefined,
-      onSnapshot: () => undefined,
     };
 
     const processor = Processor.create({
@@ -249,7 +243,6 @@ describe("Processor tool output normalization", () => {
       onMessage: (message) => messages.push(message),
       onToolCall: () => undefined,
       onToolResult: (result) => toolResults.push(result),
-      onSnapshot: () => undefined,
     };
 
     const processor = Processor.create({
@@ -295,7 +288,6 @@ describe("Processor tool error normalization", () => {
       onMessage: () => undefined,
       onToolCall: () => undefined,
       onToolResult: (result) => toolResults.push(result),
-      onSnapshot: () => undefined,
     };
 
     const processor = Processor.create({
@@ -344,7 +336,6 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       onMessage: (message) => messages.push(message),
       onToolCall: () => undefined,
       onToolResult: () => undefined,
-      onSnapshot: () => undefined,
     };
   }
 

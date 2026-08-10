@@ -143,8 +143,6 @@ function isAppendableInitialState(part: Message.Part): boolean {
     case "step-start":
     case "step-finish":
     case "retry":
-    case "snapshot":
-    case "compaction":
       return true;
   }
 }
@@ -163,8 +161,6 @@ function advancePart(
     case "step-start":
     case "step-finish":
     case "retry":
-    case "snapshot":
-    case "compaction":
       // Punctual parts: appended whole, never advanced.
       return undefined;
   }

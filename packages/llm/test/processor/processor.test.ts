@@ -1,12 +1,5 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
-import {
-  LlmCall,
-  Operational,
-  type Message,
-  type Run,
-  type Sink,
-  type Tool,
-} from "@openomni/protocol";
+import { LlmCall, Operational, type Message, type Sink, type Tool } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { Processor } from "../../src/processor";
 import { APIError } from "../../src/error";
@@ -91,7 +84,6 @@ type PartsCapture = {
   sink: Sink;
   messages: Message.WithParts[];
   finalParts: () => Message.Part[];
-  snapshotStates: string[];
   toolCalls: Tool.Call[];
   toolResults: Tool.Result[];
   /** Text of the first text part, captured at each onMessage callback. */
@@ -100,7 +92,6 @@ type PartsCapture = {
 
 function capturingSink(): PartsCapture {
   const messages: Message.WithParts[] = [];
-  const snapshotStates: string[] = [];
   const toolCalls: Tool.Call[] = [];
   const toolResults: Tool.Result[] = [];
   const textTimeline: Array<string | undefined> = [];
@@ -120,17 +111,27 @@ function capturingSink(): PartsCapture {
       onToolResult(result) {
         toolResults.push(result);
       },
-      onSnapshot(snapshot: Run.Snapshot) {
-        snapshotStates.push(String(snapshot.state.type));
-      },
     },
     messages,
     finalParts: () => messages.at(-1)?.parts ?? [],
-    snapshotStates,
     toolCalls,
     toolResults,
     textTimeline,
   };
+}
+
+/**
+ * Run-status telemetry (busy/retry/idle) is published on the Operational bus
+ * as "sink.snapshot" (the Sink.onSnapshot hop was removed — no consumer).
+ */
+function captureStatusStates(): { states: string[]; unsub: () => void } {
+  const states: string[] = [];
+  const unsub = Bus.subscribe(Operational.Info, (data) => {
+    if (data.component === "llm.processor" && data.msg === "sink.snapshot") {
+      states.push(String((data.context as Record<string, unknown> | undefined)?.stateType));
+    }
+  });
+  return { states, unsub };
 }
 
 describe("Processor", () => {
@@ -453,13 +454,15 @@ describe("Processor", () => {
       });
     });
 
-    test("publishes exactly one busy and one idle snapshot on success", async () => {
-      const capture = capturingSink();
-      const processor = createProcessor({ sink: capture.sink });
+    test("publishes exactly one busy and one idle status on success", async () => {
+      const { states, unsub } = captureStatusStates();
+      const processor = createProcessor();
 
       await processor.process({ system: "" });
+      await new Promise((resolve) => queueMicrotask(resolve));
+      unsub();
 
-      expect(capture.snapshotStates).toEqual(["busy", "idle"]);
+      expect(states).toEqual(["busy", "idle"]);
     });
 
     test("projects sink callbacks to Bus events", async () => {
@@ -473,7 +476,6 @@ describe("Processor", () => {
       const sinkEvents: string[] = [];
       const toolCalls: Tool.Call[] = [];
       const toolResults: Tool.Result[] = [];
-      const snapshots: Run.Snapshot[] = [];
       const messages: Message.WithParts[] = [];
 
       configureSession("session-456");
@@ -490,10 +492,6 @@ describe("Processor", () => {
         onToolResult(result) {
           sinkEvents.push("toolResult");
           toolResults.push(result);
-        },
-        onSnapshot(snapshot) {
-          sinkEvents.push(`snapshot:${String(snapshot.state.type)}`);
-          snapshots.push(snapshot);
         },
       };
 
@@ -516,13 +514,10 @@ describe("Processor", () => {
       expect(sinkEvents).toContain("message");
       expect(sinkEvents).toContain("toolCall");
       expect(sinkEvents).toContain("toolResult");
-      expect(sinkEvents).toContain("snapshot:busy");
-      expect(sinkEvents).toContain("snapshot:idle");
       expect(messages.length).toBeGreaterThan(0);
       expect(toolCalls).toEqual([{ id: "call-1", tool: "lookup", input: { q: "x" } }]);
       expect(toolResults).toHaveLength(1);
       expect(toolResults[0]?.toolCallId).toBe("call-1");
-      expect(snapshots.map((snapshot) => snapshot.state.type)).toEqual(["busy", "idle"]);
 
       expect(busEvents.every((event) => event.component === "llm.processor")).toBe(true);
       expect(busEvents.every((event) => event.sessionId === "session-456")).toBe(true);
@@ -601,7 +596,6 @@ describe("Processor", () => {
         onMessage: (message) => snapshots.push(message),
         onToolCall: () => undefined,
         onToolResult: () => undefined,
-        onSnapshot: () => undefined,
       };
 
       const processor = createProcessor({
@@ -757,6 +751,7 @@ describe("Processor", () => {
 
     test("throws original error instance for non-retryable errors and settles cleanly", async () => {
       const capture = capturingSink();
+      const { states, unsub } = captureStatusStates();
       const errorInstance = new APIError({
         message: "Specific error",
         statusCode: 500,
@@ -781,7 +776,9 @@ describe("Processor", () => {
       }
 
       // Exactly one idle transition, and the pending tool is closed out once.
-      expect(capture.snapshotStates).toEqual(["busy", "idle"]);
+      await new Promise((resolve) => queueMicrotask(resolve));
+      unsub();
+      expect(states).toEqual(["busy", "idle"]);
       expect(capture.toolResults).toHaveLength(1);
       expect(capture.toolResults[0]).toMatchObject({
         toolCallId: "call-1",

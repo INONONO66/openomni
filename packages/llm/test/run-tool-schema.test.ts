@@ -42,7 +42,6 @@ describe("run() with model - tool schema conversion", () => {
     onMessage: () => undefined,
     onToolCall: () => undefined,
     onToolResult: () => undefined,
-    onSnapshot: () => undefined,
   };
 
   test("maps Tool.Spec inputSchema to raw function tools via jsonSchema", async () => {

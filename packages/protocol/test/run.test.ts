@@ -50,42 +50,6 @@ describe("Run.Outcome", () => {
   });
 });
 
-describe("Run.Snapshot", () => {
-  test("parses a valid snapshot", () => {
-    const snapshot = Run.Snapshot.parse({
-      id: "run-1",
-      sessionID: "session-1",
-      timestamp: 123,
-      state: { step: 1, active: true },
-    });
-
-    expect(snapshot.id).toBe("run-1");
-    expect(snapshot.sessionID).toBe("session-1");
-    expect(snapshot.timestamp).toBe(123);
-    expect(snapshot.state).toEqual({ step: 1, active: true });
-  });
-
-  test("rejects missing id", () => {
-    expect(() =>
-      Run.Snapshot.parse({
-        sessionID: "session-1",
-        timestamp: 123,
-        state: {},
-      }),
-    ).toThrow();
-  });
-
-  test("rejects missing sessionID", () => {
-    expect(() =>
-      Run.Snapshot.parse({
-        id: "run-1",
-        timestamp: 123,
-        state: {},
-      }),
-    ).toThrow();
-  });
-});
-
 describe("Run.RetryPolicy", () => {
   test("parses a valid retry policy with retryOn", () => {
     const policy = Run.RetryPolicy.parse({
