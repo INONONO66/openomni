@@ -365,10 +365,19 @@ async function dispatchToolPre(
     resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
-    return engine.dispatchPoint("tool.mcp.pre", {
+    const mcpInput = {
       ...input,
       ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
-    } as unknown as Policy.PolicyPointInputMap["tool.mcp.pre"] & PolicyContext);
+    };
+    // Invariant: an mcp target carries a string mcpServerId (resolved from the
+    // resource source or an `mcp.` label). When it is genuinely absent the
+    // engine's tool.mcp.pre point contract denies fail-closed (context_missing).
+    // Narrow ONLY that one boundary field — every other field is checked against
+    // the point input type exactly as the native branch below is.
+    return engine.dispatchPoint(
+      "tool.mcp.pre",
+      mcpInput as typeof mcpInput & { mcpServerId: string },
+    );
   }
   return engine.dispatchPoint("tool.native.pre", input);
 }
@@ -394,10 +403,16 @@ async function dispatchToolPost(
     resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
-    return engine.dispatchPoint("tool.mcp.post", {
+    const mcpInput = {
       ...input,
       ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
-    } as unknown as Policy.PolicyPointInputMap["tool.mcp.post"] & PolicyContext);
+    };
+    // See dispatchToolPre: the single-field narrowing is confined to the one
+    // runtime-resolved boundary value; absence is denied by the point contract.
+    return engine.dispatchPoint(
+      "tool.mcp.post",
+      mcpInput as typeof mcpInput & { mcpServerId: string },
+    );
   }
   return engine.dispatchPoint("tool.native.post", input);
 }
