@@ -316,6 +316,49 @@ describe("IngressEngine wait routing", () => {
     expect(PendingInteractionStore.get("pi-denied-action")?.status).toBe("open");
   });
 
+  test("blocks an explicitly invalid action on a matched frozen legacy row instead of coercing to report_result", async () => {
+    // Fail-closed hardening over the ported legacy default: a PRESENT but
+    // invalid `action` is the typed "invalid" sentinel, disallowed by every
+    // allowedActions gate — it must never coerce to report_result and route
+    // with matched worker context.
+    await seedFrozenPending("pi-invalid-action", "run-invalid-action", ["report_result"]);
+    const runtime = new DispatchRuntime();
+    let calls = 0;
+    runtime.register("worker.complete", () => {
+      calls += 1;
+      return { output: "must not execute" };
+    });
+    makeKernelRoutingEngine({ dispatchRuntime: runtime });
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(
+        kernelEngine().ingest(
+          replyEvent("inbound-invalid-action", { action: "unknown", output: "SN-A2334" }),
+        ),
+      );
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait does not allow the requested action");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "block",
+      factsUsed: [
+        "wait:pending_interaction:pi-invalid-action",
+        "wait.action:invalid",
+        "wait.action:disallowed",
+      ],
+    });
+    expect(calls).toBe(0);
+    expect(PendingInteractionStore.get("pi-invalid-action")?.status).toBe("open");
+  });
+
   test("routes an allowed connector clarification through resident.ask", async () => {
     const sessionId = await seedFrozenPending("pi-connector-ask", "run-connector-ask", [
       "ask_clarification",
@@ -1140,6 +1183,43 @@ describe("IngressEngine durable wait routing", () => {
     // No surface routing happened: the resident runtime never executed.
     expect(residentExecutions).toEqual([]);
     const record = WaitStore.get("wait-disallowed-action");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(0);
+  });
+
+  test("blocks an explicitly invalid action on a matched durable wait instead of coercing to report_result", async () => {
+    // Red-first proof of the fail-closed hardening: pre-fix, {action:"unknown"}
+    // coerced to the report_result default and ROUTED to the owner session of a
+    // wait allowing report_result. It must block at wait_correlation with the
+    // same typed decision as any other disallowed action.
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-invalid-action");
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(
+        kernelEngine().ingest(
+          replyEvent("inbound-wait-invalid-action", { action: "unknown", output: "SN-A2334" }),
+        ),
+      );
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(error?.message).toBe("Matched wait does not allow the requested action");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "block",
+      factsUsed: ["wait:wait:wait-invalid-action", "wait.action:invalid", "wait.action:disallowed"],
+    });
+    // No routing happened: the resident runtime never executed and the wait
+    // recorded no reply.
+    expect(residentExecutions).toEqual([]);
+    const record = WaitStore.get("wait-invalid-action");
     expect(record).toMatchObject({ status: "open" });
     expect(record?.replies).toHaveLength(0);
   });

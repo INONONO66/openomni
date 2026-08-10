@@ -7,7 +7,12 @@ import {
   type Wait,
 } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore, SurfaceKey } from "@openomni/session";
-import { findWaitCandidates, requestedWaitAction, type WaitResolution } from "../wait/index.js";
+import {
+  findWaitCandidates,
+  requestedWaitAction,
+  type RequestedWaitAction,
+  type WaitResolution,
+} from "../wait/index.js";
 import { applyChannelGrantTreatment } from "./middleware/ingress-authority.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { IngressSessionResolver } from "./session-resolver.js";
@@ -21,13 +26,13 @@ export type KernelWaitExecution =
       // message id, a channel may deliver the reply matched on
       // externalMessageId alone, with no correlation envelope.
       correlation?: Dispatch.Correlation;
-      requestedAction: Wait.AllowedAction;
+      requestedAction: RequestedWaitAction;
       record: Wait.Record;
     }>
   | Readonly<{
       kind: "pending_interaction";
       correlation: Dispatch.Correlation;
-      requestedAction: Wait.AllowedAction;
+      requestedAction: RequestedWaitAction;
       record: Communication.PendingInteraction.Record;
     }>
   | Readonly<{
@@ -102,7 +107,7 @@ function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
 function kernelWaitExecution(
   resolution: WaitResolution,
   correlation: Dispatch.Correlation | undefined,
-  requestedAction: Wait.AllowedAction,
+  requestedAction: RequestedWaitAction,
 ): KernelWaitExecution {
   switch (resolution.kind) {
     case "none":
@@ -239,7 +244,7 @@ function blacklistState(
 function rejectUnsupportedPendingInteractionAction(
   decision: RoutingDecisionPayload,
   wait: RouteState["wait"],
-  requestedAction: Wait.AllowedAction,
+  requestedAction: RequestedWaitAction,
 ): RoutingDecisionPayload {
   if (
     decision.outcome !== "route" ||

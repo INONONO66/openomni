@@ -99,8 +99,11 @@ export function routePendingInteraction(
       : undefined);
   if (!match) return command;
   if (!pendingInteractionSenderMatches(command, match)) return command;
+  // The "invalid" sentinel (explicit but unparseable action) is disallowed
+  // like any action outside allowedActions: the command stays unrouted and
+  // the default dispatch authority denies it fail-closed.
   const action = requestedWaitAction(command.payload);
-  if (!match.allowedActions.includes(action)) return command;
+  if (action === "invalid" || !match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
     return Dispatch.Command.parse({
       ...command,
