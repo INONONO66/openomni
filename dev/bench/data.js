@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786348955686,
+  "lastUpdate": 1786349526839,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -40525,6 +40525,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 402180,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f8e62c3df9994a12a168730cd3b140623d5dfa60",
+          "message": "refactor(openomni): harness exodus and root barrel trim (#574)\n\n* refactor(openomni): move Manual QA drivers out of src into test/harness\n\nRelocate the stakes, verifier-registry, completion-admission, and\nexisting-agent-message drivers (fixtures, scenarios, CLI mains) from\npackages/openomni/src to packages/openomni/test/harness. Delete the\n9-LOC verifier-registry-driver.ts shim (drivers are invoked via the\nharness API or bun run on the harness path). Drop the driver exports\nfrom the root barrel and the ledger/messaging/evidence/work-item\ncluster indexes; tests import the harness directly. No open issue\nManual-QA contract names the old src paths (#215 closed; #216/#217\nuse apps/server/src/manual drivers). Docs updated to the new paths.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): merge stakes fragment modules into stakes-contract\n\nFold stakes-policy.ts (4 LOC of policy constants), stakes-digest.ts\n(7 LOC hashStakesValue), and stakes-schema-primitives.ts (9 LOC zod\nprimitives) into stakes-contract.ts. All three were cluster-internal\nsingle-purpose fragments. Importers rewired; the contract/reference\nimport cycle is function-only (no load-time evaluation) and\nnoImportCycles is off in the shared biome core.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): trim zero-consumer exports from the root barrel\n\nRe-verified production consumers (apps/*, other packages, script/) for\nevery root-barrel value export and removed the 17 with zero production\nconsumers: IngressEventProjector, IngressHandlers,\nIngressSessionResolver, resolveTarget, targetKey, PolicyResolver,\nCronJobRegistry, defineTool, ToolRuntimePolicyMiddleware,\nReadBackExecutor, VerifierRegistry, CompletionSourceOrigin,\nprojectCompletionOrigin, DispatchPolicyRegistrationError,\nDispatchRegistry, deriveActorContext, registerBuiltInDispatchHandlers.\nWith the three driver exports already evicted, the barrel goes from 55\nto 35 value exports. Test-only consumers now deep-import the owning\nmodule or cluster index; src/evidence/index.ts had no remaining\nconsumer and is deleted.\n\nKept, with reasons: IngressAuthorityMiddleware, Tool, createDispatchTool,\nresolveMeta, createDefaultDispatchPolicy, createDeviceDispatchHandlers,\ncreateOutboundDispatchHandlers (removal orphans re-exports in\ningress/execution-runtime/dispatch cluster indexes owned by other\nleaves and would grow the dead-export ratchet) and VerifierConformance\n(the entry re-export shields the #493-owned dormant replay vocabulary).\nDead-export ratchet unchanged at 24 known issues.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): drop cluster re-exports freed by the executor merge\n\nThe Q2 sole-emitter merge left ToolRuntimePolicyMiddleware with only\ndirect-path consumers; the tool/ and execution-runtime cluster\nre-exports became dead and tripped the ratchet post-rebase.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T08:10:47Z",
+          "tree_id": "e319e83000236308692ef3f77c22dd6c4dfc5cd1",
+          "url": "https://github.com/INONONO66/openomni/commit/f8e62c3df9994a12a168730cd3b140623d5dfa60"
+        },
+        "date": 1786349525739,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5933,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8930,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2354,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15271,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 767,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 652,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1234,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1630,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 729,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20183,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2271,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10834,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102484,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511580,
             "unit": "ns/op"
           }
         ]
