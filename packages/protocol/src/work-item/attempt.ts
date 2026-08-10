@@ -296,18 +296,18 @@ export type AttemptOutcome = z.infer<typeof AttemptOutcome>;
 
 /**
  * #510 D2b — projection of the `work_item.attempt_finished` decision-class
- * fact: the current attempt's terminal record. `endedAt` and
- * `lastMessageId` moved here from the worker-run store's in-memory
- * `runExtras` map (lost on restart before the cutover) — they are attempt
- * lifecycle data with no other home in the WorkItem vocabulary. Cleared by
- * the next `work_item.attempt_allocated` fact (a new execution instance).
+ * fact: the current attempt's terminal record. `endedAt`/`error` moved here
+ * from the worker-run store (whose in-memory extras map lost them on
+ * restart) — attempt lifecycle data with no other home in the WorkItem
+ * vocabulary. Cleared by the next `work_item.attempt_allocated` fact (a new
+ * execution instance). The legacy `lastMessageId` extra was NOT carried
+ * over: it never had a production writer, so it earns no vocabulary here.
  */
 export const AttemptTerminal = z
   .object({
     attemptId: AttemptId,
     outcome: AttemptOutcome,
     endedAt: z.number(),
-    lastMessageId: z.string().min(1).optional(),
     error: z.string().optional(),
   })
   .strict();

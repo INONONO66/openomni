@@ -120,19 +120,17 @@ describe("WorkItemAttemptRun", () => {
     expect(view?.startedAt).toBeGreaterThan(0);
   });
 
-  test("finish records endedAt/lastMessageId/error as the attempt terminal fact", async () => {
+  test("finish records endedAt/error as the attempt terminal fact", async () => {
     const hash = await seedRun("sess-finish", "run-finish");
 
     const finished = await WorkItemAttemptRun.finish("sess-finish", "run-finish", "succeeded", {
       endedAt: 1234,
-      lastMessageId: "msg-9",
     });
     expect(finished).toBe(true);
 
     const view = WorkItemAttemptRun.find("sess-finish", "run-finish");
     expect(view?.status).toBe("succeeded");
     expect(view?.endedAt).toBe(1234);
-    expect(view?.lastMessageId).toBe("msg-9");
 
     // The terminal record is the appended decision-class fact, durable on
     // the work stream (not an in-memory remainder).
@@ -141,7 +139,6 @@ describe("WorkItemAttemptRun", () => {
     expect(fact?.data).toMatchObject({
       outcome: "succeeded",
       endedAt: 1234,
-      lastMessageId: "msg-9",
     });
 
     // Idempotent-finish semantics: a second terminal write is a no-op
@@ -188,14 +185,13 @@ describe("WorkItemAttemptRun", () => {
     const hash = await seedRun("sess-realloc", "run-realloc");
     await WorkItemAttemptRun.finish("sess-realloc", "run-realloc", "succeeded", {
       endedAt: 1,
-      lastMessageId: "old",
     });
 
     const allocation = await WorkItemStore.allocateAttempt(hash, attemptIdentity("again"));
     expect(allocation).toBeDefined();
     const view = WorkItemAttemptRun.find("sess-realloc", "run-realloc");
     expect(view?.status).toBe("running");
-    expect(view?.lastMessageId).toBeUndefined();
+    expect(view?.endedAt).toBeUndefined();
     expect(view?.attemptId).toBe(allocation?.attempt.attemptId);
   });
 

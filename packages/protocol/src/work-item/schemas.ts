@@ -205,7 +205,7 @@ const InfoShape = z.object({
    * #510 D2b — the current attempt's terminal record, projected from
    * `work_item.attempt_finished` and cleared by the next allocation. This is
    * where the retired worker-run ledger's terminal state (outcome, endedAt,
-   * lastMessageId, error) lives after the cutover.
+   * error) lives after the cutover.
    */
   attemptTerminal: AttemptTerminal.optional(),
   timestamps: z.object({

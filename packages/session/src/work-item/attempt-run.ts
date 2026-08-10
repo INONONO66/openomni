@@ -44,14 +44,12 @@ export interface AttemptRunView {
   readonly status: AttemptRunStatus;
   readonly startedAt: number;
   readonly endedAt?: number;
-  readonly lastMessageId?: string;
   readonly error?: string;
   readonly source: "attempt_facts" | "worker_run_upcast";
 }
 
 type AttemptRunTerminalExtra = Readonly<{
   endedAt?: number;
-  lastMessageId?: string;
   error?: string;
 }>;
 
@@ -60,6 +58,11 @@ class AttemptRunNotActiveError extends Error {
   readonly name = "AttemptRunNotActiveError";
 }
 
+// Recorded #494 performance item (do not optimize here): this is an O(N)
+// full-table scan per lookup, and succeeded ingress runs accumulate as
+// forever-"running" work items (no admission path closes them), so N grows
+// unboundedly with ingress dispatch volume. #494 owns the indexed lookup
+// (workSessionId/workerRunId filter) and the terminal-state janitor.
 function findItem(sessionId: string, runId: string): WorkItem.Info | undefined {
   return Storage.get()
     .workItem?.list()
@@ -116,7 +119,6 @@ function viewOfItem(item: WorkItem.Info): AttemptRunView {
     status: statusOfItem(item),
     startedAt: item.timestamps.started ?? item.timestamps.created,
     endedAt: endedAtOfItem(item),
-    lastMessageId: item.attemptTerminal?.lastMessageId,
     error: item.attemptTerminal?.error ?? item.failureReason,
     source: "attempt_facts",
   };
@@ -264,12 +266,16 @@ export namespace WorkItemAttemptRun {
 
   /**
    * Records the attempt's terminal outcome as ONE `work_item.attempt_finished`
-   * fact: the attemptTerminal projection (outcome, endedAt, lastMessageId,
-   * error — the fields that previously lived in the in-memory runExtras map),
-   * the honest work-item fold (failed/interrupted → failed timestamps +
-   * failureReason, cancelled → cancelled timestamp), and the release of any
-   * open attempt wait. Returns false when the run is missing or already
-   * terminal (idempotent-finish semantics for recovery and cancel races).
+   * fact: the attemptTerminal projection (outcome, endedAt, error — durable
+   * where the worker-run store kept in-memory extras), the honest work-item
+   * fold (failed/interrupted → failed timestamps + failureReason, cancelled
+   * → cancelled timestamp), and the release of any open attempt wait.
+   * Returns false when the run is missing or its terminal record already
+   * exists (idempotent-finish semantics for recovery and cancel races). One
+   * deliberate exception to the active-run guard: a work item COMPLETED by
+   * completion admission may still record its attempt's `succeeded` terminal
+   * — admission landing before the terminal fact is the normal worker.
+   * complete order, not a dead run.
    */
   export async function finish(
     sessionId: string,
@@ -278,14 +284,21 @@ export namespace WorkItemAttemptRun {
     extra: AttemptRunTerminalExtra = {},
   ): Promise<boolean> {
     return mutateRun(sessionId, runId, (existing, now) => {
-      if (!isActiveItem(existing) || existing.currentAttemptId === undefined) {
+      const completedSucceeded =
+        outcome === "succeeded" &&
+        existing.currentAttemptId !== undefined &&
+        existing.attemptTerminal === undefined &&
+        WorkItem.deriveStatus(existing) === "completed";
+      if (
+        (!isActiveItem(existing) || existing.currentAttemptId === undefined) &&
+        !completedSucceeded
+      ) {
         throw new AttemptRunNotActiveError();
       }
       const terminal = WorkItem.AttemptTerminal.parse({
         attemptId: existing.currentAttemptId,
         outcome,
         endedAt: extra.endedAt ?? now,
-        ...(extra.lastMessageId === undefined ? {} : { lastMessageId: extra.lastMessageId }),
         ...(extra.error === undefined ? {} : { error: extra.error }),
       });
       const failed = outcome === "failed" || outcome === "interrupted";

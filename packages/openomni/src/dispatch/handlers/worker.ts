@@ -141,7 +141,11 @@ function assertWorkerCompletionWorkItemAuthority(
   ) {
     throw new Error(`worker.complete WorkerRun not found: ${payload.result.runId}`);
   }
-  if (run.status !== "running" && run.status !== "waiting_input") {
+  // Active runs complete; a terminal-SUCCEEDED run additionally passes
+  // through so a resubmission after a crash between admission and the
+  // attempt-terminal fact is answered by the projection's deterministic
+  // idempotent receipt (#510) instead of stranding.
+  if (run.status !== "running" && run.status !== "waiting_input" && run.status !== "succeeded") {
     throw new Error(
       `worker.complete WorkerRun is not assigned to this active WorkItem: executor=${run.executorKind ?? "missing"} status=${run.status}`,
     );
@@ -249,20 +253,26 @@ export function createWorkerDispatchHandlers(
       const workItem = resolveCompletedWorkItem(command, payload);
       assertWorkerCompletionWorkItemAuthority(payload, workItem);
       const workItemHash = workItem.hash;
-      // The connector execution instance ended (#510 D2b): record the
-      // attempt terminal fact before completion projection — admission stays
-      // the separate #490 verdict on the same work stream.
-      await WorkItemAttemptRun.finish(
-        payload.result.sessionId,
-        payload.result.runId,
-        payload.result.status,
-        {
-          endedAt: Date.now(),
-          ...(payload.result.status !== "succeeded" && payload.result.error
-            ? { error: payload.result.error }
-            : {}),
-        },
-      );
+      // #510 D2b attempt-terminal ordering (deterministic idempotent
+      // receipt): a NON-succeeded result definitively ends the execution
+      // instance, so its terminal fact lands before the projection folds the
+      // item the same direction. A succeeded result finishes only AFTER an
+      // UNBLOCKED projection — a blocked admission keeps the attempt ACTIVE
+      // so the worker's corrected same-attempt resubmission stays a live
+      // path, and a crash on either side of the admission is answered by
+      // the projection's idempotent durable receipt (the terminal-succeeded
+      // authority arm above readmits the retry).
+      if (payload.result.status !== "succeeded") {
+        await WorkItemAttemptRun.finish(
+          payload.result.sessionId,
+          payload.result.runId,
+          payload.result.status,
+          {
+            endedAt: Date.now(),
+            ...(payload.result.error ? { error: payload.result.error } : {}),
+          },
+        );
+      }
       const projection = await projectConnectorCompletion(workItemHash, payload.result, {
         completionService: options.completionService,
         verifierRegistry,
@@ -271,6 +281,16 @@ export function createWorkerDispatchHandlers(
         readBackRecorder: options.readBackRecorder,
         now: options.now,
       });
+      if (payload.result.status === "succeeded" && !projection.reflection.completionBlocked) {
+        await WorkItemAttemptRun.finish(
+          payload.result.sessionId,
+          payload.result.runId,
+          "succeeded",
+          {
+            endedAt: Date.now(),
+          },
+        );
+      }
       return {
         output: {
           workItemHash,

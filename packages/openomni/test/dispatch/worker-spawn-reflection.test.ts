@@ -471,6 +471,91 @@ describe("worker.spawn result reflection", () => {
     expect(connectorStored?.completionReport).toBeUndefined();
   });
 
+  test("worker.complete answers a blocked-then-retried completion with one admission", async () => {
+    // #510 deterministic-idempotent-receipt pin: a blocked first submission
+    // (a designed live path) must NOT terminalize the attempt — the worker's
+    // corrected resubmission of the SAME attempt completes with exactly one
+    // recorded admission.
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry);
+    const created = await WorkItemStore.create({
+      name: "Blocked-then-retried connector completion",
+      sourceMessageId: "dispatch:blocked-retry-completion",
+      sourceChannel: "dispatch",
+      intent: "worker.complete",
+      goal: "retry a blocked completion on the same attempt",
+      executorKind: "connector_endpoint",
+      workSessionId: "session:blocked-retry",
+      workerRunId: "run:blocked-retry",
+      acceptanceCriteria: ["recorded numeric operands satisfy eq"],
+    });
+    const item = await WorkItemStore.start(created.hash);
+    if (!item) throw new Error("missing blocked-retry WorkItem");
+    await allocateTestAttempt(item.hash);
+    const withEvidence = await WorkItemStore.addEvidence(item.hash, {
+      kind: "verification",
+      description: "kernel-recorded verifier input",
+      passed: true,
+      detail: recordedVerifierEvidence(item),
+    });
+    const evidenceId = withEvidence?.evidence.at(-1)?.id;
+    if (!evidenceId) throw new Error("missing blocked-retry evidence");
+
+    const submit = (output: string) =>
+      registry.get("worker.complete")?.(
+        assignedWorkerCommand(
+          { kind: "worker", runId: "run:blocked-retry", sessionId: "session:blocked-retry" },
+          {
+            workItemHash: item.hash,
+            result: {
+              runId: "run:blocked-retry",
+              sessionId: "session:blocked-retry",
+              status: "succeeded" as const,
+              output,
+            },
+          },
+          "session:blocked-retry",
+          "run:blocked-retry",
+        ),
+      ) as Promise<{ output: { reflection: { completionBlocked: boolean } } }>;
+
+    // First submission: not a completion envelope — admission blocks.
+    const blocked = await submit("not a completion envelope");
+    expect(blocked.output.reflection.completionBlocked).toBe(true);
+    // The attempt is still the live execution instance: no terminal record.
+    expect(WorkItemStore.get(item.hash)?.attemptTerminal).toBeUndefined();
+
+    // Resolve the block (the #490 active_blocker admission rule is the
+    // pre-existing unblock step, not D2b scope), then resubmit the SAME
+    // attempt with the corrected envelope: admitted once.
+    const blocker = WorkItemStore.get(item.hash)?.blockers.find(
+      (candidate) => candidate.resolvedAt === undefined,
+    );
+    if (!blocker) throw new Error("missing completion blocker after the blocked submission");
+    await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+    const retried = await submit(
+      JSON.stringify({
+        completionReport: {
+          summary: "Corrected completion envelope after the blocked attempt.",
+          claims: [
+            { statement: "recorded numeric operands satisfy eq", evidenceIds: [evidenceId] },
+          ],
+        },
+        criterionFacts: criterionFacts(evidenceId),
+      }),
+    );
+    expect(retried.output.reflection.completionBlocked).toBe(false);
+
+    const stored = WorkItemStore.get(item.hash);
+    if (!stored) throw new Error("blocked-retry WorkItem disappeared");
+    expect(WorkItem.deriveStatus(stored)).toBe("completed");
+    expect(
+      stored.completionFacts.admissions.filter((admission) => admission.decision === "admit"),
+    ).toHaveLength(1);
+    // The attempt terminal lands with the admitted completion.
+    expect(stored.attemptTerminal?.outcome).toBe("succeeded");
+  });
+
   test("worker.complete requires one WorkItem bound to its target and result run", async () => {
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
