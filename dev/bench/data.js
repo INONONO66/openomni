@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786324819437,
+  "lastUpdate": 1786326485460,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -39781,6 +39781,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 517769,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0deb7585c3e5ee58b908aa4aa75ca2965ea0ca59",
+          "message": "fix(session): merge injected responses into transcript resume (#562) (#568)\n\n* fix(openomni): record injected responses as synthesized transcript facts\n\n#562 F3: Session.resume is all-or-nothing per session (facts win once one\nexists), while injection-queue persistResponse wrote role:assistant rows\nprojection-only into the same worker session — injected responses silently\nvanished from recovery. persistResponse now records message.created +\npart.appended + message.finished through TranscriptStore.record under an\nattemptId derived from the injected messageId, wrapped in one outer\ntransaction (savepoint degradation) so a failure never strands a\ncreated-but-unfinished message. Replay ordering rule: session fact-stream\nseq (recording order). Documents the projection-fallback removal condition\nand the writer census in Session.resume.\n\nRed pin: resume keeps injected responses in a fact-bearing session, in\nrecording order (fails on main).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(openomni): scope resident direct path out of fact recording\n\n#562 F2: defaultRunAgent stays sinkless deliberately. The resident path's\ndurable assistant write is the post-writeback storeDirectResult (own\nmessage id, policy-transformed text, audit-enveloped); a raw-stream sink\nwould double-persist every resident turn and flip resident sessions off\nthe lossless projection fallback. Fact recording for residents rides a\nwriteback-seam redesign. Child-agent streams record nothing and are\nbounded via parent tool results (noted in the Session.resume census).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(session): state transcript_fact cascade intent in migration 0015\n\n#562 F5: transcript facts deliberately have no FK/CASCADE while message\nrows cascade on session delete. Decision recorded in the migration header:\nthe record outlives its projection — facts persist, projection cascades.\nComment-only change; migrations carry no checksum and the drift gate\nre-applies the chain (verified green).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* perf(session): cache attempt fold state on the transcript record path\n\n#562 F7: every record refolded the attempt's whole persisted stream\n(listByAttempt + JSON.parse + projectFrom) inside BEGIN IMMEDIATE —\nO(n^2) per attempt. record() now keeps an attemptId-keyed in-memory fold\nstate and folds only the new fact, guarded by a stored-fact COUNT\ncontinuity check (index-only countByAttempt on the fact sub-adapter);\nany divergence — cold start, restart, rolled-back outer savepoint,\nforeign writer — falls back to the full refold. Cache writes happen only\nafter the storage transaction returns; message.finished evicts and the\nmap is FIFO-bounded. Restart safety unchanged: the llm processor issues\nfresh attemptIds after restart.\n\nMeasured (150 facts, one attempt, disk db): 68 ms -> 29 ms; at 500 facts\nthe quadratic term shows: 497 ms -> 102 ms.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-10T01:46:43Z",
+          "tree_id": "39f18bd2f93e4ebfea2ca646276153ac82d369dd",
+          "url": "https://github.com/INONONO66/openomni/commit/0deb7585c3e5ee58b908aa4aa75ca2965ea0ca59"
+        },
+        "date": 1786326484139,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5863,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2386,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7922,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 813,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 687,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20687,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2294,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10922,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102779,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524879,
             "unit": "ns/op"
           }
         ]
