@@ -1,6 +1,12 @@
 import type { Database } from "bun:sqlite";
-import type { Message } from "@openomni/protocol";
+import { Message } from "@openomni/protocol";
 import type { Storage } from "./storage";
+
+// Parse-don't-cast on read: a corrupt row is a loud typed defect, never a
+// silently-trusted value (matches the wait/blacklist precedent).
+function decodeMessage(data: string): Message.Info {
+  return Message.Info.parse(JSON.parse(data));
+}
 
 export function createSqliteMessageAdapter(db: Database): Storage.Adapter["message"] {
   return {
@@ -8,7 +14,7 @@ export function createSqliteMessageAdapter(db: Database): Storage.Adapter["messa
       const row = db
         .query("SELECT data FROM message WHERE id = ? AND session_id = ?")
         .get(messageID, sessionID) as { data: string } | null;
-      return row ? (JSON.parse(row.data) as Message.Info) : undefined;
+      return row ? decodeMessage(row.data) : undefined;
     },
 
     set: (sessionID: string, message: Message.Info): void => {
@@ -34,7 +40,7 @@ export function createSqliteMessageAdapter(db: Database): Storage.Adapter["messa
       const rows = db
         .query("SELECT data FROM message WHERE session_id = ? ORDER BY time_created ASC, rowid ASC")
         .all(sessionID) as Array<{ data: string }>;
-      return rows.map((r) => JSON.parse(r.data) as Message.Info);
+      return rows.map((r) => decodeMessage(r.data));
     },
 
     listPage: (
@@ -68,7 +74,7 @@ export function createSqliteMessageAdapter(db: Database): Storage.Adapter["messa
 
       const more = rows.length > options.limit;
       const page = more ? rows.slice(0, options.limit) : rows;
-      const items = page.map((r) => JSON.parse(r.data) as Message.Info).reverse();
+      const items = page.map((r) => decodeMessage(r.data)).reverse();
       const tail = page.at(-1);
 
       return {
