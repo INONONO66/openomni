@@ -16,6 +16,20 @@ interface CompactionResult {
   removedCount: number;
 }
 
+/**
+ * Raised when compaction cannot commit a provider-valid kept window: no
+ * summary user message will anchor the window (onSummarize unset) and no user
+ * boundary exists at or before the cutoff. Thrown BEFORE anything is
+ * committed — the fail-closed `run.completion.pre` contract turns it into a
+ * deny plus a published middleware error, never commit-then-400.
+ */
+export class CompactionBoundaryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CompactionBoundaryError";
+  }
+}
+
 const DEFAULT_THRESHOLD_RATIO = 0.8;
 const DEFAULT_PROTECT_RECENT = 6;
 
@@ -35,14 +49,41 @@ export namespace InMemoryCompactor {
       return { messages, compacted: false, removedCount: 0 };
     }
 
-    const cutoff = messages.length - protectRecent;
+    // Commit boundary invariant (#531, representable since #557/#560).
+    //
+    // Tool-pair splits are unrepresentable at this seam by construction: a
+    // tool result is not a standalone message — it lives in `ToolPart.state`
+    // on the same assistant `Message.WithParts` that carries the call
+    // (protocol `Message.ToolPart` + `Tool.State`), and `Message.Info` has
+    // only user/assistant roles. Slicing at WithParts granularity therefore
+    // cannot separate a call from its result, so no pair guard exists here.
+    // Kept non-terminal (pending/running) tool parts are replay-safe too:
+    // `toModelMessages` (packages/llm/src/message/index.ts) expands every
+    // ToolPart into an atomic tool-call + tool-result block pair,
+    // synthesizing "[Tool execution was interrupted]" for pending/running
+    // states — that safety net makes a terminality guard here redundant.
+    //
+    // The one real hazard is the window START: without a summary user message
+    // anchoring the kept window, a window beginning with an assistant message
+    // violates provider first-message rules. Snap the cutoff back to the
+    // nearest user boundary; refuse loudly when none exists.
+    const naturalCutoff = messages.length - protectRecent;
+    const cutoff =
+      options.onSummarize === undefined
+        ? snapToUserBoundary(messages, naturalCutoff)
+        : naturalCutoff;
+    if (cutoff === 0) {
+      return { messages, compacted: false, removedCount: 0 };
+    }
+
     const toRemove = messages.slice(0, cutoff);
     const toKeep = messages.slice(cutoff);
 
     let summaryMessages: Message.WithParts[] = [];
-    if (options.onSummarize && toRemove.length > 0) {
+    const firstRemoved = toRemove[0];
+    if (options.onSummarize && firstRemoved !== undefined) {
       const summaryText = await options.onSummarize(toRemove);
-      summaryMessages = [buildSummaryMessage(summaryText)];
+      summaryMessages = [buildSummaryMessage(summaryText, firstRemoved.info.sessionID)];
     }
 
     const compacted = [...summaryMessages, ...toKeep];
@@ -86,9 +127,17 @@ function resolveReserveTokens(options: CompactionOptions): number | undefined {
   return Math.min(options.contextWindowTokens, Math.max(0, reserveTokens));
 }
 
-function buildSummaryMessage(summaryText: string): Message.WithParts {
+function snapToUserBoundary(messages: Message.WithParts[], naturalCutoff: number): number {
+  for (let index = naturalCutoff; index >= 0; index -= 1) {
+    if (messages[index]?.info.role === "user") return index;
+  }
+  throw new CompactionBoundaryError(
+    "no valid compaction boundary: the kept window would start with an assistant message and no summary user message anchors it (onSummarize unset); refusing to commit",
+  );
+}
+
+function buildSummaryMessage(summaryText: string, sessionID: string): Message.WithParts {
   const id = crypto.randomUUID();
-  const sessionID = "chat-agent";
   const now = Date.now();
   const info: Message.UserMessage = {
     id,
