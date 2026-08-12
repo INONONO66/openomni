@@ -9,9 +9,7 @@ import {
 } from "../../src/policy/index.js";
 
 const expectedPolicyKeys = [
-  "Label",
   "LabelEntry",
-  "PermissionDecision",
   "InputRule",
   "Permission",
   "EvaluationRequest",
@@ -49,19 +47,7 @@ const expectedPolicyPointStaticKeys = [
   "MigrationMapping",
 ];
 
-const expectedRuntimeResourceKeys = [
-  "schemaVersion",
-  "Kind",
-  "Source",
-  "ActorType",
-  "SessionType",
-  "ActorDescriptor",
-  "SessionDescriptor",
-  "Descriptor",
-  "createWorkerDescriptor",
-  "createCredentialDescriptor",
-  "createSessionDescriptor",
-];
+const expectedRuntimeResourceKeys = ["Source", "Descriptor"];
 
 const acceptsRootDecision = (decision: Policy.PolicyDecision): PolicyIndex.PolicyDecision =>
   decision;

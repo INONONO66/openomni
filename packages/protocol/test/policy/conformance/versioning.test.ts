@@ -206,13 +206,33 @@ describe("PolicyPoint versioning conformance", () => {
   });
 
   test("exposes consistent kernel, point, and resource schema versions", () => {
-    const worker = RuntimeResource.createWorkerDescriptor("version-worker");
-    const credential = RuntimeResource.createCredentialDescriptor("anthropic", "api-key");
-    const session = RuntimeResource.createSessionDescriptor("ses_version", "self-loop");
+    const worker = RuntimeResource.Descriptor.parse({
+      id: "worker:coordinator:version-worker",
+      kind: "worker",
+      labels: ["source.coordinator", "worker.coordinator"],
+      capabilities: [],
+      effects: [],
+      source: { type: "coordinator" },
+    });
+    const credential = RuntimeResource.Descriptor.parse({
+      id: "credential:anthropic:api-key",
+      kind: "credential",
+      labels: ["source.file", "credential.anthropic"],
+      capabilities: [],
+      effects: [],
+      source: { type: "file" },
+    });
+    const session = RuntimeResource.Descriptor.parse({
+      id: "session:ses_version",
+      kind: "session",
+      labels: ["source.runtime", "session.self-loop"],
+      capabilities: [],
+      effects: [],
+      source: { type: "runtime", runtimeId: "ses_version" },
+    });
 
     expect(policyKernelVersion > 0).toBe(true);
     expect(Policy.PolicyPoint.version).toBe(policyKernelVersion);
-    expect(RuntimeResource.schemaVersion).toBe(policyKernelVersion);
 
     for (const contract of Object.values(Policy.PolicyPoint.Registry)) {
       expect(contract.version).toBe(Policy.PolicyPoint.version);
