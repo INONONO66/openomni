@@ -1,4 +1,4 @@
-import type { Communication, Storage as ProtocolStorage } from "@openomni/protocol";
+import { Communication, type Storage as ProtocolStorage } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
 import {
   addOptionalStringEqualityCondition,
@@ -7,6 +7,16 @@ import {
   parseSqliteJsonDataRows,
   type SqliteJsonDataRow,
 } from "./sqlite-json-data";
+
+// Parse-don't-cast on read (#585 fail-closed): a pending_interaction row feeds
+// evaluatePendingInteractionScope, which returns {allowed:true} for
+// WorkerComplete/ActorReply. A corrupt/tampered row that parsed unvalidated
+// could bypass its status/expiry invariants (fail-open, same class as the
+// worker_grant row fixed in #584). A row that fails its schema is now a loud
+// typed defect, never a silently-trusted value. Matches wait/blacklist.
+function decodeInteraction(data: string): Communication.PendingInteraction.Record {
+  return Communication.PendingInteraction.Record.parse(JSON.parse(data));
+}
 
 export function createSqlitePendingInteractionAdapter(
   db: Database,
@@ -19,13 +29,17 @@ export function createSqlitePendingInteractionAdapter(
       const row = db
         .query("SELECT data FROM pending_interaction WHERE id = ?")
         .get(id) as SqliteJsonDataRow | null;
-      return parseSqliteJsonDataRow<Communication.PendingInteraction.Record>(row);
+      return parseSqliteJsonDataRow<Communication.PendingInteraction.Record>(
+        row,
+        decodeInteraction,
+      );
     },
     list(status) {
       return listSqliteJsonDataByStatus<Communication.PendingInteraction.Record>(
         db,
         "pending_interaction",
         status,
+        decodeInteraction,
       );
     },
     findByCorrelation(query) {
@@ -52,7 +66,10 @@ export function createSqlitePendingInteractionAdapter(
            ORDER BY time_created ASC`,
         )
         .all(...params) as SqliteJsonDataRow[];
-      return parseSqliteJsonDataRows<Communication.PendingInteraction.Record>(rows);
+      return parseSqliteJsonDataRows<Communication.PendingInteraction.Record>(
+        rows,
+        decodeInteraction,
+      );
     },
     set(record) {
       insertOrReplace(db, record, true);
