@@ -142,7 +142,6 @@ function isAppendableInitialState(part: Message.Part): boolean {
       return part.time?.end === undefined;
     case "step-start":
     case "step-finish":
-    case "retry":
       return true;
   }
 }
@@ -160,7 +159,6 @@ function advancePart(
       return advanceTextLikePart(part, transition);
     case "step-start":
     case "step-finish":
-    case "retry":
       // Punctual parts: appended whole, never advanced.
       return undefined;
   }

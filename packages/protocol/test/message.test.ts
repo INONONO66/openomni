@@ -150,41 +150,6 @@ describe("Message.StepFinishPart", () => {
   });
 });
 
-describe("Message.RetryPart", () => {
-  test("parses valid retry part with serialized APIError", () => {
-    const part = Message.RetryPart.parse({
-      ...base,
-      type: "retry",
-      attempt: 2,
-      error: {
-        name: "APIError",
-        data: { message: "rate limited", isRetryable: true },
-      },
-      time: { created: 1000 },
-    });
-
-    expect(part.type).toBe("retry");
-    expect(part.attempt).toBe(2);
-    expect(part.error.name).toBe("APIError");
-    expect(part.error.data.isRetryable).toBe(true);
-    expect(part.time.created).toBe(1000);
-  });
-
-  test("rejects missing attempt", () => {
-    expect(() =>
-      Message.RetryPart.parse({
-        ...base,
-        type: "retry",
-        error: {
-          name: "APIError",
-          data: { message: "fail", isRetryable: false },
-        },
-        time: { created: 1000 },
-      }),
-    ).toThrow();
-  });
-});
-
 describe("Message.ToolPart", () => {
   const toolBase = {
     ...base,
