@@ -47,7 +47,35 @@ export class DiscordGateway {
   }
 
   private async reconnect(): Promise<void> {
-    const url = this.resumeUrl && this.sessionId ? this.resumeUrl : await this.fetchGatewayUrl();
+    // A cold reconnect (no resumable session) needs a fresh gateway URL from
+    // Discord's REST API. That call rejects during exactly the transient
+    // outages that cluster reconnects — and a single rejection here used to
+    // terminate the chain in the close handler's `.catch` with running===true,
+    // leaving the bot silently offline until a process restart (#540). Retry
+    // the fetch under the SHARED backoff schedule, bounded by `running` so an
+    // intentional stop ends the loop cleanly (no leak, no infinite spin).
+    // openSocket stays OUTSIDE this catch: socket-level failures already
+    // re-enter through the close handler, and retrying them here too would
+    // overlap that reconnect chain.
+    let url = this.resumeUrl && this.sessionId ? this.resumeUrl : undefined;
+    while (url === undefined && this.running) {
+      try {
+        url = await this.fetchGatewayUrl();
+      } catch (err) {
+        this.reconnectAttempt++;
+        const backoffMs = calculateBackoff(this.reconnectAttempt);
+        this.publish(Operational.Error, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "discord gateway url fetch failed, retrying",
+          context: { err: String(err), backoffMs: Math.round(backoffMs) },
+        });
+        await sleep(backoffMs);
+      }
+    }
+    // Stopped during the fetch-retry loop → end cleanly, no socket, no schedule.
+    if (url === undefined) return;
     await this.openSocket(url);
   }
 
