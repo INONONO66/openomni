@@ -36,8 +36,6 @@
   },
   "naming": {
     "grandfathered": [
-      "packages/protocol/src/communication/envelope.ts:Envelope",
-      "packages/protocol/src/communication/index.ts:Envelope",
       "packages/protocol/src/policy/plan.ts:PolicyPlanModule",
       "packages/protocol/src/policy/point-contract.ts:PolicyPointContractModule",
       "packages/protocol/src/policy/point-registry.ts:PolicyPointRegistryModule",

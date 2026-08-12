@@ -1,28 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Communication, Dispatch } from "../../src/index.js";
-import { Envelope } from "../../src/communication/envelope.js";
 
 describe("Communication protocol schemas", () => {
-  test("Envelope accepts normalized adapter/delivery fields", () => {
-    const parsed = Envelope.parse({
-      id: "env-1",
-      direction: "inbound",
-      surface: "discord",
-      endpointId: "guild-1",
-      channelId: "channel-1",
-      threadId: "thread-1",
-      externalMessageId: "message-1",
-      replyToMessageId: "message-0",
-      correlationToken: "token",
-      actorId: "actor-1",
-      payload: { text: "hello" },
-      receivedAt: 1,
-    });
-
-    expect(parsed.surface).toBe("discord");
-    expect(parsed.payload).toEqual({ text: "hello" });
-  });
-
   test("PendingAsk captures durable correlation state", () => {
     const parsed = Communication.PendingAsk.Record.parse({
       id: "ask-1",
