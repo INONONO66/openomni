@@ -1,0 +1,9 @@
+{
+  "description": "A downstream importer that survives the #497 concept diet: it confirms the deleted parts (a plain delete and a test-pinned-only delete) are gone, keeps the persisted fail-closed owners, and reads a deferred mapping still on the wire.",
+  "expect": "accept",
+  "crossPackage": true,
+  "removed": ["Ingress.ActorMetadata", "Message.RetryPart"],
+  "imports": ["Adapter.Capabilities", "Actor.Relationship", "Token.Usage"],
+  "retainsFailClosed": ["Adapter.Capabilities", "Actor.Relationship"],
+  "requiredOwners": ["Adapter.Capabilities", "Actor.Relationship"]
+}

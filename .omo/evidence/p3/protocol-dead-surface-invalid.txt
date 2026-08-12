@@ -1,0 +1,54 @@
+# #497 protocol dead-surface — invalid-fixture rejection transcript
+# baseline commit 87d4fc8da6ab57212a2aea1ea187d8d56706b210
+# generated 2026-08-13
+# command:
+#   bun run script/check-protocol-disposition.ts \
+#     --inventory .omo/evidence/p3/protocol-concept-disposition.json \
+#     --fixtures packages/protocol/test/concept-diet/fixtures \
+#     --fixture removed-api-import.json --json
+# Extension.Manifest (disposition delete, shipped in #594) is REJECTED by
+# symbol + rule (removed-export); the process exits non-zero (1).
+{
+  "ok": false,
+  "inventory": {
+    "path": ".omo/evidence/p3/protocol-concept-disposition.json",
+    "ok": true,
+    "counts": {
+      "delete": 51,
+      "unexport": 13,
+      "preserve": 41,
+      "defer": 11,
+      "wire": 6,
+      "already-removed": 2
+    },
+    "tallyMatches": true,
+    "problems": []
+  },
+  "fixtures": [
+    {
+      "fixture": "removed-api-import.json",
+      "ok": false,
+      "expect": "reject",
+      "references": [
+        {
+          "symbol": "Extension.Manifest",
+          "role": "import",
+          "disposition": "delete",
+          "testPinned": true
+        }
+      ],
+      "rejectedSymbols": [
+        "Extension.Manifest"
+      ],
+      "rule": "removed-export",
+      "rejections": [
+        {
+          "symbol": "Extension.Manifest",
+          "rule": "removed-export"
+        }
+      ]
+    }
+  ]
+}
+
+exit_code=1
