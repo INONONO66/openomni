@@ -1,4 +1,4 @@
-import { Execution, type Dispatch, type Model, type WorkItem } from "@openomni/protocol";
+import { Dispatch, Execution, type Model, type WorkItem } from "@openomni/protocol";
 import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
@@ -155,11 +155,11 @@ function assertWorkerCompletionWorkItemAuthority(
 export function createWorkerDispatchHandlers(
   options: WorkerDispatchHandlerOptions = {},
 ): Record<
-  | "worker.spawn"
-  | "worker.complete"
-  | "worker.send"
-  | "worker.resume"
-  | "worker.cancel"
+  | typeof Dispatch.Actions.WorkerSpawn
+  | typeof Dispatch.Actions.WorkerComplete
+  | typeof Dispatch.Actions.WorkerSend
+  | typeof Dispatch.Actions.WorkerResume
+  | typeof Dispatch.Actions.WorkerCancel
   | "actor.reply",
   DispatchHandler
 > {
@@ -167,7 +167,7 @@ export function createWorkerDispatchHandlers(
   const policyResolver = options.policyResolver ?? PolicyResolver.create();
   const verifierRegistry = options.verifierRegistry ?? VerifierRegistry.create();
   return {
-    async "worker.spawn"(command) {
+    async [Dispatch.Actions.WorkerSpawn](command) {
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
@@ -247,7 +247,7 @@ export function createWorkerDispatchHandlers(
       };
     },
 
-    async "worker.complete"(command) {
+    async [Dispatch.Actions.WorkerComplete](command) {
       const payload = parseWorkerCompletePayload(command.payload);
       assertWorkerCompletionActorAuthority(command, payload);
       const workItem = resolveCompletedWorkItem(command, payload);
@@ -302,7 +302,7 @@ export function createWorkerDispatchHandlers(
       };
     },
 
-    async "worker.send"(command) {
+    async [Dispatch.Actions.WorkerSend](command) {
       const coordinator = requireCoordinator(options.coordinator);
       if (!coordinator.deliverMessage) {
         throw new Error("dispatch worker.send requires coordinator.deliverMessage owner");
@@ -317,7 +317,7 @@ export function createWorkerDispatchHandlers(
       return { output: { delivered: true, sessionId, runId: targetRunId(command), result } };
     },
 
-    async "worker.resume"(command) {
+    async [Dispatch.Actions.WorkerResume](command) {
       const coordinator = requireCoordinator(options.coordinator);
       if (!coordinator.deliverMessage) {
         throw new Error("dispatch worker.resume requires coordinator.deliverMessage owner");
@@ -332,7 +332,7 @@ export function createWorkerDispatchHandlers(
       return { output: { resumed: true, sessionId, runId: targetRunId(command), result } };
     },
 
-    async "worker.cancel"(command) {
+    async [Dispatch.Actions.WorkerCancel](command) {
       const coordinator = requireCoordinator(options.coordinator);
       if (!coordinator.cancelRun) {
         throw new Error("dispatch worker.cancel requires coordinator.cancelRun owner");

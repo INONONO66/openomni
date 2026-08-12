@@ -1,4 +1,4 @@
-import { CronJob, type Dispatch } from "@openomni/protocol";
+import { CronJob, Dispatch } from "@openomni/protocol";
 import type { DispatchSchedulerOwner } from "../owners.js";
 import type { DispatchHandler } from "../registry.js";
 import { extractText } from "../../ingress/handlers.js";
@@ -42,9 +42,12 @@ function scheduleTarget(command: Dispatch.Command): CronJob.Target {
 
 export function createScheduleDispatchHandlers(
   options: ScheduleDispatchHandlerOptions = {},
-): Record<"schedule.create" | "schedule.cancel", DispatchHandler> {
+): Record<
+  typeof Dispatch.Actions.ScheduleCreate | typeof Dispatch.Actions.ScheduleCancel,
+  DispatchHandler
+> {
   return {
-    "schedule.create"(command) {
+    [Dispatch.Actions.ScheduleCreate](command) {
       const scheduler = requireScheduler(options.scheduler);
       const schedule = scheduleFromPayload(command);
       if (!schedule) throw new Error("schedule.create requires payload.schedule");
@@ -67,7 +70,7 @@ export function createScheduleDispatchHandlers(
       return { output: { scheduled: true, jobId, messageId: jobId } };
     },
 
-    "schedule.cancel"(command) {
+    [Dispatch.Actions.ScheduleCancel](command) {
       const scheduler = requireScheduler(options.scheduler);
       const jobId = command.target.id ?? command.target.name;
       if (!jobId) throw new Error("schedule.cancel requires target.id");

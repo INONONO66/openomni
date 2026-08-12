@@ -314,13 +314,6 @@
     "status",
     "usage"
   ],
-  "Ingress.ActivationMetadataSchema": [
-    "activationId",
-    "durableSessionId",
-    "lifecycle",
-    "runId",
-    "trigger"
-  ],
   "Ingress.ActorSchema": [
     "actorId",
     "endpoint",
@@ -346,19 +339,6 @@
     "tools"
   ],
   "Ingress.DirectEventSchema": [
-    "agent",
-    "channel",
-    "id",
-    "meta",
-    "mode",
-    "payload",
-    "runtime",
-    "surface",
-    "target",
-    "userId",
-    "workspace"
-  ],
-  "Ingress.ExternalInboundEventSchema": [
     "agent",
     "channel",
     "id",
@@ -533,15 +513,6 @@
     "type"
   ],
   "Message.Part#4": [
-    "attempt",
-    "error",
-    "id",
-    "messageID",
-    "sessionID",
-    "time",
-    "type"
-  ],
-  "Message.Part#5": [
     "callID",
     "id",
     "messageID",
@@ -556,15 +527,6 @@
     "metadata",
     "sessionID",
     "text",
-    "time",
-    "type"
-  ],
-  "Message.RetryPart": [
-    "attempt",
-    "error",
-    "id",
-    "messageID",
-    "sessionID",
     "time",
     "type"
   ],

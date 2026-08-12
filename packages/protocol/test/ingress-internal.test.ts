@@ -49,7 +49,7 @@ describe("InternalEventSchema", () => {
 
   test("external inbound schema rejects internal events", () => {
     expectParseFailure(() =>
-      Ingress.ExternalInboundEventSchema.parse({
+      Ingress.DirectEventSchema.parse({
         id: "t3",
         surface: "cron",
         mode: "internal",
