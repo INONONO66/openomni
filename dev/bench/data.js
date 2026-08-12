@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786563030754,
+  "lastUpdate": 1786563577766,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43253,6 +43253,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 507902,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "660fad67962ee54ba3bb198f1ca66adb70ffed1f",
+          "message": "refactor(protocol): unexport variant schemas, drop dead aliases (#497) (#598)\n\nBatch-2 protocol dead-surface kill (#497).\n\nUnexport (const stays namespace-internal, still feeding its union;\nunused variant type aliases dropped to satisfy noUnusedVariables):\n- Tool.StatePending / StateRunning / StateCompleted / StateError\n  (Tool.State union stays exported)\n- McpConfig.StdioServerConfig / SseServerConfig / StreamableHttpServerConfig\n  (McpConfig.ServerConfig union stays exported)\n\nDelete:\n- Communication.Envelope alias (namespace keeps its other members)\n- Model.isRef type guard\n- McpServerConfig value const (export type McpServerConfig kept)\n\nTest repoints (coverage-preserving):\n- tool.test.ts: Tool.State*.parse -> Tool.State.parse\n- mcp.test.ts: drop McpServerConfig value import, McpServerConfig.parse\n  -> McpConfig.ServerConfig.parse\n- communication/schema.test.ts: import Envelope from\n  ../../src/communication/envelope.js, Communication.Envelope.parse\n  -> Envelope.parse\n- agent.test.ts: remove the Model.isRef guard assertions block\n\nSurgically removed 8 now-vanished keys from schema-snapshot.json\n(Communication.Envelope, the 3 McpConfig.*ServerConfig, the 4\nTool.State* variants); union keys unchanged.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T19:38:20Z",
+          "tree_id": "73bac9b470892f6803f384b201015d5dd66fb852",
+          "url": "https://github.com/INONONO66/openomni/commit/660fad67962ee54ba3bb198f1ca66adb70ffed1f"
+        },
+        "date": 1786563577026,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6269,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16005,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8418,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 825,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1312,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 52,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1571,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 725,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 41161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 104873,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 530840,
             "unit": "ns/op"
           }
         ]
