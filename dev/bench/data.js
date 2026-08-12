@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786565497501,
+  "lastUpdate": 1786566850439,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43625,6 +43625,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 510205,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "07f20ff8e2684105d91589798e397a394f5d9bf7",
+          "message": "refactor(protocol): delete 4 + unexport 2 dead-surface members (#497) (#601)\n\nBatch-#16 of the #497 protocol dead-surface kill. Zero-consumer surface\nremoved; internally-bare-referenced symbols unexported (kept defined).\n\nDELETE (4, zero prod consumers):\n- Dispatch.TargetKind alias (dispatch/index.ts) — enum, no snapshot key.\n  DispatchSchemas.TargetKind stays (bare ref in Target, plus\n  ledger-append/streams.ts consumer), so gate 3 stayed green there.\n- Run.Budget const+type (run/index.ts) + its describe block.\n- WorkerRun.Info const+type (worker-run/index.ts) + its shape tests; the\n  now-unused WorkItem import dropped.\n- Artifact.Part const+type (artifact/index.ts) + its describe block.\n  Artifact.Meta.version untouched (live cross-package field).\n\nUNEXPORT (2, bare-ref confirmed, symbol stays defined):\n- WorkItem.VerificationGate re-export (work-item/index.ts). Removing it\n  orphaned work-item/schemas.ts VerificationGate: the const is unexported\n  (still feeds InfoShape at :237) and the fully-dead inferred type is\n  deleted — both forced by check-dead-exports (gate 3).\n- TraceContext.Schema (trace/index.ts) — export dropped; type Type kept\n  (heavily consumed ecosystem-wide, references Schema bare).\n\nschema-snapshot.json: surgically removed the 5 vanished keys (Artifact.Part,\nRun.Budget, TraceContext.Schema, WorkerRun.Info, WorkItem.VerificationGate);\nthe single +line is the mandated trailing-comma fixup on the now-last key.\n\nAGENTS.md: corrected two stale Run.Snapshot references (run/ namespace\ncomment and the Sink interface contract).\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T20:32:54Z",
+          "tree_id": "7abf2a40ce153cf56f56aa73eb3c6ab2818db708",
+          "url": "https://github.com/INONONO66/openomni/commit/07f20ff8e2684105d91589798e397a394f5d9bf7"
+        },
+        "date": 1786566849645,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 704,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6213,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2635,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3175,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16196,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8469,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 877,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 751,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 780,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2406,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100797,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511778,
             "unit": "ns/op"
           }
         ]
