@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AppConnector, Extension } from "../src/index.js";
+import { AppConnector } from "../src/index.js";
 
 const it = test;
 
@@ -504,32 +504,6 @@ describe("AppConnector protocol domain", () => {
 
       // Then
       expect(result.success).toBe(false);
-    });
-  });
-
-  describe("Extension.Manifest", () => {
-    it("parses contributed app connectors", () => {
-      // Given
-      const manifest = {
-        id: "ext-installed-apps",
-        name: "Installed Apps",
-        version: "1.0.0",
-        description: "Contributes connector endpoint apps",
-        contributes: {
-          appConnectors: [validConnector()],
-        },
-      };
-
-      // When
-      const result = Extension.Manifest.safeParse(manifest);
-
-      // Then
-      expect(result.success).toBe(true);
-      if (result.success) {
-        const connectors = result.data.contributes?.appConnectors;
-        expect(connectors?.length).toBe(1);
-        expect(connectors?.[0]?.profile.initialAutonomy).toBe("approval_required");
-      }
     });
   });
 });

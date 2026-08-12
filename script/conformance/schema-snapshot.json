@@ -314,34 +314,6 @@
     "status",
     "usage"
   ],
-  "Extension.Contributes": [
-    "agents",
-    "appConnectors",
-    "mcpServers",
-    "middlewares",
-    "skills",
-    "surfaces",
-    "tools"
-  ],
-  "Extension.InstallRequest": [
-    "manifest",
-    "reason",
-    "requestedAt",
-    "requestedBy"
-  ],
-  "Extension.Manifest": [
-    "author",
-    "compatibility",
-    "contributes",
-    "description",
-    "homepage",
-    "id",
-    "name",
-    "permissions",
-    "provenance",
-    "version"
-  ],
-  "Extension.SurfaceBinding": ["adapterType", "surfaceId"],
   "Ingress.ActivationMetadataSchema": [
     "activationId",
     "durableSessionId",
@@ -771,19 +743,6 @@
   "RuntimeResource.Source#7": ["scope", "type"],
   "RuntimeResource.Source#8": ["coordinatorId", "type", "workerId"],
   "RuntimeResource.Source#9": ["runtimeId", "type"],
-  "Skill.Definition": [
-    "description",
-    "doNotUseWhen",
-    "finalChecklist",
-    "id",
-    "layer",
-    "name",
-    "path",
-    "promptFragment",
-    "scope",
-    "useWhen"
-  ],
-  "Skill.RegistryEntry": ["enabled", "id", "installedAt", "source", "version"],
   "Token.AgentUsage": [
     "cacheReadTokens",
     "cacheWriteTokens",

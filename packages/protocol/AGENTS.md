@@ -21,7 +21,6 @@ src/
 ├── error/                # NamedError factory + built-in error classes (incl. WorkerDeliveryError, #478)
 ├── event/                # Typed event descriptors: agent-execution, ingress, llm, mcp, operational, policy, tool
 ├── execution/            # Execution.Request / Result contracts + Execution.Driver command face (#478)
-├── extension/            # Extension manifest schemas
 ├── ingress/              # InboundEvent discriminated union (DirectEvent | InternalEvent), AgentDef, IngressResult, ResolvedInboundEvent
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── mcp/                  # MCP server config schemas
@@ -30,7 +29,6 @@ src/
 ├── policy/               # Point registry (20 registered policy points) + point contracts, PolicyPlan, Permission, PolicyDecision, effects
 ├── run/                  # Run.Snapshot / Outcome / RetryPolicy / Budget
 ├── sink/                 # Sink — streaming callback contract (TS interface, not Zod)
-├── skill/                # Skill definition schemas
 ├── storage/              # Storage.WorkItemSubAdapter interface
 ├── token/                # Token.Usage / AgentUsage / ProviderUsage / ExecutionUsage
 ├── tool/                 # Tool.Spec / Call / Result / State (discriminated union)
