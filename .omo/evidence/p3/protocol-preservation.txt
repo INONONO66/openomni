@@ -1,0 +1,60 @@
+# #497 protocol dead-surface — preservation ledger (preserve + defer)
+# baseline commit 87d4fc8da6ab57212a2aea1ea187d8d56706b210
+# generated 2026-08-13 (extracted from protocol-concept-disposition.json)
+# These fail-closed owners are NOT removed by #497. defer rows carry a handoff issue.
+
+== preserve (41) ==
+- Actor.BlacklistKind (actor): CORRECTION to the 'unexport candidate' label: rg NOW shows a live CROSS-PACKAGE type import at packages/openomni/src/ingress/resolve-route.ts:74, feeding the exported resolveRoute routing decision.
+- Message.StepStartPart (message-parts): Still produced by packages/llm/src/processor/stream-events.ts:175 (appendPart).
+- Message.StepFinishPart (message-parts): Still produced by stream-events.ts handleStepFinish (appendPart type:'step-finish').
+- DispatchSchemas.TargetKind (live backer — DO NOT delete) (dispatch-run-workerrun): Owner: ledger-append CommandAuthorized/CommandDenied fact (persisted/wire contract) + Dispatch.Target schema.
+- WorkerRun.FrozenError (survivor) (dispatch-run-workerrun): Owner: #510 D2b frozen-writer fail-closed contract.
+- WorkerRun.Status (survivor) (dispatch-run-workerrun): Cross-package live consumer and the semantic bridge #498 reads to upcast legacy worker-run terminal statuses into the attempt-run view.
+- WorkerRun.WriteMethod / WorkerRun.Events.* (survivors) (dispatch-run-workerrun): WriteMethod is the discriminator carried in the FrozenError; Events.* are live Bus events published by the server worker runner (wire contract).
+- policyKernelVersion (policy): Real cross-package production consumer: openomni worker-work-item.ts bakes it into the worker manifest schemaVersions.policyKernel (a wire/manifest value the worker ships).
+- Tool.Config (tool-token): PREMISE CORRECTED: not dead.
+- Tool.State (tool-token): PREMISE CORRECTED: not dead.
+- Token.Count (tool-token): AMENDMENT RESOLVED: transcript-referenced → survivor, stays in protocol (not part of the llm move).
+- Adapter.MediaAttachment (adapter): Live wire contract.
+- Adapter.DeliveryPolicy (adapter): Type of the live Config.deliveryPolicy field (adapter/index.ts:97).
+- Adapter.Capabilities (adapter): CENSUS CORRECTION REFUTED.
+- AppConnector.InstallationStatus (appconnector): Persisted enrollment state-machine enum.
+- AppConnector.WorkspaceIdentity (appconnector): Persisted enrollment workspace-identity shape.
+- McpServerConfig (top-level type alias) (mcp-ipc): Primary cross-package PUBLIC TYPE for MCP server config; imported (type-only) by apps/server MCP provider + config + context and by packages/agent MCP runtime client.
+- McpConfig.ServerConfig (const+type) (mcp-ipc): CANONICAL MCP ServerConfig discriminated union — the single source of truth (Tool does NOT own one).
+- McpConfig (namespace) (mcp-ipc): Container namespace whose ServerConfig member is a live persisted/bundled config contract.
+- Mcp (event namespace: Connected/Disconnected/ToolCalled/ToolCompleted/ToolFailed) (mcp-ipc): All five MCP bus events are Bus.publish'd in production (agent MCP client emits Connected/Disconnected/ToolCalled/ToolFailed; server MCP provider emits ToolCompleted).
+- Ipc.Methods (mcp-ipc): CORRECTION: assignment claim 'Ipc.Methods is PRODUCTION-DEAD, TEST-PINNED by 12 protocol references' is FALSE per current grep.
+- Ipc.Methods table entries (sub-key coverage note) (mcp-ipc): Sub-table granularity note (NOT an independently exported symbol).
+- Ipc.Request (const+type) (mcp-ipc): Real transport frame schema.
+- Ipc.Response (const+type) (mcp-ipc): Real transport frame schema; safeParsed at socket boundary in ipc client/server.
+- Ipc.Notification (const+type) (mcp-ipc): Real transport frame schema; safeParsed at socket boundary.
+- Ipc.createRequest (mcp-ipc): Frame constructor used by ipc server/client to emit request frames.
+- Ipc.createResponse (mcp-ipc): Frame constructor used by ipc server/client to emit response frames.
+- Ipc.createErrorResponse (mcp-ipc): Error-frame constructor used at multiple ipc server/client boundaries (version mismatch, parse failure).
+- Ipc.createNotification (mcp-ipc): Notification-frame constructor used by ipc server.
+- APIError (error-comm-cron-model): The retry stack references APIError, which per the assignment rule forces preserve.
+- CronJob (cron namespace) (error-comm-cron-model): CORRECTION: the historical 'deletion candidate' claim is false at current head.
+- Model.Status (error-comm-cron-model): Live cross-package production consumer: packages/llm/src/model/index.ts:10 aliases `export const ModelStatus = ProtocolModel.Status` (ProtocolModel imported from @openomni/protocol at line 4) and uses it at :53 as the `status: ModelStatus.o…
+- Model.Ref (error-comm-cron-model): Explicitly designated survivor: Model.Ref is the shared model scalar ({provider,id}) that stays.
+- Dispatch.Actions.ResidentAsk (actions-wiring): Value "resident.ask".
+- Dispatch.Actions.WorkerComplete (actions-wiring): Value "worker.complete".
+- Dispatch.Actions.ActorMessage (actions-wiring): Value "actor.message".
+- Dispatch.Actions.ActorReply (actions-wiring): Value "actor.reply".
+- Dispatch.Actions.ExternalAsk (actions-wiring): Value "external.ask".
+- Dispatch.Actions.A2aAsk (actions-wiring): Value "a2a.ask".
+- Dispatch.Actions.ApiAsk (actions-wiring): Value "api.ask".
+- Dispatch.Actions.DeviceCommand (actions-wiring): Value "device.command".
+
+== defer (11) ==
+- Actor.Relationship (actor) [handoff #498] [deviates-from-issue-kill-list]: REAL consumer: `relationship: Relationship` is a REQUIRED field of the live, cross-package, persisted Actor.Identity (actor/index.ts:41; stored in sqlite-actor-registry-adapter `data` blob; NOT NULL migration 0006; parsed on every DB read v…
+- WorkerRun (namespace deletion candidate) (dispatch-run-workerrun): Namespace-level removal is entangled and CANNOT happen in #497: WorkerRun still has live production members — FrozenError (fail-closed #510 D2b frozen-writer contract), WriteMethod, Status (cross-package, incl the attempt-run.ts:127 legacy-…
+- Token.Usage (tool-token): AMENDMENT RESOLVED: Token.Usage is NOT transcript-referenced.
+- AppConnector.Detect (appconnector): Connector-manifest detection sub-schema.
+- AppConnector.Evidence (appconnector): Connector-manifest evidence/completion sub-schema (distinct from WorkItem.Evidence, which is a different live symbol).
+- AppConnector.Requires (appconnector): Connector-manifest requirements sub-schema.
+- AppConnector.Profile (appconnector): Connector-endpoint profile sub-schema — the literal Tier-2 Endpoint profile named by this family ('connector_endpoint' kind).
+- AppConnector.InitialAutonomy (appconnector): Connector-endpoint autonomy-policy enum.
+- AppConnector.DriverInstallScope (appconnector): Driver install-scope enum (user/workspace/repository).
+- AppConnector.SubmitMode (appconnector): Driver submit-mode enum (spawn/hook/plugin/api).
+- AppConnector.SubmitAck (appconnector): Driver submit-ack enum (submitted/accepted/running).
