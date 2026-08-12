@@ -3,7 +3,7 @@
   "roadmap": "#459",
   "baselineCommit": "87d4fc8da6ab57212a2aea1ea187d8d56706b210",
   "generatedFrom": "adversarial evidence workflow wf_b5558306-84f (124 symbols / 13 families, verify phase) + reviewer reconciliation 2026-08-13",
-  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone.",
+  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone. Status backfill: #595 wired 6 Dispatch.Actions constants (shipped) and #596 shipped 8 ingress/message/actor kills; their rows are marked status:shipped with their PR number. Remaining kill batches stay status:pending until delivered; the #497 completion receipt does the final sweep.",
   "dispositions": [
     "delete",
     "unexport",
@@ -25,7 +25,8 @@
       "symbol": "Actor.Kind",
       "family": "actor",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/actor/index.ts:4 (const Kind = z.enum([...])), :12 (type Kind = z.infer<typeof Kind>)",
       "evidence": {
         "productionConsumers": [
@@ -140,7 +141,8 @@
       "symbol": "Message.RetryPart",
       "family": "message-parts",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/message/index.ts:62 (const), packages/protocol/src/message/index.ts:70 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -189,7 +191,8 @@
       "symbol": "Ingress.ActorMetadata",
       "family": "ingress",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/ingress/index.ts:93",
       "evidence": {
         "productionConsumers": [],
@@ -204,7 +207,8 @@
       "symbol": "Ingress.EventMetadata",
       "family": "ingress",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/ingress/index.ts:100",
       "evidence": {
         "productionConsumers": [],
@@ -219,7 +223,8 @@
       "symbol": "Ingress.ExternalInboundEventSchema",
       "family": "ingress",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/ingress/index.ts:157",
       "evidence": {
         "productionConsumers": [],
@@ -236,7 +241,8 @@
       "symbol": "Ingress.ExternalInboundEvent (inferred/paired type)",
       "family": "ingress",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/ingress/index.ts:159",
       "evidence": {
         "productionConsumers": [],
@@ -312,7 +318,8 @@
       "symbol": "Ingress.DirectResult",
       "family": "ingress",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/ingress/index.ts:162",
       "evidence": {
         "productionConsumers": [
@@ -329,7 +336,8 @@
       "symbol": "Ingress.ActivationMetadataSchema",
       "family": "ingress",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 596,
       "exportSite": "packages/protocol/src/ingress/index.ts:102 (const); paired type ActivationMetadata at :103",
       "evidence": {
         "productionConsumers": [],
@@ -2253,7 +2261,8 @@
       "symbol": "Dispatch.Actions.WorkerSpawn",
       "family": "actions-wiring",
       "disposition": "wire",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 595,
       "exportSite": "packages/protocol/src/dispatch/index.ts:143",
       "evidence": {
         "productionConsumers": [],
@@ -2268,7 +2277,8 @@
       "symbol": "Dispatch.Actions.WorkerSend",
       "family": "actions-wiring",
       "disposition": "wire",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 595,
       "exportSite": "packages/protocol/src/dispatch/index.ts:145",
       "evidence": {
         "productionConsumers": [],
@@ -2283,7 +2293,8 @@
       "symbol": "Dispatch.Actions.WorkerResume",
       "family": "actions-wiring",
       "disposition": "wire",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 595,
       "exportSite": "packages/protocol/src/dispatch/index.ts:146",
       "evidence": {
         "productionConsumers": [],
@@ -2298,7 +2309,8 @@
       "symbol": "Dispatch.Actions.WorkerCancel",
       "family": "actions-wiring",
       "disposition": "wire",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 595,
       "exportSite": "packages/protocol/src/dispatch/index.ts:147",
       "evidence": {
         "productionConsumers": [],
@@ -2313,7 +2325,8 @@
       "symbol": "Dispatch.Actions.ScheduleCreate",
       "family": "actions-wiring",
       "disposition": "wire",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 595,
       "exportSite": "packages/protocol/src/dispatch/index.ts:148",
       "evidence": {
         "productionConsumers": [],
@@ -2328,7 +2341,8 @@
       "symbol": "Dispatch.Actions.ScheduleCancel",
       "family": "actions-wiring",
       "disposition": "wire",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 595,
       "exportSite": "packages/protocol/src/dispatch/index.ts:149",
       "evidence": {
         "productionConsumers": [],
