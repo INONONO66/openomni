@@ -8,13 +8,9 @@ export namespace PolicyPermission {
   // Label source enumeration: where a label originates from
   // Labels use source.category naming convention to prevent namespace collisions
   // Examples: tool.filesystem, actor.owner, surface.github, risk.tier-2, capability.write
-  export const Label = {
+  const Label = {
     Source: z.enum(["system", "tool_metadata", "agent_profile", "policy_rule", "operator"]),
   } as const;
-
-  export type Label = {
-    Source: z.infer<typeof Label.Source>;
-  };
 
   // Label entry: a labeled value with its source for audit and policy evaluation
   export const LabelEntry = z.object({
@@ -23,8 +19,8 @@ export namespace PolicyPermission {
   });
   export type LabelEntry = z.infer<typeof LabelEntry>;
 
-  export const PermissionDecision = z.enum(["allow", "deny", "require_approval"]);
-  export type PermissionDecision = z.infer<typeof PermissionDecision>;
+  const PermissionDecision = z.enum(["allow", "deny", "require_approval"]);
+  type PermissionDecision = z.infer<typeof PermissionDecision>;
 
   export const InputRule = z.object({
     toolPattern: z.string(),
