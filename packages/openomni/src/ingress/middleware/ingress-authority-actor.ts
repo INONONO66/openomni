@@ -99,9 +99,7 @@ function inputAction(input: unknown): WorkerControlAction | undefined {
 
 function isTrustedManager(actor: ActorRecord): boolean {
   const trustTier = actorTrustTier(actor);
-  if (trustTier) return topLevelTrustTiers.has(trustTier);
-
-  return actor.trusted === true || actor.isTrustedManager === true;
+  return trustTier !== undefined && topLevelTrustTiers.has(trustTier);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

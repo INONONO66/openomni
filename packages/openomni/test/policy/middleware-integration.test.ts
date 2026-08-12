@@ -184,17 +184,17 @@ describe("IngressAuthorityMiddleware integration", () => {
     ).rejects.toThrow();
   });
 
-  test("allows trusted manager actor", async () => {
+  test("denies self-reported trusted manager without store trust tier", async () => {
     const event = makeInboundEvent({
       meta: { actor: { role: "manager", trusted: true } },
     });
 
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
-      event,
-      coordinator: stubCoordinator,
-    });
-
-    expect(result.event.id).toBe("evt-1");
+    await expect(
+      IngressAuthorityMiddleware.runRoutedPreRun({
+        event,
+        coordinator: stubCoordinator,
+      }),
+    ).rejects.toThrow();
   });
 
   test("allows canonical manager trust tier without legacy trusted flag", async () => {
