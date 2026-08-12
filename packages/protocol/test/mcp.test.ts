@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { McpConfig, McpServerConfig, Mcp } from "../src/index.js";
+import { McpConfig, Mcp } from "../src/index.js";
 
 describe("McpConfig.ServerConfig", () => {
   test("parses stdio server config", () => {
@@ -18,7 +18,7 @@ describe("McpConfig.ServerConfig", () => {
   });
 
   test("parses http-style server config with headers", () => {
-    const config = McpServerConfig.parse({
+    const config = McpConfig.ServerConfig.parse({
       name: "remote",
       transport: "streamable-http",
       url: "https://example.com/mcp",

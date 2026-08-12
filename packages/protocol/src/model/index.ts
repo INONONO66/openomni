@@ -9,8 +9,4 @@ export namespace Model {
     id: z.string(),
   });
   export type Ref = z.infer<typeof Ref>;
-
-  export function isRef(value: unknown): value is Ref {
-    return Ref.safeParse(value).success;
-  }
 }

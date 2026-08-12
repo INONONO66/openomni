@@ -1,12 +1,8 @@
-import { Envelope as EnvelopeSchema } from "./envelope.js";
 import * as PendingAskSchema from "./pending-ask.js";
 import * as PendingInteractionSchema from "./pending-interaction.js";
 import * as WorkerGrantSchema from "./worker-grant.js";
 
 export namespace Communication {
-  export const Envelope = EnvelopeSchema;
-  export type Envelope = EnvelopeSchema;
-
   export namespace PendingAsk {
     export const Status = PendingAskSchema.Status;
     export type Status = PendingAskSchema.Status;

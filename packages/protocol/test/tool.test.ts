@@ -34,7 +34,7 @@ describe("Tool shared contracts", () => {
 
 describe("Tool.StatePending", () => {
   test("parses valid pending state with empty input", () => {
-    const state = Tool.StatePending.parse({
+    const state = Tool.State.parse({
       status: "pending",
       input: {},
     });
@@ -44,16 +44,16 @@ describe("Tool.StatePending", () => {
   });
 
   test("rejects missing input", () => {
-    expect(() => Tool.StatePending.parse({ status: "pending" })).toThrow();
+    expect(() => Tool.State.parse({ status: "pending" })).toThrow();
   });
 
   test("rejects missing status", () => {
-    expect(() => Tool.StatePending.parse({ input: {} })).toThrow();
+    expect(() => Tool.State.parse({ input: {} })).toThrow();
   });
 
   test("rejects wrong status", () => {
     expect(() =>
-      Tool.StatePending.parse({
+      Tool.State.parse({
         status: "running",
         input: {},
       }),
@@ -63,7 +63,7 @@ describe("Tool.StatePending", () => {
 
 describe("Tool.StateRunning", () => {
   test("parses valid running state with negative start time", () => {
-    const state = Tool.StateRunning.parse({
+    const state = Tool.State.parse({
       status: "running",
       input: { task: "demo" },
       time: { start: -5 },
@@ -75,7 +75,7 @@ describe("Tool.StateRunning", () => {
 
   test("rejects missing time", () => {
     expect(() =>
-      Tool.StateRunning.parse({
+      Tool.State.parse({
         status: "running",
         input: {},
       }),
@@ -84,7 +84,7 @@ describe("Tool.StateRunning", () => {
 
   test("rejects missing input", () => {
     expect(() =>
-      Tool.StateRunning.parse({
+      Tool.State.parse({
         status: "running",
         time: { start: 1 },
       }),
@@ -94,7 +94,7 @@ describe("Tool.StateRunning", () => {
 
 describe("Tool.StateCompleted", () => {
   test("parses valid completed state with time.end set to 0", () => {
-    const state = Tool.StateCompleted.parse({
+    const state = Tool.State.parse({
       status: "completed",
       input: { task: "demo" },
       output: "done",
@@ -110,7 +110,7 @@ describe("Tool.StateCompleted", () => {
 
   test("rejects missing output", () => {
     expect(() =>
-      Tool.StateCompleted.parse({
+      Tool.State.parse({
         status: "completed",
         input: {},
         title: "Demo Task",
@@ -122,7 +122,7 @@ describe("Tool.StateCompleted", () => {
 
   test("rejects missing title", () => {
     expect(() =>
-      Tool.StateCompleted.parse({
+      Tool.State.parse({
         status: "completed",
         input: {},
         output: "done",
@@ -134,7 +134,7 @@ describe("Tool.StateCompleted", () => {
 
   test("rejects missing time", () => {
     expect(() =>
-      Tool.StateCompleted.parse({
+      Tool.State.parse({
         status: "completed",
         input: {},
         output: "done",
@@ -147,7 +147,7 @@ describe("Tool.StateCompleted", () => {
 
 describe("Tool.StateError", () => {
   test("parses valid error state", () => {
-    const state = Tool.StateError.parse({
+    const state = Tool.State.parse({
       status: "error",
       input: { task: "demo" },
       error: "failed",
@@ -160,7 +160,7 @@ describe("Tool.StateError", () => {
 
   test("rejects missing error", () => {
     expect(() =>
-      Tool.StateError.parse({
+      Tool.State.parse({
         status: "error",
         input: {},
         time: { start: 1, end: 2 },
@@ -170,7 +170,7 @@ describe("Tool.StateError", () => {
 
   test("rejects missing time", () => {
     expect(() =>
-      Tool.StateError.parse({
+      Tool.State.parse({
         status: "error",
         input: {},
         error: "failed",

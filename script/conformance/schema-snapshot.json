@@ -182,21 +182,6 @@
     "version"
   ],
   "Artifact.Part": ["artifactId", "meta", "type"],
-  "Communication.Envelope": [
-    "actorId",
-    "channelId",
-    "correlationToken",
-    "direction",
-    "endpointId",
-    "externalMessageId",
-    "id",
-    "payload",
-    "receivedAt",
-    "replyToMessageId",
-    "sentAt",
-    "surface",
-    "threadId"
-  ],
   "CronJob.Info": [
     "agentName",
     "createdAt",
@@ -433,31 +418,6 @@
     "url"
   ],
   "McpConfig.ServerConfig#2": [
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport",
-    "url"
-  ],
-  "McpConfig.SseServerConfig": [
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport",
-    "url"
-  ],
-  "McpConfig.StdioServerConfig": [
-    "args",
-    "command",
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport"
-  ],
-  "McpConfig.StreamableHttpServerConfig": [
     "headers",
     "name",
     "retries",
@@ -789,17 +749,6 @@
   "Tool.State#1": ["input", "status", "time"],
   "Tool.State#2": ["input", "metadata", "output", "status", "time", "title"],
   "Tool.State#3": ["error", "input", "status", "time"],
-  "Tool.StateCompleted": [
-    "input",
-    "metadata",
-    "output",
-    "status",
-    "time",
-    "title"
-  ],
-  "Tool.StateError": ["error", "input", "status", "time"],
-  "Tool.StatePending": ["input", "status"],
-  "Tool.StateRunning": ["input", "status", "time"],
   "ToolSelection.Selection": ["all", "allow", "categories", "deny"],
   "TraceContext.Schema": [
     "agentName",
