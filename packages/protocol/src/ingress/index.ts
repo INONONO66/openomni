@@ -18,8 +18,6 @@ const ActorSchemaImpl = z
     endpoint: Actor.Endpoint.optional(),
     sessionId: z.string().optional(),
     workerId: z.string().optional(),
-    trusted: z.boolean().optional(),
-    isTrustedManager: z.boolean().optional(),
     isResident: z.boolean().optional(),
     isMain: z.boolean().optional(),
   })

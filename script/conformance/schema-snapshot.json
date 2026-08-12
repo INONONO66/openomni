@@ -356,12 +356,10 @@
     "id",
     "isMain",
     "isResident",
-    "isTrustedManager",
     "kind",
     "relationship",
     "role",
     "sessionId",
-    "trusted",
     "trustTier",
     "type",
     "workerId"
