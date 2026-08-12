@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { Dispatch, Policy, Run } from "../../src/index.js";
 
 const pointIds = [
-  "session.inbound.pre",
   "dispatch.action.pre",
   "run.lifecycle.pre",
   "run.turn.pre",
@@ -19,7 +18,6 @@ const pointIds = [
   "run.turn.post",
   "run.completion.pre",
   "work.complete.pre",
-  "session.writeback.pre",
   "run.lifecycle.post",
   "run.error.error",
 ] as const;
@@ -38,7 +36,6 @@ const validDispatchInput = {
   context: { requestId: "request-1" },
 } satisfies Policy.PolicyPointInputMap["dispatch.action.pre"];
 const validInputs = {
-  "session.inbound.pre": { actorId: "actor-1", sessionId, inboundEvent: {} },
   "dispatch.action.pre": validDispatchInput,
   "run.lifecycle.pre": { actorId: "actor-1", sessionId, runId },
   "run.turn.pre": { sessionId, runId, turnIndex: 0 },
@@ -72,7 +69,6 @@ const validInputs = {
     completionCandidate: { effectiveResultIds: ["result:publish"] },
     unresolvedBlockerIds: ["blocker:effect-pending"],
   },
-  "session.writeback.pre": { sessionId, runId, writebackPayload: {} },
   "run.lifecycle.post": { sessionId, runId, runOutcome: { type: "stop" } },
   "run.error.error": { sessionId, runId, errorCode: "error", errorPhase: "turn" },
 } satisfies Policy.PolicyPointInputMap;

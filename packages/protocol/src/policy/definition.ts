@@ -4,7 +4,6 @@ export const policyKernelVersion = 1;
 
 export namespace PolicyDefinition {
   export const Timing = {
-    INBOUND_RECEIVE: "inbound.receive",
     DISPATCH_AUTHORIZE: "dispatch.authorize",
     RUN_START: "run.start",
     TURN_START: "turn.start",
@@ -16,7 +15,6 @@ export namespace PolicyDefinition {
     INVOKE_RESULT: "invoke.result",
     TURN_FINISH: "turn.finish",
     COMPLETION_PREPARE: "completion.prepare",
-    WRITEBACK_COMMIT: "writeback.commit",
     RUN_FINISH: "run.finish",
     ERROR: "error",
   } as const;

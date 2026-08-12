@@ -11,7 +11,6 @@ export namespace PolicyPointContractModule {
   const TimingValue = z.nativeEnum(Timing);
 
   const policyPointIds = [
-    "session.inbound.pre",
     "dispatch.action.pre",
     "run.lifecycle.pre",
     "run.turn.pre",
@@ -28,7 +27,6 @@ export namespace PolicyPointContractModule {
     "run.turn.post",
     "run.completion.pre",
     "work.complete.pre",
-    "session.writeback.pre",
     "run.lifecycle.post",
     "run.error.error",
   ] as const;
