@@ -224,6 +224,108 @@ describe("discord gateway state machine (#520)", () => {
     expect(resumed).toBeDefined();
   }, 15_000);
 
+  it("re-enters the reconnect backoff when fetchGatewayUrl rejects, instead of dying (#540)", async () => {
+    // The first connection drops BEFORE READY, so there is no resumable
+    // session: the reconnect must go through fetchGatewayUrl (the cold path).
+    let identifies = 0;
+    const local = createFakeGateway({
+      heartbeatIntervalMs: 5_000,
+      ackHeartbeats: true,
+      onIdentify: (ws) => {
+        identifies += 1;
+        if (identifies === 1) {
+          // Drop the socket before READY → cold reconnect (sessionId stays null).
+          ws.close(4000);
+        } else {
+          sendReady(ws, local.url, "sess-540");
+        }
+      },
+    });
+    fake = local;
+
+    // Reject the SECOND fetch (the first cold reconnect's REST call) once, then
+    // recover on the third. Under the old terminal `.catch`, that single
+    // rejection ended the chain and this test would time out (see removal map).
+    let fetchCalls = 0;
+    const fetchGatewayUrl = () => {
+      fetchCalls += 1;
+      if (fetchCalls === 2) return Promise.reject(new Error("discord REST 503"));
+      return Promise.resolve(local.url);
+    };
+
+    let ready = false;
+    gateway = new DiscordGateway(
+      "test-token",
+      fetchGatewayUrl,
+      {
+        onDispatch: () => undefined,
+        onReady: () => {
+          ready = true;
+        },
+      },
+      noopPublish,
+    );
+
+    // The first socket drops before READY, so start()'s open promise rejects;
+    // the reconnect chain proceeds independently through the close handler.
+    await gateway.start().catch(() => undefined);
+    // start (fetch 1) → drop → backoff → reconnect fetch 2 (rejects) → backoff
+    // → reconnect fetch 3 (resolves) → READY. Proves the fetch rejection did
+    // NOT terminate the reconnect chain.
+    const deadline = Date.now() + 18_000;
+    while (!ready && Date.now() < deadline) {
+      await Bun.sleep(20);
+    }
+    expect(fetchCalls).toBeGreaterThanOrEqual(3);
+    expect(identifies).toBe(2);
+    expect(ready).toBe(true);
+  }, 20_000);
+
+  it("does NOT schedule another attempt after stop() when fetchGatewayUrl keeps rejecting (#540)", async () => {
+    // Same cold-reconnect setup, but the REST call keeps failing. Once the
+    // fetch-retry loop is active we stop() the gateway; the loop is bounded by
+    // `running`, so no further fetch is attempted after shutdown (no leak).
+    const local = createFakeGateway({
+      heartbeatIntervalMs: 5_000,
+      ackHeartbeats: true,
+      onIdentify: (ws) => ws.close(4000), // always drop before READY
+    });
+    fake = local;
+
+    let fetchCalls = 0;
+    const fetchGatewayUrl = () => {
+      fetchCalls += 1;
+      if (fetchCalls === 1) return Promise.resolve(local.url); // initial connect
+      return Promise.reject(new Error("persistent outage"));
+    };
+
+    gateway = new DiscordGateway(
+      "test-token",
+      fetchGatewayUrl,
+      {
+        onDispatch: () => undefined,
+        onReady: () => undefined,
+      },
+      noopPublish,
+    );
+
+    // First socket drops before READY → start()'s open promise rejects; the
+    // reconnect chain proceeds through the close handler.
+    await gateway.start().catch(() => undefined);
+    // Wait until the first cold-reconnect fetch has rejected (fetchCalls === 2).
+    const deadline = Date.now() + 12_000;
+    while (fetchCalls < 2 && Date.now() < deadline) {
+      await Bun.sleep(20);
+    }
+    expect(fetchCalls).toBe(2);
+
+    gateway.stop();
+    const stopped = fetchCalls;
+    // Wait past the next backoff window; a running-unbounded loop would fetch again.
+    await Bun.sleep(6_000);
+    expect(fetchCalls).toBe(stopped);
+  }, 20_000);
+
   it("re-identifies (never resumes) after a non-resumable INVALID_SESSION", async () => {
     let identifies = 0;
     const local = createFakeGateway({

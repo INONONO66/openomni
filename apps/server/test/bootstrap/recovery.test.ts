@@ -559,7 +559,7 @@ describe("boot effect reconciliation (#492)", () => {
       effects: {
         reconcile: async () => {
           order.push("effects");
-          return { scanned: 0, resolved: 0, stillUnknown: 0, escalated: 0 };
+          return { scanned: 0, resolved: 0, stillUnknown: 0, escalated: 0, reprojected: 0 };
         },
       },
     });

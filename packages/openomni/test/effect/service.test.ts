@@ -159,7 +159,13 @@ describe("EffectReconciler", () => {
     );
     const summary = await new EffectReconciler(manifestWith(driver)).reconcile();
 
-    expect(summary).toEqual({ scanned: 1, resolved: 1, stillUnknown: 0, escalated: 0 });
+    expect(summary).toEqual({
+      scanned: 1,
+      resolved: 1,
+      stillUnknown: 0,
+      escalated: 0,
+      reprojected: 0,
+    });
     expect(EffectStore.status("r1").status).toBe("confirmed");
   });
 
@@ -260,6 +266,74 @@ describe("effect ↔ completion admission linkage (#490)", () => {
       },
     });
   }
+
+  function latestEffectOutcome(hash: string, intentRef: string): string | undefined {
+    const item = WorkItemStore.get(hash);
+    let latest: WorkItem.EffectRecord | undefined;
+    for (const record of item?.completionFacts.effects ?? []) {
+      if (record.intentRef !== intentRef) continue;
+      if (!latest || record.createdAt >= latest.createdAt) latest = record;
+    }
+    return latest?.outcome;
+  }
+
+  /**
+   * The #538 crash window: the intent and its pending WorkItem projection land,
+   * the terminal fact commits on the effect stream (tx A), but the LATER
+   * terminal projection (tx B) never runs — so admission is stuck on an
+   * outcome-less EffectRecord while the ledger says the effect is done.
+   */
+  function crashWindow(hash: string, effectId: string, kind = "http.post"): void {
+    EffectStore.intend({ effectId, kind, workItemHash: hash });
+    WorkItemStore.recordEffect(hash, { intentRef: effectId }); // pending projection only
+    EffectStore.confirm(effectId, "landed"); // terminal fact — crash BEFORE tx B
+  }
+
+  test("seam (b): terminal replay re-projects the crash-window outcome and unblocks admission", async () => {
+    const hash = await linkedWorkItem();
+    crashWindow(hash, "e-crash-replay");
+
+    // Precondition: the ledger is terminal but admission is stuck forever.
+    expect(EffectStore.status("e-crash-replay").status).toBe("confirmed");
+    expect(latestEffectOutcome(hash, "e-crash-replay")).toBeUndefined();
+    expect(foldDecision(hash).reasonCodes).toContain("effect_outcome_unresolved");
+
+    // Re-running the same effectId (replay) must re-project WITHOUT re-executing.
+    const driver = new ScriptedDriver("http.post", { kind: "confirmed", receipt: "ok" });
+    const replay = await new EffectService(manifestWith(driver)).run({
+      effectId: "e-crash-replay",
+      kind: "http.post",
+      workItemHash: hash,
+    });
+
+    expect(replay.runtime).toBe("confirmed");
+    expect(driver.executeCalls).toBe(0); // terminal replay never re-executes
+    expect(driver.reconcileCalls).toBe(0);
+    expect(latestEffectOutcome(hash, "e-crash-replay")).toBe("confirmed");
+    expect(foldDecision(hash).reasonCodes).not.toContain("effect_outcome_unresolved");
+  });
+
+  test("seam (a): boot reconcile re-links a crash-window terminal intent without replay", async () => {
+    const hash = await linkedWorkItem();
+    crashWindow(hash, "e-crash-sweep");
+    expect(foldDecision(hash).reasonCodes).toContain("effect_outcome_unresolved");
+
+    // No replay: the boot sweep alone re-projects the recorded terminal outcome.
+    // The intent is terminal, so it is NOT outstanding and the driver's probe
+    // must never be consulted — the pass only reads already-recorded facts.
+    const driver = new ScriptedDriver("http.post", { kind: "unknown" });
+    const summary = await new EffectReconciler(manifestWith(driver)).reconcile();
+
+    expect(summary.reprojected).toBe(1);
+    expect(summary.resolved).toBe(0);
+    expect(driver.reconcileCalls).toBe(0);
+    expect(latestEffectOutcome(hash, "e-crash-sweep")).toBe("confirmed");
+    expect(foldDecision(hash).reasonCodes).not.toContain("effect_outcome_unresolved");
+
+    // Idempotent across sweeps: a healed WorkItem is not re-linked again.
+    const second = await new EffectReconciler(manifestWith(driver)).reconcile();
+    expect(second.reprojected).toBe(0);
+  });
 
   test("a pending effect blocks completion; confirming it unblocks", async () => {
     const hash = await linkedWorkItem();

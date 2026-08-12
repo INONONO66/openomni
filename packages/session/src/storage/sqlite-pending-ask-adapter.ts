@@ -1,4 +1,4 @@
-import type { Communication, Storage as ProtocolStorage } from "@openomni/protocol";
+import { Communication, type Storage as ProtocolStorage } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
 import {
   addOptionalStringEqualityCondition,
@@ -7,6 +7,14 @@ import {
   parseSqliteJsonDataRows,
   type SqliteJsonDataRow,
 } from "./sqlite-json-data";
+
+// Parse-don't-cast on read (#585 fail-closed): pending_ask is decision-adjacent
+// to the dispatch verdict. A corrupt/tampered row that parsed unvalidated is
+// the same fail-open class as the pending_interaction/worker_grant reads; a row
+// that fails its schema is now a loud typed defect. Matches wait/blacklist.
+function decodeAsk(data: string): Communication.PendingAsk.Record {
+  return Communication.PendingAsk.Record.parse(JSON.parse(data));
+}
 
 export function createSqlitePendingAskAdapter(db: Database): ProtocolStorage.PendingAskSubAdapter {
   return {
@@ -17,10 +25,15 @@ export function createSqlitePendingAskAdapter(db: Database): ProtocolStorage.Pen
       const row = db
         .query("SELECT data FROM pending_ask WHERE id = ?")
         .get(id) as SqliteJsonDataRow | null;
-      return parseSqliteJsonDataRow<Communication.PendingAsk.Record>(row);
+      return parseSqliteJsonDataRow<Communication.PendingAsk.Record>(row, decodeAsk);
     },
     list(status) {
-      return listSqliteJsonDataByStatus<Communication.PendingAsk.Record>(db, "pending_ask", status);
+      return listSqliteJsonDataByStatus<Communication.PendingAsk.Record>(
+        db,
+        "pending_ask",
+        status,
+        decodeAsk,
+      );
     },
     findByCorrelation(query) {
       const conditions: string[] = [];
@@ -55,7 +68,7 @@ export function createSqlitePendingAskAdapter(db: Database): ProtocolStorage.Pen
            ORDER BY time_created ASC`,
         )
         .all(...params) as SqliteJsonDataRow[];
-      return parseSqliteJsonDataRows<Communication.PendingAsk.Record>(rows);
+      return parseSqliteJsonDataRows<Communication.PendingAsk.Record>(rows, decodeAsk);
     },
     set(record) {
       insertOrReplace(db, record, true);
