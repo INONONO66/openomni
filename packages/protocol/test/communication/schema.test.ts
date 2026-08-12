@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Communication, Dispatch } from "../../src/index.js";
+import { Envelope } from "../../src/communication/envelope.js";
 
 describe("Communication protocol schemas", () => {
   test("Envelope accepts normalized adapter/delivery fields", () => {
-    const parsed = Communication.Envelope.parse({
+    const parsed = Envelope.parse({
       id: "env-1",
       direction: "inbound",
       surface: "discord",
