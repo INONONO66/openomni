@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786563577766,
+  "lastUpdate": 1786564653833,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43377,6 +43377,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 530840,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8e67dd837d080460b291bc7a0edfab5a84c50dc8",
+          "message": "refactor(protocol): kill dead runtimeresource + policy surface (#497) (#599)\n\n#497 batch-#15 — narrow proven-dead policy-package surface (removals only).\n\nRuntimeResource satellite (zero runtime consumers; production builds\nDescriptor via inline literals): delete schemaVersion, ActorType,\nSessionType, ActorDescriptor, SessionDescriptor, createWorkerDescriptor,\ncreateCredentialDescriptor, createSessionDescriptor, and the now-orphaned\ninternal DescriptorInput + createDescriptor. Unexport Kind (kept Descriptor\nstill references it bare; no external Kind consumer). Keep Source +\nDescriptor untouched.\n\nPolicy trio: delete the redundant re-export aliases Policy.Label and\nPolicy.PermissionDecision (zero Policy.*-path consumers; underlying\nPolicyPermission.* symbols stay live). Keep LabelEntry.\n\nScope correction vs. the batch draft: the two \"pending\" deletions are NOT\nperformed — PolicyDecisionHelpers.pending is a load-bearing internal caller\n(fromEvaluation's require_approval branch) and PolicyDecision.pending has\nfour live cross-package consumers. pending is the canonical constructor for\na live product verdict, not dead surface, so it is out of #497 scope.\n\nSnapshot: hand-remove exactly the two vanished keys\n(RuntimeResource.ActorDescriptor, RuntimeResource.SessionDescriptor);\nbyte-identical elsewhere; lint-tools green (committed == regenerated).\n\nTests: rewrite conformance descriptor/versioning fixtures to inline\nRuntimeResource.Descriptor.parse literals (all live-Descriptor assertions\npreserved); drop the tautological schemaVersion assertion; delete the\nsatellite-only ActorDescriptor/SessionDescriptor describes and\ndescriptor-helpers.test.ts (10 satellite validation tests consciously\ndropped — their schemas are deleted). Update module-surface expected keys.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T19:56:23Z",
+          "tree_id": "b3ec0d3935e4b3a24f9765c96bcd18a1cf3c09c0",
+          "url": "https://github.com/INONONO66/openomni/commit/8e67dd837d080460b291bc7a0edfab5a84c50dc8"
+        },
+        "date": 1786564652668,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5883,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9706,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2933,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8220,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 876,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1390,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 755,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 510403,
             "unit": "ns/op"
           }
         ]
