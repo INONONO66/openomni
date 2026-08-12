@@ -1,8 +1,6 @@
-import { type Actor, Ingress, Policy, PolicyDecision, type TraceContext } from "@openomni/protocol";
+import { type Actor, Ingress, Policy, PolicyDecision } from "@openomni/protocol";
 import type { ChannelGrantStore } from "@openomni/session";
-import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
-import { IngressPolicyGate } from "../policy-gate";
 import { resolveTarget, targetKey } from "../target";
 import {
   actionLabels,
@@ -14,19 +12,9 @@ import {
   targetRequiresCoordinator,
 } from "./ingress-authority-actor";
 
-interface PreRunState {
-  readonly input: unknown;
-  readonly coordinator?: CoordinatorLike;
-  parsedEvent?: Ingress.DirectEvent;
-  schemaError?: ZodError;
-  mode?: Ingress.DirectEvent["mode"];
-  target?: Ingress.Target;
-}
-
 interface PreRunContext {
   readonly event: unknown;
   readonly coordinator?: CoordinatorLike;
-  readonly traceContext?: TraceContext.Type;
   readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
 }
 
@@ -37,28 +25,17 @@ interface PreRunResult {
   readonly target: Ingress.Target;
 }
 
-function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
-  return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
-}
-
-function abortDecision(policyId: string, reason: string): Policy.PolicyDecision {
-  return PolicyDecision.deny({
-    policyId,
-    reasonCodes: [reason],
-    effects: [{ type: "run.abort", reason }],
-  });
-}
-
-function requireParsedEvent(state: PreRunState): Ingress.DirectEvent {
-  if (!state.parsedEvent) {
-    throw new Error("ingress event must be schema-validated before authority middleware");
+function notifyDecision(
+  onDecision: PreRunContext["onDecision"],
+  decision: Policy.PolicyDecision,
+): void {
+  if (!onDecision) return;
+  try {
+    // Observers must not block or fail the routed pre-run.
+    void Promise.resolve(onDecision(decision)).catch(() => undefined);
+  } catch {
+    // Synchronous observer errors are isolated the same way.
   }
-  return state.parsedEvent;
-}
-
-function throwAbort(decision: Policy.PolicyDecision, state: PreRunState): never {
-  if (state.schemaError) throw state.schemaError;
-  throw new Error(PolicyDecision.reason(decision, "ingress routed pre-run policy aborted"));
 }
 
 // Blacklist and channel-grant enforcement is owned by the routing pipeline
@@ -201,128 +178,41 @@ export function applyChannelGrantTreatment(
 }
 
 export namespace IngressAuthorityMiddleware {
+  /**
+   * The routed pre-run admission checks. No canonical policy point fits this
+   * boundary honestly — the event is pre-schema-validation, pre-session, and
+   * pre-run, and anonymous actors are legal here — so these run as plain
+   * sequential steps, aborting on the FIRST failure (schema → coordinator →
+   * authority → mode). Only the authority check is real authorization: an
+   * unconditional direct `Policy.evaluate` whose decision is fanned to the
+   * observer. Schema, coordinator presence, and mode dispatch are pipeline
+   * mechanics — they throw directly and are not observed as policy decisions.
+   */
   export async function runRoutedPreRun(ctx: PreRunContext): Promise<PreRunResult> {
-    const state: PreRunState = { input: ctx.event, coordinator: ctx.coordinator };
-    // #530: the routed pre-run checks run on the kernel-local gate runner.
-    // No canonical policy point fits this boundary honestly — the event is
-    // pre-schema-validation, pre-session, and pre-run, and anonymous actors
-    // are legal here — so this is deliberately NOT a policy-engine dispatch.
-    const gateContext: IngressPolicyGate.PreRunContext = {
-      gate: "pre-run",
-      ...(ctx.traceContext !== undefined && { traceContext: ctx.traceContext }),
-    };
-    const decision = await IngressPolicyGate.evaluate(
-      routedPreRunPolicies(state),
-      gateContext,
-      ctx.onDecision,
-    );
+    // schema (fail-closed): the original ZodError is the abort surface.
+    const parsed = Ingress.DirectEventSchema.safeParse(ctx.event);
+    if (!parsed.success) throw parsed.error;
+    const event = parsed.data;
 
-    if (PolicyDecision.isBlocking(decision)) throwAbort(decision, state);
-    if (!state.parsedEvent || !state.mode) {
-      throw new Error("ingress run.start middleware did not produce dispatch context");
-    }
-    const target = state.target ?? resolveTarget(state.parsedEvent);
-    if (targetRequiresCoordinator(target) && !state.coordinator) {
-      throw new Error("ingress run.start middleware did not produce coordinator for worker target");
+    // coordinator presence for worker targets.
+    const target = resolveTarget(event);
+    if (targetRequiresCoordinator(target) && ctx.coordinator === undefined) {
+      throw new Error(`coordinator is required for ${target.kind} target`);
     }
 
-    return {
-      event: state.parsedEvent,
-      coordinator: state.coordinator,
-      mode: state.mode,
-      target,
-    };
-  }
+    // authority: unconditional on every routed pre-run, fanned to the observer.
+    const decision = evaluateIngressAuthority(event);
+    notifyDecision(ctx.onDecision, decision);
+    if (PolicyDecision.isBlocking(decision)) {
+      throw new Error(PolicyDecision.reason(decision, "ingress routed pre-run policy aborted"));
+    }
 
-  function routedPreRunPolicies(state: PreRunState): IngressPolicyGate.IngressPolicy[] {
-    return [
-      createSchemaValidation(state),
-      createCoordinatorPresence(state),
-      createAuthorityCheck(state),
-      createModeDispatch(state),
-    ];
-  }
+    // mode dispatch.
+    if (event.mode !== "direct") {
+      const unknownMode: unknown = event.mode;
+      throw new Error(`unknown ingress mode: ${unknownMode}`);
+    }
 
-  function createSchemaValidation(state: PreRunState): IngressPolicyGate.IngressPolicy {
-    return {
-      name: "ingress:schema-validation",
-      gate: "pre-run",
-      priority: 0,
-      failPolicy: "fail-closed",
-      fn: () => {
-        const parsed = Ingress.DirectEventSchema.safeParse(state.input);
-        if (!parsed.success) {
-          state.schemaError = parsed.error;
-          return abortDecision("ingress.schema", "invalid ingress event");
-        }
-
-        state.parsedEvent = parsed.data;
-        return allowDecision("ingress.schema", "ingress event schema valid");
-      },
-    };
-  }
-
-  function createCoordinatorPresence(state: PreRunState): IngressPolicyGate.IngressPolicy {
-    return {
-      name: "ingress:coordinator-presence",
-      gate: "pre-run",
-      priority: 10,
-      failPolicy: "fail-closed",
-      fn: () => {
-        const event = requireParsedEvent(state);
-        const target = resolveTarget(event);
-        state.target = target;
-
-        if (!targetRequiresCoordinator(target)) {
-          return allowDecision(
-            "ingress.coordinator",
-            "coordinator not required for resident target",
-          );
-        }
-        if (state.coordinator === undefined) {
-          return abortDecision(
-            "ingress.coordinator",
-            `coordinator is required for ${target.kind} target`,
-          );
-        }
-        return allowDecision(
-          "ingress.coordinator",
-          `coordinator available for ${target.kind} target`,
-        );
-      },
-    };
-  }
-
-  function createAuthorityCheck(state: PreRunState): IngressPolicyGate.IngressPolicy {
-    return {
-      name: "ingress:authority",
-      gate: "pre-run",
-      priority: 20,
-      failPolicy: "fail-closed",
-      fn: () => {
-        const event = requireParsedEvent(state);
-
-        return evaluateIngressAuthority(event);
-      },
-    };
-  }
-
-  function createModeDispatch(state: PreRunState): IngressPolicyGate.IngressPolicy {
-    return {
-      name: "ingress:mode-dispatch",
-      gate: "pre-run",
-      priority: 35,
-      failPolicy: "fail-closed",
-      fn: () => {
-        const event = requireParsedEvent(state);
-        if (event.mode !== "direct") {
-          const unknownMode: unknown = event.mode;
-          return abortDecision("ingress.mode", `unknown ingress mode: ${unknownMode}`);
-        }
-
-        state.mode = event.mode;
-        return allowDecision("ingress.mode", `dispatch mode ${event.mode}`);
-      },
-    };
+    return { event, coordinator: ctx.coordinator, mode: event.mode, target };
   }
 }
