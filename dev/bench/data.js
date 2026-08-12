@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786568559020,
+  "lastUpdate": 1786568985547,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43873,6 +43873,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 506684,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0437b4169f56db44d80a8c00572a77fd083e4208",
+          "message": "refactor(protocol): #497 disposition-ledger completion receipt (#602)\n\nReconcile the #497 dead-surface disposition ledger to its final delivered\nstate. Mark 27 delivered kill/unexport rows status:shipped with their PR:\n#598 (10), #599 (11), #601 (6). Correct three delete rows after read-\nverification: Run.Snapshot -> already-removed (phantom, no such symbol);\nPolicyDecision.pending -> preserve (live require_approval ctor); and\nArtifact.Meta.version -> preserve (live cross-package field). No census\nrows added; total stays 124 (delete 44->41, preserve 48->50,\nalready-removed 2->3). Internal unexports behind public aliases (#600\nPolicyPermission.*, #601 work-item schemas VerificationGate) are recorded\nin the reconciliation note, not as census rows.\n\nAdversarial verification of this receipt before merge refuted one delete\nclaim: #598 removed the public Communication.Envelope namespace member but\nleft its backing src/communication/envelope.ts alive (test-only consumer +\nnaming-grandfathered). PR #603 completed that delete; this receipt corrects\nthe Communication.Envelope row reason to the two-step delivery, empties its\nnow-stale test pin, and records #603 in the reconciliation note. Row stays\ndelete/shipped/#598; tally unchanged. dead-surface.test green (11 pass).\n\nRefs #497, #459.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T21:08:33Z",
+          "tree_id": "d3e7014b7f79b9733acf4424f8b9d45eb347d162",
+          "url": "https://github.com/INONONO66/openomni/commit/0437b4169f56db44d80a8c00572a77fd083e4208"
+        },
+        "date": 1786568984163,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6234,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16188,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8517,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 868,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1549,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10912,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512238,
             "unit": "ns/op"
           }
         ]
