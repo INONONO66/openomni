@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786374049487,
+  "lastUpdate": 1786505152130,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -42137,6 +42137,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 510247,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0df7c7cc079aaecbcdf729ec195d70c4156f6402",
+          "message": "fix(openomni,session): re-project terminal effect on crash/replay (#589)\n\nThe effect terminal fact (EffectStore.confirm/fail, tx A) and its WorkItem\ncompletion projection (WorkItemStore.recordEffect, the later tx B) commit in\nseparate transactions. A crash between them left the effect:<id> stream\nterminal but completionFacts.effects stuck on an outcome-less record, so the\nadmission fold blocked on effect_outcome_unresolved forever with no repair\npath: outstandingIntents() excludes terminal streams, and the terminal-replay\nearly return skipped the projection.\n\nClose #538 with two idempotent re-projection seams that only project\nALREADY-RECORDED terminal outcomes (never terminalize or re-execute):\n- (b) EffectService.run's terminal-replay branch re-projects the recorded\n  outcome onto the WorkItem before returning.\n- (a) EffectReconciler.reconcile() adds a boot-sweep pass over the new\n  EffectStore.terminalIntents() (complement of outstandingIntents()) that\n  re-links any terminal intent whose projection is still unresolved, reported\n  as ReconcileSummary.reprojected.\n\nRemoval-red tests cover both seams (unit + p2 conformance row).\n\nCloses #538\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T03:24:31Z",
+          "tree_id": "0f50505d12cdf9356daf11b3f5f31063ceb509ad",
+          "url": "https://github.com/INONONO66/openomni/commit/0df7c7cc079aaecbcdf729ec195d70c4156f6402"
+        },
+        "date": 1786505151762,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8147,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 861,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1461,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1584,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 719,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 50932,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2357,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101561,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513018,
             "unit": "ns/op"
           }
         ]
