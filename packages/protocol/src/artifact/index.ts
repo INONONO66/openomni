@@ -10,11 +10,4 @@ export namespace Artifact {
     createdAt: z.string(),
   });
   export type Meta = z.infer<typeof Meta>;
-
-  export const Part = z.object({
-    type: z.literal("artifact"),
-    artifactId: z.string(),
-    meta: Meta,
-  });
-  export type Part = z.infer<typeof Part>;
 }

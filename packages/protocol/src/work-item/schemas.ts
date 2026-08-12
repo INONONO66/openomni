@@ -140,7 +140,7 @@ export type ExecutorKind = z.infer<typeof ExecutorKind>;
 export const Outcome = z.enum(["adopted", "corrected", "redone", "ignored"]);
 export type Outcome = z.infer<typeof Outcome>;
 
-export const VerificationGate = z.object({
+const VerificationGate = z.object({
   automated: z
     .object({
       passed: z.boolean(),
@@ -174,7 +174,6 @@ export const VerificationGate = z.object({
     })
     .optional(),
 });
-export type VerificationGate = z.infer<typeof VerificationGate>;
 
 const InfoShape = z.object({
   hash: z.string(),

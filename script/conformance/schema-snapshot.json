@@ -181,7 +181,6 @@
     "title",
     "version"
   ],
-  "Artifact.Part": ["artifactId", "meta", "type"],
   "CronJob.Info": [
     "agentName",
     "createdAt",
@@ -614,12 +613,6 @@
   "Policy.PolicyPlan": ["labels", "policies", "registryVersion"],
   "Policy.PolicyPoint": ["allowedEffects", "defaultFailPolicy", "point"],
   "Policy.Scope": ["agentType"],
-  "Run.Budget": [
-    "maxToolCalls",
-    "maxToolRuntimeMs",
-    "maxTurns",
-    "maxWallTimeMs"
-  ],
   "Run.Outcome#0": ["type"],
   "Run.Outcome#1": ["type"],
   "Run.Outcome#2": ["type"],
@@ -697,14 +690,6 @@
   "Tool.State#2": ["input", "metadata", "output", "status", "time", "title"],
   "Tool.State#3": ["error", "input", "status", "time"],
   "ToolSelection.Selection": ["all", "allow", "categories", "deny"],
-  "TraceContext.Schema": [
-    "agentName",
-    "parentSpanId",
-    "runId",
-    "sessionId",
-    "taskId",
-    "traceId"
-  ],
   "WorkerBootstrap.Bootstrap": [
     "agents",
     "configEpoch",
@@ -731,20 +716,6 @@
     "riskTier",
     "source",
     "spec"
-  ],
-  "WorkerRun.Info": [
-    "assignedStepId",
-    "endedAt",
-    "executorKind",
-    "lastMessageId",
-    "parentRunId",
-    "prompt",
-    "resumeCount",
-    "runId",
-    "sessionId",
-    "startedAt",
-    "status",
-    "title"
   ],
   "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
   "WorkItem.Claim": [
@@ -960,6 +931,5 @@
     "detail",
     "id",
     "verifierRef"
-  ],
-  "WorkItem.VerificationGate": ["acceptance", "automated", "review"]
+  ]
 }

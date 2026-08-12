@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export namespace TraceContext {
-  export const Schema = z.object({
+  const Schema = z.object({
     traceId: z.string(),
     sessionId: z.string().optional(),
     runId: z.string().optional(),
