@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786568985547,
+  "lastUpdate": 1786573303735,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43997,6 +43997,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512238,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2dedeb33fd59affa8167656f91b9775d4d478f2a",
+          "message": "feat(openomni): flat-event projection spine + verdict mapper (#493) (#604)\n\n#493 I1 — the deterministic flat-event PROJECTION SPINE:\n\n- FlatEvent zod schema: exactly 30 fixed-order columns, strict.\n- mapVerdict: PURE verifier-status -> ok|warn|error, throw-on-unknown\n  (mirrors projectCompletionOrigin fail-loud discipline). Never an LLM.\n- foldToFlatEvents: pure map over an assembled ProjectionInput. Imposes\n  the global order (timeCreated,streamId,seq) over immutable recorded\n  rows — ledger_event has no global ordinal column (migration 0013);\n  fails loud on a non-total order.\n- Authority source is the Attempt ledger fact + transcript_fact, never\n  bus_event. Fingerprints emit the SCALAR .digest.\n- loop_key = canonicalDigest(work_item_id, content digest): identical\n  work content shares a loop; different content starts a new one.\n- The 5 later-increment columns (prompt_hash/observation_hash I3;\n  cache_key/replay_key/nondeterminism_manifest_hash I2) are carried\n  through from input, never faked.\n\nPlaced in packages/openomni/src/projection (openomni may import\nprotocol/session; no protocol widening, no snapshot churn).\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T22:20:33Z",
+          "tree_id": "29e51d089c00397d9f38f05f080c5080b2d02583",
+          "url": "https://github.com/INONONO66/openomni/commit/2dedeb33fd59affa8167656f91b9775d4d478f2a"
+        },
+        "date": 1786573303363,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5886,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 835,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 729,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1381,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 741,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47021,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2403,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11371,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101140,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512849,
             "unit": "ns/op"
           }
         ]
