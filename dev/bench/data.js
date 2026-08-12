@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786505152130,
+  "lastUpdate": 1786505851011,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -42261,6 +42261,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513018,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a7c22b86356ccd9ace04afa943ea3a8ab0bfd76",
+          "message": "fix(session): fail-closed reads for pending_interaction/ask (#590)\n\nThe pending_interaction and pending_ask sqlite adapters read rows through\nthe shared `parseSqliteJsonDataRow` helper, a blind `JSON.parse(row.data)\nas T` with no validation. A pending_interaction row feeds\nevaluatePendingInteractionScope, which returns {allowed:true} for\nWorkerComplete/ActorReply — so a corrupt/tampered row's status/expiry\ninvariants could be bypassed (fail-OPEN). pending_ask is the same class,\ndecision-adjacent to the dispatch verdict. This is exactly the fail-open\nclass #584 fixed for worker_grant/message/part.\n\nThread a required `decode` function through the shared read helpers so the\nblind cast is gone from the choke point, and pass zod-validating decoders\n(`Communication.Pending{Interaction,Ask}.Record.parse`) from both\nadapters. A row that fails its schema is now a loud typed defect on READ,\nnever a silently-trusted value — matching the wait/blacklist precedent and\n#584. The wait adapter's `list` passes its existing Wait.Record decoder\nthrough the same threaded path.\n\nRed-first: a corrupted pending_interaction row now rejects on read\n(PendingInteractionStore.get / list throw) before the {allowed:true}\nverdict, and a corrupted pending_ask row rejects on read.\n\nAddresses #585 (MAJOR read-path). The MINOR upcast-on-read for\nWorkerGrant/Message.Part is fail-closed-correct now and stays deferred to\nthe ledger-rename (#502) / archive-upcast (#493) waves.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T03:36:12Z",
+          "tree_id": "ae108d82eaa1cc8b82be70e8cd0ac5c8c59fa9cd",
+          "url": "https://github.com/INONONO66/openomni/commit/4a7c22b86356ccd9ace04afa943ea3a8ab0bfd76"
+        },
+        "date": 1786505850203,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6180,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2609,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2964,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 802,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1386,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43339,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2348,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11113,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100691,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 508304,
             "unit": "ns/op"
           }
         ]
