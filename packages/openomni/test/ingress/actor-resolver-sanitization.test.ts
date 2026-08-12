@@ -2,9 +2,10 @@ import { describe, expect, it } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import {
-  captureActorPolicy,
+  flushBusObservers,
   getIngressEngine,
   makeEvent,
+  observeResolvedActor,
   registerOwnerEndpoint,
   setupIngressActorResolverTest,
   testState,
@@ -16,24 +17,28 @@ describe("Ingress actor resolver sanitization", () => {
   it("keeps only legacy id and role for unregistered endpoint actor metadata", async () => {
     // Given
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-unknown-user", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
 
     // When
-    await engine.ingest(
-      makeEvent("unknown-user", {
-        role: "user",
-        id: "unknown-user",
-        kind: "human",
-        sessionId: "sess-spoof",
-        workerId: "worker-spoof",
-        futureTrustField: true,
-      }),
-    );
+    try {
+      await engine.ingest(
+        makeEvent("unknown-user", {
+          role: "user",
+          id: "unknown-user",
+          kind: "human",
+          sessionId: "sess-spoof",
+          workerId: "worker-spoof",
+          futureTrustField: true,
+        }),
+      );
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toEqual({
@@ -46,28 +51,32 @@ describe("Ingress actor resolver sanitization", () => {
   it("strips spoofed canonical actor fields from unregistered endpoints", async () => {
     // Given
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-unknown-user", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
 
     // When
-    await engine.ingest(
-      makeEvent("unknown-user", {
-        role: "user",
-        id: "unknown-user",
-        actorId: "act_spoofed",
-        kind: "system",
-        type: "system",
-        trustTier: "observer",
-        relationship: "owner",
-        endpointId: "ep_spoofed",
-        trusted: true,
-        isTrustedManager: true,
-      }),
-    );
+    try {
+      await engine.ingest(
+        makeEvent("unknown-user", {
+          role: "user",
+          id: "unknown-user",
+          actorId: "act_spoofed",
+          kind: "system",
+          type: "system",
+          trustTier: "observer",
+          relationship: "owner",
+          endpointId: "ep_spoofed",
+          trusted: true,
+          isTrustedManager: true,
+        }),
+      );
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toEqual({
@@ -81,11 +90,10 @@ describe("Ingress actor resolver sanitization", () => {
     // Given
     registerOwnerEndpoint("guild");
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
     const event = makeEvent("user-1", {
       role: "user",
@@ -100,7 +108,12 @@ describe("Ingress actor resolver sanitization", () => {
     const { userId: _userId, ...withoutUserId } = event;
 
     // When
-    await engine.ingest(withoutUserId);
+    try {
+      await engine.ingest(withoutUserId);
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
@@ -110,15 +123,19 @@ describe("Ingress actor resolver sanitization", () => {
     // Given
     registerOwnerEndpoint("guild");
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
 
     // When
-    await engine.ingest({ ...makeEvent("user-1"), surface: "telegram" });
+    try {
+      await engine.ingest({ ...makeEvent("user-1"), surface: "telegram" });
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
@@ -129,26 +146,30 @@ describe("Ingress actor resolver sanitization", () => {
     const { actorRegistry: _actorRegistry, ...legacyAdapter } = Storage.get();
     Storage.configure(legacyAdapter);
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
 
     // When
-    await engine.ingest(
-      makeEvent("user-1", {
-        role: "user",
-        id: "user-1",
-        actorId: "act_spoofed",
-        kind: "system",
-        type: "system",
-        trustTier: "observer",
-        trusted: true,
-        isTrustedManager: true,
-      }),
-    );
+    try {
+      await engine.ingest(
+        makeEvent("user-1", {
+          role: "user",
+          id: "user-1",
+          actorId: "act_spoofed",
+          kind: "system",
+          type: "system",
+          trustTier: "observer",
+          trusted: true,
+          isTrustedManager: true,
+        }),
+      );
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });

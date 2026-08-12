@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { PolicyDecision, type Ingress } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { createIngressEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
 
 // #549 completion proof: two engines in one process share no state. Every
 // collaborator is construction-injected, so nothing an engine is configured
-// with (policies, observers, runtimes) can leak into a sibling instance.
+// with (observers, runtimes) can leak into a sibling instance.
 
 function directEvent(id: string): Ingress.DirectEvent {
   return {
@@ -44,39 +44,6 @@ beforeEach(() => {
 });
 
 describe("ingress engine instance isolation", () => {
-  it("keeps ingress policies of one engine from governing another", async () => {
-    const runsA: string[] = [];
-    const runsB: string[] = [];
-    const engineA = createIngressEngine({
-      residentRuntime: recordingResidentRuntime(runsA, "engine-a"),
-      policies: [
-        {
-          name: "test:deny-engine-a",
-          gate: "inbound",
-          priority: 0,
-          fn: () =>
-            PolicyDecision.deny({
-              policyId: "test.deny-engine-a",
-              reasonCodes: ["engine A denies inbound"],
-              effects: [{ type: "run.abort", reason: "engine A denies inbound" }],
-            }),
-        },
-      ],
-    });
-    const engineB = createIngressEngine({
-      residentRuntime: recordingResidentRuntime(runsB, "engine-b"),
-    });
-
-    await expect(engineA.ingest(directEvent("evt-isolation-a"))).rejects.toThrow(
-      "engine A denies inbound",
-    );
-    const accepted = await engineB.ingest(directEvent("evt-isolation-b"));
-
-    expect(accepted.result.output).toBe("engine-b");
-    expect(runsA).toHaveLength(0);
-    expect(runsB).toEqual(["engine-b"]);
-  });
-
   it("keeps runtimes and decision observers per instance", async () => {
     const runsA: string[] = [];
     const runsB: string[] = [];

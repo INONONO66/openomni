@@ -1,34 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { PolicyDecision, type Ingress } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { createIngressEngine } from "../../../src/ingress/engine";
-import type { IngressPolicyGate } from "../../../src/ingress/policy-gate";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
-function inboundDenyAll(reason: string): IngressPolicyGate.IngressPolicy {
-  return {
-    name: "conformance:deny-all:inbound.receive",
-    gate: "inbound",
-    priority: 0,
-    failPolicy: "fail-closed",
-    fn: () =>
-      PolicyDecision.deny({
-        policyId: "conformance.inbound.receive.deny-all",
-        reasonCodes: [reason],
-        effects: [{ type: "run.abort", reason }],
-      }),
-  };
-}
-
-function inboundEvent(): Ingress.InboundEvent {
+// An admitted event whose actor is not authorized to create top-level inbound
+// work. The channel grant is a trusted_channel with no defaultTier, so routing
+// does not materialize a trust tier for the actor — it reaches the authority
+// check as an un-elevated principal.
+function unauthorizedInboundEvent(): Ingress.InboundEvent {
   return {
     id: "event-no-bypass",
-    surface: "tui",
+    surface: "internal",
     workspace: "/repo",
     mode: "direct",
-    payload: "hello",
-    meta: { actor: { role: "user" } },
+    payload: "spawn top-level work",
+    meta: { actor: { role: "sub_persona", trusted: false } },
     agent: { model },
   };
 }
@@ -47,10 +35,9 @@ beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
   ChannelGrantStore.put({
-    id: "grant-tui",
-    surface: "tui",
+    id: "grant-internal",
+    surface: "internal",
     kind: "trusted_channel",
-    defaultTier: "owner",
     createdBy: "act_owner",
   });
 });
@@ -61,7 +48,7 @@ afterEach(() => {
 });
 
 describe("policy no-bypass conformance — openomni governed paths", () => {
-  it("blocks ingress receive before dispatching to the coordinator", async () => {
+  it("blocks unauthorized ingress before dispatching to the coordinator", async () => {
     let dispatchCalled = false;
     const engine = createIngressEngine({
       coordinator: {
@@ -76,13 +63,14 @@ describe("policy no-bypass conformance — openomni governed paths", () => {
           };
         },
       },
-      policies: [inboundDenyAll("ingress receive denied by conformance policy")],
     });
 
-    const error = await catchError(engine.ingest(inboundEvent()));
+    const error = await catchError(engine.ingest(unauthorizedInboundEvent()));
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("ingress receive denied by conformance policy");
+    expect((error as Error).message).toContain(
+      "actor is not authorized to create top-level inbound work",
+    );
     expect(dispatchCalled).toBe(false);
   });
 });

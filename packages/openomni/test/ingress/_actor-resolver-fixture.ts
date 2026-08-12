@@ -1,11 +1,7 @@
 import { afterAll, beforeAll, beforeEach, mock } from "bun:test";
-import {
-  Ingress as IngressNamespace,
-  PolicyDecision as ProtocolPolicyDecision,
-  type Ingress,
-} from "@openomni/protocol";
+import { Ingress as IngressNamespace, Operational, type Ingress } from "@openomni/protocol";
 import { ActorRegistry, Bus, ChannelGrantStore, Storage } from "@openomni/session";
-import type { IngressPolicyGate } from "../../src/ingress/policy-gate";
+import { z } from "zod";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -69,9 +65,9 @@ export function setupIngressActorResolverTest(): void {
 
 /**
  * Builds a fresh engine instance for the current test with the shared mock
- * resident runtime; inbound policies are construction-injected (#549).
+ * resident runtime.
  */
-export function getIngressEngine(...policies: IngressPolicyGate.IngressPolicy[]): IngressEngine {
+export function getIngressEngine(): IngressEngine {
   return createIngressEngine({
     residentRuntime: ResidentRuntime.create({
       runAgent: async (_config, input) => {
@@ -79,7 +75,6 @@ export function getIngressEngine(...policies: IngressPolicyGate.IngressPolicy[])
         return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
       },
     }),
-    policies,
   });
 }
 
@@ -100,22 +95,39 @@ export function makeEvent(
   };
 }
 
-export function captureActorPolicy(
-  onActor: (actor: Ingress.Actor | undefined) => void,
-): IngressPolicyGate.IngressPolicy {
-  return {
-    name: "test:capture-actor",
-    gate: "inbound",
-    priority: 0,
-    fn: (ctx) => {
-      const actor = ctx.gate === "inbound" ? ctx.actor : undefined;
-      onActor(actor === undefined ? undefined : IngressNamespace.ActorSchema.parse(actor));
-      return ProtocolPolicyDecision.allow({
-        policyId: "test.capture-actor",
-        reasonCodes: ["captured"],
-      });
-    },
-  };
+const AuditActorSchema = z.object({
+  audit: z.object({
+    payload: z.object({
+      eventId: z.string(),
+      actor: z.unknown().optional(),
+    }),
+  }),
+});
+
+/**
+ * Observes the resolved actor as projected by the ingress event projector:
+ * the `ingress.inbound.project` audit fact carries `meta.actor` after routing
+ * treatment (channel default tier, canonical identity). This replaces the
+ * retired inbound-gate capture probe — routed pre-run authority is the only
+ * ingress policy point now, so actor resolution is asserted at the projection
+ * seam the resolved actor lands on. Fires only for the project fact (the sole
+ * inbound audit payload that carries an actor). Bus delivery is a microtask,
+ * so callers must `await flushBusObservers()` before asserting.
+ */
+export function observeResolvedActor(
+  eventId: string,
+  onActor: (actor: Ingress.Actor) => void,
+): () => void {
+  return Bus.observe((event, data) => {
+    if (event.name !== Operational.Info.name) return;
+    const parsed = Operational.Info.schema.safeParse(data);
+    if (!parsed.success) return;
+    const audit = AuditActorSchema.safeParse(parsed.data.context);
+    if (!audit.success) return;
+    if (audit.data.audit.payload.eventId !== eventId) return;
+    if (audit.data.audit.payload.actor === undefined) return;
+    onActor(IngressNamespace.ActorSchema.parse(audit.data.audit.payload.actor));
+  });
 }
 
 export function registerOwnerEndpoint(workspace?: string): void {
