@@ -279,3 +279,18 @@ test("rejects enumerable __proto__ effect capability keys", () => {
     }).code,
   ).toBe("unknown_point_id");
 });
+
+test("rejects the #578-retired ingress points as unknown", () => {
+  for (const retired of ["session.inbound.pre", "session.writeback.pre"]) {
+    const error = registrationErrorFor({
+      kind: "point",
+      name: "retired-578",
+      pointIds: [retired],
+      effectCapabilities: { [retired]: [] },
+      priority: 0,
+      fn: allow,
+    });
+    expect(error.code).toBe("unknown_point_id");
+    expect(error.pointId).toBe(retired);
+  }
+});
