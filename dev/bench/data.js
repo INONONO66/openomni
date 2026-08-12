@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786560550732,
+  "lastUpdate": 1786561708161,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43005,6 +43005,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 527262,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a906f290aa461bdae797907c0af2f4018284bd2",
+          "message": "refactor(protocol): drop dead ingress/message/actor members (#497) (#596)\n\nRemoves proven-dead protocol surface (#497), fail-closed since none were\never produced/persisted:\n\nDeleted:\n- Message.RetryPart (type:\"retry\" schema + type + Part union member); the\n  two exhaustive case \"retry\": arms in transcript/fold.ts; the\n  Message.RetryPart describe block in message.test.ts; the now-orphaned\n  APIError import in message/index.ts.\n- Ingress.ActorMetadata, Ingress.EventMetadata (zero-consumer type aliases).\n- Ingress.ExternalInboundEventSchema (= DirectEventSchema alias) and its\n  paired type Ingress.ExternalInboundEvent; the one test consumer repointed\n  to the identical DirectEventSchema.\n- Ingress.ActivationMetadataSchema (exported alias of the module-local\n  ActivationMetadataSchemaImpl, which is retained); ActivationMetadata type\n  repointed to the Impl.\n\nUnexported:\n- Actor.Kind (const; type export kept, no external value-consumer).\n- Ingress.DirectResult (type; intra-namespace use only).\n\nPreserved (fresh grep found live consumers, reported not cut):\n- Actor.BlacklistKind (type consumed by openomni resolve-route.ts).\n- Ingress.InboundEventSchema (value-parsed by cross-package + protocol\n  tests; sole mode-discriminating validator).\n- Ingress.InternalEventSchema + InternalEvent type (dedicated protocol test\n  block parses it; no repoint target).\n\nschema-snapshot.json hand-edited (no --update): removed Message.RetryPart,\nIngress.ExternalInboundEventSchema, Ingress.ActivationMetadataSchema; and\nreindexed the Part union (Part#5 ToolPart -> Part#4, dropped Part#5).\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T19:07:02Z",
+          "tree_id": "22e113394aff34f3276c1c6aa044677eca0213d3",
+          "url": "https://github.com/INONONO66/openomni/commit/5a906f290aa461bdae797907c0af2f4018284bd2"
+        },
+        "date": 1786561707178,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5871,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2820,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15304,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8005,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1336,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46907,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2348,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101042,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512512,
             "unit": "ns/op"
           }
         ]
