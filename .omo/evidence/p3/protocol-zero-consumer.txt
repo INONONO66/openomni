@@ -1,0 +1,145 @@
+# #497 protocol dead-surface — zero-production-consumer evidence
+# baseline commit 87d4fc8da6ab57212a2aea1ea187d8d56706b210
+# generated 2026-08-13 from repo root (regenerated after #596 reconciliation)
+# method: word-boundary regex over the QUALIFIED symbol name
+#   rg -n '\b<Namespace>\.<Symbol>\b' packages apps --type ts \
+#      -g '!**/*.test.ts' -g '!**/*.spec.ts' -g '!**/test/**' -g '!**/tests/**' -g '!**/dist/**'
+# The qualified name matches cross-namespace CONSUMERS, not the intra-
+# namespace declaration in packages/protocol/src. Word boundaries keep
+# e.g. Policy.Label from matching the distinct Policy.LabelEntry symbol.
+# CAVEAT (recorded in reconciliation): this scan is blind to a symbol referenced
+# BARE inside its own namespace by a kept interface/union (e.g. the 5 adapter
+# Surface members) — those were reclassified to preserve and are NOT listed here.
+# Honest dump: every hit is shown verbatim; empties are the zero-consumer proof.
+
+## Message.RetryPart [delete]
+(no production consumers)
+
+## Ingress.ActorMetadata [delete]
+(no production consumers)
+
+## Ingress.EventMetadata [delete]
+(no production consumers)
+
+## Ingress.ExternalInboundEventSchema [delete]
+(no production consumers)
+
+## Ingress.ExternalInboundEvent (inferred/paired type) [delete]
+(no production consumers)
+
+## Ingress.ActivationMetadataSchema [delete]
+(no production consumers)
+
+## Dispatch.TargetKind (standalone re-export) [delete]
+(no production consumers)
+
+## Run.Budget [delete]
+(no production consumers)
+
+## Run.Snapshot [delete]
+(no production consumers)
+
+## WorkerRun.Info (incl lastMessageId field) [delete]
+(no production consumers)
+
+## Artifact.Part [delete]
+(no production consumers)
+
+## Artifact.Meta.version (field) [delete]
+(no production consumers)
+
+## Policy.Label [delete]
+(no production consumers)
+
+## Policy.PermissionDecision [delete]
+(no production consumers)
+
+## PolicyDecision.pending [delete]
+(no production consumers)
+
+## RuntimeResource.ActorType [delete]
+(no production consumers)
+
+## RuntimeResource.SessionType [delete]
+(no production consumers)
+
+## RuntimeResource.ActorDescriptor [delete]
+(no production consumers)
+
+## RuntimeResource.SessionDescriptor [delete]
+(no production consumers)
+
+## RuntimeResource.createWorkerDescriptor [delete]
+(no production consumers)
+
+## RuntimeResource.createCredentialDescriptor [delete]
+(no production consumers)
+
+## RuntimeResource.createSessionDescriptor [delete]
+(no production consumers)
+
+## RuntimeResource.schemaVersion [delete]
+(no production consumers)
+
+## Extension.LifecycleState [delete]
+(no production consumers)
+
+## Extension.SurfaceBinding [delete]
+(no production consumers)
+
+## Extension.Contributes [delete]
+(no production consumers)
+
+## Extension.Manifest [delete]
+(no production consumers)
+
+## Extension.InstallRequest [delete]
+(no production consumers)
+
+## Extension.Events.Proposed [delete]
+(no production consumers)
+
+## Extension.Events.Approved [delete]
+(no production consumers)
+
+## Extension.Events.Staged [delete]
+(no production consumers)
+
+## Extension.Events.Installed [delete]
+(no production consumers)
+
+## Extension.Events.Enabled [delete]
+(no production consumers)
+
+## Extension.Events.Disabled [delete]
+(no production consumers)
+
+## Extension.Events.RolledBack [delete]
+(no production consumers)
+
+## Extension.Events.Uninstalled [delete]
+(no production consumers)
+
+## Extension.Events.Failed [delete]
+(no production consumers)
+
+## Skill.Layer [delete]
+(no production consumers)
+
+## Skill.Scope [delete]
+(no production consumers)
+
+## Skill.Definition [delete]
+(no production consumers)
+
+## Skill.RegistryEntry [delete]
+(no production consumers)
+
+## McpServerConfig (top-level value const) [delete] (VALUE-const use only; the bare type name is the preserved type-alias row)
+(no production consumers)
+
+## Communication.Envelope [delete]
+(no production consumers)
+
+## Model.isRef [delete]
+(no production consumers)
