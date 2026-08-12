@@ -52,9 +52,7 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
       return row ? decodeWaitRow(row) : undefined;
     },
     list(status) {
-      return listSqliteJsonDataByStatus<unknown>(db, "wait", status).map((data) =>
-        Wait.Record.parse(data),
-      );
+      return listSqliteJsonDataByStatus<Wait.Record>(db, "wait", status, decodeWaitData);
     },
     findByCorrelation(query) {
       const conditions: string[] = [];
@@ -140,8 +138,12 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
   };
 }
 
+function decodeWaitData(data: string): Wait.Record {
+  return Wait.Record.parse(JSON.parse(data));
+}
+
 function decodeWaitRow(row: SqliteJsonDataRow): Wait.Record {
-  return Wait.Record.parse(JSON.parse(row.data));
+  return decodeWaitData(row.data);
 }
 
 function followUpUntil(record: Wait.Record): number | null {
