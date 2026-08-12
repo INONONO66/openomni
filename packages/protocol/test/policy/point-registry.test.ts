@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { Policy, RuntimeResource } from "../../src/policy/index.js";
 
 const expectedPointIds = [
-  "session.inbound.pre",
   "dispatch.action.pre",
   "run.lifecycle.pre",
   "run.turn.pre",
@@ -19,7 +18,6 @@ const expectedPointIds = [
   "run.turn.post",
   "run.completion.pre",
   "work.complete.pre",
-  "session.writeback.pre",
   "run.lifecycle.post",
   "run.error.error",
 ] as const;
@@ -160,7 +158,6 @@ describe("PolicyPoint registry", () => {
     expect(Object.keys(aliases).sort()).toEqual(Object.values(Policy.Timing).sort());
     expect(aliases[Policy.Timing.COMPLETION_PREPARE]).toEqual(["run.completion.pre"]);
     expect(Object.values(aliases).flat()).not.toContain("work.complete.pre");
-    expect(aliases[Policy.Timing.INBOUND_RECEIVE]).toEqual(["session.inbound.pre"]);
     expect(aliases[Policy.Timing.DISPATCH_AUTHORIZE]).toEqual(["dispatch.action.pre"]);
     expect(aliases[Policy.Timing.INVOKE_PREPARE]).toEqual([
       "tool.native.pre",

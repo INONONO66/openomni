@@ -464,9 +464,8 @@ describe("Policy schemas", () => {
   });
 
   describe("Policy.Timing", () => {
-    it("parses all 15 valid timing values", () => {
+    it("parses all 13 valid timing values", () => {
       const timingValues = [
-        Policy.Timing.INBOUND_RECEIVE,
         Policy.Timing.DISPATCH_AUTHORIZE,
         Policy.Timing.RUN_START,
         Policy.Timing.TURN_START,
@@ -478,13 +477,11 @@ describe("Policy schemas", () => {
         Policy.Timing.INVOKE_RESULT,
         Policy.Timing.TURN_FINISH,
         Policy.Timing.COMPLETION_PREPARE,
-        Policy.Timing.WRITEBACK_COMMIT,
         Policy.Timing.RUN_FINISH,
         Policy.Timing.ERROR,
       ];
 
       expect(timingValues).toEqual([
-        "inbound.receive",
         "dispatch.authorize",
         "run.start",
         "turn.start",
@@ -496,15 +493,14 @@ describe("Policy schemas", () => {
         "invoke.result",
         "turn.finish",
         "completion.prepare",
-        "writeback.commit",
         "run.finish",
         "error",
       ]);
     });
 
-    it("has all 15 timing values as constants", () => {
+    it("has all 13 timing values as constants", () => {
       const timingKeys = Object.keys(Policy.Timing);
-      expect(timingKeys.length).toBe(15);
+      expect(timingKeys.length).toBe(13);
     });
 
     it("rejects invalid timing value", () => {

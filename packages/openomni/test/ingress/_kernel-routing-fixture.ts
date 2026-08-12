@@ -1,4 +1,4 @@
-import type { Ingress } from "@openomni/protocol";
+import { Ingress as IngressNamespace, Operational, type Ingress } from "@openomni/protocol";
 import {
   ActorRegistry,
   Bus,
@@ -7,6 +7,7 @@ import {
   Storage,
   SurfaceKey,
 } from "@openomni/session";
+import { z } from "zod";
 import {
   createIngressEngine,
   type IngressEngine,
@@ -104,4 +105,47 @@ export function routingDecisions(): {
     if (event.name === "ingress.routing.decision") decisions.push(payload);
   });
   return { decisions, unsubscribe };
+}
+
+const RoutedFactsSchema = z.object({
+  audit: z.object({
+    payload: z.object({
+      eventId: z.string(),
+      actor: z.unknown().optional(),
+      inboundTreatment: z.unknown().optional(),
+    }),
+  }),
+});
+
+/**
+ * Observes the routed actor and inbound treatment as projected by the ingress
+ * event projector: the `ingress.inbound.project` audit fact carries both
+ * `meta.actor` (after channel default-tier materialization and canonical
+ * identity resolution) and `inboundTreatment`. This replaces the retired
+ * inbound-gate capture probe — routed pre-run authority is the only ingress
+ * policy point now, so routed facts are asserted at the projection seam they
+ * land on. The project fact is the sole inbound audit payload carrying an
+ * actor, so gating on actor presence selects it. Bus delivery is a microtask,
+ * so callers must `await flushBusObservers()` before asserting.
+ */
+export function observeRoutedFacts(
+  eventId: string,
+  captured: { actor?: unknown; treatment?: unknown },
+): () => void {
+  return Bus.observe((event, data) => {
+    if (event.name !== Operational.Info.name) return;
+    const parsed = Operational.Info.schema.safeParse(data);
+    if (!parsed.success) return;
+    const audit = RoutedFactsSchema.safeParse(parsed.data.context);
+    if (!audit.success) return;
+    const payload = audit.data.audit.payload;
+    if (payload.eventId !== eventId) return;
+    if (payload.actor === undefined) return;
+    captured.actor = IngressNamespace.ActorSchema.parse(payload.actor);
+    captured.treatment = payload.inboundTreatment;
+  });
+}
+
+export async function flushBusObservers(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }

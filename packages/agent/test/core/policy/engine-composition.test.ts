@@ -211,9 +211,9 @@ describe("deny-wins composition", () => {
   it("deny-wins across all registered policy points", async () => {
     // Canonical successors of the legacy Policy.Timing values (invoke.prepare /
     // invoke.result exercised through their tool.native representatives),
-    // each dispatched with the point contract's required inputs.
-    // session.inbound.pre / session.writeback.pre are retired from the grid
-    // (#530 points disposition) and pinned in packages/policy retired-points.
+    // each dispatched with the point contract's required inputs. The interim
+    // session.inbound.pre / session.writeback.pre points were removed from the
+    // registry with the ingress policy gate (#578).
     const pointCases = [
       {
         pointId: "run.lifecycle.pre",

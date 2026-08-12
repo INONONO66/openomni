@@ -1,11 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import {
-  IngressEvent,
-  PolicyDecision as ProtocolPolicyDecision,
-  type Ingress,
-  type Policy,
-} from "@openomni/protocol";
-import type { IngressPolicyGate } from "../../src/ingress/policy-gate";
+import { IngressEvent, type Ingress } from "@openomni/protocol";
 import { Bus, ChannelGrantStore, Session, Storage } from "@openomni/session";
 import {
   defaultRunFn,
@@ -176,13 +170,7 @@ describe("IngressEngine", () => {
   });
 
   it("rejects missing coordinator through ingress middleware", async () => {
-    const decisions: Policy.PolicyDecision[] = [];
-    engine = makeEngine({
-      coordinator: undefined,
-      onPolicyDecision: (decision) => {
-        decisions.push(decision);
-      },
-    });
+    engine = makeEngine({ coordinator: undefined });
 
     const error = await catchError(
       engine.ingest({
@@ -201,13 +189,6 @@ describe("IngressEngine", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain("coordinator is required for worker target");
-    expect(decisions).toContainEqual(
-      expect.objectContaining({
-        policyId: "ingress.coordinator",
-        verdict: "deny",
-        reasonCodes: ["coordinator is required for worker target"],
-      }),
-    );
   });
 
   it("rejects unauthorized top-level actors before dispatch", async () => {
@@ -245,104 +226,6 @@ describe("IngressEngine", () => {
     expect((error as Error).message).toContain(
       "actor is not authorized to create top-level inbound work",
     );
-    expect(dispatchCalled).toBe(false);
-  });
-
-  it("treats inbound.receive deny verdict as terminal before dispatch", async () => {
-    let dispatchCalled = false;
-    engine = makeEngine({
-      coordinator: {
-        async dispatch(_sessionId, request) {
-          dispatchCalled = true;
-          return {
-            runId: request.runId,
-            sessionId: request.sessionId,
-            status: "succeeded" as const,
-            output: "should not dispatch",
-            finishReason: "stop" as const,
-          };
-        },
-      },
-      policies: [
-        {
-          name: "test:deny-inbound",
-          gate: "inbound",
-          priority: 0,
-          fn: () =>
-            ProtocolPolicyDecision.deny({
-              policyId: "test:deny-inbound",
-              reasonCodes: ["inbound denied by policy"],
-              effects: [{ type: "run.abort", reason: "inbound denied by policy" }],
-            }),
-        },
-      ],
-    });
-
-    const error = await catchError(
-      engine.ingest({
-        id: "event-denied-inbound-1",
-        surface: "tui",
-        workspace: "/repo",
-        mode: "direct",
-        payload: "hello",
-        meta: { actor: { role: "user" } },
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      }),
-    );
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("inbound denied by policy");
-    expect(dispatchCalled).toBe(false);
-  });
-
-  it("treats inbound.receive pending verdict as terminal", async () => {
-    let dispatchCalled = false;
-    engine = makeEngine({
-      coordinator: {
-        async dispatch(_sessionId, request) {
-          dispatchCalled = true;
-          return {
-            runId: request.runId,
-            sessionId: request.sessionId,
-            status: "succeeded" as const,
-            output: "should not dispatch",
-            finishReason: "stop" as const,
-          };
-        },
-      },
-      policies: [
-        {
-          name: "test:retry-inbound",
-          gate: "inbound",
-          priority: 0,
-          fn: () =>
-            ProtocolPolicyDecision.pending({
-              policyId: "test:retry-inbound",
-              reasonCodes: ["approval required at inbound.receive"],
-              effects: [{ type: "run.abort", reason: "approval required at inbound.receive" }],
-            }),
-        },
-      ],
-    });
-
-    const error = await catchError(
-      engine.ingest({
-        id: "event-retry-inbound-1",
-        surface: "tui",
-        workspace: "/repo",
-        mode: "direct",
-        payload: "hello",
-        meta: { actor: { role: "user" } },
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      }),
-    );
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("approval required at inbound.receive");
     expect(dispatchCalled).toBe(false);
   });
 
@@ -437,120 +320,5 @@ describe("IngressEngine", () => {
 
     expect(caughtError).toBeInstanceOf(Error);
     expect(caughtError?.message).toContain("invalid_literal");
-  });
-
-  describe("inbound.receive policy dispatch", () => {
-    function makeEvent(overrides?: Partial<Ingress.DirectEvent>): Ingress.DirectEvent {
-      return {
-        id: "event-policy-1",
-        surface: "tui",
-        workspace: "/repo",
-        mode: "direct",
-        payload: "hello",
-        meta: { actor: { role: "user" } },
-        agent: { model: { provider: "anthropic", id: "claude-3-haiku-20240307" } },
-        ...overrides,
-      };
-    }
-
-    function abortPolicy(reason: string): IngressPolicyGate.IngressPolicy {
-      return {
-        name: "test:ingress-abort",
-        gate: "inbound",
-        priority: 0,
-        failPolicy: "fail-closed",
-        fn: () =>
-          ProtocolPolicyDecision.deny({
-            policyId: "test.abort",
-            reasonCodes: [reason],
-            effects: [{ type: "run.abort", reason }],
-          }),
-      };
-    }
-
-    function continuePolicy(): IngressPolicyGate.IngressPolicy {
-      return {
-        name: "test:ingress-continue",
-        gate: "inbound",
-        priority: 0,
-        fn: () => ProtocolPolicyDecision.allow({ policyId: "test.continue", reasonCodes: ["ok"] }),
-      };
-    }
-
-    it("aborts ingest when inbound.receive policy returns abort", async () => {
-      engine = makeEngine({ policies: [abortPolicy("rate limit exceeded")] });
-
-      const error = await catchError(engine.ingest(makeEvent()));
-
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe("rate limit exceeded");
-    });
-
-    it("proceeds normally when inbound.receive policy returns continue", async () => {
-      testState.responseQueue.push("policy-ok response");
-      engine = makeEngine({ policies: [continuePolicy()] });
-
-      const result = await engine.ingest(makeEvent());
-
-      expect(result.mode).toBe("direct");
-      expect(result.result.output).toBe("policy-ok response");
-    });
-
-    it("records inbound.receive decision through observer", async () => {
-      const decisions: Policy.PolicyDecision[] = [];
-      engine = makeEngine({
-        onPolicyDecision: (d) => {
-          decisions.push(d);
-        },
-        policies: [abortPolicy("blocked")],
-      });
-
-      await catchError(engine.ingest(makeEvent()));
-
-      const ingressDecision = decisions.find((d) => d.policyId === "test.abort");
-      expect(ingressDecision).toBeDefined();
-      expect(ingressDecision?.verdict).toBe("deny");
-      if (!ingressDecision) throw new Error("expected ingress decision");
-      expect(ProtocolPolicyDecision.reason(ingressDecision)).toBe("blocked");
-    });
-
-    it("provides surface and actor labels to policy context", async () => {
-      let capturedLabels: unknown;
-      engine = makeEngine({
-        policies: [
-          {
-            name: "test:label-capture",
-            gate: "inbound",
-            priority: 0,
-            fn: (ctx) => {
-              if (ctx.gate === "inbound") capturedLabels = ctx.labels;
-              return ProtocolPolicyDecision.allow({
-                policyId: "test.labels",
-                reasonCodes: ["captured"],
-              });
-            },
-          },
-        ],
-      });
-      testState.responseQueue.push("ok");
-
-      await engine.ingest(makeEvent({ surface: "slack", meta: { actor: { role: "user" } } }));
-
-      expect(capturedLabels).toEqual([
-        { value: "surface.slack", source: "system" },
-        { value: "target.resident", source: "system" },
-        { value: "inbound.full_access", source: "system" },
-        { value: "actor.user", source: "system" },
-      ]);
-    });
-
-    it("skips dispatch when no ingress policies registered", async () => {
-      testState.responseQueue.push("no-policy response");
-
-      const result = await engine.ingest(makeEvent());
-
-      expect(result.mode).toBe("direct");
-      expect(result.result.output).toBe("no-policy response");
-    });
   });
 });

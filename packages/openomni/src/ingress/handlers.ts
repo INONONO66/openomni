@@ -1,16 +1,13 @@
 import {
   IngressEvent,
-  PolicyDecision as Decision,
   type Execution,
   type Ingress,
-  type Policy,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { allocateWorkerSpawnAttempt } from "../dispatch/handlers/worker-work-item";
 import type { ResidentRuntime } from "../resident/runtime";
 import type { CoordinatorLike } from "./coordinator-like";
-import { IngressPolicyGate } from "./policy-gate";
 import { SessionBridge } from "./session-bridge";
 import { resolveTarget } from "./target";
 
@@ -37,9 +34,8 @@ export function extractText(payload: unknown): string {
 
 /**
  * The single ingress dispatch lifecycle: payload extraction, mode events,
- * writeback policy, durable attempt-run bookkeeping (#510 D2b: WorkItem
- * attempt facts, never worker_run_state rows), and the resident/direct
- * handlers that consume them.
+ * durable attempt-run bookkeeping (#510 D2b: WorkItem attempt facts, never
+ * worker_run_state rows), and the resident/direct handlers that consume them.
  */
 export namespace IngressHandlers {
   export interface HandlerContext {
@@ -48,8 +44,6 @@ export namespace IngressHandlers {
     coordinator?: CoordinatorLike;
     residentRuntime?: Pick<ResidentRuntime, "run">;
     traceContext?: TraceContextProtocol.Type;
-    policies?: readonly IngressPolicyGate.IngressPolicy[];
-    onPolicyDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   // ---- observe-only ingress lifecycle events ----
@@ -98,46 +92,6 @@ export namespace IngressHandlers {
       error: message,
       time: Date.now(),
     });
-  }
-
-  // ---- writeback policy gate ----
-
-  async function dispatchWritebackCommit(ctx: HandlerContext, output: string): Promise<string> {
-    if (!ctx.policies?.length) return output;
-
-    const target = resolveTarget(ctx.event).kind;
-    const gateContext: IngressPolicyGate.WritebackContext = {
-      gate: "writeback",
-      sessionId: ctx.sessionId,
-      surface: ctx.event.surface,
-      mode: ctx.event.mode,
-      target,
-      output,
-      labels: [
-        { value: `surface.${ctx.event.surface}`, source: "system" },
-        { value: `target.${target}`, source: "system" },
-      ],
-      ...(ctx.traceContext !== undefined && { traceContext: ctx.traceContext }),
-    };
-    const decision = await IngressPolicyGate.evaluate(
-      ctx.policies,
-      gateContext,
-      ctx.onPolicyDecision,
-    );
-
-    return resolveWritebackDecision(decision, output);
-  }
-
-  function resolveWritebackDecision(decision: Policy.PolicyDecision, output: string): string {
-    if (Decision.isBlocking(decision)) {
-      throw new Error(Decision.reason(decision, "ingress writeback policy denied"));
-    }
-    const suppress = decision.effects.find((effect) => effect.type === "writeback.suppress");
-    if (suppress?.type === "writeback.suppress") {
-      throw new Error(suppress.reason ?? "ingress writeback policy suppressed output");
-    }
-    const rewrite = decision.effects.find((effect) => effect.type === "writeback.rewrite");
-    return rewrite?.type === "writeback.rewrite" ? rewrite.output : output;
   }
 
   // ---- durable run lifecycle (#510 D2b: WorkItem attempt facts) ----
@@ -249,14 +203,11 @@ export namespace IngressHandlers {
         return { runId: run.runId, cancelled, result };
       }),
     );
-    const output = await dispatchWritebackCommit(
-      ctx,
-      JSON.stringify({
-        cancelled: results.filter((run) => run.cancelled).length,
-        requested: results.length,
-        runs: results,
-      }),
-    );
+    const output = JSON.stringify({
+      cancelled: results.filter((run) => run.cancelled).length,
+      requested: results.length,
+      runs: results,
+    });
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
     return {
       mode: ctx.event.mode,
@@ -281,14 +232,11 @@ export namespace IngressHandlers {
       raw !== null && typeof raw === "object" && (raw as { accepted?: unknown }).accepted === true;
     if (!accepted) return undefined;
 
-    const output = await dispatchWritebackCommit(
-      ctx,
-      JSON.stringify({
-        delivered: true,
-        sessionId: ctx.sessionId,
-        runId: ctx.event.runtime?.runId,
-      }),
-    );
+    const output = JSON.stringify({
+      delivered: true,
+      sessionId: ctx.sessionId,
+      runId: ctx.event.runtime?.runId,
+    });
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
     return {
       mode: ctx.event.mode,
@@ -364,7 +312,7 @@ export namespace IngressHandlers {
       traceContext: ctx.traceContext,
       signal: (ctx.event.runtime as { signal?: AbortSignal } | undefined)?.signal,
     });
-    const output = await dispatchWritebackCommit(ctx, residentResult.output);
+    const output = residentResult.output;
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
 
     return {
@@ -397,15 +345,12 @@ export namespace IngressHandlers {
     await createDurableAttemptRun(ctx, request);
     if (isBackgroundWorkerIngress(ctx)) {
       startBackgroundWorkerDispatch(ctx, request, target, start);
-      const output = await dispatchWritebackCommit(
-        ctx,
-        JSON.stringify({
-          accepted: true,
-          status: "started",
-          runId: request.runId,
-          sessionId: ctx.sessionId,
-        }),
-      );
+      const output = JSON.stringify({
+        accepted: true,
+        status: "started",
+        runId: request.runId,
+        sessionId: ctx.sessionId,
+      });
       SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
       return {
         mode: ctx.event.mode,
@@ -420,10 +365,7 @@ export namespace IngressHandlers {
       await finishCoordinatorDispatch(ctx, request, coordinatorResult);
       if (coordinatorResult.status !== "succeeded") {
         if (coordinatorResult.status === "cancelled") {
-          const output = await dispatchWritebackCommit(
-            ctx,
-            coordinatorResult.output ?? coordinatorResult.error ?? "cancelled",
-          );
+          const output = coordinatorResult.output ?? coordinatorResult.error ?? "cancelled";
           SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
           publishCompleted(ctx, target, start);
           return {
@@ -445,7 +387,7 @@ export namespace IngressHandlers {
       await markDispatchThrown(ctx, request, error);
       throw error;
     }
-    const output = await dispatchWritebackCommit(ctx, coordinatorResult.output ?? "");
+    const output = coordinatorResult.output ?? "";
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
 
     publishCompleted(ctx, target, start);

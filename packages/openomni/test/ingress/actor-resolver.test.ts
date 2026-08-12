@@ -1,50 +1,43 @@
 import { describe, expect, it } from "bun:test";
-import { Ingress as IngressNamespace, Operational, type Ingress } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
-import { z } from "zod";
+import type { Ingress } from "@openomni/protocol";
 import {
-  captureActorPolicy,
   flushBusObservers,
   getIngressEngine,
   makeEvent,
+  observeResolvedActor,
   registerOwnerEndpoint,
   setupIngressActorResolverTest,
   testState,
 } from "./_actor-resolver-fixture";
 
-const AuditPayloadSchema = z.object({
-  audit: z.object({
-    payload: z.object({
-      eventId: z.string(),
-      actor: z.unknown().optional(),
-    }),
-  }),
-});
-
 setupIngressActorResolverTest();
 
 describe("Ingress actor resolver", () => {
-  it("adds canonical actor fields for registered endpoints before inbound policies", async () => {
+  it("adds canonical actor fields for registered endpoints", async () => {
     // Given
     registerOwnerEndpoint("guild");
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
 
     // When
-    await engine.ingest(
-      makeEvent("user-1", {
-        id: "user-1",
-        role: "manager",
-        type: "system",
-        trusted: true,
-        isTrustedManager: true,
-      }),
-    );
+    try {
+      await engine.ingest(
+        makeEvent("user-1", {
+          id: "user-1",
+          role: "manager",
+          type: "system",
+          trusted: true,
+          isTrustedManager: true,
+        }),
+      );
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toMatchObject({
@@ -61,19 +54,13 @@ describe("Ingress actor resolver", () => {
     expect(capturedActor).not.toHaveProperty("isTrustedManager");
   });
 
-  it("projects the resolved actor after inbound policy evaluation", async () => {
+  it("projects the resolved actor onto the ingress inbound audit", async () => {
     // Given
     registerOwnerEndpoint("guild");
     const engine = getIngressEngine();
     let projectedActor: Ingress.Actor | undefined;
-    const unobserve = Bus.observe((event, data) => {
-      if (event.name !== Operational.Info.name) return;
-      const parsed = Operational.Info.schema.parse(data);
-      const audit = AuditPayloadSchema.safeParse(parsed.context);
-      if (!audit.success) return;
-      if (audit.data.audit.payload.eventId !== "event-user-1") return;
-      if (audit.data.audit.payload.actor === undefined) return;
-      projectedActor = IngressNamespace.ActorSchema.parse(audit.data.audit.payload.actor);
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      projectedActor = actor;
     });
     testState.responseQueue.push("ok");
 
@@ -101,11 +88,10 @@ describe("Ingress actor resolver", () => {
     // Given
     registerOwnerEndpoint("guild-a");
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
     const event = {
       ...makeEvent("user-1", {
@@ -122,7 +108,12 @@ describe("Ingress actor resolver", () => {
     };
 
     // When
-    await engine.ingest(event);
+    try {
+      await engine.ingest(event);
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
@@ -132,15 +123,19 @@ describe("Ingress actor resolver", () => {
     // Given
     registerOwnerEndpoint("guild");
     let capturedActor: Ingress.Actor | undefined;
-    const engine = getIngressEngine(
-      captureActorPolicy((actor) => {
-        capturedActor = actor;
-      }),
-    );
+    const engine = getIngressEngine();
+    const unobserve = observeResolvedActor("event-user-1", (actor) => {
+      capturedActor = actor;
+    });
     testState.responseQueue.push("ok");
 
     // When
-    await engine.ingest(makeEvent("user-1"));
+    try {
+      await engine.ingest(makeEvent("user-1"));
+      await flushBusObservers();
+    } finally {
+      unobserve();
+    }
 
     // Then
     expect(capturedActor).toMatchObject({

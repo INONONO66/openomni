@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { BlacklistStore } from "@openomni/session";
 import {
-  captureActorPolicy,
   getIngressEngine,
   makeEvent,
   registerOwnerEndpoint,
@@ -12,7 +11,7 @@ import {
 setupIngressActorResolverTest();
 
 describe("Ingress blacklist", () => {
-  it("blocks registered blacklisted actors before inbound policies", async () => {
+  it("blocks registered blacklisted actors before resident execution", async () => {
     registerOwnerEndpoint("guild");
     BlacklistStore.put({
       id: "bl-owner",
@@ -21,12 +20,7 @@ describe("Ingress blacklist", () => {
       reason: "blocked actor",
       createdBy: "act_owner",
     });
-    let inboundPolicyCalled = false;
-    const engine = getIngressEngine(
-      captureActorPolicy(() => {
-        inboundPolicyCalled = true;
-      }),
-    );
+    const engine = getIngressEngine();
     testState.responseQueue.push("ok");
 
     const result = await engine.ingest(makeEvent("user-1"));
@@ -35,7 +29,7 @@ describe("Ingress blacklist", () => {
       kind: "dropped",
       reason: "Inbound principal matched the blacklist",
     });
-    expect(inboundPolicyCalled).toBe(false);
+    expect(testState.llmInputs).toHaveLength(0);
   });
 
   it("blocks blacklisted channels before resident execution", async () => {

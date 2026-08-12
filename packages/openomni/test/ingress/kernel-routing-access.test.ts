@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { PolicyDecision, type Ingress } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import { ActorRegistry, ChannelGrantStore } from "@openomni/session";
 import {
+  flushBusObservers,
   kernelEngine,
   makeKernelRoutingEngine,
+  observeRoutedFacts,
   ownerEvent,
   resetKernelRoutingState,
   residentExecutions,
@@ -23,25 +25,6 @@ async function captureError(action: Promise<unknown>): Promise<Error | undefined
 function strangerEvent(id: string): Ingress.DirectEvent {
   const { meta: _meta, ...event } = ownerEvent;
   return { ...event, id, userId: `${id}-external` };
-}
-
-function captureRoutedFacts(captured: { actor?: unknown; treatment?: unknown }): void {
-  makeKernelRoutingEngine({
-    policies: [
-      {
-        name: "test:capture-routed-facts",
-        gate: "inbound",
-        priority: 0,
-        fn: (context) => {
-          if (context.gate === "inbound") {
-            captured.actor = context.actor;
-            captured.treatment = context.inboundTreatment;
-          }
-          return PolicyDecision.allow({ policyId: "test.capture-routed-facts" });
-        },
-      },
-    ],
-  });
 }
 
 describe("IngressEngine access routing", () => {
@@ -136,14 +119,16 @@ describe("IngressEngine access routing", () => {
       createdBy: "actor-owner",
     });
     const captured: { actor?: unknown; treatment?: unknown } = {};
-    captureRoutedFacts(captured);
+    const unobserveFacts = observeRoutedFacts(event.id, captured);
     const observed = routingDecisions();
 
     // When
     try {
       await kernelEngine().ingest(event);
+      await flushBusObservers();
     } finally {
       observed.unsubscribe();
+      unobserveFacts();
     }
 
     // Then
@@ -175,15 +160,17 @@ describe("IngressEngine access routing", () => {
       createdBy: "actor-owner",
     });
     const captured: { actor?: unknown; treatment?: unknown } = {};
-    captureRoutedFacts(captured);
+    const unobserveFacts = observeRoutedFacts(event.id, captured);
     const observed = routingDecisions();
 
     // When
     let result: Ingress.IngressResult;
     try {
       result = await kernelEngine().ingest(event);
+      await flushBusObservers();
     } finally {
       observed.unsubscribe();
+      unobserveFacts();
     }
 
     // Then

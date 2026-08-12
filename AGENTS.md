@@ -83,7 +83,7 @@ raw channel event
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
 | Add/modify bus events | legacy families in `packages/protocol/src/event/`; new domains colocate `events.ts` beside their schema (e.g. `packages/protocol/src/wait/events.ts`) | `BusEvent.define()` pattern |
 | Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
-| Add policy point | `packages/protocol/src/policy/point-registry.ts` | 20 registered points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
+| Add policy point | `packages/protocol/src/policy/point-registry.ts` | 18 registered points (`dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
 | Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `workItem`, `workerRunState`) |

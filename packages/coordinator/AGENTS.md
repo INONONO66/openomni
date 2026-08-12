@@ -2,7 +2,7 @@
 
 Multiprocess execution coordinator runtime. This package owns on-demand worker process lifecycle, primitive run delivery, and worker supervision used by OpenOmni/server execution (the IPC transport itself is `@openomni/ipc` since #496) (interrupted-run recovery lives server-side in `apps/server/src/execution/recovery.ts` since #477). Per the runtime substrate design (see `docs/architecture.md`; ADR-008 retired into it): workers spawn on demand and idle-shutdown; there is no fixed pool.
 
-The coordinator is an executor, not the communication kernel. It must not decide actor authority, PendingInteraction/PendingAsk routing, channel/session targets, worker grants, or writeback policy. Those product semantics belong in `@openomni/openomni`.
+The coordinator is an executor, not the communication kernel. It must not decide actor authority, PendingInteraction/PendingAsk routing, channel/session targets, worker grants, or writeback. Those product semantics belong in `@openomni/openomni`.
 
 ## STRUCTURE
 

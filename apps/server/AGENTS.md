@@ -2,7 +2,7 @@
 
 Hono/Bun runtime host that exposes OpenOmni through external channels (Discord / Telegram / GitHub / WebSocket), connector processes, MCP/custom tools, and worker entrypoints. The server owns transport and bootstrap, not product messaging/access semantics.
 
-Inbound messages should flow as: raw channel payload -> channel adapter transport/auth/dedupe -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback policy.
+Inbound messages should flow as: raw channel payload -> channel adapter transport/auth/dedupe -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback.
 
 Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
 

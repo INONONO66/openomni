@@ -88,7 +88,7 @@ Completion admission has one configurable kernel gateway without exporting its r
 | Mutating MCP/custom tools behind dispatch (read-only may stay direct) | 📋 | — | ADR-010 §6 effect-radius rule; direct attachment today is an unaudited side door |
 | Intent classification (direct vs delegate) | 📋 | — | Pure in-context LLM choice; no classifier, no routing data |
 | Fork / self-loop sessions | 🔌 | `packages/protocol/src/policy/resource.ts` | `"self-loop"` enum value exists; no code path creates one |
-| Distilled writeback (worker output summarized before user session) | 🚧 | `packages/openomni/src/ingress/session-bridge.ts` | Raw worker output written directly by default; `writeback.commit` policy hook exists but optional; hygiene comes from session separation only |
+| Distilled writeback (worker output summarized before user session) | 🚧 | `packages/openomni/src/ingress/session-bridge.ts` | Raw worker output written directly; the interim `writeback.commit` policy hook was removed in #578 (no writeback policy point); hygiene comes from session separation only |
 | Cost-based model routing ("expensive thinks, cheap works") | 📋 | `apps/server/src/bootstrap/index.ts` | Single `resolveModel(config)` model for Resident and all workers |
 
 ## Runtime substrate (ADR-008 — shipped)

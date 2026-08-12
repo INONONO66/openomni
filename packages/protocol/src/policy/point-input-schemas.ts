@@ -91,9 +91,6 @@ function validator<Schema extends z.ZodTypeAny>(
 }
 
 export const policyPointInputSchemas = Object.freeze({
-  "session.inbound.pre": validator(
-    z.object({ actorId: id, sessionId: id, inboundEvent: requiredValue }).passthrough(),
-  ),
   "dispatch.action.pre": validator(
     z
       .object({
@@ -196,9 +193,6 @@ export const policyPointInputSchemas = Object.freeze({
         unresolvedBlockerIds: z.array(id),
       })
       .passthrough(),
-  ),
-  "session.writeback.pre": validator(
-    z.object({ sessionId: id, runId: id, writebackPayload: requiredValue }).passthrough(),
   ),
   "run.lifecycle.post": validator(
     z.object({ sessionId: id, runId: id, runOutcome: lifecycleRunOutcome }).passthrough(),

@@ -10,14 +10,6 @@ export namespace PolicyPointRegistryModule {
   type PolicyPointContract = PolicyPointContractModule.PolicyPointContractSnapshot;
 
   export const PolicyPointRegistry = Object.freeze({
-    "session.inbound.pre": contract(
-      "session.inbound.pre",
-      "pre",
-      ["session"],
-      ["actorId", "sessionId", "inboundEvent"],
-      ["audit.annotate", "run.abort", "delegation.set_constraints"],
-      ...preBoundary,
-    ),
     "dispatch.action.pre": contract(
       "dispatch.action.pre",
       "pre",
@@ -189,14 +181,6 @@ export namespace PolicyPointRegistryModule {
       ["audit.annotate", "run.abort", "work.allow_asserted"],
       ...preBoundary,
     ),
-    "session.writeback.pre": contract(
-      "session.writeback.pre",
-      "pre",
-      ["session"],
-      ["sessionId", "runId", "writebackPayload"],
-      ["audit.annotate", "run.abort", "writeback.rewrite", "writeback.suppress"],
-      ...preBoundary,
-    ),
     "run.lifecycle.post": contract(
       "run.lifecycle.post",
       "post",
@@ -217,7 +201,6 @@ export namespace PolicyPointRegistryModule {
   } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>);
 
   export const policyPointMigrationMapping = Object.freeze({
-    [Timing.INBOUND_RECEIVE]: Object.freeze(["session.inbound.pre"] as const),
     [Timing.DISPATCH_AUTHORIZE]: Object.freeze(["dispatch.action.pre"] as const),
     [Timing.RUN_START]: Object.freeze(["run.lifecycle.pre"] as const),
     [Timing.TURN_START]: Object.freeze(["run.turn.pre"] as const),
@@ -237,7 +220,6 @@ export namespace PolicyPointRegistryModule {
     ] as const),
     [Timing.TURN_FINISH]: Object.freeze(["run.turn.post"] as const),
     [Timing.COMPLETION_PREPARE]: Object.freeze(["run.completion.pre"] as const),
-    [Timing.WRITEBACK_COMMIT]: Object.freeze(["session.writeback.pre"] as const),
     [Timing.RUN_FINISH]: Object.freeze(["run.lifecycle.post"] as const),
     [Timing.ERROR]: Object.freeze(["run.error.error"] as const),
   }) satisfies Readonly<Record<Timing, readonly RegisteredPolicyPointId[]>>;

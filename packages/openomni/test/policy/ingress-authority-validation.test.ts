@@ -201,7 +201,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     });
 
     const policyIds = decisions.map((d) => d.policyId);
-    expect(policyIds).toContain("ingress.schema");
+    expect(policyIds).toContain("guardrail.permission");
     expect(policyIds).not.toContain("ingress.blacklist");
     expect(policyIds).not.toContain("ingress.channel_grant");
   });

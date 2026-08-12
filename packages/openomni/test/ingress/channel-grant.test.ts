@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, PolicyDecision as ProtocolPolicyDecision } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { Bus, ChannelGrantStore } from "@openomni/session";
 import {
   flushBusObservers,
@@ -67,23 +67,7 @@ describe("Ingress channel grants", () => {
       createdBy: "act_owner",
     });
     testState.responseQueue.push("ok");
-    let capturedLabels: unknown;
-    let capturedContext: unknown;
-    const engine = getIngressEngine({
-      name: "test:capture-channel-grant-context",
-      gate: "inbound",
-      priority: 0,
-      fn: (ctx) => {
-        if (ctx.gate === "inbound") {
-          capturedLabels = ctx.labels;
-          capturedContext = ctx;
-        }
-        return ProtocolPolicyDecision.allow({
-          policyId: "test.capture-channel-grant-context",
-          reasonCodes: ["captured"],
-        });
-      },
-    });
+    const engine = getIngressEngine();
     const projectedTreatments: unknown[] = [];
     const unobserve = Bus.observe((event, data) => {
       if (event.name !== Operational.Info.name) return;
@@ -103,15 +87,6 @@ describe("Ingress channel grants", () => {
 
       expect(result.mode).toBe("direct");
       expect(testState.llmInputs).toHaveLength(1);
-      expect(capturedLabels).toContainEqual({
-        value: "inbound.evidence_only",
-        source: "system",
-      });
-      expect(capturedContext).toMatchObject({
-        inboundTreatment: "evidence_only",
-        channelGrantId: "grant-discord-guild-dev",
-        channelGrantKind: "broadcast_channel",
-      });
       expect(projectedTreatments).toContain("evidence_only");
     } finally {
       unobserve();

@@ -3,12 +3,10 @@ import {
   type Ingress,
   type Policy,
   IngressEvent,
-  PolicyDecision as Decision,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
-import { IngressPolicyGate } from "./policy-gate";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
 import { resolveIngressActor } from "./actor-resolver";
@@ -42,7 +40,6 @@ export interface IngressEngineDeps {
   readonly agentResolver?: AgentResolver;
   readonly dispatchRuntime?: DispatchRuntime;
   readonly onPolicyDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
-  readonly policies?: readonly IngressPolicyGate.IngressPolicy[];
 }
 
 export interface IngressEngine {
@@ -56,14 +53,7 @@ export interface IngressEngine {
   ): Promise<Ingress.IngressResult>;
 }
 
-function assertInboundAllowed(decision: Policy.PolicyDecision): void {
-  if (!Decision.isBlocking(decision)) return;
-  throw new Error(Decision.reason(decision, "ingress inbound policy denied"));
-}
-
 export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine {
-  const ingressPolicies: readonly IngressPolicyGate.IngressPolicy[] = [...(deps.policies ?? [])];
-
   async function ingestResolved(
     inboundEvent: Ingress.ResolvedInboundEvent,
     target: Ingress.Target,
@@ -87,47 +77,6 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       time: Date.now(),
     });
 
-    if (ingressPolicies.length > 0) {
-      const labels: Policy.LabelEntry[] = [
-        { value: `surface.${inboundEvent.surface}`, source: "system" },
-        { value: `target.${target.kind}`, source: "system" },
-      ];
-      if (typeof inboundEvent.meta?.inboundTreatment === "string") {
-        labels.push({
-          value: `inbound.${inboundEvent.meta.inboundTreatment}`,
-          source: "system",
-        });
-      }
-      const role = inboundEvent.meta?.actor?.role;
-      if (role) labels.push({ value: `actor.${role}`, source: "system" });
-
-      const gateContext: IngressPolicyGate.InboundContext = {
-        gate: "inbound",
-        ...(inboundEvent.meta?.actor !== undefined && { actor: inboundEvent.meta.actor }),
-        surface: inboundEvent.surface,
-        mode: inboundEvent.mode,
-        target: target.kind,
-        ...(typeof inboundEvent.meta?.inboundTreatment === "string" && {
-          inboundTreatment: inboundEvent.meta.inboundTreatment,
-        }),
-        ...(typeof inboundEvent.meta?.channelGrantId === "string" && {
-          channelGrantId: inboundEvent.meta.channelGrantId,
-        }),
-        ...(typeof inboundEvent.meta?.channelGrantKind === "string" && {
-          channelGrantKind: inboundEvent.meta.channelGrantKind,
-        }),
-        labels,
-        traceContext: trace,
-      };
-      const decision = await IngressPolicyGate.evaluate(
-        ingressPolicies,
-        gateContext,
-        deps.onPolicyDecision,
-      );
-
-      assertInboundAllowed(decision);
-    }
-
     const agentModel = inboundEvent.agent.model;
     const { session } = IngressSessionResolver.resolve(
       inboundEvent,
@@ -150,8 +99,6 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       coordinator,
       residentRuntime,
       traceContext: activeTrace,
-      policies: ingressPolicies,
-      onPolicyDecision: deps.onPolicyDecision,
     };
 
     if (target.kind === "resident") {
@@ -184,7 +131,6 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       const preRun = await IngressAuthorityMiddleware.runRoutedPreRun({
         event: waitExecution.event,
         coordinator: deps.coordinator,
-        traceContext: trace,
         onDecision: deps.onPolicyDecision,
       });
 
