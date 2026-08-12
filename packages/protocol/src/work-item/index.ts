@@ -104,9 +104,6 @@ export namespace WorkItem {
   export const emptyCompletionFacts = Completion.emptyCompletionFacts;
   export const hasContiguousReservationBridge = hasReservationBridge;
 
-  export const VerificationGate = Schema.VerificationGate;
-  export type VerificationGate = Schema.VerificationGate;
-
   export const Info = Schema.Info;
   export type Info = Schema.Info;
 

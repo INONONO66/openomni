@@ -29,12 +29,4 @@ export namespace Run {
       .optional(),
   });
   export type RetryPolicy = z.infer<typeof RetryPolicy>;
-
-  export const Budget = z.object({
-    maxWallTimeMs: z.number(),
-    maxTurns: z.number(),
-    maxToolCalls: z.number(),
-    maxToolRuntimeMs: z.number(),
-  });
-  export type Budget = z.infer<typeof Budget>;
 }

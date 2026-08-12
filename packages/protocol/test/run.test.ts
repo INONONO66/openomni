@@ -97,32 +97,3 @@ describe("Run.RetryPolicy", () => {
     ).toThrow();
   });
 });
-
-describe("Run.Budget", () => {
-  test("accepts negative and fractional numbers", () => {
-    const budget = Run.Budget.parse({
-      maxWallTimeMs: -1,
-      maxTurns: 0,
-      maxToolCalls: -100,
-      maxToolRuntimeMs: 0.5,
-    });
-
-    expect(budget).toEqual({
-      maxWallTimeMs: -1,
-      maxTurns: 0,
-      maxToolCalls: -100,
-      maxToolRuntimeMs: 0.5,
-    });
-  });
-
-  test("parses a normal budget", () => {
-    const budget = Run.Budget.parse({
-      maxWallTimeMs: 60000,
-      maxTurns: 20,
-      maxToolCalls: 10,
-      maxToolRuntimeMs: 15000,
-    });
-
-    expect(budget.maxTurns).toBe(20);
-  });
-});

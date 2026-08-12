@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { NamedError } from "../error/index.js";
-import { WorkItem } from "../work-item/index.js";
 
 const BaseEvent = z.object({
   traceId: z.string(),
@@ -23,22 +22,6 @@ export namespace WorkerRun {
     "interrupted",
   ]);
   export type Status = z.infer<typeof Status>;
-
-  export const Info = z.object({
-    runId: z.string(),
-    sessionId: z.string(),
-    parentRunId: z.string().optional(),
-    assignedStepId: z.string().optional(),
-    title: z.string(),
-    prompt: z.string(),
-    executorKind: WorkItem.ExecutorKind.optional(),
-    status: Status,
-    startedAt: z.number(),
-    endedAt: z.number().optional(),
-    lastMessageId: z.string().optional(),
-    resumeCount: z.number().int().min(0).default(0),
-  });
-  export type Info = z.infer<typeof Info>;
 
   export const WriteMethod = z.enum(["create", "updateStatus", "updateStatusIfCurrent"]);
   export type WriteMethod = z.infer<typeof WriteMethod>;

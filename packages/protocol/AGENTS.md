@@ -27,7 +27,7 @@ src/
 ├── message/              # Message.Part (8 variants), Message.Info, Message.WithParts
 ├── model/                # Model.Ref shared model identity
 ├── policy/               # Point registry (20 registered policy points) + point contracts, PolicyPlan, Permission, PolicyDecision, effects
-├── run/                  # Run.Snapshot / Outcome / RetryPolicy / Budget
+├── run/                  # Run.Outcome / RetryPolicy
 ├── sink/                 # Sink — streaming callback contract (TS interface, not Zod)
 ├── storage/              # Storage.WorkItemSubAdapter interface
 ├── token/                # Token.Usage / AgentUsage / ProviderUsage / ExecutionUsage
@@ -46,7 +46,7 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 - **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `ProviderError` (in `@openomni/llm`) uses this.
 - **Namespace + Zod duality**: Schemas and types share the same name (e.g., `Tool.State` is both a Zod schema and a TS type). Access schema for validation, type for TS.
 - **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Policy.PolicyDecision` on `verdict`. `InboundEvent` is a discriminated union on `mode`: `DirectEvent` (`mode: "direct"`) for external inbound and `InternalEvent` (`mode: "internal"`) for system-origin events (e.g., cron). The external `ingest()` path rejects `mode: "internal"` for security.
-- **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Tool.Call`, `Tool.Result`, `Run.Snapshot`.
+- **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Message.WithParts`, `Tool.Call`, `Tool.Result`, `Transcript.Fact`.
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
 - **Policy points**: `policy/point-registry.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema (`point-contract.ts`). Generic agent-loop `run.completion.pre` and WorkItem contract-closing `work.complete.pre` are distinct points. `Policy.PolicyPlan` (`plan.ts`) is the stamped per-task plan shape (#479). `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names and resolves only generic run timing; do not build new code on it.
 - **WorkerRun lifecycle**: `WorkerRun.Events.*` covers delegated run start, completion, failure, and cancellation.

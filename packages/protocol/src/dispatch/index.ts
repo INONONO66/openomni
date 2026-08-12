@@ -7,9 +7,6 @@ export namespace Dispatch {
   export const ActorKind = DispatchSchemas.ActorKind;
   export type ActorKind = DispatchSchemas.ActorKind;
 
-  export const TargetKind = DispatchSchemas.TargetKind;
-  export type TargetKind = DispatchSchemas.TargetKind;
-
   export const Target = DispatchSchemas.Target;
   export type Target = DispatchSchemas.Target;
 
