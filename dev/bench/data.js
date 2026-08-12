@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786507080250,
+  "lastUpdate": 1786527612673,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -42633,6 +42633,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509029,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0048d3634fc89ad9b7f93f82680b8bb5e2b4baf4",
+          "message": "refactor: dismantle the interim ingress policy gate (#578) (#593)\n\n* refactor(protocol): retire inbound/writeback pre points and timings\n\nRemove the interim session.inbound.pre and session.writeback.pre policy\npoints and their orphaned INBOUND_RECEIVE / WRITEBACK_COMMIT timings from\nthe Timing enum (15->13), point contract ids (20->18), point registry\n(contracts + migration rows), and input-schema validators. Net protocol\npolicy-point vocabulary delta is -2 with no additions (#578).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(policy): drop retired-point handling from engine registry\n\nThe inbound/writeback pre mechanism is gone, so the ascending-priority\ntiming map no longer lists it and the registration snapshot no longer\ncarries the retired_point_id escape hatch. The two removed ids now reject\nas unknown_point_id like any other unregistered point (#578).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): dismantle the ingress policy gate\n\nReplace the PreRunState mutate-and-read-back gate with plain sequential\npre-run code in ingress-authority: schema-validate, require a coordinator\nfor coordinator targets, run the unconditional authority evaluation\n(fanned to onPolicyDecision), then dispatch by mode, aborting on the first\nfailure with the original error preserved. Delete the inert inbound and\nwriteback gates, the IngressPolicyGate composition engine, and the\ndeps.policies wiring (#578).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(openomni,agent): follow the ingress gate dismantle\n\nDrop the inbound/writeback verdict and dispatch tests, rewrite the\nno-bypass conformance to assert the authority error, and move the routed\nactor/treatment probes off the deleted gate onto the ingress projection\naudit fact via observeRoutedFacts / observeResolvedActor. Point the\nauthority-validation policyId assertion at guardrail.permission and note\nthe removed points in the agent engine-composition comment (#578).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: sync policy-point census to 18 after #578 retirement\n\nThe two retired points (session.inbound.pre / session.writeback.pre) and\nthe writeback.commit policy hook were still enumerated across five normative\ndocs claiming 20 points. Correct the count to 18, drop both dead points, note\nthe writeback hook removal, stop claiming ingress dispatches a registered\npoint (it runs a direct authority evaluation), and trim the now-nonexistent\n'writeback policy' token from the three boundary-ownership notes.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(policy): lock retired ingress points reject as unknown (#578)\n\nAdds an explicit assertion that registrations at the two #578-retired point\nids fail closed as unknown_point_id rather than being silently accepted —\nclosing the coverage gap the adversarial review flagged.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T09:38:51Z",
+          "tree_id": "170b68c2a4c2b05448bfbe7ca3e845d5ceae7b68",
+          "url": "https://github.com/INONONO66/openomni/commit/0048d3634fc89ad9b7f93f82680b8bb5e2b4baf4"
+        },
+        "date": 1786527612101,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 645,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3039,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2469,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 840,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 707,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1415,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1596,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47783,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2403,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10868,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100840,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 507178,
             "unit": "ns/op"
           }
         ]
