@@ -198,6 +198,49 @@ describe("p2 effects conformance (#492)", () => {
     expect(effectFactsOf("fx-unsanitized")).toHaveLength(0);
   });
 
+  test("row 8: crash between terminal fact and link — boot sweep re-projects and unblocks admission", async () => {
+    const item = await createEffectWorkItem("effect-crash-window");
+
+    // The #538 crash window: intent + pending projection + terminal fact all
+    // land, but the terminal WorkItem projection (a separate, later tx) never
+    // ran — so the effect stream says confirmed while completionFacts.effects
+    // (the admission fold's only input) is stuck outcome-less.
+    EffectStore.intend({ effectId: "fx-crash", kind: "manual", workItemHash: item.hash });
+    WorkItemStore.recordEffect(item.hash, { intentRef: "fx-crash" });
+    EffectStore.confirm("fx-crash", "receipt");
+
+    const stuck = await WorkItemStore.get(item.hash);
+    const stuckLatest = stuck?.completionFacts.effects
+      .filter((effect) => effect.intentRef === "fx-crash")
+      .at(-1);
+    expect(stuckLatest?.outcome).toBeUndefined();
+    // outstandingIntents excludes the terminal stream — the probe loop can't heal it.
+    expect(EffectStore.outstandingIntents().map((intent) => intent.effectId)).not.toContain(
+      "fx-crash",
+    );
+
+    // The boot sweep alone (no replay) re-projects the ALREADY-RECORDED outcome.
+    const { reconciler } = assembleEffectRuntime();
+    const summary = await reconciler.reconcile();
+    expect(summary.reprojected).toBe(1);
+    expect(summary.resolved).toBe(0);
+
+    const healed = await WorkItemStore.get(item.hash);
+    const healedLatest = healed?.completionFacts.effects
+      .filter((effect) => effect.intentRef === "fx-crash")
+      .at(-1);
+    expect(healedLatest?.outcome).toBe("confirmed");
+    // Nothing re-materialized on the stream: still exactly intent + one terminal.
+    expect(effectFactsOf("fx-crash").map((fact) => fact.type)).toEqual([
+      "effect.intended",
+      "effect.confirmed",
+    ]);
+
+    // Idempotent across every boot: a healed WorkItem is not re-linked again.
+    const second = await reconciler.reconcile();
+    expect(second.reprojected).toBe(0);
+  });
+
   test("row 7: exhaustion escalates via the Stakes seam — ONE durable blocker, admission input unresolved", async () => {
     const item = await createEffectWorkItem("effect-escalation");
 

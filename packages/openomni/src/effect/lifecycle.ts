@@ -60,9 +60,17 @@ export class EffectService {
       // Idempotency key hit. A terminal intent replays its recorded outcome;
       // a still-pending intent is reconciled (never blindly re-executed).
       if (intended.status.status !== "pending") {
+        // Seam (b) for #538 — re-project the recorded terminal outcome onto the
+        // WorkItem BEFORE returning. EffectStore.confirm/fail commits the
+        // terminal fact (tx A) and this projection (tx B) is a LATER
+        // transaction; a crash between them leaves admission blocked forever on
+        // an outcome-less record. recordWorkItemEffect is idempotent
+        // (same-outcome latest → no-op), so a redundant replay costs nothing.
+        const outcome = runtimeOf(intended.status.status);
+        this.linkEffect(intended.intent, outcome);
         return {
           effectId: request.effectId,
-          runtime: runtimeOf(intended.status.status),
+          runtime: outcome,
           ledger: intended.status,
         };
       }
