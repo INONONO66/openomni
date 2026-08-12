@@ -1,14 +1,7 @@
 import { z } from "zod";
 
 export namespace Actor {
-  export const Kind = z.enum([
-    "human",
-    "ai_agent",
-    "service",
-    "resident",
-    "internal_worker",
-    "system",
-  ]);
+  const Kind = z.enum(["human", "ai_agent", "service", "resident", "internal_worker", "system"]);
   export type Kind = z.infer<typeof Kind>;
 
   export const TrustTier = z.enum([
