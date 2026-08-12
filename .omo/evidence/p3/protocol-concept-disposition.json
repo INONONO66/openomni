@@ -3,7 +3,7 @@
   "roadmap": "#459",
   "baselineCommit": "87d4fc8da6ab57212a2aea1ea187d8d56706b210",
   "generatedFrom": "adversarial evidence workflow wf_b5558306-84f (124 symbols / 13 families, verify phase) + reviewer reconciliation 2026-08-13",
-  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer.",
+  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone.",
   "dispositions": [
     "delete",
     "unexport",
@@ -13,10 +13,10 @@
     "already-removed"
   ],
   "tally": {
-    "unexport": 13,
-    "preserve": 41,
-    "defer": 11,
-    "delete": 51,
+    "unexport": 12,
+    "preserve": 48,
+    "defer": 12,
+    "delete": 44,
     "already-removed": 2,
     "wire": 6
   },
@@ -255,11 +255,13 @@
     {
       "symbol": "Ingress.InboundEventSchema",
       "family": "ingress",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/ingress/index.ts:153",
       "evidence": {
-        "productionConsumers": [],
+        "productionConsumers": [
+          "only mode-discriminating validator (discriminatedUnion(mode) of Direct+Internal; rejects mode:'auto'), value-parsed (.parse) cross-package by packages/openomni/test/ingress/target.test.ts + protocol tests; no repoint target"
+        ],
         "testPins": [
           "packages/protocol/test/ingress.test.ts:142",
           "packages/protocol/test/ingress.test.ts:159",
@@ -273,19 +275,19 @@
           "packages/openomni/test/ingress/target.test.ts:19"
         ],
         "snapshotPin": "script/conformance/schema-snapshot.json:402",
-        "runtimeConsumer": "none"
+        "runtimeConsumer": "mode-discriminating validator (no equivalent)"
       },
       "overturnOriginal": {
         "from": "delete",
         "to": "preserve",
         "reclassified": "reviewer-reconciled"
       },
-      "reason": "Overturn was pin-only (schema-snapshot.json:402/415). No runtime data-flow consumer of the value (prod parses DirectEventSchema). Delete const; surgically drop snapshot keys."
+      "reason": "PRESERVED by merged #596 after fresh-grep proof refuted the delete brief."
     },
     {
       "symbol": "Ingress.InternalEventSchema",
       "family": "ingress",
-      "disposition": "unexport",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/ingress/index.ts:146",
       "evidence": {
@@ -293,19 +295,17 @@
           "packages/protocol/src/ingress/index.ts:151 (intra-file: type InternalEvent = z.infer<typeof InternalEventSchema>) -> derived InternalEvent type is cross-package consumed at apps/server/src/bootstrap/dispatch-owners.ts:22, apps/server/src/bootstrap/index.ts:134, packages/openomni/src/ingress/engine.ts:29/48/145, packages/openomni/src/dispatch/handlers/resident.ts:37"
         ],
         "testPins": [
-          "packages/protocol/test/ingress-internal.test.ts:6",
-          "packages/protocol/test/ingress-internal.test.ts:20",
-          "packages/protocol/test/ingress-internal.test.ts:63"
+          "packages/protocol/test/ingress-internal.test.ts — dedicated describe('InternalEventSchema') block parses the const directly (valid / missing-agentName / trigger-metadata)"
         ],
         "snapshotPin": "script/conformance/schema-snapshot.json:428",
-        "runtimeConsumer": "see productionConsumers"
+        "runtimeConsumer": "const parsed directly by tests; InternalEvent type cross-package consumed"
       },
       "overturnOriginal": {
         "from": "unexport",
         "to": "preserve",
         "reclassified": "reviewer-reconciled"
       },
-      "reason": "Overturn was pin-only. Cross-package consumers use the derived TYPE Ingress.InternalEvent, not the schema const (rg for InternalEventSchema outside protocol = empty). Unexport the const (keep it lexically for InboundEventSchema); KEEP the exported InternalEvent type; surgically drop snapshot key.",
+      "reason": "PRESERVED by merged #596; unexporting breaks the test import with no repoint target. Both const and type stay exported.",
       "note": "MUST keep `export type InternalEvent` — it is cross-package consumed (engine.ts, bootstrap, resident)."
     },
     {
@@ -1018,77 +1018,87 @@
     {
       "symbol": "Adapter.Command",
       "family": "adapter",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/adapter/index.ts:65",
       "evidence": {
-        "productionConsumers": [],
+        "productionConsumers": [
+          "packages/protocol/src/adapter/index.ts:114 — `registerCommands?(commands: Command[])` on the LIVE Surface interface (implemented by apps/server discord/telegram/github surfaces)"
+        ],
         "testPins": [],
         "snapshotPin": null,
-        "runtimeConsumer": "none"
+        "runtimeConsumer": "kept Surface interface signature"
       },
       "overturnOriginal": null,
-      "reason": "Dead 'commands' sub-feature. Only intra-namespace ref is Surface.registerCommands?(commands: Command[]) at adapter/index.ts:114, which is an OPTIONAL Surface method never implemented or called (rg registerCommands finds only the declaration). Zero cross-file consumers, zero test pins. Every repo-wide `Command` hit is Dispatch.Command / DispatchProtocol.Command / Execution 'Command face' / bash 'Command aborted' — all unrelated namespaces. Individually dead export, cleanly removable by #497 (delete interface + the registerCommands line); no rename semantics required."
+      "reason": "live interface-contract member; namespaced Adapter.Command grep missed the bare-internal ref inside Surface. Not dead."
     },
     {
       "symbol": "Adapter.CommandContext",
       "family": "adapter",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/adapter/index.ts:75",
       "evidence": {
-        "productionConsumers": [],
+        "productionConsumers": [
+          "adapter/index.ts:83 — parameter type of CommandHandler, a live Surface.onCommand member"
+        ],
         "testPins": [],
         "snapshotPin": null,
-        "runtimeConsumer": "none"
+        "runtimeConsumer": "kept via CommandHandler"
       },
       "overturnOriginal": null,
-      "reason": "Only reference anywhere is inside the dead CommandHandler type at adapter/index.ts:83 (ctx: CommandContext). CommandHandler itself is dead (see below). Zero cross-file consumers, zero test pins. Individually dead export, delete now in #497."
+      "reason": "transitively live."
     },
     {
       "symbol": "Adapter.CommandHandler",
       "family": "adapter",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/adapter/index.ts:83",
       "evidence": {
-        "productionConsumers": [],
+        "productionConsumers": [
+          "adapter/index.ts:115 — `onCommand?(handler: CommandHandler)` on live Surface"
+        ],
         "testPins": [],
         "snapshotPin": null,
-        "runtimeConsumer": "none"
+        "runtimeConsumer": "kept Surface signature"
       },
       "overturnOriginal": null,
-      "reason": "Only intra-namespace ref is Surface.onCommand?(handler: CommandHandler) at adapter/index.ts:115 — an OPTIONAL Surface method never implemented or called (rg onCommand finds only the declaration). Zero cross-file consumers, zero test pins. Individually dead; delete interface + the onCommand line in #497."
+      "reason": "live interface-contract member; namespaced grep missed the bare-internal ref inside Surface. Not dead."
     },
     {
       "symbol": "Adapter.StreamSink",
       "family": "adapter",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/adapter/index.ts:85",
       "evidence": {
-        "productionConsumers": [],
+        "productionConsumers": [
+          "adapter/index.ts:93 — parameter type of StreamingHandler, a live Surface.onStreamingMessage member"
+        ],
         "testPins": [],
         "snapshotPin": null,
-        "runtimeConsumer": "none"
+        "runtimeConsumer": "kept via StreamingHandler"
       },
       "overturnOriginal": null,
-      "reason": "#498 check performed and cleared: Adapter.StreamSink (chat-surface streaming SPI — write(text)/attach(media)/end()/error()) is UNRELATED to the protocol `Sink` interface at packages/protocol/src/sink/index.ts (LLM onMessage/onToolCall/onToolResult/onFact sink that #498 moves to llm). Namesakes only. Adapter.StreamSink is referenced solely by StreamingHandler (adapter/index.ts:93), whose only use is Surface.onStreamingMessage — never implemented (rg onStreamingMessage finds only the declaration). Zero consumers, zero test pins. NOT entangled with #498; individually dead → delete in #497."
+      "reason": "transitively live."
     },
     {
       "symbol": "Adapter.StreamingHandler",
       "family": "adapter",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/adapter/index.ts:93",
       "evidence": {
-        "productionConsumers": [],
+        "productionConsumers": [
+          "adapter/index.ts:110 — `onStreamingMessage?(handler: StreamingHandler)` on live Surface"
+        ],
         "testPins": [],
         "snapshotPin": null,
-        "runtimeConsumer": "none"
+        "runtimeConsumer": "kept Surface signature"
       },
       "overturnOriginal": null,
-      "reason": "Only intra-namespace ref is Surface.onStreamingMessage?(handler: StreamingHandler) at adapter/index.ts:110 — OPTIONAL Surface method never implemented/called. Zero cross-file consumers, zero test pins. Dead streaming SPI; delete type + the onStreamingMessage line in #497."
+      "reason": "removing these optional command/streaming capability members is an adapter-capability redesign, out of #497 dead-surface scope."
     },
     {
       "symbol": "Adapter.MediaAttachment",
@@ -2066,7 +2076,7 @@
     {
       "symbol": "NamedError.Unknown",
       "family": "error-comm-cron-model",
-      "disposition": "delete",
+      "disposition": "defer",
       "status": "pending",
       "exportSite": "packages/protocol/src/error/index.ts:60",
       "evidence": {
@@ -2087,7 +2097,7 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Retry-stack proof complete: the packages/llm retry stack never throws/catches/matches UnknownError. coerceApiError (packages/llm/src/error.ts:22-55) returns undefined for a non-coercible error rather than falling back to NamedError.Unknown; retry/index.ts classify() returns 'non_retryable' for any non-APIError. rg for NamedError.Unknown|UnknownError across packages/*/src, apps/*/src, script yields ZERO non-test references. The static member is only exercised by test pins in protocol and llm. Deleting lines 60-65 leaves the NamedError base class (which has many live consumers) intact."
+      "reason": "production-dead (no `new NamedError.Unknown` in any src/), but it is the generic fallback primitive of the NamedError taxonomy, guarded by dedicated instanceof-isolation tests (llm/test/error.test.ts + protocol/test/error.test.ts assert APIError/ProviderError.isInstance(new NamedError.Unknown(...)) === false). Delete-vs-wire is a taxonomy decision, not dead-surface cleanup. Conservative-direction deviation from the issue's gated-delete; flagged for a dedicated error-taxonomy review (no handoff issue number)."
     },
     {
       "symbol": "APIError",

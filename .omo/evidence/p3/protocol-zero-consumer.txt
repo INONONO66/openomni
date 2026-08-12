@@ -1,12 +1,15 @@
 # #497 protocol dead-surface — zero-production-consumer evidence
 # baseline commit 87d4fc8da6ab57212a2aea1ea187d8d56706b210
-# generated 2026-08-13 from repo root
+# generated 2026-08-13 from repo root (regenerated after #596 reconciliation)
 # method: word-boundary regex over the QUALIFIED symbol name
 #   rg -n '\b<Namespace>\.<Symbol>\b' packages apps --type ts \
 #      -g '!**/*.test.ts' -g '!**/*.spec.ts' -g '!**/test/**' -g '!**/tests/**' -g '!**/dist/**'
 # The qualified name matches cross-namespace CONSUMERS, not the intra-
 # namespace declaration in packages/protocol/src. Word boundaries keep
 # e.g. Policy.Label from matching the distinct Policy.LabelEntry symbol.
+# CAVEAT (recorded in reconciliation): this scan is blind to a symbol referenced
+# BARE inside its own namespace by a kept interface/union (e.g. the 5 adapter
+# Surface members) — those were reclassified to preserve and are NOT listed here.
 # Honest dump: every hit is shown verbatim; empties are the zero-consumer proof.
 
 ## Message.RetryPart [delete]
@@ -22,9 +25,6 @@
 (no production consumers)
 
 ## Ingress.ExternalInboundEvent (inferred/paired type) [delete]
-(no production consumers)
-
-## Ingress.InboundEventSchema [delete]
 (no production consumers)
 
 ## Ingress.ActivationMetadataSchema [delete]
@@ -79,21 +79,6 @@
 (no production consumers)
 
 ## RuntimeResource.schemaVersion [delete]
-(no production consumers)
-
-## Adapter.Command [delete]
-(no production consumers)
-
-## Adapter.CommandContext [delete]
-(no production consumers)
-
-## Adapter.CommandHandler [delete]
-(no production consumers)
-
-## Adapter.StreamSink [delete]
-(no production consumers)
-
-## Adapter.StreamingHandler [delete]
 (no production consumers)
 
 ## Extension.LifecycleState [delete]
@@ -151,9 +136,6 @@
 (no production consumers)
 
 ## McpServerConfig (top-level value const) [delete] (VALUE-const use only; the bare type name is the preserved type-alias row)
-(no production consumers)
-
-## NamedError.Unknown [delete]
 (no production consumers)
 
 ## Communication.Envelope [delete]
