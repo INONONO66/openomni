@@ -1,3 +1,4 @@
+import type { WorkItem } from "@openomni/protocol";
 import { EffectStore, WorkItemStore } from "@openomni/session";
 import type { EffectIntent } from "./driver.js";
 import type { EffectManifest } from "./manifest.js";
@@ -23,6 +24,13 @@ export type ReconcileSummary = Readonly<{
   resolved: number;
   stillUnknown: number;
   escalated: number;
+  /**
+   * Crash-window WorkItems re-linked by {@link EffectReconciler.reprojectTerminalOutcomes}
+   * — intents already terminal in the ledger whose read-model projection was
+   * still outcome-less (#538). Distinct from `resolved`: nothing is terminalized
+   * or re-executed, only an already-recorded outcome is projected.
+   */
+  reprojected: number;
 }>;
 
 export class EffectReconciler {
@@ -75,7 +83,34 @@ export class EffectReconciler {
       }
     }
 
-    return { scanned: outstanding.length, resolved, stillUnknown, escalated };
+    const reprojected = this.reprojectTerminalOutcomes();
+    return { scanned: outstanding.length, resolved, stillUnknown, escalated, reprojected };
+  }
+
+  /**
+   * Seam (a) for #538 — heals the crash window between an effect's terminal fact
+   * (EffectStore.confirm/fail, tx A) and its WorkItem projection (recordEffect,
+   * the later tx B). A crash there leaves the stream terminal but
+   * `completionFacts.effects` stuck on an outcome-less record, so the admission
+   * fold blocks on `effect_outcome_unresolved` forever — and
+   * {@link EffectStore.outstandingIntents} EXCLUDES terminal streams, so the
+   * probe loop above never revisits it. This pass re-projects
+   * ALREADY-RECORDED terminal outcomes only; it NEVER terminalizes or
+   * re-executes. The recordEffect idempotency guard makes already-linked intents
+   * no-ops, so only genuinely-stuck WorkItems gain a new EffectRecord (counted).
+   */
+  private reprojectTerminalOutcomes(): number {
+    let reprojected = 0;
+    for (const { intent, outcome } of EffectStore.terminalIntents()) {
+      if (intent.workItemHash === undefined) continue;
+      const item = WorkItemStore.get(intent.workItemHash);
+      if (!item) continue;
+      // Already projected → the fold reads the terminal record; nothing to do.
+      if (latestEffectOutcome(item, intent.effectId) === outcome) continue;
+      this.linkTerminal(intent, outcome);
+      reprojected += 1;
+    }
+    return reprojected;
   }
 
   private async escalateOrThrow(intent: EffectIntent, detail: string): Promise<number> {
@@ -92,4 +127,20 @@ export class EffectReconciler {
     if (intent.workItemHash === undefined) return;
     WorkItemStore.recordEffect(intent.workItemHash, { intentRef: intent.effectId, outcome });
   }
+}
+
+/**
+ * The latest EffectRecord outcome for one intent (mirrors the admission fold's
+ * latest-by-createdAt selection): `undefined` when outcome-less or absent.
+ */
+function latestEffectOutcome(
+  item: WorkItem.Info,
+  intentRef: string,
+): WorkItem.EffectRecord["outcome"] {
+  let latest: WorkItem.EffectRecord | undefined;
+  for (const record of item.completionFacts.effects) {
+    if (record.intentRef !== intentRef) continue;
+    if (!latest || record.createdAt >= latest.createdAt) latest = record;
+  }
+  return latest?.outcome;
 }

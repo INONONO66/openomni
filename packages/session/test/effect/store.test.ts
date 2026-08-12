@@ -121,6 +121,24 @@ describe("EffectStore durable sequence", () => {
     expect(ids).toEqual(["effect-a", "effect-c"]);
   });
 
+  test("terminalIntents surfaces only terminal intents paired with their outcome", () => {
+    EffectStore.intend(intent({ effectId: "t-a" }));
+    EffectStore.intend(intent({ effectId: "t-b" }));
+    EffectStore.intend(intent({ effectId: "t-c" }));
+    EffectStore.confirm("t-a", "receipt");
+    EffectStore.fail("t-b", "boom");
+    // t-c stays outcome-less → excluded (it is outstanding, not terminal).
+
+    const terminal = EffectStore.terminalIntents()
+      .map((entry) => [entry.intent.effectId, entry.outcome])
+      .sort();
+
+    expect(terminal).toEqual([
+      ["t-a", "confirmed"],
+      ["t-b", "failed"],
+    ]);
+  });
+
   test("durable effect writes fail closed without a ledger adapter", () => {
     Storage.reset();
     Storage.configure(bareStorageAdapter());

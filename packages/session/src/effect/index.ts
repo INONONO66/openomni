@@ -99,6 +99,19 @@ export namespace EffectStore {
   }>;
 
   /**
+   * A terminal intent paired with its recorded outcome — the mirror of
+   * {@link outstandingIntents}. Where that scan surfaces the outcome-LESS
+   * intents for the driver to probe, this one surfaces the outcome-BEARING
+   * intents so a consumer can re-project the already-recorded outcome onto a
+   * read model that a crash between the terminal fact and its projection left
+   * behind (#538). It NEVER terminalizes: both facts already exist.
+   */
+  export type TerminalIntent = Readonly<{
+    intent: LedgerAppend.EffectIntended;
+    outcome: "confirmed" | "failed";
+  }>;
+
+  /**
    * Records the intent at seq 1 (record-before-act). A `cas_conflict` means
    * the effectId was already intended — the idempotency key hit — so this is
    * a replay: report the recorded status and `fresh: false` (the caller must
@@ -187,6 +200,29 @@ export namespace EffectStore {
       .factsByType("effect.intended")
       .filter((fact) => !terminal.has(fact.streamId))
       .map((fact) => LedgerAppend.EffectIntended.parse(fact.data));
+  }
+
+  /**
+   * Every intent whose stream carries a terminal outcome fact, paired with that
+   * outcome — the complement of {@link outstandingIntents}, over the same
+   * `factsByType` scan and fail-closed ledger. The reconciler uses it to re-run
+   * the WorkItem projection for a crash between the terminal fact (tx A) and its
+   * projection (tx B): both facts are already durable, so this only READS them.
+   */
+  export function terminalIntents(): readonly TerminalIntent[] {
+    const ledger = requireLedger();
+    const outcomeByStream = new Map<string, "confirmed" | "failed">();
+    for (const fact of ledger.factsByType("effect.confirmed")) {
+      outcomeByStream.set(fact.streamId, "confirmed");
+    }
+    for (const fact of ledger.factsByType("effect.failed")) {
+      outcomeByStream.set(fact.streamId, "failed");
+    }
+    return ledger.factsByType("effect.intended").flatMap((fact) => {
+      const outcome = outcomeByStream.get(fact.streamId);
+      if (!outcome) return [];
+      return [{ intent: LedgerAppend.EffectIntended.parse(fact.data), outcome }];
+    });
   }
 
   function finalize(
