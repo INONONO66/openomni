@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786561708161,
+  "lastUpdate": 1786563030754,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -43129,6 +43129,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512512,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "015327f5c2755e1157370f43ef16468bcbcb4e60",
+          "message": "refactor(protocol): add #497 dead-surface disposition ledger + verifier (#597)\n\n* refactor(protocol): add #497 dead-surface disposition ledger + verifier\n\nScaffolding increment of #497 (protocol dead-surface concept diet). Adds\nthe evidence + verification apparatus that all subsequent kill batches\nreference; deletes nothing.\n\n- .omo/evidence/p3/protocol-concept-disposition.json: the disposition\n  ledger (124 symbols / 13 families), copied verbatim from the reviewer's\n  authoritative inventory.\n- script/check-protocol-disposition.ts: a deterministic verifier that\n  validates the ledger (one disposition per row, non-empty reason, required\n  evidence keys — orphans fail by symbol) and checks importer fixtures\n  against the ledger only (no live-repo dependency), rejecting removed /\n  cross-package-unexported imports and missing fail-closed owners by\n  symbol + rule.\n- packages/protocol/test/concept-diet: bun test driving the verifier logic\n  plus accept/reject fixtures.\n- .omo/evidence/p3/*.txt: zero-consumer proof (all 51 delete symbols have\n  zero qualified production consumers), the preserve/defer ledger, and the\n  invalid-fixture rejection transcript.\n\nRefs #497.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(protocol): reconcile #497 disposition ledger with merged kills\n\nReconcile the #497 dead-surface disposition ledger against the merged\n#596 kill outcome and a fresh read of the live Surface interface. Root\ncause of the original mis-adjudications: bare-internal-ref blindness — a\nnamespaced `Ns.Symbol` grep plus a production-only consumer scan misses\na symbol referenced BARE inside its own namespace by a kept interface or\nunion.\n\nReclassifications (8 rows, net vocab delete 51->44):\n- Adapter.Command/CommandContext/CommandHandler/StreamSink/StreamingHandler:\n  delete -> preserve (live Surface interface-contract members).\n- Ingress.InboundEventSchema: delete -> preserve (fresh grep refuted the\n  delete brief; #596 kept it).\n- Ingress.InternalEventSchema: unexport -> preserve (unexport breaks the\n  test import with no repoint target).\n- NamedError.Unknown: delete -> defer (generic fallback primitive of the\n  NamedError taxonomy, guarded by instanceof-isolation tests).\n\nEvidence regenerated from the corrected ledger: the 7 now-false entries\nleave protocol-zero-consumer.txt and land in protocol-preservation.txt\nwith their live-consumer / latent-role proof; Ingress.ExternalInboundEventSchema\nstays in zero-consumer (genuinely removed by #596). Scaffold code\n(verifier, dead-surface.test.ts, fixtures) untouched.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(protocol): backfill shipped status for #595/#596 rows (#497)\n\nThe #497 disposition ledger was seeded before #595 (wire) and #596\n(ingress/message/actor kill) merged to main, so 14 already-shipped rows\nstill read status:pending — a live inaccuracy in a committed ledger.\n\nBackfill status:shipped + pr on exactly those 14 rows (verified against\nfresh origin/main 5a906f29):\n- pr:595 — the 6 Dispatch.Actions wire constants (WorkerSpawn/Send/\n  Resume/Cancel, ScheduleCreate/Cancel), each referenced 2x in\n  packages/openomni/src/dispatch handlers.\n- pr:596 — 8 kills confirmed gone/unexported: Ingress.ActorMetadata,\n  Ingress.EventMetadata, Ingress.ExternalInboundEventSchema and its\n  paired inferred type, Ingress.ActivationMetadataSchema,\n  Ingress.DirectResult (unexported), Message.RetryPart, Actor.Kind\n  (unexported).\n\nDispositions, reasons, evidence, and the tally are unchanged; remaining\nkill batches stay status:pending until delivered.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T19:29:09Z",
+          "tree_id": "effdad37dc165647c6b41447cff2f0d45c4602e0",
+          "url": "https://github.com/INONONO66/openomni/commit/015327f5c2755e1157370f43ef16468bcbcb4e60"
+        },
+        "date": 1786563029989,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5888,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9374,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2384,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15175,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7928,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 680,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1329,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47741,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2327,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11163,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 507902,
             "unit": "ns/op"
           }
         ]
