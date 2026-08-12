@@ -116,13 +116,30 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: ["tool.expose"],
     source: { type: "server", serverId: "filesystem" },
   }),
-  RuntimeResource.createWorkerDescriptor("worker-1", { source: "coordinator-main" }),
-  RuntimeResource.createCredentialDescriptor("anthropic", "api-key", {
-    source: "/var/openomni/secrets/anthropic.json",
+  RuntimeResource.Descriptor.parse({
+    id: "worker:coordinator:worker-1",
+    kind: "worker",
+    labels: ["source.coordinator", "worker.coordinator"],
+    capabilities: [],
+    effects: [],
+    source: { type: "coordinator", coordinatorId: "coordinator-main" },
   }),
-  RuntimeResource.createSessionDescriptor("ses_child", "self-loop", {
-    parentSessionId: "ses_root",
-    ownerActorId: "agent:main-persona",
+  RuntimeResource.Descriptor.parse({
+    id: "credential:anthropic:api-key",
+    kind: "credential",
+    labels: ["source.file", "credential.anthropic"],
+    capabilities: [],
+    effects: [],
+    source: { type: "file", path: "/var/openomni/secrets/anthropic.json" },
+  }),
+  RuntimeResource.Descriptor.parse({
+    id: "session:ses_child",
+    kind: "session",
+    labels: ["source.runtime", "session.self-loop", "session.parent:ses_root"],
+    capabilities: [],
+    effects: [],
+    source: { type: "runtime", runtimeId: "ses_child" },
+    owner: "agent:main-persona",
   }),
   RuntimeResource.Descriptor.parse({
     id: "policy:operator:default",
@@ -169,8 +186,13 @@ describe("RuntimeResource.Descriptor conformance", () => {
 
   test("redact removes credential source paths from serialized descriptors", () => {
     const secretPath = "/var/openomni/secrets/anthropic.json";
-    const credential = RuntimeResource.createCredentialDescriptor("anthropic", "api-key", {
-      source: secretPath,
+    const credential = RuntimeResource.Descriptor.parse({
+      id: "credential:anthropic:api-key",
+      kind: "credential",
+      labels: ["source.file", "credential.anthropic"],
+      capabilities: [],
+      effects: [],
+      source: { type: "file", path: secretPath },
     });
     const serialized = serializeForAudit(credential);
 

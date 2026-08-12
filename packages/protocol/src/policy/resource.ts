@@ -1,10 +1,7 @@
 import { z } from "zod";
-import { policyKernelVersion } from "./definition.js";
 
 export namespace RuntimeResource {
-  export const schemaVersion = policyKernelVersion;
-
-  export const Kind = z.enum([
+  const Kind = z.enum([
     "tool",
     "skill",
     "mcpSource",
@@ -15,7 +12,6 @@ export namespace RuntimeResource {
     "dispatch",
     "work",
   ]);
-  export type Kind = z.infer<typeof Kind>;
 
   export const Source = z.discriminatedUnion("type", [
     z.object({
@@ -71,31 +67,6 @@ export namespace RuntimeResource {
     }),
   ]);
   export type Source = z.infer<typeof Source>;
-
-  export const ActorType = z.enum(["user", "agent", "system"]);
-  export type ActorType = z.infer<typeof ActorType>;
-
-  export const SessionType = z.enum(["root", "child", "self-loop"]);
-  export type SessionType = z.infer<typeof SessionType>;
-
-  export const ActorDescriptor = z.object({
-    actorId: z.string().min(1),
-    actorType: ActorType,
-    agentProfileRef: z.string().optional(),
-    permissions: z.array(z.string()),
-    labels: z.array(z.string()).optional(),
-    digest: z.string().optional(),
-  });
-  export type ActorDescriptor = z.infer<typeof ActorDescriptor>;
-
-  export const SessionDescriptor = z.object({
-    sessionId: z.string().min(1),
-    parentSessionId: z.string().optional(),
-    sessionType: SessionType,
-    ownerActorId: z.string().min(1),
-    digest: z.string().optional(),
-  });
-  export type SessionDescriptor = z.infer<typeof SessionDescriptor>;
 
   export const Descriptor = z
     .object({
@@ -170,73 +141,4 @@ export namespace RuntimeResource {
       }
     });
   export type Descriptor = z.infer<typeof Descriptor>;
-
-  type DescriptorInput = {
-    id: string;
-    kind: Kind;
-    labels?: string[];
-    capabilities?: string[];
-    effects?: string[];
-    source?: Source;
-    schemaRef?: string;
-    digest?: string;
-    owner?: string;
-    version?: string;
-    risk?: number;
-  };
-
-  function createDescriptor(input: DescriptorInput): Descriptor {
-    return Descriptor.parse({
-      labels: [],
-      capabilities: [],
-      effects: [],
-      ...input,
-    });
-  }
-
-  export function createWorkerDescriptor(workerId: string, opts?: { source?: string }): Descriptor {
-    return createDescriptor({
-      id: `worker:coordinator:${workerId}`,
-      kind: "worker",
-      labels: ["source.coordinator", "worker.coordinator"],
-      source:
-        opts?.source === undefined
-          ? { type: "coordinator" }
-          : { type: "coordinator", coordinatorId: opts.source },
-    });
-  }
-
-  export function createCredentialDescriptor(
-    provider: string,
-    credType: string,
-    opts?: { source?: string },
-  ): Descriptor {
-    return createDescriptor({
-      id: `credential:${provider}:${credType}`,
-      kind: "credential",
-      labels: ["source.file", `credential.${provider}`],
-      source: opts?.source === undefined ? { type: "file" } : { type: "file", path: opts.source },
-    });
-  }
-
-  export function createSessionDescriptor(
-    sessionId: string,
-    sessionType: string,
-    opts?: { parentSessionId?: string; ownerActorId?: string },
-  ): Descriptor {
-    const normalizedSessionType = SessionType.parse(sessionType);
-    const labels = ["source.runtime", `session.${normalizedSessionType}`];
-
-    if (opts?.parentSessionId !== undefined) {
-      labels.push(`session.parent:${opts.parentSessionId}`);
-    }
-
-    return createDescriptor({
-      id: `session:${sessionId}`,
-      kind: "session",
-      labels,
-      source: { type: "runtime", runtimeId: sessionId },
-      ...(opts?.ownerActorId === undefined ? {} : { owner: opts.ownerActorId }),
-    });
-  }
 }

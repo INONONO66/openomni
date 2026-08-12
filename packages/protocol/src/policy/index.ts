@@ -9,14 +9,8 @@ export { RuntimeResource } from "./resource.js";
 export { policyKernelVersion } from "./definition.js";
 
 export namespace Policy {
-  export const Label = PolicyPermission.Label;
-  export type Label = {
-    Source: z.infer<typeof Label.Source>;
-  };
   export const LabelEntry = PolicyPermission.LabelEntry;
   export type LabelEntry = z.infer<typeof LabelEntry>;
-  export const PermissionDecision = PolicyPermission.PermissionDecision;
-  export type PermissionDecision = z.infer<typeof PermissionDecision>;
   export const InputRule = PolicyPermission.InputRule;
   export type InputRule = z.infer<typeof InputRule>;
   export const Permission = PolicyPermission.Permission;

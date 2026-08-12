@@ -626,14 +626,6 @@
   "Run.Outcome#3": ["type"],
   "Run.Outcome#4": ["error", "type"],
   "Run.RetryPolicy": ["backoffMs", "maxAttempts", "retryOn"],
-  "RuntimeResource.ActorDescriptor": [
-    "actorId",
-    "actorType",
-    "agentProfileRef",
-    "digest",
-    "labels",
-    "permissions"
-  ],
   "RuntimeResource.Descriptor": [
     "capabilities",
     "digest",
@@ -646,13 +638,6 @@
     "schemaRef",
     "source",
     "version"
-  ],
-  "RuntimeResource.SessionDescriptor": [
-    "digest",
-    "ownerActorId",
-    "parentSessionId",
-    "sessionId",
-    "sessionType"
   ],
   "RuntimeResource.Source#0": ["type"],
   "RuntimeResource.Source#1": ["remoteName", "serverId", "type"],
