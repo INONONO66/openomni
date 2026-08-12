@@ -3,7 +3,7 @@
   "roadmap": "#459",
   "baselineCommit": "87d4fc8da6ab57212a2aea1ea187d8d56706b210",
   "generatedFrom": "adversarial evidence workflow wf_b5558306-84f (124 symbols / 13 families, verify phase) + reviewer reconciliation 2026-08-13",
-  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone. Status backfill: #595 wired 6 Dispatch.Actions constants (shipped) and #596 shipped 8 ingress/message/actor kills; their rows are marked status:shipped with their PR number. Remaining kill batches stay status:pending until delivered; the #497 completion receipt does the final sweep.",
+  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone. Status backfill: #595 wired 6 Dispatch.Actions constants (shipped) and #596 shipped 8 ingress/message/actor kills; their rows are marked status:shipped with their PR number. Remaining kill batches stay status:pending until delivered; the #497 completion receipt does the final sweep. COMPLETION SWEEP (#497 receipt, 2026-08-13): 27 delivered kill/unexport rows marked status:shipped with their PR — #598 (10: Tool.State x4 + McpConfig x3 unexport; McpServerConfig/Communication.Envelope/Model.isRef delete), #599 (11: RuntimeResource satellite x8 delete + Kind unexport; Policy.Label/PermissionDecision delete), #601 (6: Dispatch.TargetKind/Run.Budget/WorkerRun.Info/Artifact.Part delete; WorkItem.VerificationGate/TraceContext.Schema unexport). Three delete rows were reclassified after read-verification (see per-row reason): Run.Snapshot->already-removed (phantom), PolicyDecision.pending->preserve (live require_approval ctor), Artifact.Meta.version->preserve (live cross-package field). No census rows added; total stays 124 (corrections only rebalance buckets: delete 44->41, preserve 48->50, already-removed 2->3). Two internal-implementation unexports done during batch execution are recorded here rather than as census rows, because they are private building blocks behind public aliases, not tracked public-concept surface: #600 unexported PolicyPermission.Label + PolicyPermission.PermissionDecision (behind the deleted Policy.Label/PermissionDecision aliases), and #601 unexported work-item/schemas.ts VerificationGate (behind the removed WorkItem.VerificationGate re-export; the check-dead-exports gate forced it once the public re-export was dropped). DispatchSchemas.TargetKind was NOT unexported: it retains a live external consumer at ledger-append/streams.ts:116 plus a bare ref in Dispatch.Target. Preserve/defer/already-removed rows keep status:pending (no delivery PR). ENVELOPE COMPLETION (#603): a third internal-completion is recorded here rather than as a census row. PR #603 finished the Communication.Envelope delete that #598 began — #598 removed the public namespace member but left the backing src/communication/envelope.ts alive (its only consumer was its own schema.test.ts block, and it was naming-grandfathered), so #603 deleted envelope.ts, that self-test block, and both Envelope naming-grandfather entries (envelope.ts:Envelope + the already-stale index.ts:Envelope). The Communication.Envelope census row stays delete/shipped/#598 (the public concept died there); this note records the internal backing removal, mirroring the #600/#601 building-block cleanups above. Found by adversarial verification of the #602 receipt before merge.",
   "dispositions": [
     "delete",
     "unexport",
@@ -14,10 +14,10 @@
   ],
   "tally": {
     "unexport": 12,
-    "preserve": 48,
+    "preserve": 50,
     "defer": 12,
-    "delete": 44,
-    "already-removed": 2,
+    "delete": 41,
+    "already-removed": 3,
     "wire": 6
   },
   "symbols": [
@@ -356,7 +356,8 @@
       "symbol": "Dispatch.TargetKind (standalone re-export)",
       "family": "dispatch-run-workerrun",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 601,
       "exportSite": "packages/protocol/src/dispatch/index.ts:10 (const), packages/protocol/src/dispatch/index.ts:11 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -389,7 +390,8 @@
       "symbol": "Run.Budget",
       "family": "dispatch-run-workerrun",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 601,
       "exportSite": "packages/protocol/src/run/index.ts:33 (const), packages/protocol/src/run/index.ts:39 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -407,7 +409,7 @@
     {
       "symbol": "Run.Snapshot",
       "family": "dispatch-run-workerrun",
-      "disposition": "delete",
+      "disposition": "already-removed",
       "status": "pending",
       "exportSite": "(absent — no such symbol exists in the current tree)",
       "evidence": {
@@ -417,13 +419,14 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "NON-EXISTENT. The Run namespace (packages/protocol/src/run/index.ts) exports exactly Outcome, RetryPolicy, Budget — no Snapshot member. rg 'Snapshot' across protocol/src finds only unrelated symbols (policy PolicyPointContractSnapshot, work-item completionReportSnapshot) and the sink.onSnapshot regex in script/lint-side-effects.ts:77. Run.Snapshot was already removed (or never landed). #497 no-op for this candidate; recorded delete-confirmed with zero sites."
+      "reason": "CORRECTION (delete->already-removed): the symbol does not exist in source. A whole-tree grep of packages/protocol/src/run/** finds no `Snapshot` schema; it was removed before #497 began (no src, no test, no snapshot key). A delete row for a non-existent symbol is a phantom; reclassified already-removed."
     },
     {
       "symbol": "WorkerRun.Info (incl lastMessageId field)",
       "family": "dispatch-run-workerrun",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 601,
       "exportSite": "packages/protocol/src/worker-run/index.ts:27 (const), packages/protocol/src/worker-run/index.ts:41 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -527,7 +530,8 @@
       "symbol": "WorkItem.VerificationGate",
       "family": "workitem-artifact-trace",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 601,
       "exportSite": "packages/protocol/src/work-item/schemas.ts:143 (const), :177 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -545,7 +549,8 @@
       "symbol": "Artifact.Part",
       "family": "workitem-artifact-trace",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 601,
       "exportSite": "packages/protocol/src/artifact/index.ts:14 (const), :19 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -565,7 +570,7 @@
     {
       "symbol": "Artifact.Meta.version (field)",
       "family": "workitem-artifact-trace",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/artifact/index.ts:9 (`version: z.number().int().default(1)` within Artifact.Meta)",
       "evidence": {
@@ -581,13 +586,14 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "regenerated-confirmation: CONFIRMED fake (constant, never read); delete-eligible with the coupled write co-removed. No production READ anywhere, and session Artifact.versions() explicitly retains only the latest ('full version history is not retained') so a version counter is theater — always the constant 1. The only production reference is an inert WRITE `version: 1` at connector/log.ts:42, present solely to satisfy Meta's required output type. Persistence is safe: sqlite-artifact-adapter stores meta as a raw JSON blob and reads it back via `JSON.parse(row.meta) as Meta` (a cast, NOT a zod parse, and z.object is non-strict), so stale rows carrying version parse fine after removal and new writes omit it — no migration. Delete the field, co-remove the log.ts:42 write, and re-baseline the ln snapshot in the same batch. Artifact.Meta itself is a survivor (real consumers via store/get/list/versions) — only the version field is removed."
+      "reason": "CORRECTION (delete->preserve): live test-asserted Meta field. Defined artifact/index.ts:9 (`version: z.number().int().default(1)`); consumed cross-package by session artifact.test.ts / persistence.test.ts (makeMeta({version}), meta.version assertions, Artifact.store version bumps). Deleting it breaks session tests. Genuinely live, not deferred."
     },
     {
       "symbol": "TraceContext.Schema",
       "family": "workitem-artifact-trace",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 601,
       "exportSite": "packages/protocol/src/trace/index.ts:4 (the zod Schema const inside namespace TraceContext)",
       "evidence": {
         "productionConsumers": [],
@@ -627,7 +633,8 @@
       "symbol": "Policy.Label",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/index.ts:12 (lift of PolicyPermission.Label into Policy namespace)",
       "evidence": {
         "productionConsumers": [],
@@ -644,7 +651,8 @@
       "symbol": "Policy.PermissionDecision",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/index.ts:18 (lift of PolicyPermission.PermissionDecision into Policy namespace)",
       "evidence": {
         "productionConsumers": [],
@@ -660,7 +668,7 @@
     {
       "symbol": "PolicyDecision.pending",
       "family": "policy",
-      "disposition": "delete",
+      "disposition": "preserve",
       "status": "pending",
       "exportSite": "packages/protocol/src/policy/index.ts:89 (public PolicyDecision.pending wrapper)",
       "evidence": {
@@ -677,13 +685,14 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Dead alternative helper. PolicyDecision.allow/deny/fromEvaluation/isBlocking/reason are the live decision surface (dozens of prod sites across apps/server, agent, openomni, policy). PolicyDecision.pending is the ONLY member of that family with zero production callers (repo-wide `.pending(` grep = index.ts def + tests only). The 'pending' verdict itself stays live: fromEvaluation (decision.ts:64) still emits pending via the retained internal PolicyDecisionHelpers.pending. Delete removes only the public wrapper index.ts:89-91."
+      "reason": "CORRECTION (delete->preserve): live require_approval verdict constructor. `PolicyDecisionHelpers.pending` is defined at policy/decision.ts:39 and called internally at :64 inside fromEvaluation's require_approval branch; `PolicyDecision.pending` has 4 cross-package consumers (agent policy-decision.ts:45, tool-executor-verdicts.test.ts:93/117, openomni completion-admission-authority.test.ts:315, child-agent-policy-pre.test.ts:61). The batch-15 implementer refuted the delete brief; the symbol was kept. Not dead surface."
     },
     {
       "symbol": "RuntimeResource.Kind",
       "family": "policy",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:7",
       "evidence": {
         "productionConsumers": [
@@ -703,7 +712,8 @@
       "symbol": "RuntimeResource.ActorType",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:75",
       "evidence": {
         "productionConsumers": [],
@@ -720,7 +730,8 @@
       "symbol": "RuntimeResource.SessionType",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:78",
       "evidence": {
         "productionConsumers": [],
@@ -742,7 +753,8 @@
       "symbol": "RuntimeResource.ActorDescriptor",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:81",
       "evidence": {
         "productionConsumers": [],
@@ -760,7 +772,8 @@
       "symbol": "RuntimeResource.SessionDescriptor",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:91",
       "evidence": {
         "productionConsumers": [],
@@ -778,7 +791,8 @@
       "symbol": "RuntimeResource.createWorkerDescriptor",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:197",
       "evidence": {
         "productionConsumers": [],
@@ -798,7 +812,8 @@
       "symbol": "RuntimeResource.createCredentialDescriptor",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:209",
       "evidence": {
         "productionConsumers": [],
@@ -818,7 +833,8 @@
       "symbol": "RuntimeResource.createSessionDescriptor",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:222",
       "evidence": {
         "productionConsumers": [],
@@ -839,7 +855,8 @@
       "symbol": "RuntimeResource.schemaVersion",
       "family": "policy",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 599,
       "exportSite": "packages/protocol/src/policy/resource.ts:5",
       "evidence": {
         "productionConsumers": [],
@@ -909,7 +926,8 @@
       "symbol": "Tool.StatePending",
       "family": "tool-token",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/tool/index.ts:33 (const), :37 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -930,7 +948,8 @@
       "symbol": "Tool.StateRunning",
       "family": "tool-token",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/tool/index.ts:39 (const), :46 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -951,7 +970,8 @@
       "symbol": "Tool.StateCompleted",
       "family": "tool-token",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/tool/index.ts:48 (const), :59 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -968,7 +988,8 @@
       "symbol": "Tool.StateError",
       "family": "tool-token",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/tool/index.ts:61 (const), :70 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1725,7 +1746,8 @@
       "symbol": "McpConfig.StdioServerConfig (const+type)",
       "family": "mcp-ipc",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/mcp/index.ts:12 (const), :17 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1744,7 +1766,8 @@
       "symbol": "McpConfig.SseServerConfig (const+type)",
       "family": "mcp-ipc",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/mcp/index.ts:19 (const), :23 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1763,7 +1786,8 @@
       "symbol": "McpConfig.StreamableHttpServerConfig (const+type)",
       "family": "mcp-ipc",
       "disposition": "unexport",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/mcp/index.ts:25 (const), :29 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1782,7 +1806,8 @@
       "symbol": "McpServerConfig (top-level value const)",
       "family": "mcp-ipc",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/mcp/index.ts:39",
       "evidence": {
         "productionConsumers": [],
@@ -2140,18 +2165,17 @@
       "symbol": "Communication.Envelope",
       "family": "error-comm-cron-model",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/communication/index.ts:7",
       "evidence": {
         "productionConsumers": [],
-        "testPins": [
-          "packages/protocol/test/communication/schema.test.ts:6"
-        ],
+        "testPins": [],
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Envelope is a BANNED noun and has zero production consumers. The only non-declaration hit in src is script/lint-tools.ts:224, which is the ban-enforcing regex (Runtime|Task|Envelope) — a lint rule that PROHIBITS the noun, not a consumer. rg for Communication.Envelope across all src/apps/script yields only the test pin at schema.test.ts:6; every other case-insensitive 'envelope' hit is an unrelated concept (worker-completion CompletionEnvelope, ingress audit-envelope, doc comments). Deleting the namespace member (index.ts:7-8) also strands the backing file packages/protocol/src/communication/envelope.ts (imported only at communication/index.ts:1), which becomes fully dead and should be removed in the same batch. The sibling members PendingAsk/PendingInteraction/WorkerGrant stay (heavily consumed by packages/session)."
+      "reason": "Envelope is a BANNED noun (script/lint-tools.ts:224 ban regex Runtime|Task|Envelope) with zero production consumers; across src/apps/script the only hit for Communication.Envelope was its own self-test at schema.test.ts. Delivered in two steps. #598 removed the public namespace member (index.ts:7-8), which at census time was the sole importer of the backing schema file src/communication/envelope.ts; #598 left that backing file in place — its only remaining consumer was its own test block, and it was parked in the naming-grandfather list — so residual dead product surface survived. PR #603 completed the delete: it removed envelope.ts, that self-test block, and the two Envelope naming-grandfather entries (envelope.ts:Envelope plus the already-stale index.ts:Envelope), leaving no Envelope surface anywhere. Sibling members PendingAsk/PendingInteraction/WorkerGrant stay (heavily consumed by packages/session)."
     },
     {
       "symbol": "CronJob (cron namespace)",
@@ -2212,7 +2236,8 @@
       "symbol": "Model.isRef",
       "family": "error-comm-cron-model",
       "disposition": "delete",
-      "status": "pending",
+      "status": "shipped",
+      "pr": 598,
       "exportSite": "packages/protocol/src/model/index.ts:13",
       "evidence": {
         "productionConsumers": [],
