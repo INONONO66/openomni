@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786505851011,
+  "lastUpdate": 1786506104091,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -42385,6 +42385,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 508304,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a60b92721cbb0fd5f417e8a1763facd011e78c4",
+          "message": "fix(server): re-enter backoff when discord fetchGatewayUrl rejects (#591)\n\nDiscordGateway.reconnect() called fetchGatewayUrl() for cold reconnects\n(no resumable session). When that REST call rejected — exactly the\ntransient Discord outages that cluster reconnects — the close handler's\nterminal .catch logged one Operational.Error and the chain ENDED with\nrunning === true: no further reconnect was scheduled, so the bot stayed\nsilently offline until a process restart (#540). Socket-level failures\nre-enter through the close handler correctly; only the fetch-rejection\npath lacked re-entry.\n\nRetry the fetch inside reconnect() under the shared calculateBackoff\nschedule, bounded by `running` so an intentional stop() ends the loop\ncleanly (no leak, no infinite spin). openSocket stays OUTSIDE the retry\ncatch: socket-level failures already re-enter via the close handler, and\nretrying them here too would overlap that reconnect chain. A persistent\noutage still surfaces Operational.Error each attempt — it just no longer\ndies.\n\nTests: a fetch that rejects once then recovers proves the chain\nreconnects (removal map: reverting to the terminal .catch turns this\ntest RED); a persistently-rejecting fetch after stop() proves no further\nattempt is scheduled once running === false.\n\nCloses #540\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T03:40:26Z",
+          "tree_id": "a202520b0d2ba3ed14652f319fbdfdefc85f0ed4",
+          "url": "https://github.com/INONONO66/openomni/commit/4a60b92721cbb0fd5f417e8a1763facd011e78c4"
+        },
+        "date": 1786506103726,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 681,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3039,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16095,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 838,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1440,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43239,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2436,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10767,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100707,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 508992,
             "unit": "ns/op"
           }
         ]
