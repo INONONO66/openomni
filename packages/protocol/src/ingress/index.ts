@@ -90,17 +90,14 @@ const MetaSchemaImpl = z
 export namespace Ingress {
   export const ActorSchema = ActorSchemaImpl;
   export type Actor = z.infer<typeof ActorSchema>;
-  export type ActorMetadata = Actor;
 
   export const TargetSchema = TargetSchemaImpl;
   export type Target = z.infer<typeof TargetSchema>;
 
   export const MetaSchema = MetaSchemaImpl;
   export type Meta = z.infer<typeof MetaSchema>;
-  export type EventMetadata = Meta;
 
-  export const ActivationMetadataSchema = ActivationMetadataSchemaImpl;
-  export type ActivationMetadata = z.infer<typeof ActivationMetadataSchema>;
+  export type ActivationMetadata = z.infer<typeof ActivationMetadataSchemaImpl>;
 
   export const AgentDefSchema = z
     .object({
@@ -154,12 +151,10 @@ export namespace Ingress {
     DirectEventSchema,
     InternalEventSchema,
   ]);
-  export const ExternalInboundEventSchema = DirectEventSchema;
   export type InboundEvent = DirectEvent | InternalEvent;
-  export type ExternalInboundEvent = DirectEvent;
   export type ResolvedInboundEvent = DirectEvent | (InternalEvent & { agent: AgentDef });
 
-  export type DirectResult = {
+  type DirectResult = {
     output: string;
     finishReason: string;
   };

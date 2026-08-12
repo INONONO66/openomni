@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { APIError } from "../error/index.js";
 import { Token } from "../token/index.js";
 import { Tool } from "../tool/index.js";
 
@@ -59,16 +58,6 @@ export namespace Message {
   });
   export type StepFinishPart = z.infer<typeof StepFinishPart>;
 
-  export const RetryPart = PartBase.extend({
-    type: z.literal("retry"),
-    attempt: z.number(),
-    error: APIError.Schema,
-    time: z.object({
-      created: z.number(),
-    }),
-  });
-  export type RetryPart = z.infer<typeof RetryPart>;
-
   export const ToolPart = PartBase.extend({
     type: z.literal("tool"),
     callID: z.string(),
@@ -82,7 +71,6 @@ export namespace Message {
     ReasoningPart,
     StepStartPart,
     StepFinishPart,
-    RetryPart,
     ToolPart,
   ]);
   export type Part = z.infer<typeof Part>;
