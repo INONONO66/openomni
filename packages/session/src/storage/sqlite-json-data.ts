@@ -15,19 +15,32 @@ export type SqliteJsonDataRow = {
   readonly data: string;
 };
 
-export function parseSqliteJsonDataRow<T>(row: SqliteJsonDataRow | null): T | undefined {
+// Parse-don't-cast on read: every caller passes a `decode` that re-validates
+// the row's JSON across the persistence boundary (schema `.parse`), so a
+// corrupt/tampered row is a loud typed defect and never a silently-trusted
+// value. The blind `JSON.parse(...) as T` this replaced was the fail-open
+// root cause fixed for worker_grant/message/part in #584 and here for
+// pending_interaction/pending_ask (#585).
+export function parseSqliteJsonDataRow<T>(
+  row: SqliteJsonDataRow | null,
+  decode: (data: string) => T,
+): T | undefined {
   if (!row) return undefined;
-  return JSON.parse(row.data) as T;
+  return decode(row.data);
 }
 
-export function parseSqliteJsonDataRows<T>(rows: readonly SqliteJsonDataRow[]): T[] {
-  return rows.map((row) => JSON.parse(row.data) as T);
+export function parseSqliteJsonDataRows<T>(
+  rows: readonly SqliteJsonDataRow[],
+  decode: (data: string) => T,
+): T[] {
+  return rows.map((row) => decode(row.data));
 }
 
 export function listSqliteJsonDataByStatus<T>(
   db: Database,
   table: SqliteJsonDataTable,
   status: readonly string[] | undefined,
+  decode: (data: string) => T,
 ): T[] {
   const rows =
     status && status.length > 0
@@ -41,7 +54,7 @@ export function listSqliteJsonDataByStatus<T>(
       : (db
           .query(`SELECT data FROM ${table} ORDER BY time_created ASC`)
           .all() as SqliteJsonDataRow[]);
-  return parseSqliteJsonDataRows<T>(rows);
+  return parseSqliteJsonDataRows<T>(rows, decode);
 }
 
 export function addOptionalStringEqualityCondition(
