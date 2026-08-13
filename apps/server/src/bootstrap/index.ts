@@ -86,7 +86,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
   };
   const mcpProvider = new McpToolProvider({ traceId: bootTraceId });
 
-  const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
+  const projectMcpServers = McpConfigLoader.discover(
+    config.workspace?.root ?? process.cwd(),
+    bootTraceId,
+  );
   const mergedMcpConfig = {
     ...config.mcp,
     servers: McpConfigLoader.merge(config.mcp.servers, projectMcpServers),

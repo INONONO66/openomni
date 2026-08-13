@@ -7,7 +7,12 @@ import { parseMcpServerConfigs, type McpServerConfig } from "../config/mcp-serve
 const discoverCache = new Map<string, { result: McpServerConfig[] | null }>();
 
 export namespace McpConfigLoader {
-  export function discover(workspaceRoot: string): McpServerConfig[] | null {
+  /**
+   * Project MCP config, read during boot. `traceId` is the boot's — discovery
+   * is not a trace origin, and a parse warning filed under a minted id cannot
+   * be read back against the startup that produced it.
+   */
+  export function discover(workspaceRoot: string, traceId: string): McpServerConfig[] | null {
     const cached = discoverCache.get(workspaceRoot);
     if (cached) return cached.result;
 
@@ -22,7 +27,7 @@ export namespace McpConfigLoader {
       parsed = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
       Bus.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "failed to parse mcp config",
@@ -43,7 +48,7 @@ export namespace McpConfigLoader {
       });
     } else {
       Bus.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "unexpected format in mcp config",

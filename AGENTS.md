@@ -40,12 +40,34 @@ openomni/
 ## DEPENDENCY GRAPH
 
 ```
-protocol ← policy ← agent ← openomni ← server
-protocol ← telemetry ← session ← llm ──┘
-protocol ← ipc ← coordinator ← server
+protocol  ←  policy, telemetry, ipc          (ring 0 → 1)
+telemetry ←  session                          session adds durability
+session   ←  llm, agent                       Phase 1b removes both edges
+ipc       ←  coordinator                      process driver, session-free
+policy, llm, telemetry, session  ←  agent     the loop
+everything                       ←  openomni  ←  server
 ```
 
-Each layer depends only on lower primitives. `protocol` is the leaf (zero internal deps). `policy` depends only on protocol and owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` depends on `llm`, `telemetry` for observation, and `policy` for the loop extension primitive, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` depends on **protocol + ipc only** (session-free since #477): its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
+Read as `X ← Y`: Y may depend on X. Exactly what `script/check-deps.ts`
+allows, package by package — the table is the contract, the sketch is a
+reading aid:
+
+| package | may depend on |
+| --- | --- |
+| `protocol` | — (leaf) |
+| `policy` | protocol |
+| `telemetry` | protocol |
+| `ipc` | protocol |
+| `session` | protocol, telemetry |
+| `llm` | protocol, telemetry, session |
+| `coordinator` | protocol, ipc |
+| `agent` | protocol, policy, llm, telemetry, session |
+| `openomni` | any except itself |
+| `server` | composition root |
+
+`llm`'s and `agent`'s edges to `session` are the ones Phase 1b removes (#606).
+
+`policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is session-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
 
 ## PACKAGE OWNERSHIP
 
@@ -55,7 +77,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | --- | --- | --- |
 | `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
 | `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
-| `packages/session` | Durable state substrate: session/message/part CRUD, Bus, Bus persistence, storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
+| `packages/session` | Durable state substrate: session/message/part CRUD, Bus persistence (the journal writer; `Bus` itself is `packages/telemetry`), storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
 | `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
 | `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
