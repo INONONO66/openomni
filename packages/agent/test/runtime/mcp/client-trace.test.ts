@@ -85,21 +85,25 @@ describe("McpClient call audit trace", () => {
    * and nothing at all when there is none. Asserting only that a record
    * exists leaves a re-mint free to satisfy it.
    */
-  test("files connect under the lifecycle trace", async () => {
+  test("files connect and disconnect under the lifecycle trace", async () => {
     Bus.reset();
     const connected = nextEvent(Mcp.Connected);
+    const disconnected = nextEvent(Mcp.Disconnected);
     const client = createClient(async () => ({ content: [] }));
 
     await client.connect();
+    await client.disconnect();
 
     expect((await connected).traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
+    expect((await disconnected).traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
   });
 
-  test("publishes no lifecycle record when it has no trace", async () => {
+  test.each([undefined, ""])("publishes no lifecycle record for traceId %j", async (traceId) => {
     Bus.reset();
     const seen: string[] = [];
     const unsubscribe = Bus.observe((descriptor) => seen.push(descriptor.name));
     const client = new McpClient(config, {
+      ...(traceId === undefined ? {} : { traceId }),
       client: {
         connect: async () => undefined,
         close: async () => undefined,
@@ -110,11 +114,14 @@ describe("McpClient call audit trace", () => {
 
     try {
       await client.connect();
+      await client.disconnect();
       await Bun.sleep(0);
     } finally {
       unsubscribe();
     }
 
-    expect(seen.filter((name) => name.startsWith("mcp."))).toEqual([]);
+    // Not filtered to `mcp.*`: a re-minted `operational.error` on the failure
+    // branch is the same defect and should fail this too.
+    expect(seen).toEqual([]);
   });
 });
