@@ -84,6 +84,62 @@ describe("telemetry scope", () => {
       runId: "r",
     });
   });
+
+  /** Construction is the composition root, so refusing there is a wiring error. */
+  test("scope validates at construction", () => {
+    expect(() => scope({ traceId: "", sessionId: "s", runId: "r" }, collector())).toThrow(
+      MissingTraceScopeError,
+    );
+  });
+
+  /**
+   * A child belongs to the same trace. If it could mint a new `traceId` the
+   * thirteen `crypto.randomUUID()` sites this package exists to prevent would
+   * be one call away from re-expressible.
+   */
+  test("child cannot replace the trace id", () => {
+    const sink = collector();
+    const child = scope(TRACE, sink, { now: clock }).child({
+      traceId: "attacker-trace",
+    } as never);
+
+    child.emit(Operational.Info, { component: "test", msg: "child" });
+
+    expect(sink.named(Operational.Info.name)[0]).toMatchObject({ traceId: "trace-1" });
+  });
+
+  /** Narrowing mid-run must not be able to kill the run. */
+  test("child keeps the parent value instead of throwing on an absent narrowing", () => {
+    const sink = collector();
+    const child = scope(TRACE, sink, { now: clock }).child({ runId: undefined, actorId: "a2" });
+
+    child.emit(Operational.Info, { component: "test", msg: "kept" });
+
+    expect(sink.named(Operational.Info.name)[0]).toMatchObject({
+      runId: "run-1",
+      actorId: "a2",
+    });
+  });
+
+  /**
+   * The package's boundary rule: replacing telemetry with no-ops must leave
+   * observed behavior identical, and a no-op cannot throw.
+   */
+  test("a throwing sink never reaches the caller", () => {
+    const errors: string[] = [];
+    const log = scope(
+      TRACE,
+      {
+        publish() {
+          throw new Error("sink exploded");
+        },
+      },
+      { now: clock, onEmitError: (_error, name) => errors.push(name) },
+    );
+
+    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
+    expect(errors).toEqual([Operational.Info.name]);
+  });
 });
 
 const SpanEnd = BusEvent.define(
@@ -153,6 +209,27 @@ describe("telemetry span", () => {
       return "done";
     });
     expect(ends.map((end) => end.kind)).toEqual(["budget_exhausted"]);
+  });
+
+  test("a sink that throws on the start event does not cancel the body", async () => {
+    let bodyRan = false;
+    const log = scope(
+      TRACE,
+      {
+        publish() {
+          throw new Error("sink exploded");
+        },
+      },
+      { now: clock, onEmitError: () => undefined },
+    );
+
+    const result = await log.span(TEST_SPAN, { label: "t" }, async () => {
+      bodyRan = true;
+      return "done";
+    });
+
+    expect(bodyRan).toBe(true);
+    expect(result).toBe("done");
   });
 
   test("a throwing body propagates after the terminal event", async () => {

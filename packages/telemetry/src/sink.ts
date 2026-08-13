@@ -1,10 +1,4 @@
 import type { BusEvent } from "@openomni/protocol";
-import { Bus } from "./bus";
-
-/** Publishes onto the process-wide Bus. The composition root's default. */
-export function busSink(): BusEvent.Sink {
-  return { publish: Bus.publish };
-}
 
 export interface CollectedEvent {
   readonly name: string;

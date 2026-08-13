@@ -1,6 +1,8 @@
 # packages/session
 
-Durable state substrate: session lifecycle, message/part storage, event bus + hash-chained bus persistence, trace context, artifacts, audit records, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
+Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, trace context, artifacts, audit records, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+
+`Bus` itself moved to `@openomni/telemetry` (#606) — this package re-exports it for compatibility while consumers migrate, and keeps the durable journal that subscribes to it.
 
 This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in `@openomni/openomni`.
 
@@ -11,7 +13,6 @@ This package stores facts; the kernel decides their product meaning. Communicati
 ```
 src/
 ├── index.ts              # Package barrel — re-exports all namespaces
-├── bus/                  # Bus pub/sub (Bus.publish / Bus.subscribe) + typed event descriptors
 ├── session/
 │   ├── index.ts          # Session namespace barrel: public Session.* API re-exports
 │   ├── events.ts         # Session bus event descriptors

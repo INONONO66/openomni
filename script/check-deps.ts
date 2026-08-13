@@ -34,6 +34,7 @@ declare const Bun: {
 type PackageKey =
   | "protocol"
   | "ipc"
+  | "telemetry"
   | "policy"
   | "session"
   | "llm"
@@ -511,6 +512,7 @@ const TRACKED_DOCS = [
   "AGENTS.md",
   "packages/protocol/AGENTS.md",
   "packages/ipc/AGENTS.md",
+  "packages/telemetry/AGENTS.md",
   "packages/session/AGENTS.md",
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",

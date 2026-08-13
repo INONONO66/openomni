@@ -4,7 +4,7 @@ Source of truth for [#606](https://github.com/INONONO66/openomni/issues/606). Th
 
 ## Outcome
 
-`@openomni/agent` becomes a ~1,000 LOC turn state machine whose only extension mechanism is the policy point, with a working compaction pipeline and constant-cost policy dispatch. Observation moves out of the ledger package into `@openomni/telemetry`, so `agent` and `llm` carry no dependency on durable storage.
+`@openomni/agent` becomes a turn state machine whose only extension mechanism is the policy point, with a working compaction pipeline and constant-cost policy dispatch. Observation moves out of the ledger package into `@openomni/telemetry`, so `agent` and `llm` carry no dependency on durable storage.
 
 The target is a base harness that survives comparison with [pi](https://github.com/badlogic/pi-mono), [senpi](https://github.com/code-yeongyu/senpi), and [pss-runtime](https://github.com/minpeter/pss-runtime) on its own terms — not by matching their feature surface, but by owning the layer none of them has.
 
@@ -29,7 +29,7 @@ Each rule below is falsifiable. A reviewer should be able to point at a line and
 | package | owns | must not own | boundary test |
 |---|---|---|---|
 | `@openomni/protocol` | vocabulary: schemas, event descriptors, `PolicyPoint.Registry`, `PolicyEffect`, `BusEvent.Sink` | any behavior | importing it does nothing — no side effects, no globals, no I/O |
-| `@openomni/telemetry` *(new)* | the single observation channel: `Bus`, trace-owning scoped emitter, span pairing, `Visibility`, sink combinators | what to record (protocol), where to store (ledger), decisions (policy) | **replacing it with no-ops leaves agent behavior bit-identical** |
+| `@openomni/telemetry` *(new)* | the single observation channel: `Bus`, trace-owning scoped emitter, span pairing, sink combinators. `Visibility` stays a protocol vocabulary term; telemetry applies it, it does not own it | what to record (protocol), where to store (ledger), decisions (policy) | **replacing it with no-ops leaves agent behavior bit-identical** |
 | `@openomni/policy` | the decision kernel: `dispatchPoint`, contract validation, registration/scope/priority, undeclared-effect rejection, composition | policy *content*, when points fire, what reaches the ledger | the engine returns decisions and never applies an effect itself |
 | `@openomni/llm` | one model round trip: providers, catalog, auth, request assembly, stream→message fold, tool-call protocol, token accounting | the conversation loop, tool *execution*, policy, history ownership | when `run()` returns, llm's work is over — "next turn" does not exist inside it |
 | `@openomni/agent` | the turn state machine: run/turn lifecycle, the order and timing of the 12 injection points, effect application, retry control flow, history, counters, spans | tool implementations, MCP, system prompt text, session persistence, compaction *strategy*, default policy content | **zero domain string literals in core files** — no prompt text, tool names, policy names, or magic strings like `"stalled"` |
@@ -91,6 +91,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 |---|---|---|
 | [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
 | — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
+| — | move `TraceContext` off `packages/session` — two packages own the trace-identity convention with contradictory rules (`TraceContext.empty()` mints a traceId with no session or run, which `requireTraceScope` forbids) | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core

@@ -6,7 +6,7 @@ Last verified against `origin/main`: 2026-08-05 (paths, dependency graph, and sh
 
 OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 7 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 8 packages and 1 app (Server).
 
 The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
@@ -21,7 +21,8 @@ openomni/
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
-│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
+│   ├── telemetry/       # The observation channel: Bus pub/sub, trace-owning scoped emitter, span pairing, sink combinators — protocol-only deps (#606)
+│   ├── session/         # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
 │   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + MCP client runtime — depends on session for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
@@ -40,11 +41,11 @@ openomni/
 
 ```
 protocol ← policy ← agent ← openomni ← server
-protocol ← session ← llm ──────┘
+protocol ← telemetry ← session ← llm ──┘
 protocol ← ipc ← coordinator ← server
 ```
 
-Each layer depends only on lower primitives. `protocol` is the leaf (zero internal deps). `policy` depends only on protocol and owns the generic policy engine/effect composition primitive. `agent` depends on `llm`, `session` for observability, and `policy` for the loop extension primitive, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` depends on **protocol + ipc only** (session-free since #477): its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
+Each layer depends only on lower primitives. `protocol` is the leaf (zero internal deps). `policy` depends only on protocol and owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` depends on `llm`, `session` for observability, and `policy` for the loop extension primitive, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` depends on **protocol + ipc only** (session-free since #477): its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
 
 ## PACKAGE OWNERSHIP
 
