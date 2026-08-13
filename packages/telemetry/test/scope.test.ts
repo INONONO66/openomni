@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   collector,
   InvalidTraceScopeError,
+  isSpanId,
   requireTraceScope,
   scope,
   type SpanOutcome,
@@ -64,6 +65,11 @@ describe("telemetry scope", () => {
       traceId: TRACE_ID,
       sessionId: "session-1",
     });
+  });
+
+  test("the emitter's identity is frozen", () => {
+    const log = scope(TRACE, collector(), { now: clock });
+    expect(Object.isFrozen(log.trace)).toBe(true);
   });
 
   test("child narrows the scope and keeps the rest", () => {
@@ -227,6 +233,32 @@ describe("telemetry span", () => {
       ends: sink.named(SpanEnd.name) as Array<{ kind: string }>,
     };
   }
+
+  /**
+   * The tree an exporter reconstructs. Two mutations — reusing the parent's
+   * `spanId`, and dropping `parentSpanId` — each survived the whole suite
+   * before this existed, so the package's second headline claim was carried
+   * entirely by its documentation.
+   */
+  test("a span's events carry a fresh child spanId parented to the caller's span", async () => {
+    const sink = collector();
+    const log = scope(TRACE, sink, { now: clock });
+
+    await log.span(TEST_SPAN, { label: "t" }, async () => "ok");
+
+    const start = sink.named(AgentExecution.TurnStart.name)[0] as {
+      spanId: string;
+      parentSpanId?: string;
+    };
+    const end = sink.named(SpanEnd.name)[0] as { spanId: string; parentSpanId?: string };
+
+    expect(isSpanId(start.spanId)).toBe(true);
+    expect(start.spanId).not.toBe(SPAN_ID);
+    expect(start.parentSpanId).toBe(SPAN_ID);
+    // Start and end are the same span, or the pair does not describe one.
+    expect(end.spanId).toBe(start.spanId);
+    expect(end.parentSpanId).toBe(SPAN_ID);
+  });
 
   test("a normal return ends as completed", async () => {
     const { starts, ends } = await endKinds(async () => "ok");

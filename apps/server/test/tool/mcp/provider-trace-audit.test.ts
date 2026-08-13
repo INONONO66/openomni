@@ -152,9 +152,20 @@ describe("McpToolProvider canonical policy trace", () => {
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
-    await expect(
-      provider.execute({ id: "call-mcp-traceless", tool: "search_query", input: {} }),
-    ).rejects.toThrow("mcp tool execution requires the dispatching run trace");
+    for (const traceContext of [
+      undefined,
+      { traceId: "t", sessionId: "s" },
+      { traceId: "", sessionId: "s", runId: "r" },
+      { traceId: "t", sessionId: "", runId: "r" },
+      { traceId: "t", sessionId: "s", runId: "" },
+    ]) {
+      await expect(
+        provider.execute(
+          { id: "call-mcp-traceless", tool: "search_query", input: {} },
+          traceContext === undefined ? undefined : { traceContext },
+        ),
+      ).rejects.toThrow("mcp tool execution requires the dispatching run trace");
+    }
     expect(execute).not.toHaveBeenCalled();
   });
 

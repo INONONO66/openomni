@@ -181,11 +181,17 @@ export namespace McpPrefixGuardMiddleware {
   export function requireAuditContext(
     traceContext?: TraceContext.Type,
   ): Required<Pick<TraceContext.Type, "traceId" | "sessionId" | "runId">> {
-    const { traceId, sessionId, runId } = traceContext ?? {};
+    const traceId = nonEmptyString(traceContext?.traceId);
+    const sessionId = nonEmptyString(traceContext?.sessionId);
+    const runId = nonEmptyString(traceContext?.runId);
     if (traceId === undefined || sessionId === undefined || runId === undefined) {
       throw new Error("mcp tool execution requires the dispatching run trace");
     }
     return { traceId, sessionId, runId };
+  }
+
+  function nonEmptyString(value: string | undefined): string | undefined {
+    return value !== undefined && value.length > 0 ? value : undefined;
   }
 
   export async function evaluatePreToolUse(ctx: PreToolUseContext): Promise<PreToolUseResult> {
