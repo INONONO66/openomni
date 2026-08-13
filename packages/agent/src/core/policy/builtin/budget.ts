@@ -1,5 +1,5 @@
 import { PolicyDecision } from "@openomni/protocol";
-import { checkBudget, describeBudgetRemaining, effectiveBudgetThresholds } from "../../budget";
+import { checkBudget, describeBudgetRemaining } from "../../budget";
 import type { CanonicalPolicyRegistration } from "../types";
 
 export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
@@ -17,14 +17,6 @@ export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
       if (status === "reassurance") {
         issued = true;
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
-        // run.turn.pre contract guarantees a non-empty sessionId on every
-        // canonical dispatch; "" only surfaces on a non-contract invocation.
-        ctx.eventEmitter?.emit("agent.budget.reassurance", {
-          sessionId: ctx.sessionId ?? "",
-          time: Date.now(),
-          remaining,
-          threshold: effectiveBudgetThresholds(ctx.budget).reassuranceThreshold,
-        });
         return PolicyDecision.allow({
           policyId: "builtin.budget.reassurance",
           reasonCodes: ["budget_reassurance"],
@@ -56,14 +48,6 @@ export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
       if (status === "warning") {
         issued = true;
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
-        // run.turn.pre contract guarantees a non-empty sessionId on every
-        // canonical dispatch; "" only surfaces on a non-contract invocation.
-        ctx.eventEmitter?.emit("agent.budget.warning", {
-          sessionId: ctx.sessionId ?? "",
-          time: Date.now(),
-          remaining,
-          threshold: effectiveBudgetThresholds(ctx.budget).warningThreshold,
-        });
         return PolicyDecision.allow({
           policyId: "builtin.budget.warning",
           reasonCodes: ["budget_warning"],

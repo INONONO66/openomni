@@ -1,7 +1,7 @@
 import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
 import type { Policy, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { AgentEvent, AgentStep, ChatAgentConfig, TokenUsage } from "../types";
+import type { AgentEvent, AgentStep, TokenUsage } from "../types";
 import { getCompactionCount, type AgentRunBase, type RunState } from "./run-state";
 
 export function emitRunStarted(trace: TraceContext.Type, modelId: string): void {
@@ -15,18 +15,9 @@ export function emitRunStarted(trace: TraceContext.Type, modelId: string): void 
   });
 }
 
-export function emitTurnStart(
-  state: RunState,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-): void {
+export function emitTurnStart(state: RunState, agentBase: AgentRunBase): void {
   const turnIndex = state.turnIndex;
   const sessionId = eventSessionId(state, agentBase);
-  config.eventEmitter?.emit("agent.turn.start", {
-    sessionId,
-    time: Date.now(),
-    turnIndex,
-  });
   Bus.publish(AgentExecution.TurnStart, {
     ...agentBase,
     sessionId,
@@ -37,21 +28,10 @@ export function emitTurnStart(
 
 export function emitTurnComplete(
   state: RunState,
-  config: ChatAgentConfig,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): void {
   const sessionId = eventSessionId(state, agentBase);
-  config.eventEmitter?.emit("agent.turn.complete", {
-    sessionId,
-    time: Date.now(),
-    turnIndex: state.turnIndex,
-    usage: {
-      inputTokens: turnUsage.inputTokens,
-      outputTokens: turnUsage.outputTokens,
-      totalTokens: turnUsage.totalTokens,
-    },
-  });
   Bus.publish(AgentExecution.TurnComplete, {
     ...agentBase,
     sessionId,
@@ -112,18 +92,10 @@ export function emitRunCompleted(
 
 export function emitErrorRetry(
   state: RunState,
-  config: ChatAgentConfig,
   agentBase: AgentRunBase,
   options: { readonly attempt: number; readonly maxAttempts: number; readonly error: string },
 ): void {
   const sessionId = eventSessionId(state, agentBase);
-  config.eventEmitter?.emit("agent.error.retry", {
-    sessionId,
-    time: Date.now(),
-    attempt: options.attempt,
-    maxAttempts: options.maxAttempts,
-    error: options.error,
-  });
   Bus.publish(AgentExecution.ErrorRetry, {
     ...agentBase,
     sessionId,
@@ -162,7 +134,6 @@ export function publishDenyDiagnostic(
   timing: Policy.Timing,
   decision: Policy.PolicyDecision,
   state: RunState,
-  config: ChatAgentConfig,
   agentBase: AgentRunBase,
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
@@ -180,13 +151,6 @@ export function publishDenyDiagnostic(
       turns: state.budgetState.turns,
       elapsedMs: Date.now() - state.startTime,
     },
-  });
-  config.eventEmitter?.emit("agent.policy.deny", {
-    sessionId,
-    time: Date.now(),
-    timing,
-    reason,
-    policyId: decision.policyId,
   });
 }
 

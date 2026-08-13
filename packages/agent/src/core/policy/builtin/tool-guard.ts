@@ -1,16 +1,11 @@
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { AgentEventEmitter } from "../../types";
 import type { CanonicalPolicyRegistration } from "../types";
-import { summarizeInput } from "../../execution/tool-executor";
 
 const TOOL_CALL_ACTION = "tool.call";
 
 export interface ToolPermissionPolicyConfig {
   permission: Policy.Permission;
-  eventEmitter?: AgentEventEmitter;
-  source?: string;
-  onToolBlocked?: (toolCallId: string, toolName: string, reason: string) => void;
 }
 
 export function createToolPermissionPolicy(
@@ -59,25 +54,9 @@ export function createToolPermissionPolicy(
         });
       }
 
-      if (verdict.action === "continue") {
-        config.eventEmitter?.emit("tool.execution.started", {
-          sessionId: config.source,
-          time: Date.now(),
-          toolCallId: ctx.toolCallId,
-          toolName,
-          inputSummary: summarizeInput(toolInput ?? {}),
-        });
-        return PolicyDecision.fromEvaluation(verdict);
-      }
-
-      config.eventEmitter?.emit("tool.execution.permission_denied", {
-        sessionId: config.source,
-        time: Date.now(),
-        toolCallId: ctx.toolCallId,
-        toolName,
-        reason: verdict.reason,
-      });
-      config.onToolBlocked?.(ctx.toolCallId ?? "", toolName, verdict.reason);
+      // The verdict carries the outcome: `require_approval` composes to a
+      // `pending` decision, which `PolicyDecision.isBlocking` treats as
+      // blocking, so the tool executor never runs the call.
       return PolicyDecision.fromEvaluation(verdict);
     },
   };

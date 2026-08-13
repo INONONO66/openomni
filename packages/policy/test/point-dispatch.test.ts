@@ -145,10 +145,10 @@ describe("PolicyEngine dispatchPoint selection", () => {
     expect(order).toEqual(["first", "second", "later"]);
   });
 
-  test("selects scoped registrations from the immutable agent type snapshot", async () => {
+  test("pins the agent type that selected a scoped registration into its context", async () => {
     const engine = PolicyEngine.create();
     let agentTypeReads = 0;
-    let invoked = false;
+    let observedAgentType: unknown;
     engine.register({
       kind: "point",
       name: "resident-only",
@@ -156,8 +156,8 @@ describe("PolicyEngine dispatchPoint selection", () => {
       effectCapabilities: { "dispatch.action.pre": [] },
       priority: 0,
       scope: { agentType: ["resident"] },
-      fn: () => {
-        invoked = true;
+      fn: (ctx) => {
+        observedAgentType = Reflect.get(ctx, "agentType");
         return PolicyDecision.allow({ policyId: "resident-only" });
       },
     });
@@ -171,8 +171,9 @@ describe("PolicyEngine dispatchPoint selection", () => {
     });
 
     expect(decision.verdict).toBe("allow");
-    expect(invoked).toBe(true);
-    expect(agentTypeReads).toBe(1);
+    // A context getter cannot answer the selector and the selected policy
+    // differently: the engine pins the value it selected on.
+    expect(observedAgentType).toBe("resident");
   });
 
   test("keeps point selection isolated with no legacy dispatch member", async () => {

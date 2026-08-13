@@ -10,9 +10,34 @@ type ImmutablePointSnapshot<TValue extends object> =
   | { readonly success: true; readonly value: Readonly<TValue> }
   | { readonly success: false };
 
+/**
+ * Copies a dispatch context into a frozen graph a policy cannot mutate.
+ *
+ * Rejected, surfacing as `policy.input_invalid`: function and symbol values,
+ * cycles, nested proxies, and values `structuredClone` preserves but that are
+ * not plain records or arrays (Date, Map, Set, typed arrays, RegExp).
+ *
+ * Three shapes survive that the name "immutable snapshot" might suggest do not,
+ * all inherited from `structuredClone` and unchanged by #606:
+ *   - a *top-level* transparent proxy, flattened by the spread below before
+ *     `structuredClone` ever sees it (only nested proxies are rejected);
+ *   - symbol-keyed properties, silently dropped rather than rejected;
+ *   - a nested class instance, cloned into a plain record.
+ *
+ * The one deliberate exception is the caller's event emitter, carried through
+ * by reference.
+ *
+ * `added` is applied after the clone, so the engine's own fields — the point
+ * identity and the agent type that drove registration selection — are the ones
+ * a policy observes, never a context getter's second answer.
+ */
 export function immutablePointSnapshot<TCtx extends GenericPolicyContext>(
   value: Readonly<AuditDispatchContextGeneric<TCtx>>,
-  added: Readonly<{ readonly pointId: PolicyPointId; readonly timing: Policy.Timing }>,
+  added: Readonly<{
+    readonly pointId: PolicyPointId;
+    readonly timing: Policy.Timing;
+    readonly agentType?: string;
+  }>,
 ): ImmutablePointSnapshot<CanonicalAuditDispatchContextGeneric<TCtx>>;
 export function immutablePointSnapshot<TValue extends object, TAdded extends object>(
   value: TValue,
@@ -42,24 +67,64 @@ export function immutablePointSnapshot(
   }
 }
 
-function cloneRecord(record: Record<string, unknown>): Readonly<Record<string, unknown>> {
-  const clone: Record<string, unknown> = {};
+/**
+ * Correlation fields worth keeping on an audit record when the full context was
+ * never materialized. Each is captured independently so one unsafe field cannot
+ * suppress the rest.
+ */
+const AUDIT_CORRELATION_KEYS = [
+  "traceContext",
+  "sessionId",
+  "runId",
+  "resourceDescriptor",
+  "toolName",
+  "dispatchId",
+  "correlation",
+] as const;
 
-  for (const [key, value] of Object.entries(record)) {
-    clone[key] = cloneValue(value);
+/**
+ * Audit context for a dispatch that never built a full snapshot — either the
+ * snapshot failed, or the point carries no registration and materializing the
+ * context would be pure cost.
+ *
+ * Values are read directly rather than through property descriptors, so an
+ * accessor-defined `traceContext` reaches the audit record instead of leaving
+ * `publishComposedDecision` to drop the event for want of a trace id. Unlike
+ * the full snapshot's spread, `Reflect.get` also observes non-enumerable and
+ * inherited properties, so this path can capture strictly more, never less.
+ *
+ * One snapshot covers the whole set; a single unsafe field falls back to
+ * per-field capture so it cannot suppress the others.
+ */
+export function auditCorrelationContext(
+  ctx: object,
+  pointId: PolicyPointId,
+  timing: Policy.Timing,
+): Readonly<
+  Record<string, unknown> & { readonly pointId: PolicyPointId; readonly timing: Policy.Timing }
+> {
+  const present: Record<string, unknown> = {};
+  for (const key of AUDIT_CORRELATION_KEYS) {
+    try {
+      const value = Reflect.get(ctx, key);
+      if (value !== undefined) present[key] = value;
+    } catch {
+      // A throwing accessor drops its own field, never the rest.
+    }
   }
 
-  return Object.freeze(clone);
+  const combined = immutablePointSnapshot(present, {});
+  const fields = combined.success ? combined.value : capturePerField(present);
+  return Object.freeze({ ...fields, pointId, timing });
 }
 
-function cloneArray(values: readonly unknown[]): readonly unknown[] {
-  return Object.freeze(values.map(cloneValue));
-}
-
-function cloneValue(value: unknown): unknown {
-  if (Array.isArray(value)) return cloneArray(value);
-  if (isPlainRecord(value)) return cloneRecord(value);
-  return value;
+function capturePerField(present: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(present)) {
+    const captured = immutablePointSnapshot({ [key]: value }, {});
+    if (captured.success) Object.assign(fields, captured.value);
+  }
+  return fields;
 }
 
 function freezePlainValue(

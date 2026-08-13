@@ -47,6 +47,16 @@ function resolveAuditPoint(ctx: Readonly<AuditDispatchContextGeneric<GenericPoli
   };
 }
 
+/**
+ * Whether anything will read an audit context. Not every engine binds one:
+ * the completion-admission engine is built as `PolicyEngine.create()` with no
+ * options (`packages/openomni/src/dispatch/setup.ts`), so building a
+ * correlation context for its dispatches is pure waste.
+ */
+export function auditIsConsumed(options: PolicyEngineConfig): boolean {
+  return options.audit !== false && options.auditEmit !== undefined;
+}
+
 export function publishPolicyEvent(
   options: PolicyEngineConfig,
   decision: Policy.PolicyDecision,
