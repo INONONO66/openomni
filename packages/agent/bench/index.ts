@@ -4,6 +4,9 @@ import { Bench } from "tinybench";
 import type { Message } from "@openomni/protocol";
 import { InMemoryCompactor } from "../src/core/execution/compaction.ts";
 
+/** The bench stands in for one run; compaction records under its trace. */
+const BENCH_TRACE = { traceId: "trace-agent-bench" };
+
 interface BenchmarkResult {
   readonly name: string;
   readonly unit: "ns/op";
@@ -27,7 +30,7 @@ for (const size of [20, 100, 500]) {
   bench.add(
     `compaction/${size}-messages`,
     async () => {
-      await InMemoryCompactor.compact(messages, compactionOptions);
+      await InMemoryCompactor.compact(messages, compactionOptions, BENCH_TRACE);
     },
     { async: true },
   );

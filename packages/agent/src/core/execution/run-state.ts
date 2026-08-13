@@ -222,6 +222,14 @@ export function buildLifecyclePolicyContext<
     messages: state.messages,
     budgetState: state.budgetState,
     budget: config.budget,
+    // Every builtin dispatched at a lifecycle point reads its trace from here.
+    // Omitting it made a policy that reports — compaction — refuse at a
+    // fail-closed point, which reads as the run aborting.
+    traceContext: {
+      traceId: agentBase.traceId,
+      sessionId: agentBase.sessionId || state.sessionId,
+      ...(agentBase.runId === undefined ? {} : { runId: agentBase.runId }),
+    },
     ...rest,
     actorId: agentBase.actorId,
     sessionId: agentBase.sessionId || state.sessionId,

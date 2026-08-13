@@ -39,9 +39,17 @@ export namespace InMemoryCompactor {
     return totalTokens >= threshold;
   }
 
+  /**
+   * @param trace The run whose history is being rewritten. A separate required
+   * parameter rather than a field on `options`: the trace is a per-call fact,
+   * not configuration, and an optional field validated by a runtime throw
+   * gives the compiler nothing — which is how the caller that supplied none
+   * reached production.
+   */
   export async function compact(
     messages: Message.WithParts[],
     options: CompactionOptions,
+    trace: { readonly traceId: string },
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
@@ -89,9 +97,10 @@ export namespace InMemoryCompactor {
     }
 
     const compacted = [...summaryMessages, ...toKeep];
+    const { traceId } = trace;
 
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "agent.compaction",
       msg: "compaction triggered",

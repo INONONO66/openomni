@@ -89,6 +89,7 @@ function budgetState(inputTokens: number, outputTokens: number): BudgetState {
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "turn.finish",
+    traceContext: { traceId: "trace-builtin-test" },
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,

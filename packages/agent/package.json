@@ -6,7 +6,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.bench.json",
     "lint": "bunx biome check ./src",
     "test": "bun test",
     "bench": "bun run bench/index.ts",

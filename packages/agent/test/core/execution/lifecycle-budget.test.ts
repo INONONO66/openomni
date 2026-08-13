@@ -1,10 +1,43 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyDecision } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
 import { PolicyEngine, type PolicyContext } from "../../../src/core/policy";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
 describe("dispatchBudgetCheck (budget exhaustion)", () => {
+  /**
+   * `publishBudgetTelemetry` proves it uses the `run` it was handed; only this
+   * proves the lifecycle hands it the real one. Pinning the invariant one
+   * frame below where the trace enters leaves the wiring free to be wrong.
+   */
+  it("files the budget event under the run's trace, from the dispatch frame", async () => {
+    const seen: Array<{ traceId: string; sessionId?: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      seen.push(event as unknown as { traceId: string; sessionId?: string });
+    });
+    const agentBase = makeAgentBase();
+    const state = makeState();
+    state.budgetState.turns = 20;
+
+    try {
+      await dispatchBudgetCheck(
+        state,
+        PolicyEngine.create(),
+        makeConfig({ budget: { maxTurns: 24 } }),
+        agentBase,
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      traceId: agentBase.traceId,
+      sessionId: agentBase.sessionId,
+    });
+  });
   it("dispatches a truthful max-steps lifecycle outcome when budget is exceeded", async () => {
     const observedOutcomes: unknown[] = [];
     const state = makeState();

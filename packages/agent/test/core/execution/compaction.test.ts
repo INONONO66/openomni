@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type { Message } from "@openomni/protocol";
+import { Operational, type Message } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { CompactionBoundaryError, InMemoryCompactor } from "../../../src/core/execution/compaction";
+
+/** Compaction rewrites a run's history; the record carries that run's trace. */
+const TEST_TRACE_ID = "trace-compaction-test";
 
 let idCounter = 0;
 
@@ -78,6 +82,30 @@ function makeToolAssistantMessage(text: string, callID: string): Message.WithPar
 }
 
 describe("InMemoryCompactor", () => {
+  /**
+   * Compaction rewrites the run's history; the record of that has to be
+   * readable against the run it changed. Re-minting here left the suite green.
+   */
+  it("files the compaction record under the run's trace", async () => {
+    const seen: Array<{ traceId: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Info, (event) => {
+      seen.push(event as unknown as { traceId: string });
+    });
+
+    try {
+      await InMemoryCompactor.compact(
+        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
+        { contextWindowTokens: 1000, protectRecentMessages: 2 },
+        { traceId: TEST_TRACE_ID },
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(1);
+  });
+
   describe("shouldCompact", () => {
     it("returns false when tokens are below threshold", () => {
       expect(InMemoryCompactor.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);
@@ -173,10 +201,14 @@ describe("InMemoryCompactor", () => {
   describe("compact", () => {
     it("does not compact when messages count is within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b")];
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 6,
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 6,
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(false);
       expect(result.removedCount).toBe(0);
       expect(result.messages).toHaveLength(2);
@@ -186,10 +218,14 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 10 }, (_, i) =>
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 4,
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 4,
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(6);
       expect(result.messages).toHaveLength(4);
@@ -206,10 +242,14 @@ describe("InMemoryCompactor", () => {
         makeUserMessage("recent-7"),
         makeAssistantMessage("recent-8"),
       ];
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 6,
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 6,
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(true);
       expect(result.messages).toHaveLength(6);
       const texts = result.messages.flatMap((m) =>
@@ -223,11 +263,15 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 8 }, (_, i) =>
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 4,
-        onSummarize: async () => "Summary of removed messages",
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 4,
+          onSummarize: async () => "Summary of removed messages",
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(true);
       const allTexts = result.messages.flatMap((m) =>
         m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
@@ -237,10 +281,14 @@ describe("InMemoryCompactor", () => {
 
     it("does not compact when non-system messages are within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b"), makeUserMessage("c")];
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 6,
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 6,
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(false);
     });
   });
@@ -261,10 +309,14 @@ describe("InMemoryCompactor", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("a7"),
       ];
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 3,
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 3,
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(true);
       expect(result.messages[0]?.info.role).toBe("user");
       expect(result.removedCount).toBe(4);
@@ -285,10 +337,14 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 8 }, (_, i) => makeAssistantMessage(`a${i}`));
       let caught: unknown;
       try {
-        await InMemoryCompactor.compact(messages, {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 3,
-        });
+        await InMemoryCompactor.compact(
+          messages,
+          {
+            contextWindowTokens: 1000,
+            protectRecentMessages: 3,
+          },
+          { traceId: TEST_TRACE_ID },
+        );
       } catch (error) {
         caught = error;
       }
@@ -309,11 +365,15 @@ describe("InMemoryCompactor", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("a7"),
       ];
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 3,
-        onSummarize: async () => "anchored",
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 3,
+          onSummarize: async () => "anchored",
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(5);
       expect(result.messages).toHaveLength(4);
@@ -324,11 +384,15 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 8 }, (_, i) =>
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
-      const result = await InMemoryCompactor.compact(messages, {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 4,
-        onSummarize: async () => "summary",
-      });
+      const result = await InMemoryCompactor.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 4,
+          onSummarize: async () => "summary",
+        },
+        { traceId: TEST_TRACE_ID },
+      );
       const summary = result.messages[0];
       expect(summary?.info.role).toBe("user");
       // History carries sessionID "test"; the summary must not introduce a

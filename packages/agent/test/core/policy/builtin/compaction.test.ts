@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
+import { createBudgetState } from "../../../../src/core/budget";
 import { createCompactionPolicy } from "../../../../src/core/policy/builtin/compaction";
 import type { PolicyContext } from "../../../../src/core/policy";
 import type { BudgetState } from "../../../../src/core/budget";
@@ -8,6 +9,7 @@ import { effectOf } from "../../../helpers/policy-decision";
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "turn.finish",
+    traceContext: { traceId: "trace-builtin-test" },
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -53,6 +55,29 @@ function budgetState(inputTokens: number, outputTokens: number): BudgetState {
 }
 
 describe("createCompactionPolicy", () => {
+  /**
+   * `run.completion.pre` is fail-closed: a throw here becomes a deny carrying
+   * `run.abort`, which ends the run. Skipping is the lesser failure, and the
+   * reason code says which one happened.
+   */
+  it("skips rather than aborting when no trace reaches it", async () => {
+    const middleware = createCompactionPolicy({
+      contextWindowTokens: 100,
+      protectRecentMessages: 2,
+    });
+    for (const traceContext of [undefined, { traceId: "" }]) {
+      const verdict = await middleware.fn(
+        baseCtx({
+          traceContext,
+          messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+          budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
+        }),
+      );
+
+      expect(verdict.verdict).toBe("allow");
+      expect(verdict.reasonCodes).toContain("compaction_skipped_no_trace");
+    }
+  });
   it("continues when below threshold", async () => {
     const middleware = createCompactionPolicy({
       contextWindowTokens: 10000,

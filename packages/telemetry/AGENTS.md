@@ -36,7 +36,9 @@ export type EmitPayload<T> = Omit<T, TraceField | "time">;
 
 A caller cannot pass `traceId` / `sessionId` / `runId` / `actorId` / `agentName` / `time` — they are removed from every payload type, and applied last at runtime so a cast cannot override them. `child()` cannot replace `traceId` at all: a child run, a delegated actor, and a nested span all belong to the same trace.
 
-This exists because thirteen sites in the agent core mint a fresh `crypto.randomUUID()` per event (`core/retry.ts`, `core/budget.ts`, `core/execution/compaction.ts`, `core/policy/builtin/tool-guard.ts`). Those events are structurally uncorrelatable with the run that produced them — the record looks authoritative and points at nothing. **All thirteen are still live.** The emitter is the replacement, not yet the incumbent: converting them is Phase 1b of [docs/agent-core-rewrite.md](../../docs/agent-core-rewrite.md) (decision D11), and until that lands `scope()` is on no production path.
+This exists because thirteen sites in the agent core minted a fresh `crypto.randomUUID()` per event. Those events were structurally uncorrelatable with the run that produced them — the record looked authoritative and pointed at nothing. **All thirteen are converted**: `core/retry.ts`'s eight were narration of a pure decision the caller already reports correlated, so they were deleted rather than rewired; `core/budget.ts`, `core/execution/compaction.ts`, and `core/policy/builtin/tool-guard.ts` inherit the run's trace or refuse. `packages/agent/src/core` mints no trace id. Three remain in `packages/agent/src/runtime/mcp/client.ts` (lines 37, 85, 123 — the last is the `?? randomUUID()` fallback shape D11 names); they are the next slice.
+
+The rest of the tree has not caught up — see D11 in [docs/agent-core-rewrite.md](../../docs/agent-core-rewrite.md) for the remaining count, and note that `scope()` itself still has no production caller.
 
 ## WHY SPANS
 
