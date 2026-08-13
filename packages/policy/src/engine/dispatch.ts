@@ -1,16 +1,16 @@
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { COMPOSED_POLICY_ID, composeFinalPointDecision } from "./decisions";
-import { timingForPolicyPoint } from "./points";
-import { createPolicyRegistrationStore } from "./registration";
-import { immutablePointSnapshot } from "./context";
 import { publishComposedDecision } from "./audit";
-import { publishMiddlewareDebug, publishMiddlewareError, recordDecision } from "./telemetry";
+import { auditCorrelationContext, immutablePointSnapshot } from "./context";
+import { COMPOSED_POLICY_ID, composeFinalPointDecision } from "./decisions";
 import {
   normalizePointDecision,
   pointContractDecision,
   pointMiddlewareErrorDecision,
   undeclaredEffectDecision,
 } from "./point-decisions";
+import { timingForPolicyPoint } from "./points";
+import { createPolicyRegistrationStore } from "./registration";
+import { publishMiddlewareDebug, publishMiddlewareError, recordDecision } from "./telemetry";
 import type {
   CanonicalPolicyRegistrationGeneric,
   DispatchPointContextGeneric,
@@ -20,20 +20,56 @@ import type {
   PolicyPointId,
 } from "./types";
 
+const CONTRACT_REGISTRATION = { name: "policy.point.contract" } as const;
+
 export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   options: PolicyEngineConfig = {},
 ): PolicyEngineInstanceGeneric<TCtx> {
   const registrations = createPolicyRegistrationStore<TCtx>();
+
+  /**
+   * A point with no registration is unguarded: nothing will read the context,
+   * so it is never cloned or frozen. The point contract still runs, against the
+   * caller's object — snapshot-ability is a precondition for handing a context
+   * to a policy, and here no policy exists to hand it to.
+   */
+  function dispatchUnguardedPoint(
+    pointId: PolicyPointId,
+    ctx: object,
+    timing: Policy.Timing,
+  ): Policy.PolicyDecision {
+    const auditCtx = auditCorrelationContext(ctx, pointId, timing);
+    const contractFailure = validatePointContract(pointId, ctx);
+    const decision =
+      contractFailure === undefined
+        ? PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID })
+        : composeFinalPointDecision(
+            [recordDecision(options, CONTRACT_REGISTRATION, auditCtx, contractFailure)],
+            pointId,
+          );
+    publishComposedDecision(options, timing, auditCtx, decision);
+    return decision;
+  }
 
   async function dispatchPoint<TPointId extends PolicyPointId>(
     pointId: TPointId,
     ctx: DispatchPointContextGeneric<TCtx, TPointId>,
   ): Promise<Policy.PolicyDecision> {
     const timing = timingForPolicyPoint(pointId);
-    const snapshot = immutablePointSnapshot(ctx, { pointId, timing });
+    // Selection reads the agent type once and pins it into the snapshot below,
+    // so a context getter cannot answer the selector and the policy differently.
+    const agentType = readAgentType(ctx);
+    const selected = registrations.selectPoint(pointId, agentType);
+    if (selected.length === 0) return dispatchUnguardedPoint(pointId, ctx, timing);
+
+    const snapshot = immutablePointSnapshot(ctx, {
+      pointId,
+      timing,
+      ...(agentType === undefined ? {} : { agentType }),
+    });
     const auditCtx = snapshot.success
       ? snapshot.value
-      : invalidPointAuditContext(ctx, pointId, timing);
+      : auditCorrelationContext(ctx, pointId, timing);
     const decisions: Policy.PolicyDecision[] = [];
 
     function composeAndPublish(): Policy.PolicyDecision {
@@ -46,7 +82,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       decisions.push(
         recordDecision(
           options,
-          { name: "policy.point.contract" },
+          CONTRACT_REGISTRATION,
           auditCtx,
           pointContractDecision(pointId, "policy.input_invalid"),
         ),
@@ -57,17 +93,8 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
 
     const contractFailure = validatePointContract(pointId, fullCtx);
     if (contractFailure !== undefined) {
-      decisions.push(
-        recordDecision(options, { name: "policy.point.contract" }, fullCtx, contractFailure),
-      );
+      decisions.push(recordDecision(options, CONTRACT_REGISTRATION, fullCtx, contractFailure));
       return composeAndPublish();
-    }
-
-    const selected = registrations.selectPoint(pointId, fullCtx.agentType);
-    if (selected.length === 0) {
-      const decision = PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID });
-      publishComposedDecision(options, timing, fullCtx, decision);
-      return decision;
     }
 
     for (const reg of selected) {
@@ -127,46 +154,24 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   };
 }
 
-const SAFE_INVALID_CONTEXT_AUDIT_KEYS = [
-  "traceContext",
-  "sessionId",
-  "runId",
-  "resourceDescriptor",
-  "toolName",
-  "dispatchId",
-  "correlation",
-] as const;
-
-function invalidPointAuditContext(
-  ctx: object,
-  pointId: PolicyPointId,
-  timing: Policy.Timing,
-): Readonly<
-  Record<string, unknown> & { readonly pointId: PolicyPointId; readonly timing: Policy.Timing }
-> {
-  const safeFields: Record<string, unknown> = {};
-  for (const key of SAFE_INVALID_CONTEXT_AUDIT_KEYS) {
-    try {
-      const descriptor = Object.getOwnPropertyDescriptor(ctx, key);
-      if (descriptor === undefined || !("value" in descriptor)) continue;
-      const captured = immutablePointSnapshot({ [key]: descriptor.value }, {});
-      if (captured.success) Object.assign(safeFields, captured.value);
-    } catch {
-      // Ignore unsafe getters/proxies while retaining independently safe correlation fields.
-    }
+function readAgentType(ctx: object): string | undefined {
+  try {
+    const agentType = Reflect.get(ctx, "agentType");
+    return typeof agentType === "string" ? agentType : undefined;
+  } catch {
+    return undefined;
   }
-  return Object.freeze({ ...safeFields, pointId, timing });
 }
 
 function validatePointContract(
   pointId: PolicyPointId,
-  fullCtx: Readonly<object>,
+  ctx: Readonly<object>,
 ): Policy.PolicyDecision | undefined {
   const contract = Policy.PolicyPoint.Registry[pointId];
-  if (contract.requiredContext.some((key) => Reflect.get(fullCtx, key) === undefined)) {
+  if (contract.requiredContext.some((key) => Reflect.get(ctx, key) === undefined)) {
     return pointContractDecision(pointId, "policy.context_missing");
   }
-  if (!Policy.PolicyPoint.InputSchemas[pointId].safeParse(fullCtx).success) {
+  if (!Policy.PolicyPoint.InputSchemas[pointId].safeParse(ctx).success) {
     return pointContractDecision(pointId, "policy.input_invalid");
   }
   return undefined;

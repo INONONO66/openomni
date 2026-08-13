@@ -10,9 +10,25 @@ type ImmutablePointSnapshot<TValue extends object> =
   | { readonly success: true; readonly value: Readonly<TValue> }
   | { readonly success: false };
 
+/**
+ * Copies a dispatch context into a frozen graph a policy cannot mutate.
+ *
+ * Only plain records, arrays, and primitives survive. Functions, symbols,
+ * cycles, proxies, and exotic objects (Date, Map, typed arrays) fail the
+ * snapshot, which the dispatcher reports as `policy.input_invalid`. The one
+ * exception is the caller's event emitter, carried through by reference.
+ *
+ * `added` is applied after the clone, so the engine's own fields — the point
+ * identity and the agent type that drove registration selection — are the ones
+ * a policy observes, never a context getter's second answer.
+ */
 export function immutablePointSnapshot<TCtx extends GenericPolicyContext>(
   value: Readonly<AuditDispatchContextGeneric<TCtx>>,
-  added: Readonly<{ readonly pointId: PolicyPointId; readonly timing: Policy.Timing }>,
+  added: Readonly<{
+    readonly pointId: PolicyPointId;
+    readonly timing: Policy.Timing;
+    readonly agentType?: string;
+  }>,
 ): ImmutablePointSnapshot<CanonicalAuditDispatchContextGeneric<TCtx>>;
 export function immutablePointSnapshot<TValue extends object, TAdded extends object>(
   value: TValue,
@@ -42,24 +58,45 @@ export function immutablePointSnapshot(
   }
 }
 
-function cloneRecord(record: Record<string, unknown>): Readonly<Record<string, unknown>> {
-  const clone: Record<string, unknown> = {};
+/**
+ * Correlation fields worth keeping on an audit record when the full context was
+ * never materialized. Each is captured independently so one unsafe field cannot
+ * suppress the rest.
+ */
+const AUDIT_CORRELATION_KEYS = [
+  "traceContext",
+  "sessionId",
+  "runId",
+  "resourceDescriptor",
+  "toolName",
+  "dispatchId",
+  "correlation",
+] as const;
 
-  for (const [key, value] of Object.entries(record)) {
-    clone[key] = cloneValue(value);
+/**
+ * Audit context for a dispatch that never built a full snapshot — either the
+ * snapshot failed, or the point carries no registration and materializing the
+ * context would be pure cost.
+ */
+export function auditCorrelationContext(
+  ctx: object,
+  pointId: PolicyPointId,
+  timing: Policy.Timing,
+): Readonly<
+  Record<string, unknown> & { readonly pointId: PolicyPointId; readonly timing: Policy.Timing }
+> {
+  const fields: Record<string, unknown> = {};
+  for (const key of AUDIT_CORRELATION_KEYS) {
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(ctx, key);
+      if (descriptor === undefined || !("value" in descriptor)) continue;
+      const captured = immutablePointSnapshot({ [key]: descriptor.value }, {});
+      if (captured.success) Object.assign(fields, captured.value);
+    } catch {
+      // Ignore unsafe getters and proxies; independently safe fields still land.
+    }
   }
-
-  return Object.freeze(clone);
-}
-
-function cloneArray(values: readonly unknown[]): readonly unknown[] {
-  return Object.freeze(values.map(cloneValue));
-}
-
-function cloneValue(value: unknown): unknown {
-  if (Array.isArray(value)) return cloneArray(value);
-  if (isPlainRecord(value)) return cloneRecord(value);
-  return value;
+  return Object.freeze({ ...fields, pointId, timing });
 }
 
 function freezePlainValue(
