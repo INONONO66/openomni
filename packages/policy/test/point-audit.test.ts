@@ -59,6 +59,16 @@ describe("PolicyEngine canonical point audit", () => {
     const engine = PolicyEngine.create({
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
+    // The snapshot exists to protect a policy from a mutable context, so it is
+    // only built for a point that has one. Register here to exercise it.
+    engine.register({
+      kind: "point",
+      name: "snapshot-consumer",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: () => PolicyDecision.allow({ policyId: "snapshot-consumer" }),
+    });
     const traceContext = {
       traceId: "trace-invalid-context",
       sessionId: "session-invalid-context",
