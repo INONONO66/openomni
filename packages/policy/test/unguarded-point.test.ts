@@ -102,6 +102,57 @@ describe("PolicyEngine unguarded point dispatch", () => {
     expect(composed?.data).toMatchObject({ ...traceContext, verdict: "allow" });
   });
 
+  test("captures accessor-defined correlation into the audit record", async () => {
+    const events: Array<{ readonly name: string; readonly data: unknown }> = [];
+    const engine = PolicyEngine.create({
+      auditEmit: (event, data) => events.push({ name: event.name, data }),
+    });
+    const traceContext = {
+      traceId: "trace-accessor",
+      sessionId: "session-accessor",
+      runId: "run-accessor",
+    } as const;
+
+    // The full snapshot reads through a spread, which invokes accessors. The
+    // unguarded path must observe the same fields, or the composed event is
+    // dropped for want of a trace id.
+    await engine.dispatchPoint("run.turn.pre", {
+      sessionId: traceContext.sessionId,
+      runId: traceContext.runId,
+      turnIndex: 0,
+      get traceContext() {
+        return traceContext;
+      },
+    });
+
+    const composed = events.find(({ name }) => name === PolicyEvent.DecisionComposed.name);
+    expect(composed?.data).toMatchObject(traceContext);
+  });
+
+  test("keeps correlation when one field cannot be captured", async () => {
+    const events: Array<{ readonly name: string; readonly data: unknown }> = [];
+    const engine = PolicyEngine.create({
+      auditEmit: (event, data) => events.push({ name: event.name, data }),
+    });
+    const traceContext = {
+      traceId: "trace-partial",
+      sessionId: "session-partial",
+      runId: "run-partial",
+    } as const;
+
+    await engine.dispatchPoint("run.turn.pre", {
+      sessionId: traceContext.sessionId,
+      runId: traceContext.runId,
+      turnIndex: 0,
+      traceContext,
+      // Not capturable; must not suppress the fields beside it.
+      resourceDescriptor: new Map([["mutable", true]]) as never,
+    });
+
+    const composed = events.find(({ name }) => name === PolicyEvent.DecisionComposed.name);
+    expect(composed?.data).toMatchObject(traceContext);
+  });
+
   /**
    * Snapshot-ability is a precondition for handing a context to a policy, not a
    * property of the context itself. With no policy at the point there is

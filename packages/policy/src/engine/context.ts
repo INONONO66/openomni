@@ -13,10 +13,19 @@ type ImmutablePointSnapshot<TValue extends object> =
 /**
  * Copies a dispatch context into a frozen graph a policy cannot mutate.
  *
- * Only plain records, arrays, and primitives survive. Functions, symbols,
- * cycles, proxies, and exotic objects (Date, Map, typed arrays) fail the
- * snapshot, which the dispatcher reports as `policy.input_invalid`. The one
- * exception is the caller's event emitter, carried through by reference.
+ * Rejected, surfacing as `policy.input_invalid`: function and symbol values,
+ * cycles, nested proxies, and values `structuredClone` preserves but that are
+ * not plain records or arrays (Date, Map, Set, typed arrays, RegExp).
+ *
+ * Three shapes survive that the name "immutable snapshot" might suggest do not,
+ * all inherited from `structuredClone` and unchanged by #606:
+ *   - a *top-level* transparent proxy, flattened by the spread below before
+ *     `structuredClone` ever sees it (only nested proxies are rejected);
+ *   - symbol-keyed properties, silently dropped rather than rejected;
+ *   - a nested class instance, cloned into a plain record.
+ *
+ * The one deliberate exception is the caller's event emitter, carried through
+ * by reference.
  *
  * `added` is applied after the clone, so the engine's own fields — the point
  * identity and the agent type that drove registration selection — are the ones
@@ -77,6 +86,13 @@ const AUDIT_CORRELATION_KEYS = [
  * Audit context for a dispatch that never built a full snapshot — either the
  * snapshot failed, or the point carries no registration and materializing the
  * context would be pure cost.
+ *
+ * Values are read with `Reflect.get`, matching what the full snapshot's spread
+ * observes: an accessor-defined `traceContext` must reach the audit record, or
+ * `publishComposedDecision` drops the event for want of a trace id.
+ *
+ * One snapshot covers the whole set; a single unsafe field falls back to
+ * per-field capture so it cannot suppress the others.
  */
 export function auditCorrelationContext(
   ctx: object,
@@ -85,18 +101,28 @@ export function auditCorrelationContext(
 ): Readonly<
   Record<string, unknown> & { readonly pointId: PolicyPointId; readonly timing: Policy.Timing }
 > {
-  const fields: Record<string, unknown> = {};
+  const present: Record<string, unknown> = {};
   for (const key of AUDIT_CORRELATION_KEYS) {
     try {
-      const descriptor = Object.getOwnPropertyDescriptor(ctx, key);
-      if (descriptor === undefined || !("value" in descriptor)) continue;
-      const captured = immutablePointSnapshot({ [key]: descriptor.value }, {});
-      if (captured.success) Object.assign(fields, captured.value);
+      const value = Reflect.get(ctx, key);
+      if (value !== undefined) present[key] = value;
     } catch {
-      // Ignore unsafe getters and proxies; independently safe fields still land.
+      // A throwing accessor drops its own field, never the rest.
     }
   }
+
+  const combined = immutablePointSnapshot(present, {});
+  const fields = combined.success ? combined.value : capturePerField(present);
   return Object.freeze({ ...fields, pointId, timing });
+}
+
+function capturePerField(present: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(present)) {
+    const captured = immutablePointSnapshot({ [key]: value }, {});
+    if (captured.success) Object.assign(fields, captured.value);
+  }
+  return fields;
 }
 
 function freezePlainValue(

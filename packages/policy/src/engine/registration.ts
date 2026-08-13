@@ -70,10 +70,9 @@ export function createPolicyRegistrationStore<
             left.registration.priority - right.registration.priority || left.order - right.order,
         );
         entriesByPoint.set(pointId, entries);
-        selectionByPoint.set(
-          pointId,
-          entries.map((entry) => entry.registration),
-        );
+        // Frozen because it is shared with every dispatch at this point; TS
+        // `readonly` alone would let a caller mutate the store's own array.
+        selectionByPoint.set(pointId, Object.freeze(entries.map((entry) => entry.registration)));
         if (isAgentTypeScoped(prepared)) agentTypeScopedPoints.add(pointId);
       }
     },
