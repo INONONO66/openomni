@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786594981134,
+  "lastUpdate": 1786595983097,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44369,6 +44369,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 395084,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58dd65e65f0192971dadbc29a9f1ae55b82f18db",
+          "message": "refactor(agent): delete the unimplemented second event channel (#606) (#610)\n\n* refactor(agent): delete the unimplemented second event channel (#606)\n\n`AgentEventEmitter` had zero production implementations. A repo-wide search\nfor anything supplying `eventEmitter` to `ChatAgentConfig` or to\n`buildWorkerMiddleware` returned only tests. The interface, its zod schema,\nits policy-context field, and its plumbing through openomni existed so that\n`run-events.ts` and three builtins could mirror every Bus publish into a\nchannel nobody read.\n\nThe mirror was not even faithful: `agent.turn.start`, `agent.turn.complete`,\n`agent.error.retry`, and `agent.policy.deny` went to both channels, while\n`agent.run.started`, `agent.run.completed`, `agent.run.failed`, budget\nwarnings, and compaction went to the Bus alone. Two channels, one of them\ndead, with different coverage.\n\nDeleting it takes the surface that existed only to feed it:\n\n- `summarizeInput` in `tool-executor.ts` — its sole consumer was the\n  tool-guard emit. (`packages/openomni` has its own separate implementation;\n  that one stays.)\n- `ToolPermissionPolicyConfig.onToolBlocked` — a callback with no production\n  consumer, only a test.\n- `ToolPermissionPolicyConfig.source` — read only as the `sessionId` of the\n  emitted payloads, and `WorkerMiddlewareConfig.source` which fed it. No\n  production caller ever passed either.\n- `hydrateToolPermissionObservability` in openomni's middleware — its whole\n  body was injecting those two fields.\n- The `config: ChatAgentConfig` parameter of `emitTurnStart`,\n  `emitTurnComplete`, `emitErrorRetry`, `publishDenyDiagnostic`, and\n  `handleContinue`, which existed only to reach `config.eventEmitter`.\n\nTests: `event-emitter.test.ts` is deleted outright — it constructed an object\nliteral with an `emit` method, called it, and asserted the array captured the\ncall, touching no production code. Four tests that asserted the emits are\nremoved with them; `middleware.test.ts` keeps the allow-path assertion its\nemitter test carried, folded into the neighbouring permissions test.\n\nNet: 20 files, -373/+26. Observation now has exactly one channel, which is\nwhat #606 builds `@openomni/telemetry` around.\n\nFollow-up left in place: `packages/policy`'s `immutablePointSnapshot` carves\nout `eventEmitter` so a function-valued field survives structured cloning.\nThat carve-out is now unreachable — nothing puts an emitter in a policy\ncontext — but removing it touches a file with a PR in flight (#608), so it\ngoes in a later batch.\n\nVerification: agent 380/380, openomni 1064/1064, policy 66/66, server\n462/462; check-types 13/13, lint, check-deps, import-cycles (0),\ndead-exports (18 known, none new), lint-tools.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): drop the deleted emitter from the knowledge base (#606)\n\nAdversarial review caught that the PR touched twenty files and none of them\nwas a doc, leaving `packages/agent/AGENTS.md` advertising an exported type and\na `ChatAgentConfig` field that no longer exist. The next reader would have\nwritten `eventEmitter: myEmitter` and spent a build cycle on a TS2353 for a\nfield the knowledge base promised.\n\nNo gate catches this: `check-deps` doc freshness only measures commit\nrecency, and `lint:tools` does not read prose.\n\nThe review also noted that the verification grep in the PR body was scoped to\n`packages/agent/src`, `packages/openomni/src`, and `apps/server/src` — which\nis exactly the complement of where the remaining hits were. Re-run repo-wide\nacross `packages`, `apps`, `script`, `docs`, and `qa` for both\n`AgentEventEmitter` and `onToolBlocked`: zero.\n\nVerification after merging current main: agent 380/380, openomni 1064/1064,\npolicy 76/76, server 462/462; check-types 13/13, lint, check-deps.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-13T13:38:33+09:00",
+          "tree_id": "3797a0e9b1e852a9a46a7ebd60d61ba5ed879fba",
+          "url": "https://github.com/INONONO66/openomni/commit/58dd65e65f0192971dadbc29a9f1ae55b82f18db"
+        },
+        "date": 1786595982723,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 698,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6214,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10797,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3173,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16220,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8443,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 881,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1551,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1513,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 751,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2335,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 507259,
             "unit": "ns/op"
           }
         ]
