@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786593998510,
+  "lastUpdate": 1786594981134,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44245,6 +44245,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512887,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "14c0ca62ec01f6814d706e06b2e681828df9fd45",
+          "message": "perf(policy): skip context materialization at unguarded points (#606) (#608)\n\n* perf(policy): skip context materialization at unguarded points (#606)\n\n`dispatchPoint` deep-cloned (`structuredClone`), deep-froze, and zod-parsed\nthe whole context — which carries the run's message history — *before* it\nchecked whether any policy was registered at the point. The\n`selected.length === 0 -> allow` fast path sat at the end of that work.\n\nReorder so selection runs first, and skip materialization entirely when a\npoint has no registration. Measured on `run.turn.pre`, 512-message history,\nzero policies registered:\n\n    2,070,525 ns/dispatch -> 2,661 ns/dispatch      778x\n    growth factor 43.6x   -> 0.64x   (constant)\n\nA point with a registration is unchanged by design: the snapshot still runs\nbecause a policy is about to receive it. That path costs O(history) and is\naddressed where the cost originates — by not putting the history in contexts\nwhose point contract does not declare it.\n\nSelection is also precomputed. Registrations are fixed at composition time,\nbut `selectPoint` re-derived order on every dispatch with a\nmap/filter/sort/map chain allocating four arrays. It now sorts once per point\nin `register()` and returns a shared frozen empty array for points with no\nregistration. The per-dispatch scope filter is skipped unless some\nregistration at that point is agentType-scoped.\n\nTwo pinned behaviors change, both deliberately:\n\n- **An unguarded point no longer denies an unsnapshotable context.** The\n  snapshot is a precondition for handing a context to a policy; with no\n  policy at the point there is nothing to hand it to. The point contract\n  (required keys, input schema) still runs, against the caller's object.\n  `point-audit.test.ts` now registers a policy to exercise the snapshot path\n  it was written to cover, and `unguarded-point.test.ts` pins the new\n  behavior directly.\n- **The agent type is read once and pinned into the snapshot.** Selection now\n  precedes the snapshot, so a context getter could otherwise answer the\n  selector and the selected policy differently. The engine writes the value\n  it selected on into the context the policy receives, which is a stronger\n  guarantee than the read-count the old test asserted.\n\nAlso deletes `cloneRecord`/`cloneArray`/`cloneValue` — a mutually recursive\nisland in the dispatch hot-path file with no external caller, left behind\nwhen `structuredClone` replaced it — and moves the audit-correlation builder\nnext to the snapshot it complements, where both dispatch paths share it.\n\nSnapshot semantics are untouched: `structuredClone` plus `freezePlainValue`\nstill reject functions, symbols, cycles, proxies, and exotic objects exactly\nas before.\n\nVerification: policy 71/71, agent 386/386, openomni 1066/1066, server\n462/462; check-types 13/13, build, lint, check-deps, import-cycles (0),\ndead-exports (18 known, none new), lint-tools.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(policy): capture accessor correlation on the unguarded path (#606)\n\nAdversarial review found the PR body's claim that \"audit emission behaves as\nbefore\" was false, and that the new path's cost was measured on a context\nshape production does not use. Both are addressed here.\n\n**Audit records were silently dropped.** `auditCorrelationContext` captured\ndata properties only, via `getOwnPropertyDescriptor`. That was tolerable when\nit was reachable only on snapshot failure; it became the audit context for\nevery unguarded dispatch. A context defining `traceContext` as an accessor\nemitted *zero* audit events, because `publishComposedDecision` bails without\na trace id — where the full snapshot's spread had invoked the accessor and\ncarried it through. Reads now go through `Reflect.get`, matching what the\nsnapshot observes. Pinned red-first: with the old read the new test fails.\n\n**The capture is also cheaper.** One snapshot now covers the whole key set\ninstead of one per key, with per-field capture as the fallback so a single\nunsafe field still cannot suppress the others.\n\nMeasured with the corrected benchmark (median of five interleaved rounds,\n2000 iterations, 512-message history, `run.turn.pre`, zero policies):\n\n    context shape   before        after      factor\n    correlated      2,109,914 ns  6,127 ns    344x\n    minimal         2,108,860 ns  1,592 ns   1324x\n\nThe correlated shape is what production dispatches. Growth factor is 0.97 and\n0.95 respectively — constant, which is the claim. Points with a registration\nare unchanged: 39-47x, as designed.\n\nAlso freezes the per-point selection arrays. They are shared with every\ndispatch at that point and built once in `register()`, so TS `readonly` alone\nleft the store's own array mutable by any caller.\n\nAlso corrects three false statements in the snapshot doc comment. A top-level\ntransparent proxy is *accepted* — the spread flattens it before\n`structuredClone` sees it, so only nested proxies are rejected; symbol-keyed\nproperties are dropped rather than rejected; a nested class instance survives\nas a plain record. All three are inherited `structuredClone` behavior and\nunchanged by this PR, but the comment asserted otherwise.\n\nVerification: policy 73/73, agent 386/386, openomni 1066/1066, server\n462/462; check-types 13/13, lint, check-deps, import-cycles (0),\ndead-exports (18 known, none new), lint-tools.\n\nAddresses adversarial review findings 1, 2, 6, 7 on #608.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(policy): keep dispatchPoint total on the unguarded path (#606)\n\nAdversarial review round 2 returned BLOCK on a defect I introduced and then\nwalked past: `dispatchUnguardedPoint` calls `validatePointContract` on the\ncaller's own object, and both reads touch it — `Reflect.get` for each\nrequired key, and a `.passthrough()` schema that walks every key. A throwing\naccessor anywhere in the context escaped `dispatchPoint` as an exception\ninstead of resolving to a verdict.\n\n`origin/main` is total because it snapshots first and\n`immutablePointSnapshot`'s try absorbs every raw read. This PR removed that\nshield on the unguarded path only. The reviewer's table, reproduced here:\n\n    throwing accessor on        main    before this commit\n    a required key              deny    THREW\n    a correlation key           deny    THREW\n    an unrelated key            deny    THREW\n\nThat is not a cosmetic difference. `dispatchPoint` is awaited by the agent\nloop, the dispatch runtime, and completion admission; an exception there is\nnot a policy decision and bypasses fail-closed and fail-open alike. The\nengine went from \"always resolves to a verdict\" to \"resolves, unless the\ncaller's context has a getter that throws\".\n\n`validatePointContract` is now total, matching the snapshot path's outcome\n(`policy.input_invalid`). Pinned by three cases — required key, correlation\nkey, unrelated key — verified red-first: reverting only the guard fails all\nthree.\n\nThe same review also refuted the reasoning for keeping the audit-correlation\ncapture eager. `defaultCompletionAdmissionService` builds its engine as\n`PolicyEngine.create()` with no options\n(`packages/openomni/src/dispatch/setup.ts:53`), and no production caller\nsupplies `completionPolicyEngine` — so the engine that dispatches\n`work.complete.pre`, a point with zero registrations and therefore\npermanently unguarded, has `auditEmit` unbound and discarded every context it\nbuilt. The capture is now skipped when neither `auditEmit` nor `onDecision`\nis bound.\n\nRe-measured with the benchmark now binding a no-op emitter (the conservative\nagent-loop configuration), 512-message history, zero policies:\n\n    context shape   before        after      factor\n    correlated      2,090,990 ns  6,848 ns    305x\n    minimal         2,095,558 ns  1,622 ns   1292x\n\nGrowth factors 1.02 and 0.98. An engine with audit unbound — the completion\npath — now measures ~824 ns on the correlated shape, since it skips capture\nentirely.\n\nTwo comment corrections: `auditCorrelationContext` does not \"match what the\nspread observes\" — `Reflect.get` also sees non-enumerable and inherited\nproperties, so it captures strictly more, never less. And the partial-capture\ntest now carries `toolName`/`dispatchId` and asserts the uncapturable field\nis absent rather than half-captured.\n\nVerification: policy 76/76, agent 386/386, openomni 1066/1066, server\n462/462; check-types 13/13, lint, check-deps, dead-exports (18 known, none\nnew), lint-tools.\n\nAddresses adversarial review round 2 on #608.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-13T13:21:47+09:00",
+          "tree_id": "b9f90f60df18b6ea694990e8825c876823cd3d5b",
+          "url": "https://github.com/INONONO66/openomni/commit/14c0ca62ec01f6814d706e06b2e681828df9fd45"
+        },
+        "date": 1786594980228,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 351,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 565,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8061,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2029,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12697,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 663,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 568,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1245,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 38,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1227,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 36972,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1849,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8363,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 77882,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 395084,
             "unit": "ns/op"
           }
         ]
