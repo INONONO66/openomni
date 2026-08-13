@@ -10,7 +10,6 @@ export type {
   AgentBudget,
   TokenUsage,
   Sink,
-  AgentEventEmitter,
 } from "./core/types";
 export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
 export type {

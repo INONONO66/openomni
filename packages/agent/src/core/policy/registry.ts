@@ -3,7 +3,6 @@ import type { PolicyRegistryInstance } from "@openomni/policy";
 import { Policy } from "@openomni/protocol";
 import { z } from "zod";
 import type { CompactionOptions } from "../execution/compaction";
-import type { AgentEventEmitter } from "../types";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
@@ -36,25 +35,8 @@ const IdleNudgeConfigSchema: z.ZodType<IdleNudgeConfig, z.ZodTypeDef, unknown> =
   maxNudges: z.number().optional(),
 });
 
-const AgentEventEmitterSchema = z.custom<AgentEventEmitter>(
-  (value) => isRecord(value) && typeof value.emit === "function",
-);
-
-const ToolBlockedHandlerSchema = z.custom<ToolPermissionPolicyConfig["onToolBlocked"]>(
-  (value) => typeof value === "function",
-);
-
 const ToolPermissionConfigSchema: z.ZodType<ToolPermissionPolicyConfig, z.ZodTypeDef, unknown> =
-  z.object({
-    permission: Policy.Permission,
-    eventEmitter: AgentEventEmitterSchema.optional(),
-    source: z.string().optional(),
-    onToolBlocked: ToolBlockedHandlerSchema.optional(),
-  });
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+  z.object({ permission: Policy.Permission });
 
 function parseCompactionConfig(config: unknown): CompactionOptions {
   return CompactionConfigSchema.parse(config);

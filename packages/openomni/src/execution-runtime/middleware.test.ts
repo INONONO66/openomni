@@ -34,35 +34,12 @@ describe("buildWorkerMiddleware backward compatibility", () => {
     const permissions = { action: "tool.call", allowlist: ["tool:read"] };
     const registrations = buildWorkerMiddleware({ permissions });
     const toolPermission = findRegistration(registrations, "builtin:tool-permission");
-    await expect(invokeTool(toolPermission, "tool:write")).resolves.toMatchObject({
-      verdict: "deny",
-    });
-  });
-
-  it("forwards event emitter metadata to legacy tool permission middleware", async () => {
-    const events: Array<{ name: string; data: Record<string, unknown> }> = [];
-    const registrations = buildWorkerMiddleware({
-      permissions: { action: "tool.call", allowlist: ["tool:read"] },
-      eventEmitter: {
-        emit: (name, data) => events.push({ name, data }),
-      },
-      source: "worker-runtime",
-    });
-    const toolPermission = findRegistration(registrations, "builtin:tool-permission");
-
     await expect(invokeTool(toolPermission, "tool:read")).resolves.toMatchObject({
       verdict: "allow",
     });
-
-    expect(events).toEqual([
-      {
-        name: "tool.execution.started",
-        data: expect.objectContaining({
-          sessionId: "worker-runtime",
-          toolName: "tool:read",
-        }),
-      },
-    ]);
+    await expect(invokeTool(toolPermission, "tool:write")).resolves.toMatchObject({
+      verdict: "deny",
+    });
   });
 });
 

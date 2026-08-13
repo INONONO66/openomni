@@ -113,38 +113,6 @@ describe("createCompactionPolicy", () => {
     expect(replacement?.messages.length).toBeLessThan(messages.length);
   });
 
-  it("emits compaction event when compacting", async () => {
-    const events: Array<{ name: string; data: Record<string, unknown> }> = [];
-    const mockEmitter = {
-      emit: (name: string, data: Record<string, unknown>) => {
-        events.push({ name, data });
-      },
-    };
-
-    const middleware = createCompactionPolicy({
-      contextWindowTokens: 1000,
-      thresholdRatio: 0.8,
-      protectRecentMessages: 2,
-    });
-
-    const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
-    const ctx = baseCtx({
-      messages,
-      budgetState: budgetState(7000, 1000),
-      eventEmitter: mockEmitter,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-    expect(events.length).toBe(1);
-    const event = events[0];
-    if (!event) throw new Error("expected compaction event");
-    expect(event.name).toBe("agent.compaction");
-    expect(event.data.messagesBefore).toBe(10);
-    expect(event.data.messagesAfter).toBeLessThan(10);
-  });
-
   it("continues when no messages in context", async () => {
     const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
