@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786595983097,
+  "lastUpdate": 1786597281866,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44493,6 +44493,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 507259,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "10a89dddd0fb3bfe5a3750e5ccbb941a503e976d",
+          "message": "docs(agent): add the agent core rewrite execution SOT (#606) (#611)\n\n* docs(agent): add the agent core rewrite execution SOT (#606)\n\n`docs/agent-core-rewrite.md` becomes the source of truth for #606: package\nownership with falsifiable boundary tests, the ten decisions and why each was\ntaken, the twelve-point injection contract, phase status, the dispatch-cost\nbaseline, and the rules of engagement for measurement. Where it and the issue\ndisagree, this file wins and the issue is corrected.\n\nTwo entries are added to `docs/implementation-status.md` under a new \"Not\nwired, despite appearances\" heading, because both are engines with no\nconsumer and the maintenance rule says those must be visible:\n\n- Compaction does not run. `builtin:compaction` registers only when\n  `WorkerMiddlewareConfig.compaction` is supplied and no production caller\n  supplies it, so `InMemoryCompactor` never executes; the `Run.Outcome`\n  `compact` variant has no producer, so the runner's compact branch and\n  `handleCompact` are unreachable.\n- Eight of eighteen policy points have no production registration, including\n  `work.complete.pre`, which is declared fail-closed and documented as a\n  shipped gate while always returning allow (#609).\n\nThe peer comparison is recorded because it drove the shape: pi keeps tools,\nsessions, prompts, and compaction inside its agent package; pss keeps none of\nthem and separates the loop into an explicit state machine; senpi began as pi\nand is migrating toward pss. We are already on the pss side and stay there.\nWhat none of the three has is a policy point kernel, so that — not feature\nsurface — is what the core exists to carry.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): refresh phase status in the rewrite SOT (#606)\n\n#607, #608, and #610 merged; #612 opened. Adds the policy snapshot\neventEmitter carve-out to Phase 2 — #610 removed its last producer, so the\ncarve-out and its `preserved` parameter are now unreachable and\n`point-context-immutability.test.ts` asserts behavior nothing can produce.\n\nRefs #606\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-13T14:00:12+09:00",
+          "tree_id": "f702bb4b08122d637f34d176f65a3a1135105ab3",
+          "url": "https://github.com/INONONO66/openomni/commit/10a89dddd0fb3bfe5a3750e5ccbb941a503e976d"
+        },
+        "date": 1786597281441,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 686,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6181,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9823,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3048,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2464,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16141,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1489,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 42945,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2317,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10779,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100286,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512071,
             "unit": "ns/op"
           }
         ]
