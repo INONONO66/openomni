@@ -3,6 +3,12 @@ import { Bus } from "@openomni/session";
 
 export interface CompactionOptions {
   contextWindowTokens: number;
+  /**
+   * The trace the compaction record is filed under. Compaction happens
+   * because a run ran long; without the run's trace the record cannot be read
+   * back against the history it rewrote.
+   */
+  traceId?: string;
   thresholdRatio?: number;
   reserveTokens?: number;
   reserveRatio?: number;
@@ -89,9 +95,13 @@ export namespace InMemoryCompactor {
     }
 
     const compacted = [...summaryMessages, ...toKeep];
+    const traceId = options.traceId;
+    if (traceId === undefined || traceId.length === 0) {
+      throw new Error("compaction requires the run trace context");
+    }
 
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "agent.compaction",
       msg: "compaction triggered",

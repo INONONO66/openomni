@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { AgentExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -196,5 +197,46 @@ describe("handleError (error)", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ type: "error", willRetry: false });
+  });
+
+  /**
+   * `classifyRetryReason` and `shouldRetry` used to narrate every branch to
+   * the Bus under a freshly minted trace. They are pure now, so the reason and
+   * the backoff have to reach the one correlated event or the information is
+   * lost — this is what holds them there.
+   */
+  it("reports the retry reason and backoff on the run's own trace", async () => {
+    const retries: Array<Record<string, unknown>> = [];
+    const unsubscribe = Bus.subscribe(AgentExecution.ErrorRetry, (event) => {
+      retries.push(event as unknown as Record<string, unknown>);
+    });
+    const engine = PolicyEngine.create();
+    const agentBase = makeAgentBase();
+
+    try {
+      await collectEvents(
+        handleError(
+          makeState(),
+          engine,
+          makeConfig(),
+          agentBase,
+          new Error("connection timeout"),
+          1,
+          { maxAttempts: 3, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
+        ),
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(retries).toHaveLength(1);
+    expect(retries[0]).toMatchObject({
+      traceId: agentBase.traceId,
+      sessionId: agentBase.sessionId,
+      reason: "timeout",
+      backoffMs: 0,
+      attempt: 1,
+    });
   });
 });

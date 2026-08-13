@@ -9,6 +9,9 @@ import {
   publishBudgetTelemetry,
 } from "../../src/core/budget";
 
+/** The run whose budget is being reported; the reporter never mints one. */
+const TEST_RUN = { traceId: "trace-budget-test", sessionId: "session-budget-test" };
+
 async function countOperationalEmits(run: () => void): Promise<number> {
   Bus.reset();
   let count = 0;
@@ -114,11 +117,32 @@ describe("checkBudget is a pure query (query/command split)", () => {
 });
 
 describe("publishBudgetTelemetry is the command (emits once, returns status)", () => {
+  /**
+   * Budget reporting is not a trace origin: it happens because a run is
+   * running. Re-minting here left the whole suite green until this existed.
+   */
+  it("files the budget event under the run's trace", async () => {
+    const seen: Array<{ traceId: string; sessionId?: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      seen.push(event as unknown as { traceId: string; sessionId?: string });
+    });
+
+    try {
+      publishBudgetTelemetry({ ...createBudgetState(), turns: 20 }, TEST_RUN, { maxTurns: 24 });
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
+  });
+
   it("emits exactly one event per call at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
     let status: string | undefined;
     const emits = await countOperationalEmits(() => {
-      status = publishBudgetTelemetry(s, { maxTurns: 24 });
+      status = publishBudgetTelemetry(s, TEST_RUN, { maxTurns: 24 });
     });
     expect(status).toBe("warning");
     expect(emits).toBe(1);
@@ -128,7 +152,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const s = { ...createBudgetState(), turns: 5 };
     let status: string | undefined;
     const emits = await countOperationalEmits(() => {
-      status = publishBudgetTelemetry(s, { maxTurns: 24 });
+      status = publishBudgetTelemetry(s, TEST_RUN, { maxTurns: 24 });
     });
     expect(status).toBe("ok");
     expect(emits).toBe(0);

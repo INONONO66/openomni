@@ -70,6 +70,8 @@ describe("AgentExecution BusEvents", () => {
         attempt: 2,
         maxAttempts: 3,
         error: "rate limit",
+        reason: "transient_error",
+        backoffMs: 2000,
       }),
     ).not.toThrow();
   });

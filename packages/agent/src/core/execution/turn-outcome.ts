@@ -229,6 +229,8 @@ export async function* handleError(
       attempt,
       maxAttempts: effectiveRetryPolicy.maxAttempts,
       error: lastError,
+      reason: retryReason,
+      backoffMs,
     });
     yield createRunErrorEvent(normalizedError, true);
     await Retry.sleep(backoffMs, config.signal);

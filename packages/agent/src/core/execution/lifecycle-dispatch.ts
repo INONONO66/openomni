@@ -49,7 +49,7 @@ export async function dispatchBudgetCheck(
   // The single per-turn owner of budget telemetry: emit here (command) and act
   // on the returned status. The run.turn.pre budget builtins read the status
   // via the pure checkBudget query, so the event is not re-emitted per policy.
-  const budgetStatus = publishBudgetTelemetry(state.budgetState, config.budget);
+  const budgetStatus = publishBudgetTelemetry(state.budgetState, agentBase, config.budget);
   if (budgetStatus !== "exceeded") return null;
 
   const postRunDecision = await engine.dispatchPoint(

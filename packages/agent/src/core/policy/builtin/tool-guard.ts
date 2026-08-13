@@ -8,6 +8,20 @@ export interface ToolPermissionPolicyConfig {
   permission: Policy.Permission;
 }
 
+/**
+ * The trace this guard reports under. A permission evaluation happens inside
+ * a tool call, which happens inside a run — the guard is never an origin.
+ */
+function requireGuardTraceId(ctx: {
+  readonly traceContext?: { readonly traceId?: string };
+}): string {
+  const traceId = ctx.traceContext?.traceId;
+  if (traceId === undefined || traceId.length === 0) {
+    throw new Error("tool permission guard requires the run trace context");
+  }
+  return traceId;
+}
+
 export function createToolPermissionPolicy(
   config: ToolPermissionPolicyConfig,
 ): CanonicalPolicyRegistration {
@@ -41,7 +55,7 @@ export function createToolPermissionPolicy(
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         Bus.publish(Operational.Debug, {
-          traceId: crypto.randomUUID(),
+          traceId: requireGuardTraceId(ctx),
           time: Date.now(),
           component: "agent.policy.tool-permission",
           msg: "tool permission evaluation failed",

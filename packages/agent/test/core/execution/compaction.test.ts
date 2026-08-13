@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type { Message } from "@openomni/protocol";
+import { Operational, type Message } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { CompactionBoundaryError, InMemoryCompactor } from "../../../src/core/execution/compaction";
+
+/** Compaction rewrites a run's history; the record carries that run's trace. */
+const TEST_TRACE_ID = "trace-compaction-test";
 
 let idCounter = 0;
 
@@ -78,6 +82,47 @@ function makeToolAssistantMessage(text: string, callID: string): Message.WithPar
 }
 
 describe("InMemoryCompactor", () => {
+  /**
+   * Compaction rewrites the run's history; the record of that has to be
+   * readable against the run it changed. Re-minting here left the suite green.
+   */
+  it("files the compaction record under the run's trace", async () => {
+    const seen: Array<{ traceId: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Info, (event) => {
+      seen.push(event as unknown as { traceId: string });
+    });
+
+    try {
+      await InMemoryCompactor.compact(
+        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
+        { traceId: TEST_TRACE_ID, contextWindowTokens: 1000, protectRecentMessages: 2 },
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(1);
+  });
+
+  /**
+   * Compaction rewrites a run's history. A record of that filed under a minted
+   * trace cannot be read back against the run whose history it changed.
+   */
+  it("refuses to compact without the run trace", async () => {
+    const messages = Array.from({ length: 8 }, (_unused, index) =>
+      makeUserMessage(`message ${index}`),
+    );
+    for (const traceId of [undefined, ""]) {
+      await expect(
+        InMemoryCompactor.compact(messages, {
+          ...(traceId === undefined ? {} : { traceId }),
+          contextWindowTokens: 1000,
+          protectRecentMessages: 2,
+        }),
+      ).rejects.toThrow("compaction requires the run trace context");
+    }
+  });
   describe("shouldCompact", () => {
     it("returns false when tokens are below threshold", () => {
       expect(InMemoryCompactor.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);
@@ -174,6 +219,7 @@ describe("InMemoryCompactor", () => {
     it("does not compact when messages count is within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b")];
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 6,
       });
@@ -187,6 +233,7 @@ describe("InMemoryCompactor", () => {
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 4,
       });
@@ -207,6 +254,7 @@ describe("InMemoryCompactor", () => {
         makeAssistantMessage("recent-8"),
       ];
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 6,
       });
@@ -224,6 +272,7 @@ describe("InMemoryCompactor", () => {
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 4,
         onSummarize: async () => "Summary of removed messages",
@@ -238,6 +287,7 @@ describe("InMemoryCompactor", () => {
     it("does not compact when non-system messages are within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b"), makeUserMessage("c")];
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 6,
       });
@@ -262,6 +312,7 @@ describe("InMemoryCompactor", () => {
         makeAssistantMessage("a7"),
       ];
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 3,
       });
@@ -286,6 +337,7 @@ describe("InMemoryCompactor", () => {
       let caught: unknown;
       try {
         await InMemoryCompactor.compact(messages, {
+          traceId: TEST_TRACE_ID,
           contextWindowTokens: 1000,
           protectRecentMessages: 3,
         });
@@ -310,6 +362,7 @@ describe("InMemoryCompactor", () => {
         makeAssistantMessage("a7"),
       ];
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 3,
         onSummarize: async () => "anchored",
@@ -325,6 +378,7 @@ describe("InMemoryCompactor", () => {
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
       const result = await InMemoryCompactor.compact(messages, {
+        traceId: TEST_TRACE_ID,
         contextWindowTokens: 1000,
         protectRecentMessages: 4,
         onSummarize: async () => "summary",

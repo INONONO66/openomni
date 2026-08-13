@@ -102,12 +102,20 @@ export function checkBudget(state: BudgetState, budget?: AgentBudget): BudgetSta
  * for the caller to act on. Invoked from the per-turn lifecycle check so the
  * event fires exactly once per turn, never once per policy that reads it.
  */
-export function publishBudgetTelemetry(state: BudgetState, budget?: AgentBudget): BudgetStatus {
+export function publishBudgetTelemetry(
+  state: BudgetState,
+  // Structural, not `AgentRunBase`: `run-state` imports this module, so naming
+  // its type here would close a cycle. Budget reporting needs the run's trace
+  // and session and nothing else.
+  run: { readonly traceId: string; readonly sessionId: string },
+  budget?: AgentBudget,
+): BudgetStatus {
   const evaluation = evaluateBudget(state, budget);
 
   if (evaluation.status === "exceeded") {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId: run.traceId,
+      sessionId: run.sessionId,
       time: Date.now(),
       component: "agent.budget",
       msg: `budget exceeded: ${evaluation.exceededLimit}`,
@@ -125,7 +133,8 @@ export function publishBudgetTelemetry(state: BudgetState, budget?: AgentBudget)
   }
   if (evaluation.status === "warning") {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId: run.traceId,
+      sessionId: run.sessionId,
       time: Date.now(),
       component: "agent.budget",
       msg: "budget threshold warning",
@@ -139,7 +148,8 @@ export function publishBudgetTelemetry(state: BudgetState, budget?: AgentBudget)
   }
   if (evaluation.status === "reassurance") {
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId: run.traceId,
+      sessionId: run.sessionId,
       time: Date.now(),
       component: "agent.budget",
       msg: "budget threshold reassurance",

@@ -1,5 +1,3 @@
-import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import type { Run } from "@openomni/protocol";
 
 export type RetryReason = "timeout" | "tool_error" | "transient_error" | "validation_error";
@@ -16,6 +14,16 @@ export function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): nu
   return Math.min(rawDelay, policy.backoffMs.max);
 }
 
+/**
+ * Classifies an error for the retry policy. Pure: it reads a string and
+ * returns a reason.
+ *
+ * It used to narrate every branch through the Bus under a freshly minted
+ * trace — eight events describing a decision the caller already reports, on
+ * the run's own trace, two statements later (`emitErrorRetry` /
+ * `emitRunFailed`). A record that duplicates a correlated one under an
+ * uncorrelated id is worse than no record.
+ */
 export function classifyRetryReason(errorMessage: string): RetryReason {
   const normalized = errorMessage.toLowerCase();
   if (
@@ -23,113 +31,29 @@ export function classifyRetryReason(errorMessage: string): RetryReason {
     normalized.includes("aborted") ||
     normalized.includes("budget exceeded")
   ) {
-    Bus.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:classify",
-      msg: "error classified as timeout",
-      context: { error: errorMessage, reason: "timeout" },
-    });
     return "timeout";
   }
   if (normalized.includes("tool")) {
-    Bus.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:classify",
-      msg: "error classified as tool error",
-      context: { error: errorMessage, reason: "tool_error" },
-    });
     return "tool_error";
   }
   if (normalized.includes("validation")) {
-    Bus.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:classify",
-      msg: "error classified as validation error",
-      context: { error: errorMessage, reason: "validation_error" },
-    });
     return "validation_error";
   }
-  Bus.publish(Operational.Debug, {
-    traceId: crypto.randomUUID(),
-    time: Date.now(),
-    component: "retry:classify",
-    msg: "error classified as transient error",
-    context: { error: errorMessage, reason: "transient_error" },
-  });
   return "transient_error";
 }
 
+/**
+ * Whether this attempt may be retried. An empty or absent `retryOn` means no
+ * filter, so every reason is retryable up to `maxAttempts`.
+ */
 export function shouldRetry(
   policy: Run.RetryPolicy,
   reason: RetryReason,
   attempt: number,
 ): boolean {
-  if (attempt >= policy.maxAttempts) {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:shouldRetry",
-      msg: "retry exhausted: max attempts reached",
-      context: {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: false,
-      },
-    });
-    return false;
-  }
-  if (!policy.retryOn || policy.retryOn.length === 0) {
-    const backoffMs = calculateBackoffMs(policy, attempt + 1);
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:shouldRetry",
-      msg: "retry decision: will retry (no filter)",
-      context: {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: true,
-        backoffMs,
-      },
-    });
-    return true;
-  }
-  const willRetry = policy.retryOn.includes(reason);
-  if (willRetry) {
-    const backoffMs = calculateBackoffMs(policy, attempt + 1);
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:shouldRetry",
-      msg: "retry decision: will retry (reason allowed)",
-      context: {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: true,
-        backoffMs,
-      },
-    });
-  } else {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "retry:shouldRetry",
-      msg: "retry decision: will not retry (reason not allowed)",
-      context: {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: false,
-      },
-    });
-  }
-  return willRetry;
+  if (attempt >= policy.maxAttempts) return false;
+  if (policy.retryOn === undefined || policy.retryOn.length === 0) return true;
+  return policy.retryOn.includes(reason);
 }
 
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
