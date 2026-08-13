@@ -54,7 +54,7 @@ const result = await agent.run({
 
 Also exported from `@openomni/agent`:
 
-- Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentEvent`, `AgentBudget`, `TokenUsage`, `Sink`, `AgentEventEmitter`
+- Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentEvent`, `AgentBudget`, `TokenUsage`, `Sink`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyRegistration` (legacy compatibility), `PolicyEngineInstance`
 - Runtime: `McpClient`, `McpServerConfig`
 
@@ -69,7 +69,6 @@ Also exported from `@openomni/agent`:
 | `toolExecutor?`  | `(call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>` | Custom tool executor; wrapped by `createToolExecutor` |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
 | `middleware?`    | `PolicyEngineRegistration[]`             | Caller-owned canonical point registrations; legacy timing registrations are accepted only for compatibility |
-| `eventEmitter?`  | `AgentEventEmitter`                      | Optional event emitter for external observers                               |
 | `providerOptions?` | `Record<string, unknown>`              | Forwarded to the underlying provider SDK                                    |
 
 ## POLICY ENGINE

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
 import type { PolicyContext } from "../../../../src/core/policy";
-import type { AgentEventEmitter } from "../../../../src/core/types";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -180,49 +179,6 @@ describe("createToolPermissionPolicy", () => {
     // Then
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("tool_permission_evaluation_failed");
-  });
-
-  it("emits tool.execution.permission_denied event on deny", async () => {
-    const events: Array<{ name: string; data: unknown }> = [];
-    const mockEmitter: AgentEventEmitter = {
-      emit: (name: string, data: unknown) => {
-        events.push({ name, data });
-      },
-    };
-
-    const mw = createToolPermissionPolicy({
-      permission: { action: "tool.call", denylist: ["blocked_tool"] },
-      eventEmitter: mockEmitter,
-    });
-    const verdict = await mw.fn(
-      baseCtx({
-        toolName: "blocked_tool",
-        toolCallId: "call-8",
-        toolInput: {},
-      }),
-    );
-    expect(verdict.verdict).toBe("deny");
-    expect(events.some((e) => e.name === "tool.execution.permission_denied")).toBe(true);
-  });
-
-  it("calls onToolBlocked callback on deny", async () => {
-    let blocked: { toolCallId: string; toolName: string; reason: string } | undefined;
-    const mw = createToolPermissionPolicy({
-      permission: { action: "tool.call", denylist: ["blocked_tool"] },
-      onToolBlocked: (toolCallId, toolName, reason) => {
-        blocked = { toolCallId, toolName, reason };
-      },
-    });
-    await mw.fn(
-      baseCtx({
-        toolName: "blocked_tool",
-        toolCallId: "call-9",
-        toolInput: {},
-      }),
-    );
-    expect(blocked).toBeDefined();
-    expect(blocked?.toolName).toBe("blocked_tool");
-    expect(blocked?.reason).toBe("denylist");
   });
 
   it("registers canonical metadata", () => {

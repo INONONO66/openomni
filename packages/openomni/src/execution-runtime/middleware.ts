@@ -6,7 +6,7 @@ import {
   createToolPermissionPolicy,
   defaultRegistry,
 } from "@openomni/agent";
-import type { ChatAgentConfig, PolicyEngineRegistration } from "@openomni/agent";
+import type { PolicyEngineRegistration } from "@openomni/agent";
 import { Policy } from "@openomni/protocol";
 import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
@@ -25,8 +25,6 @@ export interface WorkerMiddlewareConfig {
   permissions?: Policy.Permission;
   policyPlan?: Policy.PolicyPlan;
   compaction?: WorkerCompactionConfig;
-  eventEmitter?: ChatAgentConfig["eventEmitter"];
-  source?: string;
   includeLifecycle?: boolean;
   includeIdle?: boolean;
   injectionQueue?: InjectionQueue.Instance;
@@ -87,8 +85,6 @@ function buildLegacyPermissionMiddleware(
   return [
     createToolPermissionPolicy({
       permission: config.permissions ?? DEFAULT_TOOL_PERMISSION,
-      ...(config.eventEmitter !== undefined && { eventEmitter: config.eventEmitter }),
-      source: config.source ?? "agent-runner",
     }),
   ];
 }
@@ -107,45 +103,18 @@ function hydrateToolPermissionConfig(
   const policies = plan.policies.map((policy) => {
     if (policy.id !== "builtin:tool-permission") return policy;
     const config = policy.config ?? {};
-    const hydratedConfig = hydrateToolPermissionObservability(config, workerConfig);
-    if (hydratedConfig !== config) changed = true;
     // Keep legacy permissions effective for policy plans that select the
     // builtin guard without owning its config yet.
     // A present-but-invalid permission is treated as explicit and fails closed.
-    if ("permission" in hydratedConfig) {
-      if (Policy.Permission.safeParse(hydratedConfig.permission).success) {
-        return hydratedConfig === config ? policy : { ...policy, config: hydratedConfig };
-      }
+    if ("permission" in config) {
+      if (Policy.Permission.safeParse(config.permission).success) return policy;
       changed = true;
-      return {
-        ...policy,
-        config: { ...hydratedConfig, permission: FAIL_CLOSED_TOOL_PERMISSION },
-      };
+      return { ...policy, config: { ...config, permission: FAIL_CLOSED_TOOL_PERMISSION } };
     }
 
     changed = true;
-    return {
-      ...policy,
-      config: {
-        ...hydratedConfig,
-        permission: fallbackPermission,
-      },
-    };
+    return { ...policy, config: { ...config, permission: fallbackPermission } };
   });
 
   return changed ? { ...plan, policies } : plan;
-}
-
-function hydrateToolPermissionObservability(
-  config: Record<string, unknown>,
-  workerConfig: WorkerMiddlewareConfig,
-): Record<string, unknown> {
-  const additions: Record<string, unknown> = {};
-  if (workerConfig.eventEmitter !== undefined && !("eventEmitter" in config)) {
-    additions.eventEmitter = workerConfig.eventEmitter;
-  }
-  if (!("source" in config)) {
-    additions.source = workerConfig.source ?? "agent-runner";
-  }
-  return Object.keys(additions).length === 0 ? config : { ...config, ...additions };
 }

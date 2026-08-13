@@ -37,7 +37,7 @@ export async function* handleStop(
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
 ): AsyncGenerator<AgentEvent, "complete" | "continue"> {
-  emitTurnComplete(state, config, agentBase, turn.turnUsage);
+  emitTurnComplete(state, agentBase, turn.turnUsage);
 
   if (state.lastAssistantText) yield { type: "text_chunk", text: state.lastAssistantText };
   for (const toolCall of turn.turnToolCalls) {
@@ -112,7 +112,6 @@ export async function* handleStop(
           effects: [{ type: "run.abort", reason }],
         }),
         state,
-        config,
         agentBase,
       );
       yield createGuardCompleteEvent(state);
@@ -146,7 +145,7 @@ export async function* handleStop(
       yield event;
       return flowDecision({ kind: "abort", event });
     }
-    publishDenyDiagnostic("turn.finish", postTurnDecision, state, config, agentBase);
+    publishDenyDiagnostic("turn.finish", postTurnDecision, state, agentBase);
   }
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
@@ -158,11 +157,10 @@ export async function* handleStop(
 
 export async function* handleContinue(
   state: RunState,
-  config: ChatAgentConfig,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): AsyncGenerator<AgentEvent, "continue"> {
-  emitTurnComplete(state, config, agentBase, turnUsage);
+  emitTurnComplete(state, agentBase, turnUsage);
   yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turnUsage };
   advanceRunTurn(state);
   return continueFlowDecision(continueDecision(state));
@@ -211,7 +209,7 @@ export async function* handleError(
       yield event;
       return { action: "complete", kind: "abort", event, errorMessage: normalizedError.message };
     }
-    publishDenyDiagnostic("error", onErrorDecision, state, config, agentBase);
+    publishDenyDiagnostic("error", onErrorDecision, state, agentBase);
   }
 
   const lastError = normalizedError.message;
@@ -227,7 +225,7 @@ export async function* handleError(
 
   if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
     const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
-    emitErrorRetry(state, config, agentBase, {
+    emitErrorRetry(state, agentBase, {
       attempt,
       maxAttempts: effectiveRetryPolicy.maxAttempts,
       error: lastError,
@@ -301,7 +299,7 @@ async function dispatchPostRunTransform(
     }),
   );
   if (PolicyDecision.isBlocking(postRunDecision)) {
-    publishDenyDiagnostic("run.finish", postRunDecision, state, config, agentBase);
+    publishDenyDiagnostic("run.finish", postRunDecision, state, agentBase);
   }
 }
 
@@ -324,7 +322,7 @@ async function applyPostCompaction(
   );
 
   if (PolicyDecision.isBlocking(compactionDecision)) {
-    publishDenyDiagnostic("completion.prepare", compactionDecision, state, config, agentBase);
+    publishDenyDiagnostic("completion.prepare", compactionDecision, state, agentBase);
     return createGuardCompleteEvent(state, { finishReason: "stop" });
   }
 
@@ -341,7 +339,6 @@ async function applyPostCompaction(
         effects: [{ type: "run.abort", reason }],
       }),
       state,
-      config,
       agentBase,
     );
     return createGuardCompleteEvent(state, { finishReason: "stop" });

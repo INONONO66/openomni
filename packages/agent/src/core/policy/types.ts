@@ -1,5 +1,5 @@
 import type { Policy } from "@openomni/protocol";
-import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
+import type { AgentStep, TokenUsage, AgentBudget } from "../types";
 import type { BudgetState } from "../budget";
 import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "@openomni/policy";
 
@@ -18,7 +18,6 @@ export interface PolicyContext extends GenericPolicyContext {
   continuationCount: number;
   elapsedMs: number;
   budgetState?: BudgetState;
-  eventEmitter?: AgentEventEmitter;
   budget?: AgentBudget;
 }
 

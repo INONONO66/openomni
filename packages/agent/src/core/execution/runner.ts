@@ -68,7 +68,7 @@ export async function* streamAgent(
           return;
         }
 
-        emitTurnStart(state, config, agentBase);
+        emitTurnStart(state, agentBase);
         const turnResult = await buildTurn(
           state,
           config,
@@ -115,7 +115,7 @@ export async function* streamAgent(
         }
 
         if (outcome.type === "continue") {
-          yield* handleContinue(state, config, agentBase, turnResult.turn.turnUsage);
+          yield* handleContinue(state, agentBase, turnResult.turn.turnUsage);
           continue;
         }
 

@@ -210,7 +210,6 @@ export function buildLifecyclePolicyContext<
     messages: state.messages,
     budgetState: state.budgetState,
     budget: config.budget,
-    eventEmitter: config.eventEmitter,
     ...rest,
     actorId: agentBase.actorId,
     sessionId: agentBase.sessionId || state.sessionId,

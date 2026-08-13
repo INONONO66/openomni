@@ -159,28 +159,6 @@ describe("createBudgetWarningPolicy", () => {
     expect(verdict.verdict).toBe("allow");
   });
 
-  it("emits the dispatch context sessionId in the warning event payload", async () => {
-    const middleware = createBudgetWarningPolicy();
-    const events: Array<{ name: string; data: Record<string, unknown> }> = [];
-    const ctx = {
-      ...baseCtx({
-        budgetState: createBudgetState({ turns: 20 }),
-        budget: { maxTurns: 24 },
-        eventEmitter: {
-          emit: (name: string, data: Record<string, unknown>) => void events.push({ name, data }),
-        },
-      }),
-      sessionId: "sess-real",
-    };
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-    expect(events).toHaveLength(1);
-    expect(events[0]?.name).toBe("agent.budget.warning");
-    expect(events[0]?.data.sessionId).toBe("sess-real");
-  });
-
   it("has priority 20", () => {
     const middleware = createBudgetWarningPolicy();
     expect(middleware.priority).toBe(20);
