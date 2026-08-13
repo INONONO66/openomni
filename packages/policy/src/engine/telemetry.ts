@@ -1,4 +1,4 @@
-import { Operational, type Policy } from "@openomni/protocol";
+import { Operational, type Policy, type TraceContext } from "@openomni/protocol";
 import { publishDecisionObserverError, publishPolicyEvent } from "./audit";
 import type {
   AuditDispatchContextGeneric,
@@ -25,13 +25,14 @@ export function recordDecision(
 
 export function publishMiddlewareError(
   options: PolicyEngineConfig,
+  dispatchTrace: TraceContext.Type | undefined,
   timing: Policy.Timing,
   name: string,
   err: unknown,
   failPolicy: Policy.FailPolicy,
   durationMs: number,
 ): void {
-  const traceId = options.traceContext?.traceId;
+  const traceId = dispatchTrace?.traceId ?? options.traceContext?.traceId;
   if (traceId === undefined) return;
   options.auditEmit?.(Operational.Warn, {
     traceId,
@@ -44,12 +45,13 @@ export function publishMiddlewareError(
 
 export function publishMiddlewareDebug(
   options: PolicyEngineConfig,
+  dispatchTrace: TraceContext.Type | undefined,
   timing: Policy.Timing,
   name: string,
   verdict: Policy.PolicyDecision["verdict"],
   durationMs: number,
 ): void {
-  const traceId = options.traceContext?.traceId;
+  const traceId = dispatchTrace?.traceId ?? options.traceContext?.traceId;
   if (traceId === undefined) return;
   options.auditEmit?.(Operational.Debug, {
     traceId,

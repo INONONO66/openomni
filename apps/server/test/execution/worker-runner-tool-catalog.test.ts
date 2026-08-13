@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";
-import { createSpawnOptions, createValidRequest, successfulResult } from "./worker-runner-fixture";
+import {
+  createSpawnOptions,
+  createValidRequest,
+  successfulResult,
+  toolCallContext,
+} from "./worker-runner-fixture";
 
 describe("WorkerRunner", () => {
   it("exposes dispatch without polling tools for resident guidance", async () => {
@@ -105,11 +110,14 @@ describe("WorkerRunner", () => {
           createAgent: (options) => ({
             async run() {
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              subagentResult = await options.toolExecutor({
-                id: "agent-tool-call",
-                tool: "subagent",
-                input: { agentName: "child", prompt: "delegate" },
-              });
+              subagentResult = await options.toolExecutor(
+                {
+                  id: "agent-tool-call",
+                  tool: "subagent",
+                  input: { agentName: "child", prompt: "delegate" },
+                },
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),

@@ -7,6 +7,7 @@ import {
   createExecutionToolContext,
   resolveWorkerDbPath,
 } from "../../src/execution/worker-runtime";
+import { toolCallContext } from "./worker-runner-fixture";
 
 const model = { providerID: "test", modelID: "fixture" };
 
@@ -102,11 +103,14 @@ describe("worker-runtime", () => {
     expect(context.toolExecutor).toBeDefined();
 
     if (!context.toolExecutor) throw new Error("expected toolExecutor to be defined");
-    const result = await context.toolExecutor({
-      id: crypto.randomUUID(),
-      tool: "bash",
-      input: { command: "pwd" },
-    });
+    const result = await context.toolExecutor(
+      {
+        id: crypto.randomUUID(),
+        tool: "bash",
+        input: { command: "pwd" },
+      },
+      toolCallContext(),
+    );
 
     expect(result.output).not.toContain("denied by policy");
   });

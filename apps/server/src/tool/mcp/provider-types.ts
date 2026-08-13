@@ -16,17 +16,6 @@ export interface McpClientLike {
 
 export interface McpToolProviderOptions {
   readonly createClient?: (config: McpServerConfig) => McpClientLike;
+  /** The boot trace this provider reports connect failures under. */
+  readonly traceId?: string;
 }
-
-export interface McpLifecycleAuditContext {
-  readonly audit?: {
-    readonly sessionId?: string;
-  };
-  readonly actor?: Record<string, unknown>;
-}
-
-/** @internal Package-local helper for McpToolProvider lifecycle audit. */
-export type ResolvedLifecycleAudit = {
-  readonly sessionId: string;
-  readonly actor?: Record<string, unknown>;
-};

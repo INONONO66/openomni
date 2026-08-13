@@ -193,7 +193,9 @@ export namespace McpPrefixGuardMiddleware {
     const serverName =
       tool === undefined ? resolveAttemptedServerId(ctx.call.tool) : resolveMcpServerId(tool);
 
-    const traceContext = requireAuditContext(ctx.traceContext);
+    // `executeMcpTool` — the sole caller — validated this before building the
+    // context it passed, so re-asking would enforce a settled condition twice.
+    const traceContext = ctx.traceContext as ReturnType<typeof requireAuditContext>;
     const { sessionId, runId } = traceContext;
     const engine = PolicyEngine.create<McpPolicyContext>({
       traceContext,

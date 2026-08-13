@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { ChatAgentConfig } from "@openomni/agent";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";
-import { createSpawnOptions, createValidRequest, successfulResult } from "./worker-runner-fixture";
+import {
+  createSpawnOptions,
+  createValidRequest,
+  successfulResult,
+  toolCallContext,
+} from "./worker-runner-fixture";
 
 describe("WorkerRunner", () => {
   it("exposes requested child_agent tool for worker-local parallelism", async () => {
@@ -46,17 +51,23 @@ describe("WorkerRunner", () => {
               );
               expect(options.systemPrompt).toContain("child_agent");
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              const spawn = await options.toolExecutor({
-                id: "child-agent-spawn",
-                tool: "child_agent",
-                input: { action: "spawn", prompt: "try to escalate", tools: { all: true } },
-              });
+              const spawn = await options.toolExecutor(
+                {
+                  id: "child-agent-spawn",
+                  tool: "child_agent",
+                  input: { action: "spawn", prompt: "try to escalate", tools: { all: true } },
+                },
+                toolCallContext(),
+              );
               const childId = JSON.parse(spawn.output).childId;
-              await options.toolExecutor({
-                id: "child-agent-await",
-                tool: "child_agent",
-                input: { action: "await", ids: [childId] },
-              });
+              await options.toolExecutor(
+                {
+                  id: "child-agent-await",
+                  tool: "child_agent",
+                  input: { action: "await", ids: [childId] },
+                },
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),
@@ -104,17 +115,23 @@ describe("WorkerRunner", () => {
               const childAgentTool = options.tools?.find((tool) => tool.name === "child_agent");
               if (!childAgentTool) return successfulResult;
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              const spawn = await options.toolExecutor({
-                id: "child-mw-spawn",
-                tool: "child_agent",
-                input: { action: "spawn", prompt: "inspect middleware" },
-              });
+              const spawn = await options.toolExecutor(
+                {
+                  id: "child-mw-spawn",
+                  tool: "child_agent",
+                  input: { action: "spawn", prompt: "inspect middleware" },
+                },
+                toolCallContext(),
+              );
               const childId = JSON.parse(spawn.output).childId;
-              await options.toolExecutor({
-                id: "child-mw-await",
-                tool: "child_agent",
-                input: { action: "await", ids: [childId] },
-              });
+              await options.toolExecutor(
+                {
+                  id: "child-mw-await",
+                  tool: "child_agent",
+                  input: { action: "await", ids: [childId] },
+                },
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),
@@ -167,11 +184,14 @@ describe("WorkerRunner", () => {
                 await new Promise<never>(() => undefined);
               }
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              await options.toolExecutor({
-                id: "child-agent-spawn",
-                tool: "child_agent",
-                input: { action: "spawn", prompt: "keep running" },
-              });
+              await options.toolExecutor(
+                {
+                  id: "child-agent-spawn",
+                  tool: "child_agent",
+                  input: { action: "spawn", prompt: "keep running" },
+                },
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),

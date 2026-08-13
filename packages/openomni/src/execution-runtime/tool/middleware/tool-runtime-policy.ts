@@ -116,6 +116,19 @@ export namespace ToolRuntimePolicyMiddleware {
     readonly handle: RuntimePolicyHandle;
   }
 
+  /**
+   * The evaluating run's trace. The middleware observes a call it did not
+   * start, so it inherits or refuses — minting one here produced a warning
+   * about a high-risk tool that correlated to nothing.
+   */
+  function requirePolicyTraceId(ctx: { readonly traceContext?: TraceContext.Type }): string {
+    const traceId = ctx.traceContext?.traceId;
+    if (traceId === undefined || traceId.length === 0) {
+      throw new Error("tool runtime policy requires the run trace context");
+    }
+    return traceId;
+  }
+
   export async function evaluatePreTool(ctx: PreToolContext): Promise<PreToolResult> {
     const riskTier = riskTierFromDescriptor(ctx.descriptor, ctx.riskTier);
     const timeoutMs = timeoutForRiskTier(riskTier, ctx.timeoutConfig);
@@ -130,7 +143,7 @@ export namespace ToolRuntimePolicyMiddleware {
       riskTier >= 2 ? "high-risk tool execution recorded" : "risk tier evaluated",
     );
     Bus.publish(riskTier >= 2 ? Operational.Warn : Operational.Debug, {
-      traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+      traceId: requirePolicyTraceId(ctx),
       time: Date.now(),
       component: "executor.policy",
       msg: riskTier >= 2 ? "executor: high-risk tool execution" : "executor: risk tier evaluated",

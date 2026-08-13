@@ -28,9 +28,19 @@ export function buildActor(runtime: ToolRuntimeContext | undefined): ToolActor {
   };
 }
 
-export function createEventBase(runtime: ToolRuntimeContext | undefined): EventBase {
+/**
+ * The identity every event of one tool call shares.
+ *
+ * `traceId` is the executing run's, passed in per call: minting one here gave
+ * each of a single call's four events its own trace, so they did not correlate
+ * with each other, let alone with the run.
+ */
+export function createEventBase(
+  runtime: ToolRuntimeContext | undefined,
+  traceId: string,
+): EventBase {
   return {
-    traceId: crypto.randomUUID(),
+    traceId,
     sessionId: runtime?.sessionId ?? "",
     ...(runtime?.runId !== undefined && { runId: runtime.runId }),
     time: Date.now(),

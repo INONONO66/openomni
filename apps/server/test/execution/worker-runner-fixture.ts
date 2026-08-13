@@ -1,4 +1,5 @@
 import type { AgentResult } from "@openomni/agent";
+import type { TraceContext } from "@openomni/protocol";
 import { InjectionQueue } from "@openomni/openomni";
 import { Storage } from "@openomni/session";
 
@@ -51,12 +52,26 @@ export function createSpawnOptions(
   };
 }
 
+const TEST_RUN_TRACE_ID = newTraceId();
+
+/**
+ * The context the real agent wrapper attaches to every tool call
+ * (`packages/agent/src/core/execution/tool-executor.ts`). A double that calls
+ * `options.toolExecutor` directly has to supply it too, or it is standing in
+ * for something production never does.
+ */
+export function toolCallContext(): { readonly traceContext: TraceContext.Type } {
+  return {
+    traceContext: { traceId: TEST_RUN_TRACE_ID, sessionId: "session-1", runId: "run-1" },
+  };
+}
+
 export function createValidRequest(): Record<string, unknown> {
   return {
     authToken: "token",
     // A worker run inherits the dispatch trace; the runner refuses to mint one
     // (#606), so a request without it is a wiring defect, not a default.
-    traceId: newTraceId(),
+    traceId: TEST_RUN_TRACE_ID,
     runId: "run-1",
     sessionId: "session-1",
     mode: "direct",

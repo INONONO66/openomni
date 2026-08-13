@@ -151,7 +151,7 @@ describe("McpToolProvider canonical policy trace", () => {
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
-    expect(
+    await expect(
       provider.execute({ id: "call-mcp-traceless", tool: "search_query", input: {} }),
     ).rejects.toThrow("mcp tool execution requires the dispatching run trace");
     expect(execute).not.toHaveBeenCalled();

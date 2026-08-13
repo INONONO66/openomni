@@ -79,7 +79,7 @@ export function emitRunCompleted(
   Bus.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
-    sessionId: agentBase.sessionId || undefined,
+    sessionId: agentBase.sessionId,
     component: "agent",
     msg: "agent.run.completed",
     context: {
@@ -110,7 +110,7 @@ export function emitRunFailed(agentBase: AgentRunBase, error: string): void {
   Bus.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
-    sessionId: agentBase.sessionId || undefined,
+    sessionId: agentBase.sessionId,
     component: "agent",
     msg: "agent.run.failed",
     error,
@@ -154,8 +154,13 @@ export function publishDenyDiagnostic(
   });
 }
 
+/**
+ * The run's session. `agentBase` and the state derive it from the same
+ * validated trace, so this is one value under two names — kept as a single
+ * reader so a future divergence has one place to be resolved.
+ */
 function eventSessionId(state: RunState, agentBase: AgentRunBase): string {
-  return agentBase.sessionId || state.sessionId;
+  return agentBase.sessionId === "" ? state.sessionId : agentBase.sessionId;
 }
 
 // merged from run-result.ts (250-LOC split refold: single-importer stage)

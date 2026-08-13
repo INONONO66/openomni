@@ -35,6 +35,12 @@ function createAuditedEngine() {
   return { engine, events };
 }
 
+function debugEvent(
+  events: ReadonlyArray<{ name: string; data: unknown }>,
+): { name: string; data: unknown } | undefined {
+  return events.find((event) => event.name === Operational.Debug.name);
+}
+
 function capturedRegistrationError(register: () => void): PolicyRegistrationError {
   try {
     register();
@@ -156,11 +162,18 @@ describe("PolicyEngine portability", () => {
 
     expect(decision1.verdict).toBe("allow");
     expect(decision2.verdict).toBe("deny");
-    // Isolation is the claim, not a count: each engine observes its own
-    // registration and never the other's.
-    expect(JSON.stringify(events1)).toContain("policy-1");
+    // An audited dispatch emits the middleware debug plus the two policy
+    // events; the count is pinned so a lost event is a failure, not a silence.
+    expect(events1).toHaveLength(3);
+    expect(events2).toHaveLength(3);
+    expect(debugEvent(events1)?.data).toMatchObject({
+      context: { name: "policy-1", verdict: "allow" },
+    });
+    expect(debugEvent(events2)?.data).toMatchObject({
+      context: { name: "policy-2", verdict: "deny" },
+    });
+    // ...and neither engine ever observes the other's registration.
     expect(JSON.stringify(events1)).not.toContain("policy-2");
-    expect(JSON.stringify(events2)).toContain("policy-2");
     expect(JSON.stringify(events2)).not.toContain("policy-1");
   });
 

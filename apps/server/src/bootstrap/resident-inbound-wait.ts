@@ -22,7 +22,7 @@ function residentAskOutput(output: unknown): string {
 export function createResidentInboundWaitHandler(
   config: ResidentInboundWaitConfig,
 ): (params: InboundWaitParams) => Promise<InboundWaitResult> {
-  return async ({ workerId, sessionId, runId, payload, workspaceRoot, signal }) => {
+  return async ({ workerId, traceId, sessionId, runId, payload, workspaceRoot, signal }) => {
     const requestId = crypto.randomUUID();
     const resolvedWorkspace = workspaceRoot ?? config.serverConfig.workspace?.root ?? process.cwd();
     if (signal?.aborted) {
@@ -62,6 +62,7 @@ export function createResidentInboundWaitHandler(
           correlation: requestId,
         },
         {
+          traceId,
           sessionId,
           ...(runId ? { runId } : {}),
           actorKind: "worker",

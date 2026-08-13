@@ -104,6 +104,30 @@ describe("dispatch tool", () => {
     });
   });
 
+  /**
+   * A dispatch belongs to the run that submitted it. Without this the runtime
+   * mints a fresh trace per submit, and the command cannot be linked back to
+   * the tool call that asked for it — the failure a trace exists to prevent.
+   */
+  test("forwards the calling run's trace to the runtime", async () => {
+    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1];
+    const tool = createDispatchTool({
+      async submit(_input, options) {
+        capturedOptions = options;
+        return { dispatchId: "dispatch-1", status: "completed", output: "ok" };
+      },
+    });
+
+    await tool.execute(
+      call({ action: "resident.ask", target: { kind: "resident" }, payload: "hello" }),
+      {
+        traceContext: { traceId: "trace-caller", sessionId: "session-1", runId: "run-1" },
+      },
+    );
+
+    expect(capturedOptions).toMatchObject({ traceId: "trace-caller" });
+  });
+
   test("passes worker endpoint selectors through runtime submission", async () => {
     let capturedInput: Dispatch.Input | undefined;
     const tool = createDispatchTool({

@@ -58,15 +58,24 @@ describe("OpenOmni tool executor context", () => {
     expect(observedContext?.signal?.aborted).toBe(false);
   });
 
-  it("keeps the context-free execution path trace-free", async () => {
-    let observedContext: ToolExecutionContext | undefined;
+  /**
+   * A tool call exists because a run asked for it, so it is never a trace
+   * origin. A context-free call used to run and publish four events under four
+   * freshly minted trace ids; it is now refused before the tool is reached.
+   */
+  it("refuses a call that arrives without the run trace", async () => {
+    let invoked = false;
     const executor = createToolExecutor({
-      tools: [makeTool((_call, context) => (observedContext = context))],
+      tools: [
+        makeTool(() => {
+          invoked = true;
+        }),
+      ],
     });
 
-    await executor({ id: "context-free-call", tool: "trace.probe", input: {} });
-
-    expect(observedContext?.traceContext).toBeUndefined();
-    expect(observedContext?.signal?.aborted).toBe(false);
+    await expect(
+      executor({ id: "context-free-call", tool: "trace.probe", input: {} }),
+    ).rejects.toThrow("tool execution requires the run trace context");
+    expect(invoked).toBe(false);
   });
 });

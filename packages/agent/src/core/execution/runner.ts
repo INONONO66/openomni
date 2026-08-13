@@ -219,7 +219,7 @@ export function buildPolicyEngine(
   const engine = PolicyEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
-      ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
+      sessionId: agentBase.sessionId,
       ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
     },
     auditEmit: Bus.publish,

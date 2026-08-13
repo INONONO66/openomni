@@ -96,6 +96,7 @@ export namespace WorkerRunner {
         const agentProvider = new AgentToolProvider({
           dispatchToolMode: "worker-resident-ask",
           dispatchRuntime: createWorkerDispatchRuntime({
+            traceId,
             server,
             ipcAuthToken,
             workerId: options.workerId,

@@ -46,6 +46,12 @@ This exists because thirteen sites in the agent core mint a fresh `crypto.random
 
 First `settle()` wins, so an inner guard is not overwritten by an outer one on the way out.
 
+## WHAT IS WIRED TODAY
+
+`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `scope`, `span`, `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`) — is used only by this package's own tests. `check-dead-exports` is satisfied because tests count as consumers, so it will not tell you this.
+
+That is deliberate and bounded: the surface exists so Phase 1b has something to convert *to*, and Phase 1b is what gives it callers. If Phase 1b is abandoned, this surface is dead and should be deleted, not kept for a future that is not coming.
+
 ## CONVENTIONS
 
 - **No singletons beyond `Bus`.** An emitter is a value you hold, not a global you reach for. Consumers receive a `BusEvent.Sink` (declared in `@openomni/protocol`), and the composition root decides what is behind it.

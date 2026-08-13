@@ -5,6 +5,15 @@ import { createToolExecutor } from "./executor.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type { NativeTool, ToolRiskTier } from "./types.js";
 
+/**
+ * The trace the real caller attaches to every tool call. The executor and the
+ * runtime policy both inherit it rather than mint one, so a test that omits it
+ * is exercising a path production does not have.
+ */
+const RUN_TRACE = {
+  traceContext: { traceId: "trace-executor-test", sessionId: "session-1", runId: "run-1" },
+} as const;
+
 function makeCall(tool: string, input: Record<string, unknown> = {}): Tool.Call {
   return { id: "call-1", tool, input };
 }
@@ -54,7 +63,7 @@ describe("createToolExecutor", () => {
       ],
     });
 
-    const result = await executor(makeCall("read"));
+    const result = await executor(makeCall("read"), RUN_TRACE);
 
     expect(result.output).toBe("file-content");
     expect(result.isError).toBeUndefined();
@@ -64,7 +73,7 @@ describe("createToolExecutor", () => {
   it("returns an error result for unknown tools", async () => {
     const executor = createToolExecutor({ tools: [] });
 
-    const result = await executor(makeCall("nonexistent"));
+    const result = await executor(makeCall("nonexistent"), RUN_TRACE);
 
     expect(result.isError).toBe(true);
     expect(result.output).toContain("Unknown tool: nonexistent");
@@ -76,7 +85,7 @@ describe("createToolExecutor", () => {
       config: { permissions: { action: "tool.call", denylist: ["bash"] } },
     });
 
-    const result = await executor(makeCall("bash"));
+    const result = await executor(makeCall("bash"), RUN_TRACE);
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("bash-ok");
@@ -88,11 +97,11 @@ describe("createToolExecutor", () => {
       config: { permissions: { action: "tool.call", allowlist: ["read"] } },
     });
 
-    const writeResult = await executor(makeCall("write"));
+    const writeResult = await executor(makeCall("write"), RUN_TRACE);
     expect(writeResult.isError).toBeUndefined();
     expect(writeResult.output).toBe("write-ok");
 
-    const readResult = await executor(makeCall("read"));
+    const readResult = await executor(makeCall("read"), RUN_TRACE);
     expect(readResult.isError).toBeUndefined();
   });
 
@@ -102,7 +111,7 @@ describe("createToolExecutor", () => {
       config: { permissions: { action: "tool.call", requireApproval: ["bash"] } },
     });
 
-    const result = await executor(makeCall("bash"));
+    const result = await executor(makeCall("bash"), RUN_TRACE);
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("bash-ok");
@@ -119,7 +128,7 @@ describe("createToolExecutor", () => {
       ],
     });
 
-    const result = await executor(makeCall("fail"));
+    const result = await executor(makeCall("fail"), RUN_TRACE);
 
     expect(result.isError).toBe(true);
     expect(result.output).toBe("boom");
@@ -138,7 +147,7 @@ describe("createToolExecutor", () => {
       config: { timeoutMs: { tier0: 10 } },
     });
 
-    const result = await executor(makeCall("slow"));
+    const result = await executor(makeCall("slow"), RUN_TRACE);
 
     expect(result.toolCallId).toBe("call-1");
     expect(result.isError).toBe(true);
@@ -160,7 +169,7 @@ describe("createToolExecutor", () => {
     const controller = new AbortController();
     controller.abort(new Error("already cancelled"));
 
-    const result = await executor(makeCall("read"), { signal: controller.signal });
+    const result = await executor(makeCall("read"), { ...RUN_TRACE, signal: controller.signal });
 
     expect(invoked).toBe(false);
     expect(result.toolCallId).toBe("call-1");
@@ -195,7 +204,7 @@ describe("createToolExecutor", () => {
     });
 
     try {
-      const result = await executor(makeCall("slow"));
+      const result = await executor(makeCall("slow"), RUN_TRACE);
 
       expect(receivedSignal?.aborted).toBe(true);
       expect(result.toolCallId).toBe("call-1");
@@ -234,7 +243,7 @@ describe("createToolExecutor", () => {
       config: { timeoutMs: { tier0: 10 } },
     });
 
-    const result = await executor(makeCall("slow"));
+    const result = await executor(makeCall("slow"), RUN_TRACE);
 
     expect(receivedSignal).toBeInstanceOf(AbortSignal);
     expect(receivedSignal?.aborted).toBe(true);
@@ -261,7 +270,7 @@ describe("createToolExecutor", () => {
       config: { timeoutMs: { tier0: 1_000 }, postTimeoutSettleGraceMs: 10 },
     });
 
-    const resultPromise = executor(makeCall("slow"), { signal: controller.signal });
+    const resultPromise = executor(makeCall("slow"), { ...RUN_TRACE, signal: controller.signal });
     await Bun.sleep(0);
     controller.abort();
     const result = await resultPromise;
@@ -277,7 +286,7 @@ describe("createToolExecutor", () => {
       tools: [makeTool("grep.search")],
     });
 
-    const result = await executor(makeCall("grep_search"));
+    const result = await executor(makeCall("grep_search"), RUN_TRACE);
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("grep.search-ok");
@@ -289,13 +298,13 @@ describe("createToolExecutor", () => {
       config: { permissions: { action: "tool.call", denylist: ["file.*"] } },
     });
 
-    const readResult = await executor(makeCall("file.read"));
+    const readResult = await executor(makeCall("file.read"), RUN_TRACE);
     expect(readResult.isError).toBeUndefined();
 
-    const writeResult = await executor(makeCall("file.write"));
+    const writeResult = await executor(makeCall("file.write"), RUN_TRACE);
     expect(writeResult.isError).toBeUndefined();
 
-    const bashResult = await executor(makeCall("bash"));
+    const bashResult = await executor(makeCall("bash"), RUN_TRACE);
     expect(bashResult.isError).toBeUndefined();
   });
 
@@ -305,10 +314,10 @@ describe("createToolExecutor", () => {
       config: { permissions: { action: "tool.call", denylist: ["*"] } },
     });
 
-    const readResult = await executor(makeCall("read"));
+    const readResult = await executor(makeCall("read"), RUN_TRACE);
     expect(readResult.isError).toBeUndefined();
 
-    const bashResult = await executor(makeCall("bash"));
+    const bashResult = await executor(makeCall("bash"), RUN_TRACE);
     expect(bashResult.isError).toBeUndefined();
   });
 
@@ -332,7 +341,7 @@ describe("createToolExecutor", () => {
       },
     });
 
-    const result = await executor(makeCall("bash", { command: "rm -rf /tmp/example" }));
+    const result = await executor(makeCall("bash", { command: "rm -rf /tmp/example" }), RUN_TRACE);
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("bash-ok");
@@ -343,14 +352,15 @@ describe("createToolExecutor", () => {
       tools: [makeTool("bash"), makeTool("read")],
     });
 
-    expect((await executor(makeCall("bash"))).isError).toBeUndefined();
-    expect((await executor(makeCall("read"))).isError).toBeUndefined();
+    expect((await executor(makeCall("bash"), RUN_TRACE)).isError).toBeUndefined();
+    expect((await executor(makeCall("read"), RUN_TRACE)).isError).toBeUndefined();
   });
 
   it("resolves risk-tier runtime policy with decision metadata", async () => {
     const decisions: string[] = [];
 
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-executor-test", sessionId: "session-1", runId: "run-1" },
       toolName: "bash",
       toolCallId: "call-1",
       input: {},
@@ -391,7 +401,7 @@ describe("createToolExecutor", () => {
       },
     });
 
-    await executor(makeCall("todo_write", { todos: [] }));
+    await executor(makeCall("todo_write", { todos: [] }), RUN_TRACE);
     expect(capturedInput.sessionId).toBe("ses-abc");
     expect(capturedInput.todos).toEqual([]);
   });
@@ -407,7 +417,7 @@ describe("createToolExecutor", () => {
     });
 
     const executor = createToolExecutor({ tools: [tool] });
-    await executor(makeCall("todo_write", { todos: [] }));
+    await executor(makeCall("todo_write", { todos: [] }), RUN_TRACE);
     expect(capturedInput.sessionId).toBeUndefined();
   });
 
@@ -429,7 +439,7 @@ describe("createToolExecutor", () => {
     });
 
     // LLM provides a wrong/stale sessionId — runtime should override
-    await executor(makeCall("todo_write", { sessionId: "fake-session", todos: [] }));
+    await executor(makeCall("todo_write", { sessionId: "fake-session", todos: [] }), RUN_TRACE);
     expect(capturedInput.sessionId).toBe("real-session");
   });
 
@@ -451,7 +461,7 @@ describe("createToolExecutor", () => {
         },
       });
 
-      const result = await executor(makeCall("write", { path: "file.txt" }));
+      const result = await executor(makeCall("write", { path: "file.txt" }), RUN_TRACE);
       const eventNames = events.map((e) => e.name);
 
       expect(result.output).toBe("written");
@@ -499,7 +509,7 @@ describe("createToolExecutor", () => {
         },
       });
 
-      const result = await executor(makeCall("bash"));
+      const result = await executor(makeCall("bash"), RUN_TRACE);
       const eventNames = events.map((e) => e.name);
 
       expect(result.isError).toBeUndefined();
@@ -534,7 +544,7 @@ describe("createToolExecutor", () => {
         },
       });
 
-      const result = await executor(makeCall("slow"));
+      const result = await executor(makeCall("slow"), RUN_TRACE);
 
       expect(result.isError).toBe(true);
       const blocked = events.find((e) => e.name === "policy.action.blocked");
@@ -578,7 +588,7 @@ describe("createToolExecutor", () => {
         },
       });
 
-      const result = await executor(makeCall("slow"));
+      const result = await executor(makeCall("slow"), RUN_TRACE);
 
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");
@@ -617,7 +627,7 @@ describe("createToolExecutor", () => {
         },
       });
 
-      const result = await executor(makeCall("fake_timeout"));
+      const result = await executor(makeCall("fake_timeout"), RUN_TRACE);
 
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");

@@ -6,6 +6,7 @@ import {
   InvalidTraceScopeError,
   requireTraceScope,
   scope,
+  type SpanOutcome,
   type SpanPair,
   type TraceScope,
 } from "@openomni/telemetry";
@@ -213,13 +214,11 @@ const TEST_SPAN: SpanPair<
 };
 
 describe("telemetry span", () => {
-  async function endKinds(body: (settle: (outcome: never) => void) => Promise<unknown>) {
+  async function endKinds(body: (settle: (outcome: SpanOutcome) => void) => Promise<unknown>) {
     const sink = collector();
     const log = scope(TRACE, sink, { now: clock });
     try {
-      await log.span(TEST_SPAN, { label: "t" }, (span) =>
-        body(span.settle as (outcome: never) => void),
-      );
+      await log.span(TEST_SPAN, { label: "t" }, (span) => body(span.settle));
     } catch {
       // the throwing case still has to emit its terminal event
     }
@@ -237,7 +236,7 @@ describe("telemetry span", () => {
 
   test("a settled outcome is what the terminal event carries", async () => {
     const { ends } = await endKinds(async (settle) => {
-      settle({ kind: "guard_denied", point: "run.turn.pre", policyId: "p", reason: "r" } as never);
+      settle({ kind: "guard_denied", point: "run.turn.pre", policyId: "p", reason: "r" });
       return "returned anyway";
     });
     expect(ends.map((end) => end.kind)).toEqual(["guard_denied"]);
@@ -250,7 +249,7 @@ describe("telemetry span", () => {
    */
   test("a settled outcome survives a throw out of the body", async () => {
     const { ends } = await endKinds(async (settle) => {
-      settle({ kind: "guard_denied", point: "tool.pre", policyId: "p", reason: "r" } as never);
+      settle({ kind: "guard_denied", point: "tool.pre", policyId: "p", reason: "r" });
       throw new Error("aborted by the denial");
     });
     expect(ends.map((end) => end.kind)).toEqual(["guard_denied"]);
@@ -266,8 +265,8 @@ describe("telemetry span", () => {
 
   test("the first settle wins, so an inner guard survives an outer one", async () => {
     const { ends } = await endKinds(async (settle) => {
-      settle({ kind: "budget_exhausted", limit: "turns" } as never);
-      settle({ kind: "completed" } as never);
+      settle({ kind: "budget_exhausted", limit: "turns" });
+      settle({ kind: "completed" });
       return "done";
     });
     expect(ends.map((end) => end.kind)).toEqual(["budget_exhausted"]);

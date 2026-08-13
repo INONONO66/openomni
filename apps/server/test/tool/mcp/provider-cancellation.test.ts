@@ -66,7 +66,10 @@ describe("McpToolProvider", () => {
         config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
       });
 
-      const result = await executor({ id: "call-mcp", tool: "search.query", input: {} });
+      const result = await executor(
+        { id: "call-mcp", tool: "search.query", input: {} },
+        executionContext(),
+      );
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");
 
@@ -132,7 +135,10 @@ describe("McpToolProvider", () => {
       });
 
       // When: the executor times out while the underlying MCP call remains pending.
-      const result = await executor({ id: "call-mcp-hung", tool: "search.query", input: {} });
+      const result = await executor(
+        { id: "call-mcp-hung", tool: "search.query", input: {} },
+        executionContext(),
+      );
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");
 

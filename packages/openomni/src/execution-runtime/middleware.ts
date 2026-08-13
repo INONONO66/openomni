@@ -7,6 +7,7 @@ import {
   defaultRegistry,
 } from "@openomni/agent";
 import type { PolicyEngineRegistration } from "@openomni/agent";
+import { Bus } from "@openomni/telemetry";
 import { Policy } from "@openomni/protocol";
 import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
@@ -24,6 +25,12 @@ type WorkerCompactionConfig = {
 export interface WorkerMiddlewareConfig {
   permissions?: Policy.Permission;
   policyPlan?: Policy.PolicyPlan;
+  /**
+   * The trace of the run these policies are being resolved for. Resolution
+   * reports a missing optional policy, and that report is filed under this
+   * trace or not at all — the registry never mints one.
+   */
+  traceId?: string;
   compaction?: WorkerCompactionConfig;
   includeLifecycle?: boolean;
   includeIdle?: boolean;
@@ -35,7 +42,7 @@ const DEFAULT_TOOL_PERMISSION: Policy.Permission = { action: "tool.call" };
 
 export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyEngineRegistration[] {
   const policyPlanMiddleware = config.policyPlan
-    ? resolvePoliciesFromPlan(hydrateToolPermissionConfig(config.policyPlan, config))
+    ? resolvePoliciesFromPlan(hydrateToolPermissionConfig(config.policyPlan, config), config)
     : undefined;
   const lifecycleMiddleware =
     config.includeLifecycle === false
@@ -89,9 +96,15 @@ function buildLegacyPermissionMiddleware(
   ];
 }
 
-function resolvePoliciesFromPlan(plan: Policy.PolicyPlan): PolicyEngineRegistration[] {
+function resolvePoliciesFromPlan(
+  plan: Policy.PolicyPlan,
+  config: WorkerMiddlewareConfig,
+): PolicyEngineRegistration[] {
   const registry = defaultRegistry();
-  return registry.resolve(plan, {});
+  return registry.resolve(
+    plan,
+    config.traceId === undefined ? {} : { traceId: config.traceId, auditEmit: Bus.publish },
+  );
 }
 
 function hydrateToolPermissionConfig(
