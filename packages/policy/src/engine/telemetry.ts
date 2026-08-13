@@ -38,6 +38,12 @@ export function recordDecision(
  * its trace — a wiring choice at `PolicyEngine.create`, not a runtime
  * accident.
  */
+/** An empty trace id names nothing; every guard in the tree treats it as absent. */
+function nonEmptyTraceId(trace: TraceContext.Type | undefined): string | undefined {
+  const traceId = trace?.traceId;
+  return traceId !== undefined && traceId.length > 0 ? traceId : undefined;
+}
+
 export function publishMiddlewareError(
   options: PolicyEngineConfig,
   dispatchTrace: TraceContext.Type | undefined,
@@ -47,7 +53,7 @@ export function publishMiddlewareError(
   failPolicy: Policy.FailPolicy,
   durationMs: number,
 ): void {
-  const traceId = dispatchTrace?.traceId ?? options.traceContext?.traceId;
+  const traceId = nonEmptyTraceId(dispatchTrace) ?? nonEmptyTraceId(options.traceContext);
   if (traceId === undefined) return;
   options.auditEmit?.(Operational.Warn, {
     traceId,
@@ -66,7 +72,7 @@ export function publishMiddlewareDebug(
   verdict: Policy.PolicyDecision["verdict"],
   durationMs: number,
 ): void {
-  const traceId = dispatchTrace?.traceId ?? options.traceContext?.traceId;
+  const traceId = nonEmptyTraceId(dispatchTrace) ?? nonEmptyTraceId(options.traceContext);
   if (traceId === undefined) return;
   options.auditEmit?.(Operational.Debug, {
     traceId,

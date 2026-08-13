@@ -45,7 +45,7 @@ Shipped invariant for the current Worker-only `child_agent` path: a Worker child
 ```
 ring 0  @openomni/protocol      schemas only ("structure over instruction", physically)
 ring 1  @openomni/telemetry     the observation channel — bus + scoped emitter + spans (#606)
-        @openomni/ledger        (rename of session) session + work-item + trace + actor stores
+        @openomni/ledger        (rename of session) session + work-item + actor stores
         @openomni/policy        pure judgment + the relocated engine
 ring 2  @openomni/llm           model access
         @openomni/coordinator   worker process driver — verb is deliver, never a gate

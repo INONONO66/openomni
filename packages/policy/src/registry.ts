@@ -33,7 +33,7 @@ function publishOptionalPolicyMissing(id: string, runtime: RuntimeContext): void
   // No trace, no record. The previous `runtime.runId ?? crypto.randomUUID()`
   // put a value of the wrong kind in a field every reader treats as a trace,
   // and a minted one correlates to nothing — both are worse than silence.
-  if (runtime.traceId === undefined) return;
+  if (runtime.traceId === undefined || runtime.traceId.length === 0) return;
   runtime.auditEmit?.(Operational.Warn, {
     traceId: runtime.traceId,
     ...(runtime.sessionId !== undefined && { sessionId: runtime.sessionId }),

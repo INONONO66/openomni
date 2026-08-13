@@ -83,7 +83,6 @@ export function createWorkerDispatchRuntime(options: {
     submit(input, context) {
       return runtime.submit(input, {
         ...context,
-        traceId: context.traceId,
         sessionId: context.sessionId ?? options.sessionId,
         runId: context.runId ?? options.runId,
         workspaceRoot: context.workspaceRoot ?? options.workspaceRoot,

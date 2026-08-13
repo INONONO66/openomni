@@ -44,9 +44,61 @@ describe("telemetry sinks", () => {
     expect(errors).toEqual([{ eventName: Operational.Info.name }]);
   });
 
+  /**
+   * Asserted on the sink, not through `emit`: `emit` swallows every sink
+   * throw, so routing this through it would make the assertion unfailable —
+   * and this is the reference point the boundary rule is stated against.
+   */
   test("noopSink discards without throwing", () => {
-    const log = scope(TRACE, noopSink());
-    expect(() => log.emit(Operational.Info, { component: "test", msg: "gone" })).not.toThrow();
+    const sink = noopSink();
+    expect(() => sink.publish(Operational.Info, {} as never)).not.toThrow();
+
+    const errors: string[] = [];
+    const log = scope(TRACE, sink, { onEmitError: (_error, name) => errors.push(name) });
+    log.emit(Operational.Info, { component: "test", msg: "gone" });
+    expect(errors).toEqual([]);
+  });
+
+  /**
+   * `tee`'s reporter is caller-supplied like the sinks it reports on, so it
+   * is the last place the fan-out guarantee could leak.
+   */
+  test("a throwing sink reporter neither escapes tee nor stops the fan-out", () => {
+    const survivor = collector();
+    const hostile = {
+      publish() {
+        throw new Error("sink exploded");
+      },
+    };
+    const log = scope(
+      TRACE,
+      tee([hostile, survivor], {
+        onSinkError: () => {
+          throw new Error("reporter down");
+        },
+      }),
+    );
+
+    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
+    expect(survivor.events).toHaveLength(1);
+  });
+
+  test("tee's default reporter does not throw", () => {
+    const survivor = collector();
+    const log = scope(
+      TRACE,
+      tee([
+        {
+          publish() {
+            throw new Error("sink exploded");
+          },
+        },
+        survivor,
+      ]),
+    );
+
+    expect(() => log.emit(Operational.Info, { component: "test", msg: "default" })).not.toThrow();
+    expect(survivor.events).toHaveLength(1);
   });
 
   test("collector filters by descriptor name and resets", () => {

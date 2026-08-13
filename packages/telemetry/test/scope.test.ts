@@ -244,7 +244,12 @@ describe("telemetry span", () => {
     const sink = collector();
     const log = scope(TRACE, sink, { now: clock });
 
-    await log.span(TEST_SPAN, { label: "t" }, async () => "ok");
+    await log.span(TEST_SPAN, { label: "t" }, async (_handle, child) => {
+      // The emitter handed to the body belongs to the child span too, or an
+      // event raised inside the span is attributed to its caller.
+      child.emit(Operational.Info, { component: "test", msg: "inside" });
+      return "ok";
+    });
 
     const start = sink.named(AgentExecution.TurnStart.name)[0] as {
       spanId: string;
@@ -258,6 +263,9 @@ describe("telemetry span", () => {
     // Start and end are the same span, or the pair does not describe one.
     expect(end.spanId).toBe(start.spanId);
     expect(end.parentSpanId).toBe(SPAN_ID);
+
+    const inside = sink.named(Operational.Info.name)[0] as { spanId: string };
+    expect(inside.spanId).toBe(start.spanId);
   });
 
   test("a normal return ends as completed", async () => {
