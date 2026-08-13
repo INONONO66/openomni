@@ -22,9 +22,23 @@ import type { Message, Policy } from "../packages/protocol/src/index";
 
 const HISTORY_SIZES = [8, 64, 512] as const;
 const REGISTERED_POLICY_COUNTS = [0, 1, 3] as const;
+/**
+ * `minimal` carries no audit-correlation fields; `correlated` carries the shape
+ * a real dispatch has. They diverge sharply once a point stops materializing
+ * its context, because the audit-correlation capture becomes the whole cost.
+ */
+const CONTEXT_SHAPES = ["minimal", "correlated"] as const;
 const DEFAULT_ITERATIONS = 2000;
 const WARMUP_ITERATIONS = 200;
+/**
+ * A single pass through the cells is order-biased: on a ~µs operation the cell
+ * measured last is fastest because JIT and GC warm-up dominate. Repeat every
+ * cell across interleaved rounds and report the median.
+ */
+const REPEATS = 5;
 const PART_TEXT = "x".repeat(400);
+
+type ContextShape = (typeof CONTEXT_SHAPES)[number];
 
 interface Args {
   readonly outPath?: string;
@@ -96,28 +110,51 @@ function createEngine() {
   return PolicyEngine.create({ audit: false });
 }
 
-async function measureNsPerDispatch(
-  messageCount: number,
-  registeredPolicies: number,
-  iterations: number,
-): Promise<number> {
-  const engine = createEngine();
-  for (let index = 0; index < registeredPolicies; index += 1) {
-    engine.register(inertPolicy(index));
-  }
+interface Cell {
+  readonly shape: ContextShape;
+  readonly registeredPolicies: number;
+  readonly messageCount: number;
+}
 
+function buildContext(cell: Cell): Record<string, unknown> {
   const sessionID = "bench-session";
-  const context = {
+  const base = {
     sessionId: sessionID,
     runId: "bench-run",
     actorId: "bench-actor",
     turnIndex: 0,
-    messages: buildHistory(messageCount, sessionID),
+    messages: buildHistory(cell.messageCount, sessionID),
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
   };
+  if (cell.shape === "minimal") return base;
+  return {
+    ...base,
+    traceContext: { traceId: "bench-trace", sessionId: sessionID, runId: "bench-run" },
+    resourceDescriptor: {
+      id: "tool:bench",
+      kind: "tool",
+      labels: ["source.agent"],
+      capabilities: [],
+      effects: [],
+    },
+    correlation: { dispatchId: "bench-dispatch" },
+  };
+}
 
-  // Guard every measured scenario, not just one: a context the point contract
+function buildEngine(cell: Cell): ReturnType<typeof createEngine> {
+  const engine = createEngine();
+  for (let index = 0; index < cell.registeredPolicies; index += 1) {
+    engine.register(inertPolicy(index));
+  }
+  return engine;
+}
+
+async function measureNsPerDispatch(cell: Cell, iterations: number): Promise<number> {
+  const engine = buildEngine(cell);
+  const context = buildContext(cell);
+
+  // Guard every measured cell, not just one: a context the point contract
   // rejects short-circuits dispatch, and the artifact would record that path's
   // timings as if they were normal dispatch.
   assertDispatchAllowed(await engine.dispatchPoint("run.turn.pre", context));
@@ -131,6 +168,36 @@ async function measureNsPerDispatch(
     await engine.dispatchPoint("run.turn.pre", context);
   }
   return (Bun.nanoseconds() - start) / iterations;
+}
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = sorted.length >> 1;
+  return sorted.length % 2 === 1
+    ? (sorted[middle] ?? 0)
+    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+function cellKey(cell: Cell): string {
+  return `${cell.shape}/${cell.registeredPolicies}/${cell.messageCount}`;
+}
+
+/** Rotates the cell order each round so no cell is always measured cold or last. */
+async function measureAllCells(
+  cells: readonly Cell[],
+  iterations: number,
+): Promise<Map<string, number>> {
+  const samples = new Map<string, number[]>();
+  for (let round = 0; round < REPEATS; round += 1) {
+    for (let offset = 0; offset < cells.length; offset += 1) {
+      const cell = cells[(offset + round) % cells.length];
+      if (cell === undefined) continue;
+      const sample = await measureNsPerDispatch(cell, iterations);
+      const key = cellKey(cell);
+      samples.set(key, [...(samples.get(key) ?? []), sample]);
+    }
+  }
+  return new Map([...samples].map(([key, values]) => [key, Number(median(values).toFixed(1))]));
 }
 
 async function gitHead(): Promise<string> {
@@ -147,25 +214,39 @@ function assertDispatchAllowed(decision: Policy.PolicyDecision): void {
 if (import.meta.main) {
   const { outPath, iterations } = parseArgs(process.argv.slice(2));
 
+  const cells: Cell[] = [];
+  for (const shape of CONTEXT_SHAPES) {
+    for (const registeredPolicies of REGISTERED_POLICY_COUNTS) {
+      for (const messageCount of HISTORY_SIZES) {
+        cells.push({ shape, registeredPolicies, messageCount });
+      }
+    }
+  }
+
+  const measured = await measureAllCells(cells, iterations);
+
   const scenarios: Array<{
+    contextShape: ContextShape;
     registeredPolicies: number;
     nsPerDispatchByHistorySize: Record<string, number>;
     growthFactor: number;
   }> = [];
-  for (const registeredPolicies of REGISTERED_POLICY_COUNTS) {
-    const byHistory: Record<string, number> = {};
-    for (const messageCount of HISTORY_SIZES) {
-      byHistory[String(messageCount)] = Number(
-        (await measureNsPerDispatch(messageCount, registeredPolicies, iterations)).toFixed(1),
-      );
+  for (const shape of CONTEXT_SHAPES) {
+    for (const registeredPolicies of REGISTERED_POLICY_COUNTS) {
+      const byHistory: Record<string, number> = {};
+      for (const messageCount of HISTORY_SIZES) {
+        byHistory[String(messageCount)] =
+          measured.get(cellKey({ shape, registeredPolicies, messageCount })) ?? 0;
+      }
+      const smallest = byHistory[String(HISTORY_SIZES[0])] ?? 0;
+      const largest = byHistory[String(HISTORY_SIZES.at(-1))] ?? 0;
+      scenarios.push({
+        contextShape: shape,
+        registeredPolicies,
+        nsPerDispatchByHistorySize: byHistory,
+        growthFactor: Number((largest / smallest).toFixed(2)),
+      });
     }
-    const smallest = byHistory[String(HISTORY_SIZES[0])] ?? 0;
-    const largest = byHistory[String(HISTORY_SIZES.at(-1))] ?? 0;
-    scenarios.push({
-      registeredPolicies,
-      nsPerDispatchByHistorySize: byHistory,
-      growthFactor: Number((largest / smallest).toFixed(2)),
-    });
   }
 
   const result = {
@@ -175,6 +256,8 @@ if (import.meta.main) {
     platform: `${process.platform}/${process.arch} bun ${process.versions.bun}`,
     point: "run.turn.pre",
     iterations,
+    repeats: REPEATS,
+    aggregate: "median",
     historySizes: HISTORY_SIZES,
     scenarios,
   };
