@@ -114,8 +114,8 @@ export type ErrorDecision =
   | ({ action: "complete"; errorMessage: string } & Extract<TurnDecision, { kind: "abort" }>)
   | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
 
-export function createRunState(input: ChatAgentInput): RunState {
-  const sessionId = input.traceContext?.sessionId || "runner";
+export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
+  const sessionId = input.traceContext.sessionId;
   return {
     sessionId,
     budgetState: createBudgetState(),

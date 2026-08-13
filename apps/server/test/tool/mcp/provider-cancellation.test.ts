@@ -7,7 +7,7 @@ import { createToolExecutor, WorkspaceLock } from "@openomni/openomni";
 import { Operational, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
-import { installStorageFixture, makeClient } from "./provider-test-fixture";
+import { executionContext, installStorageFixture, makeClient } from "./provider-test-fixture";
 
 installStorageFixture();
 
@@ -26,7 +26,7 @@ describe("McpToolProvider", () => {
     try {
       await provider.execute(
         { id: "call-pre-abort", tool: "search.query", input: {} },
-        { signal: controller.signal },
+        executionContext({ signal: controller.signal }),
       );
       throw new Error("expected provider.execute to reject");
     } catch (error) {

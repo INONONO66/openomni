@@ -6,6 +6,7 @@ import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
   collectBusEvents,
+  executionContext,
   createLedgerSession,
   installStorageFixture,
   makeTool,
@@ -25,11 +26,14 @@ describe("McpToolProvider", () => {
     const { events, stop } = collectBusEvents();
 
     try {
-      const result = await provider.execute({
-        id: "call-bus-success",
-        tool: "search_query",
-        input: { sessionId: session.id, query: "bus" },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-bus-success",
+          tool: "search_query",
+          input: { sessionId: session.id, query: "bus" },
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeFalsy();
       // #522 defect 2: this layer keeps authorization audit and MCP-domain
@@ -82,11 +86,14 @@ describe("McpToolProvider", () => {
     const { events, stop } = collectBusEvents();
 
     try {
-      const result = await provider.execute({
-        id: "call-bus-error",
-        tool: "search_query",
-        input: { sessionId: session.id },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-bus-error",
+          tool: "search_query",
+          input: { sessionId: session.id },
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeTruthy();
       const mcpCompleted = events.find((event) => event.name === "mcp.tool.completed");
@@ -115,25 +122,34 @@ describe("McpToolProvider", () => {
 
     try {
       seedProvider(provider, [tool], ["search"]);
-      await provider.execute({
-        id: "call-unknown",
-        tool: "ghost_query",
-        input: { sessionId: unknownSession.id },
-      });
+      await provider.execute(
+        {
+          id: "call-unknown",
+          tool: "ghost_query",
+          input: { sessionId: unknownSession.id },
+        },
+        executionContext(),
+      );
 
       seedProvider(provider, [tool]);
-      await provider.execute({
-        id: "call-disconnected",
-        tool: "search_query",
-        input: { sessionId: disconnectedSession.id },
-      });
+      await provider.execute(
+        {
+          id: "call-disconnected",
+          tool: "search_query",
+          input: { sessionId: disconnectedSession.id },
+        },
+        executionContext(),
+      );
 
       seedProvider(provider, [unprefixedTool], ["query"]);
-      await provider.execute({
-        id: "call-unprefixed",
-        tool: "query",
-        input: { sessionId: unprefixedSession.id },
-      });
+      await provider.execute(
+        {
+          id: "call-unprefixed",
+          tool: "query",
+          input: { sessionId: unprefixedSession.id },
+        },
+        executionContext(),
+      );
 
       const blockedEvents = allEvents.filter((event) => event.name === "policy.action.blocked");
       expect(blockedEvents).toHaveLength(3);

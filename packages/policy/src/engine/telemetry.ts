@@ -31,8 +31,10 @@ export function publishMiddlewareError(
   failPolicy: Policy.FailPolicy,
   durationMs: number,
 ): void {
+  const traceId = options.traceContext?.traceId;
+  if (traceId === undefined) return;
   options.auditEmit?.(Operational.Warn, {
-    traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "agent.policy",
     msg: "middleware error",
@@ -47,8 +49,10 @@ export function publishMiddlewareDebug(
   verdict: Policy.PolicyDecision["verdict"],
   durationMs: number,
 ): void {
+  const traceId = options.traceContext?.traceId;
+  if (traceId === undefined) return;
   options.auditEmit?.(Operational.Debug, {
-    traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "agent.policy",
     msg: "middleware dispatch",

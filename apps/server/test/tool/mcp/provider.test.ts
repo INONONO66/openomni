@@ -3,7 +3,13 @@ import { describe, expect, it, mock } from "bun:test";
 import type { NativeTool } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
 import { McpToolProvider } from "../../../src/tool/mcp";
-import { installStorageFixture, makeClient, makeTool, seedProvider } from "./provider-test-fixture";
+import {
+  executionContext,
+  installStorageFixture,
+  makeClient,
+  makeTool,
+  seedProvider,
+} from "./provider-test-fixture";
 
 installStorageFixture();
 
@@ -13,11 +19,14 @@ describe("McpToolProvider", () => {
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
-    const result = await provider.execute({
-      id: "call-1",
-      tool: "search_query",
-      input: { query: "hello" },
-    });
+    const result = await provider.execute(
+      {
+        id: "call-1",
+        tool: "search_query",
+        input: { query: "hello" },
+      },
+      executionContext(),
+    );
 
     expect(result).toMatchObject({
       toolCallId: "call-1",
@@ -62,7 +71,7 @@ describe("McpToolProvider", () => {
 
     const result = await provider.execute(
       { id: "call-context", tool: "search_query", input: { query: "hello" } },
-      { signal: controller.signal },
+      executionContext({ signal: controller.signal }),
     );
 
     expect(result.output).toBe("search.query ok");
@@ -98,7 +107,10 @@ describe("McpToolProvider", () => {
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
-    const result = await provider.execute({ id: "call-2", tool: "ghost_query", input: {} });
+    const result = await provider.execute(
+      { id: "call-2", tool: "ghost_query", input: {} },
+      executionContext(),
+    );
 
     expect(result).toMatchObject({
       toolCallId: "call-2",
@@ -112,7 +124,10 @@ describe("McpToolProvider", () => {
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool]);
 
-    const result = await provider.execute({ id: "call-3", tool: "search_query", input: {} });
+    const result = await provider.execute(
+      { id: "call-3", tool: "search_query", input: {} },
+      executionContext(),
+    );
 
     expect(result).toMatchObject({
       toolCallId: "call-3",
@@ -127,7 +142,10 @@ describe("McpToolProvider", () => {
     const { tool, execute } = makeTool("query");
     seedProvider(provider, [tool], ["query"]);
 
-    const result = await provider.execute({ id: "call-4", tool: "query", input: {} });
+    const result = await provider.execute(
+      { id: "call-4", tool: "query", input: {} },
+      executionContext(),
+    );
 
     expect(result).toMatchObject({
       toolCallId: "call-4",

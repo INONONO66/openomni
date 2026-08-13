@@ -13,11 +13,11 @@ interface ExecuteMcpToolInput {
   readonly isServerConnected: (serverName: string) => boolean;
 }
 
-type ExecutionAudit = ReturnType<typeof McpPrefixGuardMiddleware.normalizeAuditContext>;
+type ExecutionAudit = ReturnType<typeof McpPrefixGuardMiddleware.requireAuditContext>;
 
 export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.Result> {
   const { call, context } = input;
-  const audit = McpPrefixGuardMiddleware.normalizeAuditContext(context?.traceContext);
+  const audit = McpPrefixGuardMiddleware.requireAuditContext(context?.traceContext);
   const executionContext: ToolExecutionContext = {
     ...(context?.signal !== undefined && { signal: context.signal }),
     traceContext: audit,

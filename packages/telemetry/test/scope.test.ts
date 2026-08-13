@@ -98,9 +98,9 @@ describe("telemetry scope", () => {
   });
 
   /**
-   * A child belongs to the same trace. If it could mint a new `traceId` the
-   * thirteen `crypto.randomUUID()` sites this package exists to prevent would
-   * be one call away from re-expressible.
+   * A child belongs to the same trace. If it could mint a new `traceId`, the
+   * thirteen `crypto.randomUUID()` sites this package exists to replace would
+   * be one call away from being re-expressible through the emitter itself.
    */
   test("child cannot replace the trace id", () => {
     const sink = collector();
@@ -165,6 +165,30 @@ describe("telemetry scope", () => {
     expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
     expect(errors).toEqual([Operational.Info.name]);
   });
+
+  /**
+   * The reporter is caller-supplied like the sink, so it is the last place the
+   * boundary could leak. If it escaped, `emit` would throw and telemetry would
+   * be cancelling the work it observes.
+   */
+  test("a throwing error reporter does not escape emit", () => {
+    const log = scope(
+      TRACE,
+      {
+        publish() {
+          throw new Error("sink exploded");
+        },
+      },
+      {
+        now: clock,
+        onEmitError: () => {
+          throw new Error("reporter down");
+        },
+      },
+    );
+
+    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
+  });
 });
 
 const SpanEnd = BusEvent.define(
@@ -215,6 +239,19 @@ describe("telemetry span", () => {
     const { ends } = await endKinds(async (settle) => {
       settle({ kind: "guard_denied", point: "run.turn.pre", policyId: "p", reason: "r" } as never);
       return "returned anyway";
+    });
+    expect(ends.map((end) => end.kind)).toEqual(["guard_denied"]);
+  });
+
+  /**
+   * A denial that carries an abort effect settles and then throws. Reporting
+   * that as `failed` would lose the point and the reason — exactly what the
+   * outcome type exists to keep — so the settled outcome outranks the throw.
+   */
+  test("a settled outcome survives a throw out of the body", async () => {
+    const { ends } = await endKinds(async (settle) => {
+      settle({ kind: "guard_denied", point: "tool.pre", policyId: "p", reason: "r" } as never);
+      throw new Error("aborted by the denial");
     });
     expect(ends.map((end) => end.kind)).toEqual(["guard_denied"]);
   });
@@ -281,6 +318,27 @@ describe("telemetry span", () => {
       }),
     ).rejects.toThrow("the real error");
     expect(reported).toEqual([SpanEnd.name]);
+  });
+
+  test("a throwing reporter does not replace the body error", async () => {
+    const log = scope(TRACE, collector(), {
+      now: clock,
+      onEmitError: () => {
+        throw new Error("reporter down");
+      },
+    });
+    const hostile: SpanPair<{ label: string }, { kind: string; elapsedMs: number }> = {
+      ...TEST_SPAN,
+      terminal: () => {
+        throw new Error("terminal exploded");
+      },
+    };
+
+    await expect(
+      log.span(hostile, { label: "t" }, async () => {
+        throw new Error("the real failure");
+      }),
+    ).rejects.toThrow("the real failure");
   });
 
   test("a throwing body propagates after the terminal event", async () => {

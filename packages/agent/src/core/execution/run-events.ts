@@ -137,7 +137,7 @@ export function publishDenyDiagnostic(
   agentBase: AgentRunBase,
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
-  const sessionId = diagnosticSessionId(state, agentBase);
+  const sessionId = eventSessionId(state, agentBase);
   Bus.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
@@ -156,11 +156,6 @@ export function publishDenyDiagnostic(
 
 function eventSessionId(state: RunState, agentBase: AgentRunBase): string {
   return agentBase.sessionId || state.sessionId;
-}
-
-function diagnosticSessionId(state: RunState, agentBase: AgentRunBase): string | undefined {
-  const sessionId = eventSessionId(state, agentBase);
-  return sessionId === "runner" ? undefined : sessionId;
 }
 
 // merged from run-result.ts (250-LOC split refold: single-importer stage)

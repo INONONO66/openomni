@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-05 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
+Last verified against `origin/main`: 2026-08-13 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
 
 ## OVERVIEW
 

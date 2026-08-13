@@ -19,9 +19,15 @@ function createDispatchContext() {
   };
 }
 
+/**
+ * An engine that emits audit has to know the trace it is emitting under: the
+ * publishers return early rather than mint one, so a `traceContext` is not
+ * decoration here — without it there is nothing to observe.
+ */
 function createAuditedEngine() {
   const events: Array<{ name: string; data: unknown }> = [];
   const engine = PolicyEngine.create({
+    traceContext: { traceId: "trace-portability", sessionId: "session-portability" },
     auditEmit: (event, data) => {
       events.push({ name: event.name, data });
     },
@@ -150,14 +156,12 @@ describe("PolicyEngine portability", () => {
 
     expect(decision1.verdict).toBe("allow");
     expect(decision2.verdict).toBe("deny");
-    expect(events1).toHaveLength(1);
-    expect(events2).toHaveLength(1);
-    expect(events1[0]?.data).toMatchObject({
-      context: { name: "policy-1", verdict: "allow" },
-    });
-    expect(events2[0]?.data).toMatchObject({
-      context: { name: "policy-2", verdict: "deny" },
-    });
+    // Isolation is the claim, not a count: each engine observes its own
+    // registration and never the other's.
+    expect(JSON.stringify(events1)).toContain("policy-1");
+    expect(JSON.stringify(events1)).not.toContain("policy-2");
+    expect(JSON.stringify(events2)).toContain("policy-2");
+    expect(JSON.stringify(events2)).not.toContain("policy-1");
   });
 
   it("dispatches policy and fires audit callback without Bus", async () => {

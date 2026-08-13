@@ -290,16 +290,17 @@ export class ResidentRuntime {
   }
 
   private async runExclusive(ctx: ResidentRunContext): Promise<ResidentRunResult> {
-    let slotAcquired = false;
-    await this.acquireSlot(ctx.signal);
-    slotAcquired = true;
-    // The resident is not a trace origin: its only caller is the ingress
+    // Refused before the slot is taken: a rejection between `acquireSlot` and
+    // the `try` that releases it would leak the slot for the process lifetime.
+    //
+    // The resident is not a trace origin — its only caller is the ingress
     // handler, which always carries the trace the inbound event started. A
     // `?? newTraceId()` here would detach the resident's run from the request
     // that asked for it.
     if (ctx.traceContext === undefined) {
       throw new Error("resident run requires the inbound trace context");
     }
+    await this.acquireSlot(ctx.signal);
     const runId = crypto.randomUUID();
     const start = Date.now();
     const traceContext = { ...ctx.traceContext, sessionId: ctx.sessionId, runId };
@@ -353,7 +354,7 @@ export class ResidentRuntime {
       });
       throw error;
     } finally {
-      if (slotAcquired) this.releaseSlot();
+      this.releaseSlot();
     }
   }
 }

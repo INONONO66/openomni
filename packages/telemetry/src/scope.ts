@@ -93,7 +93,20 @@ export function scope(trace: TraceScope, sink: BusEvent.Sink, options: ScopeOpti
       const event = { ...build(), time: now(), ...from } as unknown as TPayload;
       sink.publish(descriptor, event);
     } catch (error) {
-      onEmitError(error, descriptor.name);
+      report(error, descriptor.name);
+    }
+  }
+
+  /**
+   * The last link in the chain. A caller-supplied reporter is as capable of
+   * throwing as the sink it reports on, and letting it through would defeat
+   * the guard above by replacing the error the observed code actually threw.
+   */
+  function report(error: unknown, eventName: string): void {
+    try {
+      onEmitError(error, eventName);
+    } catch {
+      // Nothing left to report to.
     }
   }
 
@@ -118,8 +131,11 @@ export function scope(trace: TraceScope, sink: BusEvent.Sink, options: ScopeOpti
       );
       return result;
     } catch (error) {
+      // A settled outcome wins over the throw. A denial that carries an abort
+      // effect leaves through this branch, and reporting it as `failed` would
+      // lose the reason — the distinction the outcome type exists to keep.
       publish(childIdentity, pair.end, () =>
-        pair.terminal(failedOutcome(error), now() - startedAt),
+        pair.terminal(handle.outcome() ?? failedOutcome(error), now() - startedAt),
       );
       throw error;
     }

@@ -6,6 +6,7 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-123",
       sessionId: "session-456",
+      traceId: "trace-execution-test",
       mode: "direct",
       prompt: "What is 2+2?",
       model: {
@@ -108,6 +109,7 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-789",
       sessionId: "session-012",
+      traceId: "trace-execution-test",
       mode: "direct",
       prompt: "Execute a task",
       model: {
@@ -140,6 +142,7 @@ describe("Execution", () => {
     const invalid = {
       runId: "run-123",
       sessionId: "session-456",
+      traceId: "trace-execution-test",
       mode: "invalid",
       prompt: "test",
       model: { provider: "anthropic", id: "claude" },
@@ -152,6 +155,7 @@ describe("Execution", () => {
     const invalid = {
       runId: "run-123",
       sessionId: "session-456",
+      traceId: "trace-execution-test",
       status: "pending",
     };
 
@@ -162,6 +166,7 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-new",
       sessionId: "session-new",
+      traceId: "trace-execution-test",
       mode: "direct",
       prompt: "Execute task",
       model: {
@@ -183,6 +188,7 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-perms",
       sessionId: "session-perms",
+      traceId: "trace-execution-test",
       mode: "direct",
       prompt: "Execute with permissions",
       model: {
@@ -224,6 +230,7 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-budget",
       sessionId: "session-budget",
+      traceId: "trace-execution-test",
       mode: "direct",
       prompt: "Execute with budget",
       model: {
@@ -249,6 +256,7 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-compat",
       sessionId: "session-compat",
+      traceId: "trace-execution-test",
       mode: "direct",
       prompt: "Legacy request",
       model: {

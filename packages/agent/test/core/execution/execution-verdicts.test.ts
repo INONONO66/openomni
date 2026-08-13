@@ -13,11 +13,12 @@ import {
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
 import { handleCompact, handleStop } from "../../../src/core/execution/turn-outcome";
 import { deny } from "../../helpers/policy-decision";
+import { runInput } from "../../helpers/run-input";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
 
 function makeInput(): ChatAgentInput {
-  return { messages: [{ role: "user", content: "hello" }] };
+  return runInput([{ role: "user", content: "hello" }]);
 }
 
 function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {

@@ -6,9 +6,10 @@ import {
   type RunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
+import { runInput } from "../../helpers/run-input";
 
 function makeInput(): ChatAgentInput {
-  return { messages: [{ role: "user", content: "hello" }] };
+  return runInput([{ role: "user", content: "hello" }]);
 }
 
 export function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {

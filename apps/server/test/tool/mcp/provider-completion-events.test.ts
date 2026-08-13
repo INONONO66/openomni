@@ -5,7 +5,12 @@ import type { Tool } from "@openomni/protocol";
 import { Mcp } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
-import { installStorageFixture, makeTool, seedProvider } from "./provider-test-fixture";
+import {
+  executionContext,
+  installStorageFixture,
+  makeTool,
+  seedProvider,
+} from "./provider-test-fixture";
 
 installStorageFixture();
 
@@ -21,11 +26,14 @@ describe("McpToolProvider", () => {
     });
 
     try {
-      const result = await provider.execute({
-        id: "call-success",
-        tool: "search_query",
-        input: { query: "test" },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-success",
+          tool: "search_query",
+          input: { query: "test" },
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeFalsy();
       expect(publishedEvents).toHaveLength(1);
@@ -60,11 +68,14 @@ describe("McpToolProvider", () => {
     });
 
     try {
-      const result = await provider.execute({
-        id: "call-denied",
-        tool: "ghost_query",
-        input: {},
-      });
+      const result = await provider.execute(
+        {
+          id: "call-denied",
+          tool: "ghost_query",
+          input: {},
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeTruthy();
       expect(publishedEvents).toHaveLength(0);
@@ -100,11 +111,14 @@ describe("McpToolProvider", () => {
     });
 
     try {
-      const result = await provider.execute({
-        id: "call-error",
-        tool: "search_query",
-        input: {},
-      });
+      const result = await provider.execute(
+        {
+          id: "call-error",
+          tool: "search_query",
+          input: {},
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeTruthy();
       expect(publishedEvents).toHaveLength(0);

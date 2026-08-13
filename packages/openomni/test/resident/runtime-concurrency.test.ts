@@ -57,7 +57,7 @@ test("ResidentRuntime enforces maximum resident activations", async () => {
   await firstRun;
 });
 
-test("ResidentRuntime reuses fallback traceId for agent input and completion event", async () => {
+test("ResidentRuntime carries the inbound traceId into agent input and the completion event", async () => {
   let inputTraceId: string | undefined;
   const completedTraceIds: string[] = [];
   const unsubscribe = Bus.subscribe(IngressEvent.Completed, (event) => {
@@ -117,6 +117,7 @@ test("ResidentRuntime does not start a queued run after it is aborted", async ()
   const secondRun = manager.run({
     sessionId: "resident-queued-abort",
     event: makeEvent(),
+    traceContext: { traceId: newTraceId() },
     signal: controller.signal,
   });
 
@@ -129,4 +130,32 @@ test("ResidentRuntime does not start a queued run after it is aborted", async ()
   await firstRun;
   await Bun.sleep(0);
   expect(runCount).toBe(1);
+});
+
+/**
+ * A run that cannot name its trace is refused, and the refusal happens before
+ * a concurrency slot is taken. Rejecting in between would leak the slot for
+ * the process lifetime: nothing releases it, so `maxActive` refusals brick the
+ * Resident and every later well-formed run waits out `slotWaitTimeoutMs`.
+ */
+test("a refused traceless run leaves the concurrency slot free", async () => {
+  const manager = ResidentRuntime.create({
+    maxActive: 1,
+    slotWaitTimeoutMs: 200,
+    runAgent: async () => ({ text: "ok", finishReason: "stop" }),
+  });
+
+  const refusal = await manager
+    .run({ sessionId: "resident-traceless", event: makeEvent() })
+    .catch((error: unknown) => error);
+  expect(refusal).toBeInstanceOf(Error);
+  expect((refusal as Error).message).toContain("resident run requires the inbound trace context");
+  expect(manager.stats().activeRuns).toBe(0);
+
+  const result = await manager.run({
+    sessionId: "resident-traceless",
+    event: makeEvent(),
+    traceContext: { traceId: newTraceId() },
+  });
+  expect(result.output).toBe("ok");
 });

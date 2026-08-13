@@ -321,8 +321,9 @@ export namespace IngressHandlers {
 
     publishModeDetected(ctx, "resident");
 
-    // Bound once here: `residentRuntime.run` refuses without it, so re-asking
-    // below would be a second enforcement of a condition already settled.
+    // Bound once, before the run: `residentRuntime.run` refuses without a
+    // trace too, so asking again after it returns would re-enforce a condition
+    // already settled.
     const traceId = requireTraceId(ctx);
     const residentResult = await ctx.residentRuntime.run({
       sessionId: ctx.sessionId,

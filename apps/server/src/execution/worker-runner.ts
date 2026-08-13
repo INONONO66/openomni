@@ -24,18 +24,6 @@ import {
   selectRequestedTools,
 } from "./worker-runtime";
 
-/**
- * A worker run inherits the trace of the dispatch that ordered it. Minting one
- * here would give the run its own trace, unlinked from the request — the
- * failure a trace exists to prevent.
- */
-function requireRequestTraceId(request: { readonly traceId?: string }): string {
-  if (request.traceId === undefined) {
-    throw new Error("worker execution request requires a traceId");
-  }
-  return request.traceId;
-}
-
 export namespace WorkerRunner {
   export function spawnRun(options: WorkerRunnerSpawnOptions): void {
     const {
@@ -80,8 +68,9 @@ export namespace WorkerRunner {
       return;
     }
 
+    const { traceId } = request;
+
     (async () => {
-      const traceId = requireRequestTraceId(request);
       const controller = new AbortController();
       let childAgentRuntime: ReturnType<typeof createChildAgentRuntime> | undefined;
 

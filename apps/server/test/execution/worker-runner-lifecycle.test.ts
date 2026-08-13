@@ -33,6 +33,27 @@ describe("WorkerRunner", () => {
     expect(options.activeRuns.size).toBe(0);
   });
 
+  /**
+   * A worker run inherits the trace of the dispatch that ordered it, so the
+   * requirement lives in `Execution.Request` and the existing parse rejection
+   * answers the coordinator. A guard placed after `parse` would instead reject
+   * into the void: `spawnRun` discards its async body's promise, so the caller
+   * would wait for a frame that never arrives.
+   */
+  it("rejects a traceless spawn request through the parse path", () => {
+    const responses: Array<{ readonly error?: string }> = [];
+    const { traceId: _dropped, ...traceless } = createValidRequest();
+    const options = createSpawnOptions(traceless, (result) =>
+      responses.push(result as { readonly error?: string }),
+    );
+
+    WorkerRunner.spawnRun(options);
+
+    expect(responses).toHaveLength(1);
+    expect(responses[0]?.error).toContain("traceId");
+    expect(options.activeRuns.size).toBe(0);
+  });
+
   it("rejects malformed spawn requests before starting a run", () => {
     const responses: unknown[] = [];
     const options = createSpawnOptions(

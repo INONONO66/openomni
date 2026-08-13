@@ -10,11 +10,11 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openomni/protocol": "workspace:*",
-    "zod": "^3.22.4"
+    "@openomni/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zod": "^3.22.4"
   }
 }

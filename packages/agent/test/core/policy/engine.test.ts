@@ -599,6 +599,9 @@ describe("PolicyEngine", () => {
     const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
     try {
       const engine = PolicyEngine.create({
+        // The publisher reports under the engine's trace or not at all, so an
+        // engine that emits audit has to be given one.
+        traceContext: { traceId: "trace-observer-isolation", sessionId: "session-1" },
         onDecision: async () => {
           throw new Error("async observer failed");
         },

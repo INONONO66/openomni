@@ -7,6 +7,7 @@ import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool, TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 import { abortRun, allow, filterTools } from "../../helpers/policy-decision";
+import { runInput } from "../../helpers/run-input";
 
 function makeTools(...names: string[]): Tool.Spec[] {
   return names.map((name) => ({
@@ -42,9 +43,7 @@ function makeAgentBase() {
 }
 
 function makeState() {
-  const input: ChatAgentInput = {
-    messages: [{ role: "user", content: "hello" }],
-  };
+  const input: ChatAgentInput = runInput([{ role: "user", content: "hello" }]);
   return createRunState(input);
 }
 

@@ -23,7 +23,13 @@ const requestSchema = z.object({
   middleware: z.array(z.string()).optional(),
   policyPlan: Policy.PolicyPlan.optional(),
   providerOptions: z.record(z.string(), z.unknown()).optional(),
-  traceId: z.string().optional(),
+  /**
+   * The trace of the dispatch that ordered this run. Required: a worker run
+   * that cannot name the request it came from is unlinkable from it, and the
+   * refusal belongs here, where `parse` turns it into a typed rejection the
+   * caller already answers.
+   */
+  traceId: z.string().min(1),
 });
 
 const connectorLogEventSchema = z.object({

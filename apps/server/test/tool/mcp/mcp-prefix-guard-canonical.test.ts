@@ -209,6 +209,11 @@ describe("McpPrefixGuardMiddleware canonical point dispatch", () => {
       call: { id: "call-disconnected", tool: "search_query", input: {} },
       tools: [makeTool("search.query")],
       isServerConnected: () => false,
+      traceContext: {
+        traceId: "trace-disconnected",
+        sessionId: "session-disconnected",
+        runId: "run-disconnected",
+      },
     });
 
     expect(result.verdict).toMatchObject({ verdict: "deny", policyId: "agent.policy.composed" });

@@ -10,7 +10,7 @@ Everything the system says about itself goes through here: the process-wide `Bus
 
 That is not a style preference; it is what makes the package safe to put in a hot path. Concretely:
 
-- `Emitter.emit` never throws. A sink that fails is reported through `onEmitError` and the caller continues.
+- `Emitter.emit` never throws. A sink that fails is reported through `onEmitError` and the caller continues; a reporter that itself throws is swallowed, because there is nothing left to report to.
 - `Emitter.child` never throws. A narrowing that omits a field keeps the parent's value.
 - `tee` swallows a downstream throw and reports it.
 - The one place that *does* throw is `scope()`, at construction — the composition root, where a malformed identity is a wiring error the process should not start with.
@@ -36,13 +36,13 @@ export type EmitPayload<T> = Omit<T, TraceField | "time">;
 
 A caller cannot pass `traceId` / `sessionId` / `runId` / `actorId` / `agentName` / `time` — they are removed from every payload type, and applied last at runtime so a cast cannot override them. `child()` cannot replace `traceId` at all: a child run, a delegated actor, and a nested span all belong to the same trace.
 
-This exists because thirteen sites in the agent core minted a fresh `crypto.randomUUID()` per event. Those events were structurally uncorrelatable with the run that produced them — the record looked authoritative and pointed at nothing.
+This exists because thirteen sites in the agent core mint a fresh `crypto.randomUUID()` per event (`core/retry.ts`, `core/budget.ts`, `core/execution/compaction.ts`, `core/policy/builtin/tool-guard.ts`). Those events are structurally uncorrelatable with the run that produced them — the record looks authoritative and points at nothing. **All thirteen are still live.** The emitter is the replacement, not yet the incumbent: converting them is Phase 1b of [docs/agent-core-rewrite.md](../../docs/agent-core-rewrite.md) (decision D11), and until that lands `scope()` is on no production path.
 
 ## WHY SPANS
 
 `span(pair, start, body)` emits exactly one terminal event per start, on every exit: a normal return, a `settle()` recording a policy block or exhausted budget, or a throw.
 
-`guard_denied` and `budget_exhausted` are first-class `SpanOutcome` variants because that is how a run most often stops, and a policy block looks like a normal return from the outside. Before spans, twelve of the agent's fifteen run-terminating paths emitted no terminal event at all.
+`guard_denied` and `budget_exhausted` are first-class `SpanOutcome` variants because that is how a run most often stops, and a policy block looks like a normal return from the outside. Twelve of the agent's fifteen run-terminating paths emit no terminal event at all today; `Emitter.span` has no production caller yet, and converting those paths is the same Phase 1b.
 
 First `settle()` wins, so an inner guard is not overwritten by an outer one on the way out.
 

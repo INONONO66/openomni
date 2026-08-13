@@ -50,7 +50,13 @@ export function tee(sinks: readonly BusEvent.Sink[], options: TeeOptions = {}): 
         try {
           sink.publish(event, data);
         } catch (error) {
-          onSinkError(error, event.name);
+          // The reporter is caller-supplied too, and a throw here would stop
+          // the fan-out this function exists to guarantee.
+          try {
+            onSinkError(error, event.name);
+          } catch {
+            // Nothing left to report to.
+          }
         }
       }
     },

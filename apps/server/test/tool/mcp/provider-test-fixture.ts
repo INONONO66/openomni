@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, mock } from "bun:test";
 
-import type { NativeTool } from "@openomni/openomni";
+import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import type { McpToolProvider } from "../../../src/tool/mcp";
@@ -13,6 +13,24 @@ export function installStorageFixture(): void {
   afterEach(() => {
     Storage.reset();
   });
+}
+
+/**
+ * The trace an MCP call inherits from the executor that dispatched it. Every
+ * suite here needs one: the provider refuses a call it cannot attribute, which
+ * is the same refusal the production executor path enforces.
+ */
+export function executionContext(
+  overrides: Partial<ToolExecutionContext> = {},
+): ToolExecutionContext {
+  return {
+    traceContext: {
+      traceId: "trace-mcp-test",
+      sessionId: "session-mcp-test",
+      runId: "run-mcp-test",
+    },
+    ...overrides,
+  };
 }
 
 export function makeTool(name: string): {

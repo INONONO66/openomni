@@ -7,6 +7,7 @@ import type {
 
 export interface RuntimeContext {
   readonly workspaceRoot?: string;
+  readonly traceId?: string;
   readonly sessionId?: string;
   readonly runId?: string;
   readonly agentName?: string;
@@ -29,8 +30,12 @@ export interface PolicyRegistryInstance<TCtx extends GenericPolicyContext = Gene
 }
 
 function publishOptionalPolicyMissing(id: string, runtime: RuntimeContext): void {
+  // No trace, no record. The previous `runtime.runId ?? crypto.randomUUID()`
+  // put a value of the wrong kind in a field every reader treats as a trace,
+  // and a minted one correlates to nothing — both are worse than silence.
+  if (runtime.traceId === undefined) return;
   runtime.auditEmit?.(Operational.Warn, {
-    traceId: runtime.runId ?? crypto.randomUUID(),
+    traceId: runtime.traceId,
     ...(runtime.sessionId !== undefined && { sessionId: runtime.sessionId }),
     time: Date.now(),
     component: "agent.policy.registry",

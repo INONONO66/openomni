@@ -59,13 +59,20 @@ describe("model execution deny verdicts", () => {
     }
   });
 
-  it("omits fallback sessionId from model.response deny diagnostics", async () => {
+  /**
+   * The diagnostic is attributed to the run's session even when the caller's
+   * `agentBase` carries none. It used to be dropped whenever the sessionId was
+   * the literal `"runner"` — the sentinel of a fallback that no longer exists,
+   * because `createRunState` now takes a validated trace.
+   */
+  it("attributes a model.response deny diagnostic to the run session", async () => {
     const diagnostics = observeInfoEvents();
     const engine = responseDenyEngine();
+    const state = makeState();
 
     try {
       const result = await dispatchModelResponse(
-        makeState(),
+        state,
         engine,
         makeConfig(),
         { outcome: { type: "stop" }, responseTokens: 0 },
@@ -76,7 +83,7 @@ describe("model execution deny verdicts", () => {
       expect(result).toBeNull();
       expect(findDenyDiagnostic(diagnostics.payloads, "model.response")).toEqual({
         traceId: "trace-empty-session",
-        sessionId: undefined,
+        sessionId: state.sessionId,
       });
     } finally {
       diagnostics.unsubscribe();
