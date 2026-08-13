@@ -5,6 +5,9 @@ import { Operational, type RuntimeResource, type Tool } from "@openomni/protocol
 import { Bus } from "@openomni/session";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
+/** An MCP server's lifecycle belongs to whatever brought it up — the boot. */
+const TEST_LIFECYCLE_TRACE_ID = "trace-mcp-lifecycle";
+
 interface McpToolStub {
   readonly name: string;
   readonly description?: string;
@@ -58,6 +61,7 @@ describe("McpClient tool descriptors", () => {
         command: "mcp-server-filesystem",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: createStubClient([
           {
             name: "write_file",
@@ -172,6 +176,7 @@ describe("McpClient request options", () => {
         timeout: 1234,
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => createTransportStub(),
       },
@@ -220,6 +225,7 @@ describe("McpClient request options", () => {
 
     const result = await client.callTool("filesystem.read_file", { path: "README.md" }, "call-1", {
       signal,
+      traceContext: { traceId: "trace-mcp-call" },
     });
 
     expect(result.output).toBe("ok");
@@ -421,6 +427,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
       },
@@ -443,6 +450,7 @@ describe("McpClient connection cleanup", () => {
         url: "https://example.test/mcp",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
       },
@@ -468,6 +476,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
       },
@@ -511,6 +520,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
       },
@@ -560,6 +570,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: createStubClient([]),
         createTransport: () => {
           throw createError;
@@ -602,11 +613,14 @@ describe("McpClient connection cleanup", () => {
         observedErrors.push(errorPayload);
       }
     });
-    const client = new McpClient({
-      name: serverName,
-      transport: "invalid",
-      command: "mcp-server-filesystem",
-    } as never);
+    const client = new McpClient(
+      {
+        name: serverName,
+        transport: "invalid",
+        command: "mcp-server-filesystem",
+      } as never,
+      { traceId: TEST_LIFECYCLE_TRACE_ID },
+    );
 
     try {
       await expect(client.connect()).rejects.toThrow("Unknown transport");
@@ -633,6 +647,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
       },
