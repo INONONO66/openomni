@@ -83,13 +83,13 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | PR | title | status |
 |---|---|---|
 | [#607](https://github.com/INONONO66/openomni/pull/607) | benchmark dispatch cost against history length | ✅ |
-| [#608](https://github.com/INONONO66/openomni/pull/608) | skip context materialization at unguarded points | 🟨 |
+| [#608](https://github.com/INONONO66/openomni/pull/608) | skip context materialization at unguarded points | ✅ |
 
 ### Phase 1 — telemetry
 
 | PR | title | status |
 |---|---|---|
-| — | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
 | — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
@@ -97,9 +97,10 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| [#610](https://github.com/INONONO66/openomni/pull/610) | delete the unimplemented second event channel | 🟨 |
+| [#610](https://github.com/INONONO66/openomni/pull/610) | delete the unimplemented second event channel | ✅ |
 | — | single output channel: remove the `AgentEvent` generator and `ChatAgent.stream` | ⬜ |
 | — | file layout + FSM; slop comments, duplicate helpers, the last `as unknown as`, `agentBaseForState` | ⬜ |
+| — | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | ⬜ |
 | — | dissolve `builtin/` per D5 | ⬜ |
 | — | retry no longer double-counts the turn budget | ⬜ |
 
