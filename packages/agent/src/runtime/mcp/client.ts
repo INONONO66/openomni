@@ -1,8 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { randomUUID } from "node:crypto";
-import type { McpServerConfig, Tool } from "@openomni/protocol";
+import type { BusEvent, McpServerConfig, Tool } from "@openomni/protocol";
 import { Mcp, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import {
@@ -25,16 +24,33 @@ export class McpClient {
   private client: McpClientHandle;
   private config: McpServerConfig;
   private createTransport: McpTransportFactory;
+  private readonly lifecycleTraceId: string | undefined;
   private connected = false;
 
   constructor(config: McpServerConfig, dependencies: McpClientDependencies = {}) {
     this.config = config;
     this.client = dependencies.client ?? new Client({ name: "openomni-agent", version: "0.1.0" });
     this.createTransport = dependencies.createTransport ?? createTransport;
+    this.lifecycleTraceId = dependencies.traceId;
+  }
+
+  /**
+   * Publishes a server-lifecycle record, or nothing.
+   *
+   * The trace is whatever brought this server up. Absent, there is no run and
+   * no boot to attribute the record to, and a minted id would name neither —
+   * so the record is dropped rather than filed under a fiction.
+   */
+  private publishLifecycle<T extends { traceId: string }>(
+    descriptor: BusEvent.Descriptor<T>,
+    payload: Omit<T, "traceId">,
+  ): void {
+    const traceId = this.lifecycleTraceId;
+    if (traceId === undefined || traceId.length === 0) return;
+    Bus.publish(descriptor, { ...payload, traceId } as T);
   }
 
   async connect(): Promise<void> {
-    const traceId = randomUUID();
     let transport: Transport | undefined;
     let closeTracker: TransportCloseTracker | undefined;
     const transportType =
@@ -51,8 +67,7 @@ export class McpClient {
 
       const toolCount = tools.tools.length;
 
-      Bus.publish(Mcp.Connected, {
-        traceId,
+      this.publishLifecycle(Mcp.Connected, {
         serverName: this.config.name,
         transport: transportType,
         toolCount,
@@ -68,8 +83,7 @@ export class McpClient {
         context.cleanupError = String(cleanupError);
       }
 
-      Bus.publish(Operational.Error, {
-        traceId,
+      this.publishLifecycle(Operational.Error, {
         time: Date.now(),
         component: "agent.mcp",
         msg: "MCP connection failed",
@@ -82,20 +96,16 @@ export class McpClient {
 
   async disconnect(): Promise<void> {
     if (this.connected) {
-      const traceId = randomUUID();
-
       try {
         await this.client.close();
         this.connected = false;
 
-        Bus.publish(Mcp.Disconnected, {
-          traceId,
+        this.publishLifecycle(Mcp.Disconnected, {
           serverName: this.config.name,
           time: Date.now(),
         });
       } catch (err) {
-        Bus.publish(Operational.Error, {
-          traceId,
+        this.publishLifecycle(Operational.Error, {
           time: Date.now(),
           component: "agent.mcp",
           msg: "MCP disconnection failed",
@@ -120,7 +130,12 @@ export class McpClient {
     toolCallId: string,
     context?: Tool.ExecutionContext,
   ): Promise<Tool.Result> {
-    const traceId = context?.traceContext?.traceId ?? randomUUID();
+    // The executor that dispatches this refuses a call with no trace, so
+    // there is one; a caller reaching past it is refused here.
+    const traceId = context?.traceContext?.traceId;
+    if (traceId === undefined || traceId.length === 0) {
+      throw new Error("mcp tool call requires the run trace context");
+    }
     const strippedName = name.startsWith(`${this.config.name}.`)
       ? name.slice(this.config.name.length + 1)
       : name;
