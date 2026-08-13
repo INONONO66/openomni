@@ -8,6 +8,7 @@ import {
   type WorkerManager,
 } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
+import { normalizeDeliverTaskTrace } from "../../src/worker-manager/worker-run-trace";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
@@ -19,6 +20,22 @@ afterEach(async () => {
 });
 
 describe("worker tool relay trace context", () => {
+  /**
+   * The deliver task carries the dispatch's trace. Minting one here gave the
+   * worker run its own, and because the mint sat upstream of every guard, no
+   * guard downstream could see that the link was already broken.
+   */
+  test("refuses a deliver task that carries no dispatch trace", () => {
+    for (const traceId of [undefined, "", 42]) {
+      expect(() =>
+        normalizeDeliverTaskTrace({
+          sessionId: "session-1",
+          prompt: "hello",
+          ...(traceId === undefined ? {} : { traceId }),
+        } as never),
+      ).toThrow("deliver task requires the dispatch traceId");
+    }
+  });
   test("uses delivered run identity instead of spoofable tool input", async () => {
     let relayedParams: ToolCallParams | undefined;
     let relayedContext: ToolCallContext | undefined;

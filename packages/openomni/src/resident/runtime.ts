@@ -298,7 +298,7 @@ export class ResidentRuntime {
     // handler, which always carries the trace the inbound event started. A
     // `?? newTraceId()` here would detach the resident's run from the request
     // that asked for it.
-    if (ctx.traceContext === undefined) {
+    if (ctx.traceContext?.traceId === undefined || ctx.traceContext.traceId.length === 0) {
       throw new Error("resident run requires the inbound trace context");
     }
     await this.acquireSlot(ctx.signal);

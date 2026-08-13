@@ -42,6 +42,25 @@ function contextsAt(
 }
 
 describe("child agent delegation construction settlement", () => {
+  /**
+   * A child agent inherits its parent's trace. Minting one would give the
+   * delegation its own, disconnected from the run that ordered it.
+   */
+  test("refuses a delegation that cannot name the parent trace", () => {
+    for (const traceContext of [
+      undefined,
+      { traceId: "trace-1" },
+      { traceId: "trace-1", sessionId: "sess-1" },
+      { traceId: "", sessionId: "sess-1", runId: "run-1" },
+    ]) {
+      expect(() =>
+        createChildAgentRuntime({
+          ...(traceContext === undefined ? {} : { traceContext }),
+          model: { provider: "test", id: "fixture" } as Model.Ref,
+        }),
+      ).toThrow("child agent delegation requires the parent trace context");
+    }
+  });
   for (const failure of [
     {
       name: "parent tool selection",

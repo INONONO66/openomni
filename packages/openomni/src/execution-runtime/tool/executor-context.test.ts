@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Tool, TraceContext } from "@openomni/protocol";
 import { createToolExecutor } from "./executor.js";
 import type { NativeTool, ToolExecutionContext } from "./types.js";
+import { Bus } from "@openomni/telemetry";
 
 function makeTool(
   observe: (call: Tool.Call, context: ToolExecutionContext | undefined) => void,
@@ -21,6 +22,33 @@ function makeTool(
 }
 
 describe("OpenOmni tool executor context", () => {
+  /**
+   * The defect this guard replaced was not a missing throw: `createEventBase`
+   * minted a traceId per event, so one tool call published four events under
+   * four traces that did not correlate with each other, let alone with the
+   * run. Pinning only the refusal would leave that free to come back.
+   */
+  it("files every event of one call under the calling run's trace", async () => {
+    const traceId = "0af7651916cd43dd8448eb211c80319c";
+    const seen: Array<{ name: string; traceId: unknown }> = [];
+    const unsubscribe = Bus.observe((descriptor, payload) => {
+      seen.push({ name: descriptor.name, traceId: (payload as { traceId?: unknown }).traceId });
+    });
+    const executor = createToolExecutor({ tools: [makeTool(() => undefined)] });
+
+    try {
+      await executor(
+        { id: "one-call", tool: "trace.probe", input: {} },
+        { traceContext: { traceId, sessionId: "session-1", runId: "run-1" } },
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen.length).toBeGreaterThan(1);
+    expect([...new Set(seen.map((event) => event.traceId))]).toEqual([traceId]);
+  });
   it("preserves trusted trace context while replacing the caller signal", async () => {
     let observedCall: Tool.Call | undefined;
     let observedContext: ToolExecutionContext | undefined;

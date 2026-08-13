@@ -29,11 +29,14 @@ export function recordDecision(
  *
  * The silence is the ruling, not an oversight: an error record filed under a
  * minted trace names a run that does not exist, and a reader chasing it finds
- * nothing — worse than no record, because it looks like evidence. The failure
- * itself is never silent regardless: `failPolicy` decides the verdict at
- * `dispatch.ts`, and a fail-closed middleware still denies. What is dropped is
- * the observation, and only for an engine that was never told its trace —
- * which `PolicyEngine.create` makes a wiring choice, not a runtime accident.
+ * nothing — worse than no record, because it looks like evidence.
+ *
+ * A fail-closed middleware still denies, so its failure reaches the caller
+ * through the verdict. A fail-open one does not: `dispatch.ts` drops its
+ * decision, so with no trace to report under, the throw leaves no trace at
+ * all. That is the cost, and it is bounded to an engine that was never told
+ * its trace — a wiring choice at `PolicyEngine.create`, not a runtime
+ * accident.
  */
 export function publishMiddlewareError(
   options: PolicyEngineConfig,

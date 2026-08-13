@@ -4,6 +4,7 @@ import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
+import { streamAgent } from "../../../src/core/execution/runner";
 import {
   createRunState,
   type AgentRunBase,
@@ -78,6 +79,30 @@ function expectComplete(event: AgentEvent | null): Extract<AgentEvent, { type: "
 }
 
 describe("execution helper deny verdicts", () => {
+  /**
+   * The guard the whole `runInput` helper exists to satisfy. A run whose
+   * identity was invented on its behalf emits events that correlate to
+   * nothing, and the caller never learns it forgot — so the runner refuses
+   * rather than mints, and this is what holds that true.
+   */
+  it("refuses a run that cannot name its trace, session, or run", async () => {
+    for (const [missing, traceContext] of [
+      ["traceId, sessionId, runId", undefined],
+      ["sessionId, runId", { traceId: "trace-1" }],
+      ["runId", { traceId: "trace-1", sessionId: "sess-1" }],
+    ] as const) {
+      const stream = streamAgent(
+        {
+          messages: [{ role: "user", content: "hello" }],
+          ...(traceContext ? { traceContext } : {}),
+        },
+        makeConfig(),
+      );
+      await expect(stream.next()).rejects.toThrow(
+        `agent run requires a trace context with ${missing}`,
+      );
+    }
+  });
   it("fail-closes run.start deny before execution", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();

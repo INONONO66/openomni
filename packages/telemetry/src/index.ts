@@ -3,7 +3,7 @@ export { scope } from "./scope";
 export type { Emitter, ScopeNarrowing, ScopeOptions } from "./scope";
 export { collector, noopSink, tee } from "./sink";
 export type { CollectedEvent, CollectingSink, TeeOptions } from "./sink";
-export { createSpanHandle, failedOutcome, spanStatus, spanStatusMessage } from "./span";
+export { spanStatus, spanStatusMessage } from "./span";
 export type { SpanHandle, SpanOutcome, SpanPair, SpanStatus } from "./span";
 export {
   fromTraceparent,

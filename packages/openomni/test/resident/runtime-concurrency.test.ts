@@ -58,6 +58,9 @@ test("ResidentRuntime enforces maximum resident activations", async () => {
 });
 
 test("ResidentRuntime carries the inbound traceId into agent input and the completion event", async () => {
+  // Bound, not minted inline: an assertion that only checks "is a string"
+  // holds just as well under the `?? crypto.randomUUID()` this replaced.
+  const inbound = newTraceId();
   let inputTraceId: string | undefined;
   const completedTraceIds: string[] = [];
   const unsubscribe = Bus.subscribe(IngressEvent.Completed, (event) => {
@@ -75,14 +78,14 @@ test("ResidentRuntime carries the inbound traceId into agent input and the compl
     await manager.run({
       sessionId: "resident-trace",
       event: makeEvent(),
-      traceContext: { traceId: newTraceId() },
+      traceContext: { traceId: inbound },
     });
   } finally {
     unsubscribe();
   }
 
-  expect(inputTraceId).toBeString();
-  expect(completedTraceIds.at(-1)).toBe(inputTraceId);
+  expect(inputTraceId).toBe(inbound);
+  expect(completedTraceIds.at(-1)).toBe(inbound);
 });
 
 test("ResidentRuntime does not start a queued run after it is aborted", async () => {
@@ -145,12 +148,18 @@ test("a refused traceless run leaves the concurrency slot free", async () => {
     runAgent: async () => ({ text: "ok", finishReason: "stop" }),
   });
 
-  const refusal = await manager
-    .run({ sessionId: "resident-traceless", event: makeEvent() })
-    .catch((error: unknown) => error);
-  expect(refusal).toBeInstanceOf(Error);
-  expect((refusal as Error).message).toContain("resident run requires the inbound trace context");
-  expect(manager.stats().activeRuns).toBe(0);
+  for (const traceContext of [undefined, { traceId: "" }]) {
+    const refusal = await manager
+      .run({
+        sessionId: "resident-traceless",
+        event: makeEvent(),
+        ...(traceContext === undefined ? {} : { traceContext }),
+      })
+      .catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(Error);
+    expect((refusal as Error).message).toContain("resident run requires the inbound trace context");
+    expect(manager.stats().activeRuns).toBe(0);
+  }
 
   const result = await manager.run({
     sessionId: "resident-traceless",

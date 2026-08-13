@@ -164,7 +164,13 @@ export function requireTraceScope(input: TraceScopeInput): TraceScope {
   };
 }
 
-/** Starts a fresh trace. The only place a trace id is minted for a new run. */
+/**
+ * Starts a fresh trace with a matching root span.
+ *
+ * A convenience over `newTraceId()` + `requireTraceScope`, for an origin that
+ * wants an emitter immediately. Origins that only need the id — boot, ingress,
+ * the manual driver — call `newTraceId()` directly.
+ */
 export function rootScope(input: Omit<TraceScopeInput, "traceId" | "parentSpanId">): TraceScope {
   return requireTraceScope({ ...input, traceId: newTraceId() });
 }

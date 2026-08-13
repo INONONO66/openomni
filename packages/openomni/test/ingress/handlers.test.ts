@@ -153,6 +153,33 @@ describe("IngressHandlers", () => {
     expect(request.policyPlan).toEqual(policyPlan);
   });
 
+  /**
+   * The writeback is what the journal attributes to a trace. Without one the
+   * record lands correlated to nothing, so the request is refused rather than
+   * filed under the session id — including for the empty string, which every
+   * sibling guard also rejects.
+   */
+  it("buildExecutionRequest refuses a context with no usable trace", () => {
+    const event: Ingress.InboundEvent = {
+      id: "event-traceless",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: { model: { provider: "anthropic", id: "claude-3-haiku-20240307" } },
+    };
+
+    for (const traceContext of [undefined, { traceId: "" }]) {
+      expect(() =>
+        IngressHandlers.buildExecutionRequest({
+          sessionId: "session-1",
+          ...(traceContext === undefined ? {} : { traceContext }),
+          event,
+          coordinator: makeDirectCoordinator(""),
+        }),
+      ).toThrow("ingress writeback requires a trace context");
+    }
+  });
+
   it("handleDirect dispatches via coordinator and stores output", async () => {
     const sessionId = createSession();
     addTextMessage(sessionId, "user", "hello");

@@ -4,8 +4,8 @@ import {
   newSpanId,
   requireTraceScope,
   type EmitPayload,
+  type SpanId,
   type TraceScope,
-  type TraceScopeInput,
 } from "./trace";
 
 /**
@@ -67,9 +67,10 @@ export interface ScopeOptions {
 /**
  * Builds an emitter bound to one trace identity.
  *
- * The input is a {@link TraceScopeInput}, not a finished {@link TraceScope}:
- * a root span has no caller to inherit a `spanId` from, so the emitter mints
- * it. Demanding one up front would push that decision onto every caller.
+ * Only `spanId` is optional: a root span has no caller to inherit one from,
+ * so the emitter mints it. The rest stay required in the type — a scope that
+ * cannot name its trace, session, or run is a compile error here, not a
+ * runtime throw somewhere further in.
  *
  * Validation happens at construction: a malformed scope is a wiring error the
  * process should not start with, while a throw from inside a run would be
@@ -78,7 +79,7 @@ export interface ScopeOptions {
  * neither can fail.
  */
 export function scope(
-  trace: TraceScopeInput,
+  trace: Omit<TraceScope, "spanId"> & { readonly spanId?: SpanId },
   sink: BusEvent.Sink,
   options: ScopeOptions = {},
 ): Emitter {
