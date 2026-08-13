@@ -84,6 +84,12 @@ const methods = {
     params: z.object({
       authToken: z.string(),
       workerId: z.string(),
+      /**
+       * The trace of the worker run that is asking. Required: the Resident
+       * dispatches under it, and a call that cannot name its trace would put
+       * both sides of one conversation on separate traces.
+       */
+      traceId: z.string().min(1),
       sessionId: z.string(),
       runId: z.string().optional(),
       callId: z.string().optional(),

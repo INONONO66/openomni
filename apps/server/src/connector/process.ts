@@ -191,10 +191,12 @@ export async function runConnectorProcess(
   credentialEnv: Record<string, string>,
   questionBridgeHandler: ConnectorQuestionBridgeHandler | undefined,
   residentSessionId: string,
+  traceId: string,
 ): Promise<ConnectorProcessResult> {
   const timeoutMs = spawn.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const bridge = questionBridgeEnabled(questionBridge)
     ? startConnectorQuestionBridgeServer({
+        traceId,
         runId: values.runId,
         sessionId: values.sessionId,
         residentSessionId,

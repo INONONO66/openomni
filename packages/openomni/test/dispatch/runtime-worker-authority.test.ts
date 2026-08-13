@@ -4,6 +4,9 @@ import { Bus, Storage, WorkerGrantStore } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createWorkerRunFixture, input, resetDispatchTestState } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -16,6 +19,7 @@ describe("DispatchRuntime", () => {
     });
 
     const result = await runtime.submit(input("worker.spawn"), {
+      traceId: TEST_DISPATCH_TRACE_ID,
       sessionId: "session-1",
       runId: "run-1",
       agentName: "worker",
@@ -50,7 +54,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "worker", parentSessionId: "parent-session" },
         payload: "delegated task",
       },
-      { sessionId: "worker-session", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "worker-session",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -73,7 +82,12 @@ describe("DispatchRuntime", () => {
           target: { kind: "worker", parentSessionId: "parent-session" },
           payload: "delegated task",
         },
-        { actorKind, actorId: `${actorKind}:test`, sessionId: "session-1" },
+        {
+          traceId: TEST_DISPATCH_TRACE_ID,
+          actorKind,
+          actorId: `${actorKind}:test`,
+          sessionId: "session-1",
+        },
       );
 
       expect(result.status).toBe("denied");
@@ -92,7 +106,12 @@ describe("DispatchRuntime", () => {
 
     const result = await runtime.submit(
       { action: "schedule.create", target: { kind: "schedule", name: "resident" } },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -114,7 +133,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "worker", sessionId: "child-session" },
         payload: "follow up",
       },
-      { sessionId: "parent-session", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "parent-session",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(denied.status).toBe("denied");
@@ -137,7 +161,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "worker", sessionId: "child-session" },
         payload: "follow up",
       },
-      { sessionId: "parent-session", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "parent-session",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(allowed.status).toBe("completed");
@@ -154,6 +183,7 @@ describe("DispatchRuntime", () => {
     });
 
     const result = await runtime.submit(input("resident.ask"), {
+      traceId: TEST_DISPATCH_TRACE_ID,
       sessionId: "session-1",
       runId: "run-1",
       agentName: "worker",
@@ -178,7 +208,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "worker", sessionId: "worker-session" },
         payload: "bypass attempt",
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -196,7 +231,12 @@ describe("DispatchRuntime", () => {
 
     const result = await runtime.submit(
       { action: "system.shutdown", target: { kind: "system" } },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -233,7 +273,12 @@ describe("DispatchRuntime", () => {
           action: "api.ask",
           target: { kind: "external_actor", id: "api:research" },
         },
-        { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+        {
+          traceId: TEST_DISPATCH_TRACE_ID,
+          sessionId: "session-1",
+          runId: "run-1",
+          agentName: "worker",
+        },
       );
 
       expect(result.status).toBe("denied");

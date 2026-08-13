@@ -8,7 +8,6 @@ import type {
   ToolExecutionContext,
   ToolProvider,
 } from "@openomni/openomni";
-import { newTraceId } from "@openomni/telemetry";
 import { executeMcpTool } from "./provider-execution";
 import { refreshMcpTools } from "./provider-tool-listing";
 import type { McpClientLike, McpToolProviderOptions } from "./provider-types";
@@ -23,16 +22,7 @@ export class McpToolProvider implements ToolProvider {
   private connected = new Set<string>();
   private cachedTools: NativeTool[] | null = null;
 
-  /**
-   * Server connect failures are reported under the trace of the boot that
-   * created this provider — boot is a genuine trace origin, an MCP connect is
-   * not.
-   */
-  private readonly bootTraceId: string;
-
-  constructor(private readonly options: McpToolProviderOptions = {}) {
-    this.bootTraceId = options.traceId ?? newTraceId();
-  }
+  constructor(private readonly options: McpToolProviderOptions) {}
 
   async addServer(config: McpServerConfig): Promise<void> {
     const client = this.options.createClient?.(config) ?? new McpClient(config);
@@ -43,7 +33,7 @@ export class McpToolProvider implements ToolProvider {
       this.cachedTools = null;
     } catch (err) {
       Bus.publish(Operational.Warn, {
-        traceId: this.bootTraceId,
+        traceId: this.options.traceId,
         time: Date.now(),
         component: "server",
         msg: "failed to connect to mcp server",

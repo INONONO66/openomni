@@ -126,6 +126,7 @@ export function createConnectorEndpointProcessDriver(
         credentialEnv.env,
         options.questionBridge,
         resolveResidentSessionId(input.command, request),
+        request.traceId,
       );
       const redactions = [...credentialEnv.redactions, ...spawned.redactions];
       const outcome = redactOutcome(spawned.outcome, redactions);

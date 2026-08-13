@@ -8,7 +8,7 @@ import type {
   DelegationPolicyContext,
 } from "./types.js";
 
-type ResolvedTraceContext = TraceContext.Type & {
+export type ResolvedTraceContext = TraceContext.Type & {
   readonly traceId: string;
   readonly sessionId: string;
   readonly runId: string;
@@ -33,11 +33,17 @@ class DelegationPolicyBlockedError extends Error {
  * is the failure this exists to prevent, not a default worth having.
  */
 function resolveTraceContext(traceContext: TraceContext.Type | undefined): ResolvedTraceContext {
-  const { traceId, sessionId, runId } = traceContext ?? {};
+  const traceId = nonEmptyString(traceContext?.traceId);
+  const sessionId = nonEmptyString(traceContext?.sessionId);
+  const runId = nonEmptyString(traceContext?.runId);
   if (traceId === undefined || sessionId === undefined || runId === undefined) {
     throw new Error("child agent delegation requires the parent trace context");
   }
   return { ...traceContext, traceId, sessionId, runId };
+}
+
+function nonEmptyString(value: string | undefined): string | undefined {
+  return value !== undefined && value.length > 0 ? value : undefined;
 }
 
 export function createDelegationPolicyRuntime(

@@ -122,6 +122,7 @@ function command(): Dispatch.Command {
 
 function request(workspaceRoot: string): Execution.Request {
   return {
+    traceId: "trace_fake",
     runId: "run_fake",
     sessionId: "ses_fake",
     mode: "direct",

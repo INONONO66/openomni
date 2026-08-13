@@ -119,7 +119,7 @@ describe("WorkerRunner child agent completion notification", () => {
       );
 
       WorkerRunner.spawnRun(options);
-    }, toolCallContext());
+    });
 
     await responseReceived;
 

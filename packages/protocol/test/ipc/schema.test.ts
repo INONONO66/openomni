@@ -213,6 +213,7 @@ describe("Ipc.Methods param schemas", () => {
       Ipc.Methods["worker.inbound_wait"].params.safeParse({
         authToken: "token",
         workerId: "worker-1",
+        traceId: "trace-1",
         sessionId: "session-1",
         runId: "run-1",
         callId: "call-1",
@@ -220,6 +221,17 @@ describe("Ipc.Methods param schemas", () => {
         workspaceRoot: "/workspace/openomni",
       }).success,
     ).toBe(true);
+  });
+
+  test("worker.inbound_wait requires the asking run's trace", () => {
+    expect(
+      Ipc.Methods["worker.inbound_wait"].params.safeParse({
+        authToken: "token",
+        workerId: "worker-1",
+        sessionId: "session-1",
+        payload: "Need approval",
+      }).success,
+    ).toBe(false);
   });
 
   test("worker.tool_call requires an auth token like other worker verbs", () => {

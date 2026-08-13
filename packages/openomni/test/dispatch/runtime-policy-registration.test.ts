@@ -17,6 +17,7 @@ function submitUntrustedPolicy(policy: unknown): {
   const submission: Promise<DispatchProtocol.Result> = Reflect.apply(runtime.submit, runtime, [
     { action: "resident.ask", target: { kind: "resident" }, payload: "hello" },
     {
+      traceId: "trace-untrusted-policy",
       sessionId: "session-untrusted-policy",
       runId: "run-untrusted-policy",
       policies: [policy],

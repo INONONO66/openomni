@@ -225,7 +225,7 @@ export async function* handleError(
 
   if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
     const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
-    emitErrorRetry(state, agentBase, {
+    emitErrorRetry(agentBase, {
       attempt,
       maxAttempts: effectiveRetryPolicy.maxAttempts,
       error: lastError,

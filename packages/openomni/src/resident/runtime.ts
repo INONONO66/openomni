@@ -133,7 +133,7 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
     ...(ctx.signal ? { signal: ctx.signal } : {}),
     ...(agent.providerOptions ? { providerOptions: agent.providerOptions } : {}),
     middleware: buildWorkerMiddleware({
-      ...(ctx.traceContext?.traceId ? { traceId: ctx.traceContext.traceId } : {}),
+      traceId: ctx.traceContext?.traceId,
       permissions: ctx.event.agent.permissions,
       ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
     }),

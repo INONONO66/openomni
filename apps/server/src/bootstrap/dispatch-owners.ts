@@ -60,6 +60,7 @@ function createQuestionBridgeHandler(
         wait: true,
       },
       {
+        traceId: request.traceId,
         sessionId: request.sessionId,
         runId: request.runId,
         actorKind: "worker",

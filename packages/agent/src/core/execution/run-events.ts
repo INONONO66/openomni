@@ -17,7 +17,7 @@ export function emitRunStarted(trace: TraceContext.Type, modelId: string): void 
 
 export function emitTurnStart(state: RunState, agentBase: AgentRunBase): void {
   const turnIndex = state.turnIndex;
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(AgentExecution.TurnStart, {
     ...agentBase,
     sessionId,
@@ -31,7 +31,7 @@ export function emitTurnComplete(
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): void {
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(AgentExecution.TurnComplete, {
     ...agentBase,
     sessionId,
@@ -91,11 +91,10 @@ export function emitRunCompleted(
 }
 
 export function emitErrorRetry(
-  state: RunState,
   agentBase: AgentRunBase,
   options: { readonly attempt: number; readonly maxAttempts: number; readonly error: string },
 ): void {
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(AgentExecution.ErrorRetry, {
     ...agentBase,
     sessionId,
@@ -137,7 +136,7 @@ export function publishDenyDiagnostic(
   agentBase: AgentRunBase,
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
@@ -152,15 +151,6 @@ export function publishDenyDiagnostic(
       elapsedMs: Date.now() - state.startTime,
     },
   });
-}
-
-/**
- * The run's session. `agentBase` and the state derive it from the same
- * validated trace, so this is one value under two names — kept as a single
- * reader so a future divergence has one place to be resolved.
- */
-function eventSessionId(state: RunState, agentBase: AgentRunBase): string {
-  return agentBase.sessionId === "" ? state.sessionId : agentBase.sessionId;
 }
 
 // merged from run-result.ts (250-LOC split refold: single-importer stage)

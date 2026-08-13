@@ -3,6 +3,9 @@ import { Session, Storage } from "@openomni/session";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 function createSession(): string {
   return Session.create({
     title: "resident-session",
@@ -50,7 +53,7 @@ describe("worker.spawn security", () => {
           agentName: "privileged-agent",
         },
       },
-      { sessionId, agentName: "resident" },
+      { traceId: TEST_DISPATCH_TRACE_ID, sessionId, agentName: "resident" },
     );
 
     expect(result.status).toBe("failed");
@@ -72,7 +75,7 @@ describe("worker.spawn security", () => {
           acceptanceCriteria: ["done"],
         },
       },
-      { sessionId, agentName: "resident" },
+      { traceId: TEST_DISPATCH_TRACE_ID, sessionId, agentName: "resident" },
     );
 
     expect(result.status).toBe("completed");

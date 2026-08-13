@@ -4,6 +4,9 @@ import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { seedPendingInteraction } from "../helpers/pending-interaction";
 import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -47,10 +50,7 @@ describe("DispatchRuntime", () => {
           replyToMessageId: "message-out-bl-endpoint",
         },
       },
-      {
-        actorKind: "unknown",
-        actorId: "telegram:blocked-seller",
-      },
+      { traceId: TEST_DISPATCH_TRACE_ID, actorKind: "unknown", actorId: "telegram:blocked-seller" },
     );
 
     expect(result.status).toBe("denied");
@@ -99,10 +99,7 @@ describe("DispatchRuntime", () => {
           replyToMessageId: "message-out-bl-channel",
         },
       },
-      {
-        actorKind: "unknown",
-        actorId: "telegram:seller-4",
-      },
+      { traceId: TEST_DISPATCH_TRACE_ID, actorKind: "unknown", actorId: "telegram:seller-4" },
     );
 
     expect(result.status).toBe("denied");
@@ -140,6 +137,7 @@ describe("DispatchRuntime", () => {
         payload: "SN-A2334",
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         actorKind: "worker",
         actorId: "telegram:seller-forged",
         sessionId: session.id,

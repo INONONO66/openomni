@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
+import { newTraceId } from "@openomni/telemetry";
 import {
   AgentToolProvider,
   createDefaultDispatchRuntime,
@@ -64,6 +65,10 @@ export interface MainOptions {
 }
 
 export async function main(options: MainOptions = {}): Promise<void> {
+  // Boot is a genuine trace origin — nothing precedes it to inherit from — and
+  // it is ONE trace. Every line the boot emits carries it, so a failed startup
+  // reads as a single sequence instead of eight unrelated records.
+  const bootTraceId = newTraceId();
   const config = loadConfig();
   if (process.env.OPENOMNI_MODE === "local") {
     throw new Error("OPENOMNI_MODE=local is disabled; OpenOmni requires coordinator mode");
@@ -79,14 +84,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
     if (!agentProviderRef.current) throw new Error("agent tool provider is not configured");
     return agentProviderRef.current;
   };
-  const mcpProvider = new McpToolProvider();
+  const mcpProvider = new McpToolProvider({ traceId: bootTraceId });
 
   const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
   const mergedMcpConfig = {
     ...config.mcp,
     servers: McpConfigLoader.merge(config.mcp.servers, projectMcpServers),
   };
-  await connectMcpServers({ ...config, mcp: mergedMcpConfig }, mcpProvider);
+  await connectMcpServers({ ...config, mcp: mergedMcpConfig }, mcpProvider, bootTraceId);
 
   const residentRuntime = ResidentRuntime.create({
     maxActive: 10,
@@ -94,7 +99,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   });
 
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId: bootTraceId,
     time: Date.now(),
     component: "server",
     msg: "server running in coordinator mode",
@@ -191,14 +196,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
   if (model) {
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId: bootTraceId,
       time: Date.now(),
       component: "server",
       msg: `server using model: ${model.providerID}/${model.id}`,
     });
   } else {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId: bootTraceId,
       time: Date.now(),
       component: "server",
       msg: "server no model credentials found; realtime surfaces disabled",
@@ -217,14 +222,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
   if (hasAnyChannel && !routingHandler) {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId: bootTraceId,
       time: Date.now(),
       component: "server",
       msg: "server channel credentials found but no model credentials; channels disabled",
     });
   }
 
-  const traceId = crypto.randomUUID();
+  const traceId = bootTraceId;
   const mode = "coordinator";
   // #492: manifest composition + finish reconciliation + admin drive surface.
   const effectRuntime = assembleEffectRuntime();
@@ -269,7 +274,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
   if (channels.length === 0) {
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId: bootTraceId,
       time: Date.now(),
       component: "server",
       msg: "server no external channels configured; web and websocket endpoints only",
@@ -277,13 +282,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
   }
 
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId: bootTraceId,
     time: Date.now(),
     component: "server",
     msg: `server listening on http://${config.server.host}:${server.port}`,
   });
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId: bootTraceId,
     time: Date.now(),
     component: "server",
     msg: `server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`,

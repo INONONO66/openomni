@@ -339,7 +339,7 @@ export function createToolExecutor(
         workspaceRoot: config.workspaceRoot,
         lockOwnerId,
         signal: linkedAbort.signal,
-        ...(context?.traceContext !== undefined && { traceContext: context.traceContext }),
+        traceContext: context?.traceContext,
       });
 
       publishPolicyEvaluated({

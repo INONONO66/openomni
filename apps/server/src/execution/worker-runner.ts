@@ -117,6 +117,7 @@ export namespace WorkerRunner {
         const middleware = [
           createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
           ...buildWorkerMiddleware({
+            traceId,
             permissions: request.permissions,
             injectionQueue,
             ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),

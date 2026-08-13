@@ -4,6 +4,9 @@ import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { seedPendingInteraction } from "../helpers/pending-interaction";
 import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -28,6 +31,7 @@ describe("DispatchRuntime", () => {
         },
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-unmatched-trusted",
         runId: "run-unmatched-trusted",
         actorKind: "resident",
@@ -74,6 +78,7 @@ describe("DispatchRuntime", () => {
         },
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-disallowed",
         runId: "run-disallowed",
         actorKind: "unknown",
@@ -121,6 +126,7 @@ describe("DispatchRuntime", () => {
         },
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-disallowed-trusted",
         runId: "run-disallowed-trusted",
         actorKind: "resident",

@@ -16,6 +16,9 @@ export interface McpClientLike {
 
 export interface McpToolProviderOptions {
   readonly createClient?: (config: McpServerConfig) => McpClientLike;
-  /** The boot trace this provider reports connect failures under. */
-  readonly traceId?: string;
+  /**
+   * The trace of the boot that created this provider. Connect failures are
+   * reported under it — boot is a trace origin, an MCP connect is not.
+   */
+  readonly traceId: string;
 }

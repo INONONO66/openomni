@@ -144,10 +144,10 @@ export function createDispatchTool(
       try {
         const output = await dispatchRuntime.submit(input, {
           signal: context?.signal,
-          // The dispatch belongs to the run that asked for it. Without this the
-          // runtime mints a fresh trace and the command is unlinkable from the
-          // tool call that submitted it.
-          ...(context?.traceContext?.traceId ? { traceId: context.traceContext.traceId } : {}),
+          // The dispatch belongs to the run that asked for it. The executor
+          // that invokes this tool already refused a call without a trace, so
+          // the submit below inherits rather than defaults.
+          traceId: context?.traceContext?.traceId,
           ...(call.input.sessionId ? { sessionId: call.input.sessionId } : {}),
           ...(call.input.runId ? { runId: call.input.runId } : {}),
           ...(call.input.agentName ? { agentName: call.input.agentName } : {}),

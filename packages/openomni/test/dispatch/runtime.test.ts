@@ -9,6 +9,9 @@ import {
   resetDispatchTestState,
 } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -23,6 +26,7 @@ describe("DispatchRuntime", () => {
     });
 
     const result = await runtime.submit(input(), {
+      traceId: TEST_DISPATCH_TRACE_ID,
       sessionId: "session-1",
       runId: "run-1",
       agentName: "resident",
@@ -52,6 +56,7 @@ describe("DispatchRuntime", () => {
     });
 
     const result = await runtime.submit(input("worker.spawn"), {
+      traceId: TEST_DISPATCH_TRACE_ID,
       sessionId: "session-1",
       runId: "run-1",
       agentName: "worker",
@@ -105,6 +110,7 @@ describe("DispatchRuntime", () => {
         payload: "private input",
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-audit",
         runId: "run-audit",
         actorKind: "resident",
@@ -121,6 +127,7 @@ describe("DispatchRuntime", () => {
     const result = await new DispatchRuntime({ includeDefaultPolicies: false }).submit(
       { action: "custom.missing", target: { kind: "system" } },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-missing-action",
         runId: "run-missing-action",
         actorKind: "system",
@@ -149,6 +156,7 @@ describe("DispatchRuntime", () => {
         timeoutMs: 1234,
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-wait",
         runId: "run-wait",
         actorKind: "resident",
@@ -169,6 +177,7 @@ describe("DispatchRuntime", () => {
     const result = await runtime.submit(
       { action: "custom.fake", target: { kind: "system" }, payload },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-opaque",
         runId: "run-opaque",
         actorKind: "system",

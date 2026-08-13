@@ -3,6 +3,9 @@ import { Storage, WorkerGrantStore } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -20,7 +23,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "external_actor", id: "api:research" },
         payload: { question: "lookup" },
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(denied.status).toBe("denied");
@@ -43,7 +51,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "external_actor", id: "api:research" },
         payload: { question: "lookup" },
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(allowed.status).toBe("completed");
@@ -75,7 +88,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "external_actor", id: "api:any" },
         payload: { question: "lookup" },
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -107,7 +125,12 @@ describe("DispatchRuntime", () => {
         action: "external.ask",
         target: { kind: "external_actor", id: "human:advisor" },
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -143,7 +166,12 @@ describe("DispatchRuntime", () => {
           labels: ["actorGroup:design", "risk:low"],
         },
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -169,7 +197,12 @@ describe("DispatchRuntime", () => {
         action: "external.ask",
         target: { kind: "external_actor", id: "human:advisor" },
       },
-      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     expect(result.status).toBe("denied");

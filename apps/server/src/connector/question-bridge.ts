@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 interface ConnectorQuestionBridgeRequest {
+  /** The trace of the connector run asking the question. */
+  readonly traceId: string;
   readonly runId: string;
   readonly sessionId: string;
   readonly residentSessionId: string;
@@ -19,6 +21,7 @@ export interface ConnectorQuestionBridgeServer {
 }
 
 export interface ConnectorQuestionBridgeServerOptions {
+  readonly traceId: string;
   readonly runId: string;
   readonly sessionId: string;
   readonly residentSessionId: string;
@@ -82,6 +85,7 @@ export function startConnectorQuestionBridgeServer(
       if (prompt instanceof Response) return prompt;
       try {
         const answer = await handler({
+          traceId: options.traceId,
           runId: options.runId,
           sessionId: options.sessionId,
           residentSessionId: options.residentSessionId,

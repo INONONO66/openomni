@@ -5,6 +5,9 @@ import { DispatchRuntime, submitPinnedPendingInteraction } from "../../src/dispa
 import { seedPendingInteraction } from "../helpers/pending-interaction";
 import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -56,10 +59,7 @@ describe("DispatchRuntime", () => {
           replyToMessageId: "message-out-1",
         },
       },
-      {
-        actorKind: "unknown",
-        actorId: "telegram:seller-1",
-      },
+      { traceId: TEST_DISPATCH_TRACE_ID, actorKind: "unknown", actorId: "telegram:seller-1" },
     );
 
     const authority = decisions.find(
@@ -138,10 +138,7 @@ describe("DispatchRuntime", () => {
           tokenHash: "token-wrong",
         },
       },
-      {
-        actorKind: "unknown",
-        actorId: "telegram:seller-1",
-      },
+      { traceId: TEST_DISPATCH_TRACE_ID, actorKind: "unknown", actorId: "telegram:seller-1" },
     );
 
     expect(result.status).toBe("completed");
@@ -184,10 +181,7 @@ describe("DispatchRuntime", () => {
           tokenHash: "token-wrong",
         },
       },
-      {
-        actorKind: "unknown",
-        actorId: "telegram:intruder-9",
-      },
+      { traceId: TEST_DISPATCH_TRACE_ID, actorKind: "unknown", actorId: "telegram:intruder-9" },
     );
 
     expect(routed).toBe(false);
@@ -229,6 +223,7 @@ describe("DispatchRuntime", () => {
         },
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         actorKind: "unknown",
         actorId: "telegram:seller-clarification",
       },
@@ -281,6 +276,7 @@ describe("DispatchRuntime", () => {
       },
       pinned,
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         actorKind: "resident",
         actorId: "resident:main",
       },
@@ -313,6 +309,7 @@ describe("DispatchRuntime", () => {
         },
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-unmatched",
         runId: "run-unmatched",
         actorKind: "unknown",
@@ -368,6 +365,7 @@ describe("DispatchRuntime", () => {
       },
       pinned,
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         actorKind: "unknown",
         actorId: pinned.endpointId,
       },
@@ -422,6 +420,7 @@ describe("DispatchRuntime", () => {
       },
       pinned,
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         actorKind: "user",
         actorId: "worker:original",
       },
