@@ -1,7 +1,6 @@
 // Compatibility re-export: Bus moved to @openomni/telemetry (#606 Phase 1).
 // Removed once openomni and apps/server import it from there directly.
 export { Bus, BusEvent } from "@openomni/telemetry";
-export { AuditLog } from "./audit/index";
 export { BusPersistence } from "./bus-persistence/index.js";
 export { BusQuery } from "./bus-persistence/query";
 export { Storage, SqliteStorageAdapter, initialize } from "./storage";
@@ -16,7 +15,6 @@ export { BlacklistStore } from "./blacklist/index.js";
 export { ChannelGrantStore } from "./channel-grant/index.js";
 export * from "./worker-run/index.js";
 export { WorkerRunStateStore } from "./worker-run/state-store.js";
-export { TraceContext } from "./trace/index.js";
 export { WorkItemStore } from "./work-item/index.js";
 export { WorkItemAttemptRun } from "./work-item/attempt-run.js";
 export type { AttemptRunStatus, AttemptRunView } from "./work-item/attempt-run.js";

@@ -23,6 +23,7 @@
     "@openomni/policy": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
+    "@openomni/telemetry": "workspace:*",
     "croner": "^10.0.1",
     "zod": "^3.22.4"
   },

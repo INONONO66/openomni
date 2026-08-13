@@ -1,6 +1,7 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
 import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
-import { Bus, PendingInteractionStore, Storage, TraceContext } from "@openomni/session";
+import { PendingInteractionStore, Storage } from "@openomni/session";
+import { Bus, newTraceId } from "@openomni/telemetry";
 import { requestedWaitAction, type RequestedWaitAction } from "../wait/index.js";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
 import { routePendingInteraction } from "./pending-interaction-routing.js";
@@ -240,7 +241,7 @@ export class DispatchRuntime {
     pendingInteraction?: PendingInteractionStore.Record,
   ): Promise<DispatchProtocol.Result> {
     const parsed = DispatchProtocol.Input.parse(input);
-    const trace = options.traceId ? { traceId: options.traceId } : TraceContext.create();
+    const trace = options.traceId ? { traceId: options.traceId } : { traceId: newTraceId() };
     const actor = deriveActorContext(options);
     const requestedPendingAction = requestedWaitAction(parsed.payload);
     const initialPinnedValidation = pendingInteraction

@@ -3,15 +3,19 @@ import { AgentExecution, BusEvent, Operational } from "@openomni/protocol";
 import { z } from "zod";
 import {
   collector,
-  MissingTraceScopeError,
+  InvalidTraceScopeError,
   requireTraceScope,
   scope,
   type SpanPair,
   type TraceScope,
 } from "@openomni/telemetry";
 
+const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
+const SPAN_ID = "b7ad6b7169203331";
+
 const TRACE: TraceScope = {
-  traceId: "trace-1",
+  traceId: TRACE_ID,
+  spanId: SPAN_ID,
   sessionId: "session-1",
   runId: "run-1",
   actorId: "actor-1",
@@ -31,7 +35,8 @@ describe("telemetry scope", () => {
         time: clock(),
         component: "test",
         msg: "hello",
-        traceId: "trace-1",
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
         sessionId: "session-1",
         runId: "run-1",
         actorId: "actor-1",
@@ -55,7 +60,7 @@ describe("telemetry scope", () => {
     } as never);
 
     expect(sink.named(Operational.Info.name)[0]).toMatchObject({
-      traceId: "trace-1",
+      traceId: TRACE_ID,
       sessionId: "session-1",
     });
   });
@@ -67,19 +72,19 @@ describe("telemetry scope", () => {
     child.emit(Operational.Info, { component: "test", msg: "child" });
 
     expect(sink.named(Operational.Info.name)[0]).toMatchObject({
-      traceId: "trace-1",
+      traceId: TRACE_ID,
       sessionId: "session-1",
       runId: "run-2",
     });
   });
 
   test("refuses an incomplete scope rather than emitting an uncorrelatable record", () => {
-    expect(() => requireTraceScope({ traceId: "t" })).toThrow(MissingTraceScopeError);
-    expect(() => requireTraceScope({ traceId: "t", sessionId: "", runId: "r" })).toThrow(
-      MissingTraceScopeError,
+    expect(() => requireTraceScope({ traceId: TRACE_ID })).toThrow(InvalidTraceScopeError);
+    expect(() => requireTraceScope({ traceId: "not-hex", sessionId: "s", runId: "r" })).toThrow(
+      InvalidTraceScopeError,
     );
-    expect(requireTraceScope({ traceId: "t", sessionId: "s", runId: "r" })).toEqual({
-      traceId: "t",
+    expect(requireTraceScope({ traceId: TRACE_ID, sessionId: "s", runId: "r" })).toMatchObject({
+      traceId: TRACE_ID,
       sessionId: "s",
       runId: "r",
     });
@@ -87,9 +92,9 @@ describe("telemetry scope", () => {
 
   /** Construction is the composition root, so refusing there is a wiring error. */
   test("scope validates at construction", () => {
-    expect(() => scope({ traceId: "", sessionId: "s", runId: "r" }, collector())).toThrow(
-      MissingTraceScopeError,
-    );
+    expect(() =>
+      scope({ traceId: "", spanId: SPAN_ID, sessionId: "s", runId: "r" }, collector()),
+    ).toThrow(InvalidTraceScopeError);
   });
 
   /**
@@ -105,7 +110,7 @@ describe("telemetry scope", () => {
 
     child.emit(Operational.Info, { component: "test", msg: "child" });
 
-    expect(sink.named(Operational.Info.name)[0]).toMatchObject({ traceId: "trace-1" });
+    expect(sink.named(Operational.Info.name)[0]).toMatchObject({ traceId: TRACE_ID });
   });
 
   /** Narrowing mid-run must not be able to kill the run. */

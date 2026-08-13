@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { Operational } from "@openomni/protocol";
-import { Bus, busSinkForTest, scope } from "./scoped-emit-fixture.js";
+import { Bus, busSinkForTest, newTraceId, scope } from "./scoped-emit-fixture.js";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
@@ -74,9 +74,10 @@ describe("scoped emit attribution", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     BusPersistence.start();
+    const traceId = newTraceId();
 
     const log = scope(
-      { traceId: "trace-attr", sessionId: session.id, runId: "run-attr", actorId: "actor" },
+      { traceId, sessionId: session.id, runId: "run-attr", actorId: "actor" },
       busSinkForTest(),
     );
 
@@ -87,22 +88,23 @@ describe("scoped emit attribution", () => {
 
     const persisted = rows().filter((row) => row.event_type.startsWith("operational."));
     expect(persisted.map((row) => row.event_type)).toEqual([Operational.Warn.name]);
-    expect(persisted[0]?.trace_id).toBe("trace-attr");
+    expect(persisted[0]?.trace_id).toBe(traceId);
     expect(persisted[0]?.session_id).toBe(session.id);
     expect(persisted[0]?.run_id).toBeNull();
   });
 
   test("a session id with no session row drops the write instead of raising", async () => {
     BusPersistence.start();
+    const orphanTraceId = newTraceId();
 
     const log = scope(
-      { traceId: "trace-orphan", sessionId: "session-that-does-not-exist", runId: "run-orphan" },
+      { traceId: orphanTraceId, sessionId: "session-that-does-not-exist", runId: "run-orphan" },
       busSinkForTest(),
     );
 
     expect(() => log.emit(Operational.Warn, { component: "test", msg: "orphan" })).not.toThrow();
     await settle();
 
-    expect(rows().filter((row) => row.trace_id === "trace-orphan")).toHaveLength(0);
+    expect(rows().filter((row) => row.trace_id === orphanTraceId)).toHaveLength(0);
   });
 });

@@ -15,6 +15,7 @@ import {
   type MockLlmFn,
 } from "../../helpers/mock-llm";
 import { abortRun, allow, inject } from "../../helpers/policy-decision";
+import { runInput } from "../../helpers/run-input";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -42,9 +43,7 @@ const defaultConfig: ChatAgentConfig = {
   llm: mockLlm,
 };
 
-const defaultInput: ChatAgentInput = {
-  messages: [{ role: "user", content: "hello" }],
-};
+const defaultInput: ChatAgentInput = runInput([{ role: "user", content: "hello" }]);
 
 async function collectEvents(
   config: ChatAgentConfig,

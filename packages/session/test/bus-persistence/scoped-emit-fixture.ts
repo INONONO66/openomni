@@ -9,7 +9,7 @@
 import { Bus } from "@openomni/telemetry";
 import type { BusEvent } from "@openomni/protocol";
 
-export { Bus, scope } from "@openomni/telemetry";
+export { Bus, newTraceId, scope } from "@openomni/telemetry";
 
 export function busSinkForTest(): BusEvent.Sink {
   return { publish: Bus.publish };

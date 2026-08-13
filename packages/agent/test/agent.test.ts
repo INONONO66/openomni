@@ -9,6 +9,7 @@ import {
   type MockLlmFn,
 } from "./helpers/mock-llm";
 import { allow, continueWithPrompt } from "./helpers/policy-decision";
+import { runInput } from "./helpers/run-input";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -94,9 +95,7 @@ describe("ChatAgent", () => {
       return createStopOutcome();
     };
 
-    const result = await createAgent().run({
-      messages: [{ role: "user", content: "Hello" }],
-    });
+    const result = await createAgent().run(runInput([{ role: "user", content: "Hello" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(result.text).toBe("Hello!");
@@ -128,9 +127,7 @@ describe("ChatAgent", () => {
       ],
     });
 
-    const result = await agent.run({
-      messages: [{ role: "user", content: "Loop" }],
-    });
+    const result = await agent.run(runInput([{ role: "user", content: "Loop" }]));
 
     expect(result.finishReason).toBe("max-steps");
     expect(callCount).toBe(1);
@@ -150,9 +147,7 @@ describe("ChatAgent", () => {
       budget: { maxTurns: 10, maxToolCalls: 7 },
     });
 
-    const result = await agent.run({
-      messages: [{ role: "user", content: "Loop with tools" }],
-    });
+    const result = await agent.run(runInput([{ role: "user", content: "Loop with tools" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(observedMaxSteps).toBe(7);
@@ -176,7 +171,7 @@ describe("ChatAgent", () => {
 
     let abortError: unknown;
     try {
-      await agent.run({ messages: [{ role: "user", content: "Hello" }] });
+      await agent.run(runInput([{ role: "user", content: "Hello" }]));
     } catch (error) {
       if (!(error instanceof Error)) throw error;
       abortError = error;
@@ -221,7 +216,7 @@ describe("ChatAgent", () => {
       ],
     });
 
-    await agent.run({ messages: [{ role: "user", content: "Hello" }] });
+    await agent.run(runInput([{ role: "user", content: "Hello" }]));
 
     expect(stepFinishCalls).toHaveLength(2);
     expect(stepFinishCalls[0]?.type).toBe("text");
@@ -237,9 +232,7 @@ describe("ChatAgent", () => {
 
     let retryError: unknown;
     try {
-      await createAgent().run({
-        messages: [{ role: "user", content: "Hello" }],
-      });
+      await createAgent().run(runInput([{ role: "user", content: "Hello" }]));
     } catch (error) {
       if (!(error instanceof Error)) throw error;
       retryError = error;
@@ -280,9 +273,7 @@ it("uses toolExecutor when provided to execute tool calls", async () => {
     toolExecutor: executor,
   });
 
-  const result = await agent.run({
-    messages: [{ role: "user", content: "Use a tool" }],
-  });
+  const result = await agent.run(runInput([{ role: "user", content: "Use a tool" }]));
 
   expect(toolExecutorCalls).toHaveLength(1);
   expect(toolExecutorCalls[0]?.tool).toBe("custom_tool");
@@ -319,9 +310,7 @@ it("passes the agent abort signal to toolExecutor calls", async () => {
     toolExecutor: executor,
   });
 
-  await agent.run({
-    messages: [{ role: "user", content: "Use a tool" }],
-  });
+  await agent.run(runInput([{ role: "user", content: "Use a tool" }]));
 
   expect(capturedSignal).toBe(controller.signal);
 });
@@ -356,9 +345,7 @@ it("handles toolExecutor errors by setting isError: true", async () => {
     },
   });
 
-  const result = await agent.run({
-    messages: [{ role: "user", content: "Use a tool" }],
-  });
+  const result = await agent.run(runInput([{ role: "user", content: "Use a tool" }]));
 
   expect(result.finishReason).toBe("stop");
 });
@@ -377,11 +364,9 @@ it("throws when tools are configured without toolExecutor", async () => {
     ],
   });
 
-  await expect(
-    agent.run({
-      messages: [{ role: "user", content: "Use a tool" }],
-    }),
-  ).rejects.toThrow("toolExecutor is required when tools are provided");
+  await expect(agent.run(runInput([{ role: "user", content: "Use a tool" }]))).rejects.toThrow(
+    "toolExecutor is required when tools are provided",
+  );
 });
 
 it("does not retry missing toolExecutor configuration errors", async () => {
@@ -401,9 +386,7 @@ it("does not retry missing toolExecutor configuration errors", async () => {
   const events: AgentEvent[] = [];
   let configurationError: unknown;
   try {
-    for await (const event of agent.stream({
-      messages: [{ role: "user", content: "Use a tool" }],
-    })) {
+    for await (const event of agent.stream(runInput([{ role: "user", content: "Use a tool" }]))) {
       events.push(event);
     }
   } catch (error) {

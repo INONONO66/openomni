@@ -116,6 +116,7 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/protocol",
       "@openomni/policy",
       "@openomni/llm",
+      "@openomni/telemetry",
       "@openomni/session",
     ]),
   },

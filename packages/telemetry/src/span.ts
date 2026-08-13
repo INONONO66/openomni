@@ -2,10 +2,12 @@ import type { BusEvent } from "@openomni/protocol";
 import type { EmitPayload } from "./trace";
 
 /**
- * How a span ended. `guard_denied` and `budget_exhausted` are first-class
- * because they are how a run most often stops: without them a policy block
- * looks like a normal return and emits no terminal event at all. Before spans,
- * twelve of the agent's fifteen run-terminating paths did exactly that.
+ * How a span ended.
+ *
+ * `guard_denied` and `budget_exhausted` are first-class because they are how a
+ * run most often stops: without them a policy block looks like a normal return
+ * and emits no terminal event at all. Before spans, twelve of the agent's
+ * fifteen run-terminating paths did exactly that.
  */
 export type SpanOutcome =
   | { readonly kind: "completed" }
@@ -17,6 +19,34 @@ export type SpanOutcome =
     }
   | { readonly kind: "budget_exhausted"; readonly limit: string }
   | { readonly kind: "failed"; readonly error: Error };
+
+/**
+ * OpenTelemetry span status. `unset` is unreachable here — a span that ended
+ * always knows whether the work it wrapped got done.
+ *
+ * A policy denial maps to `error`: the decision itself succeeded, but the
+ * operation the span measures did not complete. The reason travels with the
+ * outcome, so an exporter can distinguish a denial from a crash.
+ */
+export type SpanStatus = "ok" | "error";
+
+export function spanStatus(outcome: SpanOutcome): SpanStatus {
+  return outcome.kind === "completed" ? "ok" : "error";
+}
+
+/** A one-line description of why a span ended, for the status message. */
+export function spanStatusMessage(outcome: SpanOutcome): string | undefined {
+  switch (outcome.kind) {
+    case "completed":
+      return undefined;
+    case "guard_denied":
+      return `${outcome.point}: ${outcome.reason}`;
+    case "budget_exhausted":
+      return `budget exhausted: ${outcome.limit}`;
+    case "failed":
+      return outcome.error.message;
+  }
+}
 
 /**
  * A start/end descriptor pair plus the mapping from outcome to terminal

@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { collector, noopSink, scope, tee, type TraceScope } from "@openomni/telemetry";
 
-const TRACE: TraceScope = { traceId: "t", sessionId: "s", runId: "r" };
+const TRACE: TraceScope = {
+  traceId: "0af7651916cd43dd8448eb211c80319c",
+  spanId: "b7ad6b7169203331",
+  sessionId: "s",
+  runId: "r",
+};
 
 describe("telemetry sinks", () => {
   test("tee fans out to every sink", () => {

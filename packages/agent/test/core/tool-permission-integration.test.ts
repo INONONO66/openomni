@@ -7,6 +7,7 @@ import {
   mockProviderModel,
   type MockLlmFn,
 } from "../helpers/mock-llm";
+import { runInput } from "../helpers/run-input";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -133,16 +134,13 @@ describe("tool permission integration via toolExecutor", () => {
       ],
     });
 
-    await agent.run(
-      { messages: [{ role: "user", content: "run dangerous command" }] },
-      {
-        onMessage: () => undefined,
-        onToolCall: () => undefined,
-        onToolResult: (result) => {
-          observedToolResult = result;
-        },
+    await agent.run(runInput([{ role: "user", content: "run dangerous command" }]), {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => {
+        observedToolResult = result;
       },
-    );
+    });
 
     expect(executor).toHaveBeenCalledTimes(0);
     expect(observedToolResult?.isError).toBe(true);
@@ -190,16 +188,13 @@ describe("tool permission integration via toolExecutor", () => {
       ],
     });
 
-    await agent.run(
-      { messages: [{ role: "user", content: "run command with approval" }] },
-      {
-        onMessage: () => undefined,
-        onToolCall: () => undefined,
-        onToolResult: (result) => {
-          observedToolResult = result;
-        },
+    await agent.run(runInput([{ role: "user", content: "run command with approval" }]), {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => {
+        observedToolResult = result;
       },
-    );
+    });
 
     expect(executor).toHaveBeenCalledTimes(0);
     expect(observedToolResult?.isError).toBe(true);
@@ -247,16 +242,13 @@ describe("tool permission integration via toolExecutor", () => {
       ],
     });
 
-    await agent.run(
-      { messages: [{ role: "user", content: "safe command" }] },
-      {
-        onMessage: () => undefined,
-        onToolCall: () => undefined,
-        onToolResult: (result) => {
-          observedToolResult = result;
-        },
+    await agent.run(runInput([{ role: "user", content: "safe command" }]), {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => {
+        observedToolResult = result;
       },
-    );
+    });
 
     expect(executor).toHaveBeenCalledTimes(1);
     expect(observedToolResult?.isError).toBe(false);
@@ -303,16 +295,13 @@ describe("tool permission integration via toolExecutor", () => {
       middleware: [createToolPermissionPolicy({ permission: labelPermission })],
     });
 
-    await agent.run(
-      { messages: [{ role: "user", content: "write file" }] },
-      {
-        onMessage: () => undefined,
-        onToolCall: () => undefined,
-        onToolResult: (result) => {
-          observedToolResult = result;
-        },
+    await agent.run(runInput([{ role: "user", content: "write file" }]), {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => {
+        observedToolResult = result;
       },
-    );
+    });
 
     expect(executor).toHaveBeenCalledTimes(0);
     expect(observedToolResult?.isError).toBe(true);
@@ -359,16 +348,13 @@ describe("tool permission integration via toolExecutor", () => {
       middleware: [createToolPermissionPolicy({ permission })],
     });
 
-    await agent.run(
-      { messages: [{ role: "user", content: "search files" }] },
-      {
-        onMessage: () => undefined,
-        onToolCall: () => undefined,
-        onToolResult: (result) => {
-          observedToolResult = result;
-        },
+    await agent.run(runInput([{ role: "user", content: "search files" }]), {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => {
+        observedToolResult = result;
       },
-    );
+    });
 
     expect(executor).toHaveBeenCalledTimes(0);
     expect(observedToolResult?.isError).toBe(true);
@@ -407,7 +393,7 @@ describe("tool permission integration via toolExecutor", () => {
       toolExecutor: executor,
     });
 
-    await agent.run({ messages: [{ role: "user", content: "dangerous command" }] });
+    await agent.run(runInput([{ role: "user", content: "dangerous command" }]));
 
     expect(executor).toHaveBeenCalledTimes(1);
   });
@@ -461,7 +447,7 @@ describe("tool permission integration via toolExecutor", () => {
     });
 
     const events = [] as Array<{ type: string; result?: Tool.Result }>;
-    for await (const event of agent.stream({ messages: [{ role: "user", content: "stream" }] })) {
+    for await (const event of agent.stream(runInput([{ role: "user", content: "stream" }]))) {
       if (event.type === "tool_call_complete") {
         events.push({ type: event.type, result: event.result });
       } else {

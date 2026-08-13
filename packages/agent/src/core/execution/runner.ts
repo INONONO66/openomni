@@ -1,6 +1,6 @@
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
-import type { Sink } from "@openomni/protocol";
-import { Bus, TraceContext } from "@openomni/session";
+import type { Sink, TraceContext } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
@@ -24,28 +24,19 @@ export async function* streamAgent(
   let attempt = 1;
   let lastError = "";
 
-  const trace = input.traceContext ?? TraceContext.empty();
-  const traceId = nonEmptyString(trace.traceId) ?? crypto.randomUUID();
-  const sessionId = nonEmptyString(trace.sessionId) ?? crypto.randomUUID();
-  const runId = nonEmptyString(trace.runId) ?? crypto.randomUUID();
-  const agentName = nonEmptyString(trace.agentName);
-  const actorId = nonEmptyString(input.metadata?.actorId) ?? agentName ?? runId;
-  const resolvedTrace = {
-    ...trace,
-    traceId,
-    sessionId,
-    runId,
-    agentName,
-  };
+  const trace = requireRunTrace(input.traceContext);
+  const { traceId, sessionId, runId } = trace;
+  const actorId =
+    nonEmptyString(input.metadata?.actorId) ?? nonEmptyString(trace.agentName) ?? runId;
   const agentBase = { traceId, sessionId, runId, actorId };
-  emitRunStarted(resolvedTrace, config.model.id);
+  emitRunStarted(trace, config.model.id);
   assertToolExecutor(config);
 
   // #546: run state and pre-run dispatch are run-scoped, living across
   // attempts — an agent-level retry regenerates only the attempt (turn
   // artifacts), never the history, budget/usage (no double-billing reset),
   // or run.lifecycle.pre effects (prompt injections apply exactly once).
-  const state = createRunState({ ...input, traceContext: resolvedTrace });
+  const state = createRunState({ ...input, traceContext: trace });
   const engine = buildPolicyEngine(config, agentBase);
 
   const preRunEvent = await dispatchPreRun(state, engine, config, agentBase);
@@ -75,7 +66,7 @@ export async function* streamAgent(
           engine,
           providerModel,
           configuredToolChoice,
-          resolvedTrace,
+          trace,
           agentBase,
           sink,
         );
@@ -168,6 +159,29 @@ function unknownOutcomeType(value: unknown): string {
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * A run must arrive with an identity. Minting one here — which is what the
+ * removed `TraceContext.empty()` plus three `?? crypto.randomUUID()` fallbacks
+ * did — produces a run whose every event correlates to nothing, and the caller
+ * never learns it forgot.
+ */
+function requireRunTrace(
+  traceContext: ChatAgentInput["traceContext"],
+): TraceContext.Type & { traceId: string; sessionId: string; runId: string } {
+  const traceId = nonEmptyString(traceContext?.traceId);
+  const sessionId = nonEmptyString(traceContext?.sessionId);
+  const runId = nonEmptyString(traceContext?.runId);
+  if (traceId === undefined || sessionId === undefined || runId === undefined) {
+    const missing = [
+      traceId === undefined ? "traceId" : undefined,
+      sessionId === undefined ? "sessionId" : undefined,
+      runId === undefined ? "runId" : undefined,
+    ].filter((field): field is string => field !== undefined);
+    throw new Error(`agent run requires a trace context with ${missing.join(", ")}`);
+  }
+  return { ...traceContext, traceId, sessionId, runId };
 }
 
 // merged from shared.ts (fragment sweep: single-consumer fn)
