@@ -20,14 +20,14 @@
     "pct": 84.75
   },
   "packages/llm": {
-    "linesFound": 1911,
-    "linesHit": 1753,
-    "pct": 91.73
+    "linesFound": 1994,
+    "linesHit": 1832,
+    "pct": 91.88
   },
   "packages/openomni": {
-    "linesFound": 14006,
-    "linesHit": 13345,
-    "pct": 95.28
+    "linesFound": 15851,
+    "linesHit": 15153,
+    "pct": 95.6
   },
   "packages/policy": {
     "linesFound": 1472,

@@ -249,9 +249,13 @@ describe("handleError (error)", () => {
    * nowhere else at all.
    */
   it("records the decision on the terminal failure, with the narrowed ceiling", async () => {
-    const failures: Array<{ traceId: string; context?: Record<string, unknown> }> = [];
+    const failures: Array<{
+      traceId: string;
+      sessionId?: string;
+      context?: Record<string, unknown>;
+    }> = [];
     const unsubscribe = Bus.subscribe(Operational.Error, (event) => {
-      failures.push(event as unknown as { traceId: string; context?: Record<string, unknown> });
+      failures.push(event as unknown as (typeof failures)[number]);
     });
     const engine = PolicyEngine.create();
     engine.register({
@@ -286,11 +290,57 @@ describe("handleError (error)", () => {
 
     expect(failures).toHaveLength(1);
     expect(failures[0]?.traceId).toBe(agentBase.traceId);
+    expect(failures[0]?.sessionId).toBe(agentBase.sessionId);
     expect(failures[0]?.context).toEqual({
       reason: "validation_error",
       attempt: 1,
       // 1 from the effect, not the 5 the policy configured.
       maxAttempts: 1,
     });
+  });
+
+  /**
+   * The retry path reports the same narrowed ceiling as the terminal one. It
+   * was pinned only on the terminal side, so a run configured for five
+   * attempts and narrowed to two could still report five on every retry.
+   */
+  it("reports the narrowed ceiling on the retry path too", async () => {
+    const retries: Array<{ maxAttempts: number }> = [];
+    const unsubscribe = Bus.subscribe(AgentExecution.ErrorRetry, (event) => {
+      retries.push(event as unknown as { maxAttempts: number });
+    });
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "narrow-retries",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.retry_after"] },
+      priority: 10,
+      fn: () =>
+        allow("narrow-retries", undefined, [
+          { type: "run.retry_after", delayMs: 0, maxRetries: 2 },
+        ]),
+    });
+
+    try {
+      await collectEvents(
+        handleError(
+          makeState(),
+          engine,
+          makeConfig(),
+          makeAgentBase(),
+          new Error("connection timeout"),
+          1,
+          { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
+        ),
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(retries).toHaveLength(1);
+    // 2 from the effect, not the 5 the policy configured.
+    expect(retries[0]?.maxAttempts).toBe(2);
   });
 });

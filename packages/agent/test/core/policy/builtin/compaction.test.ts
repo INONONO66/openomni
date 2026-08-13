@@ -65,16 +65,18 @@ describe("createCompactionPolicy", () => {
       contextWindowTokens: 100,
       protectRecentMessages: 2,
     });
-    const ctx = baseCtx({
-      traceContext: undefined,
-      messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-      budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
-    });
+    for (const traceContext of [undefined, { traceId: "" }]) {
+      const verdict = await middleware.fn(
+        baseCtx({
+          traceContext,
+          messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+          budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
+        }),
+      );
 
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-    expect(verdict.reasonCodes).toContain("compaction_skipped_no_trace");
+      expect(verdict.verdict).toBe("allow");
+      expect(verdict.reasonCodes).toContain("compaction_skipped_no_trace");
+    }
   });
   it("continues when below threshold", async () => {
     const middleware = createCompactionPolicy({
