@@ -23,17 +23,19 @@ import type { Message, Policy } from "../packages/protocol/src/index";
 const HISTORY_SIZES = [8, 64, 512] as const;
 const REGISTERED_POLICY_COUNTS = [0, 1, 3] as const;
 /**
- * `minimal` carries no audit-correlation fields; `correlated` carries the shape
- * a real dispatch has. They diverge sharply once a point stops materializing
- * its context, because the audit-correlation capture becomes the whole cost.
+ * `minimal` carries only the two cheap string correlation fields (`sessionId`,
+ * `runId`); `correlated` adds the object-valued ones a real dispatch carries.
+ * They diverge sharply once a point stops materializing its context, because
+ * correlation capture then becomes the whole cost.
  */
 const CONTEXT_SHAPES = ["minimal", "correlated"] as const;
 const DEFAULT_ITERATIONS = 2000;
 const WARMUP_ITERATIONS = 200;
 /**
  * A single pass through the cells is order-biased: on a ~µs operation the cell
- * measured last is fastest because JIT and GC warm-up dominate. Repeat every
- * cell across interleaved rounds and report the median.
+ * measured last is fastest because JIT and GC warm-up dominate. Rounds are
+ * rotated so no cell is always first, but the median is what removes the bias —
+ * only round 0 is cold, so it is discarded as an outlier of five.
  */
 const REPEATS = 5;
 const PART_TEXT = "x".repeat(400);
@@ -106,8 +108,14 @@ function inertPolicy(index: number): CanonicalPolicyRegistrationGeneric<GenericP
   };
 }
 
+/**
+ * Binds a no-op `auditEmit`, matching the agent loop and the dispatch runtime.
+ * That is the conservative configuration: an engine with audit unbound — the
+ * completion-admission engine is built as `PolicyEngine.create()` with no
+ * options — skips correlation capture entirely and measures faster.
+ */
 function createEngine() {
-  return PolicyEngine.create({ audit: false });
+  return PolicyEngine.create({ auditEmit: () => undefined });
 }
 
 interface Cell {
