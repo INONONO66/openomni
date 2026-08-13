@@ -117,6 +117,11 @@ async function measureNsPerDispatch(
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
   };
 
+  // Guard every measured scenario, not just one: a context the point contract
+  // rejects short-circuits dispatch, and the artifact would record that path's
+  // timings as if they were normal dispatch.
+  assertDispatchAllowed(await engine.dispatchPoint("run.turn.pre", context));
+
   for (let i = 0; i < WARMUP_ITERATIONS; i += 1) {
     await engine.dispatchPoint("run.turn.pre", context);
   }
@@ -141,18 +146,6 @@ function assertDispatchAllowed(decision: Policy.PolicyDecision): void {
 
 if (import.meta.main) {
   const { outPath, iterations } = parseArgs(process.argv.slice(2));
-
-  // Fail loudly if the bench context stops satisfying the point contract —
-  // otherwise the numbers would measure the contract-rejection path.
-  const probe = createEngine();
-  assertDispatchAllowed(
-    await probe.dispatchPoint("run.turn.pre", {
-      sessionId: "bench-session",
-      runId: "bench-run",
-      turnIndex: 0,
-      messages: buildHistory(1, "bench-session"),
-    }),
-  );
 
   const scenarios: Array<{
     registeredPolicies: number;

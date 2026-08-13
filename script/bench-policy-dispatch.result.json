@@ -1,7 +1,7 @@
 {
   "benchmark": "policy-dispatch-history-scaling",
-  "measuredAt": "2026-08-13T02:17:11.492Z",
-  "commit": "2dedeb33fd59affa8167656f91b9775d4d478f2a",
+  "measuredAt": "2026-08-13T02:36:27.218Z",
+  "commit": "eb99c20a187ff1c6ee2a5cd622f9bbb0bee52337",
   "platform": "darwin/arm64 bun 1.3.14",
   "point": "run.turn.pre",
   "iterations": 2000,
@@ -10,29 +10,29 @@
     {
       "registeredPolicies": 0,
       "nsPerDispatchByHistorySize": {
-        "8": 42145,
-        "64": 265281.3,
-        "512": 2059688.8
+        "8": 42493.8,
+        "64": 264695,
+        "512": 2071100.1
       },
-      "growthFactor": 48.87
+      "growthFactor": 48.74
     },
     {
       "registeredPolicies": 1,
       "nsPerDispatchByHistorySize": {
-        "8": 46249.2,
-        "64": 269465.3,
-        "512": 2115894.2
+        "8": 46202.1,
+        "64": 269466.6,
+        "512": 2130477.9
       },
-      "growthFactor": 45.75
+      "growthFactor": 46.11
     },
     {
       "registeredPolicies": 3,
       "nsPerDispatchByHistorySize": {
-        "8": 49765.1,
-        "64": 281402.9,
-        "512": 2112616.3
+        "8": 50338.2,
+        "64": 286883.4,
+        "512": 2094003.9
       },
-      "growthFactor": 42.45
+      "growthFactor": 41.6
     }
   ]
 }
