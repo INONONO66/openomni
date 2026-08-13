@@ -30,7 +30,7 @@ describe("compaction through the lifecycle", () => {
     expect((ctx as { traceContext?: Record<string, string> }).traceContext).toEqual({
       traceId: agentBase.traceId,
       sessionId: agentBase.sessionId,
-      ...(agentBase.runId === undefined ? {} : { runId: agentBase.runId }),
+      runId: agentBase.runId,
     });
   });
 

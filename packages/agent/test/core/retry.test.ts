@@ -59,6 +59,9 @@ describe("classifyRetryReason", () => {
     ["budget exceeded: turns", "timeout"],
     ["tool execution failed", "tool_error"],
     ["schema validation failed", "validation_error"],
+    // "tool" is checked before "validation", so a message carrying both is a
+    // tool error. Rows that mention only one cannot pin that order.
+    ["tool input validation failed", "tool_error"],
     ["upstream 503", "transient_error"],
     ["TIMEOUT IN CAPS", "timeout"],
   ] as const)("classifies %j as %s", (message, expected) => {

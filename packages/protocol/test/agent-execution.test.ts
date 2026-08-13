@@ -63,6 +63,21 @@ describe("AgentExecution BusEvents", () => {
     ).not.toThrow();
   });
 
+  /** One field at a time, or relaxing either alone still throws on the other. */
+  test.each(["reason", "backoffMs"] as const)("ErrorRetry requires %s", (field) => {
+    const payload: Record<string, unknown> = {
+      ...base,
+      attempt: 2,
+      maxAttempts: 3,
+      error: "rate limit",
+      reason: "transient_error",
+      backoffMs: 2000,
+    };
+    delete payload[field];
+
+    expect(() => AgentExecution.ErrorRetry.schema.parse(payload)).toThrow();
+  });
+
   test("ErrorRetry parses", () => {
     expect(() =>
       AgentExecution.ErrorRetry.schema.parse({

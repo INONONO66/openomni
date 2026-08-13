@@ -279,7 +279,9 @@ describe("handleError (error)", () => {
           makeConfig(),
           agentBase,
           new Error("schema validation failed"),
-          1,
+          // Not 1: `attempt` is a pass-through, and asserting it at its input
+          // value of 1 also holds when the field is hardcoded to 1.
+          2,
           { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
         ),
       );
@@ -293,7 +295,7 @@ describe("handleError (error)", () => {
     expect(failures[0]?.sessionId).toBe(agentBase.sessionId);
     expect(failures[0]?.context).toEqual({
       reason: "validation_error",
-      attempt: 1,
+      attempt: 2,
       // 1 from the effect, not the 5 the policy configured.
       maxAttempts: 1,
     });
