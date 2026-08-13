@@ -87,9 +87,11 @@ const AUDIT_CORRELATION_KEYS = [
  * snapshot failed, or the point carries no registration and materializing the
  * context would be pure cost.
  *
- * Values are read with `Reflect.get`, matching what the full snapshot's spread
- * observes: an accessor-defined `traceContext` must reach the audit record, or
- * `publishComposedDecision` drops the event for want of a trace id.
+ * Values are read directly rather than through property descriptors, so an
+ * accessor-defined `traceContext` reaches the audit record instead of leaving
+ * `publishComposedDecision` to drop the event for want of a trace id. Unlike
+ * the full snapshot's spread, `Reflect.get` also observes non-enumerable and
+ * inherited properties, so this path can capture strictly more, never less.
  *
  * One snapshot covers the whole set; a single unsafe field falls back to
  * per-field capture so it cannot suppress the others.

@@ -129,7 +129,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
     expect(composed?.data).toMatchObject(traceContext);
   });
 
-  test("keeps correlation when one field cannot be captured", async () => {
+  test("keeps every capturable field when one cannot be captured", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
       auditEmit: (event, data) => events.push({ name: event.name, data }),
@@ -145,12 +145,46 @@ describe("PolicyEngine unguarded point dispatch", () => {
       runId: traceContext.runId,
       turnIndex: 0,
       traceContext,
+      toolName: "tool:partial",
+      dispatchId: "dispatch-partial",
       // Not capturable; must not suppress the fields beside it.
       resourceDescriptor: new Map([["mutable", true]]) as never,
     });
 
     const composed = events.find(({ name }) => name === PolicyEvent.DecisionComposed.name);
-    expect(composed?.data).toMatchObject(traceContext);
+    expect(composed?.data).toMatchObject({ ...traceContext, resource: "tool:partial" });
+    // The uncapturable field is absent, not half-captured.
+    expect(composed?.data).not.toHaveProperty("resourceDescriptor");
+  });
+
+  /**
+   * `dispatchPoint` is a total function: every caller awaits a verdict. The
+   * unguarded path reads the caller's own object — `Reflect.get` for required
+   * keys, and a `.passthrough()` schema that walks every key — so a hostile
+   * accessor must become a decision, never an exception that bypasses
+   * fail-closed and fail-open alike.
+   */
+  test.each([
+    ["a required key", "sessionId"],
+    ["a correlation key", "traceContext"],
+    ["an unrelated key", "unrelated"],
+  ])("resolves to a verdict when %s throws on read", async (_label, key) => {
+    const engine = PolicyEngine.create();
+    const context: Record<string, unknown> = { sessionId: "s", runId: "r", turnIndex: 0 };
+    Object.defineProperty(context, key, {
+      enumerable: true,
+      get() {
+        throw new Error("hostile accessor");
+      },
+    });
+
+    const decision = await engine.dispatchPoint(
+      "run.turn.pre",
+      context as Policy.PolicyPointInputMap["run.turn.pre"],
+    );
+
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("policy.input_invalid");
   });
 
   /**

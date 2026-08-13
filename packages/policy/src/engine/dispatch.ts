@@ -1,5 +1,5 @@
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { publishComposedDecision } from "./audit";
+import { auditIsConsumed, publishComposedDecision } from "./audit";
 import { auditCorrelationContext, immutablePointSnapshot } from "./context";
 import { COMPOSED_POLICY_ID, composeFinalPointDecision } from "./decisions";
 import {
@@ -38,8 +38,14 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     ctx: object,
     timing: Policy.Timing,
   ): Policy.PolicyDecision {
-    const auditCtx = auditCorrelationContext(ctx, pointId, timing);
     const contractFailure = validatePointContract(pointId, ctx);
+    // Skipped when nothing reads it — the completion-admission engine binds
+    // neither `auditEmit` nor `onDecision`, and `work.complete.pre` is
+    // permanently unguarded, so this is its whole per-dispatch cost.
+    const auditCtx =
+      auditIsConsumed(options) || options.onDecision !== undefined
+        ? auditCorrelationContext(ctx, pointId, timing)
+        : Object.freeze({ pointId, timing });
     const decision =
       contractFailure === undefined
         ? PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID })
@@ -163,16 +169,29 @@ function readAgentType(ctx: object): string | undefined {
   }
 }
 
+/**
+ * Total by construction. On the unguarded path this reads the caller's own
+ * object — `Reflect.get` for the required keys, and a `.passthrough()` schema
+ * that walks every key — so a hostile accessor would otherwise escape
+ * `dispatchPoint` as an exception rather than a verdict. Every caller awaits a
+ * decision; a throw would bypass fail-closed and fail-open alike.
+ */
 function validatePointContract(
   pointId: PolicyPointId,
   ctx: Readonly<object>,
 ): Policy.PolicyDecision | undefined {
   const contract = Policy.PolicyPoint.Registry[pointId];
-  if (contract.requiredContext.some((key) => Reflect.get(ctx, key) === undefined)) {
-    return pointContractDecision(pointId, "policy.context_missing");
-  }
-  if (!Policy.PolicyPoint.InputSchemas[pointId].safeParse(ctx).success) {
+  try {
+    if (contract.requiredContext.some((key) => Reflect.get(ctx, key) === undefined)) {
+      return pointContractDecision(pointId, "policy.context_missing");
+    }
+    if (!Policy.PolicyPoint.InputSchemas[pointId].safeParse(ctx).success) {
+      return pointContractDecision(pointId, "policy.input_invalid");
+    }
+    return undefined;
+  } catch {
+    // Matches the snapshot path, where the same throw is absorbed by
+    // `immutablePointSnapshot` and reported as an invalid input.
     return pointContractDecision(pointId, "policy.input_invalid");
   }
-  return undefined;
 }
