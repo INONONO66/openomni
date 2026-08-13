@@ -2,7 +2,7 @@
 
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Session } from "../src/session";
-import { Bus } from "../src/bus";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
 

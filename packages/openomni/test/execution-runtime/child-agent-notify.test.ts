@@ -8,6 +8,9 @@ import {
   createChildAgentRuntime,
   createChildAgentTool,
 } from "../../src/execution-runtime";
+import { newTraceId } from "@openomni/telemetry";
+
+const PARENT_TRACE_ID = newTraceId();
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
 
@@ -40,7 +43,7 @@ describe("child_agent completion notification", () => {
       model,
       parentMessages: [],
       parentTools: [],
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       injectionQueue,
       createAgent: () => ({ run: async () => successfulResult }),
     });
@@ -58,7 +61,7 @@ describe("child_agent completion notification", () => {
       expect(events).toContain(ChildAgentEvents.Completed.name);
       expect(payloads).toContainEqual(
         expect.objectContaining({
-          traceId: "trace-1",
+          traceId: PARENT_TRACE_ID,
           sessionId: "session-1",
           runId: childId,
           parentRunId: "parent-run",
@@ -85,7 +88,7 @@ describe("child_agent completion notification", () => {
       model,
       parentMessages: [],
       parentTools: [],
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       injectionQueue,
       createAgent: () => ({
         run: async () => {
@@ -122,7 +125,7 @@ describe("child_agent completion notification", () => {
       model,
       parentMessages: [],
       parentTools: [],
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       parentSignal: controller.signal,
       createAgent: () => ({
         run: async () => await new Promise<AgentResult>(() => undefined),

@@ -1,4 +1,4 @@
-import type { Bus } from "../bus/index.js";
+import type { Bus } from "@openomni/telemetry";
 
 interface SafeParseSuccess {
   readonly success: true;

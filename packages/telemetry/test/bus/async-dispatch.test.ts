@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { Bus, BusEvent } from "../../src/bus/index.js";
+import { z } from "zod";
+import { Bus, BusEvent } from "@openomni/telemetry";
 
 describe("Bus async dispatch", () => {
   beforeEach(() => {
@@ -11,7 +12,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("publish() returns immediately (non-blocking)", async () => {
-    const event = BusEvent.define("test:event", (s) => s);
+    const event = BusEvent.define("test:event", z.unknown());
     let handlerCalled = false;
 
     Bus.subscribe(event, () => {
@@ -28,7 +29,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("handler errors are logged and other handlers continue", async () => {
-    const event = BusEvent.define("test:error", (s) => s);
+    const event = BusEvent.define("test:error", z.unknown());
     const results: string[] = [];
 
     const originalWarn = console.warn;
@@ -56,7 +57,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("FIFO order is preserved across multiple publishes", async () => {
-    const event = BusEvent.define("test:order", (s) => s);
+    const event = BusEvent.define("test:order", z.unknown());
     const order: string[] = [];
 
     Bus.subscribe(event, () => {
@@ -79,7 +80,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("handler snapshot prevents mutation during dispatch", async () => {
-    const event = BusEvent.define("test:snapshot", (s) => s);
+    const event = BusEvent.define("test:snapshot", z.unknown());
     const results: string[] = [];
 
     const unsubscribe = Bus.subscribe(event, () => {
@@ -100,7 +101,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("removes empty subscriber sets after the last unsubscribe", async () => {
-    const event = BusEvent.define("test:cleanup", (s) => s);
+    const event = BusEvent.define("test:cleanup", z.unknown());
     const unsubscribe = Bus.subscribe(event, () => undefined);
     expect(Bus.stats().subscriberEventCount).toBe(1);
 

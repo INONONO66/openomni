@@ -131,8 +131,10 @@ export function publishDecisionObserverError(
   err: unknown,
 ): void {
   const traceContext = ctx.traceContext ?? options.traceContext;
+  const traceId = traceContext?.traceId;
+  if (traceId === undefined || traceId.length === 0) return;
   options.auditEmit?.(Operational.Warn, {
-    traceId: traceContext?.traceId ?? crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     ...(traceContext?.sessionId !== undefined && { sessionId: traceContext.sessionId }),
     component: "agent.policy",

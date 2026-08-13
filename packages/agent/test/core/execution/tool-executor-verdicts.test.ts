@@ -69,7 +69,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     );
     const executor = createToolExecutor({
       engine,
-      traceContext: { traceId: "trace-deny", sessionId: "sess-deny" },
+      traceContext: { traceId: "trace-deny", sessionId: "sess-deny", runId: "run-1" },
       toolExecutor: async (call) => {
         calls += 1;
         return { id: "result-deny", toolCallId: call.id, output: "should not run" };
@@ -97,6 +97,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -121,6 +122,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -150,6 +152,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const skipExecutor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine: skipEngine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -172,6 +175,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const abortExecutor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine: abortEngine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -200,6 +204,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -227,6 +232,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -253,6 +259,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
         calls += 1;
@@ -280,6 +287,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
         seenInput = call.input;
@@ -318,6 +326,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => ({
         id: "result-output",
@@ -356,6 +365,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => ({
         id: "result-plain-post",
@@ -398,6 +408,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => ({
         id: "result-denied-post",
@@ -431,6 +442,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       getToolLabels: () => ["source.mcp", "mcp.fixture"],
       toolExecutor: async (call) => ({ id: "result-mcp", toolCallId: call.id, output: "mcp ok" }),
@@ -449,6 +461,7 @@ describe("createToolExecutor effect application", () => {
     // tool runs — never a silent allow.
     let invoked = 0;
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine: PolicyEngine.create(),
       getToolLabels: () => ["source.mcp"],
       toolExecutor: async (call) => {
@@ -491,6 +504,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         toolExecutor: async (call) => {
           calls += 1;
@@ -535,6 +549,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         toolExecutor: async (call) => {
           calls += 1;
@@ -579,6 +594,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         onDecision: (timing, decision) => {
           decisions.push([timing, decision]);
@@ -613,6 +629,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         onDecision: () => {
           throw new Error("observer failed");
@@ -669,6 +686,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         onDecision: async () => {
           throw new Error("async observer failed");

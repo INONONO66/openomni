@@ -4,7 +4,7 @@ Source of truth for [#606](https://github.com/INONONO66/openomni/issues/606). Th
 
 ## Outcome
 
-`@openomni/agent` becomes a ~1,000 LOC turn state machine whose only extension mechanism is the policy point, with a working compaction pipeline and constant-cost policy dispatch. Observation moves out of the ledger package into `@openomni/telemetry`, so `agent` and `llm` carry no dependency on durable storage.
+`@openomni/agent` becomes a turn state machine whose only extension mechanism is the policy point, with a working compaction pipeline and constant-cost policy dispatch. Observation moves out of the ledger package into `@openomni/telemetry`, so `agent` and `llm` carry no dependency on durable storage.
 
 The target is a base harness that survives comparison with [pi](https://github.com/badlogic/pi-mono), [senpi](https://github.com/code-yeongyu/senpi), and [pss-runtime](https://github.com/minpeter/pss-runtime) on its own terms — not by matching their feature surface, but by owning the layer none of them has.
 
@@ -29,12 +29,12 @@ Each rule below is falsifiable. A reviewer should be able to point at a line and
 | package | owns | must not own | boundary test |
 |---|---|---|---|
 | `@openomni/protocol` | vocabulary: schemas, event descriptors, `PolicyPoint.Registry`, `PolicyEffect`, `BusEvent.Sink` | any behavior | importing it does nothing — no side effects, no globals, no I/O |
-| `@openomni/telemetry` *(new)* | the single observation channel: `Bus`, trace-owning scoped emitter, span pairing, `Visibility`, sink combinators | what to record (protocol), where to store (ledger), decisions (policy) | **replacing it with no-ops leaves agent behavior bit-identical** |
+| `@openomni/telemetry` *(new)* | the single observation channel: `Bus`, trace-owning scoped emitter, span pairing, sink combinators. `Visibility` stays a protocol vocabulary term; telemetry applies it, it does not own it | what to record (protocol), where to store (ledger), decisions (policy) | **replacing it with no-ops leaves agent behavior bit-identical** |
 | `@openomni/policy` | the decision kernel: `dispatchPoint`, contract validation, registration/scope/priority, undeclared-effect rejection, composition | policy *content*, when points fire, what reaches the ledger | the engine returns decisions and never applies an effect itself |
 | `@openomni/llm` | one model round trip: providers, catalog, auth, request assembly, stream→message fold, tool-call protocol, token accounting | the conversation loop, tool *execution*, policy, history ownership | when `run()` returns, llm's work is over — "next turn" does not exist inside it |
 | `@openomni/agent` | the turn state machine: run/turn lifecycle, the order and timing of the 12 injection points, effect application, retry control flow, history, counters, spans | tool implementations, MCP, system prompt text, session persistence, compaction *strategy*, default policy content | **zero domain string literals in core files** — no prompt text, tool names, policy names, or magic strings like `"stalled"` |
 
-Consequence worth stating plainly: with `Bus` relocated, `llm` becomes protocol-only and `agent` carries no dependency on durable storage, enforced by `script/check-deps.ts` rather than by convention.
+Consequence worth stating plainly: once the import conversion lands, `llm` depends on protocol and telemetry only, and `agent` carries no dependency on durable storage — and `script/check-deps.ts` can then drop `@openomni/session` from both allowlists, so the boundary is enforced rather than conventional. Relocating `Bus` is what makes that possible; it does not by itself achieve it. Eight of the nine `Bus` imports in `packages/agent/src` still resolve through `@openomni/session`, and both `llm` files do — that conversion is Phase 1b.
 
 ## Decisions
 
@@ -50,6 +50,7 @@ Consequence worth stating plainly: with `Bus` relocated, `llm` becomes protocol-
 | D8 | Speculative compaction overlaps the in-flight model call; **application stays at one deterministic seam** | Computing during the model's network wait is free. Applying at an arbitrary moment is not: it would make two identical runs produce different histories and break resume-by-replay. Compute in background, apply at `run.completion.pre`, record the applied result as the effect. |
 | D9 | Idle warm-up between runs is **openomni's**, not the core's | senpi's `agent_end` warm-up exploits human thinking time. Our workers are headless — there is no idle *inside* a run. Idle exists between runs, which requires a session outliving the run, which is `Wait`/work-item territory. openomni can layer it on the exported pure modules. |
 | D10 | Approval-and-resume is out of scope; `tool.require_approval` stays fail-closed as a denial | Real approval means the run suspends and resumes, which needs durable `Wait` ([#215](https://github.com/INONONO66/openomni/issues/215)). The FSM reserves a state for it. |
+| D11 | Opaque trace ids convert **at the origin**, never in the emitter. No normalizing adapter exists, and a test pins its absence | `requireTraceScope` takes W3C 32-hex; 115 sites across 43 files still write a minted `crypto.randomUUID()` into `traceId` — 115 counting the `?? crypto.randomUUID()` fallbacks alongside the bare assignments. Those are per-line ids wearing a trace's name — each one correlates to exactly one row. A normalizer would make them *look* correlated while leaving every caller minting its own vocabulary, so the shortcut is refused: Phase 1b converts each site to inherit a scope, or to mint via `newTraceId()` where it is a genuine origin. Until then `scope()` is on no production path. |
 
 ## The 12 injection points
 
@@ -91,6 +92,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 |---|---|---|
 | [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
 | — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | 🟨 |
+| — | convert the 115 opaque-`traceId` emit sites (D11): inherit a scope, or mint at a genuine origin | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core
@@ -152,4 +155,6 @@ Beyond AGENTS.md § EXECUTION DISCIPLINE, which applies in full:
 
 - **Every behavior change is pinned red-first.** A test added alongside a fix is verified to fail without the fix. Two defects in Phase 0 were caught this way and one was missed because the test used an accessor that returned rather than one that threw.
 - **A deletion carries its zero-consumer proof in the PR body**, regenerated against the current tree rather than quoted from an issue.
+- **A required field is required in the type, not only at runtime.** Three rounds of review each found a caller that satisfied a required schema by omission, because the guard was a runtime throw behind an optional parameter. `DispatchSubmitOptions.traceId` is required by type; the throw remains only for untyped callers (`Reflect.apply`, JSON-shaped IPC params).
+- **Type-checking blind spots hide exactly this class of defect.** `apps/server`, `packages/agent`, `packages/llm`, `packages/openomni`, `packages/protocol`, and `packages/session` all set `include: ["src"]`, so their tests are never type-checked. A required `traceId` broke 25 `new McpToolProvider()` call sites and a stray argument sat in a `Promise` constructor, both invisible to `check-types`. Bringing those tests under a `tsconfig.test.json` surfaces ~60 further errors and is tracked separately — it is not free, and it is not this PR. Not all of that debt is pre-existing: this PR's own API changes added errors in `agent`, `llm`, `openomni`, and `session` test code that only a test-inclusive config revealed, and they were fixed by running one. A gate that cannot see a file cannot ratchet it.
 - **Adversarial review is a separate session** that re-runs the suites itself and tries to refute the PR body. Phase 0's reviewer returned BLOCK on a real defect the author's green run did not surface.

@@ -126,7 +126,13 @@ describe("PolicyRegistry", () => {
           { id: "missing.optional", required: false },
           { id: "present.policy", required: true },
         ]),
-        { sessionId: "session-1", runId: "run-1", agentName: "primary", auditEmit: Bus.publish },
+        {
+          traceId: "trace-registry-1",
+          sessionId: "session-1",
+          runId: "run-1",
+          agentName: "primary",
+          auditEmit: Bus.publish,
+        },
       );
       await Promise.resolve();
 
@@ -134,7 +140,7 @@ describe("PolicyRegistry", () => {
       expect(registrations[0]?.name).toBe("present.policy");
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
-        traceId: "run-1",
+        traceId: "trace-registry-1",
         sessionId: "session-1",
         component: "agent.policy.registry",
         msg: "optional policy missing",

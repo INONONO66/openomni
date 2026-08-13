@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Execution, Ingress } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
+import { newTraceId } from "@openomni/telemetry";
 
 /**
  * #510 D2b pins (b) and (c) — the worker-run store stops being a live second
@@ -114,6 +115,7 @@ describe("worker-run cutover (#510 D2b)", () => {
 
     await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event: workerEvent("event-cutover-no-rows", parentSessionId),
       coordinator,
     });
@@ -161,6 +163,7 @@ describe("worker-run cutover (#510 D2b)", () => {
     await expect(
       IngressHandlers.handleDirect({
         sessionId,
+        traceContext: { traceId: newTraceId() },
         event: workerEvent("event-cutover-restart"),
         coordinator,
       }),

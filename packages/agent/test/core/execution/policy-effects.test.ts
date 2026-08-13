@@ -2,12 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
 import { PolicyEffectApplier } from "../../../src/core/execution/policy-effects";
 import { createRunState } from "../../../src/core/execution/run-state";
+import { runInput } from "../../helpers/run-input";
 
 describe("PolicyEffectApplier", () => {
   it("preserves assistant provenance for injected prompt messages", () => {
-    const state = createRunState({
-      messages: [{ role: "user", content: "parent request" }],
-    });
+    const state = createRunState(runInput([{ role: "user", content: "parent request" }]));
     const parentID = state.messages.at(-1)?.info.id;
     const decision = PolicyDecision.allow({
       policyId: "test",
@@ -33,9 +32,7 @@ describe("PolicyEffectApplier", () => {
   });
 
   it("chains parent ids across injected prompt messages in the same batch", () => {
-    const state = createRunState({
-      messages: [{ role: "user", content: "parent request" }],
-    });
+    const state = createRunState(runInput([{ role: "user", content: "parent request" }]));
     const decision = PolicyDecision.allow({
       policyId: "test",
       effects: [

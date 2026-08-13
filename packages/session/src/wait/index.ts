@@ -1,5 +1,5 @@
 import { LedgerAppend, Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { Bus } from "../bus";
+import { Bus } from "@openomni/telemetry";
 import { isSqliteBusyError } from "../storage/sqlite-busy";
 import { Storage } from "../storage/storage";
 import { withCreateTimestamps } from "../storage/timestamped-store";

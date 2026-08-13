@@ -34,6 +34,7 @@ declare const Bun: {
 type PackageKey =
   | "protocol"
   | "ipc"
+  | "telemetry"
   | "policy"
   | "session"
   | "llm"
@@ -71,6 +72,15 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageName: "@openomni/protocol",
     allowedDeps: "none",
   },
+  telemetry: {
+    displayName: "telemetry",
+    packageJsonPath: "packages/telemetry/package.json",
+    packageName: "@openomni/telemetry",
+    // Ring-1 observation channel (#606): protocol only. It must stay a leaf —
+    // replacing it with no-ops has to leave observed behavior identical, so it
+    // can never reach for storage or decisions.
+    allowedDeps: new Set(["@openomni/protocol"]),
+  },
   ipc: {
     displayName: "ipc",
     packageJsonPath: "packages/ipc/package.json",
@@ -84,7 +94,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "session",
     packageJsonPath: "packages/session/package.json",
     packageName: "@openomni/session",
-    allowedDeps: new Set(["@openomni/protocol"]),
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
   },
   policy: {
     displayName: "policy",
@@ -96,7 +106,10 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/session"]),
+    // telemetry is ring 1 and llm is ring 2, so the edge runs downward. Only
+    // llm's tests use it today, to mint trace ids through the package that
+    // owns the format rather than hardcoding hex literals beside it.
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry", "@openomni/session"]),
   },
   agent: {
     displayName: "agent",
@@ -106,6 +119,7 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/protocol",
       "@openomni/policy",
       "@openomni/llm",
+      "@openomni/telemetry",
       "@openomni/session",
     ]),
   },
@@ -502,6 +516,7 @@ const TRACKED_DOCS = [
   "AGENTS.md",
   "packages/protocol/AGENTS.md",
   "packages/ipc/AGENTS.md",
+  "packages/telemetry/AGENTS.md",
   "packages/session/AGENTS.md",
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",

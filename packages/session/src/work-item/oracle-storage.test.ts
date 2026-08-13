@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Bus } from "../bus/index.js";
+import { Bus } from "@openomni/telemetry";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
 import { persistCompletedWorkItemFixture } from "../../test/work-item/completed-fixture.js";

@@ -1,5 +1,5 @@
 import type { RunInput } from "@openomni/llm";
-import type { Message, Policy, Sink, Tool } from "@openomni/protocol";
+import type { Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import {
   createBudgetState,
   recordTokenUsage,
@@ -29,6 +29,18 @@ function toMessagesWithParts(
 
   return output;
 }
+
+/**
+ * A run's trace context after the runner has refused an incomplete one. The
+ * three ids are inherited from whatever asked for the run; every downstream
+ * stage takes this type rather than the partial one, so none of them has to
+ * decide what to do about a missing id.
+ */
+export type RunTrace = TraceContext.Type & {
+  readonly traceId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+};
 
 export interface AgentRunBase {
   readonly traceId: string;
@@ -102,8 +114,8 @@ export type ErrorDecision =
   | ({ action: "complete"; errorMessage: string } & Extract<TurnDecision, { kind: "abort" }>)
   | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
 
-export function createRunState(input: ChatAgentInput): RunState {
-  const sessionId = input.traceContext?.sessionId || "runner";
+export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
+  const sessionId = input.traceContext.sessionId;
   return {
     sessionId,
     budgetState: createBudgetState(),

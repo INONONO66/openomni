@@ -48,9 +48,10 @@ export function createToolExecutor(
     traceContext,
     signal,
   } = options;
-  const configuredTraceId = nonEmptyString(traceContext?.traceId) ?? crypto.randomUUID();
-  const configuredSessionId = nonEmptyString(traceContext?.sessionId) ?? crypto.randomUUID();
-  const configuredRunId = nonEmptyString(traceContext?.runId) ?? crypto.randomUUID();
+  // The executor is built inside a turn, which is inside a run that already
+  // refused to start without an identity. Minting one here would give a tool
+  // call its own trace, detached from the run that made it.
+  const configured = requireExecutorTrace(traceContext);
 
   function publishDecisionObserverError(
     activeTraceContext: TraceContext.Type,
@@ -122,9 +123,9 @@ export function createToolExecutor(
     const activeTraceContext = {
       ...traceContext,
       ...callTraceContext,
-      traceId: nonEmptyString(callTraceContext?.traceId) ?? configuredTraceId,
-      sessionId: nonEmptyString(callTraceContext?.sessionId) ?? configuredSessionId,
-      runId: nonEmptyString(callTraceContext?.runId) ?? configuredRunId,
+      traceId: nonEmptyString(callTraceContext?.traceId) ?? configured.traceId,
+      sessionId: nonEmptyString(callTraceContext?.sessionId) ?? configured.sessionId,
+      runId: nonEmptyString(callTraceContext?.runId) ?? configured.runId,
       agentName: nonEmptyString(traceContext?.agentName),
     } satisfies TraceContext.Type;
     const agentName = activeTraceContext.agentName;
@@ -246,6 +247,18 @@ export function createToolExecutor(
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function requireExecutorTrace(
+  traceContext: TraceContext.Type | undefined,
+): Required<Pick<TraceContext.Type, "traceId" | "sessionId" | "runId">> {
+  const traceId = nonEmptyString(traceContext?.traceId);
+  const sessionId = nonEmptyString(traceContext?.sessionId);
+  const runId = nonEmptyString(traceContext?.runId);
+  if (traceId === undefined || sessionId === undefined || runId === undefined) {
+    throw new Error("tool executor requires the run trace context");
+  }
+  return { traceId, sessionId, runId };
 }
 
 // merged from tool-policy-dispatch.ts (250-LOC split refold: single-importer stage)

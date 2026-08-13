@@ -42,7 +42,11 @@ describe("createToolExecutor execution context", () => {
   it("prefers the per-call trace while falling back to the configured cancellation signal", async () => {
     const fallbackController = new AbortController();
     fallbackController.abort("cancelled by run");
-    const fallbackTrace = { traceId: "trace-fallback", sessionId: "session-fallback" };
+    const fallbackTrace = {
+      traceId: "trace-fallback",
+      sessionId: "session-fallback",
+      runId: "run-1",
+    };
     const callTrace = { traceId: "trace-call", sessionId: "session-call", runId: "run-call" };
     let capturedContext: Tool.ExecutionContext | undefined;
     const executor = createToolExecutor({

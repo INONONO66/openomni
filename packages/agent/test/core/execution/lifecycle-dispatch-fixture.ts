@@ -1,14 +1,15 @@
 import type { TraceContext } from "@openomni/protocol";
-import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import {
   createRunState,
   type AgentRunBase,
   type RunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
+import { runInput } from "../../helpers/run-input";
 
-function makeInput(): ChatAgentInput {
-  return { messages: [{ role: "user", content: "hello" }] };
+function makeInput() {
+  return runInput([{ role: "user", content: "hello" }]);
 }
 
 export function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
@@ -20,11 +21,11 @@ export function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfi
 }
 
 export function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 export function makeTrace(): TraceContext.Type {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 export function makeState(): RunState {

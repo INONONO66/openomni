@@ -4,7 +4,8 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, Session, SurfaceKey, TraceContext } from "@openomni/session";
+import { Session, SurfaceKey } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { DEFAULT_DISPATCH_MODEL } from "../dispatch/index.js";
 import { resolveTarget, targetKey } from "./target";
 
@@ -106,7 +107,7 @@ export namespace IngressSessionResolver {
         target: target.kind,
         time: Date.now(),
       });
-      return { session, isNew, trace: TraceContext.child(traceContext, { sessionId: session.id }) };
+      return { session, isNew, trace: { ...traceContext, sessionId: session.id } };
     }
 
     return { session, isNew };

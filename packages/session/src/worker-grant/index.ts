@@ -1,5 +1,5 @@
 import { Communication } from "@openomni/protocol";
-import { Bus } from "../bus";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter, withCreateTimestamps } from "../storage/timestamped-store";
 

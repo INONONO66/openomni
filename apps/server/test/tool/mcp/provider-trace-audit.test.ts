@@ -5,7 +5,9 @@ import { Mcp, Operational, PolicyEvent, ToolExecution } from "@openomni/protocol
 import { McpToolProvider } from "../../../src/tool/mcp";
 import { refreshMcpTools } from "../../../src/tool/mcp/provider-tool-listing";
 import {
+  TEST_BOOT_TRACE_ID,
   collectBusEvents,
+  executionContext,
   installStorageFixture,
   makeTool,
   seedProvider,
@@ -13,26 +15,38 @@ import {
 
 installStorageFixture();
 
-function expectFallbackAuditIdentity(
+/**
+ * The audit identity is the executor's, and a `sessionId` in the tool input
+ * never becomes it. The identity used to be minted here when no context
+ * arrived; it is now inherited, so the same claim is checked against the
+ * inherited value rather than against "some string that is not the spoof".
+ */
+function expectInheritedAuditIdentity(
   events: ReturnType<typeof collectBusEvents>["events"],
   spoofedSessionId: string,
 ): void {
-  const { traceId, sessionId, runId } = events[0]?.payload ?? {};
-  expect(typeof traceId).toBe("string");
-  expect(typeof sessionId).toBe("string");
-  expect(sessionId).not.toBe(spoofedSessionId);
-  expect(typeof runId).toBe("string");
+  const inherited = executionContext().traceContext as {
+    traceId: string;
+    sessionId: string;
+    runId: string;
+  };
+  expect(inherited.sessionId).not.toBe(spoofedSessionId);
   for (const event of events) {
-    expect(event.payload.traceId).toBe(traceId);
-    if (event.name !== Mcp.ToolCompleted.name) {
-      expect(event.payload).toMatchObject({ sessionId, runId });
+    expect(event.payload.traceId).toBe(inherited.traceId);
+    // `Mcp.*` descriptors carry the trace and the server name only; session
+    // and run attribution lives on the policy and tool-execution events.
+    if (!event.name.startsWith("mcp.")) {
+      expect(event.payload).toMatchObject({
+        sessionId: inherited.sessionId,
+        runId: inherited.runId,
+      });
     }
   }
 }
 
 describe("McpToolProvider canonical policy trace", () => {
   it("uses the active trace for every successful MCP execution event", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
     const controller = new AbortController();
@@ -92,7 +106,7 @@ describe("McpToolProvider canonical policy trace", () => {
   });
 
   it("uses the active trace for every blocked MCP execution event", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool]);
     const traceContext: TraceContext.Type = {
@@ -128,18 +142,48 @@ describe("McpToolProvider canonical policy trace", () => {
     }
   });
 
-  it("uses one fallback audit identity for a successful context-free call", async () => {
-    const provider = new McpToolProvider();
+  /**
+   * An MCP call is never a trace origin. Without the dispatching run's trace
+   * there is nothing to attribute the audit record to, so the call is refused
+   * rather than filed under an identity no reader can reach.
+   */
+  it("refuses a call that arrives without the dispatching trace", async () => {
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
+    const { tool, execute } = makeTool("search.query");
+    seedProvider(provider, [tool], ["search"]);
+
+    for (const traceContext of [
+      undefined,
+      { traceId: "t", sessionId: "s" },
+      { traceId: "", sessionId: "s", runId: "r" },
+      { traceId: "t", sessionId: "", runId: "r" },
+      { traceId: "t", sessionId: "s", runId: "" },
+    ]) {
+      await expect(
+        provider.execute(
+          { id: "call-mcp-traceless", tool: "search_query", input: {} },
+          traceContext === undefined ? undefined : { traceContext },
+        ),
+      ).rejects.toThrow("mcp tool execution requires the dispatching run trace");
+    }
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("keeps one inherited audit identity for a successful call", async () => {
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
     const { events, stop } = collectBusEvents();
 
     try {
-      await provider.execute({
-        id: "call-mcp-fallback",
-        tool: "search_query",
-        input: { sessionId: "session-mcp-fallback" },
-      });
+      await provider.execute(
+        {
+          id: "call-mcp-fallback",
+          tool: "search_query",
+          input: { sessionId: "spoofed-session" },
+        },
+        executionContext(),
+      );
 
       const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
       expect(auditEvents.map((event) => event.name)).toEqual([
@@ -148,13 +192,13 @@ describe("McpToolProvider canonical policy trace", () => {
         PolicyEvent.ActionRequested.name,
         Mcp.ToolCompleted.name,
       ]);
-      expectFallbackAuditIdentity(auditEvents, "session-mcp-fallback");
+      expectInheritedAuditIdentity(auditEvents, "spoofed-session");
     } finally {
       stop();
     }
   });
 
-  it("uses one fallback trace across provider and real MCP client events", async () => {
+  it("keeps one inherited trace across provider and real MCP client events", async () => {
     // Given
     const client = new McpClient(
       {
@@ -181,24 +225,27 @@ describe("McpToolProvider canonical policy trace", () => {
         },
       },
     );
-    const provider = new McpToolProvider();
-    const tools = await refreshMcpTools(new Map([["search", client]]));
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
+    const tools = await refreshMcpTools(new Map([["search", client]]), TEST_BOOT_TRACE_ID);
     seedProvider(provider, tools, ["search"]);
     const { events, stop } = collectBusEvents();
 
     try {
       // When
-      const result = await provider.execute({
-        id: "call-mcp-cross-layer-fallback",
-        tool: "search_query",
-        input: { sessionId: "spoofed-session" },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-mcp-cross-layer-fallback",
+          tool: "search_query",
+          input: { sessionId: "spoofed-session" },
+        },
+        executionContext(),
+      );
 
       // Then
       expect(result.output).toBe("search ok");
       // #522 defect 2: no ToolExecution.Completed at this layer — the
       // worker-side executor owns it. The provider's own audit trail keeps
-      // one fallback trace across policy and MCP-domain events.
+      // one inherited trace across policy and MCP-domain events.
       const relevantNames = new Set([
         PolicyEvent.ActionRequested.name,
         Mcp.ToolCalled.name,
@@ -211,33 +258,27 @@ describe("McpToolProvider canonical policy trace", () => {
         Mcp.ToolCalled.name,
         Mcp.ToolCompleted.name,
       ]);
-      const traceIds = new Set(relevantEvents.map((event) => event.payload.traceId));
-      expect(traceIds.size).toBe(1);
-      const [traceId] = traceIds;
-      expect(typeof traceId).toBe("string");
-      expect(traceId).not.toBe("");
-
-      const action = relevantEvents[0]?.payload;
-      expect(action?.sessionId).not.toBe("spoofed-session");
-      expect(typeof action?.sessionId).toBe("string");
-      expect(typeof action?.runId).toBe("string");
+      expectInheritedAuditIdentity(relevantEvents, "spoofed-session");
     } finally {
       stop();
     }
   });
 
-  it("uses one fallback audit identity for a blocked context-free call", async () => {
-    const provider = new McpToolProvider();
+  it("keeps one inherited audit identity for a blocked call", async () => {
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool]);
     const { events, stop } = collectBusEvents();
 
     try {
-      await provider.execute({
-        id: "call-mcp-fallback-blocked",
-        tool: "search_query",
-        input: { sessionId: "session-mcp-fallback-blocked" },
-      });
+      await provider.execute(
+        {
+          id: "call-mcp-fallback-blocked",
+          tool: "search_query",
+          input: { sessionId: "spoofed-session" },
+        },
+        executionContext(),
+      );
 
       const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
       expect(auditEvents.map((event) => event.name)).toEqual([
@@ -245,7 +286,7 @@ describe("McpToolProvider canonical policy trace", () => {
         PolicyEvent.DecisionComposed.name,
         PolicyEvent.ActionBlocked.name,
       ]);
-      expectFallbackAuditIdentity(auditEvents, "session-mcp-fallback-blocked");
+      expectInheritedAuditIdentity(auditEvents, "spoofed-session");
       expect(execute).not.toHaveBeenCalled();
     } finally {
       stop();

@@ -3,7 +3,7 @@ import { buildToolCatalog, resolveToolSelection } from "../tool/catalog.js";
 import { createToolExecutor } from "../tool/executor.js";
 import type { NativeTool } from "../tool/types.js";
 import { publishChildAgentStarted } from "./events.js";
-import { createDelegationPolicyRuntime } from "./policy.js";
+import { createDelegationPolicyRuntime, type ResolvedTraceContext } from "./policy.js";
 import { settleCancelled, settleCompleted, settleFailed } from "./settlement.js";
 import type { ChildAgentRuntime, ChildAgentRuntimeOptions, ChildRecord } from "./types.js";
 import {
@@ -39,20 +39,19 @@ function getRecords(
   return selected;
 }
 
-function childTraceContext(
-  parent: TraceContext.Type | undefined,
-  childId: string,
-): TraceContext.Type | undefined {
-  if (!parent) return undefined;
+/**
+ * A child run is the parent's trace with the child's own run id. Both helpers
+ * take the parent's resolved context, so neither can be handed a partial one.
+ */
+function childTraceContext(parent: ResolvedTraceContext, childId: string): TraceContext.Type {
   return { ...parent, runId: childId };
 }
 
 function childToolRuntime(
-  traceContext: TraceContext.Type | undefined,
+  traceContext: ResolvedTraceContext,
   childId: string,
   workspaceRoot: string | undefined,
 ) {
-  if (!traceContext?.sessionId) return undefined;
   return {
     sessionId: traceContext.sessionId,
     runId: childId,

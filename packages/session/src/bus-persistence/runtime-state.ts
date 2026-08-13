@@ -1,4 +1,4 @@
-import { Bus, BusEvent } from "../bus/index.js";
+import { Bus, BusEvent } from "@openomni/telemetry";
 import { writeOperationalToStdout } from "./operational-logging.js";
 import { parsePayload } from "./payload.js";
 import { flushPersistQueue, persist } from "./persistence-writer.js";

@@ -8,6 +8,15 @@ import { bashTool } from "./tool/builtins/bash.js";
 import type { NativeTool } from "./tool/types.js";
 import { WorkspaceLock } from "./workspace-lock.js";
 
+/**
+ * The trace the real caller attaches to every tool call. The executor inherits
+ * it rather than mint one, so a test that omits it exercises a path production
+ * does not have.
+ */
+const RUN_TRACE = {
+  traceContext: { traceId: "trace-executor-test", sessionId: "session-1", runId: "run-1" },
+} as const;
+
 function makeWorkspace(): string {
   return `/tmp/test-workspace-${crypto.randomUUID()}`;
 }
@@ -141,7 +150,7 @@ describe("createToolExecutor — workspace lock integration", () => {
     });
 
     const result = await Promise.race([
-      executor({ id: "c1", tool: "read", input: {} }),
+      executor({ id: "c1", tool: "read", input: {} }, RUN_TRACE),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("blocked")), 300)),
     ]);
 
@@ -162,7 +171,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace },
     });
 
-    const toolDone = executor({ id: "c2", tool: "write", input: {} });
+    const toolDone = executor({ id: "c2", tool: "write", input: {} }, RUN_TRACE);
 
     order.push("before-release");
     WorkspaceLock.release(workspace, "ext");
@@ -187,7 +196,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace },
     });
 
-    const result = await executor({ id: "c3", tool: "write", input: {} });
+    const result = await executor({ id: "c3", tool: "write", input: {} }, RUN_TRACE);
     expect(result.isError).toBe(true);
     expect(result.output).toBe("boom");
 
@@ -217,7 +226,7 @@ describe("createToolExecutor — workspace lock integration", () => {
     try {
       const result = await executor(
         { id: "pre-aborted", tool: "write", input: {} },
-        { signal: controller.signal },
+        { ...RUN_TRACE, signal: controller.signal },
       );
       expect(result.isError).toBe(true);
       expect(result.output).toBe("Tool execution aborted");
@@ -248,7 +257,7 @@ describe("createToolExecutor — workspace lock integration", () => {
     try {
       const resultPromise = executor(
         { id: "abort-while-waiting", tool: "write", input: {} },
-        { signal: controller.signal },
+        { ...RUN_TRACE, signal: controller.signal },
       );
       await Bun.sleep(10);
       controller.abort();
@@ -278,7 +287,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
     });
 
-    const result = await executor({ id: "c4", tool: "write", input: {} });
+    const result = await executor({ id: "c4", tool: "write", input: {} }, RUN_TRACE);
     expect(result.isError).toBe(true);
     expect(result.output).toBe("timeout after 10ms");
 
@@ -323,14 +332,16 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
     });
 
-    const first = await executor({ id: "c4-first", tool: "write", input: {} });
+    const first = await executor({ id: "c4-first", tool: "write", input: {} }, RUN_TRACE);
     expect(first.output).toBe("timeout after 10ms");
 
     let secondDone = false;
-    const second = executor({ id: "c4-second", tool: "write", input: {} }).then((result) => {
-      secondDone = true;
-      return result;
-    });
+    const second = executor({ id: "c4-second", tool: "write", input: {} }, RUN_TRACE).then(
+      (result) => {
+        secondDone = true;
+        return result;
+      },
+    );
     await Bun.sleep(20);
     expect(secondStarted).toBe(false);
     expect(secondDone).toBe(false);
@@ -353,7 +364,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 }, postTimeoutSettleGraceMs: 20 },
     });
 
-    const result = await executor({ id: "c4-grace", tool: "write", input: {} });
+    const result = await executor({ id: "c4-grace", tool: "write", input: {} }, RUN_TRACE);
     expect(result.isError).toBe(true);
     expect(result.output).toBe("timeout after 10ms");
 
@@ -391,7 +402,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace, postTimeoutSettleGraceMs: 20 },
     });
 
-    const result = await executor({ id: "c4-unknown", tool: "write", input: {} });
+    const result = await executor({ id: "c4-unknown", tool: "write", input: {} }, RUN_TRACE);
     expect(result.isError).toBe(true);
     expect(result.settlement).toBe("unknown");
 
@@ -422,7 +433,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace, postTimeoutSettleGraceMs: 20 },
     });
 
-    await executor({ id: "agent-call-id", tool: "write", input: {} });
+    await executor({ id: "agent-call-id", tool: "write", input: {} }, RUN_TRACE);
     WorkspaceLock.clearUnsafe(workspace, "unrelated-call");
 
     const blocked = await WorkspaceLock.acquire(workspace, "probe-wrong-call", 50).catch(
@@ -461,7 +472,7 @@ describe("createToolExecutor — workspace lock integration", () => {
       config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
     });
 
-    const result = await executor({ id: "c5", tool: "write", input: {} });
+    const result = await executor({ id: "c5", tool: "write", input: {} }, RUN_TRACE);
     expect(result.isError).toBe(true);
     expect(result.output).toBe("timeout after 10ms");
 
@@ -479,11 +490,14 @@ describe("createToolExecutor — workspace lock integration", () => {
         config: { workspaceRoot: workspace, timeoutMs: { tier2: 20 } },
       });
 
-      const result = await executor({
-        id: "c6",
-        tool: "bash",
-        input: { command: "(sleep 0.2; touch late-write.txt) & wait" },
-      });
+      const result = await executor(
+        {
+          id: "c6",
+          tool: "bash",
+          input: { command: "(sleep 0.2; touch late-write.txt) & wait" },
+        },
+        RUN_TRACE,
+      );
       await Bun.sleep(300);
 
       expect(result.isError).toBe(true);

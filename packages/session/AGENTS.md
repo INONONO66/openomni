@@ -1,6 +1,8 @@
 # packages/session
 
-Durable state substrate: session lifecycle, message/part storage, event bus + hash-chained bus persistence, trace context, artifacts, audit records, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
+Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+
+`Bus` itself moved to `@openomni/telemetry` (#606) — this package re-exports it for compatibility while consumers migrate, and keeps the durable journal that subscribes to it.
 
 This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in `@openomni/openomni`.
 
@@ -11,7 +13,6 @@ This package stores facts; the kernel decides their product meaning. Communicati
 ```
 src/
 ├── index.ts              # Package barrel — re-exports all namespaces
-├── bus/                  # Bus pub/sub (Bus.publish / Bus.subscribe) + typed event descriptors
 ├── session/
 │   ├── index.ts          # Session namespace barrel: public Session.* API re-exports
 │   ├── events.ts         # Session bus event descriptors
@@ -27,13 +28,11 @@ src/
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 ├── bus-persistence/      # Durable hash-chained bus event journal + BusQuery (stats/history/verifyChainIntegrity)
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
-├── audit/                # Audit record store
 ├── blacklist/            # Blacklist entry store (absolute deny gate data)
 ├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
 ├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
 ├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
 ├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
-├── trace/                # TraceContext helpers
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs

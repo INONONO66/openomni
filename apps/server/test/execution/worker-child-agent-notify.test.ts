@@ -5,6 +5,10 @@ import type { Tool } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import type { WorkerRunState } from "../../src/execution/worker-runner-types";
 import { WorkerRunner } from "../../src/execution/worker-runner";
+import {
+  createValidRequest as createSharedValidRequest,
+  toolCallContext,
+} from "./worker-runner-fixture";
 
 type SpawnRunOptions = Parameters<typeof WorkerRunner.spawnRun>[0];
 type WorkerRunnerEnvironment = Omit<SpawnRunOptions, "params" | "respond">;
@@ -51,12 +55,7 @@ function createSpawnOptions(
 
 function createValidRequest(): Record<string, unknown> {
   return {
-    authToken: "token",
-    runId: "run-1",
-    sessionId: "session-1",
-    mode: "direct",
-    prompt: "hello",
-    model: { provider: "test", id: "test" },
+    ...createSharedValidRequest(),
     tools: [{ name: "child_agent", inputSchema: {} }],
   };
 }
@@ -91,21 +90,27 @@ describe("WorkerRunner child agent completion notification", () => {
                 }),
               );
               if (!config.toolExecutor) throw new Error("tool executor missing");
-              const spawn = await config.toolExecutor({
-                id: "spawn-child",
-                tool: "child_agent",
-                input: {
-                  action: "spawn",
-                  prompt: "background check",
-                  notifyOnComplete: true,
-                },
-              } satisfies Tool.Call);
+              const spawn = await config.toolExecutor(
+                {
+                  id: "spawn-child",
+                  tool: "child_agent",
+                  input: {
+                    action: "spawn",
+                    prompt: "background check",
+                    notifyOnComplete: true,
+                  },
+                } satisfies Tool.Call,
+                toolCallContext(),
+              );
               const childId = JSON.parse(spawn.output).childId;
-              await config.toolExecutor({
-                id: "await-child",
-                tool: "child_agent",
-                input: { action: "await", ids: [childId] },
-              } satisfies Tool.Call);
+              await config.toolExecutor(
+                {
+                  id: "await-child",
+                  tool: "child_agent",
+                  input: { action: "await", ids: [childId] },
+                } satisfies Tool.Call,
+                toolCallContext(),
+              );
               injectedResponses.push(...injectionQueue.drain("run-1"));
               return successfulResult;
             },

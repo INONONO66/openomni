@@ -1,23 +1,26 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, type TraceContext } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
+import { streamAgent } from "../../../src/core/execution/runner";
 import {
   createRunState,
   type AgentRunBase,
   type RunState,
+  type RunTrace,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
 import { handleCompact, handleStop } from "../../../src/core/execution/turn-outcome";
 import { deny } from "../../helpers/policy-decision";
+import { runInput } from "../../helpers/run-input";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
 
-function makeInput(): ChatAgentInput {
-  return { messages: [{ role: "user", content: "hello" }] };
+function makeInput() {
+  return runInput([{ role: "user", content: "hello" }]);
 }
 
 function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
@@ -33,11 +36,11 @@ function makeState(): RunState {
 }
 
 function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
 }
 
-function makeTrace(): TraceContext.Type {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+function makeTrace(): RunTrace {
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
@@ -46,6 +49,7 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
       messages: [],
       tools: [],
       model: providerModel,
+      trace: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       maxSteps: 24,
     },
     trackingSink: {
@@ -75,6 +79,30 @@ function expectComplete(event: AgentEvent | null): Extract<AgentEvent, { type: "
 }
 
 describe("execution helper deny verdicts", () => {
+  /**
+   * The guard the whole `runInput` helper exists to satisfy. A run whose
+   * identity was invented on its behalf emits events that correlate to
+   * nothing, and the caller never learns it forgot — so the runner refuses
+   * rather than mints, and this is what holds that true.
+   */
+  it("refuses a run that cannot name its trace, session, or run", async () => {
+    for (const [missing, traceContext] of [
+      ["traceId, sessionId, runId", undefined],
+      ["sessionId, runId", { traceId: "trace-1" }],
+      ["runId", { traceId: "trace-1", sessionId: "sess-1" }],
+    ] as const) {
+      const stream = streamAgent(
+        {
+          messages: [{ role: "user", content: "hello" }],
+          ...(traceContext ? { traceContext } : {}),
+        },
+        makeConfig(),
+      );
+      await expect(stream.next()).rejects.toThrow(
+        `agent run requires a trace context with ${missing}`,
+      );
+    }
+  });
   it("fail-closes run.start deny before execution", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();

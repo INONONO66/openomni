@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { z } from "zod";
-import { Bus, BusEvent } from "../../src/bus/index.js";
+import { Bus, BusEvent } from "@openomni/telemetry";
 
 describe("Bus.subscribe match filter", () => {
   beforeEach(() => {

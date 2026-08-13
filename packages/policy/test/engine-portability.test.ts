@@ -19,14 +19,26 @@ function createDispatchContext() {
   };
 }
 
+/**
+ * An engine that emits audit has to know the trace it is emitting under: the
+ * publishers return early rather than mint one, so a `traceContext` is not
+ * decoration here — without it there is nothing to observe.
+ */
 function createAuditedEngine() {
   const events: Array<{ name: string; data: unknown }> = [];
   const engine = PolicyEngine.create({
+    traceContext: { traceId: "trace-portability", sessionId: "session-portability" },
     auditEmit: (event, data) => {
       events.push({ name: event.name, data });
     },
   });
   return { engine, events };
+}
+
+function debugEvent(
+  events: ReadonlyArray<{ name: string; data: unknown }>,
+): { name: string; data: unknown } | undefined {
+  return events.find((event) => event.name === Operational.Debug.name);
 }
 
 function capturedRegistrationError(register: () => void): PolicyRegistrationError {
@@ -150,14 +162,19 @@ describe("PolicyEngine portability", () => {
 
     expect(decision1.verdict).toBe("allow");
     expect(decision2.verdict).toBe("deny");
-    expect(events1).toHaveLength(1);
-    expect(events2).toHaveLength(1);
-    expect(events1[0]?.data).toMatchObject({
+    // An audited dispatch emits the middleware debug plus the two policy
+    // events; the count is pinned so a lost event is a failure, not a silence.
+    expect(events1).toHaveLength(3);
+    expect(events2).toHaveLength(3);
+    expect(debugEvent(events1)?.data).toMatchObject({
       context: { name: "policy-1", verdict: "allow" },
     });
-    expect(events2[0]?.data).toMatchObject({
+    expect(debugEvent(events2)?.data).toMatchObject({
       context: { name: "policy-2", verdict: "deny" },
     });
+    // ...and neither engine ever observes the other's registration.
+    expect(JSON.stringify(events1)).not.toContain("policy-2");
+    expect(JSON.stringify(events2)).not.toContain("policy-1");
   });
 
   it("dispatches policy and fires audit callback without Bus", async () => {

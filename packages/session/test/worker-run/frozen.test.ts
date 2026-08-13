@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
-import { Bus } from "../../src/bus/index";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkerRun } from "../../src/worker-run/index";

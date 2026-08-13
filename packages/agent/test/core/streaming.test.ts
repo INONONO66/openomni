@@ -8,6 +8,7 @@ import {
   mockProviderModel,
   type MockLlmFn,
 } from "../helpers/mock-llm";
+import { runInput } from "../helpers/run-input";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -28,9 +29,7 @@ const defaultConfig = {
   llm: mockLlm,
 };
 
-const defaultInput = {
-  messages: [{ role: "user" as const, content: "hello" }],
-};
+const defaultInput = runInput([{ role: "user" as const, content: "hello" }]);
 
 async function collectEvents(
   agent: ReturnType<typeof ChatAgent.create>,

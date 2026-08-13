@@ -23,6 +23,8 @@ export type ToolCallResult = Tool.Result;
 
 export type InboundWaitParams = {
   workerId: string;
+  /** The trace of the worker run that is asking. Never minted by the handler. */
+  traceId: string;
   sessionId: string;
   callId?: string;
   runId?: string;

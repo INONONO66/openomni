@@ -7,6 +7,9 @@ import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
 } from "../../src/execution-runtime";
+import { newTraceId } from "@openomni/telemetry";
+
+const PARENT_TRACE_ID = newTraceId();
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
 const successfulResult: AgentResult = {
@@ -48,6 +51,7 @@ describe("child agent delegation terminal policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       delegationPolicies: [observingPolicy(contexts)],
       createAgent: () => ({ run: async () => successfulResult }),
     });
@@ -91,6 +95,7 @@ describe("child agent delegation terminal policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       delegationPolicies: [observingPolicy(contexts)],
       createAgent: () => ({
         run: async () => {
@@ -116,6 +121,7 @@ describe("child agent delegation terminal policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       delegationPolicies: [observingPolicy(contexts)],
       createAgent: () => ({ run: () => new Promise<AgentResult>(() => undefined) }),
     });
@@ -140,6 +146,7 @@ describe("child agent delegation terminal policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       parentSignal: parentController.signal,
       awaitTimeoutMs: 25,
       delegationPolicies: [observingPolicy(contexts)],
@@ -186,7 +193,7 @@ describe("child agent delegation terminal policy", () => {
               }
             : [],
         parentSignal: parentController.signal,
-        traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+        traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
         delegationPolicies: [observingPolicy(contexts)],
         createAgent: (config) => {
           childSignal = config.signal;
@@ -230,6 +237,7 @@ describe("child agent delegation terminal policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       delegationPolicies: [
         {
           kind: "point",

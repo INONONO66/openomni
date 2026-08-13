@@ -19,6 +19,7 @@ export function createWorkerDispatchRuntime(options: {
   readonly server: WorkerRunIpcServer;
   readonly ipcAuthToken: string;
   readonly workerId: string;
+  readonly traceId: string;
   readonly sessionId: string;
   readonly runId: string;
   readonly workspaceRoot?: string;
@@ -51,6 +52,7 @@ export function createWorkerDispatchRuntime(options: {
           {
             authToken: options.ipcAuthToken,
             workerId: options.workerId,
+            traceId: options.traceId,
             sessionId,
             runId,
             callId,
@@ -78,7 +80,7 @@ export function createWorkerDispatchRuntime(options: {
 
   runtime.register("resident.ask", handler);
   return {
-    submit(input, context = {}) {
+    submit(input, context) {
       return runtime.submit(input, {
         ...context,
         sessionId: context.sessionId ?? options.sessionId,

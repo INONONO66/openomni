@@ -5,13 +5,19 @@ import type { Tool } from "@openomni/protocol";
 import { Mcp } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
-import { installStorageFixture, makeTool, seedProvider } from "./provider-test-fixture";
+import {
+  TEST_BOOT_TRACE_ID,
+  executionContext,
+  installStorageFixture,
+  makeTool,
+  seedProvider,
+} from "./provider-test-fixture";
 
 installStorageFixture();
 
 describe("McpToolProvider", () => {
   it("emits Mcp.ToolCompleted event on successful tool execution", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
@@ -21,11 +27,14 @@ describe("McpToolProvider", () => {
     });
 
     try {
-      const result = await provider.execute({
-        id: "call-success",
-        tool: "search_query",
-        input: { query: "test" },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-success",
+          tool: "search_query",
+          input: { query: "test" },
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeFalsy();
       expect(publishedEvents).toHaveLength(1);
@@ -50,7 +59,7 @@ describe("McpToolProvider", () => {
   });
 
   it("does not emit Mcp.ToolCompleted on guard-denied execution", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
@@ -60,11 +69,14 @@ describe("McpToolProvider", () => {
     });
 
     try {
-      const result = await provider.execute({
-        id: "call-denied",
-        tool: "ghost_query",
-        input: {},
-      });
+      const result = await provider.execute(
+        {
+          id: "call-denied",
+          tool: "ghost_query",
+          input: {},
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeTruthy();
       expect(publishedEvents).toHaveLength(0);
@@ -74,7 +86,7 @@ describe("McpToolProvider", () => {
   });
 
   it("does not emit Mcp.ToolCompleted on error result", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const execute = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
         id: call.id,
@@ -100,11 +112,14 @@ describe("McpToolProvider", () => {
     });
 
     try {
-      const result = await provider.execute({
-        id: "call-error",
-        tool: "search_query",
-        input: {},
-      });
+      const result = await provider.execute(
+        {
+          id: "call-error",
+          tool: "search_query",
+          input: {},
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeTruthy();
       expect(publishedEvents).toHaveLength(0);

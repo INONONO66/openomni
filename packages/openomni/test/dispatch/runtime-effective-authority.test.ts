@@ -4,6 +4,9 @@ import { BlacklistStore, Storage, WorkerGrantStore } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createWorkerRunFixture, input, resetDispatchTestState } from "./runtime-test-fixtures";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 describe("DispatchRuntime", () => {
   beforeEach(resetDispatchTestState);
 
@@ -35,6 +38,7 @@ describe("DispatchRuntime", () => {
         payload: "hello",
       },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-blacklist",
         runId: "run-blacklist",
         agentName: "resident",
@@ -72,6 +76,7 @@ describe("DispatchRuntime", () => {
     runtime.register("resident.ask", () => ({ output: "answer" }));
 
     const result = await runtime.submit(input("resident.ask"), {
+      traceId: TEST_DISPATCH_TRACE_ID,
       sessionId: "session-1",
       runId: "run-1",
       actorKind: "resident",
@@ -111,7 +116,7 @@ describe("DispatchRuntime", () => {
 
     const result = await runtime.submit(
       { action: "custom.echo", target: { kind: "system" }, payload: "secret text" },
-      { sessionId: "session-unknown", runId: "run-unknown" },
+      { traceId: TEST_DISPATCH_TRACE_ID, sessionId: "session-unknown", runId: "run-unknown" },
     );
 
     const authority = decisions.find(
@@ -150,7 +155,12 @@ describe("DispatchRuntime", () => {
         target: { kind: "worker", sessionId: "child-session" },
         payload: "follow up",
       },
-      { sessionId: "parent-session", runId: "run-1", agentName: "worker" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "parent-session",
+        runId: "run-1",
+        agentName: "worker",
+      },
     );
 
     const authority = decisions.find(
@@ -171,7 +181,11 @@ describe("DispatchRuntime", () => {
 
     const result = await runtime.submit(
       { action: "custom.echo", target: { kind: "system" }, payload: "secret text" },
-      { sessionId: "session-unknown-action", runId: "run-unknown-action" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-unknown-action",
+        runId: "run-unknown-action",
+      },
     );
 
     expect(result.status).toBe("denied");

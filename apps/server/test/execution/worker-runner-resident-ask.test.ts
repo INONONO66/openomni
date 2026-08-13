@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";
-import { createSpawnOptions, createValidRequest, successfulResult } from "./worker-runner-fixture";
+import {
+  createSpawnOptions,
+  createValidRequest,
+  successfulResult,
+  toolCallContext,
+} from "./worker-runner-fixture";
 
 describe("WorkerRunner", () => {
   it("routes dispatch resident.ask wait requests through worker.inbound_wait IPC", async () => {
@@ -41,16 +46,19 @@ describe("WorkerRunner", () => {
           createAgent: (options) => ({
             async run() {
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              inboundResult = await options.toolExecutor({
-                id: "agent-inbound-call",
-                tool: "dispatch",
-                input: {
-                  action: "resident.ask",
-                  target: { kind: "resident" },
-                  payload: "Need approval",
-                  wait: true,
+              inboundResult = await options.toolExecutor(
+                {
+                  id: "agent-inbound-call",
+                  tool: "dispatch",
+                  input: {
+                    action: "resident.ask",
+                    target: { kind: "resident" },
+                    payload: "Need approval",
+                    wait: true,
+                  },
                 },
-              });
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),
@@ -112,16 +120,19 @@ describe("WorkerRunner", () => {
           createAgent: (options) => ({
             async run() {
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              dispatchResult = await options.toolExecutor({
-                id: "agent-dispatch-call",
-                tool: "dispatch",
-                input: {
-                  action: "resident.ask",
-                  target: { kind: "worker", sessionId: "owner-hint-worker-session" },
-                  payload: "try to route owner directly",
-                  wait: true,
+              dispatchResult = await options.toolExecutor(
+                {
+                  id: "agent-dispatch-call",
+                  tool: "dispatch",
+                  input: {
+                    action: "resident.ask",
+                    target: { kind: "worker", sessionId: "owner-hint-worker-session" },
+                    payload: "try to route owner directly",
+                    wait: true,
+                  },
                 },
-              });
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),

@@ -12,6 +12,7 @@ function createAbortError(): Error {
 
 export async function refreshMcpTools(
   clients: ReadonlyMap<string, McpClientLike>,
+  traceId: string,
 ): Promise<NativeTool[]> {
   const tools: NativeTool[] = [];
   for (const [serverName, client] of clients) {
@@ -36,7 +37,7 @@ export async function refreshMcpTools(
       }
     } catch (err) {
       Bus.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "failed to list tools from mcp server",

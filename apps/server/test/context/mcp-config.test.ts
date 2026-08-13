@@ -6,6 +6,9 @@ import { Operational, type McpServerConfig } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpConfigLoader } from "../../src/context/mcp-config";
 
+/** Discovery runs during boot and reports under the boot's trace. */
+const TEST_BOOT_TRACE_ID = "trace-boot-test";
+
 let tempRoot: string;
 
 async function flushBus(): Promise<void> {
@@ -28,7 +31,7 @@ describe("McpConfigLoader.discover", () => {
   it("returns null when .openomni/mcp.json does not exist", () => {
     const dir = join(tempRoot, "empty-workspace");
     mkdirSync(dir, { recursive: true });
-    expect(McpConfigLoader.discover(dir)).toBeNull();
+    expect(McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID)).toBeNull();
   });
 
   it("reads servers from { servers: [...] } format", () => {
@@ -41,7 +44,7 @@ describe("McpConfigLoader.discover", () => {
     ];
     writeFileSync(join(openomniDir, "mcp.json"), JSON.stringify({ servers }), "utf-8");
 
-    const result = McpConfigLoader.discover(dir);
+    const result = McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID);
     expect(result).toEqual(servers);
   });
 
@@ -62,7 +65,7 @@ describe("McpConfigLoader.discover", () => {
     ];
     writeFileSync(join(openomniDir, "mcp.json"), JSON.stringify(servers), "utf-8");
 
-    const result = McpConfigLoader.discover(dir);
+    const result = McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID);
     expect(result).toEqual(servers);
   });
 
@@ -72,7 +75,7 @@ describe("McpConfigLoader.discover", () => {
     mkdirSync(openomniDir, { recursive: true });
     writeFileSync(join(openomniDir, "mcp.json"), "{ not valid json", "utf-8");
 
-    expect(McpConfigLoader.discover(dir)).toBeNull();
+    expect(McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID)).toBeNull();
   });
 
   it("drops invalid server entries through the protocol MCP schema", async () => {
@@ -91,7 +94,7 @@ describe("McpConfigLoader.discover", () => {
       "utf-8",
     );
 
-    expect(McpConfigLoader.discover(dir)).toEqual([valid]);
+    expect(McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID)).toEqual([valid]);
     await flushBus();
     unsubscribe();
     expect(warnings).toContainEqual(
@@ -119,7 +122,7 @@ describe("McpConfigLoader.discover", () => {
       "utf-8",
     );
 
-    expect(McpConfigLoader.discover(dir)).toEqual([]);
+    expect(McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID)).toEqual([]);
     await flushBus();
     unsubscribe();
     expect(warnings).toContainEqual(
@@ -202,8 +205,8 @@ describe("McpConfigLoader caching", () => {
       JSON.stringify([{ name: "s1", transport: "stdio", command: "node" }]),
     );
 
-    const first = McpConfigLoader.discover(dir);
-    const second = McpConfigLoader.discover(dir);
+    const first = McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID);
+    const second = McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID);
     expect(second).toEqual(first);
     expect(first).toHaveLength(1);
   });
@@ -212,7 +215,7 @@ describe("McpConfigLoader caching", () => {
     const dir = join(tempRoot, "cache-null");
     mkdirSync(dir, { recursive: true });
 
-    const first = McpConfigLoader.discover(dir);
+    const first = McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID);
     expect(first).toBeNull();
 
     // create config after initial call — still returns null from cache
@@ -222,7 +225,7 @@ describe("McpConfigLoader caching", () => {
       JSON.stringify([{ name: "late", transport: "stdio", command: "node" }]),
     );
 
-    const cached = McpConfigLoader.discover(dir);
+    const cached = McpConfigLoader.discover(dir, TEST_BOOT_TRACE_ID);
     expect(cached).toBeNull();
 
     const freshDir = join(tempRoot, "cache-null-fresh");
@@ -232,7 +235,7 @@ describe("McpConfigLoader caching", () => {
       JSON.stringify([{ name: "late", transport: "stdio", command: "node" }]),
     );
 
-    const fresh = McpConfigLoader.discover(freshDir);
+    const fresh = McpConfigLoader.discover(freshDir, TEST_BOOT_TRACE_ID);
     expect(fresh).toHaveLength(1);
   });
 });

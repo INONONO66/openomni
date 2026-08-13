@@ -16,7 +16,6 @@
     "exports packages/session/src/storage/sqlite-part-adapter.ts getPartStartTime",
     "files packages/openomni/test/dispatch/policy-registration.contract-test.ts",
     "types packages/openomni/src/execution-runtime/child-agent/types.ts ChildStatus",
-    "types packages/openomni/src/execution-runtime/child-agent/types.ts DelegationPolicyPointId",
-    "types packages/openomni/src/ingress/audit-envelope.ts IngressAuditEvent"
+    "types packages/openomni/src/execution-runtime/child-agent/types.ts DelegationPolicyPointId"
   ]
 }

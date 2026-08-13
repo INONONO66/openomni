@@ -1258,7 +1258,12 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
 
     const result = await runtime.submit(
       { action: "conformance.act", target: { kind: "system" }, payload: "go" },
-      { actorKind: "resident", actorId: "resident:main", policies: [allowPolicy] },
+      {
+        traceId: "trace-conformance",
+        actorKind: "resident",
+        actorId: "resident:main",
+        policies: [allowPolicy],
+      },
     );
 
     expect(result.status).toBe("completed");
@@ -1293,7 +1298,12 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
 
     const result = await runtime.submit(
       { action: "conformance.act", target: { kind: "system" }, payload: "go" },
-      { actorKind: "user", actorId: "user:conformance", policies: [denyPolicy] },
+      {
+        traceId: "trace-conformance",
+        actorKind: "user",
+        actorId: "user:conformance",
+        policies: [denyPolicy],
+      },
     );
 
     expect(result.status).toBe("denied");
@@ -1326,7 +1336,12 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
     try {
       await runtime.submit(
         { action: "conformance.act", target: { kind: "system" }, payload: "go" },
-        { actorKind: "resident", actorId: "resident:main", policies: [allowPolicy] },
+        {
+          traceId: "trace-conformance",
+          actorKind: "resident",
+          actorId: "resident:main",
+          policies: [allowPolicy],
+        },
       );
     } catch (error) {
       thrown = error;

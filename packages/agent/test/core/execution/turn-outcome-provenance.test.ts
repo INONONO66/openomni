@@ -8,6 +8,7 @@ import {
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import { allow } from "../../helpers/policy-decision";
+import { runInput } from "../../helpers/run-input";
 
 function makeAgentBase(): AgentRunBase {
   return { traceId: "trace-1", sessionId: "sess-1" };
@@ -60,9 +61,7 @@ describe("handleStop prompt injection provenance", () => {
           },
         ]),
     });
-    const state = createRunState({
-      messages: [{ role: "user", content: "parent request" }],
-    });
+    const state = createRunState(runInput([{ role: "user", content: "parent request" }]));
     state.lastAssistantText = "partial response";
 
     const events = await collectEvents(

@@ -7,7 +7,12 @@ import { createToolExecutor, WorkspaceLock } from "@openomni/openomni";
 import { Operational, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
-import { installStorageFixture, makeClient } from "./provider-test-fixture";
+import {
+  TEST_BOOT_TRACE_ID,
+  executionContext,
+  installStorageFixture,
+  makeClient,
+} from "./provider-test-fixture";
 
 installStorageFixture();
 
@@ -17,7 +22,10 @@ describe("McpToolProvider", () => {
     client.listTools.mockResolvedValueOnce([
       { name: "search.query", description: "query", inputSchema: {} },
     ]);
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
     await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
     await provider.refreshTools();
     const controller = new AbortController();
@@ -26,7 +34,7 @@ describe("McpToolProvider", () => {
     try {
       await provider.execute(
         { id: "call-pre-abort", tool: "search.query", input: {} },
-        { signal: controller.signal },
+        executionContext({ signal: controller.signal }),
       );
       throw new Error("expected provider.execute to reject");
     } catch (error) {
@@ -56,7 +64,10 @@ describe("McpToolProvider", () => {
             });
         }),
     );
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
 
     try {
       await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
@@ -66,7 +77,10 @@ describe("McpToolProvider", () => {
         config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
       });
 
-      const result = await executor({ id: "call-mcp", tool: "search.query", input: {} });
+      const result = await executor(
+        { id: "call-mcp", tool: "search.query", input: {} },
+        executionContext(),
+      );
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");
 
@@ -100,7 +114,10 @@ describe("McpToolProvider", () => {
           // intentional: never resolves to exercise abort settlement grace
         }),
     );
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
     const subscriberCountBeforeWarning = Bus.stats().subscriberCount;
     let unsubscribeSettlementWarning: () => void = () => undefined;
     const settlementWarning = new Promise<void>((resolve) => {
@@ -132,7 +149,10 @@ describe("McpToolProvider", () => {
       });
 
       // When: the executor times out while the underlying MCP call remains pending.
-      const result = await executor({ id: "call-mcp-hung", tool: "search.query", input: {} });
+      const result = await executor(
+        { id: "call-mcp-hung", tool: "search.query", input: {} },
+        executionContext(),
+      );
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");
 

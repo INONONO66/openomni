@@ -161,6 +161,7 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     target: { kind: "session", id: OwnerRef.id },
     correlation,
     dispatchId: `dispatch:${input.replyKey}`,
+    traceId: `trace:${input.replyKey}`,
     actor: { kind: "user", actorId: input.actorId },
     submittedAt: input.at,
   });

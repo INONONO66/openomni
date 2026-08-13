@@ -4,7 +4,7 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
 
@@ -133,6 +133,7 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
     ...(ctx.signal ? { signal: ctx.signal } : {}),
     ...(agent.providerOptions ? { providerOptions: agent.providerOptions } : {}),
     middleware: buildWorkerMiddleware({
+      traceId: ctx.traceContext?.traceId,
       permissions: ctx.event.agent.permissions,
       ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
     }),
@@ -290,16 +291,20 @@ export class ResidentRuntime {
   }
 
   private async runExclusive(ctx: ResidentRunContext): Promise<ResidentRunResult> {
-    let slotAcquired = false;
+    // Refused before the slot is taken: a rejection between `acquireSlot` and
+    // the `try` that releases it would leak the slot for the process lifetime.
+    //
+    // The resident is not a trace origin — its only caller is the ingress
+    // handler, which always carries the trace the inbound event started. A
+    // `?? newTraceId()` here would detach the resident's run from the request
+    // that asked for it.
+    if (ctx.traceContext?.traceId === undefined || ctx.traceContext.traceId.length === 0) {
+      throw new Error("resident run requires the inbound trace context");
+    }
     await this.acquireSlot(ctx.signal);
-    slotAcquired = true;
     const runId = crypto.randomUUID();
     const start = Date.now();
-    const traceContext = {
-      ...(ctx.traceContext ?? { traceId: crypto.randomUUID() }),
-      sessionId: ctx.sessionId,
-      runId,
-    };
+    const traceContext = { ...ctx.traceContext, sessionId: ctx.sessionId, runId };
 
     try {
       throwIfAborted(ctx.signal);
@@ -350,7 +355,7 @@ export class ResidentRuntime {
       });
       throw error;
     } finally {
-      if (slotAcquired) this.releaseSlot();
+      this.releaseSlot();
     }
   }
 }

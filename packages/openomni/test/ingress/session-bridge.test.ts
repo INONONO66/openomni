@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { SessionBridge } from "../../src/ingress/session-bridge";
+import { newTraceId } from "@openomni/telemetry";
 
 const TEST_MODEL = { provider: "anthropic", id: "claude-3-haiku" };
 
@@ -99,7 +100,7 @@ describe("SessionBridge", () => {
     it("should store output string as TextPart in session", () => {
       const output = "Here is the API documentation you requested.";
 
-      SessionBridge.storeDirectResult(sessionId, output, TEST_MODEL);
+      SessionBridge.storeDirectResult(newTraceId(), sessionId, output, TEST_MODEL);
 
       const messages = Session.getMessages(sessionId);
       expect(messages).toHaveLength(1);

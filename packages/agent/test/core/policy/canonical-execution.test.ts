@@ -21,6 +21,7 @@ import {
   mockProviderData,
   mockProviderModel,
 } from "../../helpers/mock-llm";
+import { runInput } from "../../helpers/run-input";
 
 const allow = () => PolicyDecision.allow({ policyId: "test.allow" });
 
@@ -125,10 +126,7 @@ describe("canonical ChatAgent policy execution", () => {
 
     // When
     const events: AgentEvent[] = [];
-    for await (const event of streamAgent(
-      { messages: [{ role: "user", content: "hi" }] },
-      config,
-    )) {
+    for await (const event of streamAgent(runInput([{ role: "user", content: "hi" }]), config)) {
       events.push(event);
     }
 
@@ -180,6 +178,7 @@ describe("canonical tool policy execution", () => {
       { traceId: "trace", sessionId: "session", runId: "run" },
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       onDecision: () => {
         throw observerFailure;

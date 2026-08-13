@@ -63,7 +63,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
     const executor = createToolExecutor({
       toolExecutor: emittingBaseExecutor({ output: "ok" }),
       engine: PolicyEngine.create(),
-      traceContext: { traceId: "trace-sole", sessionId: "sess-sole" },
+      traceContext: { traceId: "trace-sole", sessionId: "sess-sole", runId: "run-1" },
     });
 
     await executor(makeCall("call-sole"));
@@ -81,7 +81,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
     const executor = createToolExecutor({
       toolExecutor: emittingBaseExecutor({ output: "err", isError: true }),
       engine: PolicyEngine.create(),
-      traceContext: { traceId: "trace-sole-err", sessionId: "sess-sole-err" },
+      traceContext: { traceId: "trace-sole-err", sessionId: "sess-sole-err", runId: "run-1" },
     });
 
     await executor(makeCall("call-sole-err"));
@@ -99,7 +99,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
     const executor = createToolExecutor({
       toolExecutor: emittingBaseExecutor({ output: "boom", throws: new Error("boom") }),
       engine: PolicyEngine.create(),
-      traceContext: { traceId: "trace-sole-throw", sessionId: "sess-sole-throw" },
+      traceContext: { traceId: "trace-sole-throw", sessionId: "sess-sole-throw", runId: "run-1" },
     });
 
     await expect(executor(makeCall("call-sole-throw"))).rejects.toThrow("boom");

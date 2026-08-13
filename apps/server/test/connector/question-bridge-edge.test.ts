@@ -73,6 +73,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
 
 function command(): Dispatch.Command {
   return {
+    traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
@@ -84,6 +85,7 @@ function command(): Dispatch.Command {
 
 function request(workspaceRoot: string): Execution.Request {
   return {
+    traceId: "trace-fixture",
     runId: "run_fake",
     sessionId: "ses_fake",
     mode: "direct",
@@ -107,6 +109,7 @@ describe("connector process question bridge edges", () => {
   test("returns 400 for malformed JSON without invoking the handler", async () => {
     let handlerCalls = 0;
     const bridge = startConnectorQuestionBridgeServer({
+      traceId: "trace-fixture",
       runId: "run_fake",
       sessionId: "ses_fake",
       residentSessionId: "ses_resident",
@@ -134,6 +137,7 @@ describe("connector process question bridge edges", () => {
   test("passes the HTTP request abort signal to the handler", async () => {
     let handlerSignal: AbortSignal | undefined;
     const bridge = startConnectorQuestionBridgeServer({
+      traceId: "trace-fixture",
       runId: "run_fake",
       sessionId: "ses_fake",
       residentSessionId: "ses_resident",

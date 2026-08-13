@@ -72,6 +72,7 @@ describe("native tool runtime descriptors", () => {
 
   it("resolves runtime policy risk from descriptor before legacy riskTier", async () => {
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-descriptor-test", sessionId: "session-1", runId: "run-1" },
       toolName: "bash",
       input: {},
       riskTier: 0,

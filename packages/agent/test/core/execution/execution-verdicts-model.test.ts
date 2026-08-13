@@ -58,30 +58,6 @@ describe("model execution deny verdicts", () => {
       diagnostics.unsubscribe();
     }
   });
-
-  it("omits fallback sessionId from model.response deny diagnostics", async () => {
-    const diagnostics = observeInfoEvents();
-    const engine = responseDenyEngine();
-
-    try {
-      const result = await dispatchModelResponse(
-        makeState(),
-        engine,
-        makeConfig(),
-        { outcome: { type: "stop" }, responseTokens: 0 },
-        { traceId: "trace-empty-session", sessionId: "" },
-      );
-      await Promise.resolve();
-
-      expect(result).toBeNull();
-      expect(findDenyDiagnostic(diagnostics.payloads, "model.response")).toEqual({
-        traceId: "trace-empty-session",
-        sessionId: undefined,
-      });
-    } finally {
-      diagnostics.unsubscribe();
-    }
-  });
 });
 
 function responseDenyEngine(): ReturnType<typeof PolicyEngine.create> {

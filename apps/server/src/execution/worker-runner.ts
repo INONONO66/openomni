@@ -68,8 +68,9 @@ export namespace WorkerRunner {
       return;
     }
 
+    const { traceId } = request;
+
     (async () => {
-      const traceId = request.traceId ?? crypto.randomUUID();
       const controller = new AbortController();
       let childAgentRuntime: ReturnType<typeof createChildAgentRuntime> | undefined;
 
@@ -95,6 +96,7 @@ export namespace WorkerRunner {
         const agentProvider = new AgentToolProvider({
           dispatchToolMode: "worker-resident-ask",
           dispatchRuntime: createWorkerDispatchRuntime({
+            traceId,
             server,
             ipcAuthToken,
             workerId: options.workerId,
@@ -115,6 +117,7 @@ export namespace WorkerRunner {
         const middleware = [
           createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
           ...buildWorkerMiddleware({
+            traceId,
             permissions: request.permissions,
             injectionQueue,
             ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),

@@ -6,6 +6,7 @@ import { streamAgent } from "../../../src/core/execution/runner";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
+import { runInput } from "../../helpers/run-input";
 
 function assistantMessage(outputTokens: number): Message.WithParts {
   const id = `assistant-${outputTokens}`;
@@ -71,7 +72,7 @@ describe("canonical lifecycle audit facts", () => {
 
     // When
     for await (const _event of streamAgent(
-      { messages: [{ role: "user", content: "continue once" }] },
+      runInput([{ role: "user", content: "continue once" }]),
       config,
     )) {
       // The lifecycle observer is the asserted output.

@@ -27,7 +27,13 @@ export interface RunInput {
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
   providerOptions?: Record<string, unknown>;
-  trace?: { traceId?: string; runId?: string };
+  /**
+   * The run this call belongs to. Required, and not defaulted: a model round
+   * trip that cannot name its run and session produces an assistant message
+   * detached from the conversation it is part of, and telemetry that
+   * correlates to nothing.
+   */
+  trace: { traceId: string; sessionId: string; runId: string };
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
@@ -38,9 +44,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     return { type: "aborted" };
   }
 
-  const traceId = input.trace?.traceId ?? crypto.randomUUID();
-
-  const sessionID = messages[0]?.info.sessionID || `session-${crypto.randomUUID()}`;
+  const { traceId, sessionId: sessionID } = input.trace;
   const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 
@@ -184,7 +188,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     trace: {
       traceId,
       sessionId: sessionID,
-      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+      runId: input.trace.runId,
       provider,
     },
   });
@@ -212,7 +216,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     Bus.publish(LlmCall.Completed, {
       traceId,
       sessionId: sessionID,
-      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+      runId: input.trace.runId,
       provider,
       model: modelId,
       durationMs,
@@ -233,7 +237,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     Bus.publish(LlmCall.Failed, {
       traceId,
       sessionId: sessionID,
-      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+      runId: input.trace.runId,
       provider,
       model: modelId,
       durationMs: Date.now() - startMs,

@@ -4,7 +4,7 @@ import { defineTool } from "../../define.js";
 import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
 export type DispatchToolRuntime = {
-  submit(input: Dispatch.Input, options?: DispatchSubmitOptions): Promise<Dispatch.Result>;
+  submit(input: Dispatch.Input, options: DispatchSubmitOptions): Promise<Dispatch.Result>;
 };
 
 export interface DispatchToolOptions {
@@ -141,9 +141,18 @@ export function createDispatchTool(
         return errorResult(call, error instanceof Error ? error.message : String(error));
       }
 
+      // The dispatch belongs to the run that asked for it. `submit` requires
+      // the trace by type; a caller reaching this tool outside the executor
+      // (which refuses a traceless call) is refused here instead.
+      const traceId = context?.traceContext?.traceId;
+      if (traceId === undefined || traceId.length === 0) {
+        return errorResult(call, "dispatch tool requires the run trace context");
+      }
+
       try {
         const output = await dispatchRuntime.submit(input, {
           signal: context?.signal,
+          traceId,
           ...(call.input.sessionId ? { sessionId: call.input.sessionId } : {}),
           ...(call.input.runId ? { runId: call.input.runId } : {}),
           ...(call.input.agentName ? { agentName: call.input.agentName } : {}),

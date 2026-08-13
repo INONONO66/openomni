@@ -111,6 +111,7 @@ function installation(
 
 function command(): Dispatch.Command {
   return {
+    traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
@@ -122,6 +123,7 @@ function command(): Dispatch.Command {
 
 function request(workspaceRoot: string): Execution.Request {
   return {
+    traceId: "trace_fake",
     runId: "run_fake",
     sessionId: "ses_fake",
     mode: "direct",

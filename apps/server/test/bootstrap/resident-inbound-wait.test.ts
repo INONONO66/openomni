@@ -20,6 +20,7 @@ import { createResidentInboundWaitHandler } from "../../src/bootstrap/resident-i
 import type { ServerConfig } from "../../src/config";
 import { CustomToolProvider } from "../../src/tool/custom";
 import { McpToolProvider } from "../../src/tool/mcp";
+import { TEST_BOOT_TRACE_ID } from "../tool/mcp/provider-test-fixture";
 
 /**
  * #510 D2b — the inbound wait acquires and releases the run's wait through
@@ -149,7 +150,7 @@ function createHandler(submit: DispatchRuntime["submit"]) {
     }),
     systemProvider: new SystemToolProvider("/workspace"),
     requireAgentProvider: () => new AgentToolProvider(),
-    mcpProvider: new McpToolProvider(),
+    mcpProvider: new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID }),
     customProvider: new CustomToolProvider(),
   };
   return createResidentInboundWaitHandler(config);
@@ -158,6 +159,7 @@ function createHandler(submit: DispatchRuntime["submit"]) {
 function waitParams(run: Awaited<ReturnType<typeof createActiveRun>>, signal?: AbortSignal) {
   return {
     workerId: "worker-1",
+    traceId: "trace-inbound-wait",
     sessionId: run.workerSessionId,
     runId: run.runId,
     payload: "Should I proceed?",
@@ -210,6 +212,9 @@ describe("resident inbound wait kernel dispatch", () => {
     });
     expect(typeof call[0].correlation).toBe("string");
     expect(call[1]).toEqual({
+      // The asking run's trace crosses the IPC hop and is what the Resident
+      // dispatches under; the handler never starts a second one.
+      traceId: "trace-inbound-wait",
       sessionId: run.workerSessionId,
       runId: run.runId,
       actorKind: "worker",

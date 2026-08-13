@@ -5,6 +5,9 @@ import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
 } from "../../src/execution-runtime";
+import { newTraceId } from "@openomni/telemetry";
+
+const PARENT_TRACE_ID = newTraceId();
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
 const successfulResult: AgentResult = {
@@ -39,6 +42,25 @@ function contextsAt(
 }
 
 describe("child agent delegation construction settlement", () => {
+  /**
+   * A child agent inherits its parent's trace. Minting one would give the
+   * delegation its own, disconnected from the run that ordered it.
+   */
+  test("refuses a delegation that cannot name the parent trace", () => {
+    for (const traceContext of [
+      undefined,
+      { traceId: "trace-1" },
+      { traceId: "trace-1", sessionId: "sess-1" },
+      { traceId: "", sessionId: "sess-1", runId: "run-1" },
+    ]) {
+      expect(() =>
+        createChildAgentRuntime({
+          ...(traceContext === undefined ? {} : { traceContext }),
+          model: { provider: "test", id: "fixture" } as Model.Ref,
+        }),
+      ).toThrow("child agent delegation requires the parent trace context");
+    }
+  });
   for (const failure of [
     {
       name: "parent tool selection",
@@ -61,6 +83,7 @@ describe("child agent delegation construction settlement", () => {
       const contexts: Array<Record<string, unknown>> = [];
       const runtime = createChildAgentRuntime({
         model,
+        traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
         parentMessages: [],
         parentTools: failure.parentTools,
         delegationPolicies: [observingPolicy(contexts)],
@@ -86,6 +109,7 @@ describe("child agent delegation construction settlement", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       maxChildren: 1,
       delegationPolicies: [observingPolicy(contexts)],
       createAgent: () => ({ run: () => new Promise<AgentResult>(() => undefined) }),

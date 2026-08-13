@@ -3,10 +3,16 @@ import type { ActiveRun, DeliverTask, WorkerPorts, WorkerSlot } from "./worker-m
 export type ActiveRunRegistry = Map<string, ActiveRun>;
 export type TracedDeliverTask = DeliverTask & { readonly traceId: string };
 
+/**
+ * A deliver task carries the trace of the dispatch that produced it. Minting
+ * one here gave the worker run its own trace, unlinked from the request — and
+ * because it was minted upstream of every guard, no guard could see it.
+ */
 export function normalizeDeliverTaskTrace(task: DeliverTask): TracedDeliverTask {
-  return typeof task.traceId === "string"
-    ? (task as TracedDeliverTask)
-    : { ...task, traceId: crypto.randomUUID() };
+  if (typeof task.traceId !== "string" || task.traceId.length === 0) {
+    throw new Error("deliver task requires the dispatch traceId");
+  }
+  return task as TracedDeliverTask;
 }
 
 export function createActiveRun(runId: string, task: TracedDeliverTask): ActiveRun {

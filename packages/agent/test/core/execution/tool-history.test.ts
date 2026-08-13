@@ -6,6 +6,7 @@ import { ChatAgent } from "../../../src/core/chat-agent";
 import type { PolicyRegistration } from "../../../src/core/policy";
 import { createErrorOutcome, createStopOutcome, type MockLlmFn } from "../../helpers/mock-llm";
 import { allow, continueWithPrompt } from "../../helpers/policy-decision";
+import { runInput } from "../../helpers/run-input";
 
 /**
  * C2 (#546): the model must see its own prior tool use. These tests pin the
@@ -153,9 +154,7 @@ describe("tool-bearing history (#546)", () => {
       middleware: [injectOnceMiddleware()],
     });
 
-    const result = await agent.run({
-      messages: [{ role: "user", content: "what is the answer?" }],
-    });
+    const result = await agent.run(runInput([{ role: "user", content: "what is the answer?" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(capturedInputs).toHaveLength(2);
@@ -223,7 +222,7 @@ describe("tool-bearing history (#546)", () => {
       ],
     });
 
-    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+    const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(finalMessages).toBeDefined();
@@ -294,7 +293,7 @@ describe("tool-bearing history (#546)", () => {
       ],
     });
 
-    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+    const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(call).toBe(3);
@@ -364,9 +363,7 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       ],
     });
 
-    const result = await agent.run({
-      messages: [{ role: "user", content: "what is the answer?" }],
-    });
+    const result = await agent.run(runInput([{ role: "user", content: "what is the answer?" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(capturedInputs).toHaveLength(2);
@@ -415,7 +412,7 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       ],
     });
 
-    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+    const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(call).toBe(2);
@@ -463,7 +460,7 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       ],
     });
 
-    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+    const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
     expect(result.finishReason).toBe("stop");
     expect(call).toBe(2);

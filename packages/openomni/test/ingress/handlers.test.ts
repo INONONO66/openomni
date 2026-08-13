@@ -3,6 +3,7 @@ import type { Execution, Message, Ingress } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
+import { newTraceId } from "@openomni/telemetry";
 
 let IngressHandlers: typeof import("../../src/ingress/handlers").IngressHandlers;
 let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
@@ -141,6 +142,7 @@ describe("IngressHandlers", () => {
 
     const request = IngressHandlers.buildExecutionRequest({
       sessionId: "session-1",
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: makeDirectCoordinator(""),
     });
@@ -149,6 +151,33 @@ describe("IngressHandlers", () => {
     expect(request.toolConfig).toEqual(toolConfig);
     expect(request.permissions).toEqual(permissions);
     expect(request.policyPlan).toEqual(policyPlan);
+  });
+
+  /**
+   * The writeback is what the journal attributes to a trace. Without one the
+   * record lands correlated to nothing, so the request is refused rather than
+   * filed under the session id — including for the empty string, which every
+   * sibling guard also rejects.
+   */
+  it("buildExecutionRequest refuses a context with no usable trace", () => {
+    const event: Ingress.InboundEvent = {
+      id: "event-traceless",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: { model: { provider: "anthropic", id: "claude-3-haiku-20240307" } },
+    };
+
+    for (const traceContext of [undefined, { traceId: "" }]) {
+      expect(() =>
+        IngressHandlers.buildExecutionRequest({
+          sessionId: "session-1",
+          ...(traceContext === undefined ? {} : { traceContext }),
+          event,
+          coordinator: makeDirectCoordinator(""),
+        }),
+      ).toThrow("ingress writeback requires a trace context");
+    }
   });
 
   it("handleDirect dispatches via coordinator and stores output", async () => {
@@ -173,13 +202,17 @@ describe("IngressHandlers", () => {
       },
     };
 
+    const traceId = newTraceId();
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId },
       event,
       coordinator: makeDirectCoordinator("direct output"),
     });
 
+    // The writeback must be filed under the ingress trace, not a fresh one.
     expect(storeDirectResultMock).toHaveBeenCalledWith(
+      traceId,
       sessionId,
       "direct output",
       event.agent.model,
@@ -217,6 +250,7 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: { dispatch, deliverMessage },
     });
@@ -255,6 +289,7 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: { dispatch, deliverMessage },
     });
@@ -297,6 +332,7 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: { dispatch },
     });
@@ -345,6 +381,7 @@ describe("IngressHandlers", () => {
 
     const error = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator,
     }).catch((err: unknown) => err);

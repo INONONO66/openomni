@@ -9,6 +9,9 @@ import {
 } from "../../src/dispatch/setup";
 import { allocateTestAttempt, command, expectRejectsWithMessage } from "./helpers";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 let completionWriter: Storage.WorkItemCompletionWriter;
 
 function registerBuiltInDispatchHandlers(
@@ -397,7 +400,12 @@ describe("worker.spawn result reflection", () => {
         target: { kind: "worker", name: "coder" },
         payload: workerSpawnPayload("build it"),
       },
-      { actorKind: "resident", actorId: "resident:owner", agentName: "resident" },
+      {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        actorKind: "resident",
+        actorId: "resident:owner",
+        agentName: "resident",
+      },
     );
 
     const stored = WorkItemStore.list()[0];

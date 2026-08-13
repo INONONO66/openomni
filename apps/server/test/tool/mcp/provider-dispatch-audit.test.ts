@@ -5,8 +5,10 @@ import type { Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
+  TEST_BOOT_TRACE_ID,
   collectBusEvents,
   createLedgerSession,
+  executionContext,
   installStorageFixture,
   makeTool,
   seedProvider,
@@ -17,7 +19,7 @@ installStorageFixture();
 
 describe("McpToolProvider", () => {
   it("publishes policy and completion events for successful MCP dispatch", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const session = createLedgerSession();
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
@@ -25,11 +27,14 @@ describe("McpToolProvider", () => {
     const { events, stop } = collectBusEvents();
 
     try {
-      const result = await provider.execute({
-        id: "call-bus-success",
-        tool: "search_query",
-        input: { sessionId: session.id, query: "bus" },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-bus-success",
+          tool: "search_query",
+          input: { sessionId: session.id, query: "bus" },
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeFalsy();
       // #522 defect 2: this layer keeps authorization audit and MCP-domain
@@ -58,7 +63,7 @@ describe("McpToolProvider", () => {
   });
 
   it("publishes no completion events for error results", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const session = createLedgerSession();
     const execute = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
@@ -82,11 +87,14 @@ describe("McpToolProvider", () => {
     const { events, stop } = collectBusEvents();
 
     try {
-      const result = await provider.execute({
-        id: "call-bus-error",
-        tool: "search_query",
-        input: { sessionId: session.id },
-      });
+      const result = await provider.execute(
+        {
+          id: "call-bus-error",
+          tool: "search_query",
+          input: { sessionId: session.id },
+        },
+        executionContext(),
+      );
 
       expect(result.isError).toBeTruthy();
       const mcpCompleted = events.find((event) => event.name === "mcp.tool.completed");
@@ -101,7 +109,7 @@ describe("McpToolProvider", () => {
   });
 
   it("publishes action_blocked events for guarded MCP execution failures", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const unknownSession = createLedgerSession();
     const disconnectedSession = createLedgerSession();
     const unprefixedSession = createLedgerSession();
@@ -115,25 +123,34 @@ describe("McpToolProvider", () => {
 
     try {
       seedProvider(provider, [tool], ["search"]);
-      await provider.execute({
-        id: "call-unknown",
-        tool: "ghost_query",
-        input: { sessionId: unknownSession.id },
-      });
+      await provider.execute(
+        {
+          id: "call-unknown",
+          tool: "ghost_query",
+          input: { sessionId: unknownSession.id },
+        },
+        executionContext(),
+      );
 
       seedProvider(provider, [tool]);
-      await provider.execute({
-        id: "call-disconnected",
-        tool: "search_query",
-        input: { sessionId: disconnectedSession.id },
-      });
+      await provider.execute(
+        {
+          id: "call-disconnected",
+          tool: "search_query",
+          input: { sessionId: disconnectedSession.id },
+        },
+        executionContext(),
+      );
 
       seedProvider(provider, [unprefixedTool], ["query"]);
-      await provider.execute({
-        id: "call-unprefixed",
-        tool: "query",
-        input: { sessionId: unprefixedSession.id },
-      });
+      await provider.execute(
+        {
+          id: "call-unprefixed",
+          tool: "query",
+          input: { sessionId: unprefixedSession.id },
+        },
+        executionContext(),
+      );
 
       const blockedEvents = allEvents.filter((event) => event.name === "policy.action.blocked");
       expect(blockedEvents).toHaveLength(3);

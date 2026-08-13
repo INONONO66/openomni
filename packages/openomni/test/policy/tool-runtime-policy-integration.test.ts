@@ -3,8 +3,25 @@ import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/mi
 import { WorkspaceLock } from "../../src/execution-runtime/workspace-lock";
 
 describe("ToolRuntimePolicyMiddleware integration", () => {
+  /**
+   * The middleware observes a call it did not start. Minting a trace here
+   * produced a high-risk-tool warning that correlated to nothing, so it
+   * inherits or refuses.
+   */
+  test("refuses a pre-tool evaluation with no run trace", async () => {
+    await expect(
+      ToolRuntimePolicyMiddleware.evaluatePreTool({
+        toolName: "bash",
+        toolCallId: "call-traceless",
+        input: {},
+        riskTier: 2,
+        lockOwnerId: "run-1",
+      }),
+    ).rejects.toThrow("tool runtime policy requires the run trace context");
+  });
   test("evaluates pre-tool for low-risk tier without workspace lock", async () => {
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-policy-test", sessionId: "session-1", runId: "run-1" },
       toolName: "read_file",
       toolCallId: "call-1",
       input: { path: "/tmp/test.txt" },
@@ -19,6 +36,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
 
   test("evaluates pre-tool for high-risk tier with timeout escalation", async () => {
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-policy-test", sessionId: "session-1", runId: "run-1" },
       toolName: "bash",
       toolCallId: "call-2",
       input: { command: "ls" },
@@ -33,6 +51,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
   test("evaluates post-tool releasing an acquired lock", async () => {
     const workspaceRoot = `/tmp/openomni-runtime-policy-${crypto.randomUUID()}`;
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-policy-test", sessionId: "session-1", runId: "run-1" },
       toolName: "write_file",
       toolCallId: "call-3",
       input: {},
@@ -95,6 +114,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
 
   test("custom timeout config overrides default tier timeouts", async () => {
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-policy-test", sessionId: "session-1", runId: "run-1" },
       toolName: "write_file",
       input: {},
       riskTier: 1,
@@ -109,6 +129,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
     const decisions: unknown[] = [];
 
     await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      traceContext: { traceId: "trace-policy-test", sessionId: "session-1", runId: "run-1" },
       toolName: "bash",
       input: { command: "echo hi" },
       riskTier: 2,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Bus } from "../../src/bus/index.ts";
+import { Bus } from "@openomni/telemetry";
 import { Session } from "../../src/session/index.ts";
 import { Storage } from "../../src/storage/storage.ts";
 

@@ -242,11 +242,13 @@ export function createToolExecutor(
   const config = ctx.config ?? {};
   const postTimeoutSettleGraceMs =
     config.postTimeoutSettleGraceMs ?? DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS;
-  const eventBase = () => createEventBase(config.runtime);
-
   return async (call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
     if (!tool) return createErrorResult(call, `Unknown tool: ${call.tool}`);
+
+    // One trace for the whole call, inherited from the run that made it.
+    const traceId = requireCallTraceId(context);
+    const eventBase = () => createEventBase(config.runtime, traceId);
 
     if (context?.signal?.aborted) {
       return createErrorResult(call, "Tool execution aborted");
@@ -337,6 +339,7 @@ export function createToolExecutor(
         workspaceRoot: config.workspaceRoot,
         lockOwnerId,
         signal: linkedAbort.signal,
+        traceContext: context?.traceContext,
       });
 
       publishPolicyEvaluated({
@@ -462,6 +465,19 @@ export function createToolExecutor(
       evaluatePostToolOnce();
     }
   };
+}
+
+/**
+ * A tool call is never a trace origin: it exists because a run asked for it.
+ * Without the run's trace every event this executor publishes would be filed
+ * under an id no reader can reach back from, so the call is refused instead.
+ */
+function requireCallTraceId(context: ToolExecutionContext | undefined): string {
+  const traceId = context?.traceContext?.traceId;
+  if (traceId === undefined || traceId.length === 0) {
+    throw new Error("tool execution requires the run trace context");
+  }
+  return traceId;
 }
 
 export function createErrorResult(call: Tool.Call, message: string): Tool.Result {

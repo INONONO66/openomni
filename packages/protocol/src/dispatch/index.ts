@@ -41,7 +41,7 @@ export namespace Dispatch {
   export const Command = Input.extend({
     dispatchId: z.string().min(1),
     actor: ActorContext,
-    traceId: z.string().min(1).optional(),
+    traceId: z.string().min(1),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     workspaceRoot: z.string().min(1).optional(),

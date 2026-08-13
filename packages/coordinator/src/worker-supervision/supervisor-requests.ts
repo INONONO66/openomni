@@ -177,12 +177,15 @@ function handleInboundWait(
   const payload = typeof params?.payload === "string" ? params.payload : "";
   const workspaceRoot =
     typeof params?.workspaceRoot === "string" ? params.workspaceRoot : undefined;
-  if (!context.inboundWaitHandler || !sessionId || !payload) {
+  // The asking run carries its trace across the hop; the handler dispatches
+  // under it rather than starting a second trace for the same conversation.
+  const traceId = typeof params?.traceId === "string" ? params.traceId : "";
+  if (!context.inboundWaitHandler || !sessionId || !payload || !traceId) {
     respond({
       requestId: callId,
       accepted: false,
       error: context.inboundWaitHandler
-        ? "worker.inbound_wait requires sessionId and payload"
+        ? "worker.inbound_wait requires traceId, sessionId and payload"
         : "worker.inbound_wait is not configured",
     });
     return;
@@ -203,6 +206,7 @@ function handleInboundWait(
   context
     .inboundWaitHandler({
       workerId: String(context.workerId),
+      traceId,
       sessionId,
       callId,
       ...(runId !== undefined && { runId }),

@@ -1,5 +1,5 @@
 import { WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { Bus } from "../bus/index.js";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
 import {
   appendTransitionFact,

@@ -208,7 +208,12 @@ export namespace IngressHandlers {
       requested: results.length,
       runs: results,
     });
-    SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+    SessionBridge.storeDirectResult(
+      requireTraceId(ctx),
+      ctx.sessionId,
+      output,
+      ctx.event.agent.model,
+    );
     return {
       mode: ctx.event.mode,
       target: resolveTarget(ctx.event),
@@ -237,7 +242,12 @@ export namespace IngressHandlers {
       sessionId: ctx.sessionId,
       runId: ctx.event.runtime?.runId,
     });
-    SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+    SessionBridge.storeDirectResult(
+      requireTraceId(ctx),
+      ctx.sessionId,
+      output,
+      ctx.event.agent.model,
+    );
     return {
       mode: ctx.event.mode,
       target,
@@ -260,7 +270,12 @@ export namespace IngressHandlers {
         const result = await coordinator.dispatch(ctx.sessionId, request);
         await finishCoordinatorDispatch(ctx, request, result);
         if (result.output) {
-          SessionBridge.storeDirectResult(ctx.sessionId, result.output, ctx.event.agent.model);
+          SessionBridge.storeDirectResult(
+            requireTraceId(ctx),
+            ctx.sessionId,
+            result.output,
+            ctx.event.agent.model,
+          );
         }
         if (result.status === "succeeded" || result.status === "cancelled") {
           publishCompleted(ctx, target, start);
@@ -293,7 +308,7 @@ export namespace IngressHandlers {
       policyPlan: ctx.event.agent.policyPlan,
       providerOptions: (ctx.event.agent as { providerOptions?: Record<string, unknown> })
         .providerOptions,
-      traceId: ctx.traceContext?.traceId,
+      traceId: requireTraceId(ctx),
       agentName:
         typeof ctx.event.meta?.agentName === "string" ? ctx.event.meta.agentName : undefined,
     };
@@ -306,6 +321,10 @@ export namespace IngressHandlers {
 
     publishModeDetected(ctx, "resident");
 
+    // Bound once, before the run: `residentRuntime.run` refuses without a
+    // trace too, so asking again after it returns would re-enforce a condition
+    // already settled.
+    const traceId = requireTraceId(ctx);
     const residentResult = await ctx.residentRuntime.run({
       sessionId: ctx.sessionId,
       event: ctx.event,
@@ -313,7 +332,7 @@ export namespace IngressHandlers {
       signal: (ctx.event.runtime as { signal?: AbortSignal } | undefined)?.signal,
     });
     const output = residentResult.output;
-    SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+    SessionBridge.storeDirectResult(traceId, ctx.sessionId, output, ctx.event.agent.model);
 
     return {
       mode: ctx.event.mode,
@@ -351,7 +370,12 @@ export namespace IngressHandlers {
         runId: request.runId,
         sessionId: ctx.sessionId,
       });
-      SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+      SessionBridge.storeDirectResult(
+        requireTraceId(ctx),
+        ctx.sessionId,
+        output,
+        ctx.event.agent.model,
+      );
       return {
         mode: ctx.event.mode,
         target: resolveTarget(ctx.event),
@@ -366,7 +390,12 @@ export namespace IngressHandlers {
       if (coordinatorResult.status !== "succeeded") {
         if (coordinatorResult.status === "cancelled") {
           const output = coordinatorResult.output ?? coordinatorResult.error ?? "cancelled";
-          SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+          SessionBridge.storeDirectResult(
+            requireTraceId(ctx),
+            ctx.sessionId,
+            output,
+            ctx.event.agent.model,
+          );
           publishCompleted(ctx, target, start);
           return {
             mode: ctx.event.mode,
@@ -388,7 +417,12 @@ export namespace IngressHandlers {
       throw error;
     }
     const output = coordinatorResult.output ?? "";
-    SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+    SessionBridge.storeDirectResult(
+      requireTraceId(ctx),
+      ctx.sessionId,
+      output,
+      ctx.event.agent.model,
+    );
 
     publishCompleted(ctx, target, start);
 
@@ -402,4 +436,18 @@ export namespace IngressHandlers {
       },
     };
   }
+}
+
+/**
+ * The trace a writeback is recorded under. `traceContext` is optional on the
+ * handler context because not every ingress path establishes one yet; a
+ * writeback without a trace would land in the journal attributed to nothing,
+ * so it is refused rather than filed under the session id.
+ */
+function requireTraceId(ctx: { readonly traceContext?: TraceContextProtocol.Type }): string {
+  const traceId = ctx.traceContext?.traceId;
+  if (traceId === undefined || traceId.length === 0) {
+    throw new Error("ingress writeback requires a trace context");
+  }
+  return traceId;
 }

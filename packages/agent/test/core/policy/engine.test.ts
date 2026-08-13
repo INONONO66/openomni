@@ -570,7 +570,7 @@ describe("PolicyEngine", () => {
 
       const decision = await engine.dispatchPoint("run.turn.post", {
         ...turnPostCtx(),
-        traceContext: { traceId: "trace-observer", sessionId: "session-observer" },
+        traceContext: { traceId: "trace-observer", sessionId: "session-observer", runId: "run-1" },
       });
       await new Promise((resolve) => queueMicrotask(resolve));
 
@@ -599,6 +599,9 @@ describe("PolicyEngine", () => {
     const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
     try {
       const engine = PolicyEngine.create({
+        // The publisher reports under the engine's trace or not at all, so an
+        // engine that emits audit has to be given one.
+        traceContext: { traceId: "trace-observer-isolation", sessionId: "session-1" },
         onDecision: async () => {
           throw new Error("async observer failed");
         },

@@ -5,7 +5,7 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, TraceContext } from "@openomni/session";
+import { Bus, newTraceId } from "@openomni/telemetry";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
@@ -84,7 +84,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       trace,
     );
 
-    const activeTrace = TraceContext.child(trace, { sessionId: session.id });
+    const activeTrace = { ...trace, sessionId: session.id };
 
     IngressEventProjector.project(
       inboundEvent,
@@ -115,7 +115,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       if (resolvedActorEvent.mode !== "direct") {
         throw new TypeError("external ingress actor resolution changed event mode");
       }
-      const trace = TraceContext.create();
+      const trace = { traceId: newTraceId() };
       const route = resolveAndRecordRoute(resolvedActorEvent, trace.traceId);
       const decision = requireRoutedDecision(route.decision);
       const waitExecution = await executeWaitRoute(deps.dispatchRuntime, trace, route, decision);
@@ -148,7 +148,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
         agentResolver?: AgentResolver;
       }>,
     ): Promise<Ingress.IngressResult> {
-      const trace = TraceContext.create();
+      const trace = { traceId: newTraceId() };
       const route = resolveAndRecordRoute(event, trace.traceId);
       const decision = requireRoutedDecision(route.decision);
       const waitExecution = await executeWaitRoute(deps.dispatchRuntime, trace, route, decision);

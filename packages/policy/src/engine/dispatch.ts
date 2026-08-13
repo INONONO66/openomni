@@ -1,4 +1,4 @@
-import { Policy, PolicyDecision } from "@openomni/protocol";
+import { Policy, PolicyDecision, type TraceContext } from "@openomni/protocol";
 import { auditIsConsumed, publishComposedDecision } from "./audit";
 import { auditCorrelationContext, immutablePointSnapshot } from "./context";
 import { COMPOSED_POLICY_ID, composeFinalPointDecision } from "./decisions";
@@ -96,6 +96,9 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       return composeAndPublish();
     }
     const fullCtx = snapshot.value;
+    // The trace of this dispatch. Read off the frozen snapshot so a context
+    // getter cannot answer the policy and the audit record differently.
+    const dispatchTrace = (fullCtx as { readonly traceContext?: TraceContext.Type }).traceContext;
 
     const contractFailure = validatePointContract(pointId, fullCtx);
     if (contractFailure !== undefined) {
@@ -104,7 +107,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     }
 
     for (const reg of selected) {
-      const enforced = await evaluateCanonical(reg, pointId, () => reg.fn(fullCtx));
+      const enforced = await evaluateCanonical(reg, pointId, dispatchTrace, () => reg.fn(fullCtx));
       if (enforced === undefined) continue;
       decisions.push(recordDecision(options, reg, fullCtx, enforced));
 
@@ -117,6 +120,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   async function evaluateCanonical(
     reg: CanonicalPolicyRegistrationGeneric<TCtx>,
     pointId: PolicyPointId,
+    dispatchTrace: TraceContext.Type | undefined,
     invoke: () => Promise<Policy.PolicyDecision> | Policy.PolicyDecision,
   ): Promise<Policy.PolicyDecision | undefined> {
     const contract = Policy.PolicyPoint.Registry[pointId];
@@ -130,7 +134,15 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       const durationMs = Date.now() - startTime;
       const failPolicy = reg.failPolicy ?? contract.defaultFailPolicy;
       const error = err instanceof Error ? err : new Error(String(err));
-      publishMiddlewareError(options, timing, reg.name, error, failPolicy, durationMs);
+      publishMiddlewareError(
+        options,
+        dispatchTrace,
+        timing,
+        reg.name,
+        error,
+        failPolicy,
+        durationMs,
+      );
       if (failPolicy === "fail-open") return undefined;
       engineDecision = pointMiddlewareErrorDecision(reg, pointId, durationMs);
     }
@@ -148,7 +160,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       undeclared === undefined
         ? normalized.decision
         : undeclaredEffectDecision(reg, pointId, undeclared.type, durationMs);
-    publishMiddlewareDebug(options, timing, reg.name, enforced.verdict, durationMs);
+    publishMiddlewareDebug(options, dispatchTrace, timing, reg.name, enforced.verdict, durationMs);
     return enforced;
   }
 

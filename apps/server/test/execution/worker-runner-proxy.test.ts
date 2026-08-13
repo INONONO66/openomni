@@ -4,10 +4,11 @@ import type { Tool, WorkerBootstrap } from "@openomni/protocol";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";
 import {
-  type ActiveRun,
   createSpawnOptions,
   createValidRequest,
   successfulResult,
+  toolCallContext,
+  type ActiveRun,
 } from "./worker-runner-fixture";
 
 describe("WorkerRunner", () => {
@@ -60,11 +61,14 @@ describe("WorkerRunner", () => {
           createAgent: (options) => ({
             async run() {
               if (!options.toolExecutor) throw new Error("tool executor missing");
-              proxiedResult = await options.toolExecutor({
-                id: "agent-tool-call",
-                tool: "mcp_server_write_file",
-                input: {},
-              });
+              proxiedResult = await options.toolExecutor(
+                {
+                  id: "agent-tool-call",
+                  tool: "mcp_server_write_file",
+                  input: {},
+                },
+                toolCallContext(),
+              );
               return successfulResult;
             },
           }),
@@ -158,7 +162,7 @@ describe("WorkerRunner", () => {
                   tool: "mcp_server_slow_write",
                   input: {},
                 },
-                { signal: options.signal },
+                { ...toolCallContext(), signal: options.signal },
               );
               return successfulResult;
             },

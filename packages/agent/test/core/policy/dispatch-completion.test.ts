@@ -31,6 +31,7 @@ describe("tool.native.post middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: newID("result"),
         toolCallId: call.id,
@@ -64,6 +65,7 @@ describe("tool.native.post middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: newID("result"),
         toolCallId: call.id,
@@ -97,6 +99,7 @@ describe("tool.native.post middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: newID("result"),
         toolCallId: call.id,
@@ -137,7 +140,11 @@ describe("tool.native.pre middleware dispatch", () => {
         ]),
     });
 
-    const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
+    const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
+      toolExecutor: baseExecutor,
+      engine,
+    });
 
     const call: Tool.Call = { id: "call-approval", tool: "bash", input: { command: "ls" } };
     const result = await executor(call);
@@ -167,7 +174,11 @@ describe("tool.native.pre middleware dispatch", () => {
       fn: () => abortRun("test.abort", "Blocked: test-deny"),
     });
 
-    const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
+    const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
+      toolExecutor: baseExecutor,
+      engine,
+    });
 
     const call: Tool.Call = { id: "call-abort", tool: "bash", input: { command: "rm -rf /" } };
     const result = await executor(call);
@@ -194,7 +205,11 @@ describe("tool.native.pre middleware dispatch", () => {
       fn: () => rewriteToolInput({ command: "echo safe" }, "test.transform-input", "rewrite-input"),
     });
 
-    const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
+    const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
+      toolExecutor: baseExecutor,
+      engine,
+    });
 
     const call: Tool.Call = { id: "call-xform", tool: "bash", input: { command: "rm -rf /" } };
     await executor(call);

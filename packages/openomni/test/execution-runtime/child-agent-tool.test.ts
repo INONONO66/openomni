@@ -3,6 +3,9 @@ import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "@openomni/age
 import type { Model, Tool } from "@openomni/protocol";
 import { createChildAgentTool, createChildAgentRuntime } from "../../src/execution-runtime";
 import type { NativeTool } from "../../src/execution-runtime";
+import { newTraceId } from "@openomni/telemetry";
+
+const PARENT_TRACE_ID = newTraceId();
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
 
@@ -42,7 +45,7 @@ describe("child_agent tool", () => {
       parentMessages: [{ role: "user", content: "parent task" }],
       parentTools: [makeTool("read"), makeTool("dispatch"), makeTool("bash")],
       workspaceRoot: "/repo",
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "run-1" },
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "run-1" },
       createAgent: (config) => ({
         async run(input) {
           runs.push({ config, input });
@@ -85,7 +88,7 @@ describe("child_agent tool", () => {
         { role: "user", content: "parent task" },
         { role: "user", content: "inspect auth flow" },
       ],
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: childId },
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: childId },
     });
     expect(runs[0]?.config.tools?.map((entry) => entry.name)).toEqual(["read"]);
   });
@@ -95,6 +98,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       createAgent: () => ({ run: async () => successfulResult }),
     });
     const tool = createChildAgentTool(runtime);
@@ -116,6 +120,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       parentSignal: controller.signal,
       createAgent: () => ({
         run: async () => {
@@ -141,6 +146,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       createAgent: () => ({ run: async () => successfulResult }),
     });
     const tool = createChildAgentTool(runtime);
@@ -167,6 +173,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       createAgent: (config) => ({
         run: async () => {
           childSignal = config.signal;
@@ -192,6 +199,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       maxChildren: 1,
       createAgent: () => ({
         run: async () => {
@@ -217,6 +225,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       awaitTimeoutMs: 1,
       createAgent: () => ({
         run: async () => {
@@ -242,6 +251,7 @@ describe("child_agent tool", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       maxOutputChars: 5,
       createAgent: () => ({
         run: async () => ({ ...successfulResult, text: "123456789" }),

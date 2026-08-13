@@ -7,6 +7,11 @@ import {
   type DispatchToolRuntime,
 } from "../../src/execution-runtime/tool/agent/tools/dispatch";
 
+/** The context the executor attaches to every tool call. */
+const TOOL_CONTEXT = {
+  traceContext: { traceId: "trace-caller", sessionId: "session-1", runId: "run-1" },
+} as const;
+
 function call(input: Record<string, unknown>): Tool.Call {
   return { id: "call-1", tool: "dispatch", input };
 }
@@ -59,7 +64,7 @@ describe("dispatch tool", () => {
 
   test("executes through runtime with implicit context", async () => {
     let capturedInput: Dispatch.Input | undefined;
-    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1];
+    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1] | undefined;
     const tool = createDispatchTool({
       async submit(input, options) {
         capturedInput = input;
@@ -80,6 +85,7 @@ describe("dispatch tool", () => {
         agentName: "worker",
         workspaceRoot: "/repo",
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBeUndefined();
@@ -102,6 +108,57 @@ describe("dispatch tool", () => {
       workspaceRoot: "/repo",
       sourceTool: "dispatch",
     });
+  });
+
+  /**
+   * A dispatch belongs to the run that submitted it. Without this the runtime
+   * mints a fresh trace per submit, and the command cannot be linked back to
+   * the tool call that asked for it — the failure a trace exists to prevent.
+   */
+  test("forwards the calling run's trace to the runtime", async () => {
+    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1] | undefined;
+    const tool = createDispatchTool({
+      async submit(_input, options) {
+        capturedOptions = options;
+        return { dispatchId: "dispatch-1", status: "completed", output: "ok" };
+      },
+    });
+
+    await tool.execute(
+      call({ action: "resident.ask", target: { kind: "resident" }, payload: "hello" }),
+      {
+        traceContext: { traceId: "trace-caller", sessionId: "session-1", runId: "run-1" },
+      },
+    );
+
+    expect(capturedOptions).toMatchObject({ traceId: "trace-caller" });
+  });
+
+  /**
+   * The executor that normally invokes this tool refuses a traceless call
+   * first, so this guards the exported `AgentToolProvider` surface, which can
+   * reach `execute` without a context. It returns a tool error rather than
+   * throwing: nothing was dispatched, and the run continues.
+   */
+  test("refuses a call that arrives without the run trace", async () => {
+    let submitted = false;
+    const tool = createDispatchTool({
+      async submit() {
+        submitted = true;
+        return { dispatchId: "dispatch-1", status: "completed", output: "ok" };
+      },
+    });
+
+    const response = await tool.execute(
+      call({ action: "resident.ask", target: { kind: "resident" }, payload: "hello" }),
+    );
+
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.output)).toMatchObject({
+      status: "failed",
+      error: "dispatch tool requires the run trace context",
+    });
+    expect(submitted).toBe(false);
   });
 
   test("passes worker endpoint selectors through runtime submission", async () => {
@@ -127,6 +184,7 @@ describe("dispatch tool", () => {
           acceptanceCriteria: ["ledger connector endpoint dispatch"],
         },
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBeUndefined();
@@ -160,6 +218,7 @@ describe("dispatch tool", () => {
         target: { kind: "resident", executorKind: "connector_endpoint" },
         payload: "hello",
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBe(true);
@@ -183,6 +242,7 @@ describe("dispatch tool", () => {
         payload: "hello",
         actor: { kind: "system", actorId: "fake" },
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBe(true);
@@ -207,6 +267,7 @@ describe("dispatch tool", () => {
           payload: "hello",
           [field]: "fake",
         }),
+        TOOL_CONTEXT,
       );
 
       expect(response.isError).toBe(true);
@@ -231,6 +292,7 @@ describe("dispatch tool", () => {
         payload: "question",
         wait: true,
       }),
+      TOOL_CONTEXT,
     );
     expect(allowed.isError).toBeUndefined();
     expect(calls).toBe(1);
@@ -255,7 +317,7 @@ describe("dispatch tool", () => {
         wait: false,
       },
     ]) {
-      const denied = await tool.execute(call(input));
+      const denied = await tool.execute(call(input), TOOL_CONTEXT);
       expect(denied.isError).toBe(true);
     }
 

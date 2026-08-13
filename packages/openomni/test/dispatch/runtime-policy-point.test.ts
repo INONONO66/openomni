@@ -3,6 +3,9 @@ import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/pro
 import { Storage } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
+/** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
+const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
+
 function residentAskInput(): DispatchProtocol.Input {
   return { action: "resident.ask", target: { kind: "resident" }, payload: "hello" };
 }
@@ -21,6 +24,7 @@ describe("DispatchRuntime canonical policy point", () => {
     const result = await runtime.submit(
       { ...residentAskInput(), correlation: "message-1" },
       {
+        traceId: TEST_DISPATCH_TRACE_ID,
         sessionId: "session-1",
         runId: "run-1",
         actorKind: "resident",
@@ -83,6 +87,7 @@ describe("DispatchRuntime canonical policy point", () => {
     });
 
     const result = await runtime.submit(residentAskInput(), {
+      traceId: TEST_DISPATCH_TRACE_ID,
       actorKind: "resident",
       actorId: "resident:main",
       policies: [

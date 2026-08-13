@@ -6,6 +6,7 @@ import type { ServerConfig } from "../config";
 export async function connectMcpServers(
   config: ServerConfig,
   provider: McpToolProvider,
+  traceId: string,
 ): Promise<void> {
   const servers = config.mcp.servers;
   if (servers.length === 0) return;
@@ -16,7 +17,7 @@ export async function connectMcpServers(
 
   await provider.refreshTools();
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: `mcp connected ${provider.serverCount}/${servers.length} server(s)`,

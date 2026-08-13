@@ -17,7 +17,7 @@ export function emitRunStarted(trace: TraceContext.Type, modelId: string): void 
 
 export function emitTurnStart(state: RunState, agentBase: AgentRunBase): void {
   const turnIndex = state.turnIndex;
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(AgentExecution.TurnStart, {
     ...agentBase,
     sessionId,
@@ -31,7 +31,7 @@ export function emitTurnComplete(
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): void {
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(AgentExecution.TurnComplete, {
     ...agentBase,
     sessionId,
@@ -79,7 +79,7 @@ export function emitRunCompleted(
   Bus.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
-    sessionId: agentBase.sessionId || undefined,
+    sessionId: agentBase.sessionId,
     component: "agent",
     msg: "agent.run.completed",
     context: {
@@ -91,11 +91,10 @@ export function emitRunCompleted(
 }
 
 export function emitErrorRetry(
-  state: RunState,
   agentBase: AgentRunBase,
   options: { readonly attempt: number; readonly maxAttempts: number; readonly error: string },
 ): void {
-  const sessionId = eventSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(AgentExecution.ErrorRetry, {
     ...agentBase,
     sessionId,
@@ -110,7 +109,7 @@ export function emitRunFailed(agentBase: AgentRunBase, error: string): void {
   Bus.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
-    sessionId: agentBase.sessionId || undefined,
+    sessionId: agentBase.sessionId,
     component: "agent",
     msg: "agent.run.failed",
     error,
@@ -137,7 +136,7 @@ export function publishDenyDiagnostic(
   agentBase: AgentRunBase,
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
-  const sessionId = diagnosticSessionId(state, agentBase);
+  const sessionId = agentBase.sessionId;
   Bus.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
@@ -152,15 +151,6 @@ export function publishDenyDiagnostic(
       elapsedMs: Date.now() - state.startTime,
     },
   });
-}
-
-function eventSessionId(state: RunState, agentBase: AgentRunBase): string {
-  return agentBase.sessionId || state.sessionId;
-}
-
-function diagnosticSessionId(state: RunState, agentBase: AgentRunBase): string | undefined {
-  const sessionId = eventSessionId(state, agentBase);
-  return sessionId === "runner" ? undefined : sessionId;
 }
 
 // merged from run-result.ts (250-LOC split refold: single-importer stage)
