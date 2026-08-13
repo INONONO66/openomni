@@ -129,6 +129,19 @@ Role-specific judgment remains partly userland: Resident delegation choices, ses
 | `docs/vision.local.md` (v0.2) predates single-mode ingress and current package layout | Refresh or mark archived |
 | `docs/persona-runtime-roadmap.local.md` uses pre-ADR-009 vocabulary (Main/Sub Persona) | Re-vocabulary or fold into ADR-010 ordering |
 
+## Not wired, despite appearances
+
+Engines whose consumer is absent. Listed here because an engine without a consumer does not count as shipped.
+
+| Item | Evidence |
+| --- | --- |
+| **Compaction does not run.** `builtin:compaction` is registered only when `WorkerMiddlewareConfig.compaction` is supplied, and no production caller supplies it, so `InMemoryCompactor` never executes. The `Run.Outcome` `compact` variant has no producer, making `runner.ts`'s compact branch and `handleCompact` unreachable. | `packages/openomni/src/execution-runtime/middleware.ts`, `packages/agent/src/core/execution/compaction.ts` — rebuilt under [#606](https://github.com/INONONO66/openomni/issues/606) Phase 3 |
+| **Eight of eighteen policy points have no production registration**, including `work.complete.pre`, which is declared fail-closed and described as a shipped gate. Its engine is also built without an `auditEmit`, so its verdicts are unobservable. | [#609](https://github.com/INONONO66/openomni/issues/609) |
+
+## In-flight structural work
+
+[`docs/agent-core-rewrite.md`](agent-core-rewrite.md) is the SOT for the agent core rewrite and the `@openomni/telemetry` split ([#606](https://github.com/INONONO66/openomni/issues/606)). It carries the package boundary rules, the injection-point contract, phase status, and the dispatch-cost baseline. It must land before [#502](https://github.com/INONONO66/openomni/issues/502) renames `session` to `ledger`, or the lossy observation Bus becomes part of the ledger's public surface.
+
 ## Maintenance
 
 When a 📋/🔌 item ships, flip it here in the same PR. When adding a new engine, add its **consumer** as a row at the same time — unwired engines must be visible.
