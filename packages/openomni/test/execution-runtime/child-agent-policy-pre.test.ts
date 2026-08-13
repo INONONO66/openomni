@@ -7,6 +7,9 @@ import {
   type DelegationPolicyRegistration,
   type NativeTool,
 } from "../../src/execution-runtime";
+import { newTraceId } from "@openomni/telemetry";
+
+const PARENT_TRACE_ID = newTraceId();
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
 const successfulResult: AgentResult = {
@@ -65,7 +68,7 @@ describe("child agent delegation pre-policy", () => {
         model,
         parentMessages: [],
         parentTools: [],
-        traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+        traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
         delegationPolicies: [policy],
         createAgent: () => {
           created = true;
@@ -86,6 +89,7 @@ describe("child agent delegation pre-policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       delegationPolicies: [
         {
           kind: "point",
@@ -116,6 +120,7 @@ describe("child agent delegation pre-policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       parentSignal: parentController.signal,
       delegationPolicies: [
         {
@@ -161,6 +166,7 @@ describe("child agent delegation pre-policy", () => {
     const configs: ChatAgentConfig[] = [];
     const runtime = createChildAgentRuntime({
       model,
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       parentMessages: [],
       parentTools: [makeTool("read"), makeTool("dispatch"), makeTool("child_agent")],
       createAgent: (config) => {
@@ -188,6 +194,7 @@ describe("child agent delegation pre-policy", () => {
     };
     const runtime = createChildAgentRuntime({
       model,
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       parentMessages: [],
       parentTools: [{ ...makeTool("mcp.remote.read"), descriptor }],
       createAgent: (config) => {
@@ -208,6 +215,7 @@ describe("child agent delegation pre-policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       maxChildren: 1,
       createAgent: () => {
         createCalls += 1;
@@ -235,7 +243,7 @@ describe("child agent delegation pre-policy", () => {
       model,
       parentMessages: [],
       parentTools: [],
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       injectionQueue,
       delegationPolicies: [
         {

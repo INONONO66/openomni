@@ -45,7 +45,12 @@ export namespace SessionBridge {
     return result;
   }
 
-  export function storeDirectResult(sessionId: string, output: string, model: Model.Ref): void {
+  export function storeDirectResult(
+    traceId: string,
+    sessionId: string,
+    output: string,
+    model: Model.Ref,
+  ): void {
     const message = createAssistantMessage(sessionId, model);
     const part: Message.TextPart = {
       id: crypto.randomUUID(),
@@ -55,7 +60,7 @@ export namespace SessionBridge {
       text: output,
     };
 
-    const audit = createIngressAudit(sessionId, "session_bridge");
+    const audit = createIngressAudit(traceId, sessionId, "session_bridge");
     const writebackEvent = audit.append("ingress.writeback.direct_result", {
       sessionId,
       mode: "direct",

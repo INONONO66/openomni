@@ -91,7 +91,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 |---|---|---|
 | [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
 | — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
-| — | move `TraceContext` off `packages/session` — two packages own the trace-identity convention with contradictory rules (`TraceContext.empty()` mints a traceId with no session or run, which `requireTraceScope` forbids) | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | 🟨 |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core

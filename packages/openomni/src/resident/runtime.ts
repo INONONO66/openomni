@@ -4,7 +4,7 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus, newTraceId } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
 
@@ -296,7 +296,7 @@ export class ResidentRuntime {
     const runId = crypto.randomUUID();
     const start = Date.now();
     const traceContext = {
-      ...(ctx.traceContext ?? { traceId: crypto.randomUUID() }),
+      ...(ctx.traceContext ?? { traceId: newTraceId() }),
       sessionId: ctx.sessionId,
       runId,
     };

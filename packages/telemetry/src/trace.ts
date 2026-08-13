@@ -30,7 +30,12 @@ const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/;
 const INVALID_TRACE_ID = "0".repeat(32);
 const INVALID_SPAN_ID = "0".repeat(16);
-const TRACEPARENT_PATTERN = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/;
+/**
+ * Version 00 field layout. The version and the fields after the flags are
+ * matched loosely on purpose — see {@link fromTraceparent}.
+ */
+const TRACEPARENT_PATTERN = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/;
+const FORBIDDEN_TRACEPARENT_VERSION = "ff";
 
 /** A W3C trace id. `crypto.randomUUID()` is already 32 hex once the dashes go. */
 export function newTraceId(): TraceId {
@@ -38,8 +43,13 @@ export function newTraceId(): TraceId {
 }
 
 export function newSpanId(): SpanId {
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  for (;;) {
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    const id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    // The all-zero span id is reserved as "invalid" by the spec. Retrying is
+    // cheaper than reasoning about a 2^-64 event at every call site.
+    if (id !== INVALID_SPAN_ID) return id;
+  }
 }
 
 export function isTraceId(value: unknown): value is TraceId {
@@ -59,15 +69,24 @@ export function toTraceparent(scope: Pick<TraceScope, "traceId" | "spanId">): st
 }
 
 /**
- * Reads an inbound `traceparent`. Returns undefined for anything malformed —
- * a caller joins a trace it can verify, or starts its own.
+ * Reads an inbound `traceparent`.
+ *
+ * Per W3C Trace Context §3.2.2.1 a higher version is parsed as version 00 when
+ * the first 55 characters match, and fields after the flags are ignored. A
+ * peer upgrading to a future version must not silently start a new trace —
+ * that failure is invisible, and the trace it breaks is the one crossing the
+ * boundary this exists for. Version `ff` is forbidden by the spec.
+ *
+ * Returns undefined for anything malformed: a caller joins a trace it can
+ * verify, or starts its own.
  */
 export function fromTraceparent(
   header: string | undefined,
 ): { readonly traceId: TraceId; readonly parentSpanId: SpanId } | undefined {
   const match = TRACEPARENT_PATTERN.exec(header?.trim() ?? "");
   if (match === null) return undefined;
-  const [, traceId, parentSpanId] = match;
+  const [, version, traceId, parentSpanId] = match;
+  if (version === FORBIDDEN_TRACEPARENT_VERSION) return undefined;
   if (!(isTraceId(traceId) && isSpanId(parentSpanId))) return undefined;
   return { traceId, parentSpanId };
 }
@@ -112,8 +131,7 @@ export interface TraceScopeInput {
  * Builds a scope, refusing an incomplete or malformed one.
  *
  * Emitting with a partial identity is worse than not emitting: the record
- * looks authoritative and correlates to nothing. This runs at the composition
- * root and nowhere else — see `scope()`.
+ * looks authoritative and correlates to nothing.
  *
  * `spanId` is minted when absent, because a root span has no caller to inherit
  * one from. `traceId` is not: a scope that cannot say which trace it belongs
@@ -143,7 +161,7 @@ export function requireTraceScope(input: TraceScopeInput): TraceScope {
   };
 }
 
-/** Starts a fresh trace. The only place a trace id is minted. */
+/** Starts a fresh trace. The only place a trace id is minted for a new run. */
 export function rootScope(input: Omit<TraceScopeInput, "traceId" | "parentSpanId">): TraceScope {
   return requireTraceScope({ ...input, traceId: newTraceId() });
 }

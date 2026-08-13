@@ -3,6 +3,7 @@ import type { Execution, Message, Ingress } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
+import { newTraceId } from "@openomni/telemetry";
 
 let IngressHandlers: typeof import("../../src/ingress/handlers").IngressHandlers;
 let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
@@ -141,6 +142,7 @@ describe("IngressHandlers", () => {
 
     const request = IngressHandlers.buildExecutionRequest({
       sessionId: "session-1",
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: makeDirectCoordinator(""),
     });
@@ -175,11 +177,13 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: makeDirectCoordinator("direct output"),
     });
 
     expect(storeDirectResultMock).toHaveBeenCalledWith(
+      expect.any(String),
       sessionId,
       "direct output",
       event.agent.model,
@@ -217,6 +221,7 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: { dispatch, deliverMessage },
     });
@@ -255,6 +260,7 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: { dispatch, deliverMessage },
     });
@@ -297,6 +303,7 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator: { dispatch },
     });
@@ -345,6 +352,7 @@ describe("IngressHandlers", () => {
 
     const error = await IngressHandlers.handleDirect({
       sessionId,
+      traceContext: { traceId: newTraceId() },
       event,
       coordinator,
     }).catch((err: unknown) => err);

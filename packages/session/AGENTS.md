@@ -1,6 +1,6 @@
 # packages/session
 
-Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, trace context, artifacts, audit records, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
 
 `Bus` itself moved to `@openomni/telemetry` (#606) — this package re-exports it for compatibility while consumers migrate, and keeps the durable journal that subscribes to it.
 
@@ -28,13 +28,11 @@ src/
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 ├── bus-persistence/      # Durable hash-chained bus event journal + BusQuery (stats/history/verifyChainIntegrity)
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
-├── audit/                # Audit record store
 ├── blacklist/            # Blacklist entry store (absolute deny gate data)
 ├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
 ├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
 ├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
 ├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
-├── trace/                # TraceContext helpers
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs

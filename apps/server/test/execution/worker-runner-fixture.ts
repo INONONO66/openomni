@@ -4,6 +4,7 @@ import { Storage } from "@openomni/session";
 
 import type { WorkerRunState } from "../../src/execution/worker-runner-types";
 import type { WorkerRunner } from "../../src/execution/worker-runner";
+import { newTraceId } from "@openomni/telemetry";
 
 export type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
 type SpawnRunOptions = Parameters<typeof WorkerRunner.spawnRun>[0];
@@ -53,6 +54,9 @@ export function createSpawnOptions(
 export function createValidRequest(): Record<string, unknown> {
   return {
     authToken: "token",
+    // A worker run inherits the dispatch trace; the runner refuses to mint one
+    // (#606), so a request without it is a wiring defect, not a default.
+    traceId: newTraceId(),
     runId: "run-1",
     sessionId: "session-1",
     mode: "direct",

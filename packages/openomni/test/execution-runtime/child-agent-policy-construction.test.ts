@@ -5,6 +5,9 @@ import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
 } from "../../src/execution-runtime";
+import { newTraceId } from "@openomni/telemetry";
+
+const PARENT_TRACE_ID = newTraceId();
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
 const successfulResult: AgentResult = {
@@ -61,6 +64,7 @@ describe("child agent delegation construction settlement", () => {
       const contexts: Array<Record<string, unknown>> = [];
       const runtime = createChildAgentRuntime({
         model,
+        traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
         parentMessages: [],
         parentTools: failure.parentTools,
         delegationPolicies: [observingPolicy(contexts)],
@@ -86,6 +90,7 @@ describe("child agent delegation construction settlement", () => {
       model,
       parentMessages: [],
       parentTools: [],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
       maxChildren: 1,
       delegationPolicies: [observingPolicy(contexts)],
       createAgent: () => ({ run: () => new Promise<AgentResult>(() => undefined) }),

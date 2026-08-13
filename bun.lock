@@ -32,6 +32,7 @@
         "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/session": "workspace:*",
+        "@openomni/telemetry": "workspace:*",
         "ai": "^6.0.141",
         "gray-matter": "^4.0.3",
         "hono": "^4.0.0",

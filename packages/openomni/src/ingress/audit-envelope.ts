@@ -32,8 +32,12 @@ export function summarizeText(text: string): TextSummary {
  * belonged here: `AuditLog` sat in `packages/session` under a name promising
  * the ledger while publishing to the lossy observation bus (#606). The trail
  * is ingress's own, and the honest name says so.
+ *
+ * The trace id is the run's, not the session's. `AuditLog` passed `sessionId`
+ * in that field, which put a value of the wrong kind in a field every reader
+ * treats as a trace.
  */
-export function createIngressAudit(sessionId: string, component: string) {
+export function createIngressAudit(traceId: string, sessionId: string, component: string) {
   return {
     append(
       action: string,
@@ -42,7 +46,7 @@ export function createIngressAudit(sessionId: string, component: string) {
     ): IngressAuditEvent {
       const spanId = newSpanId();
       Bus.publish(Operational.Info, {
-        traceId: sessionId,
+        traceId,
         sessionId,
         time: Date.now(),
         component,

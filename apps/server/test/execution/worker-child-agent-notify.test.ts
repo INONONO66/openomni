@@ -5,6 +5,7 @@ import type { Tool } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import type { WorkerRunState } from "../../src/execution/worker-runner-types";
 import { WorkerRunner } from "../../src/execution/worker-runner";
+import { createValidRequest as createSharedValidRequest } from "./worker-runner-fixture";
 
 type SpawnRunOptions = Parameters<typeof WorkerRunner.spawnRun>[0];
 type WorkerRunnerEnvironment = Omit<SpawnRunOptions, "params" | "respond">;
@@ -51,12 +52,7 @@ function createSpawnOptions(
 
 function createValidRequest(): Record<string, unknown> {
   return {
-    authToken: "token",
-    runId: "run-1",
-    sessionId: "session-1",
-    mode: "direct",
-    prompt: "hello",
-    model: { provider: "test", id: "test" },
+    ...createSharedValidRequest(),
     tools: [{ name: "child_agent", inputSchema: {} }],
   };
 }

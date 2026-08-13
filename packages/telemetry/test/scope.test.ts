@@ -126,6 +126,26 @@ describe("telemetry scope", () => {
     });
   });
 
+  /** Narrowing a scope must not be a way to stop a run. */
+  test("a throwing accessor on a narrowing drops only its own field", () => {
+    const sink = collector();
+    const narrowing = { actorId: "kept" };
+    Object.defineProperty(narrowing, "runId", {
+      enumerable: true,
+      get() {
+        throw new Error("hostile accessor");
+      },
+    });
+
+    const child = scope(TRACE, sink, { now: clock }).child(narrowing);
+    child.emit(Operational.Info, { component: "test", msg: "narrowed" });
+
+    expect(sink.named(Operational.Info.name)[0]).toMatchObject({
+      runId: "run-1",
+      actorId: "kept",
+    });
+  });
+
   /**
    * The package's boundary rule: replacing telemetry with no-ops must leave
    * observed behavior identical, and a no-op cannot throw.
@@ -235,6 +255,32 @@ describe("telemetry span", () => {
 
     expect(bodyRan).toBe(true);
     expect(result).toBe("done");
+  });
+
+  /**
+   * `terminal` is caller-supplied. If it threw outside the guard it would
+   * escape `span()` and — in the catch branch — replace the error the body
+   * actually threw with its own, destroying the only report of what failed.
+   */
+  test("a throwing terminal builder neither escapes nor replaces the body error", async () => {
+    const reported: string[] = [];
+    const log = scope(TRACE, collector(), {
+      now: clock,
+      onEmitError: (_error, name) => reported.push(name),
+    });
+    const hostile: SpanPair<{ label: string }, { kind: string; elapsedMs: number }> = {
+      ...TEST_SPAN,
+      terminal: () => {
+        throw new Error("terminal exploded");
+      },
+    };
+
+    await expect(
+      log.span(hostile, { label: "t" }, async () => {
+        throw new Error("the real error");
+      }),
+    ).rejects.toThrow("the real error");
+    expect(reported).toEqual([SpanEnd.name]);
   });
 
   test("a throwing body propagates after the terminal event", async () => {

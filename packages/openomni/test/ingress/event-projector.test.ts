@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import type { Ingress, Message } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { IngressEventProjector } from "../../src/ingress/event-projector";
+import { newTraceId } from "@openomni/telemetry";
 
 describe("IngressEventProjector", () => {
   let sessionId: string;
@@ -26,10 +27,15 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId, {
-      providerID: "anthropic",
-      modelID: "claude-3-haiku",
-    });
+    IngressEventProjector.project(
+      event,
+      sessionId,
+      {
+        providerID: "anthropic",
+        modelID: "claude-3-haiku",
+      },
+      { traceId: newTraceId() },
+    );
 
     const messages = Session.getMessages(sessionId);
     expect(messages).toHaveLength(1);
@@ -52,10 +58,15 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId, {
-      providerID: "anthropic",
-      modelID: "claude-3-haiku",
-    });
+    IngressEventProjector.project(
+      event,
+      sessionId,
+      {
+        providerID: "anthropic",
+        modelID: "claude-3-haiku",
+      },
+      { traceId: newTraceId() },
+    );
 
     const messages = Session.getMessages(sessionId);
     const parts = Session.getParts(messages[0].id);
@@ -74,10 +85,15 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId, {
-      providerID: "anthropic",
-      modelID: "claude-3-haiku",
-    });
+    IngressEventProjector.project(
+      event,
+      sessionId,
+      {
+        providerID: "anthropic",
+        modelID: "claude-3-haiku",
+      },
+      { traceId: newTraceId() },
+    );
 
     const messages = Session.getMessages(sessionId);
     const parts = Session.getParts(messages[0].id);
@@ -95,10 +111,15 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId, {
-      providerID: "anthropic",
-      modelID: "claude-3-haiku",
-    });
+    IngressEventProjector.project(
+      event,
+      sessionId,
+      {
+        providerID: "anthropic",
+        modelID: "claude-3-haiku",
+      },
+      { traceId: newTraceId() },
+    );
 
     const messages = Session.getMessages(sessionId);
     expect((messages[0] as Message.UserMessage).agent).toBe("whatsapp");
@@ -116,10 +137,15 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId, {
-      providerID: "anthropic",
-      modelID: "claude-3-haiku",
-    });
+    IngressEventProjector.project(
+      event,
+      sessionId,
+      {
+        providerID: "anthropic",
+        modelID: "claude-3-haiku",
+      },
+      { traceId: newTraceId() },
+    );
 
     // Verify UserMessage is stored
     const messages = Session.getMessages(sessionId);

@@ -27,13 +27,17 @@ class DelegationPolicyBlockedError extends Error {
   }
 }
 
+/**
+ * A child agent inherits its parent's trace. Minting one here would give the
+ * delegation its own trace, disconnected from the run that ordered it — which
+ * is the failure this exists to prevent, not a default worth having.
+ */
 function resolveTraceContext(traceContext: TraceContext.Type | undefined): ResolvedTraceContext {
-  return {
-    ...traceContext,
-    traceId: traceContext?.traceId ?? crypto.randomUUID(),
-    sessionId: traceContext?.sessionId ?? crypto.randomUUID(),
-    runId: traceContext?.runId ?? crypto.randomUUID(),
-  };
+  const { traceId, sessionId, runId } = traceContext ?? {};
+  if (traceId === undefined || sessionId === undefined || runId === undefined) {
+    throw new Error("child agent delegation requires the parent trace context");
+  }
+  return { ...traceContext, traceId, sessionId, runId };
 }
 
 export function createDelegationPolicyRuntime(

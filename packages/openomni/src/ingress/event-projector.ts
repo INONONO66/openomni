@@ -14,7 +14,7 @@ export namespace IngressEventProjector {
     event: Ingress.ResolvedInboundEvent,
     sessionId: string,
     model: { providerID: string; modelID: string },
-    traceContext?: TraceContextProtocol.Type,
+    traceContext: TraceContextProtocol.Type,
   ): void {
     const message: Message.UserMessage = {
       id: crypto.randomUUID(),
@@ -36,7 +36,7 @@ export namespace IngressEventProjector {
       text: textPayload,
     };
 
-    const audit = createIngressAudit(sessionId, "event_projector");
+    const audit = createIngressAudit(traceContext.traceId, sessionId, "event_projector");
     const inboundEvent = audit.append("ingress.inbound.project", {
       sessionId,
       eventId: event.id,
