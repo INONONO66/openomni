@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786646367313,
+  "lastUpdate": 1786648643642,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44865,6 +44865,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 503782,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "92d3b1dd870b5d790606c3a756d5a903c7e3bfa1",
+          "message": "refactor(agent): inherit or drop the MCP client's trace (#606) (#615)\n\n* refactor(agent): inherit or drop the MCP client's trace (#606)\n\nPhase 1b slice 2. `packages/agent/src` now mints no trace id at all — the\nthree that outlived slice 1 were in `runtime/mcp/client.ts`.\n\nA server's lifecycle belongs to whatever brought it up, which is the boot, by\nway of `McpToolProvider` and its boot trace. `connect` and `disconnect` report\nunder that trace or not at all: a lifecycle record filed under a minted id\nnames neither a run nor a boot, and dropping it is the ruling `packages/policy`\nalready applies. A tool call inherits the trace of the run that made it, or is\nrefused — the `?? randomUUID()` there was dead anyway, since the executor\ndispatching it already refuses a traceless call.\n\nMutation-tested first, which was worth doing: re-minting the lifecycle trace\nand dropping it from the provider both survived the full suite on the first\npass. Both are pinned now, the provider one through a real `McpClient`\nconstruction rather than the injected stub, since the stub is what would hide\nthe defect.\n\nD11 is 102 across 39 — and its previous 102 was wrong: a `crypto.randomUUID`\ngrep missed three bare `randomUUID()` imports, so `origin/main` is really 105.\nThe doc now names the measure.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(agent): pin disconnect, which no test had ever called (#606)\n\nReview round 1 on #615 returned PASS with three optional items; all three\ntaken.\n\n`McpClient.disconnect()` is called by no test in the repo — coverage showed\nits whole body uncovered — so both of its publishes were free to re-mint and\nthe suite stayed green. The lifecycle test now disconnects as well as\nconnects, and re-minting either publish fails three tests.\n\nThe drop test covers `traceId: \"\"` alongside `undefined`, matching the\n`callTool` refusal test, and no longer filters its assertion to `mcp.*` — a\nre-minted `operational.error` on the failure branch is the same defect and\nshould fail it too.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T04:16:04+09:00",
+          "tree_id": "447e0518b56b3ca58f98341a34a3fb48273e1566",
+          "url": "https://github.com/INONONO66/openomni/commit/92d3b1dd870b5d790606c3a756d5a903c7e3bfa1"
+        },
+        "date": 1786648642908,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5922,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9790,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3007,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15570,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8266,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1298,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 51825,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2396,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100889,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513763,
             "unit": "ns/op"
           }
         ]
