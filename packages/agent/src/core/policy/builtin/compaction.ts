@@ -28,7 +28,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
       if (traceId === undefined || traceId.length === 0) {
         throw new Error("compaction requires the run trace context");
       }
-      const result = await InMemoryCompactor.compact(ctx.messages, { ...config, traceId });
+      const result = await InMemoryCompactor.compact(ctx.messages, config, { traceId });
       if (!result.compacted) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }

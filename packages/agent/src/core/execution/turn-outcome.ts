@@ -237,7 +237,11 @@ export async function* handleError(
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 
-  emitRunFailed(agentBase, lastError);
+  emitRunFailed(agentBase, lastError, {
+    reason: retryReason,
+    attempt,
+    maxAttempts: effectiveRetryPolicy.maxAttempts,
+  });
   yield createRunErrorEvent(normalizedError, false);
   return { action: "throw", kind: "error", error: normalizedError, errorMessage: lastError };
 }

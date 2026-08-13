@@ -114,7 +114,23 @@ export function emitErrorRetry(
   });
 }
 
-export function emitRunFailed(agentBase: AgentRunBase, error: string): void {
+/**
+ * The run is over and will not be retried.
+ *
+ * `reason` and `maxAttempts` are carried because on a first-attempt terminal
+ * failure no `ErrorRetry` precedes this, and the effective `maxAttempts` — the
+ * configured one narrowed by a `run.retry_after` effect — exists nowhere else
+ * in the record.
+ */
+export function emitRunFailed(
+  agentBase: AgentRunBase,
+  error: string,
+  decision: {
+    readonly reason: RetryReason;
+    readonly attempt: number;
+    readonly maxAttempts: number;
+  },
+): void {
   Bus.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
@@ -122,6 +138,7 @@ export function emitRunFailed(agentBase: AgentRunBase, error: string): void {
     component: "agent",
     msg: "agent.run.failed",
     error,
+    context: { ...decision },
   });
 }
 

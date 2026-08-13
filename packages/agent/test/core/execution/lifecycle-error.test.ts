@@ -222,7 +222,9 @@ describe("handleError (error)", () => {
           agentBase,
           new Error("connection timeout"),
           1,
-          { maxAttempts: 3, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
+          // Non-zero: an assertion of `0` also holds when the field is
+          // hardcoded to 0, which is what the first version of this test did.
+          { maxAttempts: 3, backoffMs: { initial: 50, multiplier: 2, max: 1000 } },
         ),
       );
       await Bun.sleep(0);
@@ -235,7 +237,7 @@ describe("handleError (error)", () => {
       traceId: agentBase.traceId,
       sessionId: agentBase.sessionId,
       reason: "timeout",
-      backoffMs: 0,
+      backoffMs: 50,
       attempt: 1,
     });
   });
