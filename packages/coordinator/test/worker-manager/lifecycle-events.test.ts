@@ -5,6 +5,8 @@ import { WorkerDeliveryError, WorkerDriver } from "@openomni/protocol";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
+const TEST_TRACE_ID = "trace-coordinator-test";
+
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
 let manager: WorkerManager | undefined;
@@ -55,7 +57,12 @@ describe("worker driver lifecycle events (#462 §4)", () => {
       ports,
     );
 
-    await manager.deliver("run-le-1", { sessionId: "session-le-1", delayMs: 40, prompt: "t" });
+    await manager.deliver("run-le-1", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-le-1",
+      delayMs: 40,
+      prompt: "t",
+    });
 
     const names = ports.collected.map((entry) => entry.event.name);
     const spawnedIndex = names.indexOf(WorkerDriver.Spawned.name);
@@ -91,6 +98,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
 
     await expectDeliveryError(
       manager.deliver("run-le-wall", {
+        traceId: TEST_TRACE_ID,
         sessionId: "session-le-wall",
         delayMs: 30_000,
         budget: { maxWallTimeMs: 200 },
@@ -130,6 +138,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     );
 
     const occupying = manager.deliver("run-le-q1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "session-le-q1",
       delayMs: 400,
       prompt: "t",
@@ -138,7 +147,11 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     await waitFor(() => manager?.stats().activeRuns === 1);
 
     await expectDeliveryError(
-      manager.deliver("run-le-q2", { sessionId: "session-le-q2", prompt: "t" }),
+      manager.deliver("run-le-q2", {
+        traceId: TEST_TRACE_ID,
+        sessionId: "session-le-q2",
+        prompt: "t",
+      }),
       "queue_full",
     );
     const saturated = ports.collected.find(
@@ -162,19 +175,28 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     );
 
     const occupying = manager.deliver("run-le-s1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "session-le-s1",
       delayMs: 500,
       prompt: "t",
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
-    const queued = manager.deliver("run-le-s2", { sessionId: "session-le-s2", prompt: "t" });
+    const queued = manager.deliver("run-le-s2", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-le-s2",
+      prompt: "t",
+    });
     // Give the queued delivery a beat to register as a slot waiter.
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
     const stopping = manager.shutdown();
     await expectDeliveryError(queued, "shutting_down");
     await expectDeliveryError(
-      manager.deliver("run-le-s3", { sessionId: "session-le-s3", prompt: "t" }),
+      manager.deliver("run-le-s3", {
+        traceId: TEST_TRACE_ID,
+        sessionId: "session-le-s3",
+        prompt: "t",
+      }),
       "shutting_down",
     );
     await Promise.allSettled([occupying]);

@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
 import { newTraceId } from "@openomni/telemetry";
 
-const TEST_TRACE_ID = newTraceId();
+const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
 const TEST_PROVIDER_ID = "__test_tool_schema__";
 type AiCaptureGlobal = typeof globalThis & {
@@ -53,7 +53,7 @@ describe("run() with model - tool schema conversion", () => {
 
     await run(
       {
-        trace: { traceId: TEST_TRACE_ID },
+        trace: TEST_TRACE,
         messages: [],
         tools: [
           {
@@ -96,7 +96,7 @@ describe("run() with model - tool schema conversion", () => {
 
     await run(
       {
-        trace: { traceId: TEST_TRACE_ID },
+        trace: TEST_TRACE,
         messages: [],
         tools: [
           { name: "first_tool", description: "first", inputSchema: { type: "object" } },
@@ -128,7 +128,7 @@ describe("run() with model - tool schema conversion", () => {
 
     await run(
       {
-        trace: { traceId: TEST_TRACE_ID },
+        trace: TEST_TRACE,
         messages: [],
         tools: [
           {
@@ -160,7 +160,7 @@ describe("run() with model - tool schema conversion", () => {
 
     await run(
       {
-        trace: { traceId: TEST_TRACE_ID },
+        trace: TEST_TRACE,
         messages: [],
         tools: [] as Tool.Spec[],
         system: "you are helpful",

@@ -8,7 +8,7 @@ import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
 import { newTraceId } from "@openomni/telemetry";
 
-const TEST_TRACE_ID = newTraceId();
+const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
 let run: typeof import("../src/run").run;
 
@@ -87,7 +87,7 @@ describe("run", () => {
 
   test("returns RunOutcome with stop type", async () => {
     const input: import("../src/run").RunInput = {
-      trace: { traceId: TEST_TRACE_ID },
+      trace: TEST_TRACE,
       messages: [],
       tools: [],
       model: testModel,
@@ -103,7 +103,7 @@ describe("run", () => {
   test("handles abort signal", async () => {
     const abortController = new AbortController();
     const input: import("../src/run").RunInput = {
-      trace: { traceId: TEST_TRACE_ID },
+      trace: TEST_TRACE,
       messages: [],
       tools: [],
       model: testModel,
@@ -121,7 +121,7 @@ describe("run", () => {
 
   test("returns error outcome when auth is not configured", async () => {
     const input: import("../src/run").RunInput = {
-      trace: { traceId: TEST_TRACE_ID },
+      trace: TEST_TRACE,
       messages: [],
       tools: [],
       model: {
@@ -181,7 +181,7 @@ describe("run", () => {
 
         const outcome = await run(
           {
-            trace: { traceId: TEST_TRACE_ID },
+            trace: TEST_TRACE,
             messages: [],
             tools: [],
             allowAuthFallback: false,
@@ -208,7 +208,7 @@ describe("run", () => {
     controller.abort();
 
     const input: import("../src/run").RunInput = {
-      trace: { traceId: TEST_TRACE_ID },
+      trace: TEST_TRACE,
       messages: [],
       tools: [],
       model: testModel,
@@ -225,7 +225,7 @@ describe("run", () => {
 
   test("calls sink methods during execution", async () => {
     const input: import("../src/run").RunInput = {
-      trace: { traceId: TEST_TRACE_ID },
+      trace: TEST_TRACE,
       messages: [],
       tools: [],
       model: testModel,
@@ -255,7 +255,7 @@ describe("run", () => {
 
     const outcome = await run(
       {
-        trace: { traceId: TEST_TRACE_ID },
+        trace: TEST_TRACE,
         messages: [],
         tools: [],
         model: testModel,

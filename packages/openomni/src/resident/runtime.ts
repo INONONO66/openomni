@@ -4,7 +4,7 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, newSpanId } from "@openomni/telemetry";
+import { Bus } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
 
@@ -300,7 +300,7 @@ export class ResidentRuntime {
     if (ctx.traceContext === undefined) {
       throw new Error("resident run requires the inbound trace context");
     }
-    const runId = newSpanId();
+    const runId = crypto.randomUUID();
     const start = Date.now();
     const traceContext = { ...ctx.traceContext, sessionId: ctx.sessionId, runId };
 

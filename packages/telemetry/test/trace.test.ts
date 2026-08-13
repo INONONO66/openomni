@@ -105,6 +105,23 @@ describe("scope construction", () => {
       ]);
     }
   });
+
+  /**
+   * D11. The tree still carries opaque trace ids — a dashed `crypto.randomUUID()`
+   * is the most common. The emitter refuses them, and no adapter converts them:
+   * a normalizer would let every caller keep minting its own vocabulary and
+   * silently make it look correlated. Conversion happens at the origin, by
+   * calling {@link newTraceId}. This pins that the shortcut does not exist.
+   */
+  test("an opaque uuid is rejected rather than normalized", () => {
+    const opaque = crypto.randomUUID();
+    const base = { sessionId: "s", runId: "r" };
+
+    expect(() => requireTraceScope({ ...base, traceId: opaque })).toThrow(
+      "traceId must be 32 lowercase hex characters",
+    );
+    expect(requireTraceScope({ ...base, traceId: newTraceId() }).traceId).toMatch(/^[0-9a-f]{32}$/);
+  });
 });
 
 describe("span status", () => {

@@ -1,6 +1,6 @@
 import type { RunInput } from "@openomni/llm";
 import { type Message, PolicyDecision } from "@openomni/protocol";
-import type { Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
+import type { Policy, Sink, Tool } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
@@ -12,7 +12,7 @@ import {
   emitBudgetWarning,
 } from "./run-events";
 import { PolicyEffectApplier } from "./policy-effects";
-import type { AgentRunBase, BuildTurnResult, RunState, TurnArtifacts } from "./run-state";
+import type { AgentRunBase, BuildTurnResult, RunState, RunTrace, TurnArtifacts } from "./run-state";
 import {
   buildLifecyclePolicyContext,
   recordAssistantTokenDelta,
@@ -85,7 +85,7 @@ export async function buildTurn(
   engine: PolicyEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
-  trace: TraceContext.Type,
+  trace: RunTrace,
   agentBase: AgentRunBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
@@ -217,10 +217,7 @@ export async function buildTurn(
         toolChoice: configuredToolChoice,
         maxSteps: config.budget?.maxToolCalls ?? 24,
         providerOptions: config.providerOptions,
-        trace: {
-          traceId: trace.traceId,
-          ...(trace.runId !== undefined && { runId: trace.runId }),
-        },
+        trace: { traceId: trace.traceId, sessionId: trace.sessionId, runId: trace.runId },
       },
       trackingSink,
       turnAssistant,

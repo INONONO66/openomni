@@ -1,4 +1,4 @@
-import { newSpanId, newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "@openomni/telemetry";
 import type { ChatAgentInput } from "../../src/core/types";
 
 /**
@@ -17,8 +17,8 @@ export function runInput(
     messages,
     traceContext: {
       traceId: newTraceId(),
-      sessionId: `session-${newSpanId()}`,
-      runId: `run-${newSpanId()}`,
+      sessionId: `session-${crypto.randomUUID()}`,
+      runId: `run-${crypto.randomUUID()}`,
     },
     ...overrides,
   };

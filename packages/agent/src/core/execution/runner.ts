@@ -1,5 +1,5 @@
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
-import type { Sink, TraceContext } from "@openomni/protocol";
+import type { Sink } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
@@ -13,7 +13,7 @@ import {
   dispatchModelResponse,
   dispatchPreRun,
 } from "./lifecycle-dispatch";
-import { createRunState, type AgentRunBase } from "./run-state";
+import { createRunState, type AgentRunBase, type RunTrace } from "./run-state";
 
 export async function* streamAgent(
   input: ChatAgentInput,
@@ -172,9 +172,7 @@ function nonEmptyString(value: unknown): string | undefined {
  * W3C `traceparent` is enforced by the emitter that puts it on the wire, which
  * is the only place the format matters.
  */
-function requireRunTrace(
-  traceContext: ChatAgentInput["traceContext"],
-): TraceContext.Type & { traceId: string; sessionId: string; runId: string } {
+function requireRunTrace(traceContext: ChatAgentInput["traceContext"]): RunTrace {
   const traceId = nonEmptyString(traceContext?.traceId);
   const sessionId = nonEmptyString(traceContext?.sessionId);
   const runId = nonEmptyString(traceContext?.runId);

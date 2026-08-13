@@ -8,6 +8,8 @@ import {
 } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
+const TEST_TRACE_ID = "trace-coordinator-test";
+
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
 const socketDir = `/tmp/omo-cr-${process.pid}`;
@@ -30,6 +32,7 @@ afterAll(async () => {
 describe("worker manager crash recovery", () => {
   test("in-flight run fails when worker is killed", async () => {
     const dispatchPromise = manager.deliver("crash-run-1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "crash-session",
       delayMs: 500,
       prompt: "test",
@@ -58,6 +61,7 @@ describe("worker manager crash recovery", () => {
     expect(manager.stats().ready).toBeGreaterThan(0);
 
     const result = await manager.deliver("recovery-run-1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "recovery-session",
       prompt: "test",
     });

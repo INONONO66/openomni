@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
+const TEST_TRACE_ID = "trace-coordinator-test";
+
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
 const socketDir = `/tmp/omo-dp-${process.pid}`;
@@ -49,7 +51,12 @@ describe("worker manager dispatch", () => {
 
     const results = await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        manager.deliver(runId, { sessionId: sessionId, delayMs: 30, prompt: "test" }),
+        manager.deliver(runId, {
+          traceId: TEST_TRACE_ID,
+          sessionId: sessionId,
+          delayMs: 30,
+          prompt: "test",
+        }),
       ),
     );
 
@@ -67,14 +74,24 @@ describe("worker manager dispatch", () => {
 
     const seqStart = Date.now();
     for (const { sessionId, runId } of runs) {
-      await manager.deliver(runId, { sessionId: sessionId, delayMs: 50, prompt: "test" });
+      await manager.deliver(runId, {
+        traceId: TEST_TRACE_ID,
+        sessionId: sessionId,
+        delayMs: 50,
+        prompt: "test",
+      });
     }
     const seqMs = Date.now() - seqStart;
 
     const parStart = Date.now();
     await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        manager.deliver(runId, { sessionId: sessionId, delayMs: 50, prompt: "test" }),
+        manager.deliver(runId, {
+          traceId: TEST_TRACE_ID,
+          sessionId: sessionId,
+          delayMs: 50,
+          prompt: "test",
+        }),
       ),
     );
     const parMs = Date.now() - parStart;
@@ -105,6 +122,7 @@ describe("worker manager dispatch", () => {
 
   test("dispatch with budget.maxWallTimeMs=120_000 passes timeout=150_000 to IPC", async () => {
     const result = await manager.deliver("run-budget-1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "session-budget-1",
       delayMs: 10,
       prompt: "test",
@@ -115,6 +133,7 @@ describe("worker manager dispatch", () => {
 
   test("dispatch without budget defaults to timeout=330_000", async () => {
     const result = await manager.deliver("run-budget-2", {
+      traceId: TEST_TRACE_ID,
       sessionId: "session-budget-2",
       delayMs: 10,
       prompt: "test",
@@ -143,30 +162,35 @@ describe("worker manager dispatch", () => {
     try {
       await envManager.waitUntilReady(15_000);
       const result = await envManager.deliver("run-env", {
+        traceId: TEST_TRACE_ID,
         sessionId: "session-env",
         prompt: "test",
         envName: "OPENOMNI_WORKER_ENV_FIXTURE",
       });
       expect((result as Record<string, unknown>).envValue).toBe("runtime-value");
       const secretResult = await envManager.deliver("run-secret", {
+        traceId: TEST_TRACE_ID,
         sessionId: "session-env",
         prompt: "test",
         envName: "DISCORD_BOT_TOKEN",
       });
       expect((secretResult as Record<string, unknown>).envValue).toBeUndefined();
       const authTokenResult = await envManager.deliver("run-auth-token", {
+        traceId: TEST_TRACE_ID,
         sessionId: "session-env",
         prompt: "test",
         envName: "OPENOMNI_WORKER_IPC_TOKEN",
       });
       expect((authTokenResult as Record<string, unknown>).envValue).toBeUndefined();
       const authFileResult = await envManager.deliver("run-auth-file", {
+        traceId: TEST_TRACE_ID,
         sessionId: "session-env",
         prompt: "test",
         envName: "OPENOMNI_AUTH_FILE",
       });
       expect((authFileResult as Record<string, unknown>).envValue).toBeUndefined();
       const homeResult = await envManager.deliver("run-home", {
+        traceId: TEST_TRACE_ID,
         sessionId: "session-env",
         prompt: "test",
         envName: "HOME",

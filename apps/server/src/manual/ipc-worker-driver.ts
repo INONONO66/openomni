@@ -31,6 +31,7 @@ import { WorkerDriver } from "@openomni/protocol";
 import { createWorkerManager } from "@openomni/coordinator";
 import { Storage } from "@openomni/session";
 import { createExecutionCoordinator } from "../execution/coordinator";
+import { newTraceId } from "@openomni/telemetry";
 
 const REPO_ROOT = path.resolve(import.meta.dir, "../../../..");
 
@@ -173,6 +174,8 @@ async function runAuthenticatedRequest(json: boolean): Promise<void> {
   const runId = `run-${crypto.randomUUID()}`;
   const sessionId = `ses-${crypto.randomUUID()}`;
   const request: Execution.Request = {
+    // This driver starts the interaction, so it is a trace origin.
+    traceId: newTraceId(),
     runId,
     sessionId,
     mode: "direct",

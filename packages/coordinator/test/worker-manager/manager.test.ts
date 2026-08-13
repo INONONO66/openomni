@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
+const TEST_TRACE_ID = "trace-coordinator-test";
+
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
 let manager: WorkerManager | undefined;
@@ -50,6 +52,7 @@ describe("on-demand WorkerManager", () => {
     const results = await Promise.allSettled(
       Array.from({ length: 5 }, (_, index) =>
         manager?.deliver(`run-${index}`, {
+          traceId: TEST_TRACE_ID,
           sessionId: `session-${index}`,
           delayMs: 40,
           prompt: "test",
@@ -74,12 +77,14 @@ describe("on-demand WorkerManager", () => {
     );
 
     const first = (await manager.deliver("run-1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "same-session",
       prompt: "test",
     })) as {
       workerId: string;
     };
     const second = (await manager.deliver("run-2", {
+      traceId: TEST_TRACE_ID,
       sessionId: "same-session",
       prompt: "test",
     })) as {
@@ -101,10 +106,18 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = (await manager.deliver("run-a", { sessionId: "session-a", prompt: "test" })) as {
+    const first = (await manager.deliver("run-a", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-a",
+      prompt: "test",
+    })) as {
       workerId: string;
     };
-    const second = (await manager.deliver("run-b", { sessionId: "session-b", prompt: "test" })) as {
+    const second = (await manager.deliver("run-b", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-b",
+      prompt: "test",
+    })) as {
       workerId: string;
     };
 
@@ -124,6 +137,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const first = (await manager.deliver("run-1", {
+      traceId: TEST_TRACE_ID,
       sessionId: "resume-session",
       prompt: "test",
     })) as {
@@ -134,6 +148,7 @@ describe("on-demand WorkerManager", () => {
     await waitFor(() => manager?.stats().workers === 0, 2_000);
 
     const second = (await manager.deliver("run-2", {
+      traceId: TEST_TRACE_ID,
       sessionId: "resume-session",
       prompt: "test",
     })) as {
@@ -155,6 +170,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const dispatch = manager.deliver("run-cancel", {
+      traceId: TEST_TRACE_ID,
       sessionId: "cancel-session",
       delayMs: 200,
       prompt: "test",
@@ -180,6 +196,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const dispatch = manager.deliver("run-startup-cancel", {
+      traceId: TEST_TRACE_ID,
       sessionId: "startup-cancel-session",
       prompt: "test",
     });
@@ -207,12 +224,14 @@ describe("on-demand WorkerManager", () => {
     );
 
     const first = manager.deliver("run-duplicate", {
+      traceId: TEST_TRACE_ID,
       sessionId: "duplicate-session-a",
       delayMs: 100,
       prompt: "test",
     });
     await expect(
       manager.deliver("run-duplicate", {
+        traceId: TEST_TRACE_ID,
         sessionId: "duplicate-session-b",
         delayMs: 100,
         prompt: "test",
@@ -237,6 +256,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const first = manager.deliver("run-duplicate-same-session", {
+      traceId: TEST_TRACE_ID,
       sessionId: "duplicate-session",
       delayMs: 100,
       prompt: "test",
@@ -245,6 +265,7 @@ describe("on-demand WorkerManager", () => {
 
     await expect(
       manager.deliver("run-duplicate-same-session", {
+        traceId: TEST_TRACE_ID,
         sessionId: "duplicate-session",
         prompt: "test",
       }),
@@ -267,13 +288,18 @@ describe("on-demand WorkerManager", () => {
     );
 
     const original = manager.deliver("run-duplicate-cancel", {
+      traceId: TEST_TRACE_ID,
       sessionId: "duplicate-cancel-session",
       prompt: "test",
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
 
     await expect(
-      manager.deliver("run-duplicate-cancel", { sessionId: "other-session", prompt: "test" }),
+      manager.deliver("run-duplicate-cancel", {
+        traceId: TEST_TRACE_ID,
+        sessionId: "other-session",
+        prompt: "test",
+      }),
     ).rejects.toThrow("run already active: run-duplicate-cancel");
     await expect(manager.cancel("run-duplicate-cancel")).resolves.toMatchObject({
       cancelled: true,
@@ -300,6 +326,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const first = manager.deliver("run-busy", {
+      traceId: TEST_TRACE_ID,
       sessionId: "busy-session",
       delayMs: 200,
       prompt: "test",
@@ -307,7 +334,11 @@ describe("on-demand WorkerManager", () => {
     await waitFor(() => manager?.stats().activeRuns === 1);
 
     await expect(
-      manager.deliver("run-queued", { sessionId: "queued-session", prompt: "test" }),
+      manager.deliver("run-queued", {
+        traceId: TEST_TRACE_ID,
+        sessionId: "queued-session",
+        prompt: "test",
+      }),
     ).rejects.toThrow("worker slot wait timed out");
     await first;
   });
@@ -323,11 +354,25 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    await manager.deliver("run-a", { sessionId: "session-a", prompt: "test" });
+    await manager.deliver("run-a", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-a",
+      prompt: "test",
+    });
 
     const results = await Promise.allSettled([
-      manager.deliver("run-b", { sessionId: "session-b", delayMs: 40, prompt: "test" }),
-      manager.deliver("run-c", { sessionId: "session-c", delayMs: 40, prompt: "test" }),
+      manager.deliver("run-b", {
+        traceId: TEST_TRACE_ID,
+        sessionId: "session-b",
+        delayMs: 40,
+        prompt: "test",
+      }),
+      manager.deliver("run-c", {
+        traceId: TEST_TRACE_ID,
+        sessionId: "session-c",
+        delayMs: 40,
+        prompt: "test",
+      }),
     ]);
 
     expect(results.every((result) => result.status === "fulfilled")).toBe(true);
@@ -346,6 +391,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const first = manager.deliver("run-busy-cancel", {
+      traceId: TEST_TRACE_ID,
       sessionId: "busy-session",
       delayMs: 200,
       prompt: "test",
@@ -353,6 +399,7 @@ describe("on-demand WorkerManager", () => {
     await waitFor(() => manager?.stats().activeRuns === 1);
 
     const queued = manager.deliver("run-queued-cancel", {
+      traceId: TEST_TRACE_ID,
       sessionId: "queued-session",
       prompt: "test",
     });
@@ -381,6 +428,7 @@ describe("on-demand WorkerManager", () => {
     );
 
     const dispatch = manager.deliver("run-deliver", {
+      traceId: TEST_TRACE_ID,
       sessionId: "deliver-session",
       delayMs: 500,
       prompt: "test",

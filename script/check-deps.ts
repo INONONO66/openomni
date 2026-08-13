@@ -106,6 +106,9 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
+    // telemetry is ring 1 and llm is ring 2, so the edge runs downward. Only
+    // llm's tests use it today, to mint trace ids through the package that
+    // owns the format rather than hardcoding hex literals beside it.
     allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry", "@openomni/session"]),
   },
   agent: {

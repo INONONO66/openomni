@@ -321,6 +321,9 @@ export namespace IngressHandlers {
 
     publishModeDetected(ctx, "resident");
 
+    // Bound once here: `residentRuntime.run` refuses without it, so re-asking
+    // below would be a second enforcement of a condition already settled.
+    const traceId = requireTraceId(ctx);
     const residentResult = await ctx.residentRuntime.run({
       sessionId: ctx.sessionId,
       event: ctx.event,
@@ -328,12 +331,7 @@ export namespace IngressHandlers {
       signal: (ctx.event.runtime as { signal?: AbortSignal } | undefined)?.signal,
     });
     const output = residentResult.output;
-    SessionBridge.storeDirectResult(
-      requireTraceId(ctx),
-      ctx.sessionId,
-      output,
-      ctx.event.agent.model,
-    );
+    SessionBridge.storeDirectResult(traceId, ctx.sessionId, output, ctx.event.agent.model);
 
     return {
       mode: ctx.event.mode,

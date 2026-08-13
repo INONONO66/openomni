@@ -50,6 +50,7 @@ Consequence worth stating plainly: with `Bus` relocated, `llm` becomes protocol-
 | D8 | Speculative compaction overlaps the in-flight model call; **application stays at one deterministic seam** | Computing during the model's network wait is free. Applying at an arbitrary moment is not: it would make two identical runs produce different histories and break resume-by-replay. Compute in background, apply at `run.completion.pre`, record the applied result as the effect. |
 | D9 | Idle warm-up between runs is **openomni's**, not the core's | senpi's `agent_end` warm-up exploits human thinking time. Our workers are headless — there is no idle *inside* a run. Idle exists between runs, which requires a session outliving the run, which is `Wait`/work-item territory. openomni can layer it on the exported pure modules. |
 | D10 | Approval-and-resume is out of scope; `tool.require_approval` stays fail-closed as a denial | Real approval means the run suspends and resumes, which needs durable `Wait` ([#215](https://github.com/INONONO66/openomni/issues/215)). The FSM reserves a state for it. |
+| D11 | Opaque trace ids convert **at the origin**, never in the emitter. No normalizing adapter exists, and a test pins its absence | `requireTraceScope` takes W3C 32-hex; 126 sites across 49 files still pass a dashed `crypto.randomUUID()` as `traceId`. Those are per-line ids wearing a trace's name — each one correlates to exactly one row. A normalizer would make them *look* correlated while leaving every caller minting its own vocabulary, so the shortcut is refused: Phase 1b converts each site to inherit a scope, or to mint via `newTraceId()` where it is a genuine origin. Until then `scope()` is on no production path. |
 
 ## The 12 injection points
 
@@ -92,6 +93,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
 | — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
 | [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | 🟨 |
+| — | convert the 126 opaque-`traceId` emit sites (D11): inherit a scope, or mint at a genuine origin | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core
