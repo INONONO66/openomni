@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
+import { createBudgetState } from "../../../../src/core/budget";
 import { createCompactionPolicy } from "../../../../src/core/policy/builtin/compaction";
 import type { PolicyContext } from "../../../../src/core/policy";
 import type { BudgetState } from "../../../../src/core/budget";
@@ -54,6 +55,27 @@ function budgetState(inputTokens: number, outputTokens: number): BudgetState {
 }
 
 describe("createCompactionPolicy", () => {
+  /**
+   * `run.completion.pre` is fail-closed: a throw here becomes a deny carrying
+   * `run.abort`, which ends the run. Skipping is the lesser failure, and the
+   * reason code says which one happened.
+   */
+  it("skips rather than aborting when no trace reaches it", async () => {
+    const middleware = createCompactionPolicy({
+      contextWindowTokens: 100,
+      protectRecentMessages: 2,
+    });
+    const ctx = baseCtx({
+      traceContext: undefined,
+      messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+      budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
+    });
+
+    const verdict = await middleware.fn(ctx);
+
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.reasonCodes).toContain("compaction_skipped_no_trace");
+  });
   it("continues when below threshold", async () => {
     const middleware = createCompactionPolicy({
       contextWindowTokens: 10000,

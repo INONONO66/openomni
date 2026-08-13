@@ -104,10 +104,7 @@ export function checkBudget(state: BudgetState, budget?: AgentBudget): BudgetSta
  */
 export function publishBudgetTelemetry(
   state: BudgetState,
-  // Structural rather than `AgentRunBase`, to state the minimum this needs:
-  // the run's trace and session. (A type-only import of `AgentRunBase` would
-  // also be legal — it erases, so it closes no value cycle — but it would
-  // imply a dependency on a shape three of whose fields are irrelevant here.)
+  /** The run being reported on. Structural: this needs a trace and a session. */
   run: { readonly traceId: string; readonly sessionId: string },
   budget?: AgentBudget,
 ): BudgetStatus {

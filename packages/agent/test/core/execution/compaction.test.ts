@@ -106,10 +106,6 @@ describe("InMemoryCompactor", () => {
     expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(1);
   });
 
-  /**
-   * Compaction rewrites a run's history. A record of that filed under a minted
-   * trace cannot be read back against the run whose history it changed.
-   */
   describe("shouldCompact", () => {
     it("returns false when tokens are below threshold", () => {
       expect(InMemoryCompactor.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);

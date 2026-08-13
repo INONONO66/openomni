@@ -138,6 +138,27 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     expect(seen[0]).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
   });
 
+  /** The branch `dispatchBudgetCheck` acts on to end the run. */
+  it("files the exceeded event under the run's trace", async () => {
+    const seen: Array<{ traceId: string; sessionId?: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      seen.push(event as unknown as { traceId: string; sessionId?: string });
+    });
+
+    try {
+      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 30 }, TEST_RUN, {
+        maxTurns: 24,
+      });
+      expect(status).toBe("exceeded");
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
+  });
+
   it("emits exactly one event per call at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
     let status: string | undefined;

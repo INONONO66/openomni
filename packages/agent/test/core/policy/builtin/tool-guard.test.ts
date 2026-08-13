@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
 import type { PolicyContext } from "../../../../src/core/policy";
 
@@ -20,6 +22,51 @@ describe("createToolPermissionPolicy", () => {
   /**
    * The guard evaluates inside a tool call inside a run — never an origin.
    */
+  it("reports an evaluation failure under the run's trace", async () => {
+    const seen: Array<{ traceId: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Debug, (event) => {
+      seen.push(event as unknown as { traceId: string });
+    });
+    const hostileInput = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        get: () => {
+          throw new Error("hostile tool input");
+        },
+      },
+    );
+    const mw = createToolPermissionPolicy({
+      permission: {
+        action: "tool.call",
+        inputRules: [
+          {
+            toolPattern: "shell_exec",
+            field: "cmd",
+            pattern: "^rm\\s",
+            action: "deny",
+            priority: 10,
+          },
+        ],
+      },
+    });
+
+    try {
+      await mw.fn(
+        baseCtx({
+          traceContext: { traceId: "trace-guard-report" },
+          toolName: "shell_exec",
+          toolCallId: "call-reported",
+          toolInput: hostileInput,
+        }),
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(seen.filter((event) => event.traceId === "trace-guard-report")).toHaveLength(1);
+  });
+
   it("refuses to report an evaluation failure without the run trace", async () => {
     const hostileInput = new Proxy<Record<string, unknown>>(
       {},

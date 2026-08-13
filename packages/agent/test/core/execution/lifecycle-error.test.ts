@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { AgentExecution } from "@openomni/protocol";
+import { AgentExecution, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -239,6 +239,58 @@ describe("handleError (error)", () => {
       reason: "timeout",
       backoffMs: 50,
       attempt: 1,
+    });
+  });
+
+  /**
+   * A first-attempt terminal failure has no preceding `ErrorRetry`, so this is
+   * the only record of why the run stopped — and the effective `maxAttempts`,
+   * after a `run.retry_after` effect narrows the configured one, exists
+   * nowhere else at all.
+   */
+  it("records the decision on the terminal failure, with the narrowed ceiling", async () => {
+    const failures: Array<{ traceId: string; context?: Record<string, unknown> }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Error, (event) => {
+      failures.push(event as unknown as { traceId: string; context?: Record<string, unknown> });
+    });
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "narrow-retries",
+      pointIds: ["run.error.error"],
+      effectCapabilities: { "run.error.error": ["run.retry_after"] },
+      priority: 10,
+      fn: () =>
+        allow("narrow-retries", undefined, [
+          { type: "run.retry_after", delayMs: 0, maxRetries: 1 },
+        ]),
+    });
+    const agentBase = makeAgentBase();
+
+    try {
+      await collectEvents(
+        handleError(
+          makeState(),
+          engine,
+          makeConfig(),
+          agentBase,
+          new Error("schema validation failed"),
+          1,
+          { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
+        ),
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.traceId).toBe(agentBase.traceId);
+    expect(failures[0]?.context).toEqual({
+      reason: "validation_error",
+      attempt: 1,
+      // 1 from the effect, not the 5 the policy configured.
+      maxAttempts: 1,
     });
   });
 });
