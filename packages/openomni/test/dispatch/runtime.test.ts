@@ -13,6 +13,28 @@ import {
 const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
 
 describe("DispatchRuntime", () => {
+  /**
+   * A dispatch is ordered by something that already has a trace. The type
+   * makes this unreachable for a typed caller; the throw stands for the
+   * untyped ones — `Reflect.apply` and JSON-shaped IPC params — which is
+   * exactly how the round-7 defect reached `submit`.
+   */
+  test("refuses a submit that cannot name its ordering run", async () => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    let handlerCalled = false;
+    runtime.register("resident.ask", () => {
+      handlerCalled = true;
+      return { output: "must not run" };
+    });
+
+    const submission: Promise<unknown> = Reflect.apply(runtime.submit, runtime, [
+      { action: "resident.ask", target: { kind: "resident" }, payload: "hello" },
+      { sessionId: "session-traceless", runId: "run-traceless" },
+    ]);
+
+    await expect(submission).rejects.toThrow("dispatch submit requires the ordering run's traceId");
+    expect(handlerCalled).toBe(false);
+  });
   beforeEach(resetDispatchTestState);
 
   test("authorizes before routing and completes a handler", async () => {

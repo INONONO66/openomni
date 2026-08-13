@@ -3,6 +3,22 @@ import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/mi
 import { WorkspaceLock } from "../../src/execution-runtime/workspace-lock";
 
 describe("ToolRuntimePolicyMiddleware integration", () => {
+  /**
+   * The middleware observes a call it did not start. Minting a trace here
+   * produced a high-risk-tool warning that correlated to nothing, so it
+   * inherits or refuses.
+   */
+  test("refuses a pre-tool evaluation with no run trace", async () => {
+    await expect(
+      ToolRuntimePolicyMiddleware.evaluatePreTool({
+        toolName: "bash",
+        toolCallId: "call-traceless",
+        input: {},
+        riskTier: 2,
+        lockOwnerId: "run-1",
+      }),
+    ).rejects.toThrow("tool runtime policy requires the run trace context");
+  });
   test("evaluates pre-tool for low-risk tier without workspace lock", async () => {
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
       traceContext: { traceId: "trace-policy-test", sessionId: "session-1", runId: "run-1" },

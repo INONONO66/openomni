@@ -31,6 +31,7 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
 function command(overrides: Partial<Dispatch.Command> = {}): Dispatch.Command {
   return {
     dispatchId: "dispatch-1",
+    traceId: "trace-matcher-test",
     action: "actor.message",
     target: { kind: "surface", id: correlation.channelId },
     payload: "reply",

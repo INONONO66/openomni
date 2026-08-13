@@ -142,7 +142,7 @@ describe("run", () => {
   });
 
   test("publishes LlmCall.Failed on error so every Started call terminates", async () => {
-    const failures: Array<{ error: string; aborted: boolean; traceId: string }> = [];
+    const failures: Array<{ readonly error: string; readonly traceId: string }> = [];
     const unsub = Bus.subscribe(LlmCall.Failed, (event) => {
       failures.push(event);
     });
@@ -157,7 +157,7 @@ describe("run", () => {
           name: "Test Model",
           api: { npm: "@ai-sdk/anthropic" },
         },
-        trace: { traceId: "trace-run-failed" },
+        trace: { traceId: "trace-run-failed", sessionId: "session-failed", runId: "run-failed" },
       },
       mockSink,
     );

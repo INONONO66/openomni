@@ -5,7 +5,7 @@ import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import { createRunState } from "../../../src/core/execution/run-state";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool, TraceContext } from "@openomni/protocol";
-import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import type { ChatAgentConfig } from "../../../src/core/types";
 import { abortRun, allow, filterTools } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 
@@ -43,8 +43,7 @@ function makeAgentBase() {
 }
 
 function makeState() {
-  const input: ChatAgentInput = runInput([{ role: "user", content: "hello" }]);
-  return createRunState(input);
+  return createRunState(runInput([{ role: "user", content: "hello" }]));
 }
 
 function filterPolicy(filteredTools: string[]): PolicyRegistration {

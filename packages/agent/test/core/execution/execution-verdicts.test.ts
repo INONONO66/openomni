@@ -1,13 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, type TraceContext } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import {
   createRunState,
   type AgentRunBase,
   type RunState,
+  type RunTrace,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
@@ -17,7 +18,7 @@ import { runInput } from "../../helpers/run-input";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
 
-function makeInput(): ChatAgentInput {
+function makeInput() {
   return runInput([{ role: "user", content: "hello" }]);
 }
 
@@ -34,10 +35,10 @@ function makeState(): RunState {
 }
 
 function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
 }
 
-function makeTrace(): TraceContext.Type {
+function makeTrace(): RunTrace {
   return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
@@ -47,6 +48,7 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
       messages: [],
       tools: [],
       model: providerModel,
+      trace: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       maxSteps: 24,
     },
     trackingSink: {

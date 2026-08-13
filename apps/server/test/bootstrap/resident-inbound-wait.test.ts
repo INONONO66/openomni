@@ -20,9 +20,7 @@ import { createResidentInboundWaitHandler } from "../../src/bootstrap/resident-i
 import type { ServerConfig } from "../../src/config";
 import { CustomToolProvider } from "../../src/tool/custom";
 import { McpToolProvider } from "../../src/tool/mcp";
-
-/** Boot is the trace origin an MCP provider reports connect failures under. */
-const TEST_BOOT_TRACE_ID = "trace-boot-test";
+import { TEST_BOOT_TRACE_ID } from "../tool/mcp/provider-test-fixture";
 
 /**
  * #510 D2b — the inbound wait acquires and releases the run's wait through

@@ -1,5 +1,5 @@
 import type { TraceContext } from "@openomni/protocol";
-import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import {
   createRunState,
   type AgentRunBase,
@@ -8,7 +8,7 @@ import {
 } from "../../../src/core/execution/run-state";
 import { runInput } from "../../helpers/run-input";
 
-function makeInput(): ChatAgentInput {
+function makeInput() {
   return runInput([{ role: "user", content: "hello" }]);
 }
 

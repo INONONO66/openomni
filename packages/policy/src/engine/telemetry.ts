@@ -23,6 +23,18 @@ export function recordDecision(
   return decision;
 }
 
+/**
+ * A middleware threw. Reported under the dispatch's trace, or the engine's,
+ * or not at all.
+ *
+ * The silence is the ruling, not an oversight: an error record filed under a
+ * minted trace names a run that does not exist, and a reader chasing it finds
+ * nothing — worse than no record, because it looks like evidence. The failure
+ * itself is never silent regardless: `failPolicy` decides the verdict at
+ * `dispatch.ts`, and a fail-closed middleware still denies. What is dropped is
+ * the observation, and only for an engine that was never told its trace —
+ * which `PolicyEngine.create` makes a wiring choice, not a runtime accident.
+ */
 export function publishMiddlewareError(
   options: PolicyEngineConfig,
   dispatchTrace: TraceContext.Type | undefined,

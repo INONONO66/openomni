@@ -1,4 +1,5 @@
 import { newTraceId } from "@openomni/telemetry";
+import type { RunTrace } from "../../src/core/execution/run-state";
 import type { ChatAgentInput } from "../../src/core/types";
 
 /**
@@ -11,15 +12,18 @@ import type { ChatAgentInput } from "../../src/core/types";
  */
 export function runInput(
   messages: ChatAgentInput["messages"],
-  overrides: Omit<Partial<ChatAgentInput>, "messages"> = {},
-): ChatAgentInput {
+  overrides: Omit<Partial<ChatAgentInput>, "messages" | "traceContext"> & {
+    readonly traceContext?: RunTrace;
+  } = {},
+): ChatAgentInput & { traceContext: RunTrace } {
+  const { traceContext, ...rest } = overrides;
   return {
     messages,
-    traceContext: {
+    ...rest,
+    traceContext: traceContext ?? {
       traceId: newTraceId(),
       sessionId: `session-${crypto.randomUUID()}`,
       runId: `run-${crypto.randomUUID()}`,
     },
-    ...overrides,
   };
 }

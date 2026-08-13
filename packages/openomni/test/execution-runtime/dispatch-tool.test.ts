@@ -64,7 +64,7 @@ describe("dispatch tool", () => {
 
   test("executes through runtime with implicit context", async () => {
     let capturedInput: Dispatch.Input | undefined;
-    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1];
+    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1] | undefined;
     const tool = createDispatchTool({
       async submit(input, options) {
         capturedInput = input;
@@ -116,7 +116,7 @@ describe("dispatch tool", () => {
    * the tool call that asked for it — the failure a trace exists to prevent.
    */
   test("forwards the calling run's trace to the runtime", async () => {
-    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1];
+    let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1] | undefined;
     const tool = createDispatchTool({
       async submit(_input, options) {
         capturedOptions = options;
@@ -132,6 +132,33 @@ describe("dispatch tool", () => {
     );
 
     expect(capturedOptions).toMatchObject({ traceId: "trace-caller" });
+  });
+
+  /**
+   * The executor that normally invokes this tool refuses a traceless call
+   * first, so this guards the exported `AgentToolProvider` surface, which can
+   * reach `execute` without a context. It returns a tool error rather than
+   * throwing: nothing was dispatched, and the run continues.
+   */
+  test("refuses a call that arrives without the run trace", async () => {
+    let submitted = false;
+    const tool = createDispatchTool({
+      async submit() {
+        submitted = true;
+        return { dispatchId: "dispatch-1", status: "completed", output: "ok" };
+      },
+    });
+
+    const response = await tool.execute(
+      call({ action: "resident.ask", target: { kind: "resident" }, payload: "hello" }),
+    );
+
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.output)).toMatchObject({
+      status: "failed",
+      error: "dispatch tool requires the run trace context",
+    });
+    expect(submitted).toBe(false);
   });
 
   test("passes worker endpoint selectors through runtime submission", async () => {

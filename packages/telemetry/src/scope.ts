@@ -1,6 +1,12 @@
 import type { BusEvent } from "@openomni/protocol";
 import { createSpanHandle, failedOutcome, type SpanHandle, type SpanPair } from "./span";
-import { newSpanId, requireTraceScope, type EmitPayload, type TraceScope } from "./trace";
+import {
+  newSpanId,
+  requireTraceScope,
+  type EmitPayload,
+  type TraceScope,
+  type TraceScopeInput,
+} from "./trace";
 
 /**
  * A narrowing of an existing scope. The W3C ids are absent by construction: a
@@ -61,13 +67,21 @@ export interface ScopeOptions {
 /**
  * Builds an emitter bound to one trace identity.
  *
+ * The input is a {@link TraceScopeInput}, not a finished {@link TraceScope}:
+ * a root span has no caller to inherit a `spanId` from, so the emitter mints
+ * it. Demanding one up front would push that decision onto every caller.
+ *
  * Validation happens at construction: a malformed scope is a wiring error the
  * process should not start with, while a throw from inside a run would be
  * telemetry cancelling observed work. {@link Emitter.child} and
  * {@link Emitter.span} derive their identity from an already-valid one, so
  * neither can fail.
  */
-export function scope(trace: TraceScope, sink: BusEvent.Sink, options: ScopeOptions = {}): Emitter {
+export function scope(
+  trace: TraceScopeInput,
+  sink: BusEvent.Sink,
+  options: ScopeOptions = {},
+): Emitter {
   const now = options.now ?? Date.now;
   const onEmitError =
     options.onEmitError ??
