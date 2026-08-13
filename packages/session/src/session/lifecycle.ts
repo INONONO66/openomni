@@ -1,5 +1,5 @@
 import type { SessionInfo } from "./info";
-import { Bus } from "../bus";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage";
 import { Event } from "./events";
 

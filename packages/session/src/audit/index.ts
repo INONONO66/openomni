@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "../bus";
+import { Bus } from "@openomni/telemetry";
 
 export namespace AuditLog {
   export function create(sessionId: string, scope: string) {

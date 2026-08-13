@@ -71,6 +71,15 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageName: "@openomni/protocol",
     allowedDeps: "none",
   },
+  telemetry: {
+    displayName: "telemetry",
+    packageJsonPath: "packages/telemetry/package.json",
+    packageName: "@openomni/telemetry",
+    // Ring-1 observation channel (#606): protocol only. It must stay a leaf —
+    // replacing it with no-ops has to leave observed behavior identical, so it
+    // can never reach for storage or decisions.
+    allowedDeps: new Set(["@openomni/protocol"]),
+  },
   ipc: {
     displayName: "ipc",
     packageJsonPath: "packages/ipc/package.json",
@@ -84,7 +93,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "session",
     packageJsonPath: "packages/session/package.json",
     packageName: "@openomni/session",
-    allowedDeps: new Set(["@openomni/protocol"]),
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
   },
   policy: {
     displayName: "policy",

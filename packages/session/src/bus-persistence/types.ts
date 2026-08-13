@@ -1,4 +1,4 @@
-import type { Bus } from "../bus/index.js";
+import type { Bus } from "@openomni/telemetry";
 
 export interface RuntimeState {
   readonly unsubscribe: () => void;

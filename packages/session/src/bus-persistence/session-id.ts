@@ -1,4 +1,4 @@
-import type { Bus } from "../bus/index.js";
+import type { Bus } from "@openomni/telemetry";
 import { getOptionalDatabase } from "./database.js";
 import { stringFromRecord, toRecord } from "./record-fields.js";
 

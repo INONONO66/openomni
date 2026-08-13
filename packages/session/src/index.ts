@@ -1,4 +1,6 @@
-export { Bus, BusEvent } from "./bus";
+// Compatibility re-export: Bus moved to @openomni/telemetry (#606 Phase 1).
+// Removed once openomni and apps/server import it from there directly.
+export { Bus, BusEvent } from "@openomni/telemetry";
 export { AuditLog } from "./audit/index";
 export { BusPersistence } from "./bus-persistence/index.js";
 export { BusQuery } from "./bus-persistence/query";

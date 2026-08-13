@@ -1,5 +1,5 @@
 import { Operational, WorkItem } from "@openomni/protocol";
-import { Bus } from "../bus/index.js";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
 import { buildWorkItem } from "./builder.js";
 import { detectCycles } from "./dependency.js";

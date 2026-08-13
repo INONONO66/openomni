@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import { Bus } from "../bus";
+import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage";
 import { Event } from "./events";
 import { TranscriptStore } from "./transcript";

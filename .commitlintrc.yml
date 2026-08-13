@@ -8,7 +8,7 @@ rules:
   scope-enum:
     - 1
     - always
-    - [protocol, ipc, session, policy, llm, agent, openomni, coordinator, server]
+    - [protocol, ipc, telemetry, session, policy, llm, agent, openomni, coordinator, server]
   header-max-length:
     - 2
     - always

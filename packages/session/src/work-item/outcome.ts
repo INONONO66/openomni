@@ -1,5 +1,5 @@
 import { WorkItem } from "@openomni/protocol";
-import { Bus } from "../bus/index.js";
+import { Bus } from "@openomni/telemetry";
 import { mutate } from "./mutation.js";
 
 export async function recordWorkItemOutcome(

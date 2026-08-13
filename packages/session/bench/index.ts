@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Bench } from "tinybench";
 import type { Message } from "@openomni/protocol";
-import { Bus } from "../src/bus/index.ts";
+import { Bus } from "@openomni/telemetry";
 import { Session } from "../src/session/index.ts";
 import { initialize } from "../src/storage/initialize.ts";
 import { Storage } from "../src/storage/storage.ts";
