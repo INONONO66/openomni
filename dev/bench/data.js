@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786573303735,
+  "lastUpdate": 1786593998510,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44121,6 +44121,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512849,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e4fd80f79b45f07612868f7910d58259b2bfd5f6",
+          "message": "test(policy): benchmark dispatch cost against history length (#606) (#607)\n\n* test(policy): benchmark dispatch cost against history length (#606)\n\nEvery lifecycle point the agent loop dispatches carries the run's message\nhistory in its context, so dispatch cost that tracks history length makes a\nrun pay O(turns^2 * messages): the loop dispatches ~12 points per turn and\nthe history grows every turn.\n\nThis adds the measurement, not a fix. `run.turn.pre` on darwin/arm64, with\n*zero* policies registered at the point:\n\n    8 messages     47.5 us/dispatch\n    64 messages   264.6 us/dispatch\n    512 messages 2070.5 us/dispatch    growth factor 43.6x\n\nRegistering 1 or 3 inert policies changes nothing (43.1x, 40.2x), which\nlocates the cost in the engine rather than in policy bodies: `dispatch.ts`\ndeep-clones, deep-freezes, and zod-parses the whole context before it checks\nwhether any policy is registered at the point.\n\nThe headline metric is `growthFactor`; constant-cost dispatch scores ~1.\n\n`policy` joins the commitlint scope enum — `packages/policy` has existed\nwithout one, and this is the first commit that needs it.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(policy): guard every measured benchmark scenario (#606)\n\nThe standalone probe validated one engine with no registered policies and a\none-message history, then nine scenarios were timed without validation. A\ncontext the point contract rejects short-circuits dispatch, so a future edit\nto the fixture could have made the artifact record rejection timings as\nnormal dispatch timings — the exact failure the probe existed to prevent.\n\nMove the assertion into `measureNsPerDispatch` so it runs once per measured\nscenario, and drop the standalone probe it subsumes.\n\nVerified negatively: with `turnIndex` forced invalid the run now aborts with\n`bench context was rejected by the point contract: policy.input_invalid`\nfrom inside `measureNsPerDispatch`, where the old probe passed.\n\nArtifact regenerated with the guarded script; growth factors unchanged\n(48.7x / 46.1x / 41.6x, same 40-49x band as the first run).\n\nAddresses CodeRabbit review on #607.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(policy): measure production context shape, drop order bias (#606)\n\nTwo measurement defects found by adversarial review of the companion fix.\n\n**The context shape was unrepresentative.** The fixture carried none of the\nseven audit-correlation keys, so once a dispatch stops materializing its\ncontext the audit-correlation capture — which reads exactly those keys —\ndegenerates to a no-op walk. A real dispatch carries them: `work.complete.pre`\npasses a `resourceDescriptor` every time. `contextShape` is now a measured\ndimension, `minimal` alongside `correlated`, so a change that only looks free\non an empty context cannot hide.\n\n**A single pass through the cells is order-biased.** On a ~µs operation the\ncell measured last is fastest, because JIT and GC warm-up dominate. Reversing\nthe walk moved one growth factor from 0.66 to 1.48 — the number carried no\ninformation beyond \"constant\". Cells are now measured across five interleaved\nrounds, rotated each round so none is always cold or always last, and the\nartifact reports the median.\n\nBaseline at this commit is unchanged in substance: 40-52x growth across all\nsix scenarios, ~2.11 ms/dispatch at 512 messages regardless of shape, because\nthe full-context snapshot dominates everything else on the current engine.\n\nAddresses adversarial review findings 2 and 8 on #608.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(policy): bind audit in the benchmark engine (#606)\n\nAdversarial review refuted the assumption that a production engine always\nbinds `auditEmit`: `defaultCompletionAdmissionService` builds its engine as\n`PolicyEngine.create()` with no options at all\n(`packages/openomni/src/dispatch/setup.ts:53`), and no production caller\nsupplies `completionPolicyEngine`. So the engine dispatching\n`work.complete.pre` — a point with zero registrations — has audit unbound.\n\nThat makes `audit: false` the wrong default for this benchmark. It models the\ncompletion engine, which is the *cheaper* configuration, while the agent loop\nand the dispatch runtime both bind an emitter and pay correlation capture. The\nengine now binds a no-op `auditEmit`, so the artifact reports the\nconservative case.\n\nBaseline at this commit is unchanged in substance: 38-52x growth, ~2.1 ms per\ndispatch at 512 messages regardless of shape, because the full-context\nsnapshot still dominates.\n\nTwo comment corrections from the same review:\n\n- `minimal` does not carry \"no audit-correlation fields\" — `sessionId` and\n  `runId` are two of the seven keys. It carries no *object-valued* ones.\n- The rotation is not what removes order bias. With five repeats over\n  eighteen cells each cell visits a contiguous block of positions, so the\n  rotation moves the bias rather than removing it. The median removes it,\n  by discarding the one cold round.\n\nAddresses adversarial review follow-up findings on #608.\n\nRefs #606\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-13T13:05:20+09:00",
+          "tree_id": "6f18262fc84ec9859b534c0920f6f58bed6e3553",
+          "url": "https://github.com/INONONO66/openomni/commit/e4fd80f79b45f07612868f7910d58259b2bfd5f6"
+        },
+        "date": 1786593997190,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3100,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2474,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8199,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 829,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 706,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1382,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1624,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46943,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2324,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101661,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512887,
             "unit": "ns/op"
           }
         ]
