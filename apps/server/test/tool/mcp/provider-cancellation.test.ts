@@ -7,7 +7,12 @@ import { createToolExecutor, WorkspaceLock } from "@openomni/openomni";
 import { Operational, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
-import { executionContext, installStorageFixture, makeClient } from "./provider-test-fixture";
+import {
+  TEST_BOOT_TRACE_ID,
+  executionContext,
+  installStorageFixture,
+  makeClient,
+} from "./provider-test-fixture";
 
 installStorageFixture();
 
@@ -17,7 +22,10 @@ describe("McpToolProvider", () => {
     client.listTools.mockResolvedValueOnce([
       { name: "search.query", description: "query", inputSchema: {} },
     ]);
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
     await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
     await provider.refreshTools();
     const controller = new AbortController();
@@ -56,7 +64,10 @@ describe("McpToolProvider", () => {
             });
         }),
     );
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
 
     try {
       await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
@@ -103,7 +114,10 @@ describe("McpToolProvider", () => {
           // intentional: never resolves to exercise abort settlement grace
         }),
     );
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
     const subscriberCountBeforeWarning = Bus.stats().subscriberCount;
     let unsubscribeSettlementWarning: () => void = () => undefined;
     const settlementWarning = new Promise<void>((resolve) => {

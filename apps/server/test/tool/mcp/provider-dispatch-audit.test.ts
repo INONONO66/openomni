@@ -5,9 +5,10 @@ import type { Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
+  TEST_BOOT_TRACE_ID,
   collectBusEvents,
-  executionContext,
   createLedgerSession,
+  executionContext,
   installStorageFixture,
   makeTool,
   seedProvider,
@@ -18,7 +19,7 @@ installStorageFixture();
 
 describe("McpToolProvider", () => {
   it("publishes policy and completion events for successful MCP dispatch", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const session = createLedgerSession();
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
@@ -62,7 +63,7 @@ describe("McpToolProvider", () => {
   });
 
   it("publishes no completion events for error results", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const session = createLedgerSession();
     const execute = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
@@ -108,7 +109,7 @@ describe("McpToolProvider", () => {
   });
 
   it("publishes action_blocked events for guarded MCP execution failures", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const unknownSession = createLedgerSession();
     const disconnectedSession = createLedgerSession();
     const unprefixedSession = createLedgerSession();

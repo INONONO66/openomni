@@ -5,6 +5,9 @@ import type { Tool } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import type { McpToolProvider } from "../../../src/tool/mcp";
 
+/** Boot is the trace origin an MCP provider reports connect failures under. */
+export const TEST_BOOT_TRACE_ID = "trace-boot-test";
+
 export function installStorageFixture(): void {
   beforeEach(() => {
     Storage.initialize({ dbPath: ":memory:" });

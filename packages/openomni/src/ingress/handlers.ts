@@ -446,6 +446,8 @@ export namespace IngressHandlers {
  */
 function requireTraceId(ctx: { readonly traceContext?: TraceContextProtocol.Type }): string {
   const traceId = ctx.traceContext?.traceId;
-  if (traceId === undefined) throw new Error("ingress writeback requires a trace context");
+  if (traceId === undefined || traceId.length === 0) {
+    throw new Error("ingress writeback requires a trace context");
+  }
   return traceId;
 }

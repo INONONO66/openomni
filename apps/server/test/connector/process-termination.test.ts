@@ -78,6 +78,7 @@ describe("connector process-group termination (#517)", () => {
         {},
         undefined,
         "resident-session",
+        "trace-fixture",
       );
       await waitForFile(marker, 5_000);
       const descendantPid = Number(readFileSync(marker, "utf-8").trim());
@@ -114,6 +115,7 @@ describe("connector process-group termination (#517)", () => {
         {},
         undefined,
         "resident-session",
+        "trace-fixture",
       );
       await waitForFile(marker, 5_000);
       const descendantPid = Number(readFileSync(marker, "utf-8").trim());
@@ -136,6 +138,7 @@ describe("connector process-group termination (#517)", () => {
       {},
       undefined,
       "resident-session",
+      "trace-fixture",
     );
     expect(succeeded.outcome.status).toBe("succeeded");
     expect(succeeded.outcome.exitCode).toBe(0);
@@ -149,6 +152,7 @@ describe("connector process-group termination (#517)", () => {
       {},
       undefined,
       "resident-session",
+      "trace-fixture",
     );
     expect(failed.outcome.status).toBe("failed");
     expect(failed.outcome.exitCode).toBe(3);

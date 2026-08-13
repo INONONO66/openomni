@@ -34,6 +34,7 @@ function tempDir(name: string): string {
 
 function command(): Dispatch.Command {
   return {
+    traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint-telemetry",
     action: "worker.spawn",
     target: {
@@ -49,6 +50,7 @@ function command(): Dispatch.Command {
 
 function request(workspaceRoot: string): Execution.Request {
   return {
+    traceId: "trace-fixture",
     runId: "run_telemetry",
     sessionId: "ses_telemetry",
     mode: "direct",

@@ -83,6 +83,7 @@ function makeDirectEvent(): Ingress.DirectEvent {
 
 function makeRequest(overrides: Partial<Execution.Request> = {}): Execution.Request {
   return {
+    traceId: "trace-fixture",
     runId: crypto.randomUUID(),
     sessionId: crypto.randomUUID(),
     mode: "direct",

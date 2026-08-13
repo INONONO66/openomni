@@ -129,6 +129,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
 
 function command(): Dispatch.Command {
   return {
+    traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },

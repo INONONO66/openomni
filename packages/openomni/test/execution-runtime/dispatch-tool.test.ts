@@ -7,6 +7,11 @@ import {
   type DispatchToolRuntime,
 } from "../../src/execution-runtime/tool/agent/tools/dispatch";
 
+/** The context the executor attaches to every tool call. */
+const TOOL_CONTEXT = {
+  traceContext: { traceId: "trace-caller", sessionId: "session-1", runId: "run-1" },
+} as const;
+
 function call(input: Record<string, unknown>): Tool.Call {
   return { id: "call-1", tool: "dispatch", input };
 }
@@ -80,6 +85,7 @@ describe("dispatch tool", () => {
         agentName: "worker",
         workspaceRoot: "/repo",
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBeUndefined();
@@ -151,6 +157,7 @@ describe("dispatch tool", () => {
           acceptanceCriteria: ["ledger connector endpoint dispatch"],
         },
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBeUndefined();
@@ -184,6 +191,7 @@ describe("dispatch tool", () => {
         target: { kind: "resident", executorKind: "connector_endpoint" },
         payload: "hello",
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBe(true);
@@ -207,6 +215,7 @@ describe("dispatch tool", () => {
         payload: "hello",
         actor: { kind: "system", actorId: "fake" },
       }),
+      TOOL_CONTEXT,
     );
 
     expect(response.isError).toBe(true);
@@ -231,6 +240,7 @@ describe("dispatch tool", () => {
           payload: "hello",
           [field]: "fake",
         }),
+        TOOL_CONTEXT,
       );
 
       expect(response.isError).toBe(true);
@@ -255,6 +265,7 @@ describe("dispatch tool", () => {
         payload: "question",
         wait: true,
       }),
+      TOOL_CONTEXT,
     );
     expect(allowed.isError).toBeUndefined();
     expect(calls).toBe(1);
@@ -279,7 +290,7 @@ describe("dispatch tool", () => {
         wait: false,
       },
     ]) {
-      const denied = await tool.execute(call(input));
+      const denied = await tool.execute(call(input), TOOL_CONTEXT);
       expect(denied.isError).toBe(true);
     }
 

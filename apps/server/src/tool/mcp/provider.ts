@@ -70,7 +70,7 @@ export class McpToolProvider implements ToolProvider {
   }
 
   async refreshTools(): Promise<void> {
-    this.cachedTools = await refreshMcpTools(this.clients);
+    this.cachedTools = await refreshMcpTools(this.clients, this.options.traceId);
   }
 
   async execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {

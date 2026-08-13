@@ -4,6 +4,7 @@ import type { NativeTool } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
+  TEST_BOOT_TRACE_ID,
   executionContext,
   installStorageFixture,
   makeClient,
@@ -15,7 +16,7 @@ installStorageFixture();
 
 describe("McpToolProvider", () => {
   it("executes valid MCP-prefixed tools through the resolved canonical name", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
@@ -49,7 +50,7 @@ describe("McpToolProvider", () => {
   });
 
   it("forwards execution context to resolved MCP tools", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     let capturedSignal: AbortSignal | undefined;
     const execute = mock(
       async (call: Tool.Call, context?: { signal?: AbortSignal }): Promise<Tool.Result> => {
@@ -83,7 +84,10 @@ describe("McpToolProvider", () => {
     client.listTools.mockResolvedValueOnce([
       { name: "search.query", description: "query", inputSchema: {}, labels: ["custom.label"] },
     ]);
-    const provider = new McpToolProvider({ createClient: () => client.client });
+    const provider = new McpToolProvider({
+      traceId: TEST_BOOT_TRACE_ID,
+      createClient: () => client.client,
+    });
 
     await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
     await provider.refreshTools();
@@ -103,7 +107,7 @@ describe("McpToolProvider", () => {
   });
 
   it("preserves the unknown-tool error for unknown MCP prefixes", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
@@ -120,7 +124,7 @@ describe("McpToolProvider", () => {
   });
 
   it("preserves the disconnected-server error for cached MCP tools", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool]);
 
@@ -138,7 +142,7 @@ describe("McpToolProvider", () => {
   });
 
   it("preserves the missing-prefix error for MCP tools without server names", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("query");
     seedProvider(provider, [tool], ["query"]);
 

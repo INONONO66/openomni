@@ -89,7 +89,6 @@ interface PostToolContext {
   readonly input: Record<string, unknown>;
   readonly output?: string;
   readonly handle: ToolRuntimePolicyMiddleware.RuntimePolicyHandle;
-  readonly traceContext?: TraceContext.Type;
   readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
 }
 

@@ -15,7 +15,16 @@ import {
   resourceDescriptor,
 } from "./runtime-support.js";
 
-export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchHandlerContext {
+/**
+ * What a submit needs beyond the input. The trace is required and separated
+ * from the optional bag on purpose: a caller that forgets it is a compile
+ * error, not a review round. Rounds 5-7 of #606 each shipped a required
+ * `traceId` on a schema that a caller could still satisfy by omission, and
+ * each was found by reading rather than by the compiler.
+ */
+export type DispatchSubmitOptions = DispatchSubmitContext & { readonly traceId: string };
+
+interface DispatchSubmitContext extends DispatchRuntimeContext, DispatchHandlerContext {
   readonly policies?: readonly DispatchPolicyRegistration[];
   readonly includeDefaultPolicies?: boolean;
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
@@ -198,7 +207,7 @@ export function submitPinnedPendingInteraction(
   runtime: DispatchRuntime,
   input: DispatchProtocol.Input,
   pendingInteraction: PendingInteractionStore.Record,
-  options: DispatchSubmitOptions = {},
+  options: DispatchSubmitOptions,
 ): Promise<DispatchProtocol.Result> {
   return runtime[submitPinnedInteraction](input, pendingInteraction, options);
 }
@@ -222,7 +231,7 @@ export class DispatchRuntime {
 
   async submit(
     input: DispatchProtocol.Input,
-    options: DispatchSubmitOptions = {},
+    options: DispatchSubmitOptions,
   ): Promise<DispatchProtocol.Result> {
     return this.submitResolved(input, options);
   }
@@ -241,10 +250,8 @@ export class DispatchRuntime {
     pendingInteraction?: PendingInteractionStore.Record,
   ): Promise<DispatchProtocol.Result> {
     const parsed = DispatchProtocol.Input.parse(input);
-    // A dispatch is ordered by something that already has a trace: a tool
-    // call, a worker run, a connector question, an ingress event. Minting one
-    // here made `Dispatch.Command.traceId` a field that is always present and
-    // never inherited, which is the failure the required schema exists to stop.
+    // The type makes this unreachable for a typed caller; it stands for the
+    // untyped ones (`Reflect.apply`, JSON-shaped IPC params).
     if (options.traceId === undefined || options.traceId.length === 0) {
       throw new Error("dispatch submit requires the ordering run's traceId");
     }

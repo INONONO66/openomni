@@ -5,6 +5,7 @@ import { Mcp, Operational, PolicyEvent, ToolExecution } from "@openomni/protocol
 import { McpToolProvider } from "../../../src/tool/mcp";
 import { refreshMcpTools } from "../../../src/tool/mcp/provider-tool-listing";
 import {
+  TEST_BOOT_TRACE_ID,
   collectBusEvents,
   executionContext,
   installStorageFixture,
@@ -45,7 +46,7 @@ function expectInheritedAuditIdentity(
 
 describe("McpToolProvider canonical policy trace", () => {
   it("uses the active trace for every successful MCP execution event", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
     const controller = new AbortController();
@@ -105,7 +106,7 @@ describe("McpToolProvider canonical policy trace", () => {
   });
 
   it("uses the active trace for every blocked MCP execution event", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool]);
     const traceContext: TraceContext.Type = {
@@ -147,7 +148,7 @@ describe("McpToolProvider canonical policy trace", () => {
    * rather than filed under an identity no reader can reach.
    */
   it("refuses a call that arrives without the dispatching trace", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
@@ -158,7 +159,7 @@ describe("McpToolProvider canonical policy trace", () => {
   });
 
   it("keeps one inherited audit identity for a successful call", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
     const { events, stop } = collectBusEvents();
@@ -213,8 +214,8 @@ describe("McpToolProvider canonical policy trace", () => {
         },
       },
     );
-    const provider = new McpToolProvider();
-    const tools = await refreshMcpTools(new Map([["search", client]]));
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
+    const tools = await refreshMcpTools(new Map([["search", client]]), TEST_BOOT_TRACE_ID);
     seedProvider(provider, tools, ["search"]);
     const { events, stop } = collectBusEvents();
 
@@ -253,7 +254,7 @@ describe("McpToolProvider canonical policy trace", () => {
   });
 
   it("keeps one inherited audit identity for a blocked call", async () => {
-    const provider = new McpToolProvider();
+    const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool]);
     const { events, stop } = collectBusEvents();

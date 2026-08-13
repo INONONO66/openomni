@@ -80,10 +80,10 @@ export function createWorkerDispatchRuntime(options: {
 
   runtime.register("resident.ask", handler);
   return {
-    submit(input, context = {}) {
+    submit(input, context) {
       return runtime.submit(input, {
         ...context,
-        traceId: context.traceId ?? options.traceId,
+        traceId: context.traceId,
         sessionId: context.sessionId ?? options.sessionId,
         runId: context.runId ?? options.runId,
         workspaceRoot: context.workspaceRoot ?? options.workspaceRoot,
