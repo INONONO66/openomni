@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786638054054,
+  "lastUpdate": 1786646367313,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44741,6 +44741,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509539,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f0e57f40fd96f777b6a0bfa739b25093d3bfff7",
+          "message": "refactor(agent): inherit the run trace instead of minting one (#606) (#613)\n\n* refactor(agent): inherit the run trace instead of minting one (#606)\n\nPhase 1b, first slice: the thirteen agent-core sites `telemetry/AGENTS.md`\nnames as the reason the package exists. `packages/agent/src` now mints no\ntrace id.\n\nEight of them were in `core/retry.ts`, inside two pure functions. They\nnarrated every branch of a string classification to the Bus under a freshly\nminted trace — while the one caller reports the same decision two statements\nlater on the run's own trace, via `emitErrorRetry` / `emitRunFailed`. A record\nthat duplicates a correlated one under an uncorrelated id is worse than no\nrecord, so they are deleted rather than rewired, and `classifyRetryReason` /\n`shouldRetry` are pure. `AgentExecution.ErrorRetry` gains `reason` and\n`backoffMs` so nothing the deleted events carried is lost.\n\nThe other five inherit or refuse: `publishBudgetTelemetry` takes the run it\nreports on (structurally typed — `run-state` imports it, so naming\n`AgentRunBase` there would close a cycle), `InMemoryCompactor.compact` takes\nthe trace of the history it rewrites, and the tool-permission guard reads the\none already on its dispatch context.\n\nEvery conversion is mutation-tested: re-introducing the mint at each of the\nfour sites now fails the suite, and it did not before. Two of them — budget\nand compaction — were green under a re-mint on the first attempt, which is\nthe gap round 10 of #612 existed to punish.\n\nFound on the way: `budget.test.ts` was calling `publishBudgetTelemetry(state,\n{ maxTurns: 24 })`, passing the budget as the run. It type-checks nowhere,\nbecause `packages/agent/tsconfig.json` excludes `test`.\n\nD11: 114 sites across 43 files → 102 across 39.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): give the lifecycle context the run's trace (#606)\n\nReview round 1 on #613 returned FAIL on a regression I introduced.\n\nThe compaction builtin's new guard reads `ctx.traceContext`, but\n`buildLifecyclePolicyContext` — the only producer of the context for\n`run.completion.pre`, across all eleven call sites — never set one. That point\nis fail-closed, so the refusal became a deny carrying `run.abort`: an\nOwner-configured plan naming `builtin:compaction` went from compacting to\nsilently ending the run at the threshold.\n\nThe suite stayed green because I patched the fixtures. Both compaction tests\nhand-build a `ctx` and call `registration.fn` directly, and I added a\n`traceContext` to them — to the fixture, not to the path production takes.\nThe regression test now drives `handleCompact` with the real policy\nregistered, and dropping the field from `buildLifecyclePolicyContext` fails it.\n\n`InMemoryCompactor.compact` takes the trace as a required third parameter\ninstead of an optional field validated by a throw. The optional-plus-throw\nshape is what let a caller supply nothing and still compile, which is how this\nreached review at all. Its runtime-refusal test is deleted with the throw.\n\nThe mutation-testing claim in the previous commit was also false at two sites:\nre-minting inside `dispatchBudgetCheck` and inside the compaction policy both\nsurvived. `publishBudgetTelemetry` proved it used the run it was handed;\nnothing proved the lifecycle handed it the real one. Both are pinned from the\nframe above now, and both mutants die.\n\nAlso from the round:\n\n- `packages/telemetry/AGENTS.md` claimed `packages/agent/src` mints no trace\n  id. It is `src/core`; three remain in `src/runtime/mcp/client.ts`, now named\n  there as the next slice.\n- `emitRunFailed` carries the reason, attempt, and effective `maxAttempts`. On\n  a first-attempt terminal failure no `ErrorRetry` precedes it, and the\n  effective ceiling after a `run.retry_after` effect existed nowhere else.\n- `classifyRetryReason`, `shouldRetry`, and `calculateBackoffMs` have unit\n  tests. Three branches were neither tested nor observable once the events\n  came out — deleting the narration without adding these was the wrong half.\n- `ErrorRetry.backoffMs` was asserted only at zero, so hardcoding zero\n  survived. The test uses a non-zero policy.\n- The cycle justification in `budget.ts` was wrong: a type-only import erases\n  and closes no value cycle. Reworded to the real reason.\n\nThe tsconfig blind spot behind this and three earlier defects is now #614.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): give the bench its trace and pin what was still loose (#606)\n\nReview round 2. One real break and four conversions resting on nothing.\n\n`InMemoryCompactor.compact`'s new required parameter broke\n`packages/agent/bench/index.ts`, which `check-types` never saw because the\npackage's tsconfig is `include: [\"src\"]` — the same blind spot as #614, one\ndirectory over. `bun run bench` exited 1 and the benchmark workflow produced\nno artifact. The bench now passes a trace, and a `tsconfig.bench.json` brings\nit under `check-types` so the next signature change cannot slip the same way.\n\nFour sites were pinned only by their refusal, never by the conversion:\nre-minting inside the tool-permission guard, the budget `exceeded` branch\n(the one `dispatchBudgetCheck` acts on to end the run), and the terminal\n`emitRunFailed` context all survived the full suite. Each now has a test\nasserting the emitted record carries the run's trace, and the terminal one\ncovers a `run.retry_after` narrowing — the effective `maxAttempts` is the\nwhole reason that field was added.\n\nThe compaction policy's guard no longer throws. `run.completion.pre` is\nfail-closed, so a throw there ends the run — which is round 1's blocker\nexactly, left in the code as a latent second copy. It allows with\n`compaction_skipped_no_trace` instead: not compacting degrades a turn,\naborting ends the run, and the reason code says which happened.\n\nAlso: a comment that moved with a test and landed on an unrelated `describe`,\nand four lines in `budget.ts` arguing an alternative that was not taken.\n\nCoverage baseline tightened (agent 92.95 → 93.58, ipc 81.21 → 84.75,\ncoordinator 80.00 → 80.68 and 27 others) — shrinking is autonomous.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(agent): pin the third budget branch and stop banking slack (#606)\n\nReview round 3. No blocker; two real gaps and three loose assertions.\n\n`publishBudgetTelemetry` has three emit branches and round 2 pinned two.\nRe-minting the `reassurance` branch — the only one emitting `Info` rather\nthan `Warn`, and live on every turn between 60% and 80% of budget — survived\nthe whole suite.\n\nThe coverage `--update` was worse than useless: it recorded measured values,\nand `llm` and `openomni` measure *below* their recorded floors (within the\n0.5pp tolerance, so nothing failed). That relaxed two ratchets by 0.47pp\ncombined. A ratchet only tightens, so the update is now applied per package:\nthe eight that improved move, the two that did not keep their floor. The\nreviewer's higher agent figure came from a package-scoped run; `bun run\ntest:ci`, which is what CI measures, gives 93.58.\n\nThree assertions widened to what they claim to check: the lifecycle trace\ncontext now outranks the engine's in `packages/policy`'s audit resolution, so\na field missing there is missing from every lifecycle audit record — `runId`\nis asserted; `emitRunFailed`'s `sessionId` is asserted; and the compaction\nskip test loops both blank shapes like its tool-guard sibling does.\n\nThe `run.retry_after` narrowing was pinned on the terminal path and not the\nretry path, so a run configured for five attempts and narrowed to two could\nreport five on every retry. Pinned.\n\nAll five surviving mutants now fail.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* chore(agent): drop the coverage baseline update (#606)\n\nCI measures `packages/ipc` at 84.16% where my local run measured 84.75%, so\nthe tightened floor I recorded failed the ratchet on a package this PR does\nnot touch. The two measurements genuinely differ; a ratchet tightened from a\nlocal number is a ratchet tightened against the wrong data.\n\nReverted to `origin/main`'s baseline. Tightening is optional and belongs in a\nchange that measures the way CI does, not bolted onto a slice whose subject\nis trace inheritance.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(agent): pin the pass-through fields at more than one value (#606)\n\nReview round 4 returned PASS. These are its three optional NITs, taken\nbecause each is a test that cannot fail.\n\n`emitRunFailed`'s `attempt` is new in this slice and was asserted only at its\ninput value of 1, so hardcoding 1 survived. The test drives attempt 2.\n\n`classifyRetryReason`'s table had a row for \"tool\" and a row for\n\"validation\" and none containing both, so the branch order between them was\nunpinned — reordering the checks survived. One row fixes it.\n\n`ErrorRetry`'s two new fields are required, and the only test asserted a\ncomplete payload parses. Relaxing either to `.optional()` survived, because\nomitting both still threw on the other. Now one case per field.\n\nEach mutation fails the suite.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T03:37:57+09:00",
+          "tree_id": "59fdccfee9aaefcd477fbc3e8509e0461e68d134",
+          "url": "https://github.com/INONONO66/openomni/commit/4f0e57f40fd96f777b6a0bfa739b25093d3bfff7"
+        },
+        "date": 1786646366535,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5886,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9180,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2358,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7928,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 691,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1189,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47571,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2341,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 503782,
             "unit": "ns/op"
           }
         ]
