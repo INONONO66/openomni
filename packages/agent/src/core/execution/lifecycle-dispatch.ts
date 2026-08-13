@@ -60,7 +60,7 @@ export async function dispatchBudgetCheck(
     }),
   );
   if (PolicyDecision.isBlocking(postRunDecision)) {
-    publishDenyDiagnostic("run.finish", postRunDecision, state, config, agentBase);
+    publishDenyDiagnostic("run.finish", postRunDecision, state, agentBase);
   }
   emitRunCompleted(state, agentBase, "max-steps");
   return createRunCompleteEvent(state, { finishReason: "max-steps" });
@@ -117,7 +117,6 @@ export async function dispatchModelResponse(
           effects: [{ type: "run.abort", reason }],
         }),
         state,
-        config,
         agentBase,
       );
       return createGuardCompleteEvent(state);
@@ -127,6 +126,6 @@ export async function dispatchModelResponse(
   }
   if (effectOf(decision, "run.abort")) return createGuardCompleteEvent(state);
   // model.response is post-boundary: plain denies are diagnostics unless they carry run.abort.
-  publishDenyDiagnostic("model.response", decision, state, config, agentBase);
+  publishDenyDiagnostic("model.response", decision, state, agentBase);
   return null;
 }

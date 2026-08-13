@@ -10,10 +10,6 @@ import type {
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyEngineRegistration } from "./policy/types";
 
-export interface AgentEventEmitter {
-  emit(eventName: string, data: Record<string, unknown>): void;
-}
-
 export interface TokenUsage extends Token.AgentUsage {}
 
 export interface AgentBudget extends AgentProfile.AgentBudget {}
@@ -30,7 +26,6 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
-  eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
   auth?: RunInput["auth"];
   allowAuthFallback?: RunInput["allowAuthFallback"];

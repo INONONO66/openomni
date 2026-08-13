@@ -158,43 +158,6 @@ describe("buildWorkerMiddleware policy plan path", () => {
     });
   });
 
-  it("hydrates event emitter metadata into policyPlan tool permission middleware", async () => {
-    const events: Array<{ name: string; data: Record<string, unknown> }> = [];
-    const policyPlan: Policy.PolicyPlan = {
-      policies: [
-        {
-          id: "builtin:tool-permission",
-          required: true,
-          config: { permission: { action: "tool.call", allowlist: ["tool:read"] } },
-        },
-      ],
-      labels: ["security"],
-    };
-
-    const registrations = buildWorkerMiddleware({
-      policyPlan,
-      eventEmitter: {
-        emit: (name, data) => events.push({ name, data }),
-      },
-      source: "policy-plan-runtime",
-    });
-    const toolPermission = findRegistration(registrations, "builtin:tool-permission");
-
-    await expect(invokeTool(toolPermission, "tool:read")).resolves.toMatchObject({
-      verdict: "allow",
-    });
-
-    expect(events).toEqual([
-      {
-        name: "tool.execution.started",
-        data: expect.objectContaining({
-          sessionId: "policy-plan-runtime",
-          toolName: "tool:read",
-        }),
-      },
-    ]);
-  });
-
   it("fails closed for malformed explicit policyPlan permission config", async () => {
     const permissions = { action: "tool.call", allowlist: ["tool:legacy"] };
 
