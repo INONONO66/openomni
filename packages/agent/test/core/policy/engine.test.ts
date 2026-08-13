@@ -570,7 +570,7 @@ describe("PolicyEngine", () => {
 
       const decision = await engine.dispatchPoint("run.turn.post", {
         ...turnPostCtx(),
-        traceContext: { traceId: "trace-observer", sessionId: "session-observer" },
+        traceContext: { traceId: "trace-observer", sessionId: "session-observer", runId: "run-1" },
       });
       await new Promise((resolve) => queueMicrotask(resolve));
 

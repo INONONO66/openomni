@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine, type ChatAgentConfig } from "@openomni/agent";
 import { Session, Storage } from "@openomni/session";
 import { ResidentRuntime } from "../../src/resident/runtime";
+import { newTraceId } from "@openomni/telemetry";
 
 function makeEvent() {
   return {
@@ -66,6 +67,7 @@ describe("ResidentRuntime", () => {
 
     const result = await manager.run({
       sessionId: session.id,
+      traceContext: { traceId: newTraceId() },
       event: {
         id: "evt-resident-1",
         surface: "slack",
@@ -104,6 +106,7 @@ describe("ResidentRuntime", () => {
 
     const result = await manager.run({
       sessionId: session.id,
+      traceContext: { traceId: newTraceId() },
       event: {
         ...makeEvent(),
         agent: {
@@ -151,6 +154,7 @@ describe("ResidentRuntime", () => {
 
     await manager.run({
       sessionId: "resident-tool-factory",
+      traceContext: { traceId: newTraceId() },
       event: {
         ...makeEvent(),
         workspace: "/tmp/openomni-workspace",

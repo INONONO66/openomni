@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { IngressEvent } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { ResidentRuntime } from "../../src/resident/runtime";
+import { newTraceId } from "@openomni/telemetry";
 
 beforeEach(() => {
   Storage.reset();
@@ -38,11 +39,15 @@ test("ResidentRuntime enforces maximum resident activations", async () => {
     },
   });
 
-  const firstRun = manager.run({ sessionId: "resident-a", event: makeEvent() });
+  const firstRun = manager.run({
+    sessionId: "resident-a",
+    event: makeEvent(),
+    traceContext: { traceId: newTraceId() },
+  });
   await firstRunStarted;
 
   const secondError = await manager
-    .run({ sessionId: "resident-b", event: makeEvent() })
+    .run({ sessionId: "resident-b", event: makeEvent(), traceContext: { traceId: newTraceId() } })
     .catch((error) => error);
   expect(secondError).toBeInstanceOf(Error);
   if (!(secondError instanceof Error)) throw new TypeError("expected resident activation error");
@@ -67,7 +72,11 @@ test("ResidentRuntime reuses fallback traceId for agent input and completion eve
   });
 
   try {
-    await manager.run({ sessionId: "resident-trace", event: makeEvent() });
+    await manager.run({
+      sessionId: "resident-trace",
+      event: makeEvent(),
+      traceContext: { traceId: newTraceId() },
+    });
   } finally {
     unsubscribe();
   }
@@ -97,7 +106,11 @@ test("ResidentRuntime does not start a queued run after it is aborted", async ()
     },
   });
 
-  const firstRun = manager.run({ sessionId: "resident-queued-abort", event: makeEvent() });
+  const firstRun = manager.run({
+    sessionId: "resident-queued-abort",
+    event: makeEvent(),
+    traceContext: { traceId: newTraceId() },
+  });
   await firstStarted;
 
   const controller = new AbortController();

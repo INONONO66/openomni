@@ -1,5 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Sink } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
+
+const TEST_TRACE_ID = newTraceId();
 
 const TEST_PROVIDER_ID = "__test_run_stream_args__";
 
@@ -52,6 +55,7 @@ describe("run() streamText arguments", () => {
   test("forwards toolChoice and AI SDK stepCountIs stopWhen, and sets maxRetries to 0", async () => {
     await run(
       {
+        trace: { traceId: TEST_TRACE_ID },
         messages: [],
         tools: [],
         toolChoice: "required",
@@ -88,6 +92,7 @@ describe("run() streamText arguments", () => {
   test("uses default stepCountIs threshold when maxSteps is not provided", async () => {
     await run(
       {
+        trace: { traceId: TEST_TRACE_ID },
         messages: [],
         tools: [],
         model: {

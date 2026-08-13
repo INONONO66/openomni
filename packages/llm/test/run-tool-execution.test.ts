@@ -1,6 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
 import type { Provider } from "../src/provider";
+import { newTraceId } from "@openomni/telemetry";
+
+const TEST_TRACE_ID = newTraceId();
 
 let run: typeof import("../src/run").run;
 
@@ -72,6 +75,7 @@ describe("run() tool execution ownership", () => {
 
     await run(
       {
+        trace: { traceId: TEST_TRACE_ID },
         messages: [],
         tools: [
           {
@@ -124,6 +128,7 @@ describe("run() tool execution ownership", () => {
 
     await run(
       {
+        trace: { traceId: TEST_TRACE_ID },
         messages: [],
         tools: [
           {
@@ -165,6 +170,7 @@ describe("run() tool execution ownership", () => {
 
     await run(
       {
+        trace: { traceId: TEST_TRACE_ID },
         messages: [],
         tools: [
           {

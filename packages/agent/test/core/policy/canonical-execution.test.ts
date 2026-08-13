@@ -178,6 +178,7 @@ describe("canonical tool policy execution", () => {
       { traceId: "trace", sessionId: "session", runId: "run" },
     );
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       onDecision: () => {
         throw observerFailure;

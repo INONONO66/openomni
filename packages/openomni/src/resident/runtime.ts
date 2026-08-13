@@ -4,7 +4,7 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newSpanId } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
 
@@ -293,13 +293,16 @@ export class ResidentRuntime {
     let slotAcquired = false;
     await this.acquireSlot(ctx.signal);
     slotAcquired = true;
-    const runId = crypto.randomUUID();
+    // The resident is not a trace origin: its only caller is the ingress
+    // handler, which always carries the trace the inbound event started. A
+    // `?? newTraceId()` here would detach the resident's run from the request
+    // that asked for it.
+    if (ctx.traceContext === undefined) {
+      throw new Error("resident run requires the inbound trace context");
+    }
+    const runId = newSpanId();
     const start = Date.now();
-    const traceContext = {
-      ...(ctx.traceContext ?? { traceId: newTraceId() }),
-      sessionId: ctx.sessionId,
-      runId,
-    };
+    const traceContext = { ...ctx.traceContext, sessionId: ctx.sessionId, runId };
 
     try {
       throwIfAborted(ctx.signal);

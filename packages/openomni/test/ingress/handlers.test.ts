@@ -175,15 +175,17 @@ describe("IngressHandlers", () => {
       },
     };
 
+    const traceId = newTraceId();
     const result = await IngressHandlers.handleDirect({
       sessionId,
-      traceContext: { traceId: newTraceId() },
+      traceContext: { traceId },
       event,
       coordinator: makeDirectCoordinator("direct output"),
     });
 
+    // The writeback must be filed under the ingress trace, not a fresh one.
     expect(storeDirectResultMock).toHaveBeenCalledWith(
-      expect.any(String),
+      traceId,
       sessionId,
       "direct output",
       event.agent.model,

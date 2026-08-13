@@ -20,11 +20,11 @@ export function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfi
 }
 
 export function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 export function makeTrace(): TraceContext.Type {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 export function makeState(): RunState {

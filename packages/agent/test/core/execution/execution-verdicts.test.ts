@@ -33,11 +33,11 @@ function makeState(): RunState {
 }
 
 function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 function makeTrace(): TraceContext.Type {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
 function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {

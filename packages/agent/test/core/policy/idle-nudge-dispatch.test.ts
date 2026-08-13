@@ -22,6 +22,7 @@ it("dispatches idle-nudge at the canonical native tool result point", async () =
   const engine = PolicyEngine.create();
   engine.register(observedIdleNudge);
   const executor = createToolExecutor({
+    traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
     engine,
     toolExecutor: async (call) => ({
       id: "result-idle",

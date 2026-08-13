@@ -79,7 +79,11 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     const engine = PolicyEngine.create();
     engine.register(denyAllInvokePre("native tool denied by conformance policy"));
 
-    const executor = createToolExecutor({ toolExecutor: nativeExecutor, engine });
+    const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
+      toolExecutor: nativeExecutor,
+      engine,
+    });
     const result = await executor({ id: "native-call", tool: "bash", input: { command: "date" } });
 
     expect(nativeExecutor).toHaveBeenCalledTimes(0);
@@ -111,6 +115,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     });
 
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: mcpExecutor,
       engine,
       getToolLabels: () => ["source.mcp", "mcp.fixture"],

@@ -46,6 +46,7 @@ describe("createToolExecutor bus events", () => {
     const delegatedContexts: unknown[] = [];
 
     const executor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call, context) => {
         delegatedContexts.push(context?.traceContext);
         return {
@@ -56,7 +57,6 @@ describe("createToolExecutor bus events", () => {
         };
       },
       engine: makeEngine(),
-      traceContext: { traceId: "trace-1", sessionId: "sess-1" },
     });
 
     await executor(makeCall());
@@ -81,7 +81,7 @@ describe("createToolExecutor bus events", () => {
         isError: true,
       }),
       engine: makeEngine(),
-      traceContext: { traceId: "trace-2", sessionId: "sess-2" },
+      traceContext: { traceId: "trace-2", sessionId: "sess-2", runId: "run-1" },
     });
 
     const result = await executor(makeCall("call-err"));
@@ -110,7 +110,7 @@ describe("createToolExecutor bus events", () => {
     const executor = createToolExecutor({
       toolExecutor: async () => ({ id: "r1", toolCallId: "x", output: "never", isError: false }),
       engine,
-      traceContext: { traceId: "trace-3", sessionId: "sess-3" },
+      traceContext: { traceId: "trace-3", sessionId: "sess-3", runId: "run-1" },
     });
 
     const result = await executor(makeCall("call-deny"));
@@ -142,7 +142,7 @@ describe("createToolExecutor bus events", () => {
         throw new Error("boom");
       },
       engine: makeEngine(),
-      traceContext: { traceId: "trace-4", sessionId: "sess-4" },
+      traceContext: { traceId: "trace-4", sessionId: "sess-4", runId: "run-1" },
     });
 
     await expect(executor(makeCall("call-throw"))).rejects.toThrow("boom");
@@ -155,6 +155,7 @@ describe("createToolExecutor bus events", () => {
   it("reports tool duration for budget accounting on success and failure", async () => {
     const durations: number[] = [];
     const successExecutor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: "r1",
         toolCallId: call.id,
@@ -167,6 +168,7 @@ describe("createToolExecutor bus events", () => {
     await successExecutor(makeCall("call-budget-ok"));
 
     const failureExecutor = createToolExecutor({
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async () => {
         throw new Error("boom");
       },
@@ -180,29 +182,13 @@ describe("createToolExecutor bus events", () => {
     expect(durations.every((duration) => duration >= 0)).toBe(true);
   });
 
-  it("falls back to generated trace identities when no traceContext provided", async () => {
-    Bus.reset();
-    const delegatedContexts: Array<{ traceId?: string; sessionId?: string } | undefined> = [];
-
-    const executor = createToolExecutor({
-      toolExecutor: async (call, context) => {
-        delegatedContexts.push(context?.traceContext);
-        return {
-          id: "r1",
-          toolCallId: call.id,
-          output: "ok",
-          isError: false,
-        };
-      },
-      engine: makeEngine(),
-    });
-
-    await executor(makeCall());
-    await flushBus();
-
-    expect(delegatedContexts).toHaveLength(1);
-    expect(delegatedContexts[0]?.traceId?.length).toBeGreaterThan(0);
-    expect(delegatedContexts[0]?.sessionId?.length).toBeGreaterThan(0);
+  it("refuses to build without the run trace context", () => {
+    expect(() =>
+      createToolExecutor({
+        toolExecutor: async () => ({ id: "r", toolCallId: "c", output: "" }),
+        engine: PolicyEngine.create(),
+      }),
+    ).toThrow("tool executor requires the run trace context");
   });
 
   it("publishes actor from trace context on PermissionDenied", async () => {
@@ -215,7 +201,12 @@ describe("createToolExecutor bus events", () => {
     const denyExecutor = createToolExecutor({
       toolExecutor: async () => ({ id: "r2", toolCallId: "x", output: "never", isError: false }),
       engine: denyEngine,
-      traceContext: { traceId: "trace-6", sessionId: "sess-6", agentName: "reviewer" },
+      traceContext: {
+        traceId: "trace-6",
+        sessionId: "sess-6",
+        runId: "run-6",
+        agentName: "reviewer",
+      },
     });
 
     await denyExecutor(makeCall("call-denied-actor"));

@@ -106,7 +106,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/session"]),
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry", "@openomni/session"]),
   },
   agent: {
     displayName: "agent",

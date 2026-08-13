@@ -1,6 +1,6 @@
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink, TraceContext } from "@openomni/protocol";
-import { Bus, isTraceId } from "@openomni/telemetry";
+import { Bus } from "@openomni/telemetry";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
@@ -167,19 +167,20 @@ function nonEmptyString(value: unknown): string | undefined {
  * did — produces a run whose every event correlates to nothing, and the caller
  * never learns it forgot.
  *
- * The trace id is held to the same standard the telemetry emitter applies, so
- * a run that starts here can hand its trace to an external executor without a
- * second, looser notion of what a trace id is.
+ * What is required here is inheritance, not wire format. A run must carry the
+ * identity of whatever asked for it; whether that identity is expressible as a
+ * W3C `traceparent` is enforced by the emitter that puts it on the wire, which
+ * is the only place the format matters.
  */
 function requireRunTrace(
   traceContext: ChatAgentInput["traceContext"],
 ): TraceContext.Type & { traceId: string; sessionId: string; runId: string } {
-  const traceId = isTraceId(traceContext?.traceId) ? traceContext.traceId : undefined;
+  const traceId = nonEmptyString(traceContext?.traceId);
   const sessionId = nonEmptyString(traceContext?.sessionId);
   const runId = nonEmptyString(traceContext?.runId);
   if (traceId === undefined || sessionId === undefined || runId === undefined) {
     const missing = [
-      traceId === undefined ? "a W3C trace id" : undefined,
+      traceId === undefined ? "traceId" : undefined,
       sessionId === undefined ? "sessionId" : undefined,
       runId === undefined ? "runId" : undefined,
     ].filter((field): field is string => field !== undefined);

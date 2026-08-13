@@ -250,10 +250,7 @@ describe("PolicyEngine.dispatchPoint", () => {
         toolName: "shell",
         toolInput: { command: "ls" },
         resourceDescriptor: descriptor,
-        traceContext: {
-          traceId: "trace-deny",
-          sessionId: "sess-deny",
-        },
+        traceContext: { traceId: "trace-deny", sessionId: "sess-deny", runId: "run-1" },
       });
       await Promise.resolve();
 

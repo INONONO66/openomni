@@ -85,8 +85,11 @@ export function fromTraceparent(
 ): { readonly traceId: TraceId; readonly parentSpanId: SpanId } | undefined {
   const match = TRACEPARENT_PATTERN.exec(header?.trim() ?? "");
   if (match === null) return undefined;
-  const [, version, traceId, parentSpanId] = match;
+  const [, version, traceId, parentSpanId, , trailing] = match;
   if (version === FORBIDDEN_TRACEPARENT_VERSION) return undefined;
+  // Version 00's grammar is closed at 55 characters; trailing fields are
+  // defined only for higher versions.
+  if (version === "00" && trailing !== undefined) return undefined;
   if (!(isTraceId(traceId) && isSpanId(parentSpanId))) return undefined;
   return { traceId, parentSpanId };
 }

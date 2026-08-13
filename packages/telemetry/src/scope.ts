@@ -90,7 +90,7 @@ export function scope(trace: TraceScope, sink: BusEvent.Sink, options: ScopeOpti
       // Identity is spread last: a caller who casts past `EmitPayload` still
       // cannot forge a trace id. The cast is the one place TypeScript cannot
       // prove `Omit<T, K> & Pick<T, K>` reconstitutes `T` for a generic `T`.
-      const event = { time: now(), ...build(), ...from } as unknown as TPayload;
+      const event = { ...build(), time: now(), ...from } as unknown as TPayload;
       sink.publish(descriptor, event);
     } catch (error) {
       onEmitError(error, descriptor.name);

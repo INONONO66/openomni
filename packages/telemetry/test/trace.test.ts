@@ -5,9 +5,6 @@ import {
   isTraceId,
   newSpanId,
   newTraceId,
-  PROCESS_SESSION_ID,
-  processScope,
-  resetProcessScope,
   requireTraceScope,
   rootScope,
   spanStatus,
@@ -77,6 +74,11 @@ describe("traceparent", () => {
     expect(fromTraceparent("")).toBeUndefined();
   });
 
+  /** Version 00's grammar is closed at 55 characters. */
+  test("rejects trailing fields on version 00", () => {
+    expect(fromTraceparent(`${SPEC_HEADER}-extra`)).toBeUndefined();
+  });
+
   test("tolerates surrounding whitespace", () => {
     expect(fromTraceparent(`  ${SPEC_HEADER}  `)?.traceId).toBe(SPEC_TRACE_ID);
   });
@@ -102,15 +104,6 @@ describe("scope construction", () => {
         "runId is required",
       ]);
     }
-  });
-});
-
-describe("process scope", () => {
-  test("every caller shares one trace", () => {
-    resetProcessScope();
-    const first = processScope();
-    expect(processScope().traceId).toBe(first.traceId);
-    expect(first.sessionId).toBe(PROCESS_SESSION_ID);
   });
 });
 

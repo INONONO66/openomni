@@ -38,7 +38,10 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     return { type: "aborted" };
   }
 
-  const traceId = input.trace?.traceId ?? crypto.randomUUID();
+  // A model round trip belongs to the run that made it. Minting a trace here
+  // would give every call its own, which is the one thing a trace prevents.
+  const traceId = input.trace?.traceId;
+  if (traceId === undefined) throw new Error("llm run requires a trace id");
 
   const sessionID = messages[0]?.info.sessionID || `session-${crypto.randomUUID()}`;
   const messageID = `msg-${crypto.randomUUID()}`;
