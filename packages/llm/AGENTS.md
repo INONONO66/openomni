@@ -48,6 +48,7 @@ src/
 
 - Do NOT import `Bus` here. `llm` reports through the `events` port it is handed; reaching for the process-wide bus re-couples the package to an implementation the composition root is supposed to choose (#606). `check-deps` carries a separate `srcAllowedDeps` for this package — `src/` may import `@openomni/protocol` and nothing else, even though the manifest lists `telemetry` for the tests.
 - `packages/llm` sets `noEmit: true` in tsconfig — it does NOT produce a `dist/`. It is consumed as source by Bun.
+- Do NOT raise `lib` in `tsconfig.json`. `main` points at `src/index.ts`, so `agent` and `server` pull this package's sources into their own programs under their own `lib: ["ES2020"]` — widening here would let an ES2022 builtin pass llm's gate and surface as an error attributed to a consumer. The test tree, which nothing imports, is checked separately by `tsconfig.test.json` at ES2022; `check-types` runs both.
 - Do NOT add provider-specific logic to call sites. Keep SDK wiring in `provider/`, credential handling in `auth/`, and message/request shaping in `transform/`.
 - Do NOT bypass `Auth.get()` for credentials (e.g. reading env vars inline). All credentials flow through the namespace.
 - Do NOT hand-craft provider-specific request rewriting at call sites — keep it behind provider or transform modules so it stays in one place.

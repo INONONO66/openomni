@@ -41,8 +41,8 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("user");
-    expect(result[0].content).toBe("hello");
+    expect(result[0]?.role).toBe("user");
+    expect(result[0]?.content).toBe("hello");
   });
 
   test("anthropic filters empty text parts from array content", () => {
@@ -57,7 +57,7 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    expect(result[0].content).toEqual([{ type: "text", text: "actual content" }]);
+    expect(result[0]?.content).toEqual([{ type: "text", text: "actual content" }]);
   });
 
   test("anthropic removes message when all array parts are empty", () => {
@@ -90,16 +90,10 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    const content = result[0].content;
-    expect(Array.isArray(content)).toBe(true);
-    if (!Array.isArray(content)) {
-      expect.unreachable("content should be an array");
-    }
+    const content = result[0]?.content;
+    if (!Array.isArray(content)) throw new TypeError("expected array content");
     const part = content[0];
-    expect(part.type).toBe("tool-call");
-    if (part.type !== "tool-call") {
-      expect.unreachable("content part should be a tool call");
-    }
+    if (part?.type !== "tool-call") throw new TypeError("expected a tool-call part");
     expect(part.toolCallId).toBe("call_with_dots_and_slashes");
   });
 
@@ -118,16 +112,10 @@ describe("ProviderTransform.normalizeMessages", () => {
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    const content = result[0].content;
-    expect(Array.isArray(content)).toBe(true);
-    if (!Array.isArray(content)) {
-      expect.unreachable("content should be an array");
-    }
+    const content = result[0]?.content;
+    if (!Array.isArray(content)) throw new TypeError("expected array content");
     const part = content[0];
-    expect(part.type).toBe("tool-result");
-    if (part.type !== "tool-result") {
-      expect.unreachable("content part should be a tool result");
-    }
+    if (part?.type !== "tool-result") throw new TypeError("expected a tool-result part");
     expect(part.toolCallId).toBe("id_with_special_chars");
   });
 
@@ -150,8 +138,8 @@ describe("ProviderTransform.normalizeMessages", () => {
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, nonClaudeAnthropicModel);
-    const part = (result[0].content as Array<Record<string, unknown>>)[0];
-    expect(part.toolCallId).toBe("call.with.dots");
+    const part = (result[0]?.content as Array<Record<string, unknown>>)[0];
+    expect(part?.toolCallId).toBe("call.with.dots");
   });
 
   test("preserves non-text parts like tool-call in anthropic filtering", () => {
@@ -171,13 +159,10 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    const content = result[0].content;
-    expect(Array.isArray(content)).toBe(true);
-    if (!Array.isArray(content)) {
-      expect.unreachable("content should be an array");
-    }
+    const content = result[0]?.content;
+    if (!Array.isArray(content)) throw new TypeError("expected array content");
     expect(content.length).toBe(1);
-    expect(content[0].type).toBe("tool-call");
+    expect(content[0]?.type).toBe("tool-call");
   });
 
   test("preserves non-empty reasoning parts while filtering empty reasoning parts", () => {
@@ -194,7 +179,7 @@ describe("ProviderTransform.normalizeMessages", () => {
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
 
     expect(result).toHaveLength(1);
-    expect(result[0].content).toEqual([{ type: "reasoning", text: "keep me" }]);
+    expect(result[0]?.content).toEqual([{ type: "reasoning", text: "keep me" }]);
   });
 
   test("accepts Provider.Model directly", () => {
@@ -210,8 +195,8 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, model);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("user");
-    expect(result[0].content).toBe("hello");
+    expect(result[0]?.role).toBe("user");
+    expect(result[0]?.content).toBe("hello");
   });
 });
 
@@ -275,7 +260,7 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
 
   test("does not mutate original messages", () => {
     const msgs: ModelMessage[] = [{ role: "user", content: "hello" }];
-    const original = { ...msgs[0] };
+    const original = structuredClone(msgs[0]);
     ProviderTransform.applyAnthropicCaching(msgs);
     expect(msgs[0]).toEqual(original);
   });

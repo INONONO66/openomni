@@ -3,9 +3,6 @@ import type { Auth } from "../../src/auth";
 import { getSDK, getLanguage } from "../../src/provider/sdk";
 import { Provider } from "../../src/provider";
 
-type ModelRef = { readonly modelId?: string };
-type ProviderRef = { readonly provider?: string };
-
 function makeAnthropicModel(id?: string): Provider.Model {
   return {
     id: id ?? "claude-sonnet-4-20250514",
@@ -36,11 +33,11 @@ describe("Provider Integration", () => {
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const sdkLm = sdk.languageModel(model.id) as ModelRef;
+    const sdkLm = sdk.languageModel(model.id);
     expect(sdkLm).toBeDefined();
     expect(sdkLm.modelId).toBe(model.id);
 
-    const lm = getLanguage(model, auth) as ModelRef;
+    const lm = getLanguage(model, auth);
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe(model.id);
   });
@@ -55,11 +52,11 @@ describe("Provider Integration", () => {
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const sdkLm = sdk.languageModel(model.id) as ModelRef;
+    const sdkLm = sdk.languageModel(model.id);
     expect(sdkLm).toBeDefined();
     expect(sdkLm.modelId).toBe(model.id);
 
-    const lm = getLanguage(model, auth) as ModelRef;
+    const lm = getLanguage(model, auth);
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe(model.id);
   });
@@ -72,7 +69,7 @@ describe("Provider Integration", () => {
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
 
-    const lm = sdk.languageModel("gpt-4o") as ModelRef;
+    const lm = sdk.languageModel("gpt-4o");
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe("gpt-4o");
   });
@@ -154,7 +151,7 @@ describe("Provider Integration", () => {
     const sdk = getSDK(model, auth);
     expect(typeof sdk.languageModel).toBe("function");
 
-    const lm = getLanguage(model, auth) as ModelRef & ProviderRef;
+    const lm = getLanguage(model, auth);
     expect(lm.modelId).toBe("custom-model");
     expect(lm.provider).toBe("custom.responses");
   });
