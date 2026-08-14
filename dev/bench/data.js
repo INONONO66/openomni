@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786677499802,
+  "lastUpdate": 1786688117030,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45113,6 +45113,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 401894,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eaf7c5d411b3f42f7597222a6894f991303f9731",
+          "message": "refactor(llm): report through an injected port, not a global bus (#606) (#617)\n\n* refactor(llm): report through an injected port, not a global bus (#606)\n\nPhase 1b's remaining half, first package. `packages/llm/src` no longer\nimports `Bus`.\n\n`RunInput.events` and `Processor.Options.events` are `BusEvent.Sink` — the\nport `@openomni/protocol` already declared for exactly this. The composition\nroot decides what is behind it, a test binds a collector, and P2 can put a\nfail-closed ledger append there without touching `run()`. The agent binds it\nat the seam for now; agent's own emits are the next slice.\n\nThe port is named `events`, not `sink`: `llm` already has a `Sink` — the\nstreaming projection with `onMessage`/`onFact` — and two things called sink in\none options bag is how the wrong one gets passed.\n\n`Processor.Options.trace` becomes required. It was optional, and that\noptionality is what justified `publishInfo`'s `traceId ?? sessionID` — a\nsession id written into the field every reader treats as a trace, the exact\nwrong-kind defect D11 names. `run()` has always supplied a trace; nothing but\nthe fallback needed it optional. Records with no trace are dropped now.\n\nPinned by a test that binds a collector and asserts the global `Bus` sees no\n`llm.*` event at all. Routing one publish back through `Bus` fails it.\n\n`lint-side-effects`'s `processor-projected-sink` rule pins the call shape by\nliteral string; updated to the new signature.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(llm): pin all eight publishes, not two (#606)\n\nReview round 1. The port was correct; the test that claimed to hold it\ncovered a quarter of it.\n\n`expect(busSaw.filter((name) => name.startsWith(\"llm.\")))` blinded the\nassertion to every `operational.*` record, and the happy-path scenario never\nreached the failure or retry branches. Six of the eight publishes could be\nrouted back through the global `Bus` with the suite green. The filter is gone,\nthe processor tests read from a `collector()` instead of `Bus`, and the two\nerror paths that no test reached — `streamText`'s `onError` and the\n\"retry declined\" branch — now have coverage. All eight mutations fail.\n\nThirty-seven of the forty-one test lines I added to `processor.test.ts` and\n`fold-emission.test.ts` were dead: both files' `createProcessor` helper already\nsupplies those defaults before `...overrides`. That is scripted-edit residue,\nand it read as deliberate per-test intent.\n\nAn empty trace is refused at the boundary rather than half-dropped. Before,\n`publishInfo` dropped its records while `run` kept publishing malformed ones —\nwhich displaces the wrong-kind defect instead of closing it.\n\nMaking `trace` required left two always-true `if (trace)` checks and three\nsignatures wider than any caller; both are gone. Ten fixtures carried a\n`trace.sessionId` that disagreed with the `sessionID` in the same call, a state\n`run()` cannot produce — in a PR whose subject is a session id sitting in a\ntrace-shaped field.\n\n`packages/llm/src` is now **protocol-only**: it imports no implementation of\nthe observation channel at all. `AGENTS.md` said the opposite in four places\nand had no anti-pattern for the invariant this establishes.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* feat(llm): enforce protocol-only in src, not just claim it (#606)\n\nReview round 2. I wrote in two places that `check-deps`' source scan keeps\n`packages/llm/src` clean. It did not: `validateSourceImportDirection` resolves\nthrough the same allowlist as the manifest, and `telemetry` is in it for the\ntests — so `src/` could import `Bus` again with every gate green.\n\n`PackageRule` gains `srcAllowedDeps`, a tighter allowlist for `<pkg>/src/`\nalone. `llm` sets it to protocol only. Reintroducing the import now fails:\n\n    VIOLATION: packages/llm/src/run.ts:1 source-imports @openomni/telemetry\n\nThat is the shape a test-only dependency needs generally — without it, a\ndevDependency silently re-permits the same import in production code.\n\nAlso from the round: `LlmCall.Completed` survived deletion, so the commit that\nsaid \"pin all eight\" pinned seven against removal. Pinned. Both the re-route\nand the delete sweep now kill 8/8.\n\nSmaller: `Bus.reset()` and the `Bus` import were dead in `processor.test.ts`\nonce its default flipped to the collector; a test still named itself after\nBus; the processor comment stated \"the composition root decides\" as fact when\nthe agent hard-binds `Bus` at `turn-prepare.ts`; an optional chain guarded a\nfield validated three lines above it; and one test re-filtered the same event\nlist eight times.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(llm): make the new layer rule fail when deleted (#606)\n\nReview round 3 returned PASS. These are its follow-ups, taken because the\nfirst one is a gate that could be deleted without anything noticing — the\ndefect this PR exists to fix, in the fix itself.\n\n`srcAllowedDeps` narrows `src/` below the manifest, so replacing\n`isAllowedSourceDep` with a pass-through leaves `check-deps`, `lint:guards`\nand the llm suite all green: what the rule forbids is exactly what the\nmanifest still permits. `check-deps --self-test` now proves six layer\ndiscriminations on synthetic rules, and CI runs it beside the three sibling\nratchet self-tests. Removing the rule fails it.\n\nRoot `AGENTS.md` calls its dependency table the contract and did not carry the\ntwo-tier rule; it does now.\n\nThree provably dead lines the last two rounds targeted by class and missed by\ninstance: a `Bus.reset()` in the file round 2 did not visit, an `onError?.()`\none line after asserting it is a function, and a conditional spread on a\nrequired field that the same function spreads unconditionally twice more.\nPlus: a comment naming `Processor.Options`, a type that does not exist; a\nhelper that re-implemented the body of the helper introduced beside it; two\nassertions that filtered to prove a count and then indexed the unfiltered\narray; and a comment still describing the bus this PR removed.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T15:14:00+09:00",
+          "tree_id": "bec757daaf386e007a56d183805c96e53bbeae89",
+          "url": "https://github.com/INONONO66/openomni/commit/eaf7c5d411b3f42f7597222a6894f991303f9731"
+        },
+        "date": 1786688115793,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 252,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 549,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 3165,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1357,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2385,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1647,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 11261,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 5943,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 854,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 34,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 932,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 29000,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1435,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 6916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 65558,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 321043,
             "unit": "ns/op"
           }
         ]
