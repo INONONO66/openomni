@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
-import type { PolicyFn } from "../../../../src/core/policy";
+import { createToolPermissionPolicy } from "../../src/execution-runtime/middleware/tool-permission-policy";
+import type { PolicyFn } from "@openomni/agent";
 
 function baseCtx(
   overrides?: Partial<Omit<Parameters<PolicyFn>[0], "pointId">>,
@@ -322,5 +322,64 @@ describe("createToolPermissionPolicy", () => {
     );
     expect(verdict.verdict).toBe("allow");
     expect(verdict.reasonCodes).toContain("default_allow");
+  });
+});
+
+/**
+ * Carried from `agent`'s `builtin-snapshots` when the policy moved (#629).
+ * `effectCapabilities` and `failPolicy` are not decoration: the engine
+ * replaces any effect a registration did not declare for the point it fired
+ * at, and `fail-closed` is what makes an evaluation failure a deny rather than
+ * a pass. Neither is visible to a direct `mw.fn(ctx)` assertion.
+ */
+describe("canonical registration metadata", () => {
+  it("name, points, capabilities, priority, failPolicy", () => {
+    const mw = createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } });
+    expect(mw.name).toBe("builtin:tool-permission");
+    expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
+    expect(mw.effectCapabilities).toEqual({
+      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+    });
+    expect(mw.priority).toBe(0);
+    expect(mw.failPolicy).toBe("fail-closed");
+  });
+
+  it("denies an allowlist miss with the reason and policy id", async () => {
+    const mw = createToolPermissionPolicy({
+      events: Bus,
+      permission: { action: "tool.call", allowlist: ["read_file"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({ toolName: "shell_exec", toolCallId: "call-2", toolInput: { cmd: "rm -rf /" } }),
+    );
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("allowlist_miss");
+    expect(verdict.policyId).toBe("guardrail.permission");
+  });
+});
+
+/**
+ * The other half of what agent's tool-permission integration suite proved.
+ * The executor puts the tool's labels in the context and resolves its
+ * canonical policy name (`agent`'s `tool-policy-context.test.ts`); matching a
+ * ruleset against them is this policy's, and moved here with it (#629).
+ */
+describe("label interpretation", () => {
+  it("denies on a matched deny label", async () => {
+    const mw = createToolPermissionPolicy({
+      events: Bus,
+      permission: { action: "tool.call", denyLabels: ["capability:write"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "write",
+        toolCallId: "call-label",
+        toolInput: { path: "file.txt" },
+        toolLabels: ["capability:write", "risk:tier-1"],
+      }),
+    );
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("deny_label");
   });
 });

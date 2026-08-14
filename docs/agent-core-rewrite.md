@@ -110,7 +110,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | 🟨 |
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | 🟨 |
 | [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | 🟨 |
-| — | dissolve `builtin/` per D5 — `builtin:tool-permission`; then `defaultRegistry` and the directory go. `builtin:compaction` waits on the `Run.Outcome` ruling in Phase 3 below | ⬜ |
+| [#629](https://github.com/INONONO66/openomni/pull/629) | dissolve `builtin/` per D5 — `builtin:tool-permission` moves to openomni | 🟨 |
+| — | dissolve `builtin/` per D5 — `builtin:compaction` is the last one, and its fate is the compaction rewrite in Phase 3, not a move. `defaultRegistry` and the directory go with it | ⬜ |
 | — | retry no longer double-counts the turn budget | ⬜ |
 
 ### Phase 3 — compaction

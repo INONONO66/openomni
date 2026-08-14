@@ -6,10 +6,7 @@ import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { buildPolicyEngine } from "../../../src/core/execution/runner";
 import { runAgent } from "../../../src/core/execution/runner";
-import {
-  createCompactionPolicy,
-  createToolPermissionPolicy,
-} from "../../../src/core/policy/builtin";
+import { createCompactionPolicy } from "../../../src/core/policy/builtin";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import {
@@ -278,13 +275,9 @@ describe("canonical tool policy execution", () => {
 describe("canonical builtin registrations", () => {
   it("declare their policy points and effect capabilities", () => {
     // Given / When
-    const registrations = [
-      createCompactionPolicy({ events: Bus, contextWindowTokens: 100 }),
-      createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } }),
-    ];
+    const registrations = [createCompactionPolicy({ events: Bus, contextWindowTokens: 100 })];
 
     // Then
     expect(registrations[0]?.pointIds).toEqual(["run.completion.pre"]);
-    expect(registrations[1]?.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
   });
 });

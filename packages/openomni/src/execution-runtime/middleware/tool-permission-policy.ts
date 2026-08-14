@@ -1,6 +1,11 @@
 import type { BusEvent } from "@openomni/protocol";
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
-import type { CanonicalPolicyRegistration } from "../types";
+import { z } from "zod";
+import type {
+  CanonicalPolicyRegistration,
+  PolicyContext,
+  PolicyRegistryInstance,
+} from "@openomni/agent";
 
 const TOOL_CALL_ACTION = "tool.call";
 
@@ -76,4 +81,37 @@ export function createToolPermissionPolicy(
       return PolicyDecision.fromEvaluation(verdict);
     },
   };
+}
+
+/**
+ * Wire shape only: the output type omits `events`, and a plain `z.object`
+ * strips what the shape does not name. A policy plan therefore cannot smuggle
+ * a sink of its own and redirect where the evidence of its own decision goes.
+ */
+const ToolPermissionConfigSchema: z.ZodType<
+  Omit<ToolPermissionPolicyConfig, "events">,
+  z.ZodTypeDef,
+  unknown
+> = z.object({ permission: Policy.Permission });
+
+/**
+ * Registers the tool permission guard. A permission ruleset is an opinion
+ * about what an agent may touch, which is a product's to hold (D5); the core
+ * ships the fail-closed point it hangs on.
+ *
+ * @param events Where the guard's evaluation failures go. Passed in rather
+ * than reached for, and spread last so a plan cannot redirect it.
+ */
+export function registerToolPermission(
+  registry: PolicyRegistryInstance<PolicyContext>,
+  events: BusEvent.Sink,
+): void {
+  registry.register("builtin:tool-permission", (config) =>
+    createToolPermissionPolicy({
+      ...ToolPermissionConfigSchema.parse(
+        config === undefined ? { permission: { action: "tool.call" } } : config,
+      ),
+      events,
+    }),
+  );
 }

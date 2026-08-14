@@ -3,8 +3,6 @@ import type { Message } from "@openomni/protocol";
 import type { BudgetState } from "../../../src/core/budget";
 import type { PolicyFn } from "../../../src/core/policy";
 import { createCompactionPolicy } from "../../../src/core/policy/builtin/compaction";
-import { createToolPermissionPolicy } from "../../../src/core/policy/builtin/tool-guard";
-import { firstReason } from "../../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
 function baseCtx(overrides?: Partial<Parameters<PolicyFn>[0]>): Parameters<PolicyFn>[0] {
@@ -56,44 +54,6 @@ function testMessage(id: string): Message.WithParts {
   };
 }
 
-describe("snapshot: tool-permission", () => {
-  it("continue — tool on allowlist", async () => {
-    const mw = createToolPermissionPolicy({
-      events: Bus,
-      permission: { action: "tool.call", allowlist: ["read_file", "write_file"] },
-    });
-    const verdict = await mw.fn(
-      baseCtx({
-        timing: "invoke.prepare",
-        pointId: "tool.native.pre",
-        toolName: "read_file",
-        toolCallId: "call-1",
-        toolInput: { path: "/tmp/test" },
-      }),
-    );
-    expect(verdict.verdict).toBe("allow");
-  });
-
-  it("abort — tool not on allowlist", async () => {
-    const mw = createToolPermissionPolicy({
-      events: Bus,
-      permission: { action: "tool.call", allowlist: ["read_file"] },
-    });
-    const verdict = await mw.fn(
-      baseCtx({
-        timing: "invoke.prepare",
-        pointId: "tool.native.pre",
-        toolName: "shell_exec",
-        toolCallId: "call-2",
-        toolInput: { cmd: "rm -rf /" },
-      }),
-    );
-    expect(verdict.verdict).toBe("deny");
-    expect(firstReason(verdict)).toBe("allowlist_miss");
-    expect(verdict.policyId).toBe("guardrail.permission");
-  });
-});
-
 describe("snapshot: compaction", () => {
   it("continue — below token threshold", async () => {
     const mw = createCompactionPolicy({
@@ -113,18 +73,6 @@ describe("snapshot: compaction", () => {
 });
 
 describe("snapshot: canonical registration metadata", () => {
-  it("tool-permission: name, points, priority, failPolicy", () => {
-    const mw = createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } });
-    expect(mw.name).toBe("builtin:tool-permission");
-    expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
-    expect(mw.effectCapabilities).toEqual({
-      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
-      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
-    });
-    expect(mw.priority).toBe(0);
-    expect(mw.failPolicy).toBe("fail-closed");
-  });
-
   it("compaction: name, point, priority", () => {
     const mw = createCompactionPolicy({ events: Bus, contextWindowTokens: 1000 });
     expect(mw.name).toBe("builtin:compaction");
