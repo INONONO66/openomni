@@ -10,7 +10,6 @@ const builtinPolicyIds = [
   "builtin:budget-reassurance",
   "builtin:budget-warning",
   "builtin:compaction",
-  "builtin:idle-nudge",
   "builtin:tool-permission",
 ];
 
@@ -58,7 +57,6 @@ describe("PolicyRegistry", () => {
           required: true,
           config: { contextWindowTokens: 1000, thresholdRatio: 0.8 },
         },
-        { id: "builtin:idle-nudge", required: true, config: { idleThresholdMs: 1000 } },
         {
           id: "builtin:tool-permission",
           required: true,
@@ -70,22 +68,17 @@ describe("PolicyRegistry", () => {
 
     expect(registrations.map((registration) => registration.name)).toEqual([
       "builtin:compaction",
-      "builtin:idle-nudge",
       "builtin:tool-permission",
     ]);
   });
 
   it("defaultRegistry resolves configless default builtin policies", () => {
     const registrations = defaultRegistry(Bus).resolve(
-      plan([
-        { id: "builtin:idle-nudge", required: true },
-        { id: "builtin:tool-permission", required: true },
-      ]),
+      plan([{ id: "builtin:tool-permission", required: true }]),
       {},
     );
 
     expect(registrations.map((registration) => registration.name)).toEqual([
-      "builtin:idle-nudge",
       "builtin:tool-permission",
     ]);
   });

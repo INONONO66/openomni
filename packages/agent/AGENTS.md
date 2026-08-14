@@ -22,7 +22,6 @@ src/
 │       └── builtin/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
 │           ├── compaction.ts   # createCompactionPolicy
-│           ├── idle-nudge.ts   # createIdleNudgePolicy
 │           └── tool-guard.ts   # createToolPermissionPolicy (fail-closed)
 └── runtime/
     ├── index.ts                # Re-exports mcp

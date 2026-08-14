@@ -8,10 +8,8 @@ import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
   createCompactionPolicy,
-  createIdleNudgePolicy,
   createToolPermissionPolicy,
 } from "./builtin";
-import type { IdleNudgeConfig } from "./builtin/idle-nudge";
 import type { ToolPermissionPolicyConfig } from "./builtin/tool-guard";
 import type { PolicyContext } from "./types";
 
@@ -31,11 +29,6 @@ const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown
   onSummarize: MessageSummarizerSchema.optional(),
 });
 
-const IdleNudgeConfigSchema: z.ZodType<IdleNudgeConfig, z.ZodTypeDef, unknown> = z.object({
-  idleThresholdMs: z.number().optional(),
-  maxNudges: z.number().optional(),
-});
-
 /**
  * Wire shape only: the output type omits `events`, and a plain `z.object`
  * strips what the shape does not name. A policy plan therefore cannot smuggle
@@ -49,10 +42,6 @@ const ToolPermissionConfigSchema: z.ZodType<
 
 function parseCompactionConfig(config: unknown): CompactionOptions {
   return CompactionConfigSchema.parse(config);
-}
-
-function parseIdleNudgeConfig(config: unknown): IdleNudgeConfig {
-  return IdleNudgeConfigSchema.parse(config ?? {});
 }
 
 function parseToolPermissionConfig(config: unknown): Omit<ToolPermissionPolicyConfig, "events"> {
@@ -73,9 +62,6 @@ export function defaultRegistry(events: BusEvent.Sink): PolicyRegistryInstance<P
   registry.register("builtin:budget-warning", () => createBudgetWarningPolicy());
   registry.register("builtin:compaction", (config) =>
     createCompactionPolicy({ ...parseCompactionConfig(config), events }),
-  );
-  registry.register("builtin:idle-nudge", (config) =>
-    createIdleNudgePolicy(parseIdleNudgeConfig(config)),
   );
   registry.register("builtin:tool-permission", (config) =>
     createToolPermissionPolicy({ ...parseToolPermissionConfig(config), events }),

@@ -1,5 +1,10 @@
 import { PolicyDecision } from "@openomni/protocol";
-import type { CanonicalPolicyRegistration } from "../types";
+import { z } from "zod";
+import type {
+  CanonicalPolicyRegistration,
+  PolicyRegistryInstance,
+  PolicyContext,
+} from "@openomni/agent";
 
 export interface IdleNudgeConfig {
   idleThresholdMs?: number;
@@ -66,4 +71,21 @@ export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): CanonicalPo
       });
     },
   };
+}
+
+const IdleNudgeConfigSchema: z.ZodType<IdleNudgeConfig, z.ZodTypeDef, unknown> = z.object({
+  idleThresholdMs: z.number().optional(),
+  maxNudges: z.number().optional(),
+});
+
+/**
+ * Registers the idle nudge, which is an opinion rather than a loop invariant
+ * (D5): a run that has not progressed is still a valid run, and only a product
+ * decides that prodding it is the right response. The core ships the point;
+ * this ships the policy.
+ */
+export function registerIdleNudge(registry: PolicyRegistryInstance<PolicyContext>): void {
+  registry.register("builtin:idle-nudge", (config) =>
+    createIdleNudgePolicy(IdleNudgeConfigSchema.parse(config ?? {})),
+  );
 }

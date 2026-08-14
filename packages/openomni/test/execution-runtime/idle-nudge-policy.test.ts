@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createIdleNudgePolicy } from "../../../../src/core/policy/builtin/idle-nudge";
-import type { PolicyContext, PolicyFn } from "../../../../src/core/policy";
+import { createIdleNudgePolicy } from "../../src/execution-runtime/middleware/idle-nudge-policy";
+import type { PolicyContext, PolicyFn } from "@openomni/agent";
 import type { Policy } from "@openomni/protocol";
 
 const originalNow = Date.now;

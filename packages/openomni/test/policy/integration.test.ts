@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine, defaultRegistry, type PolicyContext } from "@openomni/agent";
+import { registerIdleNudge } from "../../src/execution-runtime/middleware/idle-nudge-policy";
 import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { PolicyResolver } from "../../src/policy";
@@ -51,6 +52,7 @@ describe("policy pipeline integration", () => {
     expect(plan.labels).toEqual(["actor.owner", "agent.reviewer", "run.direct", "surface.github"]);
 
     const registry = defaultRegistry(Bus);
+    registerIdleNudge(registry);
     registry.register("test:github-surface-guard", () => ({
       kind: "point",
       name: "test:github-surface-guard",
@@ -112,6 +114,7 @@ describe("policy pipeline integration", () => {
     });
 
     const registry = defaultRegistry(Bus);
+    registerIdleNudge(registry);
     registry.register("policy:github-review-readonly", () => ({
       kind: "point",
       name: "policy:github-review-readonly",
