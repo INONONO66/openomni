@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786719769764,
+  "lastUpdate": 1786721106215,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45733,6 +45733,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 506570,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71a8f85afda0eb2902552e622c58b746e8fb66d0",
+          "message": "refactor(policy): drop the event-emitter carve-out (#606) (#622)\n\n* refactor(policy): drop the event-emitter carve-out (#606)\n\n`immutablePointSnapshot` pulled an `eventEmitter` out of the context,\ncloned everything else, then put the emitter back by reference — a live\nobject with a callable method sitting inside what the function's own name\ncalls an immutable snapshot. `freezePlainValue` carried a third parameter\njust to skip freezing it.\n\nNothing has produced one since #610 removed `AgentEventEmitter` and\n`ChatAgentConfig.eventEmitter`. No type declares the field —\n`GenericPolicyContext` never had it — and the whole tree contains no\nother reference: the carve-out and one test were the only mentions left.\n\nWithout it an emitter-shaped context takes the path every other live\nobject already takes: `structuredClone` refuses it and the dispatch denies\nwith `policy.input_invalid`. So the test moves rather than disappears —\n`{ emit }` joins the rejection table beside the function, Set, Proxy and\nDate cases it always belonged in.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(policy): pin the deletion by the key it was read under (#606)\n\nReview finding. The rejection table's loop puts every case under the key\n`unsupported`, but the carve-out keyed on the property name — it read\n`source.eventEmitter` and spread that back by reference. So the\n`{ emit }` row added alongside `Date` and `Set` was green at the merge\nbase too, and stayed green with the deleted code restored: the PR shipped\nno coverage of the behavior it changed, while its body claimed the test\nhad moved rather than disappeared.\n\nA standalone test now dispatches with `eventEmitter: { emit }`. Verified\nagainst `4a8d3de9`'s `context.ts`: 1 fail with the carve-out restored,\n0 at head.\n\nAlso removes a blank line the deletion left inside the JSDoc block, which\n`biome format` does not flag.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T00:23:53+09:00",
+          "tree_id": "3b4639f72669092bb4e11b48a0cc4fcce64058fd",
+          "url": "https://github.com/INONONO66/openomni/commit/71a8f85afda0eb2902552e622c58b746e8fb66d0"
+        },
+        "date": 1786721105078,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 719,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6199,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10323,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2622,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3219,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 17133,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8694,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1185,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1542,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 49685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2360,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10873,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517317,
             "unit": "ns/op"
           }
         ]
