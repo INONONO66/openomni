@@ -149,6 +149,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 - **Sink-driven**: Callers pass a `Sink` (from `@openomni/protocol`) to receive streaming output. The agent never creates sessions on its own.
 - **Policy > ad-hoc hooks**: New extensions MUST use canonical point registrations in `middleware: [...]`. `PolicyEngine.create()` is the single extension surface; timing registrations exist only for legacy compatibility.
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.
+- **A retried attempt is the same turn**: `recordRunTurn` charges once per `turnIndex`, so an attempt that failed and was retried is free in the *turns* unit and bounded by `maxAttempts` instead. Tokens and tool calls still charge per attempt, because they were really spent (#630).
 - **Message format**: `ChatAgentInput.messages` is a simple `{ role: "user" | "assistant"; content: string }[]`. Richer `Message.WithParts[]` is used internally only.
 
 ## ANTI-PATTERNS
