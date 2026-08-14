@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786713495675,
+  "lastUpdate": 1786719769764,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45609,6 +45609,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 504930,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a8d3de993f532f6fae21406f803538f1080a291",
+          "message": "refactor(agent): one output channel, not two (#606) (#621)\n\n* refactor(agent): one output channel, not two (#606)\n\n`ChatAgent` exposed a `stream()` returning an `AsyncIterable<AgentEvent>`,\nand every internal step was written as a generator to feed it. Nothing\noutside this package's own tests ever consumed it: no `.stream(` call and\nno `AgentEvent` reference exists in `openomni`, `server`, or anywhere\nelse in the tree.\n\nWhat it narrated was already carried elsewhere. `text_chunk`,\n`tool_call_start` and `tool_call_complete` restate what the caller's\n`Sink` receives as it happens. `turn_complete`, `budget_warning` and\n`budget_reassurance` restate what `config.events` already publishes —\n`emitTurnComplete`, `emitBudgetWarning`, `emitBudgetReassurance` are\ncalled on the same lines that built the events. `hook_verdict` narrated\nevery policy verdict, including allows, to nobody; denies that matter go\nout as diagnostics. `complete` and `error` were the only two that carried\na decision, and both are expressible as a return.\n\nSo `streamAgent` becomes `runAgent`, returning `AgentResult`. Every\n`yield event; return;` becomes `return result`. `handleStop` and\n`handleCompact` return `AgentResult | \"continue\"`; `handleContinue` has\nnothing left to yield and is synchronous; `handleError` returns its\n`ErrorDecision` directly. `BuildTurnResult` loses its two budget-event\nfields, `ErrorDecision` stops piggybacking on `TurnDecision`, and\n`TurnDecision` — which existed to be collapsed back into a string by\nthree one-line helpers — is gone with them.\n\n`ChatAgentConfig.eventEmitter` and `AgentEventEmitter` go too: no\nproducer, no consumer. The `packages/policy` snapshot carve-out that\npreserves an `eventEmitter` across a dispatch is the next slice.\n\nTwo tests are deleted rather than rewritten, because their subject is:\none asserted the order of `hook_verdict` yields, the other that\n`stream()` and `run()` report the same `finishReason`. The rest are\nrewritten against the channel that survives — `streaming.test.ts` and the\ntool-permission stream case now assert on the `Sink` the caller passes,\nwhich is what a caller can actually observe.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): restore two pins the rewrite removed (#606)\n\nReview findings. Deleting the event channel took two real properties'\nonly test grip with it, because the tests asserted the `AgentEvent` that\nwas built on the line beside the emit — which never proved the emit\nhappened, and now proves nothing at all.\n\nBudget nagging: three tests in `lifecycle-turn-pre` were left with one\nassertion each, `expect(result.type).toBe(\"ready\")`, identical across all\nthree and unrelated to their names. They now collect\n`AgentExecution.BudgetReassurance` / `BudgetWarning` off the events port,\nincluding the negative case. Verified red-first: renaming both reason\ncodes takes the file to 2 fail.\n\nNot-retrying: `agent.test.ts`'s \"does not retry missing toolExecutor\nconfiguration errors\" lost the assertion carrying its subject, leaving it\na weaker duplicate of the test above it. It now counts\n`AgentExecution.ErrorRetry`. Verified red-first: moving\n`assertToolExecutor` inside the retry loop — a three-second regression —\nwas invisible, and now fails.\n\n`turnToolCalls` and `turnToolResults` are deleted. D3's own rationale\nsays they \"exist only to re-broadcast what the Sink already forwarded\nlive\", and their only readers were the yields the last commit removed;\nthey were write-only. `toolPolicyDecisions[].timing` goes with them, as\ndoes the `error` on `ErrorDecision`'s retry variant, which nothing reads.\n\n`packages/agent/AGENTS.md` still described `stream()`, `AgentEvent`, and\nan `AsyncGenerator` entry point. `packages/protocol/src/sink/index.ts`\nnamed the deleted type in a comment.\n\nAlso: the turn.finish deny test now asserts the diagnostic that carries\nthe fact its old `hook_verdict` assertion did — a gap the reviewer found\ngreen on both sides of the diff.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T00:01:36+09:00",
+          "tree_id": "624d8603010e531446fb19c011c5807d483b66d1",
+          "url": "https://github.com/INONONO66/openomni/commit/4a8d3de993f532f6fae21406f803538f1080a291"
+        },
+        "date": 1786719768961,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 616,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10265,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2320,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3044,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 489,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1135,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 44,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 678,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 39306,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2018,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101914,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 506570,
             "unit": "ns/op"
           }
         ]
