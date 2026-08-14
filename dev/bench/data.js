@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786688117030,
+  "lastUpdate": 1786708589778,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45237,6 +45237,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 321043,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a1051e9be9b1cfbb34f402b4512e42ed4d611abe",
+          "message": "refactor(agent): report through an injected port, not a bus (#606) (#618)\n\n* refactor(agent): report through an injected port, not a bus (#606)\n\nPhase 1b's last slice. `packages/agent/src` no longer imports `Bus`, and\n`check-deps` rejects it if it tries.\n\nAll 22 publish sites route through `ChatAgentConfig.events`, a\n`BusEvent.Sink`. The config already reached every emitter, so the port travels\nwith the run it reports for rather than being reached for. `run-events.ts`\nheld ten of the 22 and every function there already took `agentBase`; the port\nsits beside the identity, not inside it — where a record goes is not part of\nwhat it says.\n\nThe built-ins that report take it too: `defaultRegistry(events)` hands it to\nthe compaction and tool-permission policies, and the tool executor, the\nin-memory compactor and the MCP client take it from the caller that owns them.\n`buildPolicyEngine`'s `auditEmit` binds the same port instead of `Bus.publish`.\n\n`ToolPermissionConfigSchema` is now typed `Omit<…, \"events\">`: the schema\nvalidates wire config, and the port is injected, never parsed.\n\n`srcAllowedDeps` — added in #617 for llm — applies here: `src/` may import\nprotocol, policy and llm, while the manifest keeps telemetry for the tests.\nReintroducing the import fails the gate, verified.\n\nopenomni and apps/server bind `Bus` at their own seams, which is where a\ncomposition layer is supposed to choose an implementation.\n\nPinned by a test that binds a collector and asserts the global bus sees\nnothing; routing one publish back through `Bus` fails it.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): remove the eight misplaced port insertions (#606)\n\nReview round 1. The scripted fixture pass put `events: Bus` in eight places\nit does not belong — all inert, none correct:\n\n- `traceContext` literals in three tests. `TraceContext.Type` has no `events`;\n  it is identity, and this PR's own design note says the port sits beside it.\n- Before `...defaultConfig` in five spread literals, where the spread already\n  carried the port, so the inserted key was overwritten.\n- Inside a policy-registration factory literal, which is not a config at all.\n\nNone changed an assertion, and none was visible to any gate:\n`packages/agent/tsconfig.json` is `include: [\"src\"]`, so a *misplaced* binding\ntype-checks nowhere — only a *missing* one shows up, at runtime. Verified\ncleared with an ad-hoc test-inclusive config.\n\n`@openomni/telemetry` moves to `devDependencies`, which is what the comment\nthis PR added to `check-deps.ts` already claimed. `packages/agent/AGENTS.md`\ngains the `events` row it was missing — the headline change of the PR — and\n`defaultRegistry()` becomes `defaultRegistry(events)` in both places it is\nwritten.\n\n`defaultRegistry`'s threading is pinned: a plan that supplies its own `events`\nis ignored and the injected sink receives the record. The guard is the zod\nstrip, not the spread order — flipping the order alone changes nothing, and\nthe comment now says which layer does the work.\n\nFound on the way: `apps/server` had no `test` script, so its 462 tests never\nran under turbo — including the ones this series has been editing. They do now.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): split the compaction trace bag (#606)\n\nRound 2 findings. No code defect; three accuracy items and one shape.\n\n`InMemoryCompactor.compact` took `{ traceId, events }` as one `trace`\nparameter. The PR's own thesis is that the port sits beside the identity,\nnot inside it — where a record goes is not something the trace says. It\nis also the shape the scripted pass imitated when it wrote\n`traceContext: { ..., events: Bus }` three times. Now a fourth parameter.\n\nThe registry comment claimed the schema strip, not the spread order, was\nthe guard; the test comment claimed both were needed. Mutation says each\nis independently sufficient, so both claims were false. The schema's\noutput type omits `events` — that is the whole reason a plan cannot\nsupply one — and the test now says it pins the outcome, not the layer.\n\nAlso: a ninth misplaced `events: Bus`, in a `traceContext` literal that\ntype-checked only because inference through an array element skips\nexcess-property checking; a stale `defaultRegistry()` in the openomni\nexecution-runtime notes; and four test titles left naming a local\nvariable by a blind rename.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T20:55:13+09:00",
+          "tree_id": "b8b85253a7ba7dc198d5d6e34a08fcfda80ecf10",
+          "url": "https://github.com/INONONO66/openomni/commit/a1051e9be9b1cfbb34f402b4512e42ed4d611abe"
+        },
+        "date": 1786708589339,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 647,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5907,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2517,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2981,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15554,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8171,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 496,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46879,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99925,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 505661,
             "unit": "ns/op"
           }
         ]
