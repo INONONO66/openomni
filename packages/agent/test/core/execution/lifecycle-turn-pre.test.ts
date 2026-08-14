@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { testProviderModel } from "../../helpers/provider-model";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
 import type { RuntimeResource, Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
@@ -28,7 +29,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -36,7 +37,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
 
     expect(result.type).toBe("ready");
     expect(fn).toHaveBeenCalledTimes(1);
-    const ctx = fn.mock.calls[0][0] as PolicyContext;
+    const ctx = fn.mock.calls[0]?.[0] as PolicyContext;
     expect(ctx.timing).toBe("turn.start");
   });
 
@@ -59,7 +60,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeState(),
       makeConfig(),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -91,7 +92,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeState(),
       makeConfig(),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -126,7 +127,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeState(),
       makeConfig(),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -156,7 +157,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       state,
       makeConfig(),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -185,7 +186,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       state,
       makeConfig(),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -237,7 +238,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeState(),
       makeConfig({ tools: [skillTool], toolExecutor }),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),

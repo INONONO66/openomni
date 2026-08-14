@@ -38,10 +38,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const events = await collectEvents(handleStop(state, config, engine, makeAgentBase(), turn));
 
     expect(fn).toHaveBeenCalledTimes(1);
-    const ctx = fn.mock.calls[0][0];
-    expect(ctx.pointId).toBe("run.turn.post");
-    expect(ctx.timing).toBe("turn.finish");
-    expect(ctx.isCompletion).toBe(true);
+    const ctx = fn.mock.calls[0]?.[0];
+    expect(ctx?.pointId).toBe("run.turn.post");
+    expect(ctx?.timing).toBe("turn.finish");
+    expect(ctx?.isCompletion).toBe(true);
 
     const completeEvent = events.find((e) => e.type === "complete");
     expect(completeEvent).toBeDefined();

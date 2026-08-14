@@ -3,17 +3,19 @@ import { buildSystemPrompt } from "../../src/core/execution/turn-prepare";
 
 describe("buildSystemPrompt", () => {
   it("combines base prompt with tool prompt", () => {
-    const result = buildSystemPrompt("base", [{ name: "bash", prompt: "rules" }]);
+    const result = buildSystemPrompt("base", [{ name: "bash", inputSchema: {}, prompt: "rules" }]);
     expect(result).toBe("base\n\n---\n\n## Tool: bash\nrules");
   });
 
   it("returns base prompt when no tool has prompt", () => {
-    const result = buildSystemPrompt("base", [{ name: "bash" }]);
+    const result = buildSystemPrompt("base", [{ name: "bash", inputSchema: {} }]);
     expect(result).toBe("base");
   });
 
   it("returns tool prompt when no base prompt", () => {
-    const result = buildSystemPrompt(undefined, [{ name: "bash", prompt: "rules" }]);
+    const result = buildSystemPrompt(undefined, [
+      { name: "bash", inputSchema: {}, prompt: "rules" },
+    ]);
     expect(result).toBe("## Tool: bash\nrules");
   });
 

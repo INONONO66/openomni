@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import type { Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -26,7 +27,7 @@ describe("dispatchPreRun (run.start)", () => {
 
     expect(result).toBeNull();
     expect(fn).toHaveBeenCalledTimes(1);
-    const ctx = fn.mock.calls[0][0] as PolicyContext;
+    const ctx = fn.mock.calls[0]?.[0] as PolicyContext;
     expect(ctx.timing).toBe("run.start");
   });
 
@@ -74,9 +75,7 @@ describe("dispatchPreRun (run.start)", () => {
     if (!lastMsg) throw new Error("expected injected message");
     expect(lastMsg.info.role).toBe("user");
     const text = lastMsg.parts
-      .filter(
-        (p): p is { type: "text"; text: string } & Record<string, unknown> => p.type === "text",
-      )
+      .filter((p): p is Message.TextPart => p.type === "text")
       .map((p) => p.text)
       .join("");
     expect(text).toBe("injected-context");

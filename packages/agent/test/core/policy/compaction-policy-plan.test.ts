@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message, Policy } from "@openomni/protocol";
 import type { BudgetState } from "../../../src/core/budget";
 import { defaultRegistry } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy";
+import type { PolicyFn } from "../../../src/core/policy";
 import { effectOf } from "../../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
@@ -87,9 +87,10 @@ function budgetState(inputTokens: number, outputTokens: number): BudgetState {
   };
 }
 
-function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
+function baseCtx(overrides?: Partial<Parameters<PolicyFn>[0]>): Parameters<PolicyFn>[0] {
   return {
     timing: "turn.finish",
+    pointId: "run.completion.pre",
     traceContext: { traceId: "trace-builtin-test" },
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -140,7 +141,10 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
     expect(verdict.verdict).toBe("allow");
     const replacement = effectOf(verdict, "run.replace_messages");
     expect(replacement).toBeDefined();
-    const replaced = replacement?.messages ?? [];
+    // The effect carries `messages` as `unknown[]` — it crosses the wire, and
+    // the schema will not vouch for a shape it does not own. Here the producer
+    // is the compaction builtin two lines up.
+    const replaced = (replacement?.messages ?? []) as Message.WithParts[];
     expect(replaced.length).toBeLessThan(messages.length);
     expect(replaced[0]?.info.role).toBe("user");
     // The tool call and its result live inside the same kept WithParts

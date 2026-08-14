@@ -2,12 +2,17 @@ import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
-import { createRunState } from "../../../src/core/execution/run-state";
+import {
+  createRunState,
+  type AgentRunBase,
+  type RunTrace,
+} from "../../../src/core/execution/run-state";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
-import type { Tool, TraceContext } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { abortRun, allow, filterTools } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
+import { testProviderModel } from "../../helpers/provider-model";
 
 function makeTools(...names: string[]): Tool.Spec[] {
   return names.map((name) => ({
@@ -35,12 +40,12 @@ function makeConfig(tools: Tool.Spec[]): ChatAgentConfig {
   };
 }
 
-function makeTrace(): TraceContext.Type {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+function makeTrace(): RunTrace {
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
-function makeAgentBase() {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+function makeAgentBase(): AgentRunBase {
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
 }
 
 function makeState() {
@@ -81,7 +86,7 @@ describe("resources.prepare dispatch", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -106,7 +111,7 @@ describe("resources.prepare dispatch", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -131,7 +136,7 @@ describe("resources.prepare dispatch", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -155,7 +160,7 @@ describe("resources.prepare dispatch", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -196,7 +201,7 @@ describe("resources.prepare dispatch", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -230,7 +235,7 @@ describe("resources.prepare dispatch", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),

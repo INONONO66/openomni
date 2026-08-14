@@ -33,7 +33,9 @@ describe("PolicyRegistry", () => {
     const registry = PolicyRegistry.create();
     const factory: PolicyFactory = (config, runtime) => ({
       name: `test:${runtime.agentName}:${FactoryConfig.parse(config).mode}`,
-      timing: "turn.start",
+      kind: "point",
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
       priority: 10,
       fn: () => allow(),
     });
@@ -116,7 +118,9 @@ describe("PolicyRegistry", () => {
       const registry = PolicyRegistry.create();
       registry.register("present.policy", () => ({
         name: "present.policy",
-        timing: "turn.start",
+        kind: "point",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": [] },
         priority: 10,
         fn: () => allow(),
       }));
@@ -197,6 +201,7 @@ describe("PolicyRegistry", () => {
     );
     await guard.fn({
       timing: "invoke.prepare",
+      pointId: "tool.native.pre",
       traceContext: { traceId: "trace-registry-inject" },
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -206,7 +211,7 @@ describe("PolicyRegistry", () => {
       elapsedMs: 0,
       toolName: "shell_exec",
       toolInput: hostile,
-    } as never);
+    });
 
     expect(injected.events.length).toBeGreaterThan(0);
     expect(smuggled.events).toHaveLength(0);

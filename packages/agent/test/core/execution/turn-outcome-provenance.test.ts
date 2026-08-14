@@ -9,10 +9,16 @@ import {
 } from "../../../src/core/execution/run-state";
 import { allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
+import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
 
+// The run and the input it produces share one identity. Derived this way
+// round, not the other: `AgentRunBase.runId` is optional and `RunInput.trace`'s
+// is not, so reading it back off the base would widen it.
+const runTrace = { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
+
 function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { ...runTrace, actorId: "actor-1" };
 }
 
 function makeTurnArtifacts(): TurnArtifacts {
@@ -21,8 +27,9 @@ function makeTurnArtifacts(): TurnArtifacts {
       messages: [],
       tools: [],
       events: Bus,
-      model: { provider: "test", id: "test-model" },
+      model: testProviderModel,
       maxSteps: 24,
+      trace: runTrace,
     },
     trackingSink: {
       onMessage: () => undefined,

@@ -27,7 +27,7 @@ describe("compaction through the lifecycle", () => {
     // `packages/policy`'s audit resolves `ctx.traceContext ?? options.traceContext`,
     // so this now outranks the engine's — a field missing here is a field
     // missing from every lifecycle audit record.
-    expect((ctx as { traceContext?: Record<string, string> }).traceContext).toEqual({
+    expect((ctx as { traceContext?: Record<string, string | undefined> }).traceContext).toEqual({
       traceId: agentBase.traceId,
       sessionId: agentBase.sessionId,
       runId: agentBase.runId,

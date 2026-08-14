@@ -7,16 +7,11 @@ import {
   type Tool,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { createToolExecutor } from "../../../src/core/execution/tool-executor";
+import {
+  createToolExecutor,
+  type BlockedToolResult,
+} from "../../../src/core/execution/tool-executor";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
-
-type ResultWithMetadata = Tool.Result & {
-  metadata?: {
-    verdict?: string;
-    reason?: string;
-    retryAfterMs?: number;
-  };
-};
 
 function makeCall(id = "call-1"): Tool.Call {
   return { id, tool: "bash", input: { command: "bun test" } };
@@ -133,7 +128,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       },
     });
 
-    const result: ResultWithMetadata = await executor(makeCall("call-retry"));
+    const result: BlockedToolResult = await executor(makeCall("call-retry"));
 
     expect(calls).toBe(0);
     expect(result.isError).toBe(true);

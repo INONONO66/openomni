@@ -11,7 +11,8 @@ const TEST_LIFECYCLE_TRACE_ID = "trace-mcp-lifecycle";
 interface McpToolStub {
   readonly name: string;
   readonly description?: string;
-  readonly inputSchema?: Record<string, unknown>;
+  /** MCP requires one on every tool, and so does the SDK result type. */
+  readonly inputSchema: { readonly type: "object" } & Record<string, unknown>;
 }
 
 type ToolSpecWithDescriptor = Tool.Spec & {
@@ -98,7 +99,10 @@ describe("McpClient tool descriptors", () => {
         transport: "sse",
         url: "https://example.test/mcp",
       },
-      { events: Bus, client: createStubClient([{ name: "search" }]) },
+      {
+        events: Bus,
+        client: createStubClient([{ name: "search", inputSchema: { type: "object" } }]),
+      },
     );
 
     const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
@@ -115,7 +119,9 @@ describe("McpClient tool descriptors", () => {
 
 describe("McpClient request options", () => {
   test("preserves SDK defaults when neither timeout nor signal is configured", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const sdkClient = createRequestOptionsCaptureClient([
+      { name: "search", inputSchema: { type: "object" } },
+    ]);
     const client = new McpClient(
       {
         name: "search-server",
@@ -131,7 +137,9 @@ describe("McpClient request options", () => {
   });
 
   test("passes abort signal without requiring a timeout override", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const sdkClient = createRequestOptionsCaptureClient([
+      { name: "search", inputSchema: { type: "object" } },
+    ]);
     const signal = new AbortController().signal;
     const client = new McpClient(
       {
@@ -151,7 +159,9 @@ describe("McpClient request options", () => {
   });
 
   test("ignores non-positive timeout overrides", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const sdkClient = createRequestOptionsCaptureClient([
+      { name: "search", inputSchema: { type: "object" } },
+    ]);
     const client = new McpClient(
       {
         name: "search-server",
@@ -192,7 +202,9 @@ describe("McpClient request options", () => {
   });
 
   test("passes configured timeout and abort signal to listTools", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const sdkClient = createRequestOptionsCaptureClient([
+      { name: "search", inputSchema: { type: "object" } },
+    ]);
     const signal = new AbortController().signal;
     const client = new McpClient(
       {
@@ -259,7 +271,10 @@ describe("McpClient request options", () => {
   test("SSE EventSource header fetch handles omitted init", async () => {
     const sdkClient = createTransportCaptureClient();
     const originalFetch = globalThis.fetch;
-    const fetchCalls: Array<{ readonly url: string | URL; readonly init?: RequestInit }> = [];
+    const fetchCalls: Array<{
+      readonly url: Parameters<typeof fetch>[0];
+      readonly init?: RequestInit;
+    }> = [];
     globalThis.fetch = (async (url, init) => {
       fetchCalls.push({ url, init });
       return new Response(null, { status: 204 });
@@ -279,7 +294,9 @@ describe("McpClient request options", () => {
       await client.connect();
 
       const eventSourceFetch = capturedHttpTransportOptions(sdkClient.transport()).eventSourceFetch;
-      expect(eventSourceFetch).toBeFunction();
+      if (typeof eventSourceFetch !== "function") {
+        throw new TypeError("expected an eventSourceFetch on the SSE transport");
+      }
       await eventSourceFetch("https://example.test/mcp");
     } finally {
       globalThis.fetch = originalFetch;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import type { BudgetState } from "../../../src/core/budget";
-import type { PolicyContext } from "../../../src/core/policy/types";
+import type { PolicyFn } from "../../../src/core/policy";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
@@ -12,9 +12,10 @@ import { createToolPermissionPolicy } from "../../../src/core/policy/builtin/too
 import { effectOf, firstReason } from "../../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
-function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
+function baseCtx(overrides?: Partial<Parameters<PolicyFn>[0]>): Parameters<PolicyFn>[0] {
   return {
     timing: "turn.start",
+    pointId: "run.turn.pre",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -120,6 +121,7 @@ describe("snapshot: tool-permission", () => {
     const verdict = await mw.fn(
       baseCtx({
         timing: "invoke.prepare",
+        pointId: "tool.native.pre",
         toolName: "read_file",
         toolCallId: "call-1",
         toolInput: { path: "/tmp/test" },
@@ -136,6 +138,7 @@ describe("snapshot: tool-permission", () => {
     const verdict = await mw.fn(
       baseCtx({
         timing: "invoke.prepare",
+        pointId: "tool.native.pre",
         toolName: "shell_exec",
         toolCallId: "call-2",
         toolInput: { cmd: "rm -rf /" },
@@ -156,6 +159,7 @@ describe("snapshot: compaction", () => {
     });
     const verdict = await mw.fn(
       baseCtx({
+        pointId: "run.completion.pre",
         messages: [testMessage("m1"), testMessage("m2")],
         budgetState: budgetState({ totalInputTokens: 1000, totalOutputTokens: 500 }),
       }),
