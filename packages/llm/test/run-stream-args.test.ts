@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Sink } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, collector, newTraceId } from "@openomni/telemetry";
+import { Operational } from "@openomni/protocol";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
@@ -116,5 +117,49 @@ describe("run() streamText arguments", () => {
     const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
     expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
     expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
+  });
+
+  /**
+   * `streamText`'s `onError` is the one publish site the happy and failure
+   * paths both miss, so it was free to route back to a global bus.
+   */
+  test("reports a stream error through the injected sink", async () => {
+    const collected = collector();
+    const busSaw: string[] = [];
+    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+
+    try {
+      await run(
+        {
+          trace: TEST_TRACE,
+          events: collected,
+          messages: [],
+          tools: [],
+          auth: { type: "api", key: "test-key-run" },
+          model: {
+            id: "claude-3-haiku",
+            providerID: TEST_PROVIDER_ID,
+            name: "Claude 3 Haiku Test",
+            api: { npm: "@ai-sdk/anthropic" },
+          },
+        },
+        mockSink,
+      );
+      const onError = aiCapture.__openomniAiStreamArgs?.onError as
+        | ((payload: { error: unknown }) => void)
+        | undefined;
+      expect(onError).toBeFunction();
+      onError?.({ error: new Error("upstream exploded") });
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    const errors = collected
+      .named(Operational.Error.name)
+      .map((event) => event as { component?: string; error?: string });
+    expect(errors.filter((event) => event.component === "llm.stream")).toHaveLength(1);
+    expect(errors[0]?.error).toContain("upstream exploded");
+    expect(busSaw).toEqual([]);
   });
 });

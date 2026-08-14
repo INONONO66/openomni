@@ -196,7 +196,7 @@ export namespace Processor {
               const decision = Retry.decide(attempt + 1, apiError ?? e);
 
               if (!decision.retry || ++attempt > retryAttemptLimit) {
-                if (!decision.retry && decision.reason !== "non_retryable" && trace) {
+                if (!decision.retry && decision.reason !== "non_retryable") {
                   // A retryable error declined for another reason (e.g. the
                   // server-directed wait exceeded the cap) must say why.
                   events.publish(Operational.Error, {
@@ -225,28 +225,26 @@ export namespace Processor {
               finishAttempt("error");
 
               const delayMs = decision.delayMs;
-              if (trace) {
-                events.publish(LlmCall.RetryDecided, {
+              events.publish(LlmCall.RetryDecided, {
+                traceId: trace.traceId,
+                sessionId: trace.sessionId,
+                ...(trace.runId !== undefined && { runId: trace.runId }),
+                attempt,
+                maxAttempts: retryAttemptLimit,
+                reason: retryReason,
+                backoffMs: delayMs,
+                time: Date.now(),
+              });
+
+              if (publishesRateLimited(retryReason)) {
+                events.publish(LlmCall.RateLimited, {
                   traceId: trace.traceId,
                   sessionId: trace.sessionId,
                   ...(trace.runId !== undefined && { runId: trace.runId }),
-                  attempt,
-                  maxAttempts: retryAttemptLimit,
-                  reason: retryReason,
-                  backoffMs: delayMs,
+                  provider: trace.provider ?? model.providerID,
+                  retryAfterMs: delayMs,
                   time: Date.now(),
                 });
-
-                if (publishesRateLimited(retryReason)) {
-                  events.publish(LlmCall.RateLimited, {
-                    traceId: trace.traceId,
-                    sessionId: trace.sessionId,
-                    ...(trace.runId !== undefined && { runId: trace.runId }),
-                    provider: trace.provider ?? model.providerID,
-                    retryAfterMs: delayMs,
-                    time: Date.now(),
-                  });
-                }
               }
 
               publishStatus(events, sessionID, trace.traceId, "retry");
@@ -280,13 +278,11 @@ export namespace Processor {
   function publishInfo(
     events: BusEvent.Sink,
     sessionID: string,
-    traceId: string | undefined,
+    traceId: string,
     message: string,
     data?: Record<string, unknown>,
   ): void {
-    // No trace, no record. The previous `traceId ?? sessionID` put a value of
-    // the wrong kind in the field every reader treats as a trace (#606 D11).
-    if (!sessionID || traceId === undefined || traceId.length === 0) return;
+    if (!sessionID) return;
     events.publish(Operational.Info, {
       traceId,
       time: Date.now(),
@@ -301,7 +297,7 @@ export namespace Processor {
     events: BusEvent.Sink,
     sink: Sink,
     sessionID: string,
-    traceId?: string,
+    traceId: string,
   ): Sink {
     function publish(message: string, data?: Record<string, unknown>): void {
       publishInfo(events, sessionID, traceId, message, data);
@@ -358,7 +354,7 @@ export namespace Processor {
   function publishStatus(
     events: BusEvent.Sink,
     sessionID: string,
-    traceId: string | undefined,
+    traceId: string,
     stateType: string,
   ): void {
     publishInfo(events, sessionID, traceId, "sink.snapshot", { stateType });

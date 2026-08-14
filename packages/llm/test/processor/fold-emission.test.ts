@@ -95,8 +95,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("emits onMessage only at part boundaries, never per token", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "text-start", providerMetadata: {} },
         { type: "text-delta", text: "Hello" },
@@ -122,8 +120,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("already-emitted snapshots are immune to later stream progress", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "text-start", providerMetadata: {} },
         { type: "text-delta", text: "Hello" },
@@ -157,8 +153,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("emits transcript facts in fold order with attempt identity", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "text-start", providerMetadata: {} },
         { type: "text-delta", text: "Hi" },
@@ -192,8 +186,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
     let attemptCount = 0;
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: async () => ({
         fullStream: (async function* () {
           attemptCount++;
@@ -224,8 +216,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
     let attemptCount = 0;
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: async () => ({
         fullStream: (async function* () {
           attemptCount++;
@@ -260,8 +250,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("length finish fails incomplete tool calls with no salvage", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "tool-call", toolCallId: "call-cut", toolName: "lookup", input: { q: "x" } },
         {
@@ -291,8 +279,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("opens a text block for an orphan text-delta (malformed sequence normalization)", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "text-delta", text: "orphan" },
         { type: "text-end", providerMetadata: {} },
@@ -311,8 +297,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("ignores a duplicate block end", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "text-start", providerMetadata: {} },
         { type: "text-delta", text: "once" },
@@ -333,8 +317,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("captures the provider reasoning signature on the completed part", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
       createStream: streamOf([
         { type: "reasoning-start", id: "r1", providerMetadata: {} },
         { type: "reasoning-delta", id: "r1", text: "thinking" },

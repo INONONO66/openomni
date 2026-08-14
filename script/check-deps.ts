@@ -106,9 +106,12 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
-    // No durable storage: llm reads and writes the model, and reports what it
-    // did through the observation channel. The `@openomni/session` edge came
-    // from `Bus` living in the ledger package; it does not any more (#606).
+    // `packages/llm/src` is protocol-only: it reads and writes the model and
+    // reports through an injected `BusEvent.Sink`, so it imports no
+    // implementation of the observation channel at all (#606). `telemetry`
+    // stays listed because the tests bind `Bus`/`collector` behind that port,
+    // and `check-deps` counts devDependencies; the source-import scan is what
+    // proves `src/` clean.
     allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
   },
   agent: {

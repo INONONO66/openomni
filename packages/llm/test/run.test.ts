@@ -309,6 +309,62 @@ describe("run", () => {
     }
 
     expect(collected.named(LlmCall.Started.name)).toHaveLength(1);
-    expect(busSaw.filter((name) => name.startsWith("llm."))).toEqual([]);
+    // Not filtered to `llm.*`: an `operational.*` record routed back through
+    // the global bus is the same defect, and the filter hid six of the eight
+    // publish sites from this assertion.
+    expect(busSaw).toEqual([]);
+  });
+
+  /**
+   * The failure path publishes three of the eight records, and the happy path
+   * never reaches it — so without this the port is unpinned there.
+   */
+  test("reports a failed call through the injected sink too", async () => {
+    const collected = collector();
+    const busSaw: string[] = [];
+    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+
+    try {
+      const outcome = await run(
+        {
+          messages: [],
+          tools: [],
+          model: {
+            id: "claude-3-haiku",
+            providerID: "no-auth-provider-port-test",
+            name: "Test Model",
+            api: { npm: "@ai-sdk/anthropic" },
+          },
+          trace: TEST_TRACE,
+          events: collected,
+        },
+        mockSink,
+      );
+      expect(outcome.type).toBe("error");
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(collected.named(LlmCall.Started.name)).toHaveLength(1);
+    expect(collected.named(LlmCall.Failed.name)).toHaveLength(1);
+    expect(busSaw).toEqual([]);
+  });
+
+  /**
+   * Refused at the boundary rather than half-dropped: an empty trace used to
+   * silence the processor's records while `run` kept publishing malformed
+   * ones, which displaces the wrong-kind defect instead of closing it.
+   */
+  test.each([
+    ["traceId", { traceId: "", sessionId: "s", runId: "r" }],
+    ["sessionId", { traceId: "t", sessionId: "", runId: "r" }],
+  ])("refuses an empty %s", async (_field, trace) => {
+    await expect(
+      run(
+        { messages: [], tools: [], model: testModel, auth: testAuth, trace, events: collector() },
+        mockSink,
+      ),
+    ).rejects.toThrow("llm run requires a non-empty traceId and sessionId");
   });
 });

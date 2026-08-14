@@ -49,6 +49,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   }
 
   const { traceId, sessionId: sessionID } = input.trace;
+  if (traceId.length === 0 || sessionID.length === 0) {
+    throw new Error("llm run requires a non-empty traceId and sessionId");
+  }
   const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 

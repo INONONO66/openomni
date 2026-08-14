@@ -92,7 +92,7 @@ describe("Processor emission measurement (#545 T2)", () => {
       abort: new AbortController().signal,
       sink,
       events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
+      trace: { traceId: "trace-processor-test", sessionId: "session-measure" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield* scenario() as Array<{ type: string }>;
