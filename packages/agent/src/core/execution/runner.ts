@@ -1,6 +1,5 @@
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
@@ -29,7 +28,7 @@ export async function* streamAgent(
   const actorId =
     nonEmptyString(input.metadata?.actorId) ?? nonEmptyString(trace.agentName) ?? runId;
   const agentBase = { traceId, sessionId, runId, actorId };
-  emitRunStarted(trace, config.model.id);
+  emitRunStarted(config.events, trace, config.model.id);
   assertToolExecutor(config);
 
   // #546: run state and pre-run dispatch are run-scoped, living across
@@ -59,7 +58,7 @@ export async function* streamAgent(
           return;
         }
 
-        emitTurnStart(state, agentBase);
+        emitTurnStart(config.events, state, agentBase);
         const turnResult = await buildTurn(
           state,
           config,
@@ -106,7 +105,7 @@ export async function* streamAgent(
         }
 
         if (outcome.type === "continue") {
-          yield* handleContinue(state, agentBase, turnResult.turn.turnUsage);
+          yield* handleContinue(config.events, state, agentBase, turnResult.turn.turnUsage);
           continue;
         }
 
@@ -222,7 +221,7 @@ export function buildPolicyEngine(
       sessionId: agentBase.sessionId,
       ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
     },
-    auditEmit: Bus.publish,
+    auditEmit: (descriptor, data) => config.events.publish(descriptor, data),
   });
   for (const reg of config.middleware ?? []) {
     engine.register(reg);

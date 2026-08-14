@@ -96,7 +96,7 @@ describe("InMemoryCompactor", () => {
       await InMemoryCompactor.compact(
         Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
         { contextWindowTokens: 1000, protectRecentMessages: 2 },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       await Bun.sleep(0);
     } finally {
@@ -207,7 +207,7 @@ describe("InMemoryCompactor", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 6,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(false);
       expect(result.removedCount).toBe(0);
@@ -224,7 +224,7 @@ describe("InMemoryCompactor", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 4,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(6);
@@ -248,7 +248,7 @@ describe("InMemoryCompactor", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 6,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(true);
       expect(result.messages).toHaveLength(6);
@@ -270,7 +270,7 @@ describe("InMemoryCompactor", () => {
           protectRecentMessages: 4,
           onSummarize: async () => "Summary of removed messages",
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(true);
       const allTexts = result.messages.flatMap((m) =>
@@ -287,7 +287,7 @@ describe("InMemoryCompactor", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 6,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(false);
     });
@@ -315,7 +315,7 @@ describe("InMemoryCompactor", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 3,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(true);
       expect(result.messages[0]?.info.role).toBe("user");
@@ -343,7 +343,7 @@ describe("InMemoryCompactor", () => {
             contextWindowTokens: 1000,
             protectRecentMessages: 3,
           },
-          { traceId: TEST_TRACE_ID },
+          { traceId: TEST_TRACE_ID, events: Bus },
         );
       } catch (error) {
         caught = error;
@@ -372,7 +372,7 @@ describe("InMemoryCompactor", () => {
           protectRecentMessages: 3,
           onSummarize: async () => "anchored",
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(5);
@@ -391,7 +391,7 @@ describe("InMemoryCompactor", () => {
           protectRecentMessages: 4,
           onSummarize: async () => "summary",
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, events: Bus },
       );
       const summary = result.messages[0];
       expect(summary?.info.role).toBe("user");

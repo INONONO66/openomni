@@ -1,5 +1,5 @@
+import type { BusEvent } from "@openomni/protocol";
 import { Operational, type Message } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 
 export interface CompactionOptions {
   contextWindowTokens: number;
@@ -49,7 +49,7 @@ export namespace InMemoryCompactor {
   export async function compact(
     messages: Message.WithParts[],
     options: CompactionOptions,
-    trace: { readonly traceId: string },
+    trace: { readonly traceId: string; readonly events: BusEvent.Sink },
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
@@ -97,9 +97,9 @@ export namespace InMemoryCompactor {
     }
 
     const compacted = [...summaryMessages, ...toKeep];
-    const { traceId } = trace;
+    const { traceId, events } = trace;
 
-    Bus.publish(Operational.Info, {
+    events.publish(Operational.Info, {
       traceId,
       time: Date.now(),
       component: "agent.compaction",

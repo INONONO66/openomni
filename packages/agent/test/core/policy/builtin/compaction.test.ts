@@ -5,6 +5,7 @@ import { createCompactionPolicy } from "../../../../src/core/policy/builtin/comp
 import type { PolicyContext } from "../../../../src/core/policy";
 import type { BudgetState } from "../../../../src/core/budget";
 import { effectOf } from "../../../helpers/policy-decision";
+import { Bus } from "@openomni/telemetry";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -62,6 +63,7 @@ describe("createCompactionPolicy", () => {
    */
   it("skips rather than aborting when no trace reaches it", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 100,
       protectRecentMessages: 2,
     });
@@ -80,6 +82,7 @@ describe("createCompactionPolicy", () => {
   });
   it("continues when below threshold", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 10000,
       thresholdRatio: 0.8,
     });
@@ -97,6 +100,7 @@ describe("createCompactionPolicy", () => {
 
   it("transforms when above threshold", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
       protectRecentMessages: 2,
@@ -118,6 +122,7 @@ describe("createCompactionPolicy", () => {
 
   it("transforms when reserve budget is reached before ratio threshold", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.95,
       reserveTokens: 250,
@@ -140,6 +145,7 @@ describe("createCompactionPolicy", () => {
 
   it("continues when no messages in context", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
     });
@@ -156,6 +162,7 @@ describe("createCompactionPolicy", () => {
 
   it("continues when empty messages array", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
     });
@@ -172,6 +179,7 @@ describe("createCompactionPolicy", () => {
 
   it("continues when no budget state", async () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
     });
@@ -189,6 +197,7 @@ describe("createCompactionPolicy", () => {
 
   it("has priority 900", () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
     });
 
@@ -197,6 +206,7 @@ describe("createCompactionPolicy", () => {
 
   it("has name builtin:compaction", () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
     });
 
@@ -205,6 +215,7 @@ describe("createCompactionPolicy", () => {
 
   it("registers the canonical completion point", () => {
     const middleware = createCompactionPolicy({
+      events: Bus,
       contextWindowTokens: 1000,
     });
 

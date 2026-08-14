@@ -16,6 +16,7 @@ import {
 } from "../../helpers/mock-llm";
 import { abortRun, allow, inject } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -39,6 +40,7 @@ beforeAll(async () => {
 });
 
 const defaultConfig: ChatAgentConfig = {
+  events: Bus,
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
   llm: mockLlm,
 };

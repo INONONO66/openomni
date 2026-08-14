@@ -49,7 +49,12 @@ export async function dispatchBudgetCheck(
   // The single per-turn owner of budget telemetry: emit here (command) and act
   // on the returned status. The run.turn.pre budget builtins read the status
   // via the pure checkBudget query, so the event is not re-emitted per policy.
-  const budgetStatus = publishBudgetTelemetry(state.budgetState, agentBase, config.budget);
+  const budgetStatus = publishBudgetTelemetry(
+    state.budgetState,
+    agentBase,
+    config.events,
+    config.budget,
+  );
   if (budgetStatus !== "exceeded") return null;
 
   const postRunDecision = await engine.dispatchPoint(
@@ -60,9 +65,9 @@ export async function dispatchBudgetCheck(
     }),
   );
   if (PolicyDecision.isBlocking(postRunDecision)) {
-    publishDenyDiagnostic("run.finish", postRunDecision, state, agentBase);
+    publishDenyDiagnostic(config.events, "run.finish", postRunDecision, state, agentBase);
   }
-  emitRunCompleted(state, agentBase, "max-steps");
+  emitRunCompleted(config.events, state, agentBase, "max-steps");
   return createRunCompleteEvent(state, { finishReason: "max-steps" });
 }
 
@@ -110,6 +115,7 @@ export async function dispatchModelResponse(
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       publishDenyDiagnostic(
+        config.events,
         "model.response",
         PolicyDecision.deny({
           policyId: "agent.policy.composed",
@@ -126,6 +132,6 @@ export async function dispatchModelResponse(
   }
   if (effectOf(decision, "run.abort")) return createGuardCompleteEvent(state);
   // model.response is post-boundary: plain denies are diagnostics unless they carry run.abort.
-  publishDenyDiagnostic("model.response", decision, state, agentBase);
+  publishDenyDiagnostic(config.events, "model.response", decision, state, agentBase);
   return null;
 }

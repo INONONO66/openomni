@@ -74,7 +74,7 @@ function buildAgentLifecycleMiddleware(
   return [
     createBudgetReassurancePolicy(),
     createBudgetWarningPolicy(),
-    ...(compaction ? [createCompactionPolicy(compaction)] : []),
+    ...(compaction ? [createCompactionPolicy({ ...compaction, events: Bus })] : []),
   ];
 }
 
@@ -92,6 +92,7 @@ function buildLegacyPermissionMiddleware(
   return [
     createToolPermissionPolicy({
       permission: config.permissions ?? DEFAULT_TOOL_PERMISSION,
+      events: Bus,
     }),
   ];
 }
@@ -100,7 +101,7 @@ function resolvePoliciesFromPlan(
   plan: Policy.PolicyPlan,
   config: WorkerMiddlewareConfig,
 ): PolicyEngineRegistration[] {
-  const registry = defaultRegistry();
+  const registry = defaultRegistry(Bus);
   return registry.resolve(
     plan,
     config.traceId === undefined ? {} : { traceId: config.traceId, auditEmit: Bus.publish },

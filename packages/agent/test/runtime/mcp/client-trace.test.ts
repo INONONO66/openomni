@@ -14,6 +14,7 @@ const config = {
 
 function createClient(callTool: McpClientHandle["callTool"]): McpClient {
   return new McpClient(config, {
+    events: Bus,
     traceId: TEST_LIFECYCLE_TRACE_ID,
     client: {
       connect: async () => undefined,
@@ -103,6 +104,7 @@ describe("McpClient call audit trace", () => {
     const seen: string[] = [];
     const unsubscribe = Bus.observe((descriptor) => seen.push(descriptor.name));
     const client = new McpClient(config, {
+      events: Bus,
       ...(traceId === undefined ? {} : { traceId }),
       client: {
         connect: async () => undefined,

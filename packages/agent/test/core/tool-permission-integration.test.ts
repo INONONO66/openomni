@@ -8,6 +8,7 @@ import {
   type MockLlmFn,
 } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -107,6 +108,7 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [
@@ -118,6 +120,7 @@ describe("tool permission integration via toolExecutor", () => {
       toolExecutor: executor,
       middleware: [
         createToolPermissionPolicy({
+          events: Bus,
           permission: {
             action: "tool.call",
             inputRules: [
@@ -169,6 +172,7 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [
@@ -180,6 +184,7 @@ describe("tool permission integration via toolExecutor", () => {
       toolExecutor: executor,
       middleware: [
         createToolPermissionPolicy({
+          events: Bus,
           permission: {
             action: "tool.call",
             requireApproval: ["bash"],
@@ -223,6 +228,7 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [
@@ -234,6 +240,7 @@ describe("tool permission integration via toolExecutor", () => {
       toolExecutor: executor,
       middleware: [
         createToolPermissionPolicy({
+          events: Bus,
           permission: {
             action: "tool.call",
             allowlist: ["bash"],
@@ -288,11 +295,12 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [writeTool],
       toolExecutor: executor,
-      middleware: [createToolPermissionPolicy({ permission: labelPermission })],
+      middleware: [createToolPermissionPolicy({ events: Bus, permission: labelPermission })],
     });
 
     await agent.run(runInput([{ role: "user", content: "write file" }]), {
@@ -341,11 +349,12 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [grepTool],
       toolExecutor: executor,
-      middleware: [createToolPermissionPolicy({ permission })],
+      middleware: [createToolPermissionPolicy({ events: Bus, permission })],
     });
 
     await agent.run(runInput([{ role: "user", content: "search files" }]), {
@@ -382,6 +391,7 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [
@@ -419,6 +429,7 @@ describe("tool permission integration via toolExecutor", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       tools: [
@@ -430,6 +441,7 @@ describe("tool permission integration via toolExecutor", () => {
       toolExecutor: executor,
       middleware: [
         createToolPermissionPolicy({
+          events: Bus,
           permission: {
             action: "tool.call",
             inputRules: [

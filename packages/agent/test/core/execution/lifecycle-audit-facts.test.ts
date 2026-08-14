@@ -7,6 +7,7 @@ import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 function assistantMessage(outputTokens: number): Message.WithParts {
   const id = `assistant-${outputTokens}`;
@@ -56,6 +57,7 @@ describe("canonical lifecycle audit facts", () => {
     } satisfies CanonicalPolicyRegistrationGeneric<PolicyContext>;
     const outcomes: readonly Run.Outcome[] = [{ type: "continue" }, { type: "stop" }];
     const config: ChatAgentConfig = {
+      events: Bus,
       model: { provider: "test", id: "model" },
       middleware: [observer],
       llm: createMockLlmConfig({

@@ -19,8 +19,8 @@ function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
 }
 
 describe("PolicyRegistry", () => {
-  it("defaultRegistry() has all builtins registered", () => {
-    const registry = defaultRegistry();
+  it("defaultRegistry(Bus) has all builtins registered", () => {
+    const registry = defaultRegistry(Bus);
 
     expect(registry.list()).toEqual(builtinPolicyIds);
     for (const id of builtinPolicyIds) {
@@ -48,8 +48,8 @@ describe("PolicyRegistry", () => {
     expect(registrations[0]?.name).toBe("test:primary:strict");
   });
 
-  it("defaultRegistry() resolves typed builtin configs", () => {
-    const registrations = defaultRegistry().resolve(
+  it("defaultRegistry(Bus) resolves typed builtin configs", () => {
+    const registrations = defaultRegistry(Bus).resolve(
       plan([
         {
           id: "builtin:compaction",
@@ -73,8 +73,8 @@ describe("PolicyRegistry", () => {
     ]);
   });
 
-  it("defaultRegistry() resolves configless default builtin policies", () => {
-    const registrations = defaultRegistry().resolve(
+  it("defaultRegistry(Bus) resolves configless default builtin policies", () => {
+    const registrations = defaultRegistry(Bus).resolve(
       plan([
         { id: "builtin:idle-nudge", required: true },
         { id: "builtin:tool-permission", required: true },
@@ -88,9 +88,9 @@ describe("PolicyRegistry", () => {
     ]);
   });
 
-  it("defaultRegistry() rejects malformed builtin configs at resolution", () => {
+  it("defaultRegistry(Bus) rejects malformed builtin configs at resolution", () => {
     expect(() =>
-      defaultRegistry().resolve(
+      defaultRegistry(Bus).resolve(
         plan([{ id: "builtin:compaction", required: true, config: { thresholdRatio: 0.8 } }]),
         {},
       ),
@@ -115,6 +115,7 @@ describe("PolicyRegistry", () => {
     try {
       const registry = PolicyRegistry.create();
       registry.register("present.policy", () => ({
+        events: Bus,
         name: "present.policy",
         timing: "turn.start",
         priority: 10,

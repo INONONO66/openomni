@@ -33,6 +33,7 @@ describe("canonical ChatAgent policy execution", () => {
     const legacy = mock(() => allow());
     const engine = buildPolicyEngine(
       {
+        events: Bus,
         model: { provider: "test", id: "model" },
         middleware: [
           {
@@ -115,6 +116,7 @@ describe("canonical ChatAgent policy execution", () => {
       },
     } satisfies CanonicalPolicyRegistrationGeneric<PolicyContext>;
     const config: ChatAgentConfig = {
+      events: Bus,
       model: { provider: "test", id: "model-1" },
       middleware: [middleware],
       llm: createMockLlmConfig({
@@ -157,6 +159,7 @@ describe("canonical tool policy execution", () => {
     });
     const engine = buildPolicyEngine(
       {
+        events: Bus,
         model: { provider: "test", id: "model" },
         middleware: [
           {
@@ -178,6 +181,7 @@ describe("canonical tool policy execution", () => {
       { traceId: "trace", sessionId: "session", runId: "run" },
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       onDecision: () => {
@@ -212,6 +216,7 @@ describe("canonical tool policy execution", () => {
     const seen: Array<{ readonly pointId: string; readonly serverId: unknown }> = [];
     const engine = buildPolicyEngine(
       {
+        events: Bus,
         model: { provider: "test", id: "model" },
         middleware: [
           {
@@ -230,6 +235,7 @@ describe("canonical tool policy execution", () => {
       { traceId: "trace", sessionId: "session", runId: "run" },
     );
     const executor = createToolExecutor({
+      events: Bus,
       engine,
       traceContext: { traceId: "trace", sessionId: "session", runId: "run" },
       getToolLabels: () => ["source.mcp", "mcp.filesystem"],
@@ -254,10 +260,11 @@ describe("canonical tool policy execution", () => {
       output: "ok",
     }));
     const engine = buildPolicyEngine(
-      { model: { provider: "test", id: "model" } },
+      { events: Bus, model: { provider: "test", id: "model" } },
       { traceId: "trace", sessionId: "session", runId: "run" },
     );
     const executor = createToolExecutor({
+      events: Bus,
       engine,
       traceContext: { traceId: "trace", sessionId: "session", runId: "run" },
       getToolLabels: () => ["source.mcp"],
@@ -280,9 +287,9 @@ describe("canonical builtin registrations", () => {
     const registrations = [
       createBudgetReassurancePolicy(),
       createBudgetWarningPolicy(),
-      createCompactionPolicy({ contextWindowTokens: 100 }),
+      createCompactionPolicy({ events: Bus, contextWindowTokens: 100 }),
       createIdleNudgePolicy(),
-      createToolPermissionPolicy({ permission: { action: "tool.call" } }),
+      createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } }),
     ];
 
     // Then

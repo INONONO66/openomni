@@ -125,6 +125,9 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
   const agent = ctx.event.agent as RuntimeAgentDef;
 
   return {
+    // The kernel is a composition layer: it chooses what observation
+    // reaches, and hands the loop a port rather than a global.
+    events: Bus,
     model: ctx.event.agent.model,
     systemPrompt: ctx.event.agent.systemPrompt,
     budget: ctx.event.agent.budget,

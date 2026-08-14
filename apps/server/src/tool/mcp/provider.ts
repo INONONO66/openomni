@@ -27,7 +27,7 @@ export class McpToolProvider implements ToolProvider {
   async addServer(config: McpServerConfig): Promise<void> {
     const client =
       this.options.createClient?.(config) ??
-      new McpClient(config, { traceId: this.options.traceId });
+      new McpClient(config, { traceId: this.options.traceId, events: Bus });
     try {
       await client.connect();
       this.clients.set(config.name, client);

@@ -1,6 +1,5 @@
-import type { Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
+import type { BusEvent, Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
 import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
@@ -31,6 +30,8 @@ export interface ToolExecutorOptions {
   onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void | Promise<void>;
   traceContext?: TraceContext.Type;
   signal?: AbortSignal;
+  /** Where this executor's records go. */
+  events: BusEvent.Sink;
 }
 
 export function createToolExecutor(
@@ -47,6 +48,7 @@ export function createToolExecutor(
     onDecision,
     traceContext,
     signal,
+    events,
   } = options;
   // The executor is built inside a turn, which is inside a run that already
   // refused to start without an identity. Minting one here would give a tool
@@ -59,7 +61,7 @@ export function createToolExecutor(
     decision: Policy.PolicyDecision,
     err: unknown,
   ): void {
-    Bus.publish(Operational.Warn, {
+    events.publish(Operational.Warn, {
       traceId: activeTraceContext.traceId,
       time: Date.now(),
       component: "agent.tool-executor",
@@ -94,7 +96,7 @@ export function createToolExecutor(
     toolName: string,
     reason: string,
   ): void {
-    Bus.publish(ToolExecution.PermissionDenied, {
+    events.publish(ToolExecution.PermissionDenied, {
       ...eventBase,
       toolCallId: call.id,
       toolName,

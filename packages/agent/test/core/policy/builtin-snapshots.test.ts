@@ -10,6 +10,7 @@ import { createCompactionPolicy } from "../../../src/core/policy/builtin/compact
 import { createIdleNudgePolicy } from "../../../src/core/policy/builtin/idle-nudge";
 import { createToolPermissionPolicy } from "../../../src/core/policy/builtin/tool-guard";
 import { effectOf, firstReason } from "../../helpers/policy-decision";
+import { Bus } from "@openomni/telemetry";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -113,6 +114,7 @@ describe("snapshot: budget-warning", () => {
 describe("snapshot: tool-permission", () => {
   it("continue — tool on allowlist", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: ["read_file", "write_file"] },
     });
     const verdict = await mw.fn(
@@ -128,6 +130,7 @@ describe("snapshot: tool-permission", () => {
 
   it("abort — tool not on allowlist", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(
@@ -146,7 +149,11 @@ describe("snapshot: tool-permission", () => {
 
 describe("snapshot: compaction", () => {
   it("continue — below token threshold", async () => {
-    const mw = createCompactionPolicy({ contextWindowTokens: 10000, thresholdRatio: 0.8 });
+    const mw = createCompactionPolicy({
+      events: Bus,
+      contextWindowTokens: 10000,
+      thresholdRatio: 0.8,
+    });
     const verdict = await mw.fn(
       baseCtx({
         messages: [testMessage("m1"), testMessage("m2")],
@@ -191,7 +198,7 @@ describe("snapshot: canonical registration metadata", () => {
   });
 
   it("tool-permission: name, points, priority, failPolicy", () => {
-    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    const mw = createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } });
     expect(mw.name).toBe("builtin:tool-permission");
     expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
     expect(mw.effectCapabilities).toEqual({
@@ -203,7 +210,7 @@ describe("snapshot: canonical registration metadata", () => {
   });
 
   it("compaction: name, point, priority", () => {
-    const mw = createCompactionPolicy({ contextWindowTokens: 1000 });
+    const mw = createCompactionPolicy({ events: Bus, contextWindowTokens: 1000 });
     expect(mw.name).toBe("builtin:compaction");
     expect(mw.pointIds).toEqual(["run.completion.pre"]);
     expect(mw.effectCapabilities).toEqual({

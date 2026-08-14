@@ -1,12 +1,15 @@
 import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
-import type { Policy, TraceContext } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
 import type { RetryReason } from "../retry";
 import type { AgentEvent, AgentStep, TokenUsage } from "../types";
 import { getCompactionCount, type AgentRunBase, type RunState } from "./run-state";
 
-export function emitRunStarted(trace: TraceContext.Type, modelId: string): void {
-  Bus.publish(Operational.Info, {
+export function emitRunStarted(
+  events: BusEvent.Sink,
+  trace: TraceContext.Type,
+  modelId: string,
+): void {
+  events.publish(Operational.Info, {
     traceId: trace.traceId,
     time: Date.now(),
     sessionId: trace.sessionId,
@@ -16,10 +19,14 @@ export function emitRunStarted(trace: TraceContext.Type, modelId: string): void 
   });
 }
 
-export function emitTurnStart(state: RunState, agentBase: AgentRunBase): void {
+export function emitTurnStart(
+  events: BusEvent.Sink,
+  state: RunState,
+  agentBase: AgentRunBase,
+): void {
   const turnIndex = state.turnIndex;
   const sessionId = agentBase.sessionId;
-  Bus.publish(AgentExecution.TurnStart, {
+  events.publish(AgentExecution.TurnStart, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -28,12 +35,13 @@ export function emitTurnStart(state: RunState, agentBase: AgentRunBase): void {
 }
 
 export function emitTurnComplete(
+  events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): void {
   const sessionId = agentBase.sessionId;
-  Bus.publish(AgentExecution.TurnComplete, {
+  events.publish(AgentExecution.TurnComplete, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -47,11 +55,12 @@ export function emitTurnComplete(
 }
 
 export function emitBudgetReassurance(
+  events: BusEvent.Sink,
   agentBase: AgentRunBase,
   remaining: string,
   threshold: number,
 ): void {
-  Bus.publish(AgentExecution.BudgetReassurance, {
+  events.publish(AgentExecution.BudgetReassurance, {
     ...agentBase,
     time: Date.now(),
     remaining,
@@ -60,11 +69,12 @@ export function emitBudgetReassurance(
 }
 
 export function emitBudgetWarning(
+  events: BusEvent.Sink,
   agentBase: AgentRunBase,
   remaining: string,
   threshold: number,
 ): void {
-  Bus.publish(AgentExecution.BudgetWarning, {
+  events.publish(AgentExecution.BudgetWarning, {
     ...agentBase,
     time: Date.now(),
     remaining,
@@ -73,11 +83,12 @@ export function emitBudgetWarning(
 }
 
 export function emitRunCompleted(
+  events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
   finishReason: "stop" | "max-steps",
 ): void {
-  Bus.publish(Operational.Info, {
+  events.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId,
@@ -92,6 +103,7 @@ export function emitRunCompleted(
 }
 
 export function emitErrorRetry(
+  events: BusEvent.Sink,
   agentBase: AgentRunBase,
   options: {
     readonly attempt: number;
@@ -102,7 +114,7 @@ export function emitErrorRetry(
   },
 ): void {
   const sessionId = agentBase.sessionId;
-  Bus.publish(AgentExecution.ErrorRetry, {
+  events.publish(AgentExecution.ErrorRetry, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -123,6 +135,7 @@ export function emitErrorRetry(
  * in the record.
  */
 export function emitRunFailed(
+  events: BusEvent.Sink,
   agentBase: AgentRunBase,
   error: string,
   decision: {
@@ -131,7 +144,7 @@ export function emitRunFailed(
     readonly maxAttempts: number;
   },
 ): void {
-  Bus.publish(Operational.Error, {
+  events.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId,
@@ -143,11 +156,12 @@ export function emitRunFailed(
 }
 
 export function emitCompaction(
+  events: BusEvent.Sink,
   agentBase: AgentRunBase,
   messagesBefore: number,
   messagesAfter: number,
 ): void {
-  Bus.publish(AgentExecution.Compaction, {
+  events.publish(AgentExecution.Compaction, {
     ...agentBase,
     time: Date.now(),
     messagesBefore,
@@ -156,6 +170,7 @@ export function emitCompaction(
 }
 
 export function publishDenyDiagnostic(
+  events: BusEvent.Sink,
   timing: Policy.Timing,
   decision: Policy.PolicyDecision,
   state: RunState,
@@ -163,7 +178,7 @@ export function publishDenyDiagnostic(
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
   const sessionId = agentBase.sessionId;
-  Bus.publish(Operational.Info, {
+  events.publish(Operational.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId,

@@ -3,6 +3,7 @@ import { PolicyEngine, defaultRegistry, type PolicyContext } from "@openomni/age
 import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { PolicyResolver } from "../../src/policy";
+import { Bus } from "@openomni/telemetry";
 
 type PreDispatchContext = Omit<PolicyContext, "timing"> & {
   readonly sessionId?: string;
@@ -49,7 +50,7 @@ describe("policy pipeline integration", () => {
     ]);
     expect(plan.labels).toEqual(["actor.owner", "agent.reviewer", "run.direct", "surface.github"]);
 
-    const registry = defaultRegistry();
+    const registry = defaultRegistry(Bus);
     registry.register("test:github-surface-guard", () => ({
       kind: "point",
       name: "test:github-surface-guard",
@@ -110,7 +111,7 @@ describe("policy pipeline integration", () => {
       surfaceLabels: ["surface:github"],
     });
 
-    const registry = defaultRegistry();
+    const registry = defaultRegistry(Bus);
     registry.register("policy:github-review-readonly", () => ({
       kind: "point",
       name: "policy:github-review-readonly",
@@ -190,7 +191,7 @@ describe("policy pipeline integration", () => {
       labels: ["agent:reviewer", "surface:github"],
     };
 
-    expect(() => defaultRegistry().resolve(plan, { agentName: "reviewer" })).toThrow(
+    expect(() => defaultRegistry(Bus).resolve(plan, { agentName: "reviewer" })).toThrow(
       "Required policy 'policy:missing-required' is not registered",
     );
   });

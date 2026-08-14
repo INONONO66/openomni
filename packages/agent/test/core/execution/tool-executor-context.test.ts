@@ -4,6 +4,7 @@ import { describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { PolicyEngine } from "../../../src/core/policy";
+import { Bus } from "@openomni/telemetry";
 
 describe("createToolExecutor execution context", () => {
   it("forwards the active trace while preserving the per-call cancellation signal", async () => {
@@ -17,6 +18,7 @@ describe("createToolExecutor execution context", () => {
     };
     let capturedContext: Tool.ExecutionContext | undefined;
     const executor = createToolExecutor({
+      events: Bus,
       engine: PolicyEngine.create(),
       signal: fallbackController.signal,
       traceContext,
@@ -50,6 +52,7 @@ describe("createToolExecutor execution context", () => {
     const callTrace = { traceId: "trace-call", sessionId: "session-call", runId: "run-call" };
     let capturedContext: Tool.ExecutionContext | undefined;
     const executor = createToolExecutor({
+      events: Bus,
       engine: PolicyEngine.create(),
       signal: fallbackController.signal,
       traceContext: fallbackTrace,

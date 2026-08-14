@@ -7,6 +7,7 @@ import {
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import { runInput } from "../../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 function makeInput() {
   return runInput([{ role: "user", content: "hello" }]);
@@ -14,6 +15,7 @@ function makeInput() {
 
 export function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
   return {
+    events: Bus,
     model: { provider: "test", id: "test-model" },
     systemPrompt: "test",
     ...overrides,
@@ -37,6 +39,7 @@ export function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtif
     runInput: {
       messages: [],
       tools: [],
+      events: Bus,
       model: { provider: "test", id: "test-model" },
       maxSteps: 24,
     },

@@ -3,9 +3,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { Bench } from "tinybench";
 import type { Message } from "@openomni/protocol";
 import { InMemoryCompactor } from "../src/core/execution/compaction.ts";
+import { noopSink } from "@openomni/telemetry";
 
-/** The bench stands in for one run; compaction records under its trace. */
-const BENCH_TRACE = { traceId: "trace-agent-bench" };
+/** The bench stands in for one run. It measures compaction, not reporting. */
+const BENCH_TRACE = { traceId: "trace-agent-bench", events: noopSink() };
 
 interface BenchmarkResult {
   readonly name: string;

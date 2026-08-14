@@ -128,7 +128,9 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     });
 
     try {
-      publishBudgetTelemetry({ ...createBudgetState(), turns: 20 }, TEST_RUN, { maxTurns: 24 });
+      publishBudgetTelemetry({ ...createBudgetState(), turns: 20 }, TEST_RUN, Bus, {
+        maxTurns: 24,
+      });
       await Bun.sleep(0);
     } finally {
       unsubscribe();
@@ -147,7 +149,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
 
     try {
       // 15/24 sits between the reassurance threshold and the warning one.
-      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 15 }, TEST_RUN, {
+      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 15 }, TEST_RUN, Bus, {
         maxTurns: 24,
       });
       expect(status).toBe("reassurance");
@@ -168,7 +170,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     });
 
     try {
-      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 30 }, TEST_RUN, {
+      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 30 }, TEST_RUN, Bus, {
         maxTurns: 24,
       });
       expect(status).toBe("exceeded");
@@ -185,7 +187,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const s = { ...createBudgetState(), turns: 20 };
     let status: string | undefined;
     const emits = await countOperationalEmits(() => {
-      status = publishBudgetTelemetry(s, TEST_RUN, { maxTurns: 24 });
+      status = publishBudgetTelemetry(s, TEST_RUN, Bus, { maxTurns: 24 });
     });
     expect(status).toBe("warning");
     expect(emits).toBe(1);
@@ -195,7 +197,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const s = { ...createBudgetState(), turns: 5 };
     let status: string | undefined;
     const emits = await countOperationalEmits(() => {
-      status = publishBudgetTelemetry(s, TEST_RUN, { maxTurns: 24 });
+      status = publishBudgetTelemetry(s, TEST_RUN, Bus, { maxTurns: 24 });
     });
     expect(status).toBe("ok");
     expect(emits).toBe(0);
