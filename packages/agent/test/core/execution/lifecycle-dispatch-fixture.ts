@@ -1,12 +1,13 @@
-import type { TraceContext } from "@openomni/protocol";
 import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import {
   createRunState,
   type AgentRunBase,
+  type RunTrace,
   type RunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import { runInput } from "../../helpers/run-input";
+import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
 
 function makeInput() {
@@ -23,10 +24,10 @@ export function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfi
 }
 
 export function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
 }
 
-export function makeTrace(): TraceContext.Type {
+export function makeTrace(): RunTrace {
   return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 }
 
@@ -40,8 +41,9 @@ export function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtif
       messages: [],
       tools: [],
       events: Bus,
-      model: { provider: "test", id: "test-model" },
+      model: testProviderModel,
       maxSteps: 24,
+      trace: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
     },
     trackingSink: {
       onMessage: () => undefined,

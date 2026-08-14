@@ -1,3 +1,4 @@
+import { testProviderModel } from "../../helpers/provider-model";
 import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
@@ -29,7 +30,7 @@ describe("buildTurn (prompt.context.pre)", () => {
       state,
       config,
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -58,7 +59,7 @@ describe("buildTurn (prompt.context.pre)", () => {
       makeState(),
       makeConfig({ systemPrompt: "base prompt" }),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -86,7 +87,7 @@ describe("buildTurn (prompt.context.pre)", () => {
       makeState(),
       makeConfig({ systemPrompt: undefined }),
       engine,
-      { provider: "test", id: "test-model" },
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),

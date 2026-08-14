@@ -94,7 +94,7 @@ describe("completion.prepare dispatch", () => {
     expect(state.messages).toBe(originalMessages);
     expect(state.compactionCount).toBe(0);
     expect(fn).toHaveBeenCalledTimes(1);
-    const ctx = fn.mock.calls[0][0] as PolicyContext;
+    const ctx = fn.mock.calls[0]?.[0] as PolicyContext;
     expect(ctx.timing).toBe("completion.prepare");
   });
 });

@@ -21,16 +21,23 @@ const goldenRequest = Object.freeze({
   toolLabels: Object.freeze(["source.system", "risk.low"]),
 });
 
-const goldenDecision = Object.freeze({
-  policyId: "agent.policy.composed",
-  verdict: "allow",
-  effects: Object.freeze([
-    Object.freeze({ type: "prompt.inject_message", message: "Keep an audit trail." }),
-    Object.freeze({ type: "prompt.inject_message", message: "Use read-only tools first." }),
-    Object.freeze({ type: "prompt.inject_message", message: "Require approval for writes." }),
-  ]),
-  reasonCodes: Object.freeze(["policy.audit", "policy.readonly", "policy.approval"]),
-});
+/**
+ * Built fresh per use, like {@link cloneGoldenRequest}: a shared frozen
+ * literal would type its arrays `readonly` and force the comparison helper to
+ * widen for a hazard cloning already removes.
+ */
+function goldenDecision(): Omit<PolicyDecision, "durationMs"> {
+  return {
+    policyId: "agent.policy.composed",
+    verdict: "allow",
+    effects: [
+      { type: "prompt.inject_message", message: "Keep an audit trail." },
+      { type: "prompt.inject_message", message: "Use read-only tools first." },
+      { type: "prompt.inject_message", message: "Require approval for writes." },
+    ],
+    reasonCodes: ["policy.audit", "policy.readonly", "policy.approval"],
+  };
+}
 
 function stableDecision(decision: PolicyDecision): Omit<PolicyDecision, "durationMs"> {
   const { durationMs: _durationMs, ...stable } = decision;
@@ -119,8 +126,8 @@ describe("policy determinism conformance", () => {
     const first = await evaluate();
     const second = await evaluate();
 
-    expectCanonicalDecision(first, goldenDecision);
-    expectCanonicalDecision(second, goldenDecision);
+    expectCanonicalDecision(first, goldenDecision());
+    expectCanonicalDecision(second, goldenDecision());
   });
 
   it("is stable across randomized policy registration order", async () => {
@@ -129,7 +136,7 @@ describe("policy determinism conformance", () => {
     );
 
     for (const decision of decisions) {
-      expectCanonicalDecision(decision, goldenDecision);
+      expectCanonicalDecision(decision, goldenDecision());
     }
   });
 
@@ -142,7 +149,7 @@ describe("policy determinism conformance", () => {
     );
 
     for (const decision of decisions) {
-      expectCanonicalDecision(decision, goldenDecision);
+      expectCanonicalDecision(decision, goldenDecision());
     }
   });
 

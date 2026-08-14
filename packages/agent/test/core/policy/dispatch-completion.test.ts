@@ -47,7 +47,7 @@ describe("tool.native.post middleware dispatch", () => {
     await executor(call);
 
     expect(postToolFn).toHaveBeenCalledTimes(1);
-    const calledCtx = postToolFn.mock.calls[0][0] as PolicyContext;
+    const calledCtx = postToolFn.mock.calls[0]?.[0] as PolicyContext;
     expect(calledCtx.timing).toBe("invoke.result");
     expect(calledCtx.toolName).toBe("bash");
     expect(calledCtx.toolOutput).toBe(toolOutput);
@@ -86,7 +86,7 @@ describe("tool.native.post middleware dispatch", () => {
 
     await executor({ id: "call-usage", tool: "bash", input: { command: "ls" } });
 
-    const calledCtx = postToolFn.mock.calls[0][0] as PolicyContext;
+    const calledCtx = postToolFn.mock.calls[0]?.[0] as PolicyContext;
     expect(calledCtx.usage).toEqual({ inputTokens: 13, outputTokens: 8, totalTokens: 21 });
   });
 
@@ -256,7 +256,7 @@ describe("error middleware dispatch (runner level)", () => {
 
     expect(onErrorFn).toHaveBeenCalledTimes(1);
     expect(verdict.verdict).toBe("deny");
-    const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext & {
+    const calledCtx = onErrorFn.mock.calls[0]?.[0] as PolicyContext & {
       errorCode?: string;
       errorPhase?: string;
     };

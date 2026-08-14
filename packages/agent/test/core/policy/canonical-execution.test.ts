@@ -30,7 +30,7 @@ describe("canonical ChatAgent policy execution", () => {
     // Given (#530: legacy timing registrations are rejected at register(); the
     // former legacy middleware is now registered canonically at the mapped
     // point, and dispatch still derives the timing alias from the point.)
-    const legacy = mock(() => allow());
+    const legacy = mock((_ctx: unknown) => allow());
     const engine = buildPolicyEngine(
       {
         events: Bus,
@@ -46,7 +46,7 @@ describe("canonical ChatAgent policy execution", () => {
           },
         ],
       },
-      { traceId: "trace", sessionId: "session", runId: "run" },
+      { traceId: "trace", sessionId: "session", runId: "run", actorId: "actor" },
     );
 
     // When
@@ -134,7 +134,7 @@ describe("canonical ChatAgent policy execution", () => {
 
     // Then
     expect(events.some((event) => event.type === "complete")).toBe(true);
-    expect(seen.map((entry) => entry.pointId)).toEqual(pointIds);
+    expect(seen.map((entry) => entry.pointId)).toEqual([...pointIds]);
     expect(new Set(seen.map((entry) => entry.sessionId)).size).toBe(1);
     expect(new Set(seen.map((entry) => entry.runId)).size).toBe(1);
     expect(typeof seen[0]?.sessionId).toBe("string");
@@ -178,7 +178,7 @@ describe("canonical tool policy execution", () => {
           },
         ],
       },
-      { traceId: "trace", sessionId: "session", runId: "run" },
+      { traceId: "trace", sessionId: "session", runId: "run", actorId: "actor" },
     );
     const executor = createToolExecutor({
       events: Bus,
@@ -232,7 +232,7 @@ describe("canonical tool policy execution", () => {
           },
         ],
       },
-      { traceId: "trace", sessionId: "session", runId: "run" },
+      { traceId: "trace", sessionId: "session", runId: "run", actorId: "actor" },
     );
     const executor = createToolExecutor({
       events: Bus,
@@ -261,7 +261,7 @@ describe("canonical tool policy execution", () => {
     }));
     const engine = buildPolicyEngine(
       { events: Bus, model: { provider: "test", id: "model" } },
-      { traceId: "trace", sessionId: "session", runId: "run" },
+      { traceId: "trace", sessionId: "session", runId: "run", actorId: "actor" },
     );
     const executor = createToolExecutor({
       events: Bus,

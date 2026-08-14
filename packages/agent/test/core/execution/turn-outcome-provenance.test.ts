@@ -9,10 +9,11 @@ import {
 } from "../../../src/core/execution/run-state";
 import { allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
+import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
 
 function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1" };
+  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
 }
 
 function makeTurnArtifacts(): TurnArtifacts {
@@ -21,8 +22,9 @@ function makeTurnArtifacts(): TurnArtifacts {
       messages: [],
       tools: [],
       events: Bus,
-      model: { provider: "test", id: "test-model" },
+      model: testProviderModel,
       maxSteps: 24,
+      trace: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
     },
     trackingSink: {
       onMessage: () => undefined,

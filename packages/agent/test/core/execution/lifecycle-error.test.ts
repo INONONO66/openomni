@@ -39,7 +39,7 @@ describe("handleError (error)", () => {
     } while (!result.done);
 
     expect(fn).toHaveBeenCalledTimes(1);
-    const ctx = fn.mock.calls[0][0] as PolicyContext;
+    const ctx = fn.mock.calls[0]?.[0] as PolicyContext;
     expect(ctx.timing).toBe("error");
     expect(ctx.toolInput?.error).toMatchObject({ name: "Error", message: error.message });
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { createIdleNudgePolicy } from "../../../../src/core/policy/builtin/idle-nudge";
-import type { PolicyContext } from "../../../../src/core/policy";
+import type { PolicyContext, PolicyFn } from "../../../../src/core/policy";
 import type { Policy } from "@openomni/protocol";
 
 const originalNow = Date.now;
@@ -9,9 +9,14 @@ function mockNow(ms: number): void {
   Date.now = () => ms;
 }
 
-function baseCtx(timing: Policy.Timing, overrides?: Partial<PolicyContext>): PolicyContext {
+function baseCtx(
+  timing: Policy.Timing,
+  pointId: Parameters<PolicyFn>[0]["pointId"],
+  overrides?: Partial<PolicyContext>,
+): Parameters<PolicyFn>[0] {
   return {
     timing,
+    pointId,
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -35,7 +40,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(1000);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(30000);
-    const verdict = await mw.fn(baseCtx("turn.start"));
+    const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     expect(verdict.verdict).toBe("allow");
   });
 
@@ -43,7 +48,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(1000);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(70000);
-    const verdict = await mw.fn(baseCtx("turn.start"));
+    const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     const message = injectedMessage(verdict);
     expect(verdict.verdict).toBe("allow");
     expect(message).toContain("[System]");
@@ -56,13 +61,13 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 1000, maxNudges: 2 });
 
     mockNow(2000);
-    expect(injectedMessage(await mw.fn(baseCtx("turn.start")))).toBeDefined();
+    expect(injectedMessage(await mw.fn(baseCtx("turn.start", "run.turn.pre")))).toBeDefined();
 
     mockNow(4000);
-    expect(injectedMessage(await mw.fn(baseCtx("turn.start")))).toBeDefined();
+    expect(injectedMessage(await mw.fn(baseCtx("turn.start", "run.turn.pre")))).toBeDefined();
 
     mockNow(6000);
-    const third = await mw.fn(baseCtx("turn.start"));
+    const third = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     expect(third.verdict).toBe("deny");
     expect(third.reasonCodes).toContain("stalled");
   });
@@ -72,10 +77,10 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
 
     mockNow(65000);
-    await mw.fn(baseCtx("invoke.result"));
+    await mw.fn(baseCtx("invoke.result", "tool.native.post"));
 
     mockNow(70000);
-    const verdict = await mw.fn(baseCtx("turn.start"));
+    const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     expect(verdict.verdict).toBe("allow");
   });
 
@@ -83,7 +88,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: -1 });
     mockNow(999999);
-    const verdict = await mw.fn(baseCtx("turn.start"));
+    const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     expect(verdict.verdict).toBe("allow");
   });
 
@@ -92,13 +97,13 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 5000, maxNudges: 1 });
 
     mockNow(3000);
-    expect((await mw.fn(baseCtx("turn.start"))).verdict).toBe("allow");
+    expect((await mw.fn(baseCtx("turn.start", "run.turn.pre"))).verdict).toBe("allow");
 
     mockNow(10000);
-    expect(injectedMessage(await mw.fn(baseCtx("turn.start")))).toBeDefined();
+    expect(injectedMessage(await mw.fn(baseCtx("turn.start", "run.turn.pre")))).toBeDefined();
 
     mockNow(20000);
-    const next = await mw.fn(baseCtx("turn.start"));
+    const next = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     expect(next.verdict).toBe("deny");
     expect(next.reasonCodes).toContain("stalled");
   });
@@ -107,7 +112,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 10000 });
     mockNow(125500);
-    const verdict = await mw.fn(baseCtx("turn.start"));
+    const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     const message = injectedMessage(verdict);
     expect(verdict.verdict).toBe("allow");
     expect(message).toContain("126s");

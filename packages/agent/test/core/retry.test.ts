@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { Run } from "@openomni/protocol";
 import { calculateBackoffMs, classifyRetryReason, shouldRetry, sleep } from "../../src/core/retry";
 
 describe("Retry.sleep", () => {
@@ -70,10 +71,10 @@ describe("classifyRetryReason", () => {
 });
 
 describe("shouldRetry", () => {
-  const policy = {
+  const policy: Run.RetryPolicy = {
     maxAttempts: 3,
     backoffMs: { initial: 10, multiplier: 2, max: 100 },
-    retryOn: ["timeout"] as const,
+    retryOn: ["timeout"],
   };
 
   it("stops at the attempt ceiling", () => {

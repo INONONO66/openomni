@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine } from "../../../src/core/policy";
+import type { Tool } from "@openomni/protocol";
 import type { PolicyContext, PolicyRegistration } from "../../../src/core/policy/types";
 import { abortRun, allow, deny, inject, rewriteToolInput } from "../../helpers/policy-decision";
 
@@ -223,7 +224,7 @@ describe("deny-wins composition", () => {
       { pointId: "prompt.context.pre", ctx: { sessionId: "session", runId: "run", turnIndex: 0 } },
       {
         pointId: "tool.catalog.pre",
-        ctx: { sessionId: "session", runId: "run", availableTools: [] },
+        ctx: { sessionId: "session", runId: "run", availableTools: [] as Tool.Spec[] },
       },
       {
         pointId: "connection.llm.pre",

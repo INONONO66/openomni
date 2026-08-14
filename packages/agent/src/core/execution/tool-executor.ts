@@ -12,7 +12,7 @@ type BlockedResultMetadata = {
   policyId?: string;
 };
 
-type BlockedToolResult = Tool.Result & { metadata?: BlockedResultMetadata };
+export type BlockedToolResult = Tool.Result & { metadata?: BlockedResultMetadata };
 
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
