@@ -1,6 +1,6 @@
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/protocol";
-import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
+import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
 import { emitRunStarted, emitTurnStart } from "./run-events";
@@ -14,11 +14,19 @@ import {
 } from "./lifecycle-dispatch";
 import { createRunState, type AgentRunBase, type RunTrace } from "./run-state";
 
-export async function* streamAgent(
+/**
+ * Runs an agent to a result.
+ *
+ * One output channel. Streaming goes to `sink` as it happens; the record of
+ * what happened goes to `config.events`; this returns what the run decided.
+ * The `AgentEvent` generator that used to carry all three had no consumer
+ * outside this package's own tests.
+ */
+export async function runAgent(
   input: ChatAgentInput,
   config: ChatAgentConfig,
   sink?: Sink,
-): AsyncGenerator<AgentEvent> {
+): Promise<AgentResult> {
   const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
   let lastError = "";
@@ -38,11 +46,8 @@ export async function* streamAgent(
   const state = createRunState({ ...input, traceContext: trace });
   const engine = buildPolicyEngine(config, agentBase);
 
-  const preRunEvent = await dispatchPreRun(state, engine, config, agentBase);
-  if (preRunEvent) {
-    yield preRunEvent;
-    return;
-  }
+  const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
+  if (preRunResult) return preRunResult;
 
   while (attempt <= retryPolicy.maxAttempts) {
     try {
@@ -52,11 +57,8 @@ export async function* streamAgent(
       const configuredToolChoice = resolveToolChoice(config);
 
       while (true) {
-        const budgetEvent = await dispatchBudgetCheck(state, engine, config, agentBase);
-        if (budgetEvent) {
-          yield budgetEvent;
-          return;
-        }
+        const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
+        if (budgetResult) return budgetResult;
 
         emitTurnStart(config.events, state, agentBase);
         const turnResult = await buildTurn(
@@ -69,21 +71,13 @@ export async function* streamAgent(
           agentBase,
           sink,
         );
-        if (turnResult.type === "complete") {
-          yield turnResult.event;
-          return;
-        }
-        if (turnResult.budgetReassuranceEvent) yield turnResult.budgetReassuranceEvent;
-        if (turnResult.budgetWarningEvent) yield turnResult.budgetWarningEvent;
+        if (turnResult.type === "complete") return turnResult.result;
 
         const runLlm = config.llm?.run ?? llmRun;
-        const modelRequestEvent = await dispatchModelRequest(state, engine, config, agentBase);
-        if (modelRequestEvent) {
-          yield modelRequestEvent;
-          return;
-        }
+        const modelRequestResult = await dispatchModelRequest(state, engine, config, agentBase);
+        if (modelRequestResult) return modelRequestResult;
         const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
-        const modelResponseEvent = await dispatchModelResponse(
+        const modelResponseResult = await dispatchModelResponse(
           state,
           engine,
           config,
@@ -93,28 +87,22 @@ export async function* streamAgent(
           },
           agentBase,
         );
-        if (modelResponseEvent) {
-          yield modelResponseEvent;
-          return;
-        }
+        if (modelResponseResult) return modelResponseResult;
 
         if (outcome.type === "stop") {
-          const decision = yield* handleStop(state, config, engine, agentBase, turnResult.turn);
-          if (decision === "continue") continue;
-          return;
+          const stopOutcome = await handleStop(state, config, engine, agentBase, turnResult.turn);
+          if (stopOutcome !== "continue") return stopOutcome;
+          continue;
         }
 
         if (outcome.type === "continue") {
-          yield* handleContinue(config.events, state, agentBase, turnResult.turn.turnUsage);
+          handleContinue(config.events, state, agentBase, turnResult.turn.turnUsage);
           continue;
         }
 
         if (outcome.type === "compact") {
-          const compactDecision = await handleCompact(state, engine, config, agentBase);
-          if (compactDecision !== "continue") {
-            yield compactDecision;
-            return;
-          }
+          const compactOutcome = await handleCompact(state, engine, config, agentBase);
+          if (compactOutcome !== "continue") return compactOutcome;
           continue;
         }
 
@@ -125,7 +113,7 @@ export async function* streamAgent(
       }
     } catch (error) {
       if (!(error instanceof Error)) throw error;
-      const decision = yield* handleError(
+      const decision = await handleError(
         state,
         engine,
         config,
@@ -139,7 +127,7 @@ export async function* streamAgent(
         attempt += 1;
         continue;
       }
-      if (decision.action === "complete") return;
+      if (decision.action === "complete") return decision.result;
       throw decision.error;
     }
   }

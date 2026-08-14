@@ -2,7 +2,6 @@ import type {
   AgentProfile,
   BusEvent,
   Model,
-  Policy,
   RuntimeResource,
   Sink,
   Token,
@@ -66,26 +65,5 @@ export interface AgentResult {
   compactionCount?: number;
   guardAborted?: boolean;
 }
-
-export type AgentEvent =
-  | { type: "text_chunk"; text: string }
-  | {
-      type: "tool_call_start";
-      toolCallId: string;
-      toolName: string;
-      args: Record<string, unknown>;
-    }
-  | { type: "tool_call_complete"; toolCallId: string; result: Tool.Result }
-  | { type: "turn_complete"; turnIndex: number; usage: TokenUsage }
-  | { type: "error"; error: Error; willRetry: boolean }
-  | { type: "complete"; result: AgentResult }
-  | { type: "budget_warning"; remaining: string }
-  | { type: "budget_reassurance"; remaining: string }
-  | {
-      type: "hook_verdict";
-      timing: Policy.Timing;
-      action: Policy.PolicyDecision["verdict"];
-      reason?: string;
-    };
 
 export type { Sink };

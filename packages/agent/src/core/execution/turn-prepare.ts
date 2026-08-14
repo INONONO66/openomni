@@ -3,11 +3,11 @@ import { type Message, PolicyDecision } from "@openomni/protocol";
 import type { Policy, Sink, Tool } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
-import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
+import type { ChatAgentConfig, TokenUsage } from "../types";
 import { createToolExecutor } from "./tool-executor";
 import {
-  createGuardCompleteEvent,
-  createRunCompleteEvent,
+  guardAbortedResult,
+  runResult,
   emitBudgetReassurance,
   emitBudgetWarning,
 } from "./run-events";
@@ -94,13 +94,11 @@ export async function buildTurn(
     buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
   );
 
-  let budgetReassuranceEvent: Extract<AgentEvent, { type: "budget_reassurance" }> | undefined;
-  let budgetWarningEvent: Extract<AgentEvent, { type: "budget_warning" }> | undefined;
   if (PolicyDecision.isBlocking(preTurnDecision)) {
     const reason = PolicyDecision.reason(preTurnDecision, "stop");
     return {
       type: "complete",
-      event: createRunCompleteEvent(state, {
+      result: runResult(state, {
         finishReason: reason === "stalled" ? "stalled" : "stop",
         guardAborted: reason !== "stalled",
       }),
@@ -117,7 +115,6 @@ export async function buildTurn(
       remaining,
       effectiveBudgetThresholds(config.budget).reassuranceThreshold,
     );
-    budgetReassuranceEvent = { type: "budget_reassurance", remaining };
   }
   if (preTurnDecision.reasonCodes.includes("budget_warning")) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
@@ -127,7 +124,6 @@ export async function buildTurn(
       remaining,
       effectiveBudgetThresholds(config.budget).warningThreshold,
     );
-    budgetWarningEvent = { type: "budget_warning", remaining };
   }
 
   recordRunTurn(state);
@@ -162,7 +158,7 @@ export async function buildTurn(
 
   const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase);
   if (systemResult.blocked) {
-    return { type: "complete", event: createGuardCompleteEvent(state) };
+    return { type: "complete", result: guardAbortedResult(state) };
   }
   const system = systemResult.system;
 
@@ -182,7 +178,7 @@ export async function buildTurn(
   );
 
   if (PolicyDecision.isBlocking(toolSelectionDecision)) {
-    return { type: "complete", event: createGuardCompleteEvent(state) };
+    return { type: "complete", result: guardAbortedResult(state) };
   }
   const selectedTools = PolicyEffectApplier.applyToolFilterEffects(allTools, toolSelectionDecision);
 
@@ -205,8 +201,6 @@ export async function buildTurn(
 
   return {
     type: "ready",
-    budgetReassuranceEvent,
-    budgetWarningEvent,
     turn: {
       runInput: {
         // llm reports through the same port the agent was handed.

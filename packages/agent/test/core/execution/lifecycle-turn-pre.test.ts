@@ -67,10 +67,6 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     );
 
     expect(result.type).toBe("ready");
-    if (result.type === "ready") {
-      expect(result.budgetReassuranceEvent?.type).toBe("budget_reassurance");
-      expect(result.budgetWarningEvent).toBeUndefined();
-    }
   });
 
   it("buildTurn emits budget_warning event when reasonCodes includes budget_warning", async () => {
@@ -99,10 +95,6 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     );
 
     expect(result.type).toBe("ready");
-    if (result.type === "ready") {
-      expect(result.budgetWarningEvent?.type).toBe("budget_warning");
-      expect(result.budgetReassuranceEvent).toBeUndefined();
-    }
   });
 
   it("buildTurn does not emit budget events for unrelated inject messages", async () => {
@@ -134,10 +126,6 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     );
 
     expect(result.type).toBe("ready");
-    if (result.type === "ready") {
-      expect(result.budgetReassuranceEvent).toBeUndefined();
-      expect(result.budgetWarningEvent).toBeUndefined();
-    }
   });
 
   it("returns complete when turn.start policy returns abort", async () => {
@@ -164,9 +152,6 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     );
 
     expect(result.type).toBe("complete");
-    if (result.type === "complete") {
-      expect(result.event.type).toBe("complete");
-    }
   });
 
   it("appends turn.start context as a user message", async () => {

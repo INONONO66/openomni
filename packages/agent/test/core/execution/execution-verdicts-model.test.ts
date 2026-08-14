@@ -30,8 +30,8 @@ describe("model execution deny verdicts", () => {
 
     const result = await dispatchModelRequest(makeState(), engine, makeConfig());
 
-    expect(result?.type).toBe("complete");
-    if (result?.type === "complete") expect(result.result.guardAborted).toBe(true);
+    expect(result).not.toBeNull();
+    expect(result?.guardAborted).toBe(true);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

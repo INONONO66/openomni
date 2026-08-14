@@ -458,18 +458,18 @@ describe("tool permission integration via toolExecutor", () => {
       ],
     });
 
-    const events = [] as Array<{ type: string; result?: Tool.Result }>;
-    for await (const event of agent.stream(runInput([{ role: "user", content: "stream" }]))) {
-      if (event.type === "tool_call_complete") {
-        events.push({ type: event.type, result: event.result });
-      } else {
-        events.push({ type: event.type });
-      }
-    }
+    // The denial reaches the caller on the sink it passed — the channel a
+    // caller actually has — not on a second one narrating the same fact.
+    const toolResults: Tool.Result[] = [];
+    await agent.run(runInput([{ role: "user", content: "stream" }]), {
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
+      onToolResult: (result) => toolResults.push(result),
+    });
 
-    const toolResultEvent = events.find((event) => event.type === "tool_call_complete");
     expect(executor).toHaveBeenCalledTimes(0);
-    expect(toolResultEvent?.result?.isError).toBe(true);
-    expect(String(toolResultEvent?.result?.output)).toContain("input_rule_deny");
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0]?.isError).toBe(true);
+    expect(String(toolResults[0]?.output)).toContain("input_rule_deny");
   });
 });

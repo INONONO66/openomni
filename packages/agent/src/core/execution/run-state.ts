@@ -7,7 +7,7 @@ import {
   recordTurn,
   type BudgetState,
 } from "../budget";
-import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
+import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import type { DispatchContext } from "../policy";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
@@ -89,30 +89,18 @@ export interface TurnArtifacts {
 }
 
 export type BuildTurnResult =
-  | {
-      type: "ready";
-      budgetReassuranceEvent?: Extract<AgentEvent, { type: "budget_reassurance" }>;
-      budgetWarningEvent?: Extract<AgentEvent, { type: "budget_warning" }>;
-      turn: TurnArtifacts;
-    }
-  | { type: "complete"; event: AgentEvent };
+  | { type: "ready"; turn: TurnArtifacts }
+  | { type: "complete"; result: AgentResult };
 
-export type TurnDecision =
-  | {
-      kind: "continue";
-      messages: Message.WithParts[];
-      continuationCount: number;
-      compactionCount: number;
-      turnIndex: number;
-    }
-  | { kind: "complete"; event: AgentEvent }
-  | { kind: "error"; error: unknown }
-  | { kind: "abort"; event: AgentEvent };
-
+/**
+ * What the run does after an attempt raised. `complete` carries the result a
+ * guard settled on; the other two carry the error, which the caller either
+ * sleeps on and retries or rethrows.
+ */
 export type ErrorDecision =
-  | ({ action: "retry"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>)
-  | ({ action: "complete"; errorMessage: string } & Extract<TurnDecision, { kind: "abort" }>)
-  | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
+  | { action: "retry"; error: Error; errorMessage: string }
+  | { action: "complete"; result: AgentResult; errorMessage: string }
+  | { action: "throw"; error: Error; errorMessage: string };
 
 export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
   const sessionId = input.traceContext.sessionId;

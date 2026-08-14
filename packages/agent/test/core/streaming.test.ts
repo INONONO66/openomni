@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { Sink } from "@openomni/protocol";
-import type { AgentEvent } from "../../src/core/types";
+import type { Sink, Tool } from "@openomni/protocol";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -33,19 +32,36 @@ const defaultConfig = {
 
 const defaultInput = runInput([{ role: "user" as const, content: "hello" }]);
 
-async function collectEvents(
-  agent: ReturnType<typeof ChatAgent.create>,
-  input = defaultInput,
-): Promise<AgentEvent[]> {
-  const events: AgentEvent[] = [];
-  for await (const event of agent.stream(input)) {
-    events.push(event);
-  }
-  return events;
+/**
+ * The caller's view of a run in progress. Since #610 this is the only one: the
+ * `AgentEvent` generator that used to narrate the same facts had no consumer
+ * outside these tests, so what a caller can observe is exactly what reaches
+ * the sink it passed plus the result it is returned.
+ */
+function collectingSink(): Sink & {
+  readonly texts: string[];
+  readonly toolCalls: Tool.Call[];
+  readonly toolResults: Tool.Result[];
+} {
+  const texts: string[] = [];
+  const toolCalls: Tool.Call[] = [];
+  const toolResults: Tool.Result[] = [];
+  return {
+    texts,
+    toolCalls,
+    toolResults,
+    onMessage: (message) => {
+      for (const part of message.parts) {
+        if (part.type === "text") texts.push(part.text);
+      }
+    },
+    onToolCall: (call) => toolCalls.push(call),
+    onToolResult: (result) => toolResults.push(result),
+  };
 }
 
-describe("ChatAgent.stream()", () => {
-  it("yields text_chunk and complete events for simple response", async () => {
+describe("ChatAgent.run() streaming", () => {
+  it("streams assistant text to the sink and returns the result", async () => {
     mockRunFn = async (_input, sink) => {
       sink.onMessage({
         info: {
@@ -79,22 +95,15 @@ describe("ChatAgent.stream()", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create(defaultConfig);
-    const events = await collectEvents(agent);
+    const sink = collectingSink();
+    const result = await ChatAgent.create(defaultConfig).run(defaultInput, sink);
 
-    const types = events.map((e) => e.type);
-    expect(types).toContain("text_chunk");
-    expect(types).toContain("turn_complete");
-    expect(types).toContain("complete");
-
-    const completeEvent = events.find((e) => e.type === "complete");
-    expect(completeEvent).toBeDefined();
-    if (completeEvent?.type === "complete") {
-      expect(completeEvent.result.finishReason).toBe("stop");
-    }
+    expect(sink.texts).toEqual(["Hello world"]);
+    expect(result.finishReason).toBe("stop");
+    expect(result.text).toBe("Hello world");
   });
 
-  it("yields tool_call_start and tool_call_complete events", async () => {
+  it("streams tool calls and their results to the sink", async () => {
     mockRunFn = async (input, sink) => {
       const call = { id: "call-1", tool: "test_tool", input: { q: "test" } };
       if (input.toolExecutor) {
@@ -144,62 +153,11 @@ describe("ChatAgent.stream()", () => {
       }),
     });
 
-    const events = await collectEvents(agent);
-    const types = events.map((e) => e.type);
+    const sink = collectingSink();
+    const result = await agent.run(defaultInput, sink);
 
-    expect(types).toContain("tool_call_start");
-    expect(types).toContain("tool_call_complete");
-    expect(types).toContain("complete");
-
-    const startEvent = events.find((e) => e.type === "tool_call_start");
-    if (startEvent?.type === "tool_call_start") {
-      expect(startEvent.toolName).toBe("test_tool");
-    }
-  });
-
-  it("stream() and run() produce same finishReason", async () => {
-    mockRunFn = async (_input, sink) => {
-      sink.onMessage({
-        info: {
-          id: "msg-3",
-          sessionID: "test",
-          role: "assistant",
-          time: { created: Date.now() },
-          parentID: "",
-          modelID: "claude-3-haiku-20240307",
-          providerID: "anthropic",
-          agent: "test",
-          path: { cwd: "", root: "" },
-          cost: 0,
-          tokens: {
-            input: 5,
-            output: 3,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-        },
-        parts: [
-          {
-            id: "p3",
-            sessionID: "test",
-            messageID: "msg-3",
-            type: "text",
-            text: "Result",
-          },
-        ],
-      });
-      return createStopOutcome();
-    };
-
-    const agent = ChatAgent.create(defaultConfig);
-
-    const runResult = await agent.run(defaultInput);
-    const events = await collectEvents(agent);
-    const completeEvent = events.find((e) => e.type === "complete");
-
-    expect(runResult.finishReason).toBe("stop");
-    if (completeEvent?.type === "complete") {
-      expect(completeEvent.result.finishReason).toBe("stop");
-    }
+    expect(sink.toolCalls.map((call) => call.tool)).toEqual(["test_tool"]);
+    expect(sink.toolResults.map((r) => r.output)).toEqual(["tool result"]);
+    expect(result.finishReason).toBe("stop");
   });
 });

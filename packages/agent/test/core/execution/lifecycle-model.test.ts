@@ -136,7 +136,7 @@ describe("model dispatch points", () => {
       makeAgentBase(),
     );
 
-    expect(result?.type).toBe("complete");
-    if (result?.type === "complete") expect(result.result.guardAborted).toBe(true);
+    expect(result).not.toBeNull();
+    expect(result?.guardAborted).toBe(true);
   });
 });

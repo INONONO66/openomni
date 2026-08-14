@@ -5,7 +5,7 @@ import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { buildPolicyEngine } from "../../../src/core/execution/runner";
-import { streamAgent } from "../../../src/core/execution/runner";
+import { runAgent } from "../../../src/core/execution/runner";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
@@ -14,7 +14,7 @@ import {
   createToolPermissionPolicy,
 } from "../../../src/core/policy/builtin";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
+import type { ChatAgentConfig } from "../../../src/core/types";
 import {
   createMockLlmConfig,
   createStopOutcome,
@@ -127,13 +127,10 @@ describe("canonical ChatAgent policy execution", () => {
     };
 
     // When
-    const events: AgentEvent[] = [];
-    for await (const event of streamAgent(runInput([{ role: "user", content: "hi" }]), config)) {
-      events.push(event);
-    }
+    const result = await runAgent(runInput([{ role: "user", content: "hi" }]), config);
 
     // Then
-    expect(events.some((event) => event.type === "complete")).toBe(true);
+    expect(result.finishReason).toBe("stop");
     expect(seen.map((entry) => entry.pointId)).toEqual([...pointIds]);
     expect(new Set(seen.map((entry) => entry.sessionId)).size).toBe(1);
     expect(new Set(seen.map((entry) => entry.runId)).size).toBe(1);

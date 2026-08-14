@@ -1,7 +1,7 @@
 import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
 import type { RetryReason } from "../retry";
-import type { AgentEvent, AgentStep, TokenUsage } from "../types";
+import type { AgentResult, AgentStep, TokenUsage } from "../types";
 import { getCompactionCount, type AgentRunBase, type RunState } from "./run-state";
 
 export function emitRunStarted(
@@ -195,14 +195,14 @@ export function publishDenyDiagnostic(
 }
 
 // merged from run-result.ts (250-LOC split refold: single-importer stage)
-export function createGuardCompleteEvent(
+export function guardAbortedResult(
   state: RunState,
   options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },
-): AgentEvent {
-  return createRunCompleteEvent(state, { ...options, guardAborted: true });
+): AgentResult {
+  return runResult(state, { ...options, guardAborted: true });
 }
 
-export function createRunCompleteEvent(
+export function runResult(
   state: RunState,
   options?: {
     text?: string;
@@ -210,24 +210,13 @@ export function createRunCompleteEvent(
     finishReason?: "stop" | "stalled" | "max-steps";
     guardAborted?: boolean;
   },
-): AgentEvent {
+): AgentResult {
   return {
-    type: "complete",
-    result: {
-      text: options?.text ?? state.lastAssistantText,
-      steps: options?.steps ?? state.steps,
-      usage: state.totalUsage,
-      finishReason: options?.finishReason ?? "stop",
-      ...(options?.guardAborted !== undefined && { guardAborted: options.guardAborted }),
-      compactionCount: getCompactionCount(state),
-    },
-  };
-}
-
-export function createRunErrorEvent(error: Error, willRetry: boolean): AgentEvent {
-  return {
-    type: "error",
-    error,
-    willRetry,
+    text: options?.text ?? state.lastAssistantText,
+    steps: options?.steps ?? state.steps,
+    usage: state.totalUsage,
+    finishReason: options?.finishReason ?? "stop",
+    ...(options?.guardAborted !== undefined && { guardAborted: options.guardAborted }),
+    compactionCount: getCompactionCount(state),
   };
 }

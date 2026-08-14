@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
-import type { AgentEvent, AgentStep } from "../src/core/types";
+import type { AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -84,11 +84,8 @@ describe("ChatAgent", () => {
     mockProviderFromModelsDevModel.mockClear();
   });
 
-  it("create() returns instance with run and stream methods", () => {
-    const agent = createAgent();
-
-    expect(typeof agent.run).toBe("function");
-    expect(typeof agent.stream).toBe("function");
+  it("create() returns an instance with a run method", () => {
+    expect(typeof createAgent().run).toBe("function");
   });
 
   it("run() returns finishReason stop when LLM stops", async () => {
@@ -394,12 +391,9 @@ it("does not retry missing toolExecutor configuration errors", async () => {
     ],
   });
 
-  const events: AgentEvent[] = [];
   let configurationError: unknown;
   try {
-    for await (const event of agent.stream(runInput([{ role: "user", content: "Use a tool" }]))) {
-      events.push(event);
-    }
+    await agent.run(runInput([{ role: "user", content: "Use a tool" }]));
   } catch (error) {
     if (!(error instanceof Error)) throw error;
     configurationError = error;
@@ -409,5 +403,4 @@ it("does not retry missing toolExecutor configuration errors", async () => {
   expect((configurationError as Error).message).toContain(
     "toolExecutor is required when tools are provided",
   );
-  expect(events.filter((event) => event.type === "error" && event.willRetry)).toHaveLength(0);
 });

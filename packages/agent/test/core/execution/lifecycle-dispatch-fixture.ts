@@ -1,4 +1,4 @@
-import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
+import type { ChatAgentConfig } from "../../../src/core/types";
 import {
   createRunState,
   type AgentRunBase,
@@ -57,12 +57,4 @@ export function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtif
     toolPolicyDecisions: [],
     ...overrides,
   };
-}
-
-export async function collectEvents(gen: AsyncGenerator<AgentEvent>): Promise<AgentEvent[]> {
-  const events: AgentEvent[] = [];
-  for await (const event of gen) {
-    events.push(event);
-  }
-  return events;
 }
