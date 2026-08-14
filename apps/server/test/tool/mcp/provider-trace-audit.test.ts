@@ -12,6 +12,7 @@ import {
   makeTool,
   seedProvider,
 } from "./provider-test-fixture";
+import { Bus } from "@openomni/telemetry";
 
 installStorageFixture();
 
@@ -207,6 +208,7 @@ describe("McpToolProvider canonical policy trace", () => {
         url: "https://example.test/mcp",
       },
       {
+        events: Bus,
         client: {
           connect: async () => undefined,
           close: async () => undefined,

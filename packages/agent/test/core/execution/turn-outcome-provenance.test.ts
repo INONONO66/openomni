@@ -9,6 +9,7 @@ import {
 } from "../../../src/core/execution/run-state";
 import { allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 function makeAgentBase(): AgentRunBase {
   return { traceId: "trace-1", sessionId: "sess-1" };
@@ -19,6 +20,7 @@ function makeTurnArtifacts(): TurnArtifacts {
     runInput: {
       messages: [],
       tools: [],
+      events: Bus,
       model: { provider: "test", id: "test-model" },
       maxSteps: 24,
     },
@@ -67,7 +69,7 @@ describe("handleStop prompt injection provenance", () => {
     const events = await collectEvents(
       handleStop(
         state,
-        { model: { provider: "test", id: "test-model" } },
+        { events: Bus, model: { provider: "test", id: "test-model" } },
         engine,
         makeAgentBase(),
         makeTurnArtifacts(),

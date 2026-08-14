@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Policy } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
 import { z } from "zod";
 import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";
@@ -19,8 +19,8 @@ function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
 }
 
 describe("PolicyRegistry", () => {
-  it("defaultRegistry() has all builtins registered", () => {
-    const registry = defaultRegistry();
+  it("defaultRegistry has all builtins registered", () => {
+    const registry = defaultRegistry(Bus);
 
     expect(registry.list()).toEqual(builtinPolicyIds);
     for (const id of builtinPolicyIds) {
@@ -48,8 +48,8 @@ describe("PolicyRegistry", () => {
     expect(registrations[0]?.name).toBe("test:primary:strict");
   });
 
-  it("defaultRegistry() resolves typed builtin configs", () => {
-    const registrations = defaultRegistry().resolve(
+  it("defaultRegistry resolves typed builtin configs", () => {
+    const registrations = defaultRegistry(Bus).resolve(
       plan([
         {
           id: "builtin:compaction",
@@ -73,8 +73,8 @@ describe("PolicyRegistry", () => {
     ]);
   });
 
-  it("defaultRegistry() resolves configless default builtin policies", () => {
-    const registrations = defaultRegistry().resolve(
+  it("defaultRegistry resolves configless default builtin policies", () => {
+    const registrations = defaultRegistry(Bus).resolve(
       plan([
         { id: "builtin:idle-nudge", required: true },
         { id: "builtin:tool-permission", required: true },
@@ -88,9 +88,9 @@ describe("PolicyRegistry", () => {
     ]);
   });
 
-  it("defaultRegistry() rejects malformed builtin configs at resolution", () => {
+  it("defaultRegistry rejects malformed builtin configs at resolution", () => {
     expect(() =>
-      defaultRegistry().resolve(
+      defaultRegistry(Bus).resolve(
         plan([{ id: "builtin:compaction", required: true, config: { thresholdRatio: 0.8 } }]),
         {},
       ),
@@ -150,5 +150,65 @@ describe("PolicyRegistry", () => {
       unsubscribe();
       Bus.reset();
     }
+  });
+
+  it("hands the built-ins the injected sink, and a plan cannot supply its own", async () => {
+    const injected = collector();
+    const smuggled = collector();
+    const registrations = defaultRegistry(injected).resolve(
+      plan([
+        {
+          id: "builtin:tool-permission",
+          required: true,
+          // `events` is not wire config: the schema's output type omits it, so
+          // parse drops this. Pinned as an outcome — the injected sink gets the
+          // record and the smuggled one stays empty — not as a claim about
+          // which layer of the registry produced that outcome.
+          config: {
+            permission: {
+              action: "tool.call",
+              inputRules: [
+                {
+                  toolPattern: "shell_exec",
+                  field: "cmd",
+                  pattern: "^rm\\s",
+                  action: "deny",
+                  priority: 10,
+                },
+              ],
+            },
+            events: smuggled,
+          },
+        },
+      ]),
+      {},
+    );
+
+    const guard = registrations.find((r) => r.name === "builtin:tool-permission");
+    if (!guard) throw new Error("expected builtin:tool-permission");
+
+    const hostile = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        get: () => {
+          throw new Error("hostile tool input");
+        },
+      },
+    );
+    await guard.fn({
+      timing: "invoke.prepare",
+      traceContext: { traceId: "trace-registry-inject" },
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolName: "shell_exec",
+      toolInput: hostile,
+    } as never);
+
+    expect(injected.events.length).toBeGreaterThan(0);
+    expect(smuggled.events).toHaveLength(0);
   });
 });

@@ -28,6 +28,7 @@ function makeLabeledTool(name: string, labels: string[]): Tool.Spec {
 
 function makeConfig(tools: Tool.Spec[]): ChatAgentConfig {
   return {
+    events: Bus,
     model: { provider: "test", id: "test-model" },
     tools,
     systemPrompt: "test system prompt",

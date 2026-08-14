@@ -1,3 +1,4 @@
+import type { BusEvent } from "@openomni/protocol";
 import { PolicyRegistry } from "@openomni/policy";
 import type { PolicyRegistryInstance } from "@openomni/policy";
 import { Policy } from "@openomni/protocol";
@@ -35,8 +36,16 @@ const IdleNudgeConfigSchema: z.ZodType<IdleNudgeConfig, z.ZodTypeDef, unknown> =
   maxNudges: z.number().optional(),
 });
 
-const ToolPermissionConfigSchema: z.ZodType<ToolPermissionPolicyConfig, z.ZodTypeDef, unknown> =
-  z.object({ permission: Policy.Permission });
+/**
+ * Wire shape only: the output type omits `events`, and a plain `z.object`
+ * strips what the shape does not name. A policy plan therefore cannot smuggle
+ * a sink of its own and redirect where the evidence of its own decision goes.
+ */
+const ToolPermissionConfigSchema: z.ZodType<
+  Omit<ToolPermissionPolicyConfig, "events">,
+  z.ZodTypeDef,
+  unknown
+> = z.object({ permission: Policy.Permission });
 
 function parseCompactionConfig(config: unknown): CompactionOptions {
   return CompactionConfigSchema.parse(config);
@@ -46,25 +55,30 @@ function parseIdleNudgeConfig(config: unknown): IdleNudgeConfig {
   return IdleNudgeConfigSchema.parse(config ?? {});
 }
 
-function parseToolPermissionConfig(config: unknown): ToolPermissionPolicyConfig {
+function parseToolPermissionConfig(config: unknown): Omit<ToolPermissionPolicyConfig, "events"> {
   return ToolPermissionConfigSchema.parse(
     config === undefined ? { permission: { action: "tool.call" } } : config,
   );
 }
 
-export function defaultRegistry(): PolicyRegistryInstance<PolicyContext> {
+/**
+ * @param events Where the built-ins that report send their records. Passed in
+ * rather than reached for: a policy decides, and where the evidence of that
+ * decision goes is the composition root's call.
+ */
+export function defaultRegistry(events: BusEvent.Sink): PolicyRegistryInstance<PolicyContext> {
   const registry = PolicyRegistry.create<PolicyContext>();
 
   registry.register("builtin:budget-reassurance", () => createBudgetReassurancePolicy());
   registry.register("builtin:budget-warning", () => createBudgetWarningPolicy());
   registry.register("builtin:compaction", (config) =>
-    createCompactionPolicy(parseCompactionConfig(config)),
+    createCompactionPolicy({ ...parseCompactionConfig(config), events }),
   );
   registry.register("builtin:idle-nudge", (config) =>
     createIdleNudgePolicy(parseIdleNudgeConfig(config)),
   );
   registry.register("builtin:tool-permission", (config) =>
-    createToolPermissionPolicy(parseToolPermissionConfig(config)),
+    createToolPermissionPolicy({ ...parseToolPermissionConfig(config), events }),
   );
 
   return registry;

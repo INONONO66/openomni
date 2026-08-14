@@ -1,5 +1,5 @@
+import type { BusEvent } from "@openomni/protocol";
 import { Operational, type Message } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 
 export interface CompactionOptions {
   contextWindowTokens: number;
@@ -45,11 +45,14 @@ export namespace InMemoryCompactor {
    * not configuration, and an optional field validated by a runtime throw
    * gives the compiler nothing — which is how the caller that supplied none
    * reached production.
+   * @param events Where the record of the rewrite goes. Beside the identity,
+   * not inside it: a destination is not something the trace says.
    */
   export async function compact(
     messages: Message.WithParts[],
     options: CompactionOptions,
     trace: { readonly traceId: string },
+    events: BusEvent.Sink,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
@@ -97,10 +100,9 @@ export namespace InMemoryCompactor {
     }
 
     const compacted = [...summaryMessages, ...toKeep];
-    const { traceId } = trace;
 
-    Bus.publish(Operational.Info, {
-      traceId,
+    events.publish(Operational.Info, {
+      traceId: trace.traceId,
       time: Date.now(),
       component: "agent.compaction",
       msg: "compaction triggered",

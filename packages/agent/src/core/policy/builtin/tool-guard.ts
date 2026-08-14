@@ -1,11 +1,13 @@
+import type { BusEvent } from "@openomni/protocol";
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import type { CanonicalPolicyRegistration } from "../types";
 
 const TOOL_CALL_ACTION = "tool.call";
 
 export interface ToolPermissionPolicyConfig {
   permission: Policy.Permission;
+  /** Where a failed evaluation is reported. The guard denies; it does not decide where. */
+  events: BusEvent.Sink;
 }
 
 /**
@@ -54,7 +56,7 @@ export function createToolPermissionPolicy(
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        Bus.publish(Operational.Debug, {
+        config.events.publish(Operational.Debug, {
           traceId: requireGuardTraceId(ctx),
           time: Date.now(),
           component: "agent.policy.tool-permission",

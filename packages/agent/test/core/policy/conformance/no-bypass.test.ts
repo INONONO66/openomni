@@ -6,6 +6,7 @@ import {
   type PolicyContext,
   type PolicyRegistration,
 } from "../../../../src/core/policy";
+import { Bus } from "@openomni/telemetry";
 
 const itSkip = Reflect.get(it, "skip") as (label: string, fn: () => void) => void;
 const documentedSkip = () => {
@@ -80,6 +81,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     engine.register(denyAllInvokePre("native tool denied by conformance policy"));
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: nativeExecutor,
       engine,
@@ -115,6 +117,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: mcpExecutor,
       engine,

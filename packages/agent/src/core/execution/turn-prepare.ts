@@ -1,7 +1,6 @@
 import type { RunInput } from "@openomni/llm";
 import { type Message, PolicyDecision } from "@openomni/protocol";
 import type { Policy, Sink, Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
@@ -113,6 +112,7 @@ export async function buildTurn(
   if (preTurnDecision.reasonCodes.includes("budget_reassurance")) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
     emitBudgetReassurance(
+      config.events,
       agentBase,
       remaining,
       effectiveBudgetThresholds(config.budget).reassuranceThreshold,
@@ -122,6 +122,7 @@ export async function buildTurn(
   if (preTurnDecision.reasonCodes.includes("budget_warning")) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
     emitBudgetWarning(
+      config.events,
       agentBase,
       remaining,
       effectiveBudgetThresholds(config.budget).warningThreshold,
@@ -136,6 +137,7 @@ export async function buildTurn(
   const toolMetadata = buildToolMetadataMap(config.tools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({
+        events: config.events,
         toolExecutor: config.toolExecutor,
         engine,
         getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolMetadata),
@@ -207,9 +209,8 @@ export async function buildTurn(
     budgetWarningEvent,
     turn: {
       runInput: {
-        // The agent binds llm's observation port. Agent's own emits still
-        // reach for `Bus` directly; that is the next slice.
-        events: Bus,
+        // llm reports through the same port the agent was handed.
+        events: config.events,
         messages: state.messages,
         tools: selectedTools,
         system,

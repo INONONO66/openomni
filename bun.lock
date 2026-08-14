@@ -51,10 +51,10 @@
         "@openomni/llm": "workspace:*",
         "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
-        "@openomni/telemetry": "workspace:*",
         "zod": "^3.22.4",
       },
       "devDependencies": {
+        "@openomni/telemetry": "workspace:*",
         "@types/bun": "latest",
       },
     },

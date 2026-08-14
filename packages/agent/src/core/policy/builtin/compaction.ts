@@ -1,10 +1,14 @@
-import { PolicyDecision } from "@openomni/protocol";
+import { PolicyDecision, type BusEvent } from "@openomni/protocol";
 import { InMemoryCompactor, type CompactionOptions } from "../../execution/compaction";
 import type { CanonicalPolicyRegistration } from "../types";
 
-type CompactionConfig = CompactionOptions;
+type CompactionConfig = CompactionOptions & {
+  /** Where the compaction record goes. The policy reports; it does not decide. */
+  readonly events: BusEvent.Sink;
+};
 
 export function createCompactionPolicy(config: CompactionConfig): CanonicalPolicyRegistration {
+  const { events, ...compaction } = config;
   return {
     name: "builtin:compaction",
     kind: "point",
@@ -20,7 +24,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
       }
 
       const totalTokens = ctx.budgetState.totalInputTokens + ctx.budgetState.totalOutputTokens;
-      if (!InMemoryCompactor.shouldCompact(totalTokens, config)) {
+      if (!InMemoryCompactor.shouldCompact(totalTokens, compaction)) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
@@ -36,7 +40,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_trace"],
         });
       }
-      const result = await InMemoryCompactor.compact(ctx.messages, config, { traceId });
+      const result = await InMemoryCompactor.compact(ctx.messages, compaction, { traceId }, events);
       if (!result.compacted) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }

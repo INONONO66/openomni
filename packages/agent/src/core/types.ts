@@ -1,5 +1,6 @@
 import type {
   AgentProfile,
+  BusEvent,
   Model,
   Policy,
   RuntimeResource,
@@ -19,6 +20,12 @@ type AgentToolSpec = Tool.Spec & {
 };
 
 export interface ChatAgentConfig {
+  /**
+   * Where the run's records go. A port, not `Bus`: what sits behind it is the
+   * composition root's choice, tests bind a collector, and P2 can split a
+   * fail-closed ledger append from the lossy bus without touching the loop.
+   */
+  events: BusEvent.Sink;
   systemPrompt?: string;
   tools?: AgentToolSpec[];
   model: Model.Ref;

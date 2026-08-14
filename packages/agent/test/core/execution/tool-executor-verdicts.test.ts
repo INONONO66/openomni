@@ -68,6 +68,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       engine,
       traceContext: { traceId: "trace-deny", sessionId: "sess-deny", runId: "run-1" },
       toolExecutor: async (call) => {
@@ -97,6 +98,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
@@ -122,6 +124,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
@@ -152,6 +155,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const skipExecutor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine: skipEngine,
       toolExecutor: async (call) => {
@@ -175,6 +179,7 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
       }),
     );
     const abortExecutor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine: abortEngine,
       toolExecutor: async (call) => {
@@ -204,6 +209,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
@@ -232,6 +238,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
@@ -259,6 +266,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
@@ -287,6 +295,7 @@ describe("createToolExecutor effect application", () => {
       }),
     );
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => {
@@ -326,6 +335,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => ({
@@ -365,6 +375,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => ({
@@ -408,6 +419,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       toolExecutor: async (call) => ({
@@ -442,6 +454,7 @@ describe("createToolExecutor effect application", () => {
       },
     ]);
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine,
       getToolLabels: () => ["source.mcp", "mcp.fixture"],
@@ -461,6 +474,7 @@ describe("createToolExecutor effect application", () => {
     // tool runs — never a silent allow.
     let invoked = 0;
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       engine: PolicyEngine.create(),
       getToolLabels: () => ["source.mcp"],
@@ -504,6 +518,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        events: Bus,
         traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         toolExecutor: async (call) => {
@@ -549,6 +564,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        events: Bus,
         traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         toolExecutor: async (call) => {
@@ -594,6 +610,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        events: Bus,
         traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         onDecision: (timing, decision) => {
@@ -629,6 +646,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        events: Bus,
         traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         onDecision: () => {
@@ -686,6 +704,7 @@ describe("createToolExecutor effect application", () => {
         },
       ]);
       const executor = createToolExecutor({
+        events: Bus,
         traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
         onDecision: async () => {

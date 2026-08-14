@@ -61,6 +61,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
+      events: Bus,
       toolExecutor: emittingBaseExecutor({ output: "ok" }),
       engine: PolicyEngine.create(),
       traceContext: { traceId: "trace-sole", sessionId: "sess-sole", runId: "run-1" },
@@ -79,6 +80,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
+      events: Bus,
       toolExecutor: emittingBaseExecutor({ output: "err", isError: true }),
       engine: PolicyEngine.create(),
       traceContext: { traceId: "trace-sole-err", sessionId: "sess-sole-err", runId: "run-1" },
@@ -97,6 +99,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
+      events: Bus,
       toolExecutor: emittingBaseExecutor({ output: "boom", throws: new Error("boom") }),
       engine: PolicyEngine.create(),
       traceContext: { traceId: "trace-sole-throw", sessionId: "sess-sole-throw", runId: "run-1" },

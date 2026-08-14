@@ -3,7 +3,6 @@ import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.j
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { BusEvent, McpServerConfig, Tool } from "@openomni/protocol";
 import { Mcp, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import {
   cleanupFailedConnection,
   type TransportCloseTracker,
@@ -25,13 +24,15 @@ export class McpClient {
   private config: McpServerConfig;
   private createTransport: McpTransportFactory;
   private readonly lifecycleTraceId: string | undefined;
+  private readonly events: BusEvent.Sink;
   private connected = false;
 
-  constructor(config: McpServerConfig, dependencies: McpClientDependencies = {}) {
+  constructor(config: McpServerConfig, dependencies: McpClientDependencies) {
     this.config = config;
     this.client = dependencies.client ?? new Client({ name: "openomni-agent", version: "0.1.0" });
     this.createTransport = dependencies.createTransport ?? createTransport;
     this.lifecycleTraceId = dependencies.traceId;
+    this.events = dependencies.events;
   }
 
   /**
@@ -47,7 +48,7 @@ export class McpClient {
   ): void {
     const traceId = this.lifecycleTraceId;
     if (traceId === undefined || traceId.length === 0) return;
-    Bus.publish(descriptor, { ...payload, traceId } as T);
+    this.events.publish(descriptor, { ...payload, traceId } as T);
   }
 
   async connect(): Promise<void> {
@@ -142,7 +143,7 @@ export class McpClient {
 
     const startTime = Date.now();
 
-    Bus.publish(Mcp.ToolCalled, {
+    this.events.publish(Mcp.ToolCalled, {
       traceId,
       serverName: this.config.name,
       toolName: strippedName,
@@ -168,7 +169,7 @@ export class McpClient {
         toolCallId,
       );
     } catch (err) {
-      Bus.publish(Mcp.ToolFailed, {
+      this.events.publish(Mcp.ToolFailed, {
         traceId,
         serverName: this.config.name,
         toolName: strippedName,

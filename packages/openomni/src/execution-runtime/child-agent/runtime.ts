@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_OUTPUT_CHARS,
   snapshot,
 } from "./types.js";
+import { Bus } from "@openomni/telemetry";
 
 async function dispatchAcceptedDelegationFailure(
   policy: ReturnType<typeof createDelegationPolicyRuntime>,
@@ -183,6 +184,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
                   })
                 : undefined;
             agent = options.createAgent({
+              events: Bus,
               model: options.model,
               systemPrompt: options.systemPrompt,
               signal: controller.signal,

@@ -10,6 +10,7 @@ import {
 } from "./helpers/mock-llm";
 import { allow, continueWithPrompt } from "./helpers/policy-decision";
 import { runInput } from "./helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -70,6 +71,7 @@ function createAssistantMessage(text: string): Message.WithParts {
 
 function createAgent() {
   return ChatAgent.create({
+    events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     llm: mockLlm,
   });
@@ -112,6 +114,7 @@ describe("ChatAgent", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       budget: { maxTurns: 1, maxToolCalls: 10 },
@@ -142,6 +145,7 @@ describe("ChatAgent", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       budget: { maxTurns: 10, maxToolCalls: 7 },
@@ -164,6 +168,7 @@ describe("ChatAgent", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       signal: controller.signal,
@@ -193,6 +198,7 @@ describe("ChatAgent", () => {
 
     const stepFinishCalls: AgentStep[] = [];
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       onStepFinish: (step) => {
@@ -268,6 +274,7 @@ it("uses toolExecutor when provided to execute tool calls", async () => {
   };
 
   const agent = ChatAgent.create({
+    events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     llm: mockLlm,
     toolExecutor: executor,
@@ -304,6 +311,7 @@ it("passes the agent abort signal to toolExecutor calls", async () => {
   };
 
   const agent = ChatAgent.create({
+    events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     llm: mockLlm,
     signal: controller.signal,
@@ -338,6 +346,7 @@ it("handles toolExecutor errors by setting isError: true", async () => {
   };
 
   const agent = ChatAgent.create({
+    events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     llm: mockLlm,
     toolExecutor: async () => {
@@ -352,6 +361,7 @@ it("handles toolExecutor errors by setting isError: true", async () => {
 
 it("throws when tools are configured without toolExecutor", async () => {
   const agent = ChatAgent.create({
+    events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     llm: mockLlm,
     tools: [
@@ -371,6 +381,7 @@ it("throws when tools are configured without toolExecutor", async () => {
 
 it("does not retry missing toolExecutor configuration errors", async () => {
   const agent = ChatAgent.create({
+    events: Bus,
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     llm: mockLlm,
     tools: [

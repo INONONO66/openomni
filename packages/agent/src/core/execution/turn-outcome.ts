@@ -1,5 +1,5 @@
+import type { BusEvent } from "@openomni/protocol";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";
@@ -37,7 +37,7 @@ export async function* handleStop(
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
 ): AsyncGenerator<AgentEvent, "complete" | "continue"> {
-  emitTurnComplete(state, agentBase, turn.turnUsage);
+  emitTurnComplete(config.events, state, agentBase, turn.turnUsage);
 
   if (state.lastAssistantText) yield { type: "text_chunk", text: state.lastAssistantText };
   for (const toolCall of turn.turnToolCalls) {
@@ -76,7 +76,7 @@ export async function* handleStop(
   // BEFORE run.turn.post dispatch, so history-rewriting policies
   // (run.replace_messages) operate on a history that contains it and stay
   // the final word.
-  const assistantMessage = resolveTurnAssistant(state, turn, agentBase);
+  const assistantMessage = resolveTurnAssistant(config.events, state, turn, agentBase);
   appendRunMessages(state, [assistantMessage]);
 
   const postTurnDecision = await engine.dispatchPoint(
@@ -105,6 +105,7 @@ export async function* handleStop(
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       publishDenyDiagnostic(
+        config.events,
         "turn.finish",
         PolicyDecision.deny({
           policyId: "agent.policy.composed",
@@ -145,22 +146,23 @@ export async function* handleStop(
       yield event;
       return flowDecision({ kind: "abort", event });
     }
-    publishDenyDiagnostic("turn.finish", postTurnDecision, state, agentBase);
+    publishDenyDiagnostic(config.events, "turn.finish", postTurnDecision, state, agentBase);
   }
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
-  emitRunCompleted(state, agentBase, "stop");
+  emitRunCompleted(config.events, state, agentBase, "stop");
   const event = createRunCompleteEvent(state, { finishReason: "stop" });
   yield event;
   return flowDecision({ kind: "complete", event });
 }
 
 export async function* handleContinue(
+  events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): AsyncGenerator<AgentEvent, "continue"> {
-  emitTurnComplete(state, agentBase, turnUsage);
+  emitTurnComplete(events, state, agentBase, turnUsage);
   yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turnUsage };
   advanceRunTurn(state);
   return continueFlowDecision(continueDecision(state));
@@ -209,7 +211,7 @@ export async function* handleError(
       yield event;
       return { action: "complete", kind: "abort", event, errorMessage: normalizedError.message };
     }
-    publishDenyDiagnostic("error", onErrorDecision, state, agentBase);
+    publishDenyDiagnostic(config.events, "error", onErrorDecision, state, agentBase);
   }
 
   const lastError = normalizedError.message;
@@ -225,7 +227,7 @@ export async function* handleError(
 
   if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
     const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
-    emitErrorRetry(agentBase, {
+    emitErrorRetry(config.events, agentBase, {
       attempt,
       maxAttempts: effectiveRetryPolicy.maxAttempts,
       error: lastError,
@@ -237,7 +239,7 @@ export async function* handleError(
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 
-  emitRunFailed(agentBase, lastError, {
+  emitRunFailed(config.events, agentBase, lastError, {
     reason: retryReason,
     attempt,
     maxAttempts: effectiveRetryPolicy.maxAttempts,
@@ -256,12 +258,13 @@ export async function* handleError(
  * resurrecting it would forge history.
  */
 function resolveTurnAssistant(
+  events: BusEvent.Sink,
   state: RunState,
   turn: TurnArtifacts,
   agentBase: AgentRunBase,
 ): Message.WithParts {
   if (turn.turnAssistant.message !== undefined) return turn.turnAssistant.message;
-  Bus.publish(Operational.Error, {
+  events.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId || state.sessionId,
@@ -305,7 +308,7 @@ async function dispatchPostRunTransform(
     }),
   );
   if (PolicyDecision.isBlocking(postRunDecision)) {
-    publishDenyDiagnostic("run.finish", postRunDecision, state, agentBase);
+    publishDenyDiagnostic(config.events, "run.finish", postRunDecision, state, agentBase);
   }
 }
 
@@ -328,7 +331,13 @@ async function applyPostCompaction(
   );
 
   if (PolicyDecision.isBlocking(compactionDecision)) {
-    publishDenyDiagnostic("completion.prepare", compactionDecision, state, agentBase);
+    publishDenyDiagnostic(
+      config.events,
+      "completion.prepare",
+      compactionDecision,
+      state,
+      agentBase,
+    );
     return createGuardCompleteEvent(state, { finishReason: "stop" });
   }
 
@@ -338,6 +347,7 @@ async function applyPostCompaction(
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     publishDenyDiagnostic(
+      config.events,
       "completion.prepare",
       PolicyDecision.deny({
         policyId: "agent.policy.composed",
@@ -351,7 +361,7 @@ async function applyPostCompaction(
   }
   if (messages !== undefined) {
     const messagesBefore = applyCompactionMessages(state, messages);
-    emitCompaction(agentBase, messagesBefore, state.messages.length);
+    emitCompaction(config.events, agentBase, messagesBefore, state.messages.length);
   }
   PolicyEffectApplier.applyPromptMessageEffects(state, compactionDecision);
 

@@ -40,7 +40,9 @@ describe("compaction through the lifecycle", () => {
       seen.push(event as unknown as { traceId: string });
     });
     const engine = PolicyEngine.create();
-    engine.register(createCompactionPolicy({ contextWindowTokens: 100, protectRecentMessages: 2 }));
+    engine.register(
+      createCompactionPolicy({ contextWindowTokens: 100, protectRecentMessages: 2, events: Bus }),
+    );
     const agentBase = makeAgentBase();
 
     const state = makeState();
@@ -63,7 +65,9 @@ describe("compaction through the lifecycle", () => {
 
   it("compacts rather than aborting when the threshold is exceeded", async () => {
     const engine = PolicyEngine.create();
-    engine.register(createCompactionPolicy({ contextWindowTokens: 100, protectRecentMessages: 2 }));
+    engine.register(
+      createCompactionPolicy({ contextWindowTokens: 100, protectRecentMessages: 2, events: Bus }),
+    );
 
     const state = makeState();
     state.messages = Array.from({ length: 12 }, (_unused, index) =>

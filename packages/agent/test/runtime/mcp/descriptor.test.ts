@@ -61,6 +61,7 @@ describe("McpClient tool descriptors", () => {
         command: "mcp-server-filesystem",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: createStubClient([
           {
@@ -97,7 +98,7 @@ describe("McpClient tool descriptors", () => {
         transport: "sse",
         url: "https://example.test/mcp",
       },
-      { client: createStubClient([{ name: "search" }]) },
+      { events: Bus, client: createStubClient([{ name: "search" }]) },
     );
 
     const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
@@ -121,7 +122,7 @@ describe("McpClient request options", () => {
         transport: "sse",
         url: "https://example.test/mcp",
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     await client.listTools();
@@ -138,7 +139,7 @@ describe("McpClient request options", () => {
         transport: "sse",
         url: "https://example.test/mcp",
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     await client.listTools({ signal });
@@ -158,7 +159,7 @@ describe("McpClient request options", () => {
         url: "https://example.test/mcp",
         timeout: 0,
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     await client.listTools();
@@ -176,6 +177,7 @@ describe("McpClient request options", () => {
         timeout: 1234,
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => createTransportStub(),
@@ -199,7 +201,7 @@ describe("McpClient request options", () => {
         url: "https://example.test/mcp",
         timeout: 2500,
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     await client.listTools({ signal });
@@ -220,7 +222,7 @@ describe("McpClient request options", () => {
         command: "mcp-server-filesystem",
         timeout: 5000,
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     const result = await client.callTool("filesystem.read_file", { path: "README.md" }, "call-1", {
@@ -244,7 +246,7 @@ describe("McpClient request options", () => {
         url: "https://example.test/mcp",
         headers: { Authorization: "Bearer token" },
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     await client.connect();
@@ -271,7 +273,7 @@ describe("McpClient request options", () => {
           url: "https://example.test/mcp",
           headers: { Authorization: "Bearer token" },
         },
-        { client: sdkClient },
+        { events: Bus, client: sdkClient },
       );
 
       await client.connect();
@@ -297,7 +299,7 @@ describe("McpClient request options", () => {
         headers: { "x-api-key": "secret" },
         retries: 4,
       },
-      { client: sdkClient },
+      { events: Bus, client: sdkClient },
     );
 
     await client.connect();
@@ -427,6 +429,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
@@ -450,6 +453,7 @@ describe("McpClient connection cleanup", () => {
         url: "https://example.test/mcp",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
@@ -476,6 +480,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
@@ -520,6 +525,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,
@@ -570,6 +576,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: createStubClient([]),
         createTransport: () => {
@@ -619,7 +626,7 @@ describe("McpClient connection cleanup", () => {
         transport: "invalid",
         command: "mcp-server-filesystem",
       } as never,
-      { traceId: TEST_LIFECYCLE_TRACE_ID },
+      { traceId: TEST_LIFECYCLE_TRACE_ID, events: Bus },
     );
 
     try {
@@ -647,6 +654,7 @@ describe("McpClient connection cleanup", () => {
         command: "mcp-server-filesystem",
       },
       {
+        events: Bus,
         traceId: TEST_LIFECYCLE_TRACE_ID,
         client: sdkClient,
         createTransport: () => transport,

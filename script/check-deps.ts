@@ -124,14 +124,17 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "agent",
     packageJsonPath: "packages/agent/package.json",
     packageName: "@openomni/agent",
-    // The loop owns no durable state. Same reason as llm: the ledger edge was
-    // `Bus`'s old address, and the ratchet keeps it closed (#606).
+    // The manifest may carry `telemetry` — the tests bind `Bus` behind the
+    // port, and `check-deps` counts devDependencies.
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/policy",
       "@openomni/llm",
       "@openomni/telemetry",
     ]),
+    // `src/` may not. The loop reports through an injected `BusEvent.Sink`
+    // and owns no durable state (#606).
+    srcAllowedDeps: new Set(["@openomni/protocol", "@openomni/policy", "@openomni/llm"]),
   },
   openomni: {
     displayName: "openomni",

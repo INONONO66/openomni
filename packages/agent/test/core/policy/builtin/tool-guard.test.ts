@@ -36,6 +36,7 @@ describe("createToolPermissionPolicy", () => {
       },
     );
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: {
         action: "tool.call",
         inputRules: [
@@ -77,6 +78,7 @@ describe("createToolPermissionPolicy", () => {
       },
     );
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: {
         action: "tool.call",
         inputRules: [
@@ -106,6 +108,7 @@ describe("createToolPermissionPolicy", () => {
   });
   it("continue — tool on allowlist", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: ["read_file", "write_file"] },
     });
     const verdict = await mw.fn(
@@ -121,6 +124,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("abort — tool not on allowlist (allowlist_miss)", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(
@@ -137,6 +141,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("abort — tool on denylist", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", denylist: ["dangerous_tool"] },
     });
     const verdict = await mw.fn(
@@ -153,6 +158,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("abort — empty allowlist denies everything (allowlist_empty)", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: [] },
     });
     const verdict = await mw.fn(
@@ -168,6 +174,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("continue — no toolName in context", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(baseCtx());
@@ -176,6 +183,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("continue — wildcard allowlist allows everything", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", allowlist: ["*"] },
     });
     const verdict = await mw.fn(
@@ -190,6 +198,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("abort — inputRule deny overrides allowlist", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: {
         action: "tool.call",
         allowlist: ["shell_exec"],
@@ -218,6 +227,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("continue — permission without explicit action gets normalized to tool.call", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(
@@ -241,6 +251,7 @@ describe("createToolPermissionPolicy", () => {
       },
     );
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: {
         action: "tool.call",
         inputRules: [
@@ -270,7 +281,7 @@ describe("createToolPermissionPolicy", () => {
   });
 
   it("registers canonical metadata", () => {
-    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    const mw = createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } });
     expect(mw.name).toBe("builtin:tool-permission");
     expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
     expect(mw.priority).toBe(0);
@@ -279,6 +290,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("abort — denyLabels match blocks tool", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call", denyLabels: ["risk.tier-3"] },
     });
     const verdict = await mw.fn(
@@ -295,6 +307,7 @@ describe("createToolPermissionPolicy", () => {
 
   it("continue — no permission rules means default allow", async () => {
     const mw = createToolPermissionPolicy({
+      events: Bus,
       permission: { action: "tool.call" },
     });
     const verdict = await mw.fn(

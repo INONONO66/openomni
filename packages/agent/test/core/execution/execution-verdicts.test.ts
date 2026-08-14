@@ -25,6 +25,7 @@ function makeInput() {
 
 function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
   return {
+    events: Bus,
     model: { provider: "test", id: "test-model" },
     systemPrompt: "test",
     ...overrides,
@@ -46,6 +47,7 @@ function makeTrace(): RunTrace {
 function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
   return {
     runInput: {
+      events: Bus,
       messages: [],
       tools: [],
       model: providerModel,

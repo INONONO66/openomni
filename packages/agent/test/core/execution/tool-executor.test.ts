@@ -46,6 +46,7 @@ describe("createToolExecutor bus events", () => {
     const delegatedContexts: unknown[] = [];
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call, context) => {
         delegatedContexts.push(context?.traceContext);
@@ -74,6 +75,7 @@ describe("createToolExecutor bus events", () => {
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
+      events: Bus,
       toolExecutor: async (call) => ({
         id: "r1",
         toolCallId: call.id,
@@ -108,6 +110,7 @@ describe("createToolExecutor bus events", () => {
     engine.register(abortMiddleware("Blocked: test rule"));
 
     const executor = createToolExecutor({
+      events: Bus,
       toolExecutor: async () => ({ id: "r1", toolCallId: "x", output: "never", isError: false }),
       engine,
       traceContext: { traceId: "trace-3", sessionId: "sess-3", runId: "run-1" },
@@ -138,6 +141,7 @@ describe("createToolExecutor bus events", () => {
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
+      events: Bus,
       toolExecutor: async () => {
         throw new Error("boom");
       },
@@ -155,6 +159,7 @@ describe("createToolExecutor bus events", () => {
   it("reports tool duration for budget accounting on success and failure", async () => {
     const durations: number[] = [];
     const successExecutor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: "r1",
@@ -168,6 +173,7 @@ describe("createToolExecutor bus events", () => {
     await successExecutor(makeCall("call-budget-ok"));
 
     const failureExecutor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async () => {
         throw new Error("boom");
@@ -185,6 +191,7 @@ describe("createToolExecutor bus events", () => {
   it("refuses to build without the run trace context", () => {
     expect(() =>
       createToolExecutor({
+        events: Bus,
         toolExecutor: async () => ({ id: "r", toolCallId: "c", output: "" }),
         engine: PolicyEngine.create(),
       }),
@@ -199,6 +206,7 @@ describe("createToolExecutor bus events", () => {
     const denyEngine = makeEngine();
     denyEngine.register(abortMiddleware("Blocked: actor rule"));
     const denyExecutor = createToolExecutor({
+      events: Bus,
       toolExecutor: async () => ({ id: "r2", toolCallId: "x", output: "never", isError: false }),
       engine: denyEngine,
       traceContext: {

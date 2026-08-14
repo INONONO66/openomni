@@ -92,7 +92,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 |---|---|---|
 | [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | ✅ |
 | [#616](https://github.com/INONONO66/openomni/pull/616) | `agent` and `llm` drop `@openomni/session`; the allowlists close behind them | ✅ |
-| — | `agent` and `llm` take an injected `Sink` rather than importing `Bus` | ⬜ |
+| [#617](https://github.com/INONONO66/openomni/pull/617), [#618](https://github.com/INONONO66/openomni/pull/618) | `agent` and `llm` take an injected `Sink` rather than importing `Bus`; both `src/` trees are gate-enforced | ✅ |
 | [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | ✅ |
 | [#613](https://github.com/INONONO66/openomni/pull/613), [#615](https://github.com/INONONO66/openomni/pull/615) | convert every opaque-`traceId` site in `packages/agent/src` (D11) — 13 + 3, the package now mints none | ✅ |
 | — | convert the remaining 102 opaque-`traceId` sites (D11): server 72, openomni 11, session 10, coordinator 9 | ⬜ |

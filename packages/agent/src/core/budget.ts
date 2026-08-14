@@ -1,5 +1,5 @@
+import type { BusEvent } from "@openomni/protocol";
 import { AgentProfile, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import type { AgentBudget } from "./types";
 
 export interface BudgetState {
@@ -106,12 +106,13 @@ export function publishBudgetTelemetry(
   state: BudgetState,
   /** The run being reported on. Structural: this needs a trace and a session. */
   run: { readonly traceId: string; readonly sessionId: string },
+  events: BusEvent.Sink,
   budget?: AgentBudget,
 ): BudgetStatus {
   const evaluation = evaluateBudget(state, budget);
 
   if (evaluation.status === "exceeded") {
-    Bus.publish(Operational.Warn, {
+    events.publish(Operational.Warn, {
       traceId: run.traceId,
       sessionId: run.sessionId,
       time: Date.now(),
@@ -130,7 +131,7 @@ export function publishBudgetTelemetry(
     return evaluation.status;
   }
   if (evaluation.status === "warning") {
-    Bus.publish(Operational.Warn, {
+    events.publish(Operational.Warn, {
       traceId: run.traceId,
       sessionId: run.sessionId,
       time: Date.now(),
@@ -145,7 +146,7 @@ export function publishBudgetTelemetry(
     return evaluation.status;
   }
   if (evaluation.status === "reassurance") {
-    Bus.publish(Operational.Info, {
+    events.publish(Operational.Info, {
       traceId: run.traceId,
       sessionId: run.sessionId,
       time: Date.now(),

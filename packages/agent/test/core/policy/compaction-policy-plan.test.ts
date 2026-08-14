@@ -4,9 +4,10 @@ import type { BudgetState } from "../../../src/core/budget";
 import { defaultRegistry } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
 import { effectOf } from "../../helpers/policy-decision";
+import { Bus } from "@openomni/telemetry";
 
 // #546 review F5: production configs never pass WorkerMiddlewareConfig.compaction,
-// but defaultRegistry() registers builtin:compaction, so an external PolicyPlan
+// but defaultRegistry registers builtin:compaction, so an external PolicyPlan
 // can activate compaction anyway. This suite proves the commit boundary
 // invariant holds on that backdoor path over tool-bearing history.
 
@@ -114,7 +115,7 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
       ],
       labels: [],
     };
-    const registrations = defaultRegistry().resolve(plan, {});
+    const registrations = defaultRegistry(Bus).resolve(plan, {});
     const registration = registrations[0];
     if (registration === undefined || !("kind" in registration)) {
       throw new Error("expected canonical builtin:compaction registration");

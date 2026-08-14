@@ -3,9 +3,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { Bench } from "tinybench";
 import type { Message } from "@openomni/protocol";
 import { InMemoryCompactor } from "../src/core/execution/compaction.ts";
+import { noopSink } from "@openomni/telemetry";
 
-/** The bench stands in for one run; compaction records under its trace. */
+/** The bench stands in for one run. It measures compaction, not reporting. */
 const BENCH_TRACE = { traceId: "trace-agent-bench" };
+const BENCH_EVENTS = noopSink();
 
 interface BenchmarkResult {
   readonly name: string;
@@ -30,7 +32,7 @@ for (const size of [20, 100, 500]) {
   bench.add(
     `compaction/${size}-messages`,
     async () => {
-      await InMemoryCompactor.compact(messages, compactionOptions, BENCH_TRACE);
+      await InMemoryCompactor.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS);
     },
     { async: true },
   );

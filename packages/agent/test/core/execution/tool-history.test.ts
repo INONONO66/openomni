@@ -7,6 +7,7 @@ import type { PolicyRegistration } from "../../../src/core/policy";
 import { createErrorOutcome, createStopOutcome, type MockLlmFn } from "../../helpers/mock-llm";
 import { allow, continueWithPrompt } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 /**
  * C2 (#546): the model must see its own prior tool use. These tests pin the
@@ -149,6 +150,7 @@ describe("tool-bearing history (#546)", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [injectOnceMiddleware()],
@@ -203,6 +205,7 @@ describe("tool-bearing history (#546)", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
@@ -259,6 +262,7 @@ describe("tool-bearing history (#546)", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
@@ -336,6 +340,7 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
@@ -387,6 +392,7 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [
@@ -440,6 +446,7 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
     };
 
     const agent = ChatAgent.create({
+      events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: { run, resolveProviderModel: async () => providerModel },
       middleware: [

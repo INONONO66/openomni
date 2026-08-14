@@ -10,6 +10,7 @@ import {
   rewriteToolInput,
   rewriteToolOutput,
 } from "../../helpers/policy-decision";
+import { Bus } from "@openomni/telemetry";
 
 function newID(prefix: string): string {
   return `${prefix}-${Math.random().toString(16).slice(2)}`;
@@ -31,6 +32,7 @@ describe("tool.native.post middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: newID("result"),
@@ -65,6 +67,7 @@ describe("tool.native.post middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: newID("result"),
@@ -99,6 +102,7 @@ describe("tool.native.post middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: async (call) => ({
         id: newID("result"),
@@ -141,6 +145,7 @@ describe("tool.native.pre middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: baseExecutor,
       engine,
@@ -175,6 +180,7 @@ describe("tool.native.pre middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: baseExecutor,
       engine,
@@ -206,6 +212,7 @@ describe("tool.native.pre middleware dispatch", () => {
     });
 
     const executor = createToolExecutor({
+      events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: baseExecutor,
       engine,

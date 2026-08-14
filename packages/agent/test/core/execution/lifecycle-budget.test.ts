@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
 import { PolicyEngine, type PolicyContext } from "../../../src/core/policy";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
@@ -77,5 +77,34 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
 
     const result = await dispatchBudgetCheck(state, engine, config, makeAgentBase());
     expect(result).toBeNull();
+  });
+
+  /**
+   * The point of the port. The loop reports to whatever the composition root
+   * hands it — no process-wide `Bus`, and P2 can put a fail-closed ledger
+   * append behind this without touching the loop.
+   */
+  it("reports through the injected sink, not a global bus", async () => {
+    const collected = collector();
+    const busSaw: string[] = [];
+    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+    const agentBase = makeAgentBase();
+    const state = makeState();
+    state.budgetState.turns = 20;
+
+    try {
+      await dispatchBudgetCheck(
+        state,
+        PolicyEngine.create(),
+        makeConfig({ events: collected, budget: { maxTurns: 24 } }),
+        agentBase,
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(collected.named(Operational.Warn.name)).toHaveLength(1);
+    expect(busSaw).toEqual([]);
   });
 });

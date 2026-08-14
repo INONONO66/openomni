@@ -23,6 +23,7 @@ import {
   createExecutionToolContext,
   selectRequestedTools,
 } from "./worker-runtime";
+import { Bus } from "@openomni/telemetry";
 
 export namespace WorkerRunner {
   export function spawnRun(options: WorkerRunnerSpawnOptions): void {
@@ -161,6 +162,7 @@ export namespace WorkerRunner {
         const exposedTools = tools ?? [];
 
         const agent = createAgent({
+          events: Bus,
           model: request.model,
           auth: resolveAuth(request.model.provider),
           allowAuthFallback: false,

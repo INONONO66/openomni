@@ -1,6 +1,6 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { McpServerConfig } from "@openomni/protocol";
+import type { BusEvent, McpServerConfig } from "@openomni/protocol";
 
 export type McpClientHandle = Pick<Client, "connect" | "close" | "listTools" | "callTool">;
 
@@ -16,4 +16,6 @@ export interface McpClientDependencies {
    * observation does not get to invent an identity for itself.
    */
   readonly traceId?: string;
+  /** Where this client's records go. Supplied by whatever created it. */
+  readonly events: BusEvent.Sink;
 }

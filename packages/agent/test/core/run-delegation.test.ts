@@ -10,6 +10,7 @@ import {
 } from "../helpers/mock-llm";
 import { allow, abortRun, continueWithPrompt, replaceMessages } from "../helpers/policy-decision";
 import { runInput } from "../helpers/run-input";
+import { Bus } from "@openomni/telemetry";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -26,6 +27,7 @@ beforeAll(async () => {
 });
 
 const defaultConfig = {
+  events: Bus,
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
   llm: mockLlm,
 };

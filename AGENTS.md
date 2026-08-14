@@ -62,7 +62,7 @@ package's tests may reach further than its runtime code, and the gate holds
 | `session` | protocol, telemetry |
 | `llm` | protocol, telemetry — `src/` protocol only |
 | `coordinator` | protocol, ipc |
-| `agent` | protocol, policy, llm, telemetry |
+| `agent` | protocol, policy, llm, telemetry — `src/` protocol, policy, llm |
 | `openomni` | any except itself |
 | `server` | composition root |
 

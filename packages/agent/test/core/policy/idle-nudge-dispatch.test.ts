@@ -4,6 +4,7 @@ import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy";
 import { createIdleNudgePolicy } from "../../../src/core/policy/builtin/idle-nudge";
+import { Bus } from "@openomni/telemetry";
 
 it("dispatches idle-nudge at the canonical native tool result point", async () => {
   // Given
@@ -22,6 +23,7 @@ it("dispatches idle-nudge at the canonical native tool result point", async () =
   const engine = PolicyEngine.create();
   engine.register(observedIdleNudge);
   const executor = createToolExecutor({
+    events: Bus,
     traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
     engine,
     toolExecutor: async (call) => ({
