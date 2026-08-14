@@ -98,6 +98,8 @@ export interface RunState {
   continuationCount: number;
   compactionCount: number;
   turnIndex: number;
+  /** The last `turnIndex` charged to the budget; -1 before the first turn. */
+  chargedTurnIndex: number;
   readonly startTime: number;
 }
 
@@ -145,6 +147,7 @@ export function createRunState(input: ChatAgentInput & { traceContext: RunTrace 
     continuationCount: 0,
     compactionCount: 0,
     turnIndex: 0,
+    chargedTurnIndex: -1,
     startTime: Date.now(),
   };
 }
@@ -153,7 +156,16 @@ export function getCompactionCount(state: RunState): number | undefined {
   return state.compactionCount > 0 ? state.compactionCount : undefined;
 }
 
+/**
+ * Charges the turn budget for the turn about to run, once.
+ *
+ * A retried attempt is the same turn tried again: the runner re-enters
+ * `buildTurn` without advancing `turnIndex`, so charging per attempt would let
+ * a transient provider error eat headroom an operator sized in turns of work.
+ */
 export function recordRunTurn(state: RunState): void {
+  if (state.chargedTurnIndex === state.turnIndex) return;
+  state.chargedTurnIndex = state.turnIndex;
   state.budgetState = recordTurn(state.budgetState);
 }
 
