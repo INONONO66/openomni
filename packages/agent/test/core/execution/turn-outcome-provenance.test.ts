@@ -11,9 +11,9 @@ import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
 
-// The run and the input it produces share one identity. Derived this way
-// round, not the other: `AgentRunBase.runId` is optional and `RunInput.trace`'s
-// is not, so reading it back off the base would widen it.
+// The run and the input it produces share one identity, stated once. The base
+// is the origin because that is the direction production runs in: the runner
+// derives both from the trace it was handed.
 const runTrace = { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
 
 function makeAgentBase(): AgentRunBase {
