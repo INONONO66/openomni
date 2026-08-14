@@ -148,8 +148,8 @@ describe("run() streamText arguments", () => {
       const onError = aiCapture.__openomniAiStreamArgs?.onError as
         | ((payload: { error: unknown }) => void)
         | undefined;
-      expect(onError).toBeFunction();
-      onError?.({ error: new Error("upstream exploded") });
+      if (onError === undefined) throw new Error("streamText received no onError");
+      onError({ error: new Error("upstream exploded") });
       await Bun.sleep(0);
     } finally {
       unsubscribe();
@@ -158,8 +158,9 @@ describe("run() streamText arguments", () => {
     const errors = collected
       .named(Operational.Error.name)
       .map((event) => event as { component?: string; error?: string });
-    expect(errors.filter((event) => event.component === "llm.stream")).toHaveLength(1);
-    expect(errors[0]?.error).toContain("upstream exploded");
+    const fromStream = errors.filter((event) => event.component === "llm.stream");
+    expect(fromStream).toHaveLength(1);
+    expect(fromStream[0]?.error).toContain("upstream exploded");
     expect(busSaw).toEqual([]);
   });
 });

@@ -63,22 +63,20 @@ function capturingSink(): PartsCapture {
 }
 
 /**
- * Run-status telemetry (busy/retry/idle) is published on the Operational bus
- * as "sink.snapshot" (the Sink.onSnapshot hop was removed — no consumer).
+ * Run-status telemetry (busy/retry/idle) goes to the injected events port as
+ * an `Operational.Info` named "sink.snapshot" (the `Sink.onSnapshot` hop was
+ * removed — no consumer).
  */
-function statusStates(events: ReturnType<typeof collector>): string[] {
-  return events
-    .named(Operational.Info.name)
-    .map((event) => event as OperationalInfoPayload)
-    .filter((data) => data.component === "llm.processor" && data.msg === "sink.snapshot")
-    .map((data) => String((data.context as Record<string, unknown> | undefined)?.stateType));
-}
-
 function processorInfo(events: ReturnType<typeof collector>): OperationalInfoPayload[] {
   return events
     .named(Operational.Info.name)
     .map((event) => event as OperationalInfoPayload)
     .filter((data) => data.component === "llm.processor");
+}
+function statusStates(events: ReturnType<typeof collector>): string[] {
+  return processorInfo(events)
+    .filter((data) => data.msg === "sink.snapshot")
+    .map((data) => String((data.context as Record<string, unknown> | undefined)?.stateType));
 }
 
 describe("Processor", () => {

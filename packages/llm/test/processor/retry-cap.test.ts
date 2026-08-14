@@ -99,7 +99,6 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
   const events = collector();
 
   afterEach(() => {
-    Bus.reset();
     events.reset();
   });
 
@@ -138,7 +137,8 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
     const declined = events
       .named(Operational.Error.name)
       .map((event) => event as { component?: string; traceId?: string });
-    expect(declined.filter((event) => event.component === "llm.retry")).toHaveLength(1);
-    expect(declined[0]?.traceId).toBe("trace-retry-cap");
+    const fromRetry = declined.filter((event) => event.component === "llm.retry");
+    expect(fromRetry).toHaveLength(1);
+    expect(fromRetry[0]?.traceId).toBe("trace-retry-cap");
   });
 });

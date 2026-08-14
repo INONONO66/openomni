@@ -34,7 +34,7 @@ export interface RunInput {
    */
   trace: { traceId: string; sessionId: string; runId: string };
   /**
-   * Where observation goes. See `Processor.Options.events` — the port exists so
+   * Where observation goes. See `Processor.ProcessorOptions.events` — the port exists so
    * `llm` reports what it did without reaching for a process-wide singleton.
    */
   events: BusEvent.Sink;
@@ -204,7 +204,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   input.events.publish(LlmCall.Started, {
     traceId,
     sessionId: sessionID,
-    ...(input.trace.runId !== undefined && { runId: input.trace.runId }),
+    runId: input.trace.runId,
     provider,
     model: modelId,
     messageCount: messages.length,

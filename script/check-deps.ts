@@ -603,7 +603,51 @@ async function checkDocFreshness(): Promise<string[]> {
   return warnings;
 }
 
+/**
+ * Proves the layer rules discriminate, on synthetic inputs only — it reads no
+ * package and writes nothing.
+ *
+ * `srcAllowedDeps` is the reason this exists: a rule that narrows `src/` below
+ * the manifest can be deleted and every gate stays green, because the thing it
+ * forbids is exactly the thing the manifest still permits. That is the shape
+ * of a decorative gate, which is what this file is supposed to prevent.
+ */
+function selfTest(): void {
+  const twoTier: PackageRule = {
+    displayName: "self-test",
+    packageJsonPath: "",
+    packageName: "@openomni/self-test",
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
+    srcAllowedDeps: new Set(["@openomni/protocol"]),
+  };
+  const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
+
+  const cases: Array<[string, boolean]> = [
+    ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/telemetry")],
+    [
+      "src refuses what only the manifest lists",
+      !isAllowedSourceDep(twoTier, "@openomni/telemetry"),
+    ],
+    ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
+    ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/session")],
+    [
+      "no srcAllowedDeps falls back to the manifest",
+      isAllowedSourceDep(oneTier, "@openomni/telemetry"),
+    ],
+    ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
+  ];
+
+  const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
+  if (failed.length > 0) {
+    for (const name of failed) console.error(`SELF-TEST FAILED: ${name}`);
+    process.exit(1);
+  }
+  console.log(`OK: check-deps self-test — ${cases.length} layer discriminations hold`);
+  process.exit(0);
+}
+
 async function main(): Promise<void> {
+  if (Bun.argv.includes("--self-test")) selfTest();
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();
   const deepImportViolations = await validateDeepImports();
