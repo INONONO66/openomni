@@ -23,7 +23,6 @@ type ImmutablePointSnapshot<TValue extends object> =
  *     `structuredClone` ever sees it (only nested proxies are rejected);
  *   - symbol-keyed properties, silently dropped rather than rejected;
  *   - a nested class instance, cloned into a plain record.
-
  *
  * `added` is applied after the clone, so the engine's own fields — the point
  * identity and the agent type that drove registration selection — are the ones
