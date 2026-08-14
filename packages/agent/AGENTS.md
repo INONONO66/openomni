@@ -88,10 +88,10 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
 - **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids). Per D5 these are moving out one at a time — an id listed here but not below is registered by `openomni` instead:
   - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; denial returns `run.abort` plus `audit.annotate`, while approval requirements return pending with `tool.require_approval`
-  - `builtin:budget-reassurance` / `builtin:budget-warning` — inject reassurance/warning system messages as budget consumption climbs
   - `builtin:compaction` — triggers `InMemoryCompactor.compact()` when the token threshold is exceeded
   A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
-  - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered onto the same registry by `registerIdleNudge`
+  - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered by `registerIdleNudge`
+  - Moved out (#626): `builtin:budget-reassurance` / `builtin:budget-warning` — `openomni`'s `execution-runtime/middleware/budget-nudge-policy.ts`, registered by `registerBudgetNudges`. Budget *accounting* stays here; `checkBudget` and `describeBudgetRemaining` are exported so the product can decide what to say about what is left
 
 ## TURN LIFECYCLE (core/execution)
 
@@ -102,7 +102,7 @@ runner.ts (entry) → Promise<AgentResult>
   │   ├─ dispatchPoint(run.lifecycle.pre)       → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
   │       ├─ checkBudget → if exceeded, dispatchPoint(run.lifecycle.post) + return result
-  │       ├─ dispatchPoint(run.turn.pre)        → budget warnings; idle-nudge (openomni)
+  │       ├─ dispatchPoint(run.turn.pre)        → budget nudges, idle-nudge (both openomni)
   │       ├─ dispatchPoint(prompt.context.pre)  → context/prompt enrichment
   │       ├─ dispatchPoint(tool.catalog.pre)    → filter/modify tools exposed to LLM
   │       ├─ dispatchPoint(connection.llm.pre)

@@ -6,7 +6,7 @@ Tool system, workspace safety, injection queue, cron bridge, and worker middlewa
 
 | Path | Purpose |
 | --- | --- |
-| `middleware.ts` | Builds worker middleware registrations from the gate-stamped `Execution.Request.policyPlan` (#479); builtin ids resolve through `defaultRegistry(events)` plus this package's own registrations (`registerIdleNudge`, #625), `builtin:tool-permission` config is hydrated from `request.permissions`, required-but-unregistered ids fail closed. |
+| `middleware.ts` | Builds worker middleware registrations from the gate-stamped `Execution.Request.policyPlan` (#479); builtin ids resolve through `defaultRegistry(events)` plus this package's own registrations (`registerIdleNudge` #625, `registerBudgetNudges` #626), `builtin:tool-permission` config is hydrated from `request.permissions`, required-but-unregistered ids fail closed. |
 | `workspace-lock.ts` | Serializes workspace-mutating tool execution. |
 | `injection-queue.ts` | `InjectionQueue` — async response buffer keyed by `runId`; drained at `turn.finish` by the injection-queue policy. |
 | `cron-job-registry.ts` | `CronJobRegistry` — storage-backed registry of scheduled jobs with a process-local fallback; populated by `dispatch` `schedule.create` action. |

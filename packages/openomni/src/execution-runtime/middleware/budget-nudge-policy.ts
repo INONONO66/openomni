@@ -1,6 +1,11 @@
 import { PolicyDecision } from "@openomni/protocol";
-import { checkBudget, describeBudgetRemaining } from "../../budget";
-import type { CanonicalPolicyRegistration } from "../types";
+import {
+  checkBudget,
+  describeBudgetRemaining,
+  type CanonicalPolicyRegistration,
+  type PolicyContext,
+  type PolicyRegistryInstance,
+} from "@openomni/agent";
 
 export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
   let issued = false;
@@ -62,4 +67,15 @@ export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
       return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
     },
   };
+}
+
+/**
+ * Registers the two budget nudges. The core owns budget *accounting* — the
+ * limits are loop invariants and `checkBudget` is its query — but telling the
+ * model how much room it has left is an opinion about how to talk to a model,
+ * which is a product's call (D5).
+ */
+export function registerBudgetNudges(registry: PolicyRegistryInstance<PolicyContext>): void {
+  registry.register("builtin:budget-reassurance", () => createBudgetReassurancePolicy());
+  registry.register("builtin:budget-warning", () => createBudgetWarningPolicy());
 }

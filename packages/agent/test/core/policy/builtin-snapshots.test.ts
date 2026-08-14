@@ -2,13 +2,9 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import type { BudgetState } from "../../../src/core/budget";
 import type { PolicyFn } from "../../../src/core/policy";
-import {
-  createBudgetReassurancePolicy,
-  createBudgetWarningPolicy,
-} from "../../../src/core/policy/builtin/budget";
 import { createCompactionPolicy } from "../../../src/core/policy/builtin/compaction";
 import { createToolPermissionPolicy } from "../../../src/core/policy/builtin/tool-guard";
-import { effectOf, firstReason } from "../../helpers/policy-decision";
+import { firstReason } from "../../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
 function baseCtx(overrides?: Partial<Parameters<PolicyFn>[0]>): Parameters<PolicyFn>[0] {
@@ -59,48 +55,6 @@ function testMessage(id: string): Message.WithParts {
     ],
   };
 }
-
-describe("snapshot: budget-reassurance", () => {
-  it("continue — below 0.6 threshold", async () => {
-    const mw = createBudgetReassurancePolicy();
-    const verdict = await mw.fn(
-      baseCtx({ budgetState: budgetState({ turns: 5 }), budget: { maxTurns: 24 } }),
-    );
-    expect(verdict.verdict).toBe("allow");
-  });
-
-  it("inject — at 0.6 threshold", async () => {
-    const mw = createBudgetReassurancePolicy();
-    const verdict = await mw.fn(
-      baseCtx({ budgetState: budgetState({ turns: 15 }), budget: { maxTurns: 24 } }),
-    );
-    expect(verdict.verdict).toBe("allow");
-    expect(firstReason(verdict)).toBe("budget_reassurance");
-    expect(verdict.policyId).toBe("builtin.budget.reassurance");
-    expect(effectOf(verdict, "prompt.inject_message")?.message).toContain("[Budget Status]");
-  });
-});
-
-describe("snapshot: budget-warning", () => {
-  it("continue — below 0.8 threshold", async () => {
-    const mw = createBudgetWarningPolicy();
-    const verdict = await mw.fn(
-      baseCtx({ budgetState: budgetState({ turns: 10 }), budget: { maxTurns: 24 } }),
-    );
-    expect(verdict.verdict).toBe("allow");
-  });
-
-  it("inject — at 0.8 threshold", async () => {
-    const mw = createBudgetWarningPolicy();
-    const verdict = await mw.fn(
-      baseCtx({ budgetState: budgetState({ turns: 20 }), budget: { maxTurns: 24 } }),
-    );
-    expect(verdict.verdict).toBe("allow");
-    expect(firstReason(verdict)).toBe("budget_warning");
-    expect(verdict.policyId).toBe("builtin.budget.warning");
-    expect(effectOf(verdict, "prompt.inject_message")?.message).toContain("[Budget Warning]");
-  });
-});
 
 describe("snapshot: tool-permission", () => {
   it("continue — tool on allowlist", async () => {
@@ -159,26 +113,6 @@ describe("snapshot: compaction", () => {
 });
 
 describe("snapshot: canonical registration metadata", () => {
-  it("budget-reassurance: name, point, priority", () => {
-    const mw = createBudgetReassurancePolicy();
-    expect(mw.name).toBe("builtin:budget-reassurance");
-    expect(mw.pointIds).toEqual(["run.turn.pre"]);
-    expect(mw.effectCapabilities).toEqual({
-      "run.turn.pre": ["prompt.inject_message"],
-    });
-    expect(mw.priority).toBe(10);
-  });
-
-  it("budget-warning: name, point, priority", () => {
-    const mw = createBudgetWarningPolicy();
-    expect(mw.name).toBe("builtin:budget-warning");
-    expect(mw.pointIds).toEqual(["run.turn.pre"]);
-    expect(mw.effectCapabilities).toEqual({
-      "run.turn.pre": ["prompt.inject_message"],
-    });
-    expect(mw.priority).toBe(20);
-  });
-
   it("tool-permission: name, points, priority, failPolicy", () => {
     const mw = createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } });
     expect(mw.name).toBe("builtin:tool-permission");
