@@ -27,7 +27,7 @@ openomni/
 │   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + MCP client runtime — depends on telemetry for observation
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
-│   │   │   └── policy/         # Agent policy facade + builtins (compaction, tool-guard)
+│   │   │   └── policy/         # Agent policy facade + the last builtin (compaction)
 │   │   └── src/runtime/        # MCP client runtime
 │   │       └── mcp/            # McpClient
 │   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime

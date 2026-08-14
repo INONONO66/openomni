@@ -117,7 +117,7 @@ Claims that are actually enforced in code today — docs may say "cannot" only a
 | --- | --- |
 | Workers cannot spawn new Workers, even with a matching WorkerGrant | `packages/openomni/src/dispatch/policy.ts`, `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` |
 | Budget hard-stop ends execution at limits (turns, tool calls, wall time) | `packages/agent/src/core/budget.ts`, `packages/agent/src/core/execution/lifecycle-dispatch.ts` |
-| Tool permission is fail-closed | `packages/agent/src/core/policy/builtin/tool-guard.ts` |
+| Tool permission is fail-closed | `packages/openomni/src/execution-runtime/middleware/tool-permission-policy.ts` |
 | WorkItem terminal completion requires a matching durable admission for the current contract revision and basis | `packages/openomni/src/work-item/completion-admission.ts`, `packages/session/src/work-item/lifecycle.ts` |
 
 Role-specific judgment remains partly userland: Resident delegation choices, session hygiene, evidence-over-self-report framing, and tool restraint still rely on `packages/openomni/src/agents/resident/prompt/` until #218 attaches the explicit Resident policy plan and judgment-only catalog. The shared policy interception plane itself is production code and applies across actor loops and boundaries.

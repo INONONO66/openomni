@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
-import type { PolicyFn } from "../../../../src/core/policy";
+import { createToolPermissionPolicy } from "../../src/execution-runtime/middleware/tool-permission-policy";
+import type { PolicyFn } from "@openomni/agent";
 
 function baseCtx(
   overrides?: Partial<Omit<Parameters<PolicyFn>[0], "pointId">>,
@@ -289,6 +289,14 @@ describe("createToolPermissionPolicy", () => {
     expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
     expect(mw.priority).toBe(0);
     expect(mw.failPolicy).toBe("fail-closed");
+    // Not decoration: the engine replaces any effect a registration did not
+    // declare for the point it fired at, so an emptied entry would drop the
+    // abort and the approval request at runtime while every direct
+    // `mw.fn(ctx)` assertion here still passed.
+    expect(mw.effectCapabilities).toEqual({
+      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+    });
   });
 
   it("abort — denyLabels match blocks tool", async () => {
@@ -322,5 +330,26 @@ describe("createToolPermissionPolicy", () => {
     );
     expect(verdict.verdict).toBe("allow");
     expect(verdict.reasonCodes).toContain("default_allow");
+  });
+});
+
+/**
+ * The ruleset-to-verdict mapping for approval. The executor's half — that a
+ * pending decision blocks the call — is `agent`'s
+ * `tool-executor-verdicts.test.ts`; that a `requireApproval` entry *produces*
+ * one is this policy's, and was covered only by the integration suite #629
+ * decomposed.
+ */
+describe("approval requirements", () => {
+  it("returns pending with a require_approval effect", async () => {
+    const mw = createToolPermissionPolicy({
+      events: Bus,
+      permission: { action: "tool.call", requireApproval: ["bash"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({ toolName: "bash", toolCallId: "call-approval", toolInput: { cmd: "ls" } }),
+    );
+    expect(verdict.verdict).toBe("pending");
+    expect(verdict.effects.map((effect) => effect.type)).toContain("tool.require_approval");
   });
 });

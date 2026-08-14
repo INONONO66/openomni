@@ -1,11 +1,9 @@
 import type { BusEvent } from "@openomni/protocol";
 import { PolicyRegistry } from "@openomni/policy";
 import type { PolicyRegistryInstance } from "@openomni/policy";
-import { Policy } from "@openomni/protocol";
 import { z } from "zod";
 import type { CompactionOptions } from "../execution/compaction";
-import { createCompactionPolicy, createToolPermissionPolicy } from "./builtin";
-import type { ToolPermissionPolicyConfig } from "./builtin/tool-guard";
+import { createCompactionPolicy } from "./builtin";
 import type { PolicyContext } from "./types";
 
 export { PolicyRegistry } from "@openomni/policy";
@@ -24,25 +22,8 @@ const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown
   onSummarize: MessageSummarizerSchema.optional(),
 });
 
-/**
- * Wire shape only: the output type omits `events`, and a plain `z.object`
- * strips what the shape does not name. A policy plan therefore cannot smuggle
- * a sink of its own and redirect where the evidence of its own decision goes.
- */
-const ToolPermissionConfigSchema: z.ZodType<
-  Omit<ToolPermissionPolicyConfig, "events">,
-  z.ZodTypeDef,
-  unknown
-> = z.object({ permission: Policy.Permission });
-
 function parseCompactionConfig(config: unknown): CompactionOptions {
   return CompactionConfigSchema.parse(config);
-}
-
-function parseToolPermissionConfig(config: unknown): Omit<ToolPermissionPolicyConfig, "events"> {
-  return ToolPermissionConfigSchema.parse(
-    config === undefined ? { permission: { action: "tool.call" } } : config,
-  );
 }
 
 /**
@@ -55,9 +36,6 @@ export function defaultRegistry(events: BusEvent.Sink): PolicyRegistryInstance<P
 
   registry.register("builtin:compaction", (config) =>
     createCompactionPolicy({ ...parseCompactionConfig(config), events }),
-  );
-  registry.register("builtin:tool-permission", (config) =>
-    createToolPermissionPolicy({ ...parseToolPermissionConfig(config), events }),
   );
 
   return registry;

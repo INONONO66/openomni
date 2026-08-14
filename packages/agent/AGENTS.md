@@ -20,8 +20,7 @@ src/
 │       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution
 │       ├── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
 │       └── builtin/
-│           ├── compaction.ts   # createCompactionPolicy
-│           └── tool-guard.ts   # createToolPermissionPolicy (fail-closed)
+│           └── compaction.ts   # createCompactionPolicy
 └── runtime/
     ├── index.ts                # Re-exports mcp
     └── mcp/
@@ -87,10 +86,10 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
 - **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids). Per D5 these are moving out one at a time — an id listed here but not below is registered by `openomni` instead:
-  - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; denial returns `run.abort` plus `audit.annotate`, while approval requirements return pending with `tool.require_approval`
   - `builtin:compaction` — triggers `InMemoryCompactor.compact()` when the token threshold is exceeded
   A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
   - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered by `registerIdleNudge`
+  - Moved out (#629): `builtin:tool-permission` — `openomni`'s `execution-runtime/middleware/tool-permission-policy.ts`, registered by `registerToolPermission(registry, events)`. The executor still resolves the canonical policy name and the tool's labels; matching a ruleset against them is the policy's
   - Moved out (#626): `builtin:budget-reassurance` / `builtin:budget-warning` — `openomni`'s `execution-runtime/middleware/budget-nudge-policy.ts`, registered by `registerBudgetNudges`. Budget *accounting* stays here; `checkBudget` and `describeBudgetRemaining` are exported so the product can decide what to say about what is left
 
 ## TURN LIFECYCLE (core/execution)

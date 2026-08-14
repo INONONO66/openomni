@@ -5,8 +5,10 @@ import { z } from "zod";
 import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";
 import { allow } from "../../helpers/policy-decision";
+import { createBudgetState } from "../../../src/core/budget";
+import { createUserMessage } from "../../../src/core/message-factory";
 
-const builtinPolicyIds = ["builtin:compaction", "builtin:tool-permission"];
+const builtinPolicyIds = ["builtin:compaction"];
 
 function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
   return { policies, labels: [] };
@@ -52,30 +54,11 @@ describe("PolicyRegistry", () => {
           required: true,
           config: { contextWindowTokens: 1000, thresholdRatio: 0.8 },
         },
-        {
-          id: "builtin:tool-permission",
-          required: true,
-          config: { permission: { action: "tool.call", allowlist: ["read_file"] } },
-        },
       ]),
       {},
     );
 
-    expect(registrations.map((registration) => registration.name)).toEqual([
-      "builtin:compaction",
-      "builtin:tool-permission",
-    ]);
-  });
-
-  it("defaultRegistry resolves configless default builtin policies", () => {
-    const registrations = defaultRegistry(Bus).resolve(
-      plan([{ id: "builtin:tool-permission", required: true }]),
-      {},
-    );
-
-    expect(registrations.map((registration) => registration.name)).toEqual([
-      "builtin:tool-permission",
-    ]);
+    expect(registrations.map((registration) => registration.name)).toEqual(["builtin:compaction"]);
   });
 
   it("defaultRegistry rejects malformed builtin configs at resolution", () => {
@@ -144,61 +127,43 @@ describe("PolicyRegistry", () => {
     }
   });
 
-  it("hands the built-ins the injected sink, and a plan cannot supply its own", async () => {
+  it("hands the built-in the injected sink, and a plan cannot supply its own", async () => {
     const injected = collector();
     const smuggled = collector();
     const registrations = defaultRegistry(injected).resolve(
       plan([
         {
-          id: "builtin:tool-permission",
+          id: "builtin:compaction",
           required: true,
           // `events` is not wire config: the schema's output type omits it, so
           // parse drops this. Pinned as an outcome — the injected sink gets the
           // record and the smuggled one stays empty — not as a claim about
           // which layer of the registry produced that outcome.
-          config: {
-            permission: {
-              action: "tool.call",
-              inputRules: [
-                {
-                  toolPattern: "shell_exec",
-                  field: "cmd",
-                  pattern: "^rm\\s",
-                  action: "deny",
-                  priority: 10,
-                },
-              ],
-            },
-            events: smuggled,
-          },
+          config: { contextWindowTokens: 10, protectRecentMessages: 1, events: smuggled },
         },
       ]),
       {},
     );
 
-    const guard = registrations.find((r) => r.name === "builtin:tool-permission");
-    if (!guard) throw new Error("expected builtin:tool-permission");
+    const compaction = registrations.find((r) => r.name === "builtin:compaction");
+    if (!compaction) throw new Error("expected builtin:compaction");
 
-    const hostile = new Proxy<Record<string, unknown>>(
-      {},
-      {
-        get: () => {
-          throw new Error("hostile tool input");
-        },
-      },
-    );
-    await guard.fn({
-      timing: "invoke.prepare",
-      pointId: "tool.native.pre",
+    await compaction.fn({
+      timing: "turn.finish",
+      pointId: "run.completion.pre",
       traceContext: { traceId: "trace-registry-inject" },
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
-      isCompletion: false,
+      isCompletion: true,
       continuationCount: 0,
       elapsedMs: 0,
-      toolName: "shell_exec",
-      toolInput: hostile,
+      budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
+      messages: [
+        createUserMessage("one", "s"),
+        createUserMessage("two", "s"),
+        createUserMessage("three", "s"),
+      ],
     });
 
     expect(injected.events.length).toBeGreaterThan(0);

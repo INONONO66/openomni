@@ -1,8 +1,4 @@
-import {
-  createCompactionPolicy,
-  createToolPermissionPolicy,
-  defaultRegistry,
-} from "@openomni/agent";
+import { createCompactionPolicy, defaultRegistry } from "@openomni/agent";
 import type { PolicyEngineRegistration } from "@openomni/agent";
 import { Bus } from "@openomni/telemetry";
 import { Policy } from "@openomni/protocol";
@@ -15,6 +11,10 @@ import {
   createBudgetWarningPolicy,
   registerBudgetNudges,
 } from "./middleware/budget-nudge-policy.js";
+import {
+  createToolPermissionPolicy,
+  registerToolPermission,
+} from "./middleware/tool-permission-policy.js";
 
 type WorkerCompactionConfig = {
   readonly contextWindowTokens: number;
@@ -107,6 +107,7 @@ function resolvePoliciesFromPlan(
   const registry = defaultRegistry(Bus);
   registerIdleNudge(registry);
   registerBudgetNudges(registry);
+  registerToolPermission(registry, Bus);
   return registry.resolve(
     plan,
     config.traceId === undefined ? {} : { traceId: config.traceId, auditEmit: Bus.publish },
