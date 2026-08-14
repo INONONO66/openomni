@@ -40,7 +40,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_trace"],
         });
       }
-      const result = await InMemoryCompactor.compact(ctx.messages, compaction, { traceId, events });
+      const result = await InMemoryCompactor.compact(ctx.messages, compaction, { traceId }, events);
       if (!result.compacted) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }

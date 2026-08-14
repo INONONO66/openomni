@@ -93,7 +93,7 @@ describe("createToolPermissionPolicy", () => {
       },
     });
 
-    for (const traceContext of [undefined, { traceId: "", events: Bus }]) {
+    for (const traceContext of [undefined, { traceId: "" }]) {
       await expect(
         mw.fn(
           baseCtx({

@@ -37,9 +37,9 @@ const IdleNudgeConfigSchema: z.ZodType<IdleNudgeConfig, z.ZodTypeDef, unknown> =
 });
 
 /**
- * Wire shape only. A plain `z.object` strips unknown keys, so a policy plan
- * cannot smuggle an `events` of its own and redirect where the evidence of its
- * own decision goes — the strip is the guard here, not the spread order below.
+ * Wire shape only: the output type omits `events`, and a plain `z.object`
+ * strips what the shape does not name. A policy plan therefore cannot smuggle
+ * a sink of its own and redirect where the evidence of its own decision goes.
  */
 const ToolPermissionConfigSchema: z.ZodType<
   Omit<ToolPermissionPolicyConfig, "events">,

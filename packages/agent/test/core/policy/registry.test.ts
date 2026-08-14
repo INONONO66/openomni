@@ -19,7 +19,7 @@ function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
 }
 
 describe("PolicyRegistry", () => {
-  it("defaultRegistry(Bus) has all builtins registered", () => {
+  it("defaultRegistry has all builtins registered", () => {
     const registry = defaultRegistry(Bus);
 
     expect(registry.list()).toEqual(builtinPolicyIds);
@@ -48,7 +48,7 @@ describe("PolicyRegistry", () => {
     expect(registrations[0]?.name).toBe("test:primary:strict");
   });
 
-  it("defaultRegistry(Bus) resolves typed builtin configs", () => {
+  it("defaultRegistry resolves typed builtin configs", () => {
     const registrations = defaultRegistry(Bus).resolve(
       plan([
         {
@@ -73,7 +73,7 @@ describe("PolicyRegistry", () => {
     ]);
   });
 
-  it("defaultRegistry(Bus) resolves configless default builtin policies", () => {
+  it("defaultRegistry resolves configless default builtin policies", () => {
     const registrations = defaultRegistry(Bus).resolve(
       plan([
         { id: "builtin:idle-nudge", required: true },
@@ -88,7 +88,7 @@ describe("PolicyRegistry", () => {
     ]);
   });
 
-  it("defaultRegistry(Bus) rejects malformed builtin configs at resolution", () => {
+  it("defaultRegistry rejects malformed builtin configs at resolution", () => {
     expect(() =>
       defaultRegistry(Bus).resolve(
         plan([{ id: "builtin:compaction", required: true, config: { thresholdRatio: 0.8 } }]),
@@ -160,9 +160,10 @@ describe("PolicyRegistry", () => {
         {
           id: "builtin:tool-permission",
           required: true,
-          // `events` is not wire config: the schema strips it, and the registry
-          // spreads the injected sink last. Both have to hold, or a policy plan
-          // could redirect where its own evidence goes.
+          // `events` is not wire config: the schema's output type omits it, so
+          // parse drops this. Pinned as an outcome — the injected sink gets the
+          // record and the smuggled one stays empty — not as a claim about
+          // which layer of the registry produced that outcome.
           config: {
             permission: {
               action: "tool.call",

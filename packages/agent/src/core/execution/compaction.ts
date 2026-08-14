@@ -45,11 +45,14 @@ export namespace InMemoryCompactor {
    * not configuration, and an optional field validated by a runtime throw
    * gives the compiler nothing — which is how the caller that supplied none
    * reached production.
+   * @param events Where the record of the rewrite goes. Beside the identity,
+   * not inside it: a destination is not something the trace says.
    */
   export async function compact(
     messages: Message.WithParts[],
     options: CompactionOptions,
-    trace: { readonly traceId: string; readonly events: BusEvent.Sink },
+    trace: { readonly traceId: string },
+    events: BusEvent.Sink,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
@@ -97,10 +100,9 @@ export namespace InMemoryCompactor {
     }
 
     const compacted = [...summaryMessages, ...toKeep];
-    const { traceId, events } = trace;
 
     events.publish(Operational.Info, {
-      traceId,
+      traceId: trace.traceId,
       time: Date.now(),
       component: "agent.compaction",
       msg: "compaction triggered",
