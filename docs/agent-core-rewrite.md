@@ -115,7 +115,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| — | remove the dead pipeline: `InMemoryCompactor`, `builtin:compaction`, `handleCompact`, the `Run.Outcome.compact` variant, middleware wiring | ⬜ |
+| — | remove `handleContinue`, `handleCompact`, and the `Run.Outcome` `continue`/`compact` variants. Both are unproduced: `packages/llm/src/run.ts` returns only `stop`, `aborted`, `error`, and no production site injects `config.llm.run`. **Owner-gated** — deleting a union member trips `lint:tools`' positional schema snapshot (`Run.Outcome#4`), whose `--update` needs sign-off, and `.omo/evidence/p3/protocol-concept-disposition.json` records this symbol as claimed by #498's run→llm `StepResult` move. Not splittable: `runner.ts`'s `_exhaustive: never` fails whichever half lands first | ⬜ |
+| — | `InMemoryCompactor` + `builtin:compaction` — **not dead**, and not covered by the row above. Reachable through `run.completion.pre` from an external policy plan (`compaction-policy-plan.test.ts` pins that path) and registered by the product kernel at `openomni/src/execution-runtime/middleware.ts`. Their fate is D5 and the compaction rewrite below, not a deletion | ⬜ |
 | — | `compaction/`: measure, adaptive policy with yield feedback, guard | ⬜ |
 | — | deterministic no-LLM reduction, cut planning, incremental summarization | ⬜ |
 | — | speculative overlap and bounded overflow retry | ⬜ |

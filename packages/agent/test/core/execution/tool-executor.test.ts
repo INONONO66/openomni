@@ -195,7 +195,7 @@ describe("createToolExecutor bus events", () => {
         toolExecutor: async () => ({ id: "r", toolCallId: "c", output: "" }),
         engine: PolicyEngine.create(),
       }),
-    ).toThrow("tool executor requires a trace context with");
+    ).toThrow("tool executor requires a trace context with traceId, sessionId, runId");
   });
 
   it("publishes actor from trace context on PermissionDenied", async () => {
