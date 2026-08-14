@@ -20,7 +20,6 @@ src/
 │       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution
 │       ├── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
 │       └── builtin/
-│           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
 │           ├── compaction.ts   # createCompactionPolicy
 │           └── tool-guard.ts   # createToolPermissionPolicy (fail-closed)
 └── runtime/
@@ -55,6 +54,7 @@ Also exported from `@openomni/agent`:
 
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentBudget`, `TokenUsage`, `Sink`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyRegistration` (legacy compatibility), `PolicyEngineInstance`
+- Budget queries: `checkBudget`, `describeBudgetRemaining`, and the `BudgetState` / `BudgetStatus` they read and return — the accounting stays here, what to say about it does not (D5)
 - Runtime: `McpClient`, `McpServerConfig`
 
 ## ChatAgentConfig

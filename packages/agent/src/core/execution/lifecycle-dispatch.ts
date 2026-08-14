@@ -41,8 +41,9 @@ export async function dispatchBudgetCheck(
   agentBase: AgentRunBase,
 ): Promise<AgentResult | null> {
   // The single per-turn owner of budget telemetry: emit here (command) and act
-  // on the returned status. The run.turn.pre budget builtins read the status
-  // via the pure checkBudget query, so the event is not re-emitted per policy.
+  // on the returned status. The budget nudges — openomni's, since D5 — read
+  // the same status through the pure checkBudget query at run.turn.pre, so the
+  // event is not re-emitted per policy.
   const budgetStatus = publishBudgetTelemetry(
     state.budgetState,
     agentBase,
