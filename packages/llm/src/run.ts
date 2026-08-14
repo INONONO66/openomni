@@ -1,4 +1,4 @@
-import type { Sink, Message, Tool, Run } from "@openomni/protocol";
+import type { BusEvent, Sink, Message, Tool, Run } from "@openomni/protocol";
 import { LlmCall, Operational } from "@openomni/protocol";
 import type { SDKMessage } from "./message";
 import { Processor } from "./processor";
@@ -7,7 +7,6 @@ import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
 import { getLanguage } from "./provider/sdk";
 import { Auth } from "./auth/storage";
-import { Bus } from "@openomni/telemetry";
 
 /**
  * Input for the run() function.
@@ -34,6 +33,11 @@ export interface RunInput {
    * correlates to nothing.
    */
   trace: { traceId: string; sessionId: string; runId: string };
+  /**
+   * Where observation goes. See `Processor.Options.events` — the port exists so
+   * `llm` reports what it did without reaching for a process-wide singleton.
+   */
+  events: BusEvent.Sink;
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
@@ -137,7 +141,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       maxRetries: 0,
       stopWhen: ai.stepCountIs(input.maxSteps ?? 24),
       onError: ({ error }: { error: unknown }) => {
-        Bus.publish(Operational.Error, {
+        input.events.publish(Operational.Error, {
           traceId,
           time: Date.now(),
           sessionId: sessionID,
@@ -179,6 +183,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const modelId = model.id;
 
   const processor = Processor.create({
+    events: input.events,
     assistantMessage,
     sessionID,
     model,
@@ -193,7 +198,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     },
   });
 
-  Bus.publish(LlmCall.Started, {
+  input.events.publish(LlmCall.Started, {
     traceId,
     sessionId: sessionID,
     ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
@@ -213,7 +218,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     const finalTokens = processor.message.tokens;
     const finishReason = processor.message.finish ?? "unknown";
 
-    Bus.publish(LlmCall.Completed, {
+    input.events.publish(LlmCall.Completed, {
       traceId,
       sessionId: sessionID,
       runId: input.trace.runId,
@@ -234,7 +239,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     const err = error instanceof Error ? error : new Error(String(error));
     const aborted = abortSignal.aborted;
 
-    Bus.publish(LlmCall.Failed, {
+    input.events.publish(LlmCall.Failed, {
       traceId,
       sessionId: sessionID,
       runId: input.trace.runId,

@@ -2,11 +2,11 @@ import {
   LlmCall,
   Operational,
   Transcript,
+  type BusEvent,
   type Message,
   type Sink,
   type Tool,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import { coerceApiError } from "../error";
 import { Retry } from "../retry";
 import type { Provider } from "../provider";
@@ -39,8 +39,19 @@ export namespace Processor {
     abort: AbortSignal;
     maxRetryAttempts?: number;
     sink?: Sink;
+    /**
+     * Where observation goes. A port, not `Bus`: the composition root decides
+     * what is behind it, tests bind a collector, and P2 can split a
+     * fail-closed ledger append from the lossy bus without touching this file.
+     */
+    events: BusEvent.Sink;
     createStream: (input: StreamInput) => Promise<Stream>;
-    trace?: { traceId: string; sessionId: string; runId?: string; provider?: string };
+    /**
+     * The call's identity. Required: `run()` always has it, and making it
+     * optional is what justified filing records under `traceId ?? sessionID`
+     * — a session id in the field every reader treats as a trace.
+     */
+    trace: { traceId: string; sessionId: string; runId?: string; provider?: string };
   }
 
   interface ProcessorInfo {
@@ -64,6 +75,7 @@ export namespace Processor {
       model,
       abort,
       sink: configuredSink = createNoopSink(),
+      events,
       createStream,
       maxRetryAttempts = DEFAULT_MAX_RETRY_ATTEMPTS,
       trace,
@@ -72,7 +84,7 @@ export namespace Processor {
     const retryAttemptLimit = Number.isFinite(maxRetryAttempts)
       ? Math.max(0, Math.floor(maxRetryAttempts))
       : DEFAULT_MAX_RETRY_ATTEMPTS;
-    const sink = createProjectedSink(configuredSink, sessionID, trace?.traceId);
+    const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);
 
     let folded: Message.WithParts | undefined;
 
@@ -93,7 +105,7 @@ export namespace Processor {
     }
 
     function debugNote(msg: string, data?: Record<string, unknown>): void {
-      publishInfo(sessionID, trace?.traceId, msg, data);
+      publishInfo(events, sessionID, trace.traceId, msg, data);
     }
 
     return {
@@ -102,7 +114,7 @@ export namespace Processor {
       },
 
       async process(streamInput: StreamInput): Promise<void> {
-        publishStatus(sessionID, trace?.traceId, "busy");
+        publishStatus(events, sessionID, trace.traceId, "busy");
         let attempt = 0;
         let attemptSeq = 0;
 
@@ -187,7 +199,7 @@ export namespace Processor {
                 if (!decision.retry && decision.reason !== "non_retryable" && trace) {
                   // A retryable error declined for another reason (e.g. the
                   // server-directed wait exceeded the cap) must say why.
-                  Bus.publish(Operational.Error, {
+                  events.publish(Operational.Error, {
                     traceId: trace.traceId,
                     time: Date.now(),
                     sessionId: trace.sessionId,
@@ -214,7 +226,7 @@ export namespace Processor {
 
               const delayMs = decision.delayMs;
               if (trace) {
-                Bus.publish(LlmCall.RetryDecided, {
+                events.publish(LlmCall.RetryDecided, {
                   traceId: trace.traceId,
                   sessionId: trace.sessionId,
                   ...(trace.runId !== undefined && { runId: trace.runId }),
@@ -226,7 +238,7 @@ export namespace Processor {
                 });
 
                 if (publishesRateLimited(retryReason)) {
-                  Bus.publish(LlmCall.RateLimited, {
+                  events.publish(LlmCall.RateLimited, {
                     traceId: trace.traceId,
                     sessionId: trace.sessionId,
                     ...(trace.runId !== undefined && { runId: trace.runId }),
@@ -237,13 +249,13 @@ export namespace Processor {
                 }
               }
 
-              publishStatus(sessionID, trace?.traceId, "retry");
+              publishStatus(events, sessionID, trace.traceId, "retry");
 
               await Retry.sleep(delayMs, abort);
             }
           }
         } finally {
-          publishStatus(sessionID, trace?.traceId, "idle");
+          publishStatus(events, sessionID, trace.traceId, "idle");
         }
       },
     };
@@ -266,14 +278,17 @@ export namespace Processor {
   }
 
   function publishInfo(
+    events: BusEvent.Sink,
     sessionID: string,
     traceId: string | undefined,
     message: string,
     data?: Record<string, unknown>,
   ): void {
-    if (!sessionID) return;
-    Bus.publish(Operational.Info, {
-      traceId: traceId ?? sessionID,
+    // No trace, no record. The previous `traceId ?? sessionID` put a value of
+    // the wrong kind in the field every reader treats as a trace (#606 D11).
+    if (!sessionID || traceId === undefined || traceId.length === 0) return;
+    events.publish(Operational.Info, {
+      traceId,
       time: Date.now(),
       sessionId: sessionID,
       component: "llm.processor",
@@ -282,9 +297,14 @@ export namespace Processor {
     });
   }
 
-  function createProjectedSink(sink: Sink, sessionID: string, traceId?: string): Sink {
+  function createProjectedSink(
+    events: BusEvent.Sink,
+    sink: Sink,
+    sessionID: string,
+    traceId?: string,
+  ): Sink {
     function publish(message: string, data?: Record<string, unknown>): void {
-      publishInfo(sessionID, traceId, message, data);
+      publishInfo(events, sessionID, traceId, message, data);
     }
 
     return {
@@ -335,8 +355,13 @@ export namespace Processor {
    * hop was removed; the operational publish — the only observable effect it
    * ever had — stays, under the same msg name for log continuity.
    */
-  function publishStatus(sessionID: string, traceId: string | undefined, stateType: string): void {
-    publishInfo(sessionID, traceId, "sink.snapshot", { stateType });
+  function publishStatus(
+    events: BusEvent.Sink,
+    sessionID: string,
+    traceId: string | undefined,
+    stateType: string,
+  ): void {
+    publishInfo(events, sessionID, traceId, "sink.snapshot", { stateType });
   }
 
   function summarizeRecord(input: Record<string, unknown>): string {

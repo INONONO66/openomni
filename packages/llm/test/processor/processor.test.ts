@@ -130,6 +130,8 @@ describe("Processor", () => {
       sessionID: "session-456",
       model: mockModel,
       abort: abortController.signal,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-456" },
       createStream: streamOf([{ type: "finish" }]),
       ...overrides,
     });
@@ -149,6 +151,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello" },
@@ -172,6 +175,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello" },
@@ -193,6 +197,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "reasoning-start", id: "r1", providerMetadata: {} },
           { type: "reasoning-delta", id: "r1", text: "Step 1" },
@@ -217,6 +222,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "step-start" },
           {
@@ -258,6 +264,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello   " },
@@ -284,6 +291,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "First" },
@@ -307,6 +315,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "reasoning-start", id: "r1", providerMetadata: {} },
           { type: "reasoning-start", id: "r1", providerMetadata: {} },
@@ -331,6 +340,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: streamOf([
           { type: "tool-call", toolCallId: "call-orphan", toolName: "lookup", args: { q: "x" } },
           { type: "finish" },
@@ -356,6 +366,7 @@ describe("Processor", () => {
       const capture = capturingSink();
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: async () => ({
           fullStream: (async function* () {
             attemptCount++;
@@ -437,6 +448,7 @@ describe("Processor", () => {
       const processor = createProcessor({
         sink,
         trace: { traceId: "trace-projection", sessionId: "session-456" },
+        events: Bus,
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello" },
@@ -511,6 +523,7 @@ describe("Processor", () => {
       });
 
       const processor = createProcessor({
+        events: Bus,
         createStream: async () => ({
           fullStream: (async function* () {
             attemptCount++;
@@ -539,6 +552,7 @@ describe("Processor", () => {
 
       const processor = createProcessor({
         sink,
+        events: Bus,
         createStream: streamOf([
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello" },
@@ -563,6 +577,7 @@ describe("Processor", () => {
       let attemptCount = 0;
 
       const processor = createProcessor({
+        events: Bus,
         createStream: async () => ({
           fullStream: (async function* () {
             attemptCount++;
@@ -603,6 +618,7 @@ describe("Processor", () => {
           runId: "run-processor-retry",
           provider: "anthropic",
         },
+        events: Bus,
         createStream: async () => ({
           fullStream: (async function* () {
             attemptCount++;
@@ -658,6 +674,7 @@ describe("Processor", () => {
           sessionId: "session-456",
           provider: "anthropic",
         },
+        events: Bus,
         createStream: async () => ({
           fullStream: (async function* () {
             attemptCount++;
@@ -699,6 +716,7 @@ describe("Processor", () => {
 
       const processor = createProcessor({
         sink: capture.sink,
+        events: Bus,
         createStream: async () => ({
           fullStream: (async function* (shouldThrow = true) {
             yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", args: {} };
@@ -742,6 +760,7 @@ describe("Processor", () => {
 
       const processor = createProcessor({
         model: modelWithCatalogCost,
+        events: Bus,
         createStream: streamOf([
           {
             type: "step-finish",
@@ -770,6 +789,7 @@ describe("Processor", () => {
 
       const processor = createProcessor({
         model: modelNoCost,
+        events: Bus,
         createStream: streamOf([
           {
             type: "step-finish",
@@ -797,6 +817,7 @@ describe("Processor", () => {
 
       const processor = createProcessor({
         model: modelWithCatalogCost,
+        events: Bus,
         createStream: streamOf([
           {
             type: "step-finish",

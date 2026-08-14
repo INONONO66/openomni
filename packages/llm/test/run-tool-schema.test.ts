@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
-import { newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/telemetry";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
@@ -54,6 +54,7 @@ describe("run() with model - tool schema conversion", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [
           {
@@ -97,6 +98,7 @@ describe("run() with model - tool schema conversion", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [
           { name: "first_tool", description: "first", inputSchema: { type: "object" } },
@@ -129,6 +131,7 @@ describe("run() with model - tool schema conversion", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [
           {
@@ -161,6 +164,7 @@ describe("run() with model - tool schema conversion", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [] as Tool.Spec[],
         system: "you are helpful",

@@ -3,7 +3,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Sink, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
 import { newTraceId } from "@openomni/telemetry";
@@ -88,6 +88,7 @@ describe("run", () => {
   test("returns RunOutcome with stop type", async () => {
     const input: import("../src/run").RunInput = {
       trace: TEST_TRACE,
+      events: Bus,
       messages: [],
       tools: [],
       model: testModel,
@@ -104,6 +105,7 @@ describe("run", () => {
     const abortController = new AbortController();
     const input: import("../src/run").RunInput = {
       trace: TEST_TRACE,
+      events: Bus,
       messages: [],
       tools: [],
       model: testModel,
@@ -122,6 +124,7 @@ describe("run", () => {
   test("returns error outcome when auth is not configured", async () => {
     const input: import("../src/run").RunInput = {
       trace: TEST_TRACE,
+      events: Bus,
       messages: [],
       tools: [],
       model: {
@@ -158,6 +161,7 @@ describe("run", () => {
           api: { npm: "@ai-sdk/anthropic" },
         },
         trace: { traceId: "trace-run-failed", sessionId: "session-failed", runId: "run-failed" },
+        events: Bus,
       },
       mockSink,
     );
@@ -182,6 +186,7 @@ describe("run", () => {
         const outcome = await run(
           {
             trace: TEST_TRACE,
+            events: Bus,
             messages: [],
             tools: [],
             allowAuthFallback: false,
@@ -209,6 +214,7 @@ describe("run", () => {
 
     const input: import("../src/run").RunInput = {
       trace: TEST_TRACE,
+      events: Bus,
       messages: [],
       tools: [],
       model: testModel,
@@ -226,6 +232,7 @@ describe("run", () => {
   test("calls sink methods during execution", async () => {
     const input: import("../src/run").RunInput = {
       trace: TEST_TRACE,
+      events: Bus,
       messages: [],
       tools: [],
       model: testModel,
@@ -256,6 +263,7 @@ describe("run", () => {
     const outcome = await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [],
         model: testModel,
@@ -271,5 +279,36 @@ describe("run", () => {
     expect(textParts.length).toBe(1);
     expect(textParts[0]?.text).toBe("hello world");
     expect(textParts.some((part) => part.text === "")).toBe(false);
+  });
+
+  /**
+   * The point of the port. `llm` reports what it did to whatever the caller
+   * hands it — no process-wide `Bus`, nothing to reset between tests, and P2
+   * can put a fail-closed ledger append behind this without touching `run()`.
+   */
+  test("reports through the injected sink, not a global bus", async () => {
+    const collected = collector();
+    const busSaw: string[] = [];
+    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+
+    try {
+      await run(
+        {
+          messages: [],
+          tools: [],
+          model: testModel,
+          auth: testAuth,
+          trace: TEST_TRACE,
+          events: collected,
+        },
+        mockSink,
+      );
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(collected.named(LlmCall.Started.name)).toHaveLength(1);
+    expect(busSaw.filter((name) => name.startsWith("llm."))).toEqual([]);
   });
 });

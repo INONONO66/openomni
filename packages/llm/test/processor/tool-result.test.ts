@@ -53,6 +53,8 @@ describe("Processor tool result projection", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -117,6 +119,8 @@ describe("Processor tool result projection", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -158,6 +162,8 @@ describe("Processor tool result projection", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -205,6 +211,8 @@ describe("Processor tool result projection", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -251,6 +259,8 @@ describe("Processor tool output normalization", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -296,6 +306,8 @@ describe("Processor tool error normalization", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -355,6 +367,8 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       model,
       abort: abortController.signal,
       sink: captureSink(messages),
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {
@@ -398,6 +412,8 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       model,
       abort: abortController.signal,
       sink: captureSink(messages),
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield {

@@ -67,6 +67,7 @@ describe("Processor retry cap", () => {
         traceId: "trace-processor-retry-cap",
         sessionId: "session-retry-cap",
       },
+      events: Bus,
       createStream: async () => ({
         fullStream: (async function* () {
           const error = retryErrors[attemptCount];
@@ -110,6 +111,8 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-processor-test" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield { type: "text-start", id: "t" };

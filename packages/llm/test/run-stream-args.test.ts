@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Sink } from "@openomni/protocol";
-import { newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/telemetry";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
@@ -56,6 +56,7 @@ describe("run() streamText arguments", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [],
         toolChoice: "required",
@@ -93,6 +94,7 @@ describe("run() streamText arguments", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [],
         model: {
