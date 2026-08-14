@@ -11,6 +11,12 @@ export type {
   Sink,
 } from "./core/types";
 export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
+// Budget accounting stays core (the limits are loop invariants); the queries
+// and the types they read and return are exported so a product can decide what
+// to say about what is left (D5). Exporting the functions without the types
+// leaves a consumer unable to name what it is holding.
+export { checkBudget, describeBudgetRemaining } from "./core/budget";
+export type { BudgetState, BudgetStatus } from "./core/budget";
 export type {
   CanonicalPolicyRegistration,
   PolicyContext,
@@ -26,10 +32,6 @@ export type {
 } from "./core/policy";
 export { McpClient } from "./runtime/mcp/index";
 export type { McpServerConfig } from "./runtime/mcp/index";
-export {
-  createBudgetReassurancePolicy,
-  createBudgetWarningPolicy,
-} from "./core/policy/builtin/budget";
 export { createCompactionPolicy } from "./core/policy/builtin/compaction";
 export { createToolPermissionPolicy } from "./core/policy/builtin/tool-guard";
 export { InMemoryCompactor } from "./core/execution/compaction";

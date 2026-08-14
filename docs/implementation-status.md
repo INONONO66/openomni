@@ -116,7 +116,7 @@ Claims that are actually enforced in code today — docs may say "cannot" only a
 | Guarantee | Code |
 | --- | --- |
 | Workers cannot spawn new Workers, even with a matching WorkerGrant | `packages/openomni/src/dispatch/policy.ts`, `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` |
-| Budget hard-stop ends execution at limits (turns, tool calls, wall time) | `packages/agent/src/core/budget.ts`, `packages/agent/src/core/policy/builtin/budget.ts` |
+| Budget hard-stop ends execution at limits (turns, tool calls, wall time) | `packages/agent/src/core/budget.ts`, `packages/agent/src/core/execution/lifecycle-dispatch.ts` |
 | Tool permission is fail-closed | `packages/agent/src/core/policy/builtin/tool-guard.ts` |
 | WorkItem terminal completion requires a matching durable admission for the current contract revision and basis | `packages/openomni/src/work-item/completion-admission.ts`, `packages/session/src/work-item/lifecycle.ts` |
 

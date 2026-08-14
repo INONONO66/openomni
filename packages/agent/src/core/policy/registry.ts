@@ -4,12 +4,7 @@ import type { PolicyRegistryInstance } from "@openomni/policy";
 import { Policy } from "@openomni/protocol";
 import { z } from "zod";
 import type { CompactionOptions } from "../execution/compaction";
-import {
-  createBudgetReassurancePolicy,
-  createBudgetWarningPolicy,
-  createCompactionPolicy,
-  createToolPermissionPolicy,
-} from "./builtin";
+import { createCompactionPolicy, createToolPermissionPolicy } from "./builtin";
 import type { ToolPermissionPolicyConfig } from "./builtin/tool-guard";
 import type { PolicyContext } from "./types";
 
@@ -58,8 +53,6 @@ function parseToolPermissionConfig(config: unknown): Omit<ToolPermissionPolicyCo
 export function defaultRegistry(events: BusEvent.Sink): PolicyRegistryInstance<PolicyContext> {
   const registry = PolicyRegistry.create<PolicyContext>();
 
-  registry.register("builtin:budget-reassurance", () => createBudgetReassurancePolicy());
-  registry.register("builtin:budget-warning", () => createBudgetWarningPolicy());
   registry.register("builtin:compaction", (config) =>
     createCompactionPolicy({ ...parseCompactionConfig(config), events }),
   );

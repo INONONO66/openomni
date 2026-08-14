@@ -1,6 +1,4 @@
 import {
-  createBudgetReassurancePolicy,
-  createBudgetWarningPolicy,
   createCompactionPolicy,
   createToolPermissionPolicy,
   defaultRegistry,
@@ -12,6 +10,11 @@ import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "./middleware/injection-queue-policy.js";
 import { createIdleNudgePolicy, registerIdleNudge } from "./middleware/idle-nudge-policy.js";
+import {
+  createBudgetReassurancePolicy,
+  createBudgetWarningPolicy,
+  registerBudgetNudges,
+} from "./middleware/budget-nudge-policy.js";
 
 type WorkerCompactionConfig = {
   readonly contextWindowTokens: number;
@@ -103,6 +106,7 @@ function resolvePoliciesFromPlan(
 ): PolicyEngineRegistration[] {
   const registry = defaultRegistry(Bus);
   registerIdleNudge(registry);
+  registerBudgetNudges(registry);
   return registry.resolve(
     plan,
     config.traceId === undefined ? {} : { traceId: config.traceId, auditEmit: Bus.publish },

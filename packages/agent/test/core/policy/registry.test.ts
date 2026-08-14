@@ -6,12 +6,7 @@ import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";
 import { allow } from "../../helpers/policy-decision";
 
-const builtinPolicyIds = [
-  "builtin:budget-reassurance",
-  "builtin:budget-warning",
-  "builtin:compaction",
-  "builtin:tool-permission",
-];
+const builtinPolicyIds = ["builtin:compaction", "builtin:tool-permission"];
 
 function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
   return { policies, labels: [] };

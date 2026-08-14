@@ -7,8 +7,6 @@ import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { buildPolicyEngine } from "../../../src/core/execution/runner";
 import { runAgent } from "../../../src/core/execution/runner";
 import {
-  createBudgetReassurancePolicy,
-  createBudgetWarningPolicy,
   createCompactionPolicy,
   createToolPermissionPolicy,
 } from "../../../src/core/policy/builtin";
@@ -281,15 +279,12 @@ describe("canonical builtin registrations", () => {
   it("declare their policy points and effect capabilities", () => {
     // Given / When
     const registrations = [
-      createBudgetReassurancePolicy(),
-      createBudgetWarningPolicy(),
       createCompactionPolicy({ events: Bus, contextWindowTokens: 100 }),
       createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } }),
     ];
 
     // Then
-    expect(registrations[0]?.pointIds).toEqual(["run.turn.pre"]);
-    expect(registrations[2]?.pointIds).toEqual(["run.completion.pre"]);
-    expect(registrations[3]?.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
+    expect(registrations[0]?.pointIds).toEqual(["run.completion.pre"]);
+    expect(registrations[1]?.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
   });
 });

@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
-} from "../../../../src/core/policy/builtin/budget";
-import type { PolicyFn } from "../../../../src/core/policy";
-import type { BudgetState } from "../../../../src/core/budget";
+} from "../../src/execution-runtime/middleware/budget-nudge-policy";
+import type { PolicyFn } from "@openomni/agent";
+import type { BudgetState } from "@openomni/agent";
 import type { Policy } from "@openomni/protocol";
 
 function baseCtx(
@@ -51,6 +51,8 @@ describe("createBudgetReassurancePolicy", () => {
     const message = injectedMessage(verdict);
 
     expect(verdict.verdict).toBe("allow");
+    expect(verdict.policyId).toBe("builtin.budget.reassurance");
+    expect(verdict.reasonCodes).toContain("budget_reassurance");
     expect(message).toContain("[Budget Status]");
     expect(message).toContain("You have plenty of budget remaining");
     expect(message).toContain("Do NOT rush or skip tasks");
@@ -118,6 +120,8 @@ describe("createBudgetWarningPolicy", () => {
     const message = injectedMessage(verdict);
 
     expect(verdict.verdict).toBe("allow");
+    expect(verdict.policyId).toBe("builtin.budget.warning");
+    expect(verdict.reasonCodes).toContain("budget_warning");
     expect(message).toContain("[Budget Warning]");
     expect(message).toContain("Wrap up your current task");
     expect(message).toContain("provide a summary");
@@ -169,5 +173,30 @@ describe("createBudgetWarningPolicy", () => {
   it("has name builtin:budget-warning", () => {
     const middleware = createBudgetWarningPolicy();
     expect(middleware.name).toBe("builtin:budget-warning");
+  });
+});
+
+/**
+ * Carried from `agent`'s `builtin-snapshots` when the policies moved (#626).
+ * `effectCapabilities` is not decoration: the engine replaces any effect a
+ * registration did not declare for the point it fired at, so losing an entry
+ * silently drops the injected message at runtime while every direct
+ * `mw.fn(ctx)` assertion above still passes.
+ */
+describe("canonical registration metadata", () => {
+  it("budget-reassurance: name, point, capabilities, priority", () => {
+    const mw = createBudgetReassurancePolicy();
+    expect(mw.name).toBe("builtin:budget-reassurance");
+    expect(mw.pointIds).toEqual(["run.turn.pre"]);
+    expect(mw.effectCapabilities).toEqual({ "run.turn.pre": ["prompt.inject_message"] });
+    expect(mw.priority).toBe(10);
+  });
+
+  it("budget-warning: name, point, capabilities, priority", () => {
+    const mw = createBudgetWarningPolicy();
+    expect(mw.name).toBe("builtin:budget-warning");
+    expect(mw.pointIds).toEqual(["run.turn.pre"]);
+    expect(mw.effectCapabilities).toEqual({ "run.turn.pre": ["prompt.inject_message"] });
+    expect(mw.priority).toBe(20);
   });
 });
