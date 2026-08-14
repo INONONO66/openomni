@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786710341152,
+  "lastUpdate": 1786713495675,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45485,6 +45485,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 510881,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27e83b9f7821e71b424437f5b32ad9236e5cfb61",
+          "message": "fix(agent): type-check the test tree (#614) (#620)\n\n* fix(agent): type-check the test tree (#614)\n\n`packages/agent/tsconfig.json` scanned only `src`. Nothing checked the\ntest tree, and `test/bun-test.d.ts` — a hand-written `declare module\n\"bun:test\"` — shadowed the real `@types/bun` declarations with matchers\ntyped `(...args: unknown[]) => void`. So even where a file was read, no\nassertion argument was ever checked. Deleting the stub *lowered* the\nerror count by 32; the real types are strictly better.\n\nWhat the gate then found, none of it cosmetic:\n\nSix fixtures built `model: { provider, id }` — the protocol's model\n*reference* shape — where a resolved `Provider.Model` was required. Every\none was missing `providerID` and `name` while carrying a key nothing\nreads. Now one `testProviderModel` in `test/helpers`, and the two sites\nthat really did want a reference keep one.\n\n`makeTrace()` in two files was typed `TraceContext.Type`, whose fields\nare all optional, so a trace without `runId` satisfied a `RunTrace`\nparameter that requires it — and `tool-selection`'s genuinely omitted it.\n`makeAgentBase()` omitted `actorId`. Two `runInput` fixtures omitted\n`trace`, required since #617.\n\nNine policy contexts were dispatched without `pointId`, which every\ncanonical dispatch carries and the point contracts require. Two\n`PolicyFactory` fixtures still returned the legacy `timing` registration\nshape that `register()` has rejected fail-closed since #530. One\n`BudgetState` carried a `totalCost` the type dropped years ago.\n\n`tool-executor-verdicts` declared its own copy of the executor's result\nmetadata type and had drifted from it — no `policyId`, which the executor\nsets on every blocked result. It now imports the real one.\n\nThe test tree gets `tsconfig.test.json` rather than a widened\n`tsconfig.json`, for the reason llm did in #619: `main` points at\n`src/index.ts`, so consumers compile these sources under their own\nsettings. `check-types` runs all three configs.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): correct two point ids, kill a dead fallback (#614)\n\nReview findings.\n\n`builtin-snapshots.test.ts` applied one `pointId: \"run.turn.pre\"` to all\nfive builtins, so the tool-permission and compaction blocks stood at a\npoint their policy is not registered at — contradicted by the same file's\nown assertions forty lines down. Inert, since no builtin reads\n`ctx.pointId`, but the file exists to pin point registration.\n\n`lifecycle-dispatch.ts` passed `actorId: agentBase.actorId ?? runId ??\ntraceId`. `AgentRunBase.actorId` is a required string, so the chain could\nnot fire, and `buildLifecyclePolicyContext` discards the key anyway — its\nreturn type `Omit`s `actorId` from the overrides and writes\n`agentBase.actorId` unconditionally. Until this PR gave the fixtures an\n`actorId`, the chain did fire at runtime; now nothing reaches it.\n\n`docs/agent-core-rewrite.md` declares itself the source of truth and\nstill listed agent and llm as untype-checked.\n\nThe `invoke.result resets idle timer` test was vacuous: it asserted only\nthat the following turn allows, which the nudge path also does. Nor does\nasserting the absent message there help — the nudge path sets\n`lastProgressAt` too, so both branches leave the next turn identical. It\nnow pins the `invoke.result` call itself, which by 65s would nudge\nwithout the reset. Verified red-first.\n\nAlso: `packages/protocol/test/bun-test.d.ts`, the same hand-written\n`bun:test` stub, deleted — inert today because protocol has no\ntest-inclusive config, and a landmine for whoever adds one. The\nsingle-point fixtures now take `Partial<Omit<..., \"pointId\">>` so a\ncaller cannot move the point out from under them, `tsconfig.test.json`\ndrops an `allowImportingTsExtensions` it does not need, and two trace\nliterals are derived rather than repeated.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T22:17:04+09:00",
+          "tree_id": "5c856832cad87b9ca45629a566ff0221267fe7c9",
+          "url": "https://github.com/INONONO66/openomni/commit/27e83b9f7821e71b424437f5b32ad9236e5cfb61"
+        },
+        "date": 1786713494919,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5892,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9338,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2810,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2419,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8170,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1076,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10687,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99373,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 504930,
             "unit": "ns/op"
           }
         ]
