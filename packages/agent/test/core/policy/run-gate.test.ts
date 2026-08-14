@@ -1,11 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Sink } from "@openomni/protocol";
-import type {
-  AgentEvent,
-  AgentResult,
-  ChatAgentConfig,
-  ChatAgentInput,
-} from "../../../src/core/types";
+import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 import type { PolicyContext } from "../../../src/core/policy";
 import {
   createStopOutcome,
@@ -33,10 +28,10 @@ const mockLlm = createMockLlmConfig({
   },
 });
 
-let streamAgent: typeof import("../../../src/core/execution/runner").streamAgent;
+let runAgent: typeof import("../../../src/core/execution/runner").runAgent;
 
 beforeAll(async () => {
-  ({ streamAgent } = await import("../../../src/core/execution/runner"));
+  ({ runAgent } = await import("../../../src/core/execution/runner"));
 });
 
 const defaultConfig: ChatAgentConfig = {
@@ -47,20 +42,11 @@ const defaultConfig: ChatAgentConfig = {
 
 const defaultInput: ChatAgentInput = runInput([{ role: "user", content: "hello" }]);
 
-async function collectEvents(
+function runWith(
   config: ChatAgentConfig,
   input: ChatAgentInput = defaultInput,
-): Promise<AgentEvent[]> {
-  const events: AgentEvent[] = [];
-  for await (const event of streamAgent(input, config)) {
-    events.push(event);
-  }
-  return events;
-}
-
-function getResult(events: AgentEvent[]): AgentResult | undefined {
-  const ev = events.find((e) => e.type === "complete");
-  return ev ? (ev as Extract<AgentEvent, { type: "complete" }>).result : undefined;
+): Promise<AgentResult> {
+  return runAgent(input, config);
 }
 
 beforeEach(() => {
@@ -76,7 +62,7 @@ describe("run.start middleware dispatch", () => {
       return allow();
     });
 
-    await collectEvents({
+    await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -99,7 +85,7 @@ describe("run.start middleware dispatch", () => {
   });
 
   it("abort → guardAborted: true and no LLM turn", async () => {
-    const events = await collectEvents({
+    const result = await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -113,17 +99,15 @@ describe("run.start middleware dispatch", () => {
       ],
     });
 
-    const result = getResult(events);
-    expect(result).toBeDefined();
-    expect(result?.guardAborted).toBe(true);
-    expect(result?.steps).toHaveLength(0);
+    expect(result.guardAborted).toBe(true);
+    expect(result.steps).toHaveLength(0);
     expect(callOrder).not.toContain("llm_turn");
   });
 
   it("inject → injected message appears in context passed to first LLM turn", async () => {
     const injectedContent = "injected-pre-run-context";
 
-    await collectEvents({
+    await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -152,7 +136,7 @@ describe("run.finish middleware dispatch", () => {
   it("fires after normal completion with result context", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => allow());
 
-    await collectEvents({
+    await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -176,7 +160,7 @@ describe("run.finish middleware dispatch", () => {
   it("reports an honest max-steps outcome after budget exceeded", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => allow());
 
-    const events = await collectEvents({
+    const result = await runWith({
       ...defaultConfig,
       budget: { maxTurns: 0 },
       middleware: [
@@ -191,8 +175,7 @@ describe("run.finish middleware dispatch", () => {
       ],
     });
 
-    const result = getResult(events);
-    expect(result?.finishReason).toBe("max-steps");
+    expect(result.finishReason).toBe("max-steps");
     expect(postRunFn).toHaveBeenCalledTimes(1);
     expect(Reflect.get(postRunFn.mock.calls[0]?.[0] ?? {}, "runOutcome")).toEqual({
       type: "max-steps",
@@ -202,7 +185,7 @@ describe("run.finish middleware dispatch", () => {
   it("does NOT fire after turn.start abort", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => allow());
 
-    await collectEvents({
+    await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -230,7 +213,7 @@ describe("run.finish middleware dispatch", () => {
   it("does NOT fire after turn.finish abort", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => allow());
 
-    await collectEvents({
+    await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -256,7 +239,7 @@ describe("run.finish middleware dispatch", () => {
   });
 
   it("run.finish allow leaves AgentResult.text unchanged", async () => {
-    const events = await collectEvents({
+    const result = await runWith({
       ...defaultConfig,
       middleware: [
         {
@@ -270,7 +253,6 @@ describe("run.finish middleware dispatch", () => {
       ],
     });
 
-    const result = getResult(events);
-    expect(result?.text).toBe("");
+    expect(result.text).toBe("");
   });
 });

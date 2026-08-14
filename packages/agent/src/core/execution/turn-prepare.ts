@@ -3,11 +3,11 @@ import { type Message, PolicyDecision } from "@openomni/protocol";
 import type { Policy, Sink, Tool } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
-import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
+import type { ChatAgentConfig, TokenUsage } from "../types";
 import { createToolExecutor } from "./tool-executor";
 import {
-  createGuardCompleteEvent,
-  createRunCompleteEvent,
+  guardAbortedResult,
+  runResult,
   emitBudgetReassurance,
   emitBudgetWarning,
 } from "./run-events";
@@ -94,13 +94,11 @@ export async function buildTurn(
     buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
   );
 
-  let budgetReassuranceEvent: Extract<AgentEvent, { type: "budget_reassurance" }> | undefined;
-  let budgetWarningEvent: Extract<AgentEvent, { type: "budget_warning" }> | undefined;
   if (PolicyDecision.isBlocking(preTurnDecision)) {
     const reason = PolicyDecision.reason(preTurnDecision, "stop");
     return {
       type: "complete",
-      event: createRunCompleteEvent(state, {
+      result: runResult(state, {
         finishReason: reason === "stalled" ? "stalled" : "stop",
         guardAborted: reason !== "stalled",
       }),
@@ -117,7 +115,6 @@ export async function buildTurn(
       remaining,
       effectiveBudgetThresholds(config.budget).reassuranceThreshold,
     );
-    budgetReassuranceEvent = { type: "budget_reassurance", remaining };
   }
   if (preTurnDecision.reasonCodes.includes("budget_warning")) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
@@ -127,13 +124,12 @@ export async function buildTurn(
       remaining,
       effectiveBudgetThresholds(config.budget).warningThreshold,
     );
-    budgetWarningEvent = { type: "budget_warning", remaining };
   }
 
   recordRunTurn(state);
   if (config.signal?.aborted) throw new Error("aborted");
 
-  const toolPolicyDecisions: Array<{ timing: Policy.Timing; decision: Policy.PolicyDecision }> = [];
+  const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
   const toolMetadata = buildToolMetadataMap(config.tools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({
@@ -152,8 +148,8 @@ export async function buildTurn(
           elapsedMs: Date.now() - state.startTime,
           usage: state.totalUsage,
         }),
-        onDecision: (timing, decision) => {
-          toolPolicyDecisions.push({ timing, decision });
+        onDecision: (_timing, decision) => {
+          toolPolicyDecisions.push({ decision });
         },
         traceContext: trace,
         signal: config.signal,
@@ -162,7 +158,7 @@ export async function buildTurn(
 
   const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase);
   if (systemResult.blocked) {
-    return { type: "complete", event: createGuardCompleteEvent(state) };
+    return { type: "complete", result: guardAbortedResult(state) };
   }
   const system = systemResult.system;
 
@@ -182,7 +178,7 @@ export async function buildTurn(
   );
 
   if (PolicyDecision.isBlocking(toolSelectionDecision)) {
-    return { type: "complete", event: createGuardCompleteEvent(state) };
+    return { type: "complete", result: guardAbortedResult(state) };
   }
   const selectedTools = PolicyEffectApplier.applyToolFilterEffects(allTools, toolSelectionDecision);
 
@@ -191,22 +187,11 @@ export async function buildTurn(
     outputTokens: 0,
     totalTokens: 0,
   };
-  const turnToolCalls: TurnArtifacts["turnToolCalls"] = [];
-  const turnToolResults: TurnArtifacts["turnToolResults"] = [];
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
-  const trackingSink = createTrackingSink(
-    state,
-    sink,
-    turnUsage,
-    turnToolCalls,
-    turnToolResults,
-    turnAssistant,
-  );
+  const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant);
 
   return {
     type: "ready",
-    budgetReassuranceEvent,
-    budgetWarningEvent,
     turn: {
       runInput: {
         // llm reports through the same port the agent was handed.
@@ -227,8 +212,6 @@ export async function buildTurn(
       trackingSink,
       turnAssistant,
       turnUsage,
-      turnToolCalls,
-      turnToolResults,
       toolPolicyDecisions,
     },
   };
@@ -238,8 +221,6 @@ function createTrackingSink(
   state: RunState,
   sink: Sink | undefined,
   turnUsage: TokenUsage,
-  turnToolCalls: TurnArtifacts["turnToolCalls"],
-  turnToolResults: TurnArtifacts["turnToolResults"],
   turnAssistant: TurnArtifacts["turnAssistant"],
 ): Sink {
   let prevInputTokens = 0;
@@ -274,18 +255,8 @@ function createTrackingSink(
       if (text) setLastAssistantText(state, text);
       sink?.onMessage(message);
     },
-    onToolCall: (call) => {
-      turnToolCalls.push({
-        toolCallId: call.id,
-        toolName: call.tool,
-        args: call.input,
-      });
-      sink?.onToolCall(call);
-    },
-    onToolResult: (result) => {
-      turnToolResults.push({ toolCallId: result.toolCallId, result });
-      sink?.onToolResult(result);
-    },
+    onToolCall: (call) => sink?.onToolCall(call),
+    onToolResult: (result) => sink?.onToolResult(result),
     // #547 C3: the fact stream passes through untouched — the transcript
     // record family subscribes to facts, not boundary snapshots.
     onFact: (fact) => sink?.onFact?.(fact),

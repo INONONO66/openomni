@@ -2,11 +2,9 @@ import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
-import type { AgentEvent } from "../../../src/core/types";
 import { abortRun, allow, inject, replaceMessages } from "../../helpers/policy-decision";
 import { handleStop } from "../../../src/core/execution/turn-outcome";
 import {
-  collectEvents,
   makeAgentBase,
   makeConfig,
   makeState,
@@ -35,7 +33,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const config = makeConfig();
     const turn = makeTurnArtifacts();
 
-    const events = await collectEvents(handleStop(state, config, engine, makeAgentBase(), turn));
+    const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
 
     expect(fn).toHaveBeenCalledTimes(1);
     const ctx = fn.mock.calls[0]?.[0];
@@ -43,31 +41,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
     expect(ctx?.timing).toBe("turn.finish");
     expect(ctx?.isCompletion).toBe(true);
 
-    const completeEvent = events.find((e) => e.type === "complete");
-    expect(completeEvent).toBeDefined();
-  });
-
-  it("emits actual tool policy decision timings", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create();
-    const state = makeState();
-    state.lastAssistantText = "response text";
-    const turn = makeTurnArtifacts({
-      toolPolicyDecisions: [
-        { timing: "invoke.prepare", decision: allow("test.pre", "pre") },
-        { timing: "invoke.result", decision: allow("test.post", "post") },
-      ],
-    });
-
-    const events = await collectEvents(
-      handleStop(state, makeConfig(), engine, makeAgentBase(), turn),
-    );
-
-    expect(
-      events
-        .filter((event) => event.type === "hook_verdict")
-        .map((event) => (event as Extract<AgentEvent, { type: "hook_verdict" }>).timing),
-    ).toEqual(["invoke.prepare", "invoke.result", "turn.finish"]);
+    expect(outcome).not.toBe("continue");
   });
 
   it("turn.finish inject verdict causes continuation", async () => {
@@ -87,15 +61,9 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const config = makeConfig();
     const turn = makeTurnArtifacts();
 
-    const gen = handleStop(state, config, engine, makeAgentBase(), turn);
-    let result: IteratorResult<AgentEvent, "complete" | "continue">;
-    const events: AgentEvent[] = [];
-    do {
-      result = await gen.next();
-      if (!result.done && result.value) events.push(result.value);
-    } while (!result.done);
+    const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
 
-    expect(result.value).toBe("continue");
+    expect(outcome).toBe("continue");
     expect(state.messages.length).toBeGreaterThan(1);
     expect(state.continuationCount).toBe(1);
   });
@@ -116,11 +84,15 @@ describe("handleStop (turn.finish + run.finish)", () => {
 
     const state = makeState();
     state.lastAssistantText = "text";
-    const events = await collectEvents(
-      handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts()),
+    const outcome = await handleStop(
+      state,
+      makeConfig(),
+      engine,
+      makeAgentBase(),
+      makeTurnArtifacts(),
     );
 
-    expect(events.some((event) => event.type === "complete")).toBe(true);
+    expect(outcome).not.toBe("continue");
     expect(state.messages).toEqual(replacement);
   });
 
@@ -141,13 +113,9 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const config = makeConfig();
     const turn = makeTurnArtifacts();
 
-    const events = await collectEvents(handleStop(state, config, engine, makeAgentBase(), turn));
-    const completeEvent = events.find((e) => e.type === "complete") as
-      | Extract<AgentEvent, { type: "complete" }>
-      | undefined;
-
-    expect(completeEvent).toBeDefined();
-    expect(completeEvent?.result.guardAborted).toBe(true);
+    const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
+    if (outcome === "continue") throw new Error("expected the run to end");
+    expect(outcome.guardAborted).toBe(true);
   });
 
   it("turn.finish abort with reason 'stalled' sets finishReason to stalled", async () => {
@@ -167,14 +135,10 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const config = makeConfig();
     const turn = makeTurnArtifacts();
 
-    const events = await collectEvents(handleStop(state, config, engine, makeAgentBase(), turn));
-    const completeEvent = events.find((e) => e.type === "complete") as
-      | Extract<AgentEvent, { type: "complete" }>
-      | undefined;
-
-    expect(completeEvent).toBeDefined();
-    expect(completeEvent?.result.finishReason).toBe("stalled");
-    expect(completeEvent?.result.guardAborted).toBeFalsy();
+    const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
+    if (outcome === "continue") throw new Error("expected the run to end");
+    expect(outcome.finishReason).toBe("stalled");
+    expect(outcome.guardAborted).toBeFalsy();
   });
 
   it("dispatches run.finish without modifying final text", async () => {
@@ -194,12 +158,8 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const config = makeConfig();
     const turn = makeTurnArtifacts();
 
-    const events = await collectEvents(handleStop(state, config, engine, makeAgentBase(), turn));
-    const completeEvent = events.find((e) => e.type === "complete") as
-      | Extract<AgentEvent, { type: "complete" }>
-      | undefined;
-
-    expect(completeEvent).toBeDefined();
-    expect(completeEvent?.result.text).toBe("original");
+    const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
+    if (outcome === "continue") throw new Error("expected the run to end");
+    expect(outcome.text).toBe("original");
   });
 });

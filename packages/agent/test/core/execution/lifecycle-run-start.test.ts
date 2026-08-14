@@ -3,7 +3,6 @@ import type { Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import type { AgentEvent } from "../../../src/core/types";
 import { abortRun, allow, appendContext, inject } from "../../helpers/policy-decision";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
 import { makeConfig, makeState } from "./lifecycle-dispatch-fixture";
@@ -47,10 +46,8 @@ describe("dispatchPreRun (run.start)", () => {
     const result = await dispatchPreRun(state, engine, makeConfig());
 
     expect(result).not.toBeNull();
-    expect(result?.type).toBe("complete");
-    const complete = result as Extract<AgentEvent, { type: "complete" }>;
-    expect(complete.result.guardAborted).toBe(true);
-    expect(complete.result.finishReason).toBe("stop");
+    expect(result?.guardAborted).toBe(true);
+    expect(result?.finishReason).toBe("stop");
   });
 
   it("injects user message when run.start policy returns inject", async () => {

@@ -66,7 +66,6 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
     const result = await dispatchBudgetCheck(state, engine, config, makeAgentBase());
 
     expect(result).not.toBeNull();
-    expect(result?.type).toBe("complete");
     expect(observedOutcomes).toEqual([{ type: "max-steps" }]);
   });
 

@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
+import type { AgentResult, ChatAgentConfig } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
-import { streamAgent } from "../../../src/core/execution/runner";
+import { runAgent } from "../../../src/core/execution/runner";
 import {
   createRunState,
   type AgentRunBase,
@@ -61,23 +61,16 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
     },
     turnAssistant: {},
     turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-    turnToolCalls: [],
-    turnToolResults: [],
     toolPolicyDecisions: [],
     ...overrides,
   };
 }
 
-async function collectEvents(gen: AsyncGenerator<AgentEvent>): Promise<AgentEvent[]> {
-  const events: AgentEvent[] = [];
-  for await (const event of gen) events.push(event);
-  return events;
-}
-
-function expectComplete(event: AgentEvent | null): Extract<AgentEvent, { type: "complete" }> {
-  expect(event).not.toBeNull();
-  expect(event?.type).toBe("complete");
-  return event as Extract<AgentEvent, { type: "complete" }>;
+/** A dispatcher that ends the run returns its result; one that lets it run returns null. */
+function expectComplete(result: AgentResult | null): AgentResult {
+  expect(result).not.toBeNull();
+  if (result === null) throw new Error("expected the dispatcher to end the run");
+  return result;
 }
 
 describe("execution helper deny verdicts", () => {
@@ -93,16 +86,14 @@ describe("execution helper deny verdicts", () => {
       ["sessionId, runId", { traceId: "trace-1" }],
       ["runId", { traceId: "trace-1", sessionId: "sess-1" }],
     ] as const) {
-      const stream = streamAgent(
+      const run = runAgent(
         {
           messages: [{ role: "user", content: "hello" }],
           ...(traceContext ? { traceContext } : {}),
         },
         makeConfig(),
       );
-      await expect(stream.next()).rejects.toThrow(
-        `agent run requires a trace context with ${missing}`,
-      );
+      await expect(run).rejects.toThrow(`agent run requires a trace context with ${missing}`);
     }
   });
   it("fail-closes run.start deny before execution", async () => {
@@ -119,8 +110,8 @@ describe("execution helper deny verdicts", () => {
 
     const complete = expectComplete(await dispatchPreRun(makeState(), engine, makeConfig()));
 
-    expect(complete.result.guardAborted).toBe(true);
-    expect(complete.result.finishReason).toBe("stop");
+    expect(complete.guardAborted).toBe(true);
+    expect(complete.finishReason).toBe("stop");
   });
 
   it("fail-closes turn.start deny before building a turn", async () => {
@@ -146,9 +137,8 @@ describe("execution helper deny verdicts", () => {
     );
 
     expect(result.type).toBe("complete");
-    if (result.type === "complete" && result.event.type === "complete") {
-      expect(result.event.result.guardAborted).toBe(true);
-    }
+    if (result.type !== "complete") throw new Error("expected the turn to end");
+    expect(result.result.guardAborted).toBe(true);
   });
 
   it("fail-closes resources.prepare deny before exposing tools", async () => {
@@ -174,13 +164,16 @@ describe("execution helper deny verdicts", () => {
     );
 
     expect(result.type).toBe("complete");
-    if (result.type === "complete" && result.event.type === "complete") {
-      expect(result.event.result.guardAborted).toBe(true);
-    }
+    if (result.type !== "complete") throw new Error("expected the turn to end");
+    expect(result.result.guardAborted).toBe(true);
   });
 
-  it("emits a hook verdict and completes normally for turn.finish deny", async () => {
+  it("records a diagnostic and completes normally for turn.finish deny", async () => {
     Bus.reset();
+    const diagnostics: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === Operational.Info.name) diagnostics.push(payload);
+    });
     const engine = PolicyEngine.create();
     engine.register({
       kind: "point",
@@ -193,17 +186,20 @@ describe("execution helper deny verdicts", () => {
     const state = makeState();
     state.lastAssistantText = "done";
 
-    const events = await collectEvents(
-      handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts()),
-    );
-    const hook = events.find((event) => event.type === "hook_verdict");
-    const complete = events.find((event) => event.type === "complete") as
-      | Extract<AgentEvent, { type: "complete" }>
-      | undefined;
+    let outcome: Awaited<ReturnType<typeof handleStop>>;
+    try {
+      outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts());
+      await Promise.resolve();
+    } finally {
+      unsubscribe();
+    }
 
-    expect(hook).toMatchObject({ timing: "turn.finish", action: "deny", reason: "post-turn" });
-    expect(complete).toBeDefined();
-    expect(complete?.result.guardAborted).toBeUndefined();
+    // A plain deny at turn.finish is a diagnostic, not an abort: the run ends
+    // normally and `guardAborted` stays unset.
+    expect(outcome).not.toBe("continue");
+    if (outcome === "continue") throw new Error("expected the run to end");
+    expect(outcome.guardAborted).toBeUndefined();
+    expect(hasDenyDiagnostic(diagnostics, "turn.finish")).toBe(true);
   });
 
   it("records a diagnostic and fail-closes completion.prepare deny", async () => {
@@ -227,10 +223,8 @@ describe("execution helper deny verdicts", () => {
       await Promise.resolve();
 
       expect(result).not.toBe("continue");
-      if (result !== "continue") {
-        expect(result.type).toBe("complete");
-        if (result.type === "complete") expect(result.result.guardAborted).toBe(true);
-      }
+      if (result === "continue") throw new Error("expected the run to end");
+      expect(result.guardAborted).toBe(true);
       expect(hasDenyDiagnostic(diagnostics, "completion.prepare")).toBe(true);
     } finally {
       unsubscribe();

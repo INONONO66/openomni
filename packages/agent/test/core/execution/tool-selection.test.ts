@@ -168,9 +168,8 @@ describe("resources.prepare dispatch", () => {
 
     expect(result.type).toBe("complete");
     if (result.type !== "complete") return;
-    expect(result.event).toMatchObject({
-      type: "complete",
-      result: { guardAborted: true },
+    expect(result.result).toMatchObject({
+      guardAborted: true,
     });
   });
 

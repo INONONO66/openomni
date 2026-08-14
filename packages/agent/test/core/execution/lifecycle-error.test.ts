@@ -3,10 +3,9 @@ import { AgentExecution, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import type { AgentEvent } from "../../../src/core/types";
 import { abortRun, allow } from "../../helpers/policy-decision";
 import { handleError } from "../../../src/core/execution/turn-outcome";
-import { collectEvents, makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
+import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
 describe("handleError (error)", () => {
   it("dispatches error and respects abort verdict", async () => {
@@ -30,26 +29,24 @@ describe("handleError (error)", () => {
       backoffMs: { initial: 0, multiplier: 1, max: 0 },
     };
 
-    const gen = handleError(state, engine, config, makeAgentBase(), error, 1, retryPolicy);
-    let result: IteratorResult<AgentEvent, unknown>;
-    const events: AgentEvent[] = [];
-    do {
-      result = await gen.next();
-      if (!result.done && result.value) events.push(result.value as AgentEvent);
-    } while (!result.done);
+    const decision = await handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      error,
+      1,
+      retryPolicy,
+    );
 
     expect(fn).toHaveBeenCalledTimes(1);
     const ctx = fn.mock.calls[0]?.[0] as PolicyContext;
     expect(ctx.timing).toBe("error");
     expect(ctx.toolInput?.error).toMatchObject({ name: "Error", message: error.message });
 
-    const decision = result.value as { action: string };
     expect(decision.action).toBe("complete");
-    const completeEvent = events.find((e) => e.type === "complete") as
-      | Extract<AgentEvent, { type: "complete" }>
-      | undefined;
-    expect(completeEvent).toBeDefined();
-    expect(completeEvent?.result.guardAborted).toBe(true);
+    if (decision.action !== "complete") throw new Error("expected a settled result");
+    expect(decision.result.guardAborted).toBe(true);
   });
 
   it("error continue verdict allows retry when retry policy permits", async () => {
@@ -72,13 +69,15 @@ describe("handleError (error)", () => {
       backoffMs: { initial: 0, multiplier: 1, max: 0 },
     };
 
-    const gen = handleError(state, engine, config, makeAgentBase(), error, 1, retryPolicy);
-    let result: IteratorResult<AgentEvent, unknown>;
-    do {
-      result = await gen.next();
-    } while (!result.done);
-
-    const decision = result.value as { action: string };
+    const decision = await handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      error,
+      1,
+      retryPolicy,
+    );
     expect(decision.action).toBe("retry");
   });
 
@@ -103,7 +102,7 @@ describe("handleError (error)", () => {
     };
 
     const started = Date.now();
-    const gen = handleError(
+    const decision = await handleError(
       state,
       engine,
       config,
@@ -112,12 +111,8 @@ describe("handleError (error)", () => {
       1,
       retryPolicy,
     );
-    let result: IteratorResult<AgentEvent, unknown>;
-    do {
-      result = await gen.next();
-    } while (!result.done);
 
-    expect((result.value as { action: string }).action).toBe("retry");
+    expect(decision.action).toBe("retry");
     expect(Date.now() - started).toBeGreaterThanOrEqual(15);
   });
 
@@ -146,18 +141,17 @@ describe("handleError (error)", () => {
     };
 
     const started = Date.now();
-    const gen = handleError(
-      state,
-      engine,
-      config,
-      makeAgentBase(),
-      new Error("timeout while waiting"),
-      1,
-      retryPolicy,
-    );
-    await gen.next();
-
-    await expect(gen.next()).rejects.toThrow("aborted");
+    await expect(
+      handleError(
+        state,
+        engine,
+        config,
+        makeAgentBase(),
+        new Error("timeout while waiting"),
+        1,
+        retryPolicy,
+      ),
+    ).rejects.toThrow("aborted");
     expect(Date.now() - started).toBeLessThan(500);
   });
 
@@ -183,20 +177,17 @@ describe("handleError (error)", () => {
       backoffMs: { initial: 0, multiplier: 1, max: 0 },
     };
 
-    const events = await collectEvents(
-      handleError(
-        state,
-        engine,
-        config,
-        makeAgentBase(),
-        new Error("timeout while waiting"),
-        2,
-        retryPolicy,
-      ),
+    const decision = await handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      new Error("timeout while waiting"),
+      2,
+      retryPolicy,
     );
 
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ type: "error", willRetry: false });
+    expect(decision.action).toBe("throw");
   });
 
   /**
@@ -214,18 +205,16 @@ describe("handleError (error)", () => {
     const agentBase = makeAgentBase();
 
     try {
-      await collectEvents(
-        handleError(
-          makeState(),
-          engine,
-          makeConfig(),
-          agentBase,
-          new Error("connection timeout"),
-          1,
-          // Non-zero: an assertion of `0` also holds when the field is
-          // hardcoded to 0, which is what the first version of this test did.
-          { maxAttempts: 3, backoffMs: { initial: 50, multiplier: 2, max: 1000 } },
-        ),
+      await handleError(
+        makeState(),
+        engine,
+        makeConfig(),
+        agentBase,
+        new Error("connection timeout"),
+        1,
+        // Non-zero: an assertion of `0` also holds when the field is
+        // hardcoded to 0, which is what the first version of this test did.
+        { maxAttempts: 3, backoffMs: { initial: 50, multiplier: 2, max: 1000 } },
       );
       await Bun.sleep(0);
     } finally {
@@ -272,18 +261,16 @@ describe("handleError (error)", () => {
     const agentBase = makeAgentBase();
 
     try {
-      await collectEvents(
-        handleError(
-          makeState(),
-          engine,
-          makeConfig(),
-          agentBase,
-          new Error("schema validation failed"),
-          // Not 1: `attempt` is a pass-through, and asserting it at its input
-          // value of 1 also holds when the field is hardcoded to 1.
-          2,
-          { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
-        ),
+      await handleError(
+        makeState(),
+        engine,
+        makeConfig(),
+        agentBase,
+        new Error("schema validation failed"),
+        // Not 1: `attempt` is a pass-through, and asserting it at its input
+        // value of 1 also holds when the field is hardcoded to 1.
+        2,
+        { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
       );
       await Bun.sleep(0);
     } finally {
@@ -325,16 +312,14 @@ describe("handleError (error)", () => {
     });
 
     try {
-      await collectEvents(
-        handleError(
-          makeState(),
-          engine,
-          makeConfig(),
-          makeAgentBase(),
-          new Error("connection timeout"),
-          1,
-          { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
-        ),
+      await handleError(
+        makeState(),
+        engine,
+        makeConfig(),
+        makeAgentBase(),
+        new Error("connection timeout"),
+        1,
+        { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
       );
       await Bun.sleep(0);
     } finally {

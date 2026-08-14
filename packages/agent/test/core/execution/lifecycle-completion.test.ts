@@ -68,10 +68,8 @@ describe("completion.prepare dispatch", () => {
     const result = await handleCompact(makeState(), engine, makeConfig(), makeAgentBase());
 
     expect(result).not.toBe("continue");
-    if (result !== "continue") {
-      expect(result.type).toBe("complete");
-      if (result.type === "complete") expect(result.result.guardAborted).toBe(true);
-    }
+    if (result === "continue") throw new Error("expected the run to end");
+    expect(result.guardAborted).toBe(true);
   });
 
   it("completion.prepare continue verdict leaves state messages unchanged", async () => {

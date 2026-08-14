@@ -3,11 +3,10 @@ import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
 import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";
-import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
+import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
 import {
-  createGuardCompleteEvent,
-  createRunCompleteEvent,
-  createRunErrorEvent,
+  guardAbortedResult,
+  runResult,
   emitCompaction,
   emitErrorRetry,
   emitRunCompleted,
@@ -26,50 +25,30 @@ import {
   type AgentRunBase,
   type RunState,
   type TurnArtifacts,
-  type TurnDecision,
 } from "./run-state";
 import type { PolicyEngineInstance } from "../policy";
 
-export async function* handleStop(
+/** The run ends with this result, or it takes another turn. */
+export type StopOutcome = AgentResult | "continue";
+
+export async function handleStop(
   state: RunState,
   config: ChatAgentConfig,
   engine: PolicyEngineInstance,
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
-): AsyncGenerator<AgentEvent, "complete" | "continue"> {
+): Promise<StopOutcome> {
   emitTurnComplete(config.events, state, agentBase, turn.turnUsage);
-
-  if (state.lastAssistantText) yield { type: "text_chunk", text: state.lastAssistantText };
-  for (const toolCall of turn.turnToolCalls) {
-    yield { type: "tool_call_start", ...toolCall };
-  }
-  for (const toolResult of turn.turnToolResults) {
-    yield { type: "tool_call_complete", ...toolResult };
-  }
-  for (const entry of turn.toolPolicyDecisions) {
-    yield {
-      type: "hook_verdict",
-      timing: entry.timing,
-      action: entry.decision.verdict,
-      reason: PolicyDecision.reason(entry.decision, undefined),
-    };
-  }
 
   const toolAbort = turn.toolPolicyDecisions.find(
     (entry) => PolicyDecision.isBlocking(entry.decision) && effectOf(entry.decision, "run.abort"),
   );
 
-  yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turn.turnUsage };
-
   const step = { type: "text" as const, content: state.lastAssistantText };
   appendRunStep(state, step);
   if (config.onStepFinish) await config.onStepFinish(step);
 
-  if (toolAbort) {
-    const event = createRunCompleteEvent(state, { finishReason: "stop", guardAborted: true });
-    yield event;
-    return "complete";
-  }
+  if (toolAbort) return runResult(state, { finishReason: "stop", guardAborted: true });
 
   // #546: the turn's assistant output always enters history — tool and
   // reasoning parts included, regardless of continuation — and it enters
@@ -92,13 +71,6 @@ export async function* handleStop(
     }),
   );
 
-  yield {
-    type: "hook_verdict",
-    timing: "turn.finish",
-    action: postTurnDecision.verdict,
-    reason: PolicyDecision.reason(postTurnDecision, undefined),
-  };
-
   if (!PolicyDecision.isBlocking(postTurnDecision)) {
     try {
       PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision);
@@ -115,8 +87,7 @@ export async function* handleStop(
         state,
         agentBase,
       );
-      yield createGuardCompleteEvent(state);
-      return "complete";
+      return guardAbortedResult(state);
     }
   }
 
@@ -128,44 +99,35 @@ export async function* handleStop(
   if (!PolicyDecision.isBlocking(postTurnDecision) && continuationMessages.length > 0) {
     appendRunMessages(state, continuationMessages);
     const blocked = await applyPostCompaction(state, engine, config, agentBase, true);
-    if (blocked) {
-      yield blocked;
-      return "complete";
-    }
+    if (blocked) return blocked;
     advanceRunContinuation(state);
-    return flowDecision(continueDecision(state));
+    return "continue";
   }
 
   if (PolicyDecision.isBlocking(postTurnDecision)) {
     const reason = PolicyDecision.reason(postTurnDecision, "stop");
     if (effectOf(postTurnDecision, "run.abort")) {
-      const event = createRunCompleteEvent(state, {
+      return runResult(state, {
         finishReason: reason === "stalled" ? "stalled" : "stop",
         guardAborted: reason !== "stalled",
       });
-      yield event;
-      return flowDecision({ kind: "abort", event });
     }
     publishDenyDiagnostic(config.events, "turn.finish", postTurnDecision, state, agentBase);
   }
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
   emitRunCompleted(config.events, state, agentBase, "stop");
-  const event = createRunCompleteEvent(state, { finishReason: "stop" });
-  yield event;
-  return flowDecision({ kind: "complete", event });
+  return runResult(state, { finishReason: "stop" });
 }
 
-export async function* handleContinue(
+export function handleContinue(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
-): AsyncGenerator<AgentEvent, "continue"> {
+): void {
   emitTurnComplete(events, state, agentBase, turnUsage);
-  yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turnUsage };
   advanceRunTurn(state);
-  return continueFlowDecision(continueDecision(state));
 }
 
 export async function handleCompact(
@@ -173,14 +135,14 @@ export async function handleCompact(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
-): Promise<"continue" | AgentEvent> {
+): Promise<StopOutcome> {
   const blocked = await applyPostCompaction(state, engine, config, agentBase, false);
   if (blocked) return blocked;
   advanceRunTurn(state);
-  return continueFlowDecision(continueDecision(state));
+  return "continue";
 }
 
-export async function* handleError(
+export async function handleError(
   state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
@@ -188,7 +150,7 @@ export async function* handleError(
   error: unknown,
   attempt: number,
   retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
-): AsyncGenerator<AgentEvent, ErrorDecision> {
+): Promise<ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
   const onErrorDecision = await engine.dispatchPoint(
     "run.error.error",
@@ -207,9 +169,11 @@ export async function* handleError(
 
   if (PolicyDecision.isBlocking(onErrorDecision)) {
     if (effectOf(onErrorDecision, "run.abort")) {
-      const event: AgentEvent = createGuardCompleteEvent(state);
-      yield event;
-      return { action: "complete", kind: "abort", event, errorMessage: normalizedError.message };
+      return {
+        action: "complete",
+        result: guardAbortedResult(state),
+        errorMessage: normalizedError.message,
+      };
     }
     publishDenyDiagnostic(config.events, "error", onErrorDecision, state, agentBase);
   }
@@ -234,9 +198,8 @@ export async function* handleError(
       reason: retryReason,
       backoffMs,
     });
-    yield createRunErrorEvent(normalizedError, true);
     await Retry.sleep(backoffMs, config.signal);
-    return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
+    return { action: "retry", errorMessage: lastError };
   }
 
   emitRunFailed(config.events, agentBase, lastError, {
@@ -244,8 +207,7 @@ export async function* handleError(
     attempt,
     maxAttempts: effectiveRetryPolicy.maxAttempts,
   });
-  yield createRunErrorEvent(normalizedError, false);
-  return { action: "throw", kind: "error", error: normalizedError, errorMessage: lastError };
+  return { action: "throw", error: normalizedError, errorMessage: lastError };
 }
 
 /**
@@ -275,24 +237,6 @@ function resolveTurnAssistant(
   return createAssistantMessage("", parentID, state.sessionId);
 }
 
-function continueDecision(state: RunState): Extract<TurnDecision, { kind: "continue" }> {
-  return {
-    kind: "continue",
-    messages: state.messages,
-    continuationCount: state.continuationCount,
-    compactionCount: state.compactionCount,
-    turnIndex: state.turnIndex,
-  };
-}
-
-function flowDecision(decision: Exclude<TurnDecision, { kind: "error" }>): "continue" | "complete" {
-  return decision.kind === "continue" ? "continue" : "complete";
-}
-
-function continueFlowDecision(decision: Extract<TurnDecision, { kind: "continue" }>): "continue" {
-  return decision.kind;
-}
-
 // merged from completion-policy.ts (250-LOC split refold: single-importer stage)
 async function dispatchPostRunTransform(
   state: RunState,
@@ -318,7 +262,7 @@ async function applyPostCompaction(
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
   isCompletion: boolean,
-): Promise<AgentEvent | null> {
+): Promise<AgentResult | null> {
   const compactionDecision = await engine.dispatchPoint(
     "run.completion.pre",
     buildLifecyclePolicyContext(state, config, agentBase, {
@@ -338,7 +282,7 @@ async function applyPostCompaction(
       state,
       agentBase,
     );
-    return createGuardCompleteEvent(state, { finishReason: "stop" });
+    return guardAbortedResult(state, { finishReason: "stop" });
   }
 
   let messages: Message.WithParts[] | undefined;
@@ -357,7 +301,7 @@ async function applyPostCompaction(
       state,
       agentBase,
     );
-    return createGuardCompleteEvent(state, { finishReason: "stop" });
+    return guardAbortedResult(state, { finishReason: "stop" });
   }
   if (messages !== undefined) {
     const messagesBefore = applyCompactionMessages(state, messages);

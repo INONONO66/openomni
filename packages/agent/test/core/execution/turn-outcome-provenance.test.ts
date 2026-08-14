@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import type { AgentEvent } from "../../../src/core/types";
 import { PolicyEngine } from "../../../src/core/policy";
 import { handleStop } from "../../../src/core/execution/turn-outcome";
 import {
@@ -38,18 +37,8 @@ function makeTurnArtifacts(): TurnArtifacts {
     },
     turnAssistant: {},
     turnUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnToolCalls: [],
-    turnToolResults: [],
     toolPolicyDecisions: [],
   };
-}
-
-async function collectEvents(
-  gen: AsyncGenerator<AgentEvent, "complete" | "continue">,
-): Promise<AgentEvent[]> {
-  const events: AgentEvent[] = [];
-  for await (const event of gen) events.push(event);
-  return events;
 }
 
 describe("handleStop prompt injection provenance", () => {
@@ -73,17 +62,15 @@ describe("handleStop prompt injection provenance", () => {
     const state = createRunState(runInput([{ role: "user", content: "parent request" }]));
     state.lastAssistantText = "partial response";
 
-    const events = await collectEvents(
-      handleStop(
-        state,
-        { events: Bus, model: { provider: "test", id: "test-model" } },
-        engine,
-        makeAgentBase(),
-        makeTurnArtifacts(),
-      ),
+    const outcome = await handleStop(
+      state,
+      { events: Bus, model: { provider: "test", id: "test-model" } },
+      engine,
+      makeAgentBase(),
+      makeTurnArtifacts(),
     );
 
-    expect(events.some((event) => event.type === "turn_complete")).toBe(true);
+    expect(outcome).toBe("continue");
     expect(state.continuationCount).toBe(1);
     expect(state.messages.at(-1)?.info).toMatchObject({
       role: "assistant",

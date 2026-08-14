@@ -2,10 +2,10 @@ import { PolicyDecision, type Run } from "@openomni/protocol";
 import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { publishBudgetTelemetry } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
-import type { AgentEvent, ChatAgentConfig } from "../types";
+import type { AgentResult, ChatAgentConfig } from "../types";
 import {
-  createGuardCompleteEvent,
-  createRunCompleteEvent,
+  guardAbortedResult,
+  runResult,
   emitRunCompleted,
   publishDenyDiagnostic,
 } from "./run-events";
@@ -21,7 +21,7 @@ export async function dispatchPreRun(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase = agentBaseForState(state),
-): Promise<AgentEvent | null> {
+): Promise<AgentResult | null> {
   const preRunDecision = await engine.dispatchPoint(
     "run.lifecycle.pre",
     buildLifecyclePolicyContext(state, config, agentBase, {
@@ -32,7 +32,7 @@ export async function dispatchPreRun(
   );
 
   if (PolicyDecision.isBlocking(preRunDecision)) {
-    return createGuardCompleteEvent(state, { text: "", steps: [] });
+    return guardAbortedResult(state, { text: "", steps: [] });
   }
 
   PolicyEffectApplier.applyPromptMessageEffects(state, preRunDecision);
@@ -44,7 +44,7 @@ export async function dispatchBudgetCheck(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase = agentBaseForState(state),
-): Promise<AgentEvent | null> {
+): Promise<AgentResult | null> {
   // The single per-turn owner of budget telemetry: emit here (command) and act
   // on the returned status. The run.turn.pre budget builtins read the status
   // via the pure checkBudget query, so the event is not re-emitted per policy.
@@ -67,7 +67,7 @@ export async function dispatchBudgetCheck(
     publishDenyDiagnostic(config.events, "run.finish", postRunDecision, state, agentBase);
   }
   emitRunCompleted(config.events, state, agentBase, "max-steps");
-  return createRunCompleteEvent(state, { finishReason: "max-steps" });
+  return runResult(state, { finishReason: "max-steps" });
 }
 
 type ModelResponseFacts = {
@@ -80,13 +80,13 @@ export async function dispatchModelRequest(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase = agentBaseForState(state),
-): Promise<AgentEvent | null> {
+): Promise<AgentResult | null> {
   const decision = await engine.dispatchPoint(
     "connection.llm.pre",
     buildLifecyclePolicyContext(state, config, agentBase, { modelId: config.model.id }),
   );
 
-  if (PolicyDecision.isBlocking(decision)) return createGuardCompleteEvent(state);
+  if (PolicyDecision.isBlocking(decision)) return guardAbortedResult(state);
   PolicyEffectApplier.applyPromptMessageEffects(state, decision);
   return null;
 }
@@ -97,7 +97,7 @@ export async function dispatchModelResponse(
   config: ChatAgentConfig,
   response: ModelResponseFacts,
   agentBase: AgentRunBase,
-): Promise<AgentEvent | null> {
+): Promise<AgentResult | null> {
   const decision = await engine.dispatchPoint(
     "connection.llm.post",
     buildLifecyclePolicyContext(state, config, agentBase, {
@@ -124,12 +124,12 @@ export async function dispatchModelResponse(
         state,
         agentBase,
       );
-      return createGuardCompleteEvent(state);
+      return guardAbortedResult(state);
     }
     PolicyEffectApplier.applyPromptMessageEffects(state, decision);
     return null;
   }
-  if (effectOf(decision, "run.abort")) return createGuardCompleteEvent(state);
+  if (effectOf(decision, "run.abort")) return guardAbortedResult(state);
   // model.response is post-boundary: plain denies are diagnostics unless they carry run.abort.
   publishDenyDiagnostic(config.events, "model.response", decision, state, agentBase);
   return null;

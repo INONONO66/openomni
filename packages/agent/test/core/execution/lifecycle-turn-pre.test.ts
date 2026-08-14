@@ -1,13 +1,32 @@
 import { describe, expect, it, mock } from "bun:test";
 import { testProviderModel } from "../../helpers/provider-model";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
-import type { RuntimeResource, Tool } from "@openomni/protocol";
+import { AgentExecution, type RuntimeResource, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import { abortRun, allow, appendContext } from "../../helpers/policy-decision";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
+
+/**
+ * Budget nagging leaves on the events port, which is the only channel that
+ * carries it since #621. Pinned by name: the `AgentEvent` these tests used to
+ * read was built on the line beside the emit, so asserting on it never proved
+ * the emit happened.
+ */
+function collectBudgetNames(): { readonly names: string[]; readonly stop: () => void } {
+  const names: string[] = [];
+  const stop = Bus.observe((event) => {
+    if (
+      event.name === AgentExecution.BudgetReassurance.name ||
+      event.name === AgentExecution.BudgetWarning.name
+    ) {
+      names.push(event.name);
+    }
+  });
+  return { names, stop };
+}
 
 describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("dispatches turn.start and returns ready on continue", async () => {
@@ -41,8 +60,9 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     expect(ctx.timing).toBe("turn.start");
   });
 
-  it("buildTurn emits budget_reassurance event when reasonCodes includes budget_reassurance", async () => {
+  it("buildTurn publishes budget reassurance when the verdict carries that reason code", async () => {
     Bus.reset();
+    const budget = collectBudgetNames();
     const engine = PolicyEngine.create();
     engine.register({
       kind: "point",
@@ -66,15 +86,15 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeAgentBase(),
     );
 
+    budget.stop();
+
     expect(result.type).toBe("ready");
-    if (result.type === "ready") {
-      expect(result.budgetReassuranceEvent?.type).toBe("budget_reassurance");
-      expect(result.budgetWarningEvent).toBeUndefined();
-    }
+    expect(budget.names).toEqual([AgentExecution.BudgetReassurance.name]);
   });
 
-  it("buildTurn emits budget_warning event when reasonCodes includes budget_warning", async () => {
+  it("buildTurn publishes a budget warning when the verdict carries that reason code", async () => {
     Bus.reset();
+    const budget = collectBudgetNames();
     const engine = PolicyEngine.create();
     engine.register({
       kind: "point",
@@ -98,15 +118,15 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeAgentBase(),
     );
 
+    budget.stop();
+
     expect(result.type).toBe("ready");
-    if (result.type === "ready") {
-      expect(result.budgetWarningEvent?.type).toBe("budget_warning");
-      expect(result.budgetReassuranceEvent).toBeUndefined();
-    }
+    expect(budget.names).toEqual([AgentExecution.BudgetWarning.name]);
   });
 
-  it("buildTurn does not emit budget events for unrelated inject messages", async () => {
+  it("buildTurn publishes no budget event for an unrelated inject message", async () => {
     Bus.reset();
+    const budget = collectBudgetNames();
     const engine = PolicyEngine.create();
     engine.register({
       kind: "point",
@@ -133,11 +153,10 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       makeAgentBase(),
     );
 
+    budget.stop();
+
     expect(result.type).toBe("ready");
-    if (result.type === "ready") {
-      expect(result.budgetReassuranceEvent).toBeUndefined();
-      expect(result.budgetWarningEvent).toBeUndefined();
-    }
+    expect(budget.names).toEqual([]);
   });
 
   it("returns complete when turn.start policy returns abort", async () => {
@@ -164,9 +183,6 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     );
 
     expect(result.type).toBe("complete");
-    if (result.type === "complete") {
-      expect(result.event.type).toBe("complete");
-    }
   });
 
   it("appends turn.start context as a user message", async () => {

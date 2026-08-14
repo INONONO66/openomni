@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
 import type { Message, Run } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
-import { streamAgent } from "../../../src/core/execution/runner";
+import { runAgent } from "../../../src/core/execution/runner";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
@@ -73,12 +73,8 @@ describe("canonical lifecycle audit facts", () => {
     };
 
     // When
-    for await (const _event of streamAgent(
-      runInput([{ role: "user", content: "continue once" }]),
-      config,
-    )) {
-      // The lifecycle observer is the asserted output.
-    }
+    // The lifecycle observer is the asserted output.
+    await runAgent(runInput([{ role: "user", content: "continue once" }]), config);
 
     // Then
     expect(responseTokens).toEqual([3, 4]);

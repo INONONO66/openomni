@@ -103,7 +103,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | PR | title | status |
 |---|---|---|
 | [#610](https://github.com/INONONO66/openomni/pull/610) | delete the unimplemented second event channel | ✅ |
-| — | single output channel: remove the `AgentEvent` generator and `ChatAgent.stream` | ⬜ |
+| [#621](https://github.com/INONONO66/openomni/pull/621) | single output channel: remove the `AgentEvent` generator and `ChatAgent.stream` | 🟨 |
 | — | file layout + FSM; slop comments, duplicate helpers, the last `as unknown as`, `agentBaseForState` | ⬜ |
 | — | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | ⬜ |
 | — | dissolve `builtin/` per D5 | ⬜ |
