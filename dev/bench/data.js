@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786730775369,
+  "lastUpdate": 1786733694789,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46477,6 +46477,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 504051,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "34de8195bbaae5f5953ba19ea1ffb1c8ebb4d72d",
+          "message": "refactor(openomni): permission rulesets are opinions (#606) (#629)\n\n* refactor(openomni): permission rulesets are opinions (#606)\n\nLast move of D5. `builtin:tool-permission` and its wire schema go to\nopenomni; `defaultRegistry` is down to one registration and `builtin/` to\none file. What a product lets an agent touch is a product's to say — the\ncore ships the fail-closed point it hangs on.\n\nThe 475-line integration suite did not move with it, because half of what\nit proved was never the policy's. A permission ruleset can only match on\nlabels and a canonical name because the *executor* puts them in the\ncontext and resolves the sanitized alias — that half stays in agent as\n`tool-policy-context.test.ts`, pinned against an observing policy. How a\nruleset then reads them moved here, as unit tests on the policy. Neither\nhalf needed `ChatAgent` to be driven end to end to say what it says.\n\nThe snapshot pins travel, as in #626: `effectCapabilities` by deep\nequality, `failPolicy: \"fail-closed\"`, the reason code and the policy id.\nTwo of those are invisible to a direct `mw.fn(ctx)` call.\n\n`registry.test.ts`'s injected-sink guarantee was pinned through\ntool-permission, which is gone; it is re-pinned on compaction, the\nremaining registration that takes a sink. Its `configless default`\nsibling loses its subject entirely — compaction requires config — so it\ngoes with the policies rather than being propped up.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test: pin the three fail-opens the decomposition dropped (#606)\n\nReview returned FAIL. All of it fair.\n\n`check-dead-exports` was red at head: deleting the tool-permission\nsnapshot block orphaned `firstReason`, its last importer. I ran the gates\nbefore the doc pass and did not re-run them after. Deleted.\n\nTwo subjects went on the floor, and together with a third they let three\nfail-opens through a green suite — on the guarantee `implementation-status`\ncites this very file for.\n\n`requireApproval` → `pending` + `tool.require_approval` was pinned only\nby the deleted integration suite. The executor's half (a pending decision\nblocks the call) is agent's `tool-executor-verdicts`; that a ruleset\n*produces* one is the policy's, and is now a case in openomni's suite.\nVerified red-first against `pending(` → `allow(`.\n\nWorse, my replacement pinned the wrong layer. It hands `getToolLabels`\nand `getPolicyToolName` to `createToolExecutor` by hand, so it proves the\nexecutor consumes them and says nothing about `buildTurn` deriving them\nfrom `config.tools` — the `tool:` prefix and the `_`→`.` fallback that\nmake a ruleset able to name a tool at all. A ChatAgent-level test now\ndrives a real run with an observing policy. Both of the reviewer's\nmutants — labels never supplied, alias never resolved — go red.\n\nAlso: three of the tests I added to openomni's suite duplicated ones\nalready there, so only the `effectCapabilities` assertion was new; folded\ninto the existing metadata test. The `registerBudgetNudges` addition to\nopenomni's integration test was inert; reverted. A dangling\n`tool-guard.ts` citation in `packages/telemetry/AGENTS.md`. A dead union\narm in the new test's helper.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T03:53:39+09:00",
+          "tree_id": "491904799216d25fa23ed8118b2070d3c44ae1af",
+          "url": "https://github.com/INONONO66/openomni/commit/34de8195bbaae5f5953ba19ea1ffb1c8ebb4d72d"
+        },
+        "date": 1786733693690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 443,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 631,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9556,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2872,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2392,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15250,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8002,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 492,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48065,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 507943,
             "unit": "ns/op"
           }
         ]
