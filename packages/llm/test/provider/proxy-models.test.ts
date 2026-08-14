@@ -2,11 +2,16 @@ import { describe, expect, it } from "bun:test";
 import { enrichWithCatalog, fetchProxyModels } from "../../src/provider/proxy-models";
 import type { Provider } from "../../src/provider/index";
 
+type FetchArgs = Parameters<typeof fetch>;
+
 function stubFetch(
-  handler: (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>,
+  handler: (input: FetchArgs[0], init?: FetchArgs[1]) => Response | Promise<Response>,
 ): { restore: () => void } {
   const original = globalThis.fetch;
-  globalThis.fetch = handler;
+  // The stub answers calls; it does not carry `fetch.preconnect`, and nothing
+  // under test reaches for it. A single assertion, so the call signature is
+  // still checked — `as unknown as` here would wave through any shape.
+  globalThis.fetch = handler as typeof fetch;
   return {
     restore: () => {
       globalThis.fetch = original;
@@ -20,7 +25,7 @@ describe("proxy-models", () => {
       let capturedHeaders: Headers | undefined;
 
       const stub = stubFetch((_input, init) => {
-        capturedHeaders = new Headers(init?.headers as HeadersInit);
+        capturedHeaders = new Headers(init?.headers);
         return new Response(JSON.stringify({ data: [{ id: "test-model" }] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -40,7 +45,7 @@ describe("proxy-models", () => {
       let capturedHeaders: Headers | undefined;
 
       const stub = stubFetch((_input, init) => {
-        capturedHeaders = new Headers(init?.headers as HeadersInit);
+        capturedHeaders = new Headers(init?.headers);
         return new Response(JSON.stringify({ data: [{ id: "test-model" }] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },

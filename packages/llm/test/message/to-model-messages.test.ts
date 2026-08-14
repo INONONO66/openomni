@@ -53,8 +53,8 @@ describe("toModelMessages", () => {
 
     const result = toModelMessages([userMsg], model);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("user");
-    expect(result[0].content).toBe("Hello");
+    expect(result[0]?.role).toBe("user");
+    expect(result[0]?.content).toBe("Hello");
   });
 
   test("converts AssistantMessage to model message", () => {
@@ -105,8 +105,8 @@ describe("toModelMessages", () => {
 
     const result = toModelMessages([assistantMsg], model);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("assistant");
-    expect(result[0].content).toBe("Response");
+    expect(result[0]?.role).toBe("assistant");
+    expect(result[0]?.content).toBe("Response");
   });
 
   test("preserves assistant reasoning parts during conversion", () => {
@@ -166,10 +166,10 @@ describe("toModelMessages", () => {
     const result = toModelMessages([assistantMsg], model);
 
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("assistant");
+    expect(result[0]?.role).toBe("assistant");
     // Reasoning must come first: Anthropic rejects assistant turns where a
     // thinking block follows other content.
-    expect(result[0].content).toEqual([
+    expect(result[0]?.content).toEqual([
       { type: "reasoning", text: "I should preserve this." },
       { type: "text", text: "Final answer" },
     ]);
@@ -246,10 +246,10 @@ describe("toModelMessages", () => {
 
     const result = toModelMessages([userMsg, assistantMsg], model);
     expect(result).toHaveLength(2);
-    expect(result[0].role).toBe("user");
-    expect(result[0].content).toBe("Hello");
-    expect(result[1].role).toBe("assistant");
-    expect(result[1].content).toBe("Response");
+    expect(result[0]?.role).toBe("user");
+    expect(result[0]?.content).toBe("Hello");
+    expect(result[1]?.role).toBe("assistant");
+    expect(result[1]?.content).toBe("Response");
   });
 
   test("calls ProviderTransform.normalizeMessages", () => {
@@ -287,8 +287,8 @@ describe("toModelMessages", () => {
 
     const result = toModelMessages([userMsg], model);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("user");
-    expect(result[0].content).toBe("Hello");
+    expect(result[0]?.role).toBe("user");
+    expect(result[0]?.content).toBe("Hello");
   });
 });
 

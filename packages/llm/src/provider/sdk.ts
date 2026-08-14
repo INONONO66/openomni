@@ -21,12 +21,19 @@ const BUNDLED_PROVIDERS = new Map<string, (options: SdkOptions) => BundledProvid
   ["@ai-sdk/openai", (options) => createOpenAI(options)],
 ]);
 
+/**
+ * What every path in this module actually produces. `LanguageModel` also
+ * admits a bare gateway model id string, which nothing here returns — leaving
+ * it in the signature only pushed casts onto callers.
+ */
+type ResolvedLanguageModel = Exclude<LanguageModel, string>;
+
 const SDK_CACHE = new Map<string, ProviderSDK>();
-const LANGUAGE_CACHE = new Map<string, LanguageModel>();
+const LANGUAGE_CACHE = new Map<string, ResolvedLanguageModel>();
 const PROVIDER_SDK_CACHE_MAX_ENTRIES = 64;
 const PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES = 256;
 
-type CustomModelLoader = (sdk: ProviderSDK, modelID: string) => LanguageModel;
+type CustomModelLoader = (sdk: ProviderSDK, modelID: string) => ResolvedLanguageModel;
 
 interface CustomLoaderResult {
   getModel?: CustomModelLoader;
@@ -107,7 +114,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   return sdk;
 }
 
-export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
+export function getLanguage(model: Provider.Model, auth: Auth.Info): ResolvedLanguageModel {
   const modelID = model.api?.id ?? model.id;
   const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${authFingerprint(auth)}`;
   const cached = getCached(LANGUAGE_CACHE, cacheKey);
@@ -150,7 +157,7 @@ function resolveLanguageModel(
   providerID: string,
   auth: Auth.Info,
   custom: CustomLoaderResult | undefined,
-): LanguageModel {
+): ResolvedLanguageModel {
   if (providerID === "openai" && auth.type === "proxy" && isOpenAIProvider(sdk)) {
     return sdk.chat(modelID);
   }

@@ -356,7 +356,6 @@ describe("Retry", () => {
 describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   function apiError(headers: Record<string, string>): InstanceType<typeof APIError> {
     return new APIError({
-      name: "APIError",
       message: "rate limited",
       isRetryable: true,
       statusCode: 429,
@@ -400,7 +399,6 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
 describe("Retry.decide (#532 candidate 3)", () => {
   function apiError(headers?: Record<string, string>): InstanceType<typeof APIError> {
     return new APIError({
-      name: "APIError",
       message: "rate limited",
       isRetryable: true,
       statusCode: 429,
@@ -448,7 +446,6 @@ describe("Retry.decide (#532 candidate 3)", () => {
 describe("Retry.decide cap semantics for inferred resets", () => {
   function apiError(headers: Record<string, string>): InstanceType<typeof APIError> {
     return new APIError({
-      name: "APIError",
       message: "rate limited",
       isRetryable: true,
       statusCode: 429,

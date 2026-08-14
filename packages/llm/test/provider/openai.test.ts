@@ -5,7 +5,8 @@ import type { Auth } from "../../src/auth";
 
 const originalFetch = globalThis.fetch;
 
-type ModelRef = { readonly modelId?: string; readonly config?: { readonly provider?: string } };
+/** `config` is an OpenAI SDK detail, absent from the `LanguageModelV3` interface. */
+type OpenAIModelRef = { readonly config?: { readonly provider?: string } };
 
 function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
   return {
@@ -29,7 +30,7 @@ describe("getSDK (OpenAI)", () => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel("gpt-4o") as ModelRef;
+    const lm = sdk.languageModel("gpt-4o");
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe("gpt-4o");
   });
@@ -42,7 +43,7 @@ describe("getSDK (OpenAI)", () => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel("gpt-4o") as ModelRef;
+    const lm = sdk.languageModel("gpt-4o");
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe("gpt-4o");
   });
@@ -56,7 +57,7 @@ describe("getSDK (OpenAI)", () => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel("gpt-4o") as ModelRef;
+    const lm = sdk.languageModel("gpt-4o");
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe("gpt-4o");
   });
@@ -67,9 +68,9 @@ describe("getSDK (OpenAI)", () => {
       baseURL: "http://localhost:8317/v1",
       apiKey: "proxy-key",
     };
-    const lm = getLanguage(makeModel({ id: "gpt-5.4" }), auth) as ModelRef;
+    const lm = getLanguage(makeModel({ id: "gpt-5.4" }), auth);
 
     expect(lm.modelId).toBe("gpt-5.4");
-    expect(lm.config?.provider).toBe("openai.chat");
+    expect((lm as OpenAIModelRef).config?.provider).toBe("openai.chat");
   });
 });
