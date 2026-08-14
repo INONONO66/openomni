@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import type { BudgetState } from "../../../src/core/budget";
 import type { PolicyFn } from "../../../src/core/policy";
@@ -7,7 +7,6 @@ import {
   createBudgetWarningPolicy,
 } from "../../../src/core/policy/builtin/budget";
 import { createCompactionPolicy } from "../../../src/core/policy/builtin/compaction";
-import { createIdleNudgePolicy } from "../../../src/core/policy/builtin/idle-nudge";
 import { createToolPermissionPolicy } from "../../../src/core/policy/builtin/tool-guard";
 import { effectOf, firstReason } from "../../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
@@ -60,15 +59,6 @@ function testMessage(id: string): Message.WithParts {
     ],
   };
 }
-
-const originalNow = Date.now;
-function mockNow(ms: number): void {
-  Date.now = () => ms;
-}
-
-afterEach(() => {
-  Date.now = originalNow;
-});
 
 describe("snapshot: budget-reassurance", () => {
   it("continue — below 0.6 threshold", async () => {
@@ -168,18 +158,6 @@ describe("snapshot: compaction", () => {
   });
 });
 
-describe("snapshot: idle-nudge", () => {
-  it("inject — idle threshold exceeded", async () => {
-    mockNow(1000);
-    const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
-    mockNow(70000);
-    const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
-    expect(verdict.verdict).toBe("allow");
-    expect(firstReason(verdict)).toBe("idle_nudge");
-    expect(verdict.policyId).toBe("builtin.idle_nudge");
-  });
-});
-
 describe("snapshot: canonical registration metadata", () => {
   it("budget-reassurance: name, point, priority", () => {
     const mw = createBudgetReassurancePolicy();
@@ -221,17 +199,5 @@ describe("snapshot: canonical registration metadata", () => {
       "run.completion.pre": ["run.replace_messages"],
     });
     expect(mw.priority).toBe(900);
-  });
-
-  it("idle-nudge: name, points, priority", () => {
-    const mw = createIdleNudgePolicy();
-    expect(mw.name).toBe("builtin:idle-nudge");
-    expect(mw.pointIds).toEqual(["run.turn.pre", "tool.native.post", "tool.mcp.post"]);
-    expect(mw.effectCapabilities).toEqual({
-      "run.turn.pre": ["prompt.inject_message", "run.abort"],
-      "tool.native.post": [],
-      "tool.mcp.post": [],
-    });
-    expect(mw.priority).toBe(300);
   });
 });

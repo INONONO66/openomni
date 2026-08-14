@@ -10,7 +10,6 @@ import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
   createCompactionPolicy,
-  createIdleNudgePolicy,
   createToolPermissionPolicy,
 } from "../../../src/core/policy/builtin";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -285,13 +284,12 @@ describe("canonical builtin registrations", () => {
       createBudgetReassurancePolicy(),
       createBudgetWarningPolicy(),
       createCompactionPolicy({ events: Bus, contextWindowTokens: 100 }),
-      createIdleNudgePolicy(),
       createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } }),
     ];
 
     // Then
     expect(registrations[0]?.pointIds).toEqual(["run.turn.pre"]);
     expect(registrations[2]?.pointIds).toEqual(["run.completion.pre"]);
-    expect(registrations[4]?.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
+    expect(registrations[3]?.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
   });
 });

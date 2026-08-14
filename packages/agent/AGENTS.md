@@ -22,7 +22,6 @@ src/
 │       └── builtin/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
 │           ├── compaction.ts   # createCompactionPolicy
-│           ├── idle-nudge.ts   # createIdleNudgePolicy
 │           └── tool-guard.ts   # createToolPermissionPolicy (fail-closed)
 └── runtime/
     ├── index.ts                # Re-exports mcp
@@ -86,13 +85,13 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **Registration**: use `CanonicalPolicyRegistration { kind: "point", name, pointIds, effectCapabilities, priority, scope?, failPolicy?, fn }`. `pointIds` declares where the policy may run and `effectCapabilities` declares the effects it may return at each point. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; omitted `failPolicy` follows each protocol point contract. `PolicyEngineRegistration` also accepts the old timing-based `PolicyRegistration` shape, but only as an explicit compatibility boundary for existing callers.
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
-- **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction, idle nudge).
-- **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids):
+- **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
+- **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids). Per D5 these are moving out one at a time — an id listed here but not below is registered by `openomni` instead:
   - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; denial returns `run.abort` plus `audit.annotate`, while approval requirements return pending with `tool.require_approval`
   - `builtin:budget-reassurance` / `builtin:budget-warning` — inject reassurance/warning system messages as budget consumption climbs
-  - `builtin:idle-nudge` — detects idle ≥ threshold (default 60s), injects a nudge; after `maxNudges` (default 3) aborts with reason `stalled`
   - `builtin:compaction` — triggers `InMemoryCompactor.compact()` when the token threshold is exceeded
   A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
+  - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered onto the same registry by `registerIdleNudge`
 
 ## TURN LIFECYCLE (core/execution)
 
@@ -103,7 +102,7 @@ runner.ts (entry) → Promise<AgentResult>
   │   ├─ dispatchPoint(run.lifecycle.pre)       → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
   │       ├─ checkBudget → if exceeded, dispatchPoint(run.lifecycle.post) + return result
-  │       ├─ dispatchPoint(run.turn.pre)        → budget warnings, idle-nudge
+  │       ├─ dispatchPoint(run.turn.pre)        → budget warnings; idle-nudge (openomni)
   │       ├─ dispatchPoint(prompt.context.pre)  → context/prompt enrichment
   │       ├─ dispatchPoint(tool.catalog.pre)    → filter/modify tools exposed to LLM
   │       ├─ dispatchPoint(connection.llm.pre)

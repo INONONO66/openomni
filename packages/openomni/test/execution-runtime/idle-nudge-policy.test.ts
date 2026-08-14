@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createIdleNudgePolicy } from "../../../../src/core/policy/builtin/idle-nudge";
-import type { PolicyContext, PolicyFn } from "../../../../src/core/policy";
+import { createIdleNudgePolicy } from "../../src/execution-runtime/middleware/idle-nudge-policy";
+import type { PolicyContext, PolicyFn } from "@openomni/agent";
 import type { Policy } from "@openomni/protocol";
 
 const originalNow = Date.now;
@@ -51,6 +51,8 @@ describe("createIdleNudgePolicy", () => {
     const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     const message = injectedMessage(verdict);
     expect(verdict.verdict).toBe("allow");
+    expect(verdict.policyId).toBe("builtin.idle_nudge");
+    expect(verdict.reasonCodes).toContain("idle_nudge");
     expect(message).toContain("[System]");
     expect(message).toContain("idle for 69s");
     expect(message).toContain("Report your current status");
@@ -130,5 +132,14 @@ describe("createIdleNudgePolicy", () => {
     expect(mw.priority).toBe(300);
     expect(mw.kind).toBe("point");
     expect(mw.pointIds).toEqual(["run.turn.pre", "tool.native.post", "tool.mcp.post"]);
+    // Not decoration: the engine replaces any effect a registration did not
+    // declare for the point it fired at, so losing these two entries would
+    // silently drop the nudge and the stalled abort at runtime while every
+    // direct `mw.fn(...)` assertion above still passed.
+    expect(mw.effectCapabilities).toEqual({
+      "run.turn.pre": ["prompt.inject_message", "run.abort"],
+      "tool.native.post": [],
+      "tool.mcp.post": [],
+    });
   });
 });
