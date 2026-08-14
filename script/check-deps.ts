@@ -48,6 +48,13 @@ type PackageRule = {
   packageJsonPath: string;
   packageName: string;
   allowedDeps: "none" | "any-except-self" | Set<string>;
+  /**
+   * Tighter allowlist for `<pkg>/src/` alone, when a package's runtime surface
+   * is narrower than what its tests need. Without it a test-only dependency
+   * silently re-permits the same import in production code, which is how a
+   * closed boundary reopens without any gate noticing.
+   */
+  srcAllowedDeps?: Set<string>;
 };
 
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
@@ -106,10 +113,12 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
-    // No durable storage: llm reads and writes the model, and reports what it
-    // did through the observation channel. The `@openomni/session` edge came
-    // from `Bus` living in the ledger package; it does not any more (#606).
+    // The manifest may carry `telemetry` — the tests bind `Bus`/`collector`
+    // behind the port, and `check-deps` counts devDependencies.
     allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
+    // `src/` may not. It reports through an injected `BusEvent.Sink` and
+    // imports no implementation of the observation channel at all (#606).
+    srcAllowedDeps: new Set(["@openomni/protocol"]),
   },
   agent: {
     displayName: "agent",
@@ -153,6 +162,12 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
+
+/** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
+function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
+  if (!dep.startsWith("@openomni/")) return true;
+  return rule.srcAllowedDeps === undefined ? isAllowedDep(rule, dep) : rule.srcAllowedDeps.has(dep);
+}
 
 function isAllowedDep(rule: PackageRule, dep: string): boolean {
   if (!dep.startsWith("@openomni/")) {
@@ -319,7 +334,7 @@ async function validateSourceImportDirection(): Promise<string[]> {
     let match = importPattern.exec(source);
     while (match !== null) {
       const dep = match[1];
-      if (!isAllowedDep(owner.rule, dep)) {
+      if (!isAllowedSourceDep(owner.rule, dep)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
           `VIOLATION: ${filePath}:${line} source-imports ${dep} — not allowed by layer order for ${owner.rule.displayName} (manifest check cannot see phantom imports)`,
@@ -588,7 +603,51 @@ async function checkDocFreshness(): Promise<string[]> {
   return warnings;
 }
 
+/**
+ * Proves the layer rules discriminate, on synthetic inputs only — it reads no
+ * package and writes nothing.
+ *
+ * `srcAllowedDeps` is the reason this exists: a rule that narrows `src/` below
+ * the manifest can be deleted and every gate stays green, because the thing it
+ * forbids is exactly the thing the manifest still permits. That is the shape
+ * of a decorative gate, which is what this file is supposed to prevent.
+ */
+function selfTest(): void {
+  const twoTier: PackageRule = {
+    displayName: "self-test",
+    packageJsonPath: "",
+    packageName: "@openomni/self-test",
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
+    srcAllowedDeps: new Set(["@openomni/protocol"]),
+  };
+  const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
+
+  const cases: Array<[string, boolean]> = [
+    ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/telemetry")],
+    [
+      "src refuses what only the manifest lists",
+      !isAllowedSourceDep(twoTier, "@openomni/telemetry"),
+    ],
+    ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
+    ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/session")],
+    [
+      "no srcAllowedDeps falls back to the manifest",
+      isAllowedSourceDep(oneTier, "@openomni/telemetry"),
+    ],
+    ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
+  ];
+
+  const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
+  if (failed.length > 0) {
+    for (const name of failed) console.error(`SELF-TEST FAILED: ${name}`);
+    process.exit(1);
+  }
+  console.log(`OK: check-deps self-test — ${cases.length} layer discriminations hold`);
+  process.exit(0);
+}
+
 async function main(): Promise<void> {
+  if (Bun.argv.includes("--self-test")) selfTest();
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();
   const deepImportViolations = await validateDeepImports();

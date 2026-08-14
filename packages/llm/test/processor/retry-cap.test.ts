@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { LlmCall, type Message } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { LlmCall, Operational, type Message } from "@openomni/protocol";
+import { Bus, collector } from "@openomni/telemetry";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";
@@ -67,6 +67,7 @@ describe("Processor retry cap", () => {
         traceId: "trace-processor-retry-cap",
         sessionId: "session-retry-cap",
       },
+      events: Bus,
       createStream: async () => ({
         fullStream: (async function* () {
           const error = retryErrors[attemptCount];
@@ -95,8 +96,10 @@ describe("Processor retry cap", () => {
 });
 
 describe("Processor retry header-delay cap (#532 candidate 3)", () => {
+  const events = collector();
+
   afterEach(() => {
-    Bus.reset();
+    events.reset();
   });
 
   test("a server-directed wait above the cap fails fast instead of stalling", async () => {
@@ -110,6 +113,8 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
+      events,
+      trace: { traceId: "trace-retry-cap", sessionId: "session-retry-cap" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield { type: "text-start", id: "t" };
@@ -126,5 +131,14 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
     await expect(processor.process({ system: "" })).rejects.toBeDefined();
     // Under the old policy this would have slept for an hour mid-run.
     expect(Date.now() - startedAt).toBeLessThan(1000);
+
+    // A retryable error declined for a reason other than "non_retryable" has
+    // to say why, and say it through the port.
+    const declined = events
+      .named(Operational.Error.name)
+      .map((event) => event as { component?: string; traceId?: string });
+    const fromRetry = declined.filter((event) => event.component === "llm.retry");
+    expect(fromRetry).toHaveLength(1);
+    expect(fromRetry[0]?.traceId).toBe("trace-retry-cap");
   });
 });

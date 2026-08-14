@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Message, Sink } from "@openomni/protocol";
 import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";
+import { Bus } from "@openomni/telemetry";
 
 /**
  * #545 T2 measurement harness: streams a fixed synthetic 2000-delta/3-part
@@ -90,6 +91,8 @@ describe("Processor emission measurement (#545 T2)", () => {
       model,
       abort: new AbortController().signal,
       sink,
+      events: Bus,
+      trace: { traceId: "trace-processor-test", sessionId: "session-measure" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield* scenario() as Array<{ type: string }>;

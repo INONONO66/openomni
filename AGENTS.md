@@ -49,7 +49,9 @@ everything                       ←  openomni  ←  server
 
 Read as `X ← Y`: Y may depend on X. Exactly what `script/check-deps.ts`
 allows, package by package — the table is the contract, the sketch is a
-reading aid:
+reading aid. Where a row names two sets, the second is `srcAllowedDeps`: the
+package's tests may reach further than its runtime code, and the gate holds
+`<pkg>/src/` to the narrower one.
 
 | package | may depend on |
 | --- | --- |
@@ -58,7 +60,7 @@ reading aid:
 | `telemetry` | protocol |
 | `ipc` | protocol |
 | `session` | protocol, telemetry |
-| `llm` | protocol, telemetry |
+| `llm` | protocol, telemetry — `src/` protocol only |
 | `coordinator` | protocol, ipc |
 | `agent` | protocol, policy, llm, telemetry |
 | `openomni` | any except itself |

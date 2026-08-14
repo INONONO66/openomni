@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Sink } from "@openomni/protocol";
-import { newTraceId } from "@openomni/telemetry";
+import { Bus, collector, newTraceId } from "@openomni/telemetry";
+import { Operational } from "@openomni/protocol";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
@@ -56,6 +57,7 @@ describe("run() streamText arguments", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [],
         toolChoice: "required",
@@ -93,6 +95,7 @@ describe("run() streamText arguments", () => {
     await run(
       {
         trace: TEST_TRACE,
+        events: Bus,
         messages: [],
         tools: [],
         model: {
@@ -114,5 +117,50 @@ describe("run() streamText arguments", () => {
     const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
     expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
     expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
+  });
+
+  /**
+   * `streamText`'s `onError` is the one publish site the happy and failure
+   * paths both miss, so it was free to route back to a global bus.
+   */
+  test("reports a stream error through the injected sink", async () => {
+    const collected = collector();
+    const busSaw: string[] = [];
+    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+
+    try {
+      await run(
+        {
+          trace: TEST_TRACE,
+          events: collected,
+          messages: [],
+          tools: [],
+          auth: { type: "api", key: "test-key-run" },
+          model: {
+            id: "claude-3-haiku",
+            providerID: TEST_PROVIDER_ID,
+            name: "Claude 3 Haiku Test",
+            api: { npm: "@ai-sdk/anthropic" },
+          },
+        },
+        mockSink,
+      );
+      const onError = aiCapture.__openomniAiStreamArgs?.onError as
+        | ((payload: { error: unknown }) => void)
+        | undefined;
+      if (onError === undefined) throw new Error("streamText received no onError");
+      onError({ error: new Error("upstream exploded") });
+      await Bun.sleep(0);
+    } finally {
+      unsubscribe();
+    }
+
+    const errors = collected
+      .named(Operational.Error.name)
+      .map((event) => event as { component?: string; error?: string });
+    const fromStream = errors.filter((event) => event.component === "llm.stream");
+    expect(fromStream).toHaveLength(1);
+    expect(fromStream[0]?.error).toContain("upstream exploded");
+    expect(busSaw).toEqual([]);
   });
 });

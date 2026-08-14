@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
 import { LlmCall, Operational, type Message, type Sink, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { collector } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
@@ -63,23 +63,29 @@ function capturingSink(): PartsCapture {
 }
 
 /**
- * Run-status telemetry (busy/retry/idle) is published on the Operational bus
- * as "sink.snapshot" (the Sink.onSnapshot hop was removed — no consumer).
+ * Run-status telemetry (busy/retry/idle) goes to the injected events port as
+ * an `Operational.Info` named "sink.snapshot" (the `Sink.onSnapshot` hop was
+ * removed — no consumer).
  */
-function captureStatusStates(): { states: string[]; unsub: () => void } {
-  const states: string[] = [];
-  const unsub = Bus.subscribe(Operational.Info, (data) => {
-    if (data.component === "llm.processor" && data.msg === "sink.snapshot") {
-      states.push(String((data.context as Record<string, unknown> | undefined)?.stateType));
-    }
-  });
-  return { states, unsub };
+function processorInfo(events: ReturnType<typeof collector>): OperationalInfoPayload[] {
+  return events
+    .named(Operational.Info.name)
+    .map((event) => event as OperationalInfoPayload)
+    .filter((data) => data.component === "llm.processor");
+}
+function statusStates(events: ReturnType<typeof collector>): string[] {
+  return processorInfo(events)
+    .filter((data) => data.msg === "sink.snapshot")
+    .map((data) => String((data.context as Record<string, unknown> | undefined)?.stateType));
 }
 
 describe("Processor", () => {
   let mockAssistantMessage: Message.AssistantMessage;
   let mockModel: Provider.Model;
   let abortController: AbortController;
+  /** The port under test. Reading here rather than off `Bus` is what makes a
+   * re-mint through the global bus fail instead of pass. */
+  const events = collector();
 
   beforeEach(() => {
     abortController = new AbortController();
@@ -121,7 +127,7 @@ describe("Processor", () => {
   });
 
   afterEach(() => {
-    Bus.reset();
+    events.reset();
   });
 
   function createProcessor(overrides: Partial<Processor.ProcessorOptions> = {}) {
@@ -130,6 +136,8 @@ describe("Processor", () => {
       sessionID: "session-456",
       model: mockModel,
       abort: abortController.signal,
+      events,
+      trace: { traceId: "trace-processor-test", sessionId: "session-456" },
       createStream: streamOf([{ type: "finish" }]),
       ...overrides,
     });
@@ -396,24 +404,15 @@ describe("Processor", () => {
     });
 
     test("publishes exactly one busy and one idle status on success", async () => {
-      const { states, unsub } = captureStatusStates();
       const processor = createProcessor();
 
       await processor.process({ system: "" });
       await new Promise((resolve) => queueMicrotask(resolve));
-      unsub();
 
-      expect(states).toEqual(["busy", "idle"]);
+      expect(statusStates(events)).toEqual(["busy", "idle"]);
     });
 
-    test("projects sink callbacks to Bus events", async () => {
-      const busEvents: OperationalInfoPayload[] = [];
-      const unsub = Bus.subscribe(Operational.Info, (data) => {
-        if (data.component === "llm.processor") {
-          busEvents.push(data);
-        }
-      });
-
+    test("projects sink callbacks onto the events port", async () => {
       const sinkEvents: string[] = [];
       const toolCalls: Tool.Call[] = [];
       const toolResults: Tool.Result[] = [];
@@ -458,16 +457,17 @@ describe("Processor", () => {
       expect(toolResults).toHaveLength(1);
       expect(toolResults[0]?.toolCallId).toBe("call-1");
 
-      expect(busEvents.every((event) => event.component === "llm.processor")).toBe(true);
-      expect(busEvents.every((event) => event.sessionId === "session-456")).toBe(true);
+      const infoEvents = processorInfo(events);
+      expect(infoEvents.every((event) => event.component === "llm.processor")).toBe(true);
+      expect(infoEvents.every((event) => event.sessionId === "session-456")).toBe(true);
       // sink.* diagnostics must join to llm.call.* events via the run traceId.
-      expect(busEvents.every((event) => event.traceId === "trace-projection")).toBe(true);
-      expect(busEvents.every((event) => typeof event.time === "number")).toBe(true);
+      expect(infoEvents.every((event) => event.traceId === "trace-projection")).toBe(true);
+      expect(infoEvents.every((event) => typeof event.time === "number")).toBe(true);
 
-      const messageEvents = busEvents.filter((event) => event.msg === "sink.message");
-      const snapshotEvents = busEvents.filter((event) => event.msg === "sink.snapshot");
-      const toolStarted = busEvents.find((event) => event.msg === "sink.tool.started");
-      const toolCompleted = busEvents.find((event) => event.msg === "sink.tool.completed");
+      const messageEvents = infoEvents.filter((event) => event.msg === "sink.message");
+      const snapshotEvents = infoEvents.filter((event) => event.msg === "sink.snapshot");
+      const toolStarted = infoEvents.find((event) => event.msg === "sink.tool.started");
+      const toolCompleted = infoEvents.find((event) => event.msg === "sink.tool.completed");
 
       expect(messageEvents.length).toBe(messages.length);
       expect(snapshotEvents.length).toBe(2);
@@ -480,8 +480,6 @@ describe("Processor", () => {
         toolCallId: "call-1",
         outputLength: 2,
       });
-
-      unsub();
     });
 
     test("respects abort signal during stream processing", async () => {
@@ -589,12 +587,6 @@ describe("Processor", () => {
       let attemptCount = 0;
       const retries: Array<{ runId?: string; reason: string; backoffMs: number }> = [];
       const rateLimits: Array<{ runId?: string; provider: string; retryAfterMs: number }> = [];
-      const unsubRetry = Bus.subscribe(LlmCall.RetryDecided, (event) => {
-        retries.push(event);
-      });
-      const unsubRateLimit = Bus.subscribe(LlmCall.RateLimited, (event) => {
-        rateLimits.push(event);
-      });
 
       const processor = createProcessor({
         trace: {
@@ -621,8 +613,8 @@ describe("Processor", () => {
       });
 
       await processor.process({ system: "" });
-      unsubRetry();
-      unsubRateLimit();
+      retries.push(...events.named(LlmCall.RetryDecided.name).map((event) => event as never));
+      rateLimits.push(...events.named(LlmCall.RateLimited.name).map((event) => event as never));
 
       expect(retries).toHaveLength(1);
       expect(retries[0]).toMatchObject({
@@ -648,9 +640,6 @@ describe("Processor", () => {
       // limit. The typed reason switch must catch it.
       let attemptCount = 0;
       const rateLimits: Array<{ provider: string; retryAfterMs: number }> = [];
-      const unsubRateLimit = Bus.subscribe(LlmCall.RateLimited, (event) => {
-        rateLimits.push(event);
-      });
 
       const processor = createProcessor({
         trace: {
@@ -681,7 +670,7 @@ describe("Processor", () => {
       });
 
       await processor.process({ system: "" });
-      unsubRateLimit();
+      rateLimits.push(...events.named(LlmCall.RateLimited.name).map((event) => event as never));
 
       expect(attemptCount).toBe(2);
       expect(rateLimits).toHaveLength(1);
@@ -690,7 +679,7 @@ describe("Processor", () => {
 
     test("throws original error instance for non-retryable errors and settles cleanly", async () => {
       const capture = capturingSink();
-      const { states, unsub } = captureStatusStates();
+
       const errorInstance = new APIError({
         message: "Specific error",
         statusCode: 500,
@@ -716,8 +705,7 @@ describe("Processor", () => {
 
       // Exactly one idle transition, and the pending tool is closed out once.
       await new Promise((resolve) => queueMicrotask(resolve));
-      unsub();
-      expect(states).toEqual(["busy", "idle"]);
+      expect(statusStates(events)).toEqual(["busy", "idle"]);
       expect(capture.toolResults).toHaveLength(1);
       expect(capture.toolResults[0]).toMatchObject({
         toolCallId: "call-1",

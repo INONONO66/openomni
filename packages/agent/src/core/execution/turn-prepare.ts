@@ -1,6 +1,7 @@
 import type { RunInput } from "@openomni/llm";
 import { type Message, PolicyDecision } from "@openomni/protocol";
 import type { Policy, Sink, Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
@@ -206,6 +207,9 @@ export async function buildTurn(
     budgetWarningEvent,
     turn: {
       runInput: {
+        // The agent binds llm's observation port. Agent's own emits still
+        // reach for `Bus` directly; that is the next slice.
+        events: Bus,
         messages: state.messages,
         tools: selectedTools,
         system,

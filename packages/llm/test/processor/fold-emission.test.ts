@@ -72,6 +72,8 @@ function createProcessor(cap: Capture, overrides: Partial<Processor.ProcessorOpt
     model,
     abort: new AbortController().signal,
     sink: cap.sink,
+    events: Bus,
+    trace: { traceId: "trace-processor-test", sessionId: "session-fold" },
     createStream: streamOf([{ type: "finish" }]),
     ...overrides,
   });
