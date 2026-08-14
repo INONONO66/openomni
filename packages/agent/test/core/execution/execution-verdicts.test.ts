@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { AgentEvent, ChatAgentConfig } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";

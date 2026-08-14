@@ -1,5 +1,5 @@
 import { AgentProfile, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { AgentBudget } from "./types";
 
 export interface BudgetState {

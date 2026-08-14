@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ToolExecution } from "@openomni/protocol";
 import type { Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { PolicyEngine } from "../../../src/core/policy";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { abortRun } from "../../helpers/policy-decision";
 import { buildPolicyEngine } from "../../../src/core/execution/runner";
 import { makeAgentBase, makeConfig } from "./lifecycle-dispatch-fixture";

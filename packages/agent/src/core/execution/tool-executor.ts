@@ -1,6 +1,6 @@
 import type { Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
 import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";

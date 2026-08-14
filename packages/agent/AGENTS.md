@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` for Bus and TraceContext observability.
+`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/telemetry` for observation. It reaches no durable storage, and `check-deps.ts` rejects the edge (#606).
 
 ## STRUCTURE
 
@@ -154,7 +154,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## ANTI-PATTERNS
 
-- Agent depends on `@openomni/session` for Bus and TraceContext observability only. Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
+- Reaching for `@openomni/session`. The loop owns no durable state; observation goes through `@openomni/telemetry` and orchestration that needs session state lives in `@openomni/openomni`. The allowlist in `check-deps.ts` no longer contains it, so this fails the gate rather than review.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass the policy engine by returning placeholder tool results in user code; use a `tool.native.pre` / `tool.mcp.pre` policy so behavior is uniform.
 - Do NOT add OpenOmni communication kernel logic here. No actor authority, PendingInteraction routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.

@@ -1,5 +1,5 @@
 import { Operational, type Message } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 export interface CompactionOptions {
   contextWindowTokens: number;

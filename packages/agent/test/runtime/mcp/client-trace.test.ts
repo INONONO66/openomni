@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Mcp } from "@openomni/protocol";
-import { Bus, type BusEvent } from "@openomni/session";
+import { Bus, type BusEvent } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
 /** An MCP server's lifecycle belongs to whatever brought it up — the boot. */

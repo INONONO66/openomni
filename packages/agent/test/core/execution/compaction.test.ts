@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Message } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { CompactionBoundaryError, InMemoryCompactor } from "../../../src/core/execution/compaction";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */

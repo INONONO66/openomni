@@ -1,5 +1,5 @@
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { CanonicalPolicyRegistration } from "../types";
 
 const TOOL_CALL_ACTION = "tool.call";

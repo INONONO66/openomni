@@ -41,10 +41,9 @@ openomni/
 
 ```
 protocol  ←  policy, telemetry, ipc          (ring 0 → 1)
-telemetry ←  session                          session adds durability
-session   ←  llm, agent                       Phase 1b removes both edges
+telemetry ←  session, llm                     session adds durability
 ipc       ←  coordinator                      process driver, session-free
-policy, llm, telemetry, session  ←  agent     the loop
+policy, llm, telemetry           ←  agent     the loop
 everything                       ←  openomni  ←  server
 ```
 
@@ -59,13 +58,13 @@ reading aid:
 | `telemetry` | protocol |
 | `ipc` | protocol |
 | `session` | protocol, telemetry |
-| `llm` | protocol, telemetry, session |
+| `llm` | protocol, telemetry |
 | `coordinator` | protocol, ipc |
-| `agent` | protocol, policy, llm, telemetry, session |
+| `agent` | protocol, policy, llm, telemetry |
 | `openomni` | any except itself |
 | `server` | composition root |
 
-`llm`'s and `agent`'s edges to `session` are the ones Phase 1b removes (#606).
+`llm` and `agent` no longer reach the ledger at all: `Bus` moved to `telemetry` and the allowlists closed behind it (#606).
 
 `policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is session-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   dispatchModelRequest,
   dispatchModelResponse,

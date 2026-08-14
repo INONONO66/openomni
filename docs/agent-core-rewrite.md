@@ -34,7 +34,7 @@ Each rule below is falsifiable. A reviewer should be able to point at a line and
 | `@openomni/llm` | one model round trip: providers, catalog, auth, request assembly, stream→message fold, tool-call protocol, token accounting | the conversation loop, tool *execution*, policy, history ownership | when `run()` returns, llm's work is over — "next turn" does not exist inside it |
 | `@openomni/agent` | the turn state machine: run/turn lifecycle, the order and timing of the 12 injection points, effect application, retry control flow, history, counters, spans | tool implementations, MCP, system prompt text, session persistence, compaction *strategy*, default policy content | **zero domain string literals in core files** — no prompt text, tool names, policy names, or magic strings like `"stalled"` |
 
-Consequence worth stating plainly: once the import conversion lands, `llm` depends on protocol and telemetry only, and `agent` carries no dependency on durable storage — and `script/check-deps.ts` can then drop `@openomni/session` from both allowlists, so the boundary is enforced rather than conventional. Relocating `Bus` is what makes that possible; it does not by itself achieve it. Eight of the nine `Bus` imports in `packages/agent/src` still resolve through `@openomni/session`, and both `llm` files do — that conversion is Phase 1b.
+Consequence, now realised: `llm` depends on protocol and telemetry only, and `agent` carries no dependency on durable storage. `script/check-deps.ts` no longer lists `@openomni/session` in either allowlist and neither manifest declares it, so the boundary is enforced rather than conventional — reopening either edge fails the gate. Relocating `Bus` made it possible; converting the nine imports is what achieved it.
 
 ## Decisions
 
@@ -90,10 +90,12 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
-| — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
-| [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | 🟨 |
-| — | convert the 102 opaque-`traceId` emit sites (D11): inherit a scope, or mint at a genuine origin | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | ✅ |
+| [#616](https://github.com/INONONO66/openomni/pull/616) | `agent` and `llm` drop `@openomni/session`; the allowlists close behind them | ✅ |
+| — | `agent` and `llm` take an injected `Sink` rather than importing `Bus` | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | ✅ |
+| [#613](https://github.com/INONONO66/openomni/pull/613), [#615](https://github.com/INONONO66/openomni/pull/615) | convert every opaque-`traceId` site in `packages/agent/src` (D11) — 13 + 3, the package now mints none | ✅ |
+| — | convert the remaining 102 opaque-`traceId` sites (D11): server 72, openomni 11, session 10, coordinator 9 | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core

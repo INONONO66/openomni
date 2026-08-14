@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import { createRunState } from "../../../src/core/execution/run-state";

@@ -3,7 +3,7 @@ import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.j
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { BusEvent, McpServerConfig, Tool } from "@openomni/protocol";
 import { Mcp, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   cleanupFailedConnection,
   type TransportCloseTracker,

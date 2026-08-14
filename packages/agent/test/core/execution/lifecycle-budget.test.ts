@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
 import { PolicyEngine, type PolicyContext } from "../../../src/core/policy";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";

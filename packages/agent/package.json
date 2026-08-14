@@ -17,7 +17,6 @@
     "@openomni/llm": "workspace:*",
     "@openomni/policy": "workspace:*",
     "@openomni/protocol": "workspace:*",
-    "@openomni/session": "workspace:*",
     "@openomni/telemetry": "workspace:*",
     "zod": "^3.22.4"
   },

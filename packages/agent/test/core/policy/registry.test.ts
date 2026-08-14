@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Policy } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";

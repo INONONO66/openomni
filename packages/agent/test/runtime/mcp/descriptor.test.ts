@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Operational, type RuntimeResource, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
 /** An MCP server's lifecycle belongs to whatever brought it up — the boot. */

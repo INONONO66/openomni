@@ -6,7 +6,7 @@ import {
   type Policy,
   type Tool,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
 
