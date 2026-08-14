@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786727281005,
+  "lastUpdate": 1786729340434,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46229,6 +46229,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509755,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7d6d01dca7fbafff5e29aa631c7499c845c6b24",
+          "message": "refactor(openomni): budget nagging is an opinion (#606) (#626)\n\n* refactor(openomni): budget nagging is an opinion (#606)\n\nSecond move of D5. The core owns budget *accounting* — the limits are\nloop invariants, and `checkBudget` is the query over them — but telling a\nmodel how much room it has left is an opinion about how to talk to a\nmodel. `builtin:budget-reassurance` and `builtin:budget-warning` move to\nopenomni and register through the public `PolicyRegistry.register`.\n\n`checkBudget` and `describeBudgetRemaining` become exported from\n`@openomni/agent`. That is the shape the split implies: the core keeps\nthe accounting and hands out the reading; the product decides what to say\nabout it.\n\nThe two snapshot blocks in `builtin-snapshots.test.ts` move with the\npolicies, and this time the pins that block carried travel intact —\n`effectCapabilities` by deep equality, plus `policyId` and the reason\ncodes, which the moved behavior suite did not cover. #625's review caught\nexactly that gap on the last move; the same three mutations are verified\nred-first here.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): export the types the budget queries read (#606)\n\nReview findings.\n\n`checkBudget` and `describeBudgetRemaining` went public without\n`BudgetState` or `BudgetStatus`, so a consumer can call them but cannot\nname what it is holding or what it got back. The moved test is the first\ncasualty: `import type { BudgetState } from \"@openomni/agent\"` is a\nTS2305 today. It is invisible because `packages/openomni`'s check-types\nruns `tsconfig.contract-test.json`, whose include is `src` plus one file\n— the test tree is not checked at all, which is #614's remaining work.\nSo the move took a type-checked test out of `packages/agent` and put it\nsomewhere nothing would notice. Verified with a scoped probe config:\nerror before, clean after.\n\nThat also corrects the PR body's claim that the two exports were \"the\nminimum needed\". They were less than needed.\n\n`docs/implementation-status.md` cited the deleted\n`policy/builtin/budget.ts` as the enforcement site for the budget\nhard-stop — in the table the repo describes as claims that are actually\nenforced. It was wrong before the move too: the hard-stop is\n`dispatchBudgetCheck`, never the nudges. Repointed.\n\nAlso: the `builtin/` tree in `packages/agent/AGENTS.md` still listed\n`budget.ts`, the \"Also exported\" list did not mention the queries, and a\ncomment in `lifecycle-dispatch.ts` still called the readers \"budget\nbuiltins\".\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T02:41:04+09:00",
+          "tree_id": "c12a6203208cc3e91e77d770cbb2077b0a97b209",
+          "url": "https://github.com/INONONO66/openomni/commit/c7d6d01dca7fbafff5e29aa631c7499c845c6b24"
+        },
+        "date": 1786729339500,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 7448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2220,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2320,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2303,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16053,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8323,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 960,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 42,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1471,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 36684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2006,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10285,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 97472,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 482479,
             "unit": "ns/op"
           }
         ]
