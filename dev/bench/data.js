@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786722875878,
+  "lastUpdate": 1786724960589,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45981,6 +45981,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 505821,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6881c06a721eb5d2ea3b80ac9665189eae3af3e",
+          "message": "refactor(agent): one trace guard, not two (#606) (#624)\n\n* refactor(agent): one trace guard, not two (#606)\n\n`requireRunTrace` (runner) and `requireExecutorTrace` (tool-executor)\nread the same three fields through the same predicate and threw on the\nsame condition. Each file also carried its own byte-identical copy of\nthat predicate. Three helpers for one rule.\n\nNow one `requireTrace(subject, traceContext)` beside `RunTrace`, whose\ntype it constructs, and one exported `nonEmptyString` beside it. The\nsubject names the boundary that refused, so the two messages stay\ndistinguishable.\n\nOne behavior change, an improvement: the tool executor's message was\n\"tool executor requires the run trace context\" and is now \"tool executor\nrequires a trace context with traceId, sessionId, runId\" — the runner\nalready listed the missing fields, and a caller that forgot one should be\ntold which.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): record what the compact investigation actually found (#606)\n\nReview findings.\n\nThe executor's refusal test asserted a prefix that stopped one word short\nof the field list this PR added, so the one deliberate behavior change\nwas unpinned. Now asserts the whole message; verified red-first against a\nmutant that drops the field list.\n\nPhase 3's row named five things as a dead pipeline. Two of them are live:\n`InMemoryCompactor` and `builtin:compaction` are reachable through\n`run.completion.pre` from an external policy plan, registered by the\nproduct kernel, and independent of `Run.Outcome.compact`. They get their\nown row saying so.\n\nAnd the dead half is larger than recorded. `packages/llm/src/run.ts`\nreturns only `stop`, `aborted`, and `error` — so `Run.Outcome.continue`\nis unproduced on exactly the same evidence as `compact`, and\n`handleContinue` is as unreachable as `handleCompact`. The row now names\nboth, along with why the deletion is Owner-gated (`lint:tools` indexes\nunion members positionally, and the disposition ledger records this\nsymbol as claimed by #498's run→llm `StepResult` move) and why it cannot\nbe split.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T01:28:07+09:00",
+          "tree_id": "4ba8ad032a2684d5359c5484ffc966b0e12dcd50",
+          "url": "https://github.com/INONONO66/openomni/commit/a6881c06a721eb5d2ea3b80ac9665189eae3af3e"
+        },
+        "date": 1786724960024,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 343,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1999,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2033,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1938,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 462,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 395,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 827,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 37,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1307,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 30966,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1682,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 9279,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 86958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 427037,
             "unit": "ns/op"
           }
         ]
