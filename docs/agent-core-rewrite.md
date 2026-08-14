@@ -109,7 +109,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | — | file layout + FSM | ⬜ |
 | [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | 🟨 |
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | 🟨 |
-| — | dissolve `builtin/` per D5 — `builtin:tool-permission` and the two budget policies; then `defaultRegistry` and the directory go. `builtin:compaction` waits on the `Run.Outcome` ruling above | ⬜ |
+| — | dissolve `builtin/` per D5 — `builtin:tool-permission` and the two budget policies; then `defaultRegistry` and the directory go. `builtin:compaction` waits on the `Run.Outcome` ruling in Phase 3 below | ⬜ |
 | — | retry no longer double-counts the turn budget | ⬜ |
 
 ### Phase 3 — compaction
