@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786648643642,
+  "lastUpdate": 1786677499802,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -44989,6 +44989,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513763,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "04d0a8c06537657b389570b763d5abd0d86d0576",
+          "message": "refactor(agent): close the llm and agent edges to the ledger (#606) (#616)\n\n* refactor(agent): close the llm and agent edges to the ledger (#606)\n\nPhase 1b's stated consequence, now enforced rather than described.\n\nAll nine `Bus` imports in `packages/agent/src` and `packages/llm/src` resolved\nthrough `@openomni/session` — the address `Bus` had before #612 moved it to\n`@openomni/telemetry`, kept working by a compatibility re-export. They point\nat telemetry now, and `script/check-deps.ts` no longer lists\n`@openomni/session` in either allowlist; neither manifest declares it.\nReopening either edge fails the gate, which is the difference between a\nboundary and a convention.\n\nThe 31 test imports moved too, or knip would flag them as unlisted. One was\nload-bearing in appearance only: `llm/test/processor/processor.test.ts`\nconfigured a fake session storage adapter, and `packages/llm/src` never reads\n`Storage` — removing the scaffolding leaves all 22 of its tests passing. That\nwas the last thing standing between `llm` and a protocol-plus-telemetry\ndependency set.\n\n`llm`'s `@openomni/telemetry` moves from devDependencies to dependencies: its\nsource imports `Bus` now, not just its tests.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): stop naming a dependency the gate now rejects (#606)\n\nReview round 1 on #616. Three doc-state violations, one of them active\nguidance rather than stale prose.\n\n`packages/agent/AGENTS.md`'s ANTI-PATTERNS list told the next contributor\nthat \"Agent depends on `@openomni/session` for Bus and TraceContext\nobservability only\" — the exact edge this PR closes and `check-deps.ts` now\nrejects. Following the guidance would fail the gate. Both that line and the\npackage summary name `@openomni/telemetry` now, and say the boundary is\nenforced.\n\n`packages/llm/AGENTS.md` had the same wrong dependency set.\n\nThe Phase 1 table called shipped work planned: #612's two rows sat at 🟨\nthough it merged, and the D11 row at ⬜ though #613 and #615 converted every\nsite in `packages/agent/src`. The `drop @openomni/session` row is split from\nthe injected-`Sink` row, which is genuinely still open — this PR removes the\ndependency without changing how `Bus` is reached.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T12:17:03+09:00",
+          "tree_id": "d38659bd7e5de02f747901289e3ac8d75b108bef",
+          "url": "https://github.com/INONONO66/openomni/commit/04d0a8c06537657b389570b763d5abd0d86d0576"
+        },
+        "date": 1786677498450,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4484,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2246,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1994,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13783,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7292,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 562,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 487,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 38,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1194,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 32210,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1551,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 79728,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 401894,
             "unit": "ns/op"
           }
         ]
