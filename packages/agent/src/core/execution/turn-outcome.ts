@@ -1,5 +1,5 @@
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";

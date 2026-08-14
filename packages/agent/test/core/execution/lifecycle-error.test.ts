@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { AgentExecution, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { AgentEvent } from "../../../src/core/types";

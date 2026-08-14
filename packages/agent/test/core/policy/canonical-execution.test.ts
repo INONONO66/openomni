@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
 import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
 import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { buildPolicyEngine } from "../../../src/core/execution/runner";
 import { streamAgent } from "../../../src/core/execution/runner";

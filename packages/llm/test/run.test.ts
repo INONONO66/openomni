@@ -3,7 +3,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Sink, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
 import { newTraceId } from "@openomni/telemetry";

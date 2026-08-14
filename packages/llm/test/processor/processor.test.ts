@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
 import { LlmCall, Operational, type Message, type Sink, type Tool } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
@@ -13,64 +13,6 @@ type OperationalInfoPayload = {
   msg: string;
   context?: Record<string, unknown>;
 };
-
-function configureSession(sessionId: string): void {
-  const messages = new Map<string, Message.Info>();
-  const parts = new Map<string, Message.Part>();
-  const now = Date.now();
-
-  Storage.configure({
-    session: {
-      get(id) {
-        if (id !== sessionId) return undefined;
-        return {
-          id: sessionId,
-          title: "Processor test session",
-          model: { providerID: "anthropic", modelID: "claude-3-5-sonnet" },
-          spawnDepth: 0,
-          time: { created: now, updated: now },
-        };
-      },
-      set() {
-        return undefined;
-      },
-      list() {
-        return [];
-      },
-      remove() {
-        return false;
-      },
-    },
-    message: {
-      get(_sessionID, messageID) {
-        return messages.get(messageID);
-      },
-      set(_sessionID, message) {
-        messages.set(message.id, message);
-      },
-      list() {
-        return [...messages.values()];
-      },
-      remove(_sessionID, messageID) {
-        return messages.delete(messageID);
-      },
-    },
-    part: {
-      get(_messageID, partID) {
-        return parts.get(partID);
-      },
-      set(_messageID, part) {
-        parts.set(part.id, part);
-      },
-      list() {
-        return [...parts.values()];
-      },
-      remove(_messageID, partID) {
-        return parts.delete(partID);
-      },
-    },
-  });
-}
 
 function streamOf(chunks: Array<Record<string, unknown>>) {
   return async () => ({
@@ -180,7 +122,6 @@ describe("Processor", () => {
 
   afterEach(() => {
     Bus.reset();
-    Storage.reset();
   });
 
   function createProcessor(overrides: Partial<Processor.ProcessorOptions> = {}) {
@@ -477,8 +418,6 @@ describe("Processor", () => {
       const toolCalls: Tool.Call[] = [];
       const toolResults: Tool.Result[] = [];
       const messages: Message.WithParts[] = [];
-
-      configureSession("session-456");
 
       const sink: Sink = {
         onMessage(message) {

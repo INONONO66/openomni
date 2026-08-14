@@ -7,7 +7,7 @@ import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
 import { getLanguage } from "./provider/sdk";
 import { Auth } from "./auth/storage";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 /**
  * Input for the run() function.

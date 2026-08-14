@@ -13,12 +13,11 @@
     "@ai-sdk/anthropic": "^3.0.64",
     "@ai-sdk/openai": "^3.0.48",
     "@openomni/protocol": "workspace:*",
-    "@openomni/session": "workspace:*",
+    "@openomni/telemetry": "workspace:*",
     "ai": "^6.0.141",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@openomni/telemetry": "workspace:*",
     "@types/bun": "latest"
   }
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { LlmCall, type Message } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";

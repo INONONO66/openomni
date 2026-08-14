@@ -6,7 +6,7 @@ import {
   type Sink,
   type Tool,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { coerceApiError } from "../error";
 import { Retry } from "../retry";
 import type { Provider } from "../provider";

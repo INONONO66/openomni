@@ -106,21 +106,22 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
-    // telemetry is ring 1 and llm is ring 2, so the edge runs downward. Only
-    // llm's tests use it today, to mint trace ids through the package that
-    // owns the format rather than hardcoding hex literals beside it.
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry", "@openomni/session"]),
+    // No durable storage: llm reads and writes the model, and reports what it
+    // did through the observation channel. The `@openomni/session` edge came
+    // from `Bus` living in the ledger package; it does not any more (#606).
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
   },
   agent: {
     displayName: "agent",
     packageJsonPath: "packages/agent/package.json",
     packageName: "@openomni/agent",
+    // The loop owns no durable state. Same reason as llm: the ledger edge was
+    // `Bus`'s old address, and the ratchet keeps it closed (#606).
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/policy",
       "@openomni/llm",
       "@openomni/telemetry",
-      "@openomni/session",
     ]),
   },
   openomni: {

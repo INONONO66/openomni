@@ -1,6 +1,6 @@
 import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
 import type { Policy, TraceContext } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { RetryReason } from "../retry";
 import type { AgentEvent, AgentStep, TokenUsage } from "../types";
 import { getCompactionCount, type AgentRunBase, type RunState } from "./run-state";
