@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
 import { LlmCall, Operational, type Message, type Sink, type Tool } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
+import { collector } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
@@ -129,7 +129,6 @@ describe("Processor", () => {
   });
 
   afterEach(() => {
-    Bus.reset();
     events.reset();
   });
 
@@ -415,7 +414,7 @@ describe("Processor", () => {
       expect(statusStates(events)).toEqual(["busy", "idle"]);
     });
 
-    test("projects sink callbacks to Bus events", async () => {
+    test("projects sink callbacks onto the events port", async () => {
       const sinkEvents: string[] = [];
       const toolCalls: Tool.Call[] = [];
       const toolResults: Tool.Result[] = [];
@@ -460,22 +459,17 @@ describe("Processor", () => {
       expect(toolResults).toHaveLength(1);
       expect(toolResults[0]?.toolCallId).toBe("call-1");
 
-      expect(processorInfo(events).every((event) => event.component === "llm.processor")).toBe(
-        true,
-      );
-      expect(processorInfo(events).every((event) => event.sessionId === "session-456")).toBe(true);
+      const infoEvents = processorInfo(events);
+      expect(infoEvents.every((event) => event.component === "llm.processor")).toBe(true);
+      expect(infoEvents.every((event) => event.sessionId === "session-456")).toBe(true);
       // sink.* diagnostics must join to llm.call.* events via the run traceId.
-      expect(processorInfo(events).every((event) => event.traceId === "trace-projection")).toBe(
-        true,
-      );
-      expect(processorInfo(events).every((event) => typeof event.time === "number")).toBe(true);
+      expect(infoEvents.every((event) => event.traceId === "trace-projection")).toBe(true);
+      expect(infoEvents.every((event) => typeof event.time === "number")).toBe(true);
 
-      const messageEvents = processorInfo(events).filter((event) => event.msg === "sink.message");
-      const snapshotEvents = processorInfo(events).filter((event) => event.msg === "sink.snapshot");
-      const toolStarted = processorInfo(events).find((event) => event.msg === "sink.tool.started");
-      const toolCompleted = processorInfo(events).find(
-        (event) => event.msg === "sink.tool.completed",
-      );
+      const messageEvents = infoEvents.filter((event) => event.msg === "sink.message");
+      const snapshotEvents = infoEvents.filter((event) => event.msg === "sink.snapshot");
+      const toolStarted = infoEvents.find((event) => event.msg === "sink.tool.started");
+      const toolCompleted = infoEvents.find((event) => event.msg === "sink.tool.completed");
 
       expect(messageEvents.length).toBe(messages.length);
       expect(snapshotEvents.length).toBe(2);

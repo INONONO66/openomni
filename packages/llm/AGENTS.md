@@ -46,7 +46,7 @@ src/
 
 ## ANTI-PATTERNS
 
-- Do NOT import `Bus` here. `llm` reports through the `events` port it is handed; reaching for the process-wide bus re-couples the package to an implementation the composition root is supposed to choose (#606). `check-deps`' source scan is what keeps `src/` clean.
+- Do NOT import `Bus` here. `llm` reports through the `events` port it is handed; reaching for the process-wide bus re-couples the package to an implementation the composition root is supposed to choose (#606). `check-deps` carries a separate `srcAllowedDeps` for this package — `src/` may import `@openomni/protocol` and nothing else, even though the manifest lists `telemetry` for the tests.
 - `packages/llm` sets `noEmit: true` in tsconfig — it does NOT produce a `dist/`. It is consumed as source by Bun.
 - Do NOT add provider-specific logic to call sites. Keep SDK wiring in `provider/`, credential handling in `auth/`, and message/request shaping in `transform/`.
 - Do NOT bypass `Auth.get()` for credentials (e.g. reading env vars inline). All credentials flow through the namespace.

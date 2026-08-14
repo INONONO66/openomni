@@ -309,6 +309,9 @@ describe("run", () => {
     }
 
     expect(collected.named(LlmCall.Started.name)).toHaveLength(1);
+    // Every `Started` gets a terminal event — the success half of the pair the
+    // failure test covers.
+    expect(collected.named(LlmCall.Completed.name)).toHaveLength(1);
     // Not filtered to `llm.*`: an `operational.*` record routed back through
     // the global bus is the same defect, and the filter hid six of the eight
     // publish sites from this assertion.

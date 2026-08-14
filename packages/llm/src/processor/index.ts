@@ -40,9 +40,11 @@ export namespace Processor {
     maxRetryAttempts?: number;
     sink?: Sink;
     /**
-     * Where observation goes. A port, not `Bus`: the composition root decides
-     * what is behind it, tests bind a collector, and P2 can split a
+     * Where observation goes. A port, not `Bus`, so that what sits behind it
+     * is the caller's choice: tests bind a collector, and P2 can split a
      * fail-closed ledger append from the lossy bus without touching this file.
+     * Today the agent hard-binds `Bus` at `turn-prepare.ts` — moving that to
+     * the composition root is the next slice, not something this file knows.
      */
     events: BusEvent.Sink;
     createStream: (input: StreamInput) => Promise<Stream>;

@@ -48,6 +48,13 @@ type PackageRule = {
   packageJsonPath: string;
   packageName: string;
   allowedDeps: "none" | "any-except-self" | Set<string>;
+  /**
+   * Tighter allowlist for `<pkg>/src/` alone, when a package's runtime surface
+   * is narrower than what its tests need. Without it a test-only dependency
+   * silently re-permits the same import in production code, which is how a
+   * closed boundary reopens without any gate noticing.
+   */
+  srcAllowedDeps?: Set<string>;
 };
 
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
@@ -106,13 +113,12 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
     packageName: "@openomni/llm",
-    // `packages/llm/src` is protocol-only: it reads and writes the model and
-    // reports through an injected `BusEvent.Sink`, so it imports no
-    // implementation of the observation channel at all (#606). `telemetry`
-    // stays listed because the tests bind `Bus`/`collector` behind that port,
-    // and `check-deps` counts devDependencies; the source-import scan is what
-    // proves `src/` clean.
+    // The manifest may carry `telemetry` — the tests bind `Bus`/`collector`
+    // behind the port, and `check-deps` counts devDependencies.
     allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
+    // `src/` may not. It reports through an injected `BusEvent.Sink` and
+    // imports no implementation of the observation channel at all (#606).
+    srcAllowedDeps: new Set(["@openomni/protocol"]),
   },
   agent: {
     displayName: "agent",
@@ -156,6 +162,12 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
+
+/** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
+function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
+  if (!dep.startsWith("@openomni/")) return true;
+  return rule.srcAllowedDeps === undefined ? isAllowedDep(rule, dep) : rule.srcAllowedDeps.has(dep);
+}
 
 function isAllowedDep(rule: PackageRule, dep: string): boolean {
   if (!dep.startsWith("@openomni/")) {
@@ -322,7 +334,7 @@ async function validateSourceImportDirection(): Promise<string[]> {
     let match = importPattern.exec(source);
     while (match !== null) {
       const dep = match[1];
-      if (!isAllowedDep(owner.rule, dep)) {
+      if (!isAllowedSourceDep(owner.rule, dep)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
           `VIOLATION: ${filePath}:${line} source-imports ${dep} — not allowed by layer order for ${owner.rule.displayName} (manifest check cannot see phantom imports)`,

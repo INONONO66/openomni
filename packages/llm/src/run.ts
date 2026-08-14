@@ -204,7 +204,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   input.events.publish(LlmCall.Started, {
     traceId,
     sessionId: sessionID,
-    ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+    ...(input.trace.runId !== undefined && { runId: input.trace.runId }),
     provider,
     model: modelId,
     messageCount: messages.length,
