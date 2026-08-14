@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786721106215,
+  "lastUpdate": 1786722875878,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45857,6 +45857,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 517317,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "274bca54ec6218e016924f3538c64d2ba1cb1888",
+          "message": "refactor(agent): delete the fabricated run identity (#606) (#623)\n\n* refactor(agent): delete the fabricated run identity (#606)\n\n`agentBaseForState` built an `AgentRunBase` by putting `state.sessionId`\ninto all four fields — traceId, sessionId, runId, actorId. It was reached\nonly through a default parameter on three lifecycle dispatchers, and only\nby tests: the runner passes the base it derives from a trace it refused\nto mint. So the guard #613 put at the run boundary had a back door two\nfiles over, and eight tests were quietly running against a trace id that\nwas a session id.\n\nThe default is gone and those eight call sites now pass `makeAgentBase()`.\nWith no synthesizer left, `AgentRunBase.runId` becomes required, which\nremoves three fallbacks that could not fire on a well-formed base:\n`agentBase.sessionId || state.sessionId` twice, `agentBase.runId ||\nagentBase.traceId`, and the `runId === undefined` conditional spreads in\n`buildLifecyclePolicyContext` and `buildPolicyEngine`.\n\nAlso deletes ten comments narrating a past refactor rather than the code\n(\"merged from shared.ts (fragment sweep: single-consumer fn)\" and kin).\n\nThe remaining `as unknown as` stays and is now explained. The generic on\n`buildLifecyclePolicyContext` is what type-checks each point's declared\ninputs at eleven call sites; TypeScript cannot prove an object literal\nsatisfies `Omit<TOverrides, K>` while `TOverrides` is still a parameter,\nand narrowing to a single assertion is rejected as non-overlapping for\nthe same reason. Verified both ways.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(agent): pin where a lifecycle context takes its identity (#606)\n\nReview findings.\n\nReverting `buildLifecyclePolicyContext` to the old `sessionId ||\nstate.sessionId` / `runId || traceId` semantics left the entire monorepo\nsuite green — nothing asserted where a lifecycle point's identity comes\nfrom. The existing trace assertion already ran with a base whose session\nid differs from the state's, so two lines extend it to the top-level\nfields. Verified red-first: the old semantics now fail it.\n\nA comment added two PRs ago said `AgentRunBase.runId` is optional, which\nthis PR is what makes false. Rewritten to the reason that survives.\n\n`duplicate helpers` was dropped from the roadmap row rather than done —\n`nonEmptyString` is byte-identical in `runner.ts` and `tool-executor.ts`,\nand `requireRunTrace`/`requireExecutorTrace` sit on top of it. Restored\nto the remaining row, named.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T00:53:15+09:00",
+          "tree_id": "532bb982118a60659edd407201235a43e5fab02d",
+          "url": "https://github.com/INONONO66/openomni/commit/274bca54ec6218e016924f3538c64d2ba1cb1888"
+        },
+        "date": 1786722874771,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5912,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2496,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15410,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7984,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1052,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10779,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 505821,
             "unit": "ns/op"
           }
         ]
