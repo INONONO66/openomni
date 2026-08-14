@@ -289,6 +289,14 @@ describe("createToolPermissionPolicy", () => {
     expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
     expect(mw.priority).toBe(0);
     expect(mw.failPolicy).toBe("fail-closed");
+    // Not decoration: the engine replaces any effect a registration did not
+    // declare for the point it fired at, so an emptied entry would drop the
+    // abort and the approval request at runtime while every direct
+    // `mw.fn(ctx)` assertion here still passed.
+    expect(mw.effectCapabilities).toEqual({
+      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+    });
   });
 
   it("abort — denyLabels match blocks tool", async () => {
@@ -326,60 +334,22 @@ describe("createToolPermissionPolicy", () => {
 });
 
 /**
- * Carried from `agent`'s `builtin-snapshots` when the policy moved (#629).
- * `effectCapabilities` and `failPolicy` are not decoration: the engine
- * replaces any effect a registration did not declare for the point it fired
- * at, and `fail-closed` is what makes an evaluation failure a deny rather than
- * a pass. Neither is visible to a direct `mw.fn(ctx)` assertion.
+ * The ruleset-to-verdict mapping for approval. The executor's half — that a
+ * pending decision blocks the call — is `agent`'s
+ * `tool-executor-verdicts.test.ts`; that a `requireApproval` entry *produces*
+ * one is this policy's, and was covered only by the integration suite #629
+ * decomposed.
  */
-describe("canonical registration metadata", () => {
-  it("name, points, capabilities, priority, failPolicy", () => {
-    const mw = createToolPermissionPolicy({ events: Bus, permission: { action: "tool.call" } });
-    expect(mw.name).toBe("builtin:tool-permission");
-    expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
-    expect(mw.effectCapabilities).toEqual({
-      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
-      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
-    });
-    expect(mw.priority).toBe(0);
-    expect(mw.failPolicy).toBe("fail-closed");
-  });
-
-  it("denies an allowlist miss with the reason and policy id", async () => {
+describe("approval requirements", () => {
+  it("returns pending with a require_approval effect", async () => {
     const mw = createToolPermissionPolicy({
       events: Bus,
-      permission: { action: "tool.call", allowlist: ["read_file"] },
+      permission: { action: "tool.call", requireApproval: ["bash"] },
     });
     const verdict = await mw.fn(
-      baseCtx({ toolName: "shell_exec", toolCallId: "call-2", toolInput: { cmd: "rm -rf /" } }),
+      baseCtx({ toolName: "bash", toolCallId: "call-approval", toolInput: { cmd: "ls" } }),
     );
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("allowlist_miss");
-    expect(verdict.policyId).toBe("guardrail.permission");
-  });
-});
-
-/**
- * The other half of what agent's tool-permission integration suite proved.
- * The executor puts the tool's labels in the context and resolves its
- * canonical policy name (`agent`'s `tool-policy-context.test.ts`); matching a
- * ruleset against them is this policy's, and moved here with it (#629).
- */
-describe("label interpretation", () => {
-  it("denies on a matched deny label", async () => {
-    const mw = createToolPermissionPolicy({
-      events: Bus,
-      permission: { action: "tool.call", denyLabels: ["capability:write"] },
-    });
-    const verdict = await mw.fn(
-      baseCtx({
-        toolName: "write",
-        toolCallId: "call-label",
-        toolInput: { path: "file.txt" },
-        toolLabels: ["capability:write", "risk:tier-1"],
-      }),
-    );
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("deny_label");
+    expect(verdict.verdict).toBe("pending");
+    expect(verdict.effects.map((effect) => effect.type)).toContain("tool.require_approval");
   });
 });

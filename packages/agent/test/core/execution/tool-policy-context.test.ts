@@ -1,8 +1,16 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyDecision, type Policy, type Tool } from "@openomni/protocol";
+import { PolicyDecision, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
-import { PolicyEngine } from "../../../src/core/policy";
+import { PolicyEngine, type CanonicalPolicyRegistration } from "../../../src/core/policy";
+import { ChatAgent } from "../../../src/core/chat-agent";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  mockProviderData,
+  mockProviderModel,
+} from "../../helpers/mock-llm";
+import { runInput } from "../../helpers/run-input";
 
 /**
  * What the executor hands a `tool.native.pre` policy. Half of what the
@@ -11,22 +19,26 @@ import { PolicyEngine } from "../../../src/core/policy";
  * if the executor puts them in the context. How a ruleset then *interprets*
  * them is the policy's, and moved to openomni with it (#629).
  */
-function observingEngine(seen: Policy.PolicyDecision[] | Array<Record<string, unknown>>) {
-  const engine = PolicyEngine.create();
-  engine.register({
+function engineRegistration(seen: Array<Record<string, unknown>>) {
+  return {
     kind: "point",
     name: "test:tool-pre-observer",
     pointIds: ["tool.native.pre"],
     effectCapabilities: { "tool.native.pre": [] },
     priority: 0,
     fn: (ctx) => {
-      (seen as Array<Record<string, unknown>>).push({
+      seen.push({
         toolName: ctx.toolName,
         toolLabels: ctx.toolLabels,
       });
       return PolicyDecision.allow({ policyId: "test.tool-pre-observer" });
     },
-  });
+  } satisfies CanonicalPolicyRegistration;
+}
+
+function observingEngine(seen: Array<Record<string, unknown>>) {
+  const engine = PolicyEngine.create();
+  engine.register(engineRegistration(seen));
   return engine;
 }
 
@@ -80,5 +92,56 @@ describe("tool policy context", () => {
     await executor({ id: "call-2", tool: "grep_search", input: { pattern: "x" } });
 
     expect(seen[0]?.toolName).toBe("grep.search");
+  });
+});
+
+/**
+ * One layer up, and the layer #629's first decomposition missed. The tests
+ * above hand `getToolLabels` / `getPolicyToolName` to the executor directly,
+ * so they pin that it *consumes* them — not that `buildTurn` derives them from
+ * `config.tools`. That derivation is what makes a permission ruleset able to
+ * name a tool at all, and it was covered only by the integration suite this
+ * PR decomposed.
+ */
+describe("tool policy context through a run", () => {
+  it("derives labels and the canonical policy name from the tool spec", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const agent = ChatAgent.create({
+      events: Bus,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: createMockLlmConfig({
+        getModels: async () => mockProviderData,
+        fromModelsDevModel: () => mockProviderModel,
+        run: async (input, sink) => {
+          const call: Tool.Call = {
+            id: "call-derived",
+            tool: "grep_search",
+            input: { pattern: "x" },
+          };
+          if (input.toolExecutor) sink.onToolResult(await input.toolExecutor(call));
+          return createStopOutcome();
+        },
+      }),
+      tools: [
+        {
+          name: "grep_search",
+          inputSchema: { type: "object", properties: { pattern: { type: "string" } } },
+          labels: ["tool:grep.search", "capability:read"],
+        },
+      ],
+      toolExecutor: async (call) => ({
+        id: "result-derived",
+        toolCallId: call.id,
+        output: "ok",
+        isError: false,
+      }),
+      middleware: [engineRegistration(seen)],
+    });
+
+    await agent.run(runInput([{ role: "user", content: "search" }]));
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.toolName).toBe("grep.search");
+    expect(seen[0]?.toolLabels).toEqual(["tool:grep.search", "capability:read"]);
   });
 });

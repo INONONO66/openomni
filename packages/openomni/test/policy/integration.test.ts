@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine, defaultRegistry, type PolicyContext } from "@openomni/agent";
 import { registerIdleNudge } from "../../src/execution-runtime/middleware/idle-nudge-policy";
-import { registerBudgetNudges } from "../../src/execution-runtime/middleware/budget-nudge-policy";
 import { registerToolPermission } from "../../src/execution-runtime/middleware/tool-permission-policy";
 import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
@@ -55,7 +54,6 @@ describe("policy pipeline integration", () => {
 
     const registry = defaultRegistry(Bus);
     registerIdleNudge(registry);
-    registerBudgetNudges(registry);
     registerToolPermission(registry, Bus);
     registry.register("test:github-surface-guard", () => ({
       kind: "point",
@@ -119,7 +117,6 @@ describe("policy pipeline integration", () => {
 
     const registry = defaultRegistry(Bus);
     registerIdleNudge(registry);
-    registerBudgetNudges(registry);
     registerToolPermission(registry, Bus);
     registry.register("policy:github-review-readonly", () => ({
       kind: "point",

@@ -8,10 +8,6 @@ export function allow(
   return PolicyDecision.allow({ policyId, ...(reason ? { reasonCodes: [reason] } : {}), effects });
 }
 
-export function firstReason(decision: Policy.PolicyDecision): string | undefined {
-  return decision.reasonCodes[0];
-}
-
 export function effectOf<TType extends Policy.PolicyEffect["type"]>(
   decision: Policy.PolicyDecision,
   type: TType,
