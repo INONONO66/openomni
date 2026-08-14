@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786708589778,
+  "lastUpdate": 1786710341152,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -45361,6 +45361,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 505661,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "67a2ab635afc56d923c7d45bdab6506feedb3d9f",
+          "message": "fix(llm): type-check the test tree (#614) (#619)\n\n`packages/llm/tsconfig.json` scanned only `src`, so none of the 24 files\nunder `test/` were ever type-checked. Turning it on surfaced 56 errors,\nand they were not all test-local.\n\n`getLanguage` was declared `LanguageModel`, which in ai 6 also admits a\nbare gateway model id string. No path in `sdk.ts` returns one — every\nbranch hands back an SDK-built `LanguageModelV3` — so the loose return\ntype only pushed `as ModelRef` casts onto callers who wanted `modelId`.\nNarrowed to `Exclude<LanguageModel, string>`; the casts in\n`integration.test.ts` and three of the four in `openai.test.ts` go with\nit. The survivor reaches for `config`, an OpenAI SDK detail genuinely\nabsent from the interface, and is now named for that.\n\n`expect.unreachable` does not narrow — it is a method call, so\nTypeScript's never-return analysis skips it — which left four assertions\nreading a property off an un-narrowed union. Replaced with throwing\nguards, which narrow and say the thing once instead of twice.\n\nThree `new APIError({ name: \"APIError\", ... })` calls passed a key the\noptions type does not name. It was not silently dropped: `NamedError`\nstores `data` verbatim, so it rode along in `.data` and `toObject()`.\nNothing reads it and the zod schema does not declare it, so it goes.\n\nThe test tree gets its own `tsconfig.test.json` at ES2022, because 13\ndead-export pins use `Object.hasOwn`. Raising `lib` in `tsconfig.json`\ninstead would not have made llm stricter: `main` points at\n`src/index.ts`, so `agent` and `server` compile llm's sources under their\nown ES2020, and an ES2022 builtin in llm's `src` would pass here and fail\nthere, reported against the wrong package. `check-types` runs both\nconfigs, the shape `agent` and `session` already use.\n\nThe rest is `noUncheckedIndexedAccess` honesty at indexed reads, and a\nfetch stub that named DOM types Bun does not export.\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T21:24:30+09:00",
+          "tree_id": "29010d67e5224f022309f9979924581cb9e32ce1",
+          "url": "https://github.com/INONONO66/openomni/commit/67a2ab635afc56d923c7d45bdab6506feedb3d9f"
+        },
+        "date": 1786710340088,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6224,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2624,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3363,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2480,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16427,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8494,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1240,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 799,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10772,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 510881,
             "unit": "ns/op"
           }
         ]
