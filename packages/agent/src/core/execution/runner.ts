@@ -12,7 +12,7 @@ import {
   dispatchModelResponse,
   dispatchPreRun,
 } from "./lifecycle-dispatch";
-import { createRunState, type AgentRunBase, type RunTrace } from "./run-state";
+import { createRunState, nonEmptyString, requireTrace, type AgentRunBase } from "./run-state";
 
 /**
  * Runs an agent to a result.
@@ -31,7 +31,7 @@ export async function runAgent(
   let attempt = 1;
   let lastError = "";
 
-  const trace = requireRunTrace(input.traceContext);
+  const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
   const actorId =
     nonEmptyString(input.metadata?.actorId) ?? nonEmptyString(trace.agentName) ?? runId;
@@ -142,36 +142,6 @@ function unknownOutcomeType(value: unknown): string {
 
   const type = value.type;
   return typeof type === "string" ? type : "unknown";
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-/**
- * A run must arrive with an identity. Minting one here — which is what the
- * removed `TraceContext.empty()` plus three `?? crypto.randomUUID()` fallbacks
- * did — produces a run whose every event correlates to nothing, and the caller
- * never learns it forgot.
- *
- * What is required here is inheritance, not wire format. A run must carry the
- * identity of whatever asked for it; whether that identity is expressible as a
- * W3C `traceparent` is enforced by the emitter that puts it on the wire, which
- * is the only place the format matters.
- */
-function requireRunTrace(traceContext: ChatAgentInput["traceContext"]): RunTrace {
-  const traceId = nonEmptyString(traceContext?.traceId);
-  const sessionId = nonEmptyString(traceContext?.sessionId);
-  const runId = nonEmptyString(traceContext?.runId);
-  if (traceId === undefined || sessionId === undefined || runId === undefined) {
-    const missing = [
-      traceId === undefined ? "traceId" : undefined,
-      sessionId === undefined ? "sessionId" : undefined,
-      runId === undefined ? "runId" : undefined,
-    ].filter((field): field is string => field !== undefined);
-    throw new Error(`agent run requires a trace context with ${missing.join(", ")}`);
-  }
-  return { ...traceContext, traceId, sessionId, runId };
 }
 
 async function resolveProviderModel(model: {

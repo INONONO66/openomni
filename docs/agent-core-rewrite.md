@@ -105,7 +105,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#610](https://github.com/INONONO66/openomni/pull/610) | delete the unimplemented second event channel | ✅ |
 | [#621](https://github.com/INONONO66/openomni/pull/621) | single output channel: remove the `AgentEvent` generator and `ChatAgent.stream` | 🟨 |
 | [#623](https://github.com/INONONO66/openomni/pull/623) | slop comments and `agentBaseForState`; the last `as unknown as` is earned, not removed | 🟨 |
-| — | file layout + FSM; duplicate helpers (`nonEmptyString` ×2, `requireRunTrace`/`requireExecutorTrace`) | ⬜ |
+| [#624](https://github.com/INONONO66/openomni/pull/624) | duplicate helpers: one `requireTrace`, one `nonEmptyString` | 🟨 |
+| — | file layout + FSM | ⬜ |
 | [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | 🟨 |
 | — | dissolve `builtin/` per D5 | ⬜ |
 | — | retry no longer double-counts the turn budget | ⬜ |
@@ -114,7 +115,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| — | remove the dead pipeline: `InMemoryCompactor`, `builtin:compaction`, `handleCompact`, the `Run.Outcome.compact` variant, middleware wiring | ⬜ |
+| — | remove `handleContinue`, `handleCompact`, and the `Run.Outcome` `continue`/`compact` variants. Both are unproduced: `packages/llm/src/run.ts` returns only `stop`, `aborted`, `error`, and no production site injects `config.llm.run`. **Owner-gated** — deleting a union member trips `lint:tools`' positional schema snapshot (`Run.Outcome#4`), whose `--update` needs sign-off, and `.omo/evidence/p3/protocol-concept-disposition.json` records this symbol as claimed by #498's run→llm `StepResult` move. Not splittable: `runner.ts`'s `_exhaustive: never` fails whichever half lands first | ⬜ |
+| — | `InMemoryCompactor` + `builtin:compaction` — **not dead**, and not covered by the row above. Reachable through `run.completion.pre` from an external policy plan (`compaction-policy-plan.test.ts` pins that path) and registered by the product kernel at `openomni/src/execution-runtime/middleware.ts`. Their fate is D5 and the compaction rewrite below, not a deletion | ⬜ |
 | — | `compaction/`: measure, adaptive policy with yield feedback, guard | ⬜ |
 | — | deterministic no-LLM reduction, cut planning, incremental summarization | ⬜ |
 | — | speculative overlap and bounded overflow retry | ⬜ |

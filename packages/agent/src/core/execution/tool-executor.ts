@@ -4,6 +4,7 @@ import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
 import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
+import { nonEmptyString, requireTrace } from "./run-state";
 
 type BlockedResultMetadata = {
   verdict: Policy.PolicyDecision["verdict"];
@@ -53,7 +54,7 @@ export function createToolExecutor(
   // The executor is built inside a turn, which is inside a run that already
   // refused to start without an identity. Minting one here would give a tool
   // call its own trace, detached from the run that made it.
-  const configured = requireExecutorTrace(traceContext);
+  const configured = requireTrace("tool executor", traceContext);
 
   function publishDecisionObserverError(
     activeTraceContext: TraceContext.Type,
@@ -245,22 +246,6 @@ export function createToolExecutor(
     const rewriteOutput = effectOf(postDecision, "tool.rewrite_output");
     return rewriteOutput ? { ...result, output: rewriteOutput.output } : result;
   };
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function requireExecutorTrace(
-  traceContext: TraceContext.Type | undefined,
-): Required<Pick<TraceContext.Type, "traceId" | "sessionId" | "runId">> {
-  const traceId = nonEmptyString(traceContext?.traceId);
-  const sessionId = nonEmptyString(traceContext?.sessionId);
-  const runId = nonEmptyString(traceContext?.runId);
-  if (traceId === undefined || sessionId === undefined || runId === undefined) {
-    throw new Error("tool executor requires the run trace context");
-  }
-  return { traceId, sessionId, runId };
 }
 
 interface ToolPolicyRunContext {
