@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786733694789,
+  "lastUpdate": 1786735576512,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46601,6 +46601,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 507943,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca48f150878ce710fb4b433964956f1f93342525",
+          "message": "fix(agent): a retried attempt is the same turn (#606) (#630)\n\n* fix(agent): a retried attempt is the same turn (#606)\n\n`buildTurn` charges the turn budget before the model call, and the runner\nre-enters `buildTurn` on retry without advancing `turnIndex`. So a turn\nthat failed once and succeeded on the second attempt cost two turns of\nbudget. Instrumenting `recordRunTurn` on such a run prints two charges at\n`turnIndex=0`, taking `turns` to 2 for one turn of work.\n\nThat is the wrong unit. An operator sizing `maxTurns` is sizing turns of\nwork; a transient provider error is not work. With the default policy a\nsingle flaky turn spends two, and a run near its ceiling ends as\n`max-steps` having done less than it was allowed.\n\n`recordRunTurn` now charges once per `turnIndex`. `advanceRunTurn` and\n`advanceRunContinuation` move the index, so a real next turn charges\nnormally.\n\nPinned at the contract the fix changes rather than end to end: the\nrunner-level observation points either read the count before the charge\nthey would prove (`run.turn.pre`) or fire between the two charges, so an\nend-to-end assertion would have been shaped around the harness rather\nthan the behavior. Red-first: both cases fail without the guard.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(agent): the end-to-end case I wrongly said could not exist (#606)\n\nReview finding, and it is about my evidence rather than the fix.\n\nI claimed every runner-level observation point reads the wrong moment,\n`run.lifecycle.post` included. That half is false: it fires once, from\n`dispatchPostRunTransform`, after every charge, and reads 2 without the\nguard and 1 with it. The harness I discarded never let the retry succeed,\nso `handleStop` never ran and the only `run.lifecycle.post` I saw came\nfrom mid-run — which is exactly the shaped-around-the-harness mistake I\nsaid I was avoiding. `run.turn.post`, `agent.run.completed`, and\n`finishReason` under `maxTurns` discriminate too.\n\nThe case matters beyond bookkeeping: it is the only guard on the runner's\ncall site. Adding `state.chargedTurnIndex = -1` to the retry branch — the\nkind of \"reset for the new attempt\" edit someone will make — leaves both\nunit cases green and restores the double charge. With this test it fails.\n\nAlso one line in the KEY PATTERNS list next to the existing budget\nbullet, since that is where a reader looks for turn accounting: a retried\nattempt is free in the turns unit and bounded by `maxAttempts`, while\ntokens and tool calls still charge per attempt because they were spent.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T04:25:08+09:00",
+          "tree_id": "9234bda0146ab0d36ecb52bb1ffae5a5c1c2b8f4",
+          "url": "https://github.com/INONONO66/openomni/commit/ca48f150878ce710fb4b433964956f1f93342525"
+        },
+        "date": 1786735575859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5831,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8783,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2666,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15072,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7983,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 574,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1022,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1576,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43910,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2286,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 98860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 501930,
             "unit": "ns/op"
           }
         ]
