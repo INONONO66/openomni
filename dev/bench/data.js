@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786724960589,
+  "lastUpdate": 1786727281005,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46105,6 +46105,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 427037,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b8d5c947a8ee2b0955daa62aaa9b520481d72e4",
+          "message": "refactor(openomni): idle nudge is an opinion, not a core policy (#606) (#625)\n\n* refactor(openomni): idle nudge is an opinion, not a core policy (#606)\n\nFirst move of D5. The core ships the points; a product ships the\npolicies. Prodding a run that has not progressed is a product decision —\na run that is merely slow is still a valid run — so `builtin:idle-nudge`\nmoves to `packages/openomni`, config schema and all, and registers\nthrough the same public `PolicyRegistry.register` any consumer would use.\n\n`defaultRegistry` no longer knows about it. That is the whole point of\nthe decision: it was a privileged second-class extension path only we\ncould reach.\n\nOne test does not move with it. `idle-nudge-dispatch.test.ts` drove\n`createToolExecutor`, which is agent-internal, and its real subject was\nnever the nudge: it asserts the executor reaches `tool.native.post` at\nthe `invoke.result` timing exactly once per native call. That fact is the\nagent's, so the test stays in agent with a stand-in registration and a\nname that says what it pins. The nudge's own behavior tests go to\nopenomni intact.\n\nAlso drops a `Date.now` stub left orphaned in `builtin-snapshots.test.ts`\nwhen the idle-nudge blocks moved out — the only remaining user of it.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(openomni): pin the effect capabilities the move dropped (#606)\n\nReview findings. Deleting `builtin-snapshots`' two idle-nudge blocks cost\nthree pins, and my PR body called the block \"duplicated\" by the moved\ntests. It was not.\n\n`effectCapabilities` is the serious one. The engine replaces any effect a\nregistration did not declare for the point it fired at\n(`policy/src/engine/dispatch.ts`), so emptying `\"run.turn.pre\"` silently\ndrops both the nudge and the stalled abort at runtime — while every\ndirect `mw.fn(ctx)` assertion in the moved suite still passes, because\nthey bypass the engine. Restored as a deep-equality assertion with the\nreason written down. The `builtin.idle_nudge` policyId and the\n`idle_nudge` reason code were also pinned nowhere; restored beside the\nmessage assertions. All three verified red-first.\n\nDocs corrected: `packages/agent/AGENTS.md` still listed the id under\n\"resolved by id through `defaultRegistry(events)`\" and named idle nudge\nin its ownership line, the root `AGENTS.md` file tree still listed it\nunder `policy/`, and `openomni`'s execution-runtime notes said builtin\nids resolve through `defaultRegistry` alone. `check-deps`' doc-freshness\ngate only reads file rows, so none of it was caught.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T02:06:46+09:00",
+          "tree_id": "5dfb4b4a4b36b30a3896695ff208fa032d4485a1",
+          "url": "https://github.com/INONONO66/openomni/commit/9b8d5c947a8ee2b0955daa62aaa9b520481d72e4"
+        },
+        "date": 1786727279715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6180,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3138,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8526,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1532,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 755,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46053,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2341,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 509755,
             "unit": "ns/op"
           }
         ]
