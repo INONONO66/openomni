@@ -2,9 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
-import type { PolicyContext, PolicyFn } from "../../../../src/core/policy";
+import type { PolicyFn } from "../../../../src/core/policy";
 
-function baseCtx(overrides?: Partial<PolicyContext>): Parameters<PolicyFn>[0] {
+function baseCtx(
+  overrides?: Partial<Omit<Parameters<PolicyFn>[0], "pointId">>,
+): Parameters<PolicyFn>[0] {
   return {
     timing: "invoke.prepare",
     pointId: "tool.native.pre",

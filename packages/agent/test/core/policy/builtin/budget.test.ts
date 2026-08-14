@@ -3,11 +3,13 @@ import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
 } from "../../../../src/core/policy/builtin/budget";
-import type { PolicyContext, PolicyFn } from "../../../../src/core/policy";
+import type { PolicyFn } from "../../../../src/core/policy";
 import type { BudgetState } from "../../../../src/core/budget";
 import type { Policy } from "@openomni/protocol";
 
-function baseCtx(overrides?: Partial<PolicyContext>): Parameters<PolicyFn>[0] {
+function baseCtx(
+  overrides?: Partial<Omit<Parameters<PolicyFn>[0], "pointId">>,
+): Parameters<PolicyFn>[0] {
   return {
     timing: "turn.start",
     pointId: "run.turn.pre",

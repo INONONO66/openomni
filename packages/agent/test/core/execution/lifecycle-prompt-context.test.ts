@@ -1,5 +1,5 @@
-import { testProviderModel } from "../../helpers/provider-model";
 import { describe, expect, it, mock } from "bun:test";
+import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";

@@ -43,7 +43,7 @@ export function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtif
       events: Bus,
       model: testProviderModel,
       maxSteps: 24,
-      trace: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
+      trace: makeTrace(),
     },
     trackingSink: {
       onMessage: () => undefined,

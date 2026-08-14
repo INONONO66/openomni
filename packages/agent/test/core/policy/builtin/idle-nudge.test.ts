@@ -76,12 +76,18 @@ describe("createIdleNudgePolicy", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
 
+    // Pinned on this call, not the next one. By 65s the run is already past
+    // the threshold, so without the reset branch this call nudges — and the
+    // nudge path sets `lastProgressAt` too, leaving the following turn
+    // indistinguishable either way.
     mockNow(65000);
-    await mw.fn(baseCtx("invoke.result", "tool.native.post"));
+    const progress = await mw.fn(baseCtx("invoke.result", "tool.native.post"));
+    expect(injectedMessage(progress)).toBeUndefined();
 
     mockNow(70000);
     const verdict = await mw.fn(baseCtx("turn.start", "run.turn.pre"));
     expect(verdict.verdict).toBe("allow");
+    expect(injectedMessage(verdict)).toBeUndefined();
   });
 
   it("is disabled when idleThresholdMs is -1", async () => {

@@ -121,6 +121,7 @@ describe("snapshot: tool-permission", () => {
     const verdict = await mw.fn(
       baseCtx({
         timing: "invoke.prepare",
+        pointId: "tool.native.pre",
         toolName: "read_file",
         toolCallId: "call-1",
         toolInput: { path: "/tmp/test" },
@@ -137,6 +138,7 @@ describe("snapshot: tool-permission", () => {
     const verdict = await mw.fn(
       baseCtx({
         timing: "invoke.prepare",
+        pointId: "tool.native.pre",
         toolName: "shell_exec",
         toolCallId: "call-2",
         toolInput: { cmd: "rm -rf /" },
@@ -157,6 +159,7 @@ describe("snapshot: compaction", () => {
     });
     const verdict = await mw.fn(
       baseCtx({
+        pointId: "run.completion.pre",
         messages: [testMessage("m1"), testMessage("m2")],
         budgetState: budgetState({ totalInputTokens: 1000, totalOutputTokens: 500 }),
       }),

@@ -28,7 +28,6 @@ export async function dispatchPreRun(
       turnCount: 0,
       continuationCount: 0,
       elapsedMs: 0,
-      actorId: agentBase.actorId ?? agentBase.runId ?? agentBase.traceId,
     }),
   );
 

@@ -1,5 +1,5 @@
-import { testProviderModel } from "../../helpers/provider-model";
 import { describe, expect, it, mock } from "bun:test";
+import { testProviderModel } from "../../helpers/provider-model";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
 import type { RuntimeResource, Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
