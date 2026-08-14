@@ -1,6 +1,6 @@
 # packages/llm
 
-LLM provider abstraction. Handles auth (API key + proxy), provider SDK wiring, streaming, retry, message conversion, token usage accounting, and the `run()` entry point. Depends on `@openomni/protocol` and `@openomni/session`.
+LLM provider abstraction. Handles auth (API key + proxy), provider SDK wiring, streaming, retry, message conversion, token usage accounting, and the `run()` entry point. Depends on `@openomni/protocol` and `@openomni/telemetry` — nothing durable (#606).
 
 ## STRUCTURE
 

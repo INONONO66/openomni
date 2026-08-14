@@ -90,10 +90,12 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | 🟨 |
-| — | `agent` and `llm` take an injected `Sink`; both drop `@openomni/session` | ⬜ |
-| [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | 🟨 |
-| — | convert the 102 opaque-`traceId` emit sites (D11): inherit a scope, or mint at a genuine origin | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | create `@openomni/telemetry`, move `Bus`, add scope/span/sink; `session` re-exports for compatibility | ✅ |
+| [#616](https://github.com/INONONO66/openomni/pull/616) | `agent` and `llm` drop `@openomni/session`; the allowlists close behind them | ✅ |
+| — | `agent` and `llm` take an injected `Sink` rather than importing `Bus` | ⬜ |
+| [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | ✅ |
+| [#613](https://github.com/INONONO66/openomni/pull/613), [#615](https://github.com/INONONO66/openomni/pull/615) | convert every opaque-`traceId` site in `packages/agent/src` (D11) — 13 + 3, the package now mints none | ✅ |
+| — | convert the remaining 102 opaque-`traceId` sites (D11): server 72, openomni 11, session 10, coordinator 9 | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core
