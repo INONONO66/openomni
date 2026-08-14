@@ -174,7 +174,6 @@ function requireRunTrace(traceContext: ChatAgentInput["traceContext"]): RunTrace
   return { ...traceContext, traceId, sessionId, runId };
 }
 
-// merged from shared.ts (fragment sweep: single-consumer fn)
 async function resolveProviderModel(model: {
   provider: string;
   id: string;
@@ -198,7 +197,6 @@ async function resolveProviderModel(model: {
   throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
-// merged from policy-engine-builder.ts (250-LOC split refold: single-importer stage)
 export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
@@ -207,7 +205,7 @@ export function buildPolicyEngine(
     traceContext: {
       traceId: agentBase.traceId,
       sessionId: agentBase.sessionId,
-      ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
+      runId: agentBase.runId,
     },
     auditEmit: (descriptor, data) => config.events.publish(descriptor, data),
   });

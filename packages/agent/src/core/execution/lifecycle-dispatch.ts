@@ -9,18 +9,13 @@ import {
   emitRunCompleted,
   publishDenyDiagnostic,
 } from "./run-events";
-import {
-  agentBaseForState,
-  buildLifecyclePolicyContext,
-  type AgentRunBase,
-  type RunState,
-} from "./run-state";
+import { buildLifecyclePolicyContext, type AgentRunBase, type RunState } from "./run-state";
 
 export async function dispatchPreRun(
   state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
-  agentBase: AgentRunBase = agentBaseForState(state),
+  agentBase: AgentRunBase,
 ): Promise<AgentResult | null> {
   const preRunDecision = await engine.dispatchPoint(
     "run.lifecycle.pre",
@@ -43,7 +38,7 @@ export async function dispatchBudgetCheck(
   state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
-  agentBase: AgentRunBase = agentBaseForState(state),
+  agentBase: AgentRunBase,
 ): Promise<AgentResult | null> {
   // The single per-turn owner of budget telemetry: emit here (command) and act
   // on the returned status. The run.turn.pre budget builtins read the status
@@ -79,7 +74,7 @@ export async function dispatchModelRequest(
   state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
-  agentBase: AgentRunBase = agentBaseForState(state),
+  agentBase: AgentRunBase,
 ): Promise<AgentResult | null> {
   const decision = await engine.dispatchPoint(
     "connection.llm.pre",

@@ -24,7 +24,7 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelRequest(state, engine, makeConfig());
+    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase());
 
     expect(result).toBeNull();
     expect(fn).toHaveBeenCalledTimes(1);
@@ -76,7 +76,7 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelRequest(state, engine, makeConfig());
+    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase());
 
     expect(result).toBeNull();
     const lastMessage = state.messages[state.messages.length - 1];

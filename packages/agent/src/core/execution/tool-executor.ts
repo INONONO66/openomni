@@ -263,7 +263,6 @@ function requireExecutorTrace(
   return { traceId, sessionId, runId };
 }
 
-// merged from tool-policy-dispatch.ts (250-LOC split refold: single-importer stage)
 interface ToolPolicyRunContext {
   readonly sessionId: string;
   readonly runId: string;
