@@ -1,5 +1,5 @@
 import type { RunInput } from "@openomni/llm";
-import type { Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
+import type { Message, Policy, Sink, TraceContext } from "@openomni/protocol";
 import {
   createBudgetState,
   recordTokenUsage,
@@ -73,19 +73,7 @@ export interface TurnArtifacts {
    */
   readonly turnAssistant: { message?: Message.WithParts };
   readonly turnUsage: TokenUsage;
-  readonly turnToolCalls: Array<{
-    toolCallId: string;
-    toolName: string;
-    args: Record<string, unknown>;
-  }>;
-  readonly turnToolResults: Array<{
-    toolCallId: string;
-    result: Tool.Result;
-  }>;
-  readonly toolPolicyDecisions: Array<{
-    readonly timing: Policy.Timing;
-    readonly decision: Policy.PolicyDecision;
-  }>;
+  readonly toolPolicyDecisions: Array<{ readonly decision: Policy.PolicyDecision }>;
 }
 
 export type BuildTurnResult =
@@ -98,7 +86,7 @@ export type BuildTurnResult =
  * sleeps on and retries or rethrows.
  */
 export type ErrorDecision =
-  | { action: "retry"; error: Error; errorMessage: string }
+  | { action: "retry"; errorMessage: string }
   | { action: "complete"; result: AgentResult; errorMessage: string }
   | { action: "throw"; error: Error; errorMessage: string };
 

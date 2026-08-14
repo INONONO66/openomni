@@ -10,7 +10,7 @@ export interface Sink {
    * emits no callback for an unmatched tool-result, #532-6, and settles
    * interruptions as error results), while the fact stream records those
    * anomalies as raw part lifecycle. The agent's trackingSink builds its
-   * public tool_call_start/tool_call_complete AgentEvents from these
+   * caller-visible tool call and result notifications from these
    * correlated pairs; deriving them from facts would change the anomaly-path
    * event stream.
    */

@@ -199,7 +199,7 @@ export async function handleError(
       backoffMs,
     });
     await Retry.sleep(backoffMs, config.signal);
-    return { action: "retry", error: normalizedError, errorMessage: lastError };
+    return { action: "retry", errorMessage: lastError };
   }
 
   emitRunFailed(config.events, agentBase, lastError, {

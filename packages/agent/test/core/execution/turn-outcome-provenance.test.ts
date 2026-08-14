@@ -37,8 +37,6 @@ function makeTurnArtifacts(): TurnArtifacts {
     },
     turnAssistant: {},
     turnUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnToolCalls: [],
-    turnToolResults: [],
     toolPolicyDecisions: [],
   };
 }

@@ -33,10 +33,10 @@ const defaultConfig = {
 const defaultInput = runInput([{ role: "user" as const, content: "hello" }]);
 
 /**
- * The caller's view of a run in progress. Since #610 this is the only one: the
- * `AgentEvent` generator that used to narrate the same facts had no consumer
- * outside these tests, so what a caller can observe is exactly what reaches
- * the sink it passed plus the result it is returned.
+ * The caller's view of a run in progress, and since #621 the only one: the
+ * `AgentEvent` generator that narrated the same facts had no consumer outside
+ * these tests. What a caller can observe is exactly what reaches the sink it
+ * passed, plus the result it is returned.
  */
 function collectingSink(): Sink & {
   readonly texts: string[];

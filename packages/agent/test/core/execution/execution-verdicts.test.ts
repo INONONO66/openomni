@@ -61,8 +61,6 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
     },
     turnAssistant: {},
     turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-    turnToolCalls: [],
-    turnToolResults: [],
     toolPolicyDecisions: [],
     ...overrides,
   };
@@ -170,8 +168,12 @@ describe("execution helper deny verdicts", () => {
     expect(result.result.guardAborted).toBe(true);
   });
 
-  it("emits a hook verdict and completes normally for turn.finish deny", async () => {
+  it("records a diagnostic and completes normally for turn.finish deny", async () => {
     Bus.reset();
+    const diagnostics: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === Operational.Info.name) diagnostics.push(payload);
+    });
     const engine = PolicyEngine.create();
     engine.register({
       kind: "point",
@@ -184,19 +186,20 @@ describe("execution helper deny verdicts", () => {
     const state = makeState();
     state.lastAssistantText = "done";
 
-    const outcome = await handleStop(
-      state,
-      makeConfig(),
-      engine,
-      makeAgentBase(),
-      makeTurnArtifacts(),
-    );
+    let outcome: Awaited<ReturnType<typeof handleStop>>;
+    try {
+      outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts());
+      await Promise.resolve();
+    } finally {
+      unsubscribe();
+    }
 
     // A plain deny at turn.finish is a diagnostic, not an abort: the run ends
     // normally and `guardAborted` stays unset.
     expect(outcome).not.toBe("continue");
     if (outcome === "continue") throw new Error("expected the run to end");
     expect(outcome.guardAborted).toBeUndefined();
+    expect(hasDenyDiagnostic(diagnostics, "turn.finish")).toBe(true);
   });
 
   it("records a diagnostic and fail-closes completion.prepare deny", async () => {

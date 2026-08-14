@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import { AgentExecution, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
 import type { AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
@@ -391,13 +391,25 @@ it("does not retry missing toolExecutor configuration errors", async () => {
     ],
   });
 
+  // The subject is the *absence* of retries, so it has to be observed, not
+  // inferred from the throw: a classified-and-retried config error throws the
+  // same message three backoffs later.
+  const retries: unknown[] = [];
+  const stop = Bus.observe((event, payload) => {
+    if (event.name === AgentExecution.ErrorRetry.name) retries.push(payload);
+  });
+
   let configurationError: unknown;
   try {
     await agent.run(runInput([{ role: "user", content: "Use a tool" }]));
   } catch (error) {
     if (!(error instanceof Error)) throw error;
     configurationError = error;
+  } finally {
+    stop();
   }
+
+  expect(retries).toHaveLength(0);
 
   expect(configurationError).toBeInstanceOf(Error);
   expect((configurationError as Error).message).toContain(

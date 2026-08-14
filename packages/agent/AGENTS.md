@@ -8,8 +8,8 @@
 src/
 ├── index.ts                    # Public API
 ├── core/
-│   ├── chat-agent.ts           # ChatAgent.create() — provides run() / stream()
-│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink
+│   ├── chat-agent.ts           # ChatAgent.create() — provides run()
+│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentBudget, TokenUsage, Sink
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── prompt-builder.ts       # System prompt composition helpers
@@ -54,7 +54,7 @@ const result = await agent.run({
 
 Also exported from `@openomni/agent`:
 
-- Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentEvent`, `AgentBudget`, `TokenUsage`, `Sink`
+- Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentBudget`, `TokenUsage`, `Sink`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyRegistration` (legacy compatibility), `PolicyEngineInstance`
 - Runtime: `McpClient`, `McpServerConfig`
 
@@ -97,12 +97,12 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 ## TURN LIFECYCLE (core/execution)
 
 ```
-runner.ts (entry) [AsyncGenerator<AgentEvent>]
+runner.ts (entry) → Promise<AgentResult>
   ├─ retry loop (maxAttempts)
   │   ├─ build PolicyEngine (config.middleware only)
   │   ├─ dispatchPoint(run.lifecycle.pre)       → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
-  │       ├─ checkBudget → if exceeded, dispatchPoint(run.lifecycle.post) + yield complete
+  │       ├─ checkBudget → if exceeded, dispatchPoint(run.lifecycle.post) + return result
   │       ├─ dispatchPoint(run.turn.pre)        → budget warnings, idle-nudge
   │       ├─ dispatchPoint(prompt.context.pre)  → context/prompt enrichment
   │       ├─ dispatchPoint(tool.catalog.pre)    → filter/modify tools exposed to LLM
@@ -116,7 +116,7 @@ runner.ts (entry) [AsyncGenerator<AgentEvent>]
   │       ├─ outcome === "stop"?
   │       │    ├─ dispatchPoint(run.turn.post)  → allow (with continuation effects) / deny
   │       │    ├─ if continuation: dispatchPoint(run.completion.pre) → loop
-  │       │    └─ else: dispatchPoint(run.lifecycle.post) + yield complete
+  │       │    └─ else: dispatchPoint(run.lifecycle.post) + return result
   │       └─ outcome === "error"/"aborted"?
   │            └─ dispatchPoint(run.error.error) → retry (shouldRetry) or throw
 ```

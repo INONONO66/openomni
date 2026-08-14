@@ -129,7 +129,7 @@ export async function buildTurn(
   recordRunTurn(state);
   if (config.signal?.aborted) throw new Error("aborted");
 
-  const toolPolicyDecisions: Array<{ timing: Policy.Timing; decision: Policy.PolicyDecision }> = [];
+  const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
   const toolMetadata = buildToolMetadataMap(config.tools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({
@@ -148,8 +148,8 @@ export async function buildTurn(
           elapsedMs: Date.now() - state.startTime,
           usage: state.totalUsage,
         }),
-        onDecision: (timing, decision) => {
-          toolPolicyDecisions.push({ timing, decision });
+        onDecision: (_timing, decision) => {
+          toolPolicyDecisions.push({ decision });
         },
         traceContext: trace,
         signal: config.signal,
@@ -187,17 +187,8 @@ export async function buildTurn(
     outputTokens: 0,
     totalTokens: 0,
   };
-  const turnToolCalls: TurnArtifacts["turnToolCalls"] = [];
-  const turnToolResults: TurnArtifacts["turnToolResults"] = [];
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
-  const trackingSink = createTrackingSink(
-    state,
-    sink,
-    turnUsage,
-    turnToolCalls,
-    turnToolResults,
-    turnAssistant,
-  );
+  const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant);
 
   return {
     type: "ready",
@@ -221,8 +212,6 @@ export async function buildTurn(
       trackingSink,
       turnAssistant,
       turnUsage,
-      turnToolCalls,
-      turnToolResults,
       toolPolicyDecisions,
     },
   };
@@ -232,8 +221,6 @@ function createTrackingSink(
   state: RunState,
   sink: Sink | undefined,
   turnUsage: TokenUsage,
-  turnToolCalls: TurnArtifacts["turnToolCalls"],
-  turnToolResults: TurnArtifacts["turnToolResults"],
   turnAssistant: TurnArtifacts["turnAssistant"],
 ): Sink {
   let prevInputTokens = 0;
@@ -268,18 +255,8 @@ function createTrackingSink(
       if (text) setLastAssistantText(state, text);
       sink?.onMessage(message);
     },
-    onToolCall: (call) => {
-      turnToolCalls.push({
-        toolCallId: call.id,
-        toolName: call.tool,
-        args: call.input,
-      });
-      sink?.onToolCall(call);
-    },
-    onToolResult: (result) => {
-      turnToolResults.push({ toolCallId: result.toolCallId, result });
-      sink?.onToolResult(result);
-    },
+    onToolCall: (call) => sink?.onToolCall(call),
+    onToolResult: (result) => sink?.onToolResult(result),
     // #547 C3: the fact stream passes through untouched — the transcript
     // record family subscribes to facts, not boundary snapshots.
     onFact: (fact) => sink?.onFact?.(fact),
