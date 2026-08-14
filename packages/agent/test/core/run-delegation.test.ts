@@ -95,7 +95,6 @@ describe("run() delegation contract", () => {
     };
 
     const agent = ChatAgent.create({
-      events: Bus,
       ...defaultConfig,
       middleware: [
         {
@@ -163,7 +162,6 @@ describe("run() delegation contract", () => {
     };
 
     const agent = ChatAgent.create({
-      events: Bus,
       ...defaultConfig,
       middleware: [
         {
@@ -205,7 +203,6 @@ describe("run() delegation contract", () => {
       | undefined;
 
     const agent = ChatAgent.create({
-      events: Bus,
       ...defaultConfig,
       middleware: [
         {
@@ -239,7 +236,6 @@ describe("run() delegation contract", () => {
     };
 
     const agent = ChatAgent.create({
-      events: Bus,
       ...defaultConfig,
       middleware: [
         {

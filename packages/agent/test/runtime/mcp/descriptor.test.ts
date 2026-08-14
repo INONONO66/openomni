@@ -227,7 +227,7 @@ describe("McpClient request options", () => {
 
     const result = await client.callTool("filesystem.read_file", { path: "README.md" }, "call-1", {
       signal,
-      traceContext: { traceId: "trace-mcp-call", events: Bus },
+      traceContext: { traceId: "trace-mcp-call" },
     });
 
     expect(result.output).toBe("ok");

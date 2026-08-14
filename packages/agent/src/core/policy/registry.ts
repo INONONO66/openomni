@@ -36,7 +36,11 @@ const IdleNudgeConfigSchema: z.ZodType<IdleNudgeConfig, z.ZodTypeDef, unknown> =
   maxNudges: z.number().optional(),
 });
 
-/** Wire shape only — `events` is injected by the registry, never parsed. */
+/**
+ * Wire shape only. A plain `z.object` strips unknown keys, so a policy plan
+ * cannot smuggle an `events` of its own and redirect where the evidence of its
+ * own decision goes — the strip is the guard here, not the spread order below.
+ */
 const ToolPermissionConfigSchema: z.ZodType<
   Omit<ToolPermissionPolicyConfig, "events">,
   z.ZodTypeDef,

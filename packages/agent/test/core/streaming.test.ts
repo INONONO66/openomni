@@ -135,7 +135,6 @@ describe("ChatAgent.stream()", () => {
     };
 
     const agent = ChatAgent.create({
-      events: Bus,
       ...defaultConfig,
       toolExecutor: async (call) => ({
         id: crypto.randomUUID(),

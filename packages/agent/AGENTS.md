@@ -17,7 +17,7 @@ src/
 │   ├── execution/              # The agent loop, decomposed: runner.ts (entry), turn-prepare.ts / turn-outcome.ts (turn loop), lifecycle-dispatch.ts / completion-policy.ts (run.lifecycle/completion points), policy-effects*.ts (effect application), prompt-policy.ts, tool-executor.ts (tool.native/mcp pre/post dispatch), run-state.ts / run-events.ts / run-result.ts, compaction.ts (InMemoryCompactor)
 │   └── policy/
 │       ├── index.ts            # Agent-scoped PolicyEngine facade over @openomni/policy
-│       ├── registry.ts         # PolicyRegistry + defaultRegistry() — builtin policy id → factory resolution
+│       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution
 │       ├── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
 │       └── builtin/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
@@ -62,6 +62,7 @@ Also exported from `@openomni/agent`:
 
 | Field            | Type                                     | Description                                                                 |
 | ---------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
+| `events`         | `BusEvent.Sink`                          | Required. Where the run's records go — the loop reports through this port and never reaches for `Bus` |
 | `model`          | `Model.Ref`                              | Required LLM provider + model id                                            |
 | `systemPrompt?`  | `string`                                 | Base system prompt                                                          |
 | `tools?`         | `(Tool.Spec & { descriptor?: RuntimeResource.Descriptor })[]` | Tool specs plus optional structured policy provenance; descriptors survive catalog preparation and tool execution |
@@ -86,7 +87,7 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction, idle nudge).
-- **Builtins** (resolved by id through `defaultRegistry()`; stamped plans from the dispatch gate (#479) reference these ids):
+- **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids):
   - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; denial returns `run.abort` plus `audit.annotate`, while approval requirements return pending with `tool.require_approval`
   - `builtin:budget-reassurance` / `builtin:budget-warning` — inject reassurance/warning system messages as budget consumption climbs
   - `builtin:idle-nudge` — detects idle ≥ threshold (default 60s), injects a nudge; after `maxNudges` (default 3) aborts with reason `stalled`

@@ -7,7 +7,7 @@ import type { PolicyContext } from "../../../../src/core/policy";
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "invoke.prepare",
-    traceContext: { traceId: "trace-builtin-test", events: Bus },
+    traceContext: { traceId: "trace-builtin-test" },
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -54,7 +54,7 @@ describe("createToolPermissionPolicy", () => {
     try {
       await mw.fn(
         baseCtx({
-          traceContext: { traceId: "trace-guard-report", events: Bus },
+          traceContext: { traceId: "trace-guard-report" },
           toolName: "shell_exec",
           toolCallId: "call-reported",
           toolInput: hostileInput,

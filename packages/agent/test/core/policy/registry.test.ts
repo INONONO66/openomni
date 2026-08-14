@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Policy } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
 import { z } from "zod";
 import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";
@@ -115,7 +115,6 @@ describe("PolicyRegistry", () => {
     try {
       const registry = PolicyRegistry.create();
       registry.register("present.policy", () => ({
-        events: Bus,
         name: "present.policy",
         timing: "turn.start",
         priority: 10,
@@ -151,5 +150,64 @@ describe("PolicyRegistry", () => {
       unsubscribe();
       Bus.reset();
     }
+  });
+
+  it("hands the built-ins the injected sink, and a plan cannot supply its own", async () => {
+    const injected = collector();
+    const smuggled = collector();
+    const registrations = defaultRegistry(injected).resolve(
+      plan([
+        {
+          id: "builtin:tool-permission",
+          required: true,
+          // `events` is not wire config: the schema strips it, and the registry
+          // spreads the injected sink last. Both have to hold, or a policy plan
+          // could redirect where its own evidence goes.
+          config: {
+            permission: {
+              action: "tool.call",
+              inputRules: [
+                {
+                  toolPattern: "shell_exec",
+                  field: "cmd",
+                  pattern: "^rm\\s",
+                  action: "deny",
+                  priority: 10,
+                },
+              ],
+            },
+            events: smuggled,
+          },
+        },
+      ]),
+      {},
+    );
+
+    const guard = registrations.find((r) => r.name === "builtin:tool-permission");
+    if (!guard) throw new Error("expected builtin:tool-permission");
+
+    const hostile = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        get: () => {
+          throw new Error("hostile tool input");
+        },
+      },
+    );
+    await guard.fn({
+      timing: "invoke.prepare",
+      traceContext: { traceId: "trace-registry-inject" },
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolName: "shell_exec",
+      toolInput: hostile,
+    } as never);
+
+    expect(injected.events.length).toBeGreaterThan(0);
+    expect(smuggled.events).toHaveLength(0);
   });
 });
