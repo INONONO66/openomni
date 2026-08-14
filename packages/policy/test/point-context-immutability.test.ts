@@ -101,28 +101,36 @@ describe("PolicyEngine canonical point context immutability", () => {
       expect(invoked).toBe(false);
     });
   }
-  test("preserves trusted event emitters outside structured cloning", async () => {
+
+  /**
+   * The carve-out this replaces keyed on the property name: it read
+   * `source.eventEmitter` and, when that held something with an `emit`
+   * method, spread it back into the snapshot by reference. The rejection
+   * table above cannot reach it — the loop puts every case under
+   * `unsupported`, so an emitter under any other key was always refused.
+   */
+  test("returns input-invalid for an eventEmitter-keyed emitter", async () => {
     const engine = PolicyEngine.create();
-    const eventEmitter = { emit: () => undefined };
-    let observedEmitter: unknown;
+    let invoked = false;
     engine.register({
       kind: "point",
       name: "event-emitter-context-policy",
       pointIds: ["dispatch.action.pre"],
       effectCapabilities: { "dispatch.action.pre": [] },
       priority: 0,
-      fn: (ctx) => {
-        observedEmitter = Reflect.get(ctx, "eventEmitter");
+      fn: () => {
+        invoked = true;
         return PolicyDecision.allow({ policyId: "event-emitter-context-policy" });
       },
     });
 
     const decision = await engine.dispatchPoint("dispatch.action.pre", {
       ...dispatchContext,
-      eventEmitter,
+      eventEmitter: { emit: () => undefined },
     });
 
-    expect(decision.verdict).toBe("allow");
-    expect(observedEmitter).toBe(eventEmitter);
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("policy.input_invalid");
+    expect(invoked).toBe(false);
   });
 });

@@ -24,9 +24,6 @@ type ImmutablePointSnapshot<TValue extends object> =
  *   - symbol-keyed properties, silently dropped rather than rejected;
  *   - a nested class instance, cloned into a plain record.
  *
- * The one deliberate exception is the caller's event emitter, carried through
- * by reference.
- *
  * `added` is applied after the clone, so the engine's own fields — the point
  * identity and the agent type that drove registration selection — are the ones
  * a policy observes, never a context getter's second answer.
@@ -50,17 +47,8 @@ export function immutablePointSnapshot(
   try {
     if (!isPlainRecord(value)) return { success: false };
     const source = { ...value } as Record<string, unknown>;
-    const eventEmitter = source.eventEmitter;
-    const preservesEventEmitter =
-      Object.getOwnPropertyDescriptor(source, "eventEmitter") !== undefined &&
-      isEventEmitterLike(eventEmitter);
-    if (preservesEventEmitter) delete source.eventEmitter;
-    const snapshot = {
-      ...structuredClone(source),
-      ...added,
-      ...(preservesEventEmitter && { eventEmitter }),
-    };
-    if (!freezePlainValue(snapshot, new WeakSet(), eventEmitter)) return { success: false };
+    const snapshot = { ...structuredClone(source), ...added };
+    if (!freezePlainValue(snapshot, new WeakSet())) return { success: false };
     return { success: true, value: snapshot };
   } catch {
     return { success: false };
@@ -127,12 +115,7 @@ function capturePerField(present: Readonly<Record<string, unknown>>): Record<str
   return fields;
 }
 
-function freezePlainValue(
-  value: unknown,
-  ancestors: WeakSet<object>,
-  preservedValue?: unknown,
-): boolean {
-  if (value === preservedValue) return true;
+function freezePlainValue(value: unknown, ancestors: WeakSet<object>): boolean {
   if (typeof value === "function" || typeof value === "symbol") return false;
   if (typeof value !== "object" || value === null) return true;
   if (ancestors.has(value)) return false;
@@ -140,17 +123,11 @@ function freezePlainValue(
 
   ancestors.add(value);
   for (const child of Object.values(value)) {
-    if (!freezePlainValue(child, ancestors, preservedValue)) return false;
+    if (!freezePlainValue(child, ancestors)) return false;
   }
   ancestors.delete(value);
   Object.freeze(value);
   return true;
-}
-
-function isEventEmitterLike(value: unknown): value is object {
-  return (
-    typeof value === "object" && value !== null && typeof Reflect.get(value, "emit") === "function"
-  );
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
