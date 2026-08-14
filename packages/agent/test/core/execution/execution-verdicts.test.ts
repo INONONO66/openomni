@@ -108,7 +108,9 @@ describe("execution helper deny verdicts", () => {
       fn: () => deny("test.deny", "blocked"),
     });
 
-    const complete = expectComplete(await dispatchPreRun(makeState(), engine, makeConfig()));
+    const complete = expectComplete(
+      await dispatchPreRun(makeState(), engine, makeConfig(), makeAgentBase()),
+    );
 
     expect(complete.guardAborted).toBe(true);
     expect(complete.finishReason).toBe("stop");

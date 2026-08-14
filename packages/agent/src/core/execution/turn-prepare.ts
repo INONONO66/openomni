@@ -27,7 +27,6 @@ export function resolveToolChoice(
   return config.toolChoice;
 }
 
-// merged from prompt-builder.ts (fragment sweep: single-caller fn)
 export function buildSystemPrompt(
   basePrompt: string | undefined,
   tools: Tool.Spec[],
@@ -263,7 +262,6 @@ function createTrackingSink(
   };
 }
 
-// merged from prompt-policy.ts (250-LOC split refold: single-importer stage)
 async function buildTurnSystemPrompt(
   state: RunState,
   config: ChatAgentConfig,

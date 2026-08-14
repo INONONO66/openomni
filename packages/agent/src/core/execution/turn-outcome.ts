@@ -229,7 +229,7 @@ function resolveTurnAssistant(
   events.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
-    sessionId: agentBase.sessionId || state.sessionId,
+    sessionId: agentBase.sessionId,
     component: "agent.turn",
     msg: "llm sink emitted no assistant snapshot — test stub?",
   });
@@ -237,7 +237,6 @@ function resolveTurnAssistant(
   return createAssistantMessage("", parentID, state.sessionId);
 }
 
-// merged from completion-policy.ts (250-LOC split refold: single-importer stage)
 async function dispatchPostRunTransform(
   state: RunState,
   engine: PolicyEngineInstance,

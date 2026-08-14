@@ -5,7 +5,7 @@ import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import { abortRun, allow, appendContext, inject } from "../../helpers/policy-decision";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
-import { makeConfig, makeState } from "./lifecycle-dispatch-fixture";
+import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
 describe("dispatchPreRun (run.start)", () => {
   it("dispatches run.start and allows continuation on continue verdict", async () => {
@@ -22,7 +22,7 @@ describe("dispatchPreRun (run.start)", () => {
     });
 
     const state = makeState();
-    const result = await dispatchPreRun(state, engine, makeConfig());
+    const result = await dispatchPreRun(state, engine, makeConfig(), makeAgentBase());
 
     expect(result).toBeNull();
     expect(fn).toHaveBeenCalledTimes(1);
@@ -43,7 +43,7 @@ describe("dispatchPreRun (run.start)", () => {
     });
 
     const state = makeState();
-    const result = await dispatchPreRun(state, engine, makeConfig());
+    const result = await dispatchPreRun(state, engine, makeConfig(), makeAgentBase());
 
     expect(result).not.toBeNull();
     expect(result?.guardAborted).toBe(true);
@@ -64,7 +64,7 @@ describe("dispatchPreRun (run.start)", () => {
 
     const state = makeState();
     const messagesBefore = state.messages.length;
-    const result = await dispatchPreRun(state, engine, makeConfig());
+    const result = await dispatchPreRun(state, engine, makeConfig(), makeAgentBase());
 
     expect(result).toBeNull();
     expect(state.messages.length).toBe(messagesBefore + 1);
@@ -92,7 +92,7 @@ it("appends run.start context as a user message", async () => {
   });
 
   const state = makeState();
-  const result = await dispatchPreRun(state, engine, makeConfig());
+  const result = await dispatchPreRun(state, engine, makeConfig(), makeAgentBase());
 
   expect(result).toBeNull();
   expect(state.messages.at(-1)?.parts).toContainEqual(

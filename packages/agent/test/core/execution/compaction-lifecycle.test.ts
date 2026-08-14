@@ -20,7 +20,13 @@ import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixtu
 describe("compaction through the lifecycle", () => {
   it("the lifecycle context carries the run's trace", () => {
     const agentBase = makeAgentBase();
-    const ctx = buildLifecyclePolicyContext(makeState(), makeConfig(), agentBase, {
+    const state = makeState();
+    // `makeState` mints its own session id, so these differ — which is what
+    // makes the assertions below discriminate. The context used to read
+    // `agentBase.sessionId || state.sessionId` and `agentBase.runId ||
+    // agentBase.traceId`; either fallback firing would show up here.
+    expect(state.sessionId).not.toBe(agentBase.sessionId);
+    const ctx = buildLifecyclePolicyContext(state, makeConfig(), agentBase, {
       isCompletion: true,
     });
 
@@ -32,6 +38,8 @@ describe("compaction through the lifecycle", () => {
       sessionId: agentBase.sessionId,
       runId: agentBase.runId,
     });
+    expect(ctx.sessionId).toBe(agentBase.sessionId);
+    expect(ctx.runId).toBe(agentBase.runId);
   });
 
   it("files the compaction record under the run's trace, not a minted one", async () => {

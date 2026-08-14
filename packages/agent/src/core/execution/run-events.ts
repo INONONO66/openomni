@@ -194,7 +194,6 @@ export function publishDenyDiagnostic(
   });
 }
 
-// merged from run-result.ts (250-LOC split refold: single-importer stage)
 export function guardAbortedResult(
   state: RunState,
   options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },

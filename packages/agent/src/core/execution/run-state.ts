@@ -11,7 +11,6 @@ import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsag
 import type { DispatchContext } from "../policy";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
-// merged from shared.ts (fragment sweep: single-consumer fn)
 function toMessagesWithParts(
   messages: ChatAgentInput["messages"],
   source: string,
@@ -42,10 +41,15 @@ export type RunTrace = TraceContext.Type & {
   readonly runId: string;
 };
 
+/**
+ * A run's identity, all four fields required. The runner builds exactly one of
+ * these, from a trace it refused to mint (#606); nothing else may synthesize
+ * one, so every consumer can read the fields rather than guess at them.
+ */
 export interface AgentRunBase {
   readonly traceId: string;
   readonly sessionId: string;
-  readonly runId?: string;
+  readonly runId: string;
   readonly actorId: string;
 }
 
@@ -165,7 +169,6 @@ export function applyCompactionMessages(state: RunState, messages: Message.WithP
   return messagesBefore;
 }
 
-// merged from lifecycle-context.ts (250-LOC split refold: single-importer stage)
 type LifecyclePolicyContextOverrides = Partial<
   Pick<
     DispatchContext,
@@ -203,26 +206,22 @@ export function buildLifecyclePolicyContext<
     // fail-closed point, which reads as the run aborting.
     traceContext: {
       traceId: agentBase.traceId,
-      sessionId: agentBase.sessionId || state.sessionId,
-      ...(agentBase.runId === undefined ? {} : { runId: agentBase.runId }),
+      sessionId: agentBase.sessionId,
+      runId: agentBase.runId,
     },
     ...rest,
     actorId: agentBase.actorId,
-    sessionId: agentBase.sessionId || state.sessionId,
-    runId: agentBase.runId || agentBase.traceId,
+    sessionId: agentBase.sessionId,
+    runId: agentBase.runId,
+    // The generic is what makes each point's declared inputs type-check at the
+    // eleven call sites; the cost is this one cast. TypeScript cannot prove an
+    // object literal satisfies `Omit<TOverrides, K>` while `TOverrides` is
+    // still a parameter, and a single assertion is rejected as
+    // non-overlapping for the same reason.
   } as unknown as Omit<DispatchContext, "actorId" | "sessionId" | "runId"> &
     Omit<TOverrides, "actorId" | "sessionId" | "runId"> & {
       readonly actorId: string;
       readonly sessionId: string;
       readonly runId: string;
     };
-}
-
-export function agentBaseForState(state: RunState): AgentRunBase {
-  return {
-    traceId: state.sessionId,
-    sessionId: state.sessionId,
-    runId: state.sessionId,
-    actorId: state.sessionId,
-  };
 }

@@ -28,7 +28,6 @@ export function matchesToolPattern(toolName: string, pattern: string): boolean {
   return toolName === pattern;
 }
 
-// merged from policy-effects-apply.ts (250-LOC split refold: single-importer stage)
 export namespace PolicyEffectApplier {
   export function continuationMessages(
     decision: Policy.PolicyDecision,
