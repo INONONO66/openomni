@@ -42,6 +42,41 @@ export type RunTrace = TraceContext.Type & {
 };
 
 /**
+ * Builds a {@link RunTrace}, refusing an incomplete one.
+ *
+ * A run or a tool call whose traceId, sessionId, and runId were invented on
+ * its behalf emits records that correlate to nothing, and the caller never
+ * learns it forgot (#606). `subject` names the boundary that refused, and the
+ * message lists what was missing rather than only that something was.
+ *
+ * What is required is inheritance, not wire format. Whether the identity is
+ * expressible as a W3C `traceparent` is enforced by the emitter that puts it
+ * on the wire, which is the only place the format matters.
+ */
+export function requireTrace(
+  subject: string,
+  traceContext: TraceContext.Type | undefined,
+): RunTrace {
+  const traceId = nonEmptyString(traceContext?.traceId);
+  const sessionId = nonEmptyString(traceContext?.sessionId);
+  const runId = nonEmptyString(traceContext?.runId);
+  if (traceId === undefined || sessionId === undefined || runId === undefined) {
+    const missing = [
+      traceId === undefined ? "traceId" : undefined,
+      sessionId === undefined ? "sessionId" : undefined,
+      runId === undefined ? "runId" : undefined,
+    ].filter((field): field is string => field !== undefined);
+    throw new Error(`${subject} requires a trace context with ${missing.join(", ")}`);
+  }
+  return { ...traceContext, traceId, sessionId, runId };
+}
+
+/** A present, non-blank string. The one shape a trace field may take. */
+export function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
  * A run's identity, all four fields required. The runner builds exactly one of
  * these, from a trace it refused to mint (#606); nothing else may synthesize
  * one, so every consumer can read the fields rather than guess at them.
