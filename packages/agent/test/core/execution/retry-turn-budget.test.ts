@@ -1,12 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import {
-  advanceRunTurn,
-  createRunState,
-  recordRunTurn,
-} from "../../../src/core/execution/run-state";
-import { runAgent } from "../../../src/core/execution/runner";
+import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core/execution/state";
+import { runAgent } from "../../../src/core/execution/run";
 import {
   createMockLlmConfig,
   createStopOutcome,

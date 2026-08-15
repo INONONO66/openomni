@@ -2,7 +2,7 @@ import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol"
 import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
 import type { RetryReason } from "../retry";
 import type { AgentResult, AgentStep, TokenUsage } from "../types";
-import { getCompactionCount, type AgentRunBase, type RunState } from "./run-state";
+import { getCompactionCount, type AgentRunBase, type RunState } from "./state";
 
 export function emitRunStarted(
   events: BusEvent.Sink,

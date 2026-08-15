@@ -4,7 +4,7 @@ import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
 import { appendContext, replacePrompt } from "../../helpers/policy-decision";
-import { buildTurn } from "../../../src/core/execution/turn-prepare";
+import { buildTurn } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
 
 describe("buildTurn (prompt.context.pre)", () => {

@@ -5,7 +5,7 @@ import {
   type RunTrace,
   type RunState,
   type TurnArtifacts,
-} from "../../../src/core/execution/run-state";
+} from "../../../src/core/execution/state";
 import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";

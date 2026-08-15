@@ -3,7 +3,7 @@ import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
 import { abortRun, allow, inject, replaceMessages } from "../../helpers/policy-decision";
-import { handleStop } from "../../../src/core/execution/turn-outcome";
+import { handleStop } from "../../../src/core/execution/turn";
 import {
   makeAgentBase,
   makeConfig,

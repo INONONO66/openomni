@@ -28,10 +28,10 @@ const mockLlm = createMockLlmConfig({
   },
 });
 
-let runAgent: typeof import("../../../src/core/execution/runner").runAgent;
+let runAgent: typeof import("../../../src/core/execution/run").runAgent;
 
 beforeAll(async () => {
-  ({ runAgent } = await import("../../../src/core/execution/runner"));
+  ({ runAgent } = await import("../../../src/core/execution/run"));
 });
 
 const defaultConfig: ChatAgentConfig = {

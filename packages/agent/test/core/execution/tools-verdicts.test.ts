@@ -7,10 +7,7 @@ import {
   type Tool,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import {
-  createToolExecutor,
-  type BlockedToolResult,
-} from "../../../src/core/execution/tool-executor";
+import { createToolExecutor, type BlockedToolResult } from "../../../src/core/execution/tools";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
 
 function makeCall(id = "call-1"): Tool.Call {

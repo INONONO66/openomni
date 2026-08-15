@@ -56,7 +56,7 @@ const TEST_RUN_TRACE_ID = newTraceId();
 
 /**
  * The context the real agent wrapper attaches to every tool call
- * (`packages/agent/src/core/execution/tool-executor.ts`). A double that calls
+ * (`packages/agent/src/core/execution/tools.ts`). A double that calls
  * `options.toolExecutor` directly has to supply it too, or it is standing in
  * for something production never does.
  */

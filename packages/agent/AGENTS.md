@@ -12,9 +12,8 @@ src/
 │   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentBudget, TokenUsage, Sink
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
-│   ├── prompt-builder.ts       # System prompt composition helpers
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
-│   ├── execution/              # The agent loop, decomposed: runner.ts (entry), turn-prepare.ts / turn-outcome.ts (turn loop), lifecycle-dispatch.ts / completion-policy.ts (run.lifecycle/completion points), policy-effects*.ts (effect application), prompt-policy.ts, tool-executor.ts (tool.native/mcp pre/post dispatch), run-state.ts / run-events.ts / run-result.ts, compaction.ts (InMemoryCompactor)
+│   ├── execution/              # The agent loop. Phase 4 rule 1 names five of these: run.ts (entry), turn.ts (prepare + settle), tools.ts (tool.native/mcp pre/post dispatch), effects.ts (effect application), state.ts (run state + lifecycle context). Beside them: run-events.ts (the records), lifecycle-dispatch.ts (run-level points), compaction.ts (InMemoryCompactor)
 │   └── policy/
 │       ├── index.ts            # Agent-scoped PolicyEngine facade over @openomni/policy
 │       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution
@@ -95,7 +94,7 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 ## TURN LIFECYCLE (core/execution)
 
 ```
-runner.ts (entry) → Promise<AgentResult>
+run.ts (entry) → Promise<AgentResult>
   ├─ retry loop (maxAttempts)
   │   ├─ build PolicyEngine (config.middleware only)
   │   ├─ dispatchPoint(run.lifecycle.pre)       → allow (with effects) / deny
@@ -107,7 +106,7 @@ runner.ts (entry) → Promise<AgentResult>
   │       ├─ dispatchPoint(connection.llm.pre)
   │       ├─ llmRun via @openomni/llm
   │       ├─ dispatchPoint(connection.llm.post)
-  │       │    └─ tool calls flow through tool-executor.ts:
+  │       │    └─ tool calls flow through tools.ts:
   │       │         ├─ dispatchPoint(tool.native.pre / tool.mcp.pre)  → tool-permission (fail-closed)
   │       │         ├─ execute tool
   │       │         └─ dispatchPoint(tool.native.post / tool.mcp.post) → idle-nudge reset, enrichment

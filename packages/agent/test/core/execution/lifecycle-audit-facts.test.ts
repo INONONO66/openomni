@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
 import type { Message, Run } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
-import { runAgent } from "../../../src/core/execution/runner";
+import { runAgent } from "../../../src/core/execution/run";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";

@@ -3,7 +3,7 @@ import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import { allow, appendContext, replaceMessages } from "../../helpers/policy-decision";
-import { handleCompact } from "../../../src/core/execution/turn-outcome";
+import { handleCompact } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
 describe("completion.prepare dispatch", () => {
