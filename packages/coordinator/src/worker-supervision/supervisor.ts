@@ -255,7 +255,10 @@ export class WorkerSupervisor {
 
   // The three worker RPCs live here directly (#462 §3 — supervisor-client.ts
   // was three thin wrappers around this.client with no second consumer).
-  async deliver(runId: string, task: Record<string, unknown>): Promise<unknown> {
+  async deliver(
+    runId: string,
+    task: Record<string, unknown> & { readonly traceId: string },
+  ): Promise<unknown> {
     const client = this.client;
     if (!client?.connected) {
       throw new Error(`worker ${this.id} not available`);
@@ -275,10 +278,10 @@ export class WorkerSupervisor {
         // triggers the normal exited → restart path for the slot.
         this.events.publish(Operational.Warn, {
           // The kill is an event OF the run — the same trace its
-          // RunSettled{interrupted} carries (D11). The task's traceId is
-          // contract-required upstream; a malformed task degrades to the
-          // empty string the sinks already treat as absent.
-          traceId: typeof task.traceId === "string" ? task.traceId : "",
+          // RunSettled{interrupted} carries (D11). The type requires the
+          // trace the pool's normalizer already refused to go without; no
+          // fallback exists because none is reachable.
+          traceId: task.traceId,
           time: Date.now(),
           component: "coordinator.worker",
           msg: "run exceeded wall-time ceiling; killing worker",

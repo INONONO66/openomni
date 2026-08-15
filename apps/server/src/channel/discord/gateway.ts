@@ -192,6 +192,10 @@ export class DiscordGateway {
         // after ~2 heartbeat intervals.
         this.heartbeatAckReceived = true;
         return false;
+      // The op notice and the close→reconnect chain it triggers carry two
+      // ids on purpose: threading the notice's id through instance state
+      // could leak it across UNRELATED close events, which is worse than an
+      // orphaned chain head (#653 review).
       case GatewayOp.RECONNECT:
         this.publish(Operational.Info, {
           traceId: newTraceId(),

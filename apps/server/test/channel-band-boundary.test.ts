@@ -7,11 +7,14 @@ import ts from "typescript";
 /**
  * Channels band-extraction readiness gate (#499 precursor).
  *
- * The future channels band depends on exactly @openomni/protocol plus the
- * leaf @openomni/telemetry: channel code observes through the injected
- * publish port (channel/types.ts), speaks the Adapter.SurfaceKey codec, and
- * mints W3C trace ids at its genuine trace origins (D11 — gateway events,
- * inbound frames). This static scan pins that seam — every import in
+ * The future channels band depends on @openomni/protocol plus the leaf
+ * @openomni/telemetry: channel code observes through the injected publish
+ * port (channel/types.ts), speaks the Adapter.SurfaceKey codec, and mints
+ * W3C trace ids at its genuine trace origins (D11 — gateway events, inbound
+ * frames). #499's text pinned the band to {protocol, ipc}; this amendment
+ * (+telemetry, PR #653) is recorded on that issue for Owner review — an
+ * injected-mint port would be one-off ceremony for a pure leaf function no
+ * other band bothers with. This static scan pins the seam — every import in
  * apps/server/src/channel/** must be one of the allowed packages, a node
  * builtin, or relative. When the band MOVE lands (post-#499) this gate
  * travels with it as the package's import contract.
