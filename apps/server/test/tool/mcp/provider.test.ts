@@ -129,7 +129,7 @@ describe("McpToolProvider", () => {
     expect(tool.spec.labels).toEqual([
       "custom.label",
       "tool:search.query",
-      "source.mcp",
+      "source:mcp",
       "mcp.search",
     ]);
     expect(tool.descriptor).toMatchObject({

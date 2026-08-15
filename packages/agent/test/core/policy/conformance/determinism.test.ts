@@ -18,7 +18,7 @@ const goldenRequest = Object.freeze({
   elapsedMs: 1_500,
   toolName: "shell",
   toolInput: Object.freeze({ command: "pwd", cwd: "/workspace" }),
-  toolLabels: Object.freeze(["source.system", "risk.low"]),
+  toolLabels: Object.freeze(["source:system", "risk.low"]),
 });
 
 /**

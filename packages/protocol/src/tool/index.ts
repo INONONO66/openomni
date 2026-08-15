@@ -12,6 +12,25 @@ export namespace Tool {
   export const Source = z.enum(["system", "mcp", "agent", "server"]);
   export type Source = z.infer<typeof Source>;
 
+  /**
+   * Tool source provenance as a catalog label: `source:<Source>`. Producers
+   * live in three packages and the consumer in a fourth, so the grammar is
+   * defined once, here, next to the vocabulary it speaks — the two ends had
+   * already drifted apart once (`source.mcp` vs `source:system`).
+   */
+  const sourceLabelPrefix = "source:";
+
+  export function sourceLabel(source: Source): string {
+    return `${sourceLabelPrefix}${source}`;
+  }
+
+  export function sourceFromLabels(labels: readonly string[] | undefined): Source | undefined {
+    const label = labels?.find((candidate) => candidate.startsWith(sourceLabelPrefix));
+    if (label === undefined) return undefined;
+    const parsed = Source.safeParse(label.slice(sourceLabelPrefix.length));
+    return parsed.success ? parsed.data : undefined;
+  }
+
   export const RiskTier = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
   export type RiskTier = z.infer<typeof RiskTier>;
 

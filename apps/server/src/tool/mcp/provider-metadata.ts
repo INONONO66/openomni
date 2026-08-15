@@ -1,4 +1,5 @@
-import type { RuntimeResource, Tool } from "@openomni/protocol";
+import type { RuntimeResource } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
 
 function uniqueLabels(labels: readonly string[]): string[] {
   return [...new Set(labels)];
@@ -12,7 +13,7 @@ export function mcpToolMetadata(
   const labels = uniqueLabels([
     ...(spec.labels ?? []),
     `tool:${spec.name}`,
-    "source.mcp",
+    Tool.sourceLabel("mcp"),
     `mcp.${serverName}`,
   ]);
 

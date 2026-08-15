@@ -35,7 +35,7 @@ class PolicyFixtureMigrationError extends Error {
 const toolResource = RuntimeResource.Descriptor.parse({
   id: "tool:system:bash",
   kind: "tool",
-  labels: ["source.system", "tool.shell"],
+  labels: ["source:system", "tool.shell"],
   capabilities: ["shell.exec"],
   effects: ["workspace.read"],
   source: { type: "system" },
@@ -209,7 +209,7 @@ describe("PolicyPoint versioning conformance", () => {
     const worker = RuntimeResource.Descriptor.parse({
       id: "worker:coordinator:version-worker",
       kind: "worker",
-      labels: ["source.coordinator", "worker.coordinator"],
+      labels: ["source:coordinator", "worker.coordinator"],
       capabilities: [],
       effects: [],
       source: { type: "coordinator" },
@@ -217,7 +217,7 @@ describe("PolicyPoint versioning conformance", () => {
     const credential = RuntimeResource.Descriptor.parse({
       id: "credential:anthropic:api-key",
       kind: "credential",
-      labels: ["source.file", "credential.anthropic"],
+      labels: ["source:file", "credential.anthropic"],
       capabilities: [],
       effects: [],
       source: { type: "file" },
@@ -225,7 +225,7 @@ describe("PolicyPoint versioning conformance", () => {
     const session = RuntimeResource.Descriptor.parse({
       id: "session:ses_version",
       kind: "session",
-      labels: ["source.runtime", "session.self-loop"],
+      labels: ["source:runtime", "session.self-loop"],
       capabilities: [],
       effects: [],
       source: { type: "runtime", runtimeId: "ses_version" },

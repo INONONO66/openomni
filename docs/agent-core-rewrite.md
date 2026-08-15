@@ -130,9 +130,10 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| [#637](https://github.com/INONONO66/openomni/pull/637) | close the run loop's reason-code vocabulary (rule 1's real target); amend rules 2–4 with what the tree shows | 🟨 |
-| [#638](https://github.com/INONONO66/openomni/pull/638) | rule 5: policy points with zero production registration vs an explicit allowlist (`policy-point-registration` guard, 9 of 18 pinned) | 🟨 |
-| — | close the tool source-label vocabulary (`tools.ts` consumer vs `define.ts`/`client-descriptor.ts` producers, two prefix separators already coexist) | ⬜ |
+| [#637](https://github.com/INONONO66/openomni/pull/637) | close the run loop's reason-code vocabulary (rule 1's real target); amend rules 2–4 with what the tree shows | ✅ |
+| [#638](https://github.com/INONONO66/openomni/pull/638) | rule 5: policy points with zero production registration vs an explicit allowlist (`policy-point-registration` guard, 9 of 18 pinned) | ✅ |
+| [#639](https://github.com/INONONO66/openomni/pull/639) | close the tool source-label vocabulary: grammar lives in `Tool.sourceLabel`/`Tool.sourceFromLabels` next to `Tool.Source`; dot separator retired; rejections pinned | 🟨 |
+| — | close the `mcp.<serverId>` label vocabulary: 2 producers in 2 packages + a third server-name derivation from tool names in `worker-bootstrap.ts` — the same multi-package raw-string shape #639 closed for source | ⬜ |
 | — | rule 3: core may not import `builtin/` — blocked on the Owner-gated `builtin:compaction` row | ⬜ |
 
 Then [#502](https://github.com/INONONO66/openomni/issues/502) runs against a `session` package that holds only durable facts.

@@ -7,7 +7,7 @@ describe("RuntimeResource descriptors", () => {
       const result = RuntimeResource.Descriptor.parse({
         id: "tool:bash",
         kind: "tool",
-        labels: ["source.system"],
+        labels: ["source:system"],
         capabilities: ["shell.exec"],
         effects: ["workspace.mutate"],
       });
@@ -21,7 +21,7 @@ describe("RuntimeResource descriptors", () => {
       const result = RuntimeResource.Descriptor.parse({
         id: "skill:project:git-master",
         kind: "skill",
-        labels: ["source.project"],
+        labels: ["source:project"],
         capabilities: ["behavior.inject"],
         effects: ["prompt.modify"],
         source: {

@@ -229,7 +229,7 @@ describe("canonical tool policy execution", () => {
       events: Bus,
       engine,
       traceContext: { traceId: "trace", sessionId: "session", runId: "run" },
-      getToolLabels: () => ["source.mcp", "mcp.filesystem"],
+      getToolLabels: () => ["source:mcp", "mcp.filesystem"],
       toolExecutor: async (call) => ({ id: "result", toolCallId: call.id, output: "ok" }),
     });
 
@@ -258,7 +258,7 @@ describe("canonical tool policy execution", () => {
       events: Bus,
       engine,
       traceContext: { traceId: "trace", sessionId: "session", runId: "run" },
-      getToolLabels: () => ["source.mcp"],
+      getToolLabels: () => ["source:mcp"],
       toolExecutor,
     });
 

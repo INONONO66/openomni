@@ -1,4 +1,5 @@
-import type { RuntimeResource, Tool } from "@openomni/protocol";
+import type { RuntimeResource } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
 
 type McpToolSpec = Tool.Spec & {
   readonly descriptor: RuntimeResource.Descriptor;
@@ -13,7 +14,7 @@ function createMcpToolDescriptor(serverId: string, remoteName: string): RuntimeR
       serverId,
       remoteName,
     },
-    labels: ["source.mcp", `mcp.${serverId}`],
+    labels: [Tool.sourceLabel("mcp"), `mcp.${serverId}`],
     capabilities: ["network.write"],
     effects: ["external.write"],
   };

@@ -24,7 +24,7 @@ function nativeToolDescriptor(name: string): RuntimeResource.Descriptor {
   return {
     id: `tool:${name}`,
     kind: "tool",
-    labels: ["source.system"],
+    labels: ["source:system"],
     capabilities: ["tool.execute"],
     effects: ["external.write"],
     source: { type: "system" },
