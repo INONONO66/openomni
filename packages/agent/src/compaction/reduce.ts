@@ -1,4 +1,4 @@
-import type { Message, Tool } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 
 export interface ToolOutputElision {
   /** Outputs at or below this length are left alone — nothing worth reclaiming. */
@@ -17,14 +17,18 @@ interface ReductionResult {
  * messages older than the protected tail to a sized elision marker plus a
  * head excerpt. The model projection resends `state.output` verbatim on
  * every call, so old bulky outputs dominate the window long after anything
- * reads them again.
+ * reads them again. Errored outputs are out of scope: they project as
+ * `Error: <message>`, already short in the cases that matter.
  *
- * Runs before the cut, not instead of it: elision reclaims tokens without
- * dropping any message, so the lossy boundary-snap cut is reached only when
- * there is nothing left to elide. Idempotent by construction — an elided
- * output is shorter than any sane `minOutputChars`, so a second pass finds
- * nothing. Part identities are preserved: this rewrites a field of the same
- * part, it does not mint new parts.
+ * Termination is structural, not configurational: an output is elided only
+ * when its replacement is strictly shorter, so every pass shrinks what it
+ * touches and a fixed point exists for every config — including ones where
+ * marker + head would not fit under `minOutputChars` (those outputs are
+ * simply left alone, and adversarial review showed the alternative: marker
+ * stacking that reports negative yield as positive, forever). `elidedChars`
+ * is the net shrink, not the original length. Part identities are
+ * preserved: this rewrites a field of the same part, it does not mint new
+ * parts.
  */
 export function elideToolOutputs(
   messages: readonly Message.WithParts[],
@@ -40,9 +44,11 @@ export function elideToolOutputs(
     const parts = message.parts.map((part) => {
       if (part.type !== "tool" || part.state.status !== "completed") return part;
       if (part.state.output.length <= options.minOutputChars) return part;
-      elidedChars += part.state.output.length;
+      const output = elidedOutput(part.state.output, options.keepHeadChars);
+      if (output.length >= part.state.output.length) return part;
+      elidedChars += part.state.output.length - output.length;
       touched = true;
-      return { ...part, state: elidedState(part.state, options.keepHeadChars) };
+      return { ...part, state: { ...part.state, output } };
     });
     return touched ? { ...message, parts } : message;
   });
@@ -52,12 +58,6 @@ export function elideToolOutputs(
     : { messages: reduced, elidedChars };
 }
 
-function elidedState(
-  state: Extract<Tool.State, { status: "completed" }>,
-  keepHeadChars: number,
-): Extract<Tool.State, { status: "completed" }> {
-  return {
-    ...state,
-    output: `[output elided by compaction: ${state.output.length} chars]\n${state.output.slice(0, keepHeadChars)}`,
-  };
+function elidedOutput(output: string, keepHeadChars: number): string {
+  return `[output elided by compaction: ${output.length} chars]\n${output.slice(0, keepHeadChars)}`;
 }

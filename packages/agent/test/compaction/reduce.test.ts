@@ -70,7 +70,8 @@ describe("elideToolOutputs", () => {
 
     const result = elideToolOutputs(messages, 2, options);
 
-    expect(result.elidedChars).toBe(500);
+    // net shrink: 500 original − (41-char marker+newline + 20-char head) = 439
+    expect(result.elidedChars).toBe(439);
     const oldTool = result.messages[0]?.parts[0];
     if (oldTool?.type !== "tool" || oldTool.state.status !== "completed") throw new Error("shape");
     expect(oldTool.state.output).toBe(
@@ -96,7 +97,7 @@ describe("elideToolOutputs", () => {
     const once = elideToolOutputs(messages, 1, options);
     const twice = elideToolOutputs(once.messages, 1, options);
 
-    expect(once.elidedChars).toBe(500);
+    expect(once.elidedChars).toBe(439);
     expect(twice.elidedChars).toBe(0);
     expect(twice.messages).toEqual(once.messages);
   });
@@ -150,5 +151,81 @@ describe("Compaction.compact with elision configured", () => {
 
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBeGreaterThan(0);
+  });
+
+  it("never grows an output: the unsafe-config region is skipped, not stacked", () => {
+    // Adversarial review, executably: with keepHead 80 the replacement of a
+    // 110-char output would be ~124 chars — the old code committed that as
+    // positive yield and stacked markers forever. Strictly-shorter is the
+    // structural termination guarantee for every config, including
+    // minOutputChars: 1.
+    const unsafe = { minOutputChars: 100, keepHeadChars: 80 };
+    const messages = [toolMessage("x".repeat(110)), userMessage("u1"), userMessage("u2")];
+
+    const result = elideToolOutputs(messages, 1, unsafe);
+
+    expect(result.elidedChars).toBe(0);
+    const part = result.messages[0]?.parts[0];
+    if (part?.type !== "tool" || part.state.status !== "completed") throw new Error("shape");
+    expect(part.state.output).toBe("x".repeat(110));
+
+    const large = elideToolOutputs(
+      [toolMessage("x".repeat(500)), userMessage("u1"), userMessage("u2")],
+      1,
+      unsafe,
+    );
+    const second = elideToolOutputs(large.messages, 1, unsafe);
+    expect(large.elidedChars).toBeGreaterThan(0);
+    expect(second.elidedChars).toBe(0);
+    expect(second.messages).toEqual(large.messages);
+  });
+
+  it("also cuts in the same round when elision cannot cover the measured overage", async () => {
+    // The cut-starvation fix (#645 review MAJOR 2): under sustained tool use
+    // elision always finds a fresh aged-out output, so "cut when nothing is
+    // left to elide" never fires. When the estimated net reclaim (chars/4)
+    // falls short of the measured overage, the cut runs on the already-elided
+    // history in the same round.
+    const sink = collector();
+    const messages = [
+      userMessage("u0"),
+      toolMessage("x".repeat(500)),
+      userMessage("u1"),
+      userMessage("u2"),
+    ];
+
+    const result = await Compaction.compact(
+      messages,
+      { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
+      trace,
+      sink,
+      10_000, // measured: overage ~9920 tokens; elision nets 439 chars ≈ 110 tokens
+    );
+
+    expect(result.compacted).toBe(true);
+    expect(result.removedCount).toBeGreaterThan(0);
+    expect(result.messages.length).toBeLessThan(messages.length);
+  });
+
+  it("keeps the round to elision alone when the estimated reclaim covers the overage", async () => {
+    const sink = collector();
+    const messages = [
+      userMessage("u0"),
+      toolMessage("x".repeat(500)),
+      userMessage("u1"),
+      userMessage("u2"),
+    ];
+
+    const result = await Compaction.compact(
+      messages,
+      { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
+      trace,
+      sink,
+      100, // measured: overage 20 tokens; elision nets 439 chars ≈ 110 tokens
+    );
+
+    expect(result.compacted).toBe(true);
+    expect(result.removedCount).toBe(0);
+    expect(result.messages).toHaveLength(4);
   });
 });
