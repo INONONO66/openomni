@@ -133,7 +133,7 @@ describe("IngressEngine", () => {
       title: "worker target key test",
       model: { providerID: "test", modelID: "fixture" },
     });
-    const received: Array<{ target?: string }> = [];
+    const received: Array<{ target?: string; traceId?: string }> = [];
     const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
       received.push(event);
     });
@@ -158,6 +158,9 @@ describe("IngressEngine", () => {
     }
 
     expect(received.at(-1)?.target).toBe(`worker-session:${workerSession.id}`);
+    // D11 keystone pin (#654 review): ingest INHERITS the event's trace —
+    // reverting the engine to a fresh mint must fail here, not stay green.
+    expect(received.at(-1)?.traceId).toBe("trace-test");
   });
 
   it("ingest() with invalid event throws", async () => {
