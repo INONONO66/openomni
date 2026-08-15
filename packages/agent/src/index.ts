@@ -33,5 +33,4 @@ export type {
 } from "./core/policy";
 export { McpClient } from "./runtime/mcp/index";
 export type { McpServerConfig } from "./runtime/mcp/index";
-export { createCompactionPolicy } from "./core/policy/builtin/compaction";
-export { InMemoryCompactor } from "./core/execution/compaction";
+export { createCompactionPolicy } from "./compaction";

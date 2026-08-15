@@ -33,7 +33,7 @@ export class CompactionBoundaryError extends Error {
 const DEFAULT_THRESHOLD_RATIO = 0.8;
 const DEFAULT_PROTECT_RECENT = 6;
 
-export namespace InMemoryCompactor {
+export namespace Compaction {
   export function shouldCompact(totalTokens: number, options: CompactionOptions): boolean {
     const threshold = resolveThresholdTokens(options);
     return totalTokens >= threshold;

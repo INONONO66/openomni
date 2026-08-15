@@ -1,1 +1,0 @@
-export { createCompactionPolicy } from "./compaction";

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
-import { createCompactionPolicy } from "../../../src/core/policy/builtin/compaction";
+import { createCompactionPolicy } from "../../../src/compaction";
 import { createUserMessage } from "../../../src/core/message-factory";
 import { handleCompact } from "../../../src/core/execution/turn";
 import { buildLifecyclePolicyContext } from "../../../src/core/execution/state";

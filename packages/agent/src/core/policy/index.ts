@@ -8,7 +8,6 @@ export type {
 export type { PolicyDecision, PolicyAuditConfig, PolicyEngineConfig } from "@openomni/policy";
 export { PolicyRegistry, defaultRegistry } from "./registry";
 export type { PolicyFactory, PolicyRegistryInstance } from "./registry";
-export * from "./builtin";
 
 import {
   PolicyEngine as GenericPolicyEngine,

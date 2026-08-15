@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { createBudgetState } from "../../../../src/core/budget";
-import { createCompactionPolicy } from "../../../../src/core/policy/builtin/compaction";
-import type { PolicyFn } from "../../../../src/core/policy";
-import type { BudgetState } from "../../../../src/core/budget";
-import { effectOf } from "../../../helpers/policy-decision";
+import { createBudgetState } from "../../src/core/budget";
+import { createCompactionPolicy } from "../../src/compaction";
+import type { PolicyFn } from "../../src/core/policy";
+import type { BudgetState } from "../../src/core/budget";
+import { effectOf } from "../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
 function baseCtx(

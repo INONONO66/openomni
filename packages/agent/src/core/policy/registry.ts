@@ -2,8 +2,7 @@ import type { BusEvent } from "@openomni/protocol";
 import { PolicyRegistry } from "@openomni/policy";
 import type { PolicyRegistryInstance } from "@openomni/policy";
 import { z } from "zod";
-import type { CompactionOptions } from "../execution/compaction";
-import { createCompactionPolicy } from "./builtin";
+import { createCompactionPolicy, type CompactionOptions } from "../../compaction";
 import type { PolicyContext } from "./types";
 
 export { PolicyRegistry } from "@openomni/policy";
