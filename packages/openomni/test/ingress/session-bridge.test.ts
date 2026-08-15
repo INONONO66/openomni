@@ -104,11 +104,13 @@ describe("SessionBridge", () => {
 
       const messages = Session.getMessages(sessionId);
       expect(messages).toHaveLength(1);
-      expect(messages[0].role).toBe("assistant");
+      const message = messages[0];
+      if (message === undefined) throw new Error("shape");
+      expect(message.role).toBe("assistant");
 
-      const parts = Session.getParts(messages[0].id);
+      const parts = Session.getParts(message.id);
       expect(parts).toHaveLength(1);
-      expect(parts[0].type).toBe("text");
+      expect(parts[0]?.type).toBe("text");
       expect((parts[0] as Message.TextPart).text).toBe(output);
     });
   });

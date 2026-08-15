@@ -64,7 +64,7 @@ function createSession(): string {
   }).id;
 }
 
-function workerEvent(id: string, parentSessionId?: string): Ingress.InboundEvent {
+function workerEvent(id: string, parentSessionId?: string): Ingress.DirectEvent {
   return {
     id,
     surface: "tui",

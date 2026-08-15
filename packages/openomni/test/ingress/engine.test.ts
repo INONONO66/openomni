@@ -121,6 +121,7 @@ describe("IngressEngine", () => {
     const result = await engine.ingest(event);
 
     expect(result.mode).toBe("direct");
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("direct response");
     expect(result.result.finishReason).toBe("stop");
   });
@@ -262,6 +263,7 @@ describe("IngressEngine", () => {
     const first = await engine.ingest(eventA);
     const second = await engine.ingest(eventB);
 
+    if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
     expect(first.sessionId).toBe(second.sessionId);
   });
 
@@ -294,6 +296,7 @@ describe("IngressEngine", () => {
       payload: "After reset",
     });
 
+    if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
     expect(first.sessionId).not.toBe(second.sessionId);
   });
 

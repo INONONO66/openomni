@@ -44,9 +44,9 @@ describe("SkillLoader.discover", () => {
     const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe("my-skill");
-    expect(skills[0].description).toBe("A test skill");
-    expect(skills[0].path).toContain("SKILL.md");
+    expect(skills[0]?.name).toBe("my-skill");
+    expect(skills[0]?.description).toBe("A test skill");
+    expect(skills[0]?.path).toContain("SKILL.md");
   });
 
   it("parses frontmatter name and description correctly", () => {
@@ -60,8 +60,8 @@ describe("SkillLoader.discover", () => {
 
     const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
-    expect(skills[0].name).toBe("parsed-name");
-    expect(skills[0].description).toBe("Parsed description");
+    expect(skills[0]?.name).toBe("parsed-name");
+    expect(skills[0]?.description).toBe("Parsed description");
   });
 
   it("falls back to directory name when frontmatter has no name", () => {
@@ -71,8 +71,8 @@ describe("SkillLoader.discover", () => {
 
     const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
-    expect(skills[0].name).toBe("dir-fallback");
-    expect(skills[0].description).toBe("Only description");
+    expect(skills[0]?.name).toBe("dir-fallback");
+    expect(skills[0]?.description).toBe("Only description");
   });
 
   it("falls back to empty description when frontmatter has no description", () => {
@@ -82,7 +82,7 @@ describe("SkillLoader.discover", () => {
 
     const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
-    expect(skills[0].description).toBe("");
+    expect(skills[0]?.description).toBe("");
   });
 
   it("handles malformed YAML frontmatter gracefully without crashing", () => {
@@ -92,7 +92,7 @@ describe("SkillLoader.discover", () => {
 
     expect(() => SkillLoader.discover(ws, emptyGlobalDir)).not.toThrow();
     const skills = SkillLoader.discover(ws, emptyGlobalDir);
-    expect(skills[0].name).toBe("bad-yaml");
+    expect(skills[0]?.name).toBe("bad-yaml");
   });
 
   it("discovers multiple skills", () => {
@@ -148,7 +148,7 @@ describe("SkillLoader.discover", () => {
 
     const match = skills.filter((s) => s.name === "shared-name");
     expect(match).toHaveLength(1);
-    expect(match[0].description).toBe("Project version");
+    expect(match[0]?.description).toBe("Project version");
   });
 
   it("returns empty array when no skills dir exists", () => {

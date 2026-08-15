@@ -46,7 +46,7 @@ async function dispatchContextMiddleware(
   middleware: ReturnType<typeof createContextMiddleware>,
   context: ContextPolicyInput,
 ) {
-  const engine = PolicyEngine.create({ audit: false });
+  const engine = PolicyEngine.create<PolicyContext>({ audit: false });
   engine.register(middleware);
   return engine.dispatchPoint("prompt.context.pre", context);
 }

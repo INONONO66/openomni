@@ -142,9 +142,9 @@ describe("worker.spawn read-back completion gate", () => {
         matchedText: "expected completion marker",
       },
     });
-    expect(workItems[0]?.completionReport?.claims[0]?.evidenceIds).toEqual([
-      workItems[0]?.evidence[0]?.id,
-    ]);
+    const readBackEvidenceId = workItems[0]?.evidence[0]?.id;
+    if (readBackEvidenceId === undefined) throw new Error("shape");
+    expect(workItems[0]?.completionReport?.claims[0]?.evidenceIds).toEqual([readBackEvidenceId]);
     expect(result).toMatchObject({
       output: {
         workItemHash: workItems[0]?.hash,

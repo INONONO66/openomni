@@ -132,6 +132,7 @@ describe("AppConnectorInstallationStore lifecycle", () => {
   test("rejects storage adapters without app connector installation support", () => {
     // Given
     const adapterWithoutAppConnector = {
+      transaction: <T>(operation: () => T): T => operation(),
       session: {
         get: () => undefined,
         set: () => undefined,

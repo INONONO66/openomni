@@ -1,23 +1,27 @@
 import { describe, expect, test } from "bun:test";
+import type { z } from "zod";
 import { IngressEvent } from "../../src/event/ingress.js";
 
 const RoutingDecision = IngressEvent.RoutingDecision;
 const routingDecisionSchema = RoutingDecision.schema;
+
+type RoutingDecisionInput = z.input<typeof routingDecisionSchema>;
 
 const baseDecision = {
   traceId: "trace-1",
   time: 1_750_000_000_000,
   inboundId: "inbound-1",
   surface: "discord:channel:42",
-  mode: "direct",
+  mode: "direct" as const,
   reason: "terminal routing decision",
   factsUsed: ["inbound.normalized", "surface.discord"],
   target: "resident",
 };
 
-const terminalCases = [
-  { stage: "blacklist", outcome: "drop" },
+const terminalCases: RoutingDecisionInput[] = [
+  { ...baseDecision, stage: "blacklist", outcome: "drop" },
   {
+    ...baseDecision,
     stage: "wait_correlation",
     outcome: "route",
     target: "worker-session:session-1",
@@ -29,16 +33,24 @@ const terminalCases = [
     inboundTreatment: "full_access",
   },
   {
+    ...baseDecision,
     stage: "wait_correlation",
     outcome: "ambiguous",
     candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2", "wait:wait-3"],
   },
   // Fail-closed wait stage (#215): a matched wait whose owner has no ingress
   // delivery path blocks instead of falling through to surface routing.
-  { stage: "wait_correlation", outcome: "block" },
-  { stage: "channel_ceiling", outcome: "block", inboundTreatment: "drop" },
-  { stage: "actor_identity", outcome: "block", actorId: "actor-2", trustTier: "observer" },
+  { ...baseDecision, stage: "wait_correlation", outcome: "block" },
+  { ...baseDecision, stage: "channel_ceiling", outcome: "block", inboundTreatment: "drop" },
   {
+    ...baseDecision,
+    stage: "actor_identity",
+    outcome: "block",
+    actorId: "actor-2",
+    trustTier: "observer",
+  },
+  {
+    ...baseDecision,
     stage: "surface_default",
     outcome: "route",
     mode: "internal",
@@ -76,7 +88,7 @@ describe("IngressEvent.RoutingDecision", () => {
   for (const terminal of terminalCases) {
     test(`parses the terminal ${terminal.stage}/${terminal.outcome} decision`, () => {
       // Given
-      const input = { ...baseDecision, ...terminal };
+      const input = terminal;
 
       // When
       const parsed = routingDecisionSchema.parse(input);

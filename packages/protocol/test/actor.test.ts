@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { z } from "zod";
 import { Actor } from "../src/actor/index.js";
 
 describe("Actor protocol contracts", () => {
   test("parses canonical identity and endpoint records", () => {
     // Given
-    const identityInput = {
+    const identityInput: z.input<typeof Actor.Identity> = {
       id: "act_owner",
       kind: "human",
       trustTier: "owner",

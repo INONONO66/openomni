@@ -26,6 +26,8 @@ describe("default dispatch completion writer contract", () => {
       resumeCompletion: unsupported,
       reserveRequest: unsupported,
       assertReservationLease: unsupported,
+      hasActiveRequest: unsupported,
+      trackActiveRequest: unsupported,
     };
     const runtime = createDefaultDispatchRuntime({ completionAdmissionService: injected });
 

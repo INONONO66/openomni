@@ -75,6 +75,7 @@ export function registerStakesSeamCases(): void {
         ok: false,
         denial: { code: "forged_local_value", surface: "authorized_voice" },
       });
+      if (forgedCompletion.ok || forgedVoice.ok) throw new Error("shape");
       expect(Object.isFrozen(forgedCompletion)).toBe(true);
       expect(Object.isFrozen(forgedCompletion.denial)).toBe(true);
       expect(Object.isFrozen(forgedVoice)).toBe(true);

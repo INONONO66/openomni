@@ -179,7 +179,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
       completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
-      readBackRecorder: (_workItemHash, readBack) =>
+      readBackRecorder: async (_workItemHash, readBack) =>
         WorkItem.ReadBackCheck.parse({
           kind: "citation_match",
           target: readBack.target,
@@ -260,7 +260,7 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
       completionService: testCompletionService(() => 1),
       connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       now: () => 1,
-      readBackRecorder: (_workItemHash, readBack) => {
+      readBackRecorder: async (_workItemHash, readBack) => {
         recordedReadBacks.push(readBack);
         return WorkItem.ReadBackCheck.parse({
           kind: "citation_match",

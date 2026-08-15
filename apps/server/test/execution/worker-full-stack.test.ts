@@ -8,16 +8,7 @@ import {
   type WorkerManagerFactory,
 } from "../../src/execution/coordinator";
 
-let capturedOnToolCall:
-  | ((
-      params: {
-        callId: string;
-        tool: string;
-        input: Record<string, unknown>;
-      },
-      context?: { signal?: AbortSignal },
-    ) => Promise<{ id: string; toolCallId: string; output: string; isError?: boolean }>)
-  | undefined;
+let capturedOnToolCall: Parameters<WorkerManagerFactory>[1]["toolRelay"];
 
 let mockPoolDispatch: (
   sessionId: string,
@@ -116,6 +107,7 @@ describe("system tool provider — read/glob", () => {
 describe("builtin middleware — tool permission", () => {
   function makeToolCtx(toolName: string) {
     return {
+      pointId: "tool.native.pre" as const,
       timing: "invoke.prepare" as const,
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -186,6 +178,10 @@ describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
     const controller = new AbortController();
     const result = await capturedOnToolCall(
       {
+        // runId/sessionId are required by the current ToolCallParams contract;
+        // the relay routes on `tool` and they do not affect the dispatcher path.
+        runId: crypto.randomUUID(),
+        sessionId: crypto.randomUUID(),
         callId,
         tool: "myserver.read_file",
         input: { path: "/tmp/test.txt" },
@@ -258,6 +254,7 @@ describe("concurrent sessions with tools", () => {
     for (const result of results) {
       expect(result.mode).toBe("direct");
       if (result.mode !== "direct") continue;
+      if (result.kind === "dropped") throw new Error("shape");
       expect(result.result.output).toMatch(/^handled:/);
     }
   });

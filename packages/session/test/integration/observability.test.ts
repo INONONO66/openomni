@@ -134,8 +134,8 @@ describe("Observability Pipeline Integration", () => {
 
       const history = await BusQuery.getWorkerRunHistory(sessionId);
       expect(history).toHaveLength(1);
-      expect(history[0].runId).toBe(runId);
-      expect(history[0].status).toBe("succeeded");
+      expect(history[0]?.runId).toBe(runId);
+      expect(history[0]?.status).toBe("succeeded");
 
       const eventLogCount = db().query("SELECT COUNT(*) as count FROM event_log").get() as {
         count: number;

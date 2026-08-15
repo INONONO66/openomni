@@ -39,6 +39,7 @@ describe("WorkerGrantStore", () => {
       workerRunId: "run-1",
       allowedActions: ["worker.send"],
       allowedSessionIds: ["session-1"],
+      canCreateExternalTasks: false,
     });
 
     expect(
@@ -162,6 +163,7 @@ describe("WorkerGrantStore", () => {
       allowedActions: ["worker.send"],
       allowedSessionIds: ["session-1"],
       expiresAt: Date.now() - 1,
+      canCreateExternalTasks: false,
     });
 
     expect(
@@ -187,6 +189,7 @@ describe("WorkerGrantStore", () => {
       id: "grant-stale",
       workerRunId: "run-stale",
       allowedActions: ["worker.send"],
+      canCreateExternalTasks: false,
     });
     const staleConcurrentUpdate = {
       ...created,

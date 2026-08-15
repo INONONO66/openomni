@@ -50,11 +50,11 @@ describe("McpToolProvider", () => {
         "policy.action.requested",
         "mcp.tool.completed",
       ]);
-      expect(auditEvents[0].payload).toMatchObject({
+      expect(auditEvents[0]?.payload).toMatchObject({
         action: "mcp.tool.call",
         resource: "search.query",
       });
-      expect(auditEvents[1].payload).toMatchObject({
+      expect(auditEvents[1]?.payload).toMatchObject({
         toolCallId: "call-bus-success",
       });
     } finally {
@@ -154,15 +154,15 @@ describe("McpToolProvider", () => {
 
       const blockedEvents = allEvents.filter((event) => event.name === "policy.action.blocked");
       expect(blockedEvents).toHaveLength(3);
-      expect(blockedEvents[0].payload).toMatchObject({
+      expect(blockedEvents[0]?.payload).toMatchObject({
         resource: "ghost_query",
         reason: "Unknown tool: ghost_query",
       });
-      expect(blockedEvents[1].payload).toMatchObject({
+      expect(blockedEvents[1]?.payload).toMatchObject({
         resource: "search.query",
         reason: "MCP server not found: search",
       });
-      expect(blockedEvents[2].payload).toMatchObject({
+      expect(blockedEvents[2]?.payload).toMatchObject({
         resource: "query",
         reason: "MCP tool name must be prefixed with server name: query",
       });

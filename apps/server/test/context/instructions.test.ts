@@ -92,11 +92,14 @@ describe("InstructionLoader.discover", () => {
     const priorities = files.map((f) => f.priority);
 
     for (let i = 1; i < priorities.length; i++) {
-      expect(priorities[i]).toBeGreaterThanOrEqual(priorities[i - 1]);
+      const prev = priorities[i - 1];
+      const curr = priorities[i];
+      if (prev === undefined || curr === undefined) throw new Error("shape");
+      expect(curr).toBeGreaterThanOrEqual(prev);
     }
 
-    expect(files[0].label).toBe("Global");
-    expect(files[files.length - 1].label).toBe("Local");
+    expect(files[0]?.label).toBe("Global");
+    expect(files[files.length - 1]?.label).toBe("Local");
   });
 
   it("returns [] for empty directory with no relevant files", () => {

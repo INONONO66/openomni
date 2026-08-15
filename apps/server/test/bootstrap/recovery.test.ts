@@ -414,6 +414,7 @@ describe("server recovery", () => {
     await runRecovery({
       handler: async (message) => {
         handled.push({ id: message.id, text: message.text, surfaceKey: message.surfaceKey });
+        return null;
       },
       traceId: "trace-retry-queue",
       completionRuntime: {

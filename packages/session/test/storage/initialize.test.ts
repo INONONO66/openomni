@@ -38,6 +38,7 @@ describe("Storage.initialize", () => {
       title: "Persisted",
       model: { providerID: "test", modelID: "test-model" },
       time: { created: Date.now(), updated: Date.now() },
+      spawnDepth: 0,
     };
     Storage.getAdapter().session.set("s1", session);
 
@@ -82,6 +83,7 @@ describe("Storage.initialize", () => {
         title: "Isolated",
         model: { providerID: "test", modelID: "test" },
         time: { created: 1, updated: 1 },
+        spawnDepth: 0,
       });
     });
 

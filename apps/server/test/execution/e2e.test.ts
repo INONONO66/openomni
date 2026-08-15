@@ -59,6 +59,7 @@ describe("coordinator dispatch path — direct mode", () => {
 
     expect(result.mode).toBe("direct");
     if (result.mode !== "direct") throw new Error("expected direct result");
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("mock response");
   });
 });

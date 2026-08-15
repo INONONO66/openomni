@@ -139,6 +139,7 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
       id: "grant-corrupt",
       workerRunId: "run-corrupt",
       allowedActions: ["worker.send"],
+      canCreateExternalTasks: false,
     });
 
     // Structurally-valid-looking but schema-invalid: missing id/workerRunId/

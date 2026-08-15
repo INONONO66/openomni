@@ -96,7 +96,9 @@ describe("ingress bridge transport boundary", () => {
     expect(event.meta && "pendingAsk" in event.meta).toBe(false);
     expect("externalMessageId" in event).toBe(false);
     expect(event.meta && "externalMessageId" in event.meta).toBe(false);
-    expect(event.meta?.correlation && "externalMessageId" in event.meta.correlation).toBe(false);
+    const correlation = event.meta?.correlation;
+    if (typeof correlation !== "object" || correlation === null) throw new Error("shape");
+    expect("externalMessageId" in correlation).toBe(false);
   });
 
   it("preserves a descriptor-only thread hint in event and correlation metadata", () => {
@@ -107,7 +109,11 @@ describe("ingress bridge transport boundary", () => {
     const event = buildInboundEvent(message, deps);
 
     expect(event.meta?.threadId).toBe("descriptor-thread");
-    expect(event.meta?.correlation?.threadId).toBe("descriptor-thread");
+    const correlation = event.meta?.correlation;
+    if (typeof correlation !== "object" || correlation === null || !("threadId" in correlation)) {
+      throw new Error("shape");
+    }
+    expect(correlation.threadId).toBe("descriptor-thread");
   });
 
   it("prefers an explicit message thread hint over a conflicting descriptor hint", () => {
@@ -118,7 +124,11 @@ describe("ingress bridge transport boundary", () => {
     const event = buildInboundEvent(message, deps);
 
     expect(event.meta?.threadId).toBe("explicit-thread");
-    expect(event.meta?.correlation?.threadId).toBe(event.meta?.threadId);
+    const correlation = event.meta?.correlation;
+    if (typeof correlation !== "object" || correlation === null || !("threadId" in correlation)) {
+      throw new Error("shape");
+    }
+    expect(correlation.threadId).toBe(event.meta?.threadId);
   });
 
   it("constructs the Resident agent from normalized transport facts", () => {

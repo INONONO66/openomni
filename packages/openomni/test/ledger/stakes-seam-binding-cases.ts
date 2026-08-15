@@ -23,6 +23,26 @@ import {
 
 type CompletionMutation = BindingMutation<CompletionStakesBinding>;
 type VoiceMutation = BindingMutation<VoiceStakesBinding>;
+type LedgerStateFixture = StakesAuthoritySnapshot["state"];
+
+/** Like mutation(), but keeps the concrete snapshot type so the mutated value can flow back through the typed authority port. */
+function snapshotMutation(
+  name: string,
+  apply: (snapshot: StakesAuthoritySnapshot) => StakesAuthoritySnapshot,
+): Readonly<{ name: string; apply(snapshot: StakesAuthoritySnapshot): StakesAuthoritySnapshot }> {
+  return { name, apply };
+}
+
+/** Like mutation(), but keeps the concrete request type for the voice-authorization read path. */
+function voiceAuthorizationMutation(
+  name: string,
+  apply: (request: VoiceAuthorizationRequest) => VoiceAuthorizationRequest,
+): Readonly<{
+  name: string;
+  apply(request: VoiceAuthorizationRequest): VoiceAuthorizationRequest;
+}> {
+  return { name, apply };
+}
 
 const completionMutations: readonly CompletionMutation[] = [
   ...sharedBindingMutations,
@@ -98,7 +118,7 @@ export function registerStakesSeamBindingCases(): void {
 
 function harness() {
   const action = boundaryAction("trusted", 50_000_000);
-  const state = { window: stakesWindow, actions: [], knownFingerprints: [] };
+  const state: LedgerStateFixture = { window: stakesWindow, actions: [], knownFingerprints: [] };
   return {
     action,
     state,
@@ -110,7 +130,7 @@ function harness() {
 
 function authorityFor(
   action: ReturnType<typeof boundaryAction>,
-  state: ReturnType<typeof harness>["state"],
+  state: LedgerStateFixture,
 ): StakesAuthorityPort {
   return {
     read(request) {
@@ -139,7 +159,7 @@ function authorityWithSnapshotMutation(
 function snapshotFor(
   request: StakesAuthorityRequest,
   action: ReturnType<typeof boundaryAction>,
-  state: ReturnType<typeof harness>["state"],
+  state: LedgerStateFixture,
 ): StakesAuthoritySnapshot {
   return {
     action,
@@ -159,28 +179,28 @@ function snapshotMutations() {
     closesAt: stakesWindow.closesAt,
   });
   return [
-    mutation("action", (snapshot: StakesAuthoritySnapshot) => ({
+    snapshotMutation("action", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
       action: { ...snapshot.action, actionId: "action:other" },
     })),
-    mutation("state", (snapshot: StakesAuthoritySnapshot) => ({
+    snapshotMutation("state", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
       action: { ...snapshot.action, windowRef: otherWindow.windowRef },
       state: { ...snapshot.state, window: otherWindow },
     })),
-    mutation("basisRef", (snapshot: StakesAuthoritySnapshot) => ({
+    snapshotMutation("basisRef", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
       basisRef: stakesDigest("snapshot-basis"),
     })),
-    mutation("asOfOwnerSeq", (snapshot: StakesAuthoritySnapshot) => ({
+    snapshotMutation("asOfOwnerSeq", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
       asOfOwnerSeq: snapshot.asOfOwnerSeq + 1,
     })),
-    mutation("ledgerRangeDigest", (snapshot: StakesAuthoritySnapshot) => ({
+    snapshotMutation("ledgerRangeDigest", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
       ledgerRangeDigest: stakesDigest("snapshot-ledger-range"),
     })),
-    mutation("noveltyBasisDigest", (snapshot: StakesAuthoritySnapshot) => ({
+    snapshotMutation("noveltyBasisDigest", (snapshot: StakesAuthoritySnapshot) => ({
       ...snapshot,
       noveltyBasisDigest: stakesDigest("snapshot-novelty-basis"),
     })),
@@ -188,27 +208,27 @@ function snapshotMutations() {
 }
 
 const voiceAuthorizationMutations = [
-  mutation("ownerKey", (request: VoiceAuthorizationRequest) => ({
+  voiceAuthorizationMutation("ownerKey", (request: VoiceAuthorizationRequest) => ({
     ...request,
     ownerKey: "owner:other",
   })),
-  mutation("evaluationId", (request: VoiceAuthorizationRequest) => ({
+  voiceAuthorizationMutation("evaluationId", (request: VoiceAuthorizationRequest) => ({
     ...request,
     evaluationId: "jester:other",
   })),
-  mutation("authorizationReceiptRef", (request: VoiceAuthorizationRequest) => ({
+  voiceAuthorizationMutation("authorizationReceiptRef", (request: VoiceAuthorizationRequest) => ({
     ...request,
     authorizationReceiptRef: stakesDigest("authorization-other"),
   })),
-  mutation("actionRef", (request: VoiceAuthorizationRequest) => ({
+  voiceAuthorizationMutation("actionRef", (request: VoiceAuthorizationRequest) => ({
     ...request,
     actionRef: "action:other",
   })),
-  mutation("windowRef", (request: VoiceAuthorizationRequest) => ({
+  voiceAuthorizationMutation("windowRef", (request: VoiceAuthorizationRequest) => ({
     ...request,
     windowRef: stakesDigest("authorization-window"),
   })),
-  mutation("asOfOwnerSeq", (request: VoiceAuthorizationRequest) => ({
+  voiceAuthorizationMutation("asOfOwnerSeq", (request: VoiceAuthorizationRequest) => ({
     ...request,
     asOfOwnerSeq: request.asOfOwnerSeq + 1,
   })),

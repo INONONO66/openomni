@@ -39,6 +39,7 @@ const serverConfig: ServerConfig = {
   telegram: { allowedUsers: [] },
   github: { allowedUsers: [] },
   discord: { allowedUsers: [] },
+  messaging: { grants: [] },
 };
 
 const originalBeginWait = WorkItemAttemptRun.beginWait;
@@ -211,6 +212,8 @@ describe("resident inbound wait kernel dispatch", () => {
       wait: true,
     });
     expect(typeof call[0].correlation).toBe("string");
+    const correlation = call[0].correlation;
+    if (typeof correlation !== "string") throw new Error("shape");
     expect(call[1]).toEqual({
       // The asking run's trace crosses the IPC hop and is what the Resident
       // dispatches under; the handler never starts a second one.
@@ -224,7 +227,7 @@ describe("resident inbound wait kernel dispatch", () => {
       workspaceRoot: "/workspace",
     });
     expect(result).toEqual({
-      requestId: call[0].correlation,
+      requestId: correlation,
       accepted: true,
       output: "Proceed carefully.",
     });

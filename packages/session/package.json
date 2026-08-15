@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.contract-test.json",
+    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.contract-test.json && tsc --noEmit -p tsconfig.test.json",
     "lint": "bunx biome check ./src",
     "test": "bun test",
     "bench": "bun run bench/index.ts"

@@ -72,13 +72,13 @@ describe("tool catalog", () => {
     expect(catalog).toHaveLength(7);
 
     const byName = Object.fromEntries(catalog.map((e) => [e.canonicalName, e]));
-    expect(byName.read.category).toBe("filesystem");
-    expect(byName.write.category).toBe("filesystem");
-    expect(byName.glob.category).toBe("filesystem");
-    expect(byName["grep.search"].category).toBe("filesystem");
-    expect(byName.bash.category).toBe("execution");
-    expect(byName.mcp_tool.category).toBe("mcp");
-    expect(byName.server_analyzer.category).toBe("filesystem");
+    expect(byName.read?.category).toBe("filesystem");
+    expect(byName.write?.category).toBe("filesystem");
+    expect(byName.glob?.category).toBe("filesystem");
+    expect(byName["grep.search"]?.category).toBe("filesystem");
+    expect(byName.bash?.category).toBe("execution");
+    expect(byName.mcp_tool?.category).toBe("mcp");
+    expect(byName.server_analyzer?.category).toBe("filesystem");
   });
 
   it("resolveToolSelection with categories filters to matching tools only", () => {

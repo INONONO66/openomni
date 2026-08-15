@@ -23,7 +23,7 @@ import {
 import type {
   CompletionStakesInjection,
   VoiceStakesInjection,
-} from "../../src/ledger/stakes-seams.js";
+} from "../../src/ledger/stakes-seam-contract.js";
 
 export { stakesDriverStatus };
 export type { StakesDriverReceipt, StakesDriverScenario };

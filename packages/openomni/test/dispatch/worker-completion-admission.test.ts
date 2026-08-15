@@ -72,7 +72,12 @@ type ReflectOptions = Omit<WorkerCompletionOptions, "completionService" | "verif
     verifierRegistry?: WorkerCompletionOptions["verifierRegistry"];
   }>;
 
-function completionServiceFor(options: ReflectOptions): CompletionAdmissionService {
+function completionServiceFor(
+  options: Pick<
+    ReflectOptions,
+    "completionService" | "completionPolicyEngine" | "stakesResolver" | "now"
+  >,
+): CompletionAdmissionService {
   return (
     options.completionService ??
     completionService({
@@ -142,7 +147,7 @@ beforeEach(() => {
 });
 
 async function startedItem(
-  executorKind: WorkItem.ExecutorKind,
+  executorKind?: WorkItem.ExecutorKind,
   criterionStatement = "recorded numeric operands satisfy eq",
 ): Promise<WorkItem.Info> {
   const created = await WorkItemStore.create({
@@ -351,14 +356,14 @@ describe("worker completion admission convergence", () => {
     if (!adapter) throw new Error("missing WorkItem adapter");
     const compareAndSet = adapter.compareAndSet.bind(adapter);
     let clock = 0;
-    adapter.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.compareAndSet = (hash, expectedHead, candidate) => {
       if (
         candidate.completionTerminalReceipt === undefined &&
         candidate.completionFacts.admissions.length === 1
       ) {
         clock = 5_001;
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
 
     const reflection = await reflectCoordinatorResult(
@@ -684,11 +689,11 @@ describe("worker completion admission convergence", () => {
       ],
     });
     let readBackCalls = 0;
-    const options = {
+    const options: ReflectOptions = {
       completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
-      async readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+      async readBackRecorder(_hash, request) {
         readBackCalls += 1;
         if (readBackCalls > 1) throw new Error("duplicate delivery repeated read-back");
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
@@ -836,12 +841,12 @@ describe("worker completion admission convergence", () => {
       ],
     });
     let readBackCalls = 0;
-    const options = {
+    const options: ReflectOptions = {
       completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       completionPolicyEngine: COMPLETION_POLICY_ENGINE,
       now: () => NOW,
-      readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+      async readBackRecorder(_hash, request) {
         readBackCalls += 1;
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
         return WorkItem.ReadBackCheck.parse({
@@ -900,11 +905,11 @@ describe("worker completion admission convergence", () => {
     const readBackStarted = Promise.withResolvers<void>();
     const releaseReadBack = Promise.withResolvers<void>();
     let readBackCalls = 0;
-    const options = {
+    const options: ReflectOptions = {
       completionService: completionService({ ownerId: "process:one", now: () => NOW }),
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
-      async readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+      async readBackRecorder(_hash, request) {
         readBackCalls += 1;
         if (readBackCalls > 1) throw new Error("concurrent delivery repeated read-back");
         readBackStarted.resolve();
@@ -960,8 +965,8 @@ describe("worker completion admission convergence", () => {
     let policyBCalls = 0;
     const policy = (
       name: string,
-      entered: PromiseWithResolvers<void>,
-      release: PromiseWithResolvers<void>,
+      entered: ReturnType<typeof Promise.withResolvers<void>>,
+      release: ReturnType<typeof Promise.withResolvers<void>>,
     ) => {
       const engine = PolicyEngine.create();
       engine.register({
@@ -1075,7 +1080,9 @@ describe("worker completion admission convergence", () => {
     await reflectCoordinatorResult(item.hash, succeeded(output), options);
     const blocked = WorkItemStore.get(item.hash);
     const evidence = blocked?.evidence[0];
-    if (!blocked || !evidence) throw new Error("missing blocked durable verifier evidence");
+    if (!blocked || evidence?.detail === undefined) {
+      throw new Error("missing blocked durable verifier evidence");
+    }
     const detail = JSON.parse(evidence.detail) as {
       recordedInputs: Record<string, unknown>;
     };
@@ -1539,14 +1546,14 @@ describe("worker completion admission convergence", () => {
       "hold-citation-replay",
     );
     let readBackCalls = 0;
-    const options = {
+    const options: ReflectOptions = {
       completionService: completionService({
         policyEngine: completionPolicyEngine,
         now: () => NOW,
       }),
       sourceOrigin: { source: "internal_worker" } as const,
       now: () => NOW,
-      readBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+      async readBackRecorder(_hash, request) {
         readBackCalls += 1;
         if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
         return WorkItem.ReadBackCheck.parse({

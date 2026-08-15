@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { z } from "zod";
 import { Policy, RuntimeResource } from "../../src/policy/index.js";
 
 const expectedPointIds = [
@@ -91,7 +92,10 @@ describe("PolicyPoint registry", () => {
   });
 
   test("registers the criterion-scoped asserted-result allowance", () => {
-    const effect = { type: "work.allow_asserted", criterionIds: ["criterion:publish"] };
+    const effect: z.input<typeof Policy.PolicyEffect> = {
+      type: "work.allow_asserted",
+      criterionIds: ["criterion:publish"],
+    };
     const parsed = Policy.PolicyEffect.safeParse(effect);
 
     expect(parsed.success).toBe(true);
@@ -129,9 +133,12 @@ describe("PolicyPoint registry", () => {
 
   test("exports an initial contract for every required 3-tier point", () => {
     expect(Object.keys(Policy.PolicyPoint.Registry).sort()).toEqual([...expectedPointIds].sort());
-    expect(Policy.PolicyPoint.RegistrySchema.parse(Policy.PolicyPoint.Registry)).toEqual(
+    // Widened to `unknown` so toEqual accepts the deeply-readonly Registry as
+    // the expectation; the runtime deep-equality assertion is unchanged.
+    const roundTripped: unknown = Policy.PolicyPoint.RegistrySchema.parse(
       Policy.PolicyPoint.Registry,
     );
+    expect(roundTripped).toEqual(Policy.PolicyPoint.Registry);
 
     for (const pointId of expectedPointIds) {
       const contract = Policy.PolicyPoint.Registry[pointId];

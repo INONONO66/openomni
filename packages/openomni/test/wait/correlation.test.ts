@@ -326,12 +326,14 @@ describe("findWaitCandidates", () => {
     const wait = spyOn(WaitStore, "findByCorrelation").mockReturnValue([]);
     const pi = spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([]);
     const pa = spyOn(PendingAskStore, "findByCorrelation").mockReturnValue([]);
-    const markAmbiguous = spyOn(PendingAskStore, "markAmbiguous").mockImplementation((id) =>
-      buildAsk(id),
-    );
-    const resolve = spyOn(PendingInteractionStore, "resolve").mockImplementation((id) =>
-      buildInteraction(id),
-    );
+    // The frozen stores type these writes as `never` (#548); the spies exist
+    // only to prove they are never called (asserted below).
+    const markAmbiguous = spyOn(PendingAskStore, "markAmbiguous").mockImplementation(() => {
+      throw new Error("frozen markAmbiguous must not be called");
+    });
+    const resolve = spyOn(PendingInteractionStore, "resolve").mockImplementation(() => {
+      throw new Error("frozen resolve must not be called");
+    });
 
     findWaitCandidates({ correlation, externalMessageId: "message-1" });
 

@@ -295,7 +295,9 @@ type Provenance = Readonly<{
   name?: string;
 }>;
 
-function provenanceResolver(model: LexicalModel): (binding: Binding) => Provenance | undefined {
+function provenanceResolver(
+  model: LexicalModel,
+): (binding: Binding | undefined) => Provenance | undefined {
   const memo = new Map<Binding, Provenance | undefined>();
   const active = new Set<Binding>();
 
@@ -545,7 +547,7 @@ function kernelIngressCallCount(source: ts.SourceFile): number {
   });
   return calls;
 }
-function visit(source: ts.SourceFile, callback: (node: ts.Node) => void): void {
+function visit(source: ts.Node, callback: (node: ts.Node) => void): void {
   const walk = (node: ts.Node): void => {
     callback(node);
     ts.forEachChild(node, walk);

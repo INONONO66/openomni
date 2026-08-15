@@ -38,7 +38,7 @@ describe("McpToolProvider", () => {
 
       expect(result.isError).toBeFalsy();
       expect(publishedEvents).toHaveLength(1);
-      const event = publishedEvents[0].payload;
+      const event = publishedEvents[0]?.payload;
       if (
         typeof event !== "object" ||
         event === null ||

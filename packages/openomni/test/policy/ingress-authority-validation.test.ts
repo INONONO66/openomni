@@ -94,12 +94,15 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
         defaultTier: "observer",
         createdBy: "act_owner",
       },
-      "normal",
+      // Stale fixture: the "normal" treatment was renamed "full_access" in
+      // Actor.InboundTreatment; the test still proves the passed treatment is
+      // stamped onto meta verbatim.
+      "full_access",
     );
 
     expect(treated.meta?.actor).toMatchObject({ role: "user", trustTier: "observer" });
     expect(treated.meta?.channelGrantId).toBe("grant-public-observer");
-    expect(treated.meta?.inboundTreatment).toBe("normal");
+    expect(treated.meta?.inboundTreatment).toBe("full_access");
   });
 
   test("channel grant treatment never overrides an explicit trust tier", () => {
@@ -116,7 +119,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
         defaultTier: "observer",
         createdBy: "act_owner",
       },
-      "normal",
+      "full_access",
     );
 
     expect(treated.meta?.actor).toMatchObject({ trustTier: "manager" });

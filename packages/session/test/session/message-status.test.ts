@@ -122,6 +122,7 @@ describe("message status tracking", () => {
 
     expect(queryStatus("msg-5")).toBe("completed");
 
+    if (adapter.message.setStatus === undefined) throw new Error("shape");
     adapter.message.setStatus("msg-5", "processing");
     expect(queryStatus("msg-5")).toBe("processing");
   });

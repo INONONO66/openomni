@@ -258,6 +258,7 @@ describe("IngressHandlers", () => {
     expect(deliverMessage).toHaveBeenCalledWith(sessionId, "adjust your plan", undefined);
     expect(dispatch).not.toHaveBeenCalled();
     expect(workRunItems(sessionId)).toHaveLength(0);
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.finishReason).toBe("delivered");
     expect(storeDirectResultMock).toHaveBeenCalled();
   });
@@ -297,6 +298,7 @@ describe("IngressHandlers", () => {
     expect(deliverMessage).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(workRunItems(sessionId)[0]?.attemptTerminal?.outcome).toBe("succeeded");
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("resumed");
   });
 
@@ -337,6 +339,7 @@ describe("IngressHandlers", () => {
       coordinator: { dispatch },
     });
 
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.finishReason).toBe("background");
     expect(JSON.parse(result.result.output)).toMatchObject({
       accepted: true,
