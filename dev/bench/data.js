@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786801296497,
+  "lastUpdate": 1786803710221,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48213,6 +48213,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 508746,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a7d3c4f719e8aca1075479a5eb5ddf1bbc7340c",
+          "message": "feat(agent): compaction measures the window, not the spend (#606) (#644)\n\n* feat(agent): compaction measures the window, not the spend (#606)\n\nPhase 3's first behavioral row. The trigger compared the run's\ncumulative spend (totalInput + totalOutput) against the context window\n— a number that re-counts every prior turn's input and only ever\ngrows, so a long run fires compaction with a window nowhere near full,\nand the comparison drifts further from reality each turn.\n\nThe provider already measures the real thing: every response reports\nthe input tokens the call consumed, split into fresh input and both\ncache lanes — and a cached token still occupies the window. The\ntracking sink, where those tokens land, now records\ninput + cache.read + cache.write on the run state; the lifecycle\ncontext exposes it as contextTokens; the trigger compares that. Ground\ntruth per call, no estimation heuristic.\n\nNo measurement means no call has completed yet, and the policy skips\nwith compaction_skipped_no_measurement — recorded, like the no-trace\nskip, rather than guessed at.\n\nmeasure.ts is the first of the pure compaction modules the plan's\nPhase 3 names. The end-to-end pin drives the real tracking sink through\nbuildTurn: tokens land, the state carries 1000, the trigger sees it.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): measure the last step, not a sum of sums (#606)\n\nAdversarial review proved the first measurement wrong on two\nindependent axes, with the repo's own pins as evidence.\n\nThe cache lanes are components, not addends: the ai SDK normalizes\neach step's input to the cache-inclusive prompt total on both bundled\nproviders — the token-tracker pin fixes input 100 = 90 fresh + 7 read\n+ 3 write — so input + cache.read + cache.write counted a warm cache\ntwice, roughly doubling the measurement in the normal agentic case.\n\nAnd message.info.tokens is the turn's sum across steps, not a call: a\ntool-using turn resends the conversation per step, so a ten-step turn\nat a 50k window would have recorded ~500k. The sum grows with step\ncount; the window does not.\n\nThe measurement now reads the turn's last step-finish part's\ntokens.input — per-step, cache-inclusive, stamped by the same\nfinish-step event that counted it. The pins are pipeline-shaped\n(multi-step message, turn total deliberately not the answer, cache\nnever re-added), and the review's other demands landed with it: the\nskip reason code is asserted, the stale \"no budget state\" test name\nsays what it tests, an anti-hybrid pin holds a huge spend against a\nsmall window and expects silence, and a history rewrite clears the\nmeasurement it invalidated.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): clear the measurement on the path compaction takes (#606)\n\nRe-review PASS with one residual: applyCompactionMessages assigned\nstate.messages directly, bypassing the clearing replaceRunMessages just\ngained — so the clearing pin tested a function the compaction\napplication never calls. It now routes through replaceRunMessages, and\na second pin drives applyCompactionMessages itself.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T23:20:42+09:00",
+          "tree_id": "8c30325a1f15008ebd7188f5e7f568e4cc02c17a",
+          "url": "https://github.com/INONONO66/openomni/commit/4a7d3c4f719e8aca1075479a5eb5ddf1bbc7340c"
+        },
+        "date": 1786803709282,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 643,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6194,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9458,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2933,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2441,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8364,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 609,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 502,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1170,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 804,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45296,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2331,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 506442,
             "unit": "ns/op"
           }
         ]
