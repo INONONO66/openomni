@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786833133936,
+  "lastUpdate": 1786835345194,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -49701,6 +49701,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 397142,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71b9426770cfba48270cd44c387869e6afe952ec",
+          "message": "refactor(openomni): d11 batch 4 — the owner-gated seven remain (#606) (#656)\n\nThe last autonomous mint sites. The Scheduler owner interface carries\ncommand.traceId, so a scheduled or cancelled cron job records under the\ndispatch that asked for it. resolveDefaultProviderModel takes its trace\nfrom whichever of its two callers is alive — the boot inherits, the\ninteractive onboard command mints its own root. fetch-retry's options\nbag requires a trace and the recursion spreads it, so a rate-limited\nrequest retried three times finally reads as one request; all three\nchannel clients thread the inbound message's trace down to it, and the\ntelegram poller mints once per long-poll iteration so the request and\nits failure share one id. The websocket upgrade mints once and carries\nit on the auth state — the two warns are mutually exclusive per\nupgrade. The context loaders read the policy ctx that middleware.ts had\nbeen receiving and discarding as _ctx; an absent traceContext refuses\nvia the established throw helper rather than minting, and the fail-open\ndispatch turns that refusal into a bare allow. Discord's onReady is a\ndistinct gateway occurrence — initial connect and every re-identify —\nso it is deliberately its own trace, not the boot's.\n\nSurface.send and deliver still have no inbound trace to inherit; they\nfollow the github precedent — documented origin mints pointing at the\nWait/#215 threading, with the protocol signature untouched because that\nchange is #215 scope.\n\nPins: the scheduler pair equals the command's trace, the unreadable-\ninstruction warn equals the caller's, and a missing traceContext\nproduces the refuse path, not a fallback. The D11 measure lands at\nseven, all in packages/coordinator behind the Owner-gated ring-2 dep\nset.\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T08:07:49+09:00",
+          "tree_id": "dc4f4acb272c46c3d2cc5fcd1811914e1a7048f4",
+          "url": "https://github.com/INONONO66/openomni/commit/71b9426770cfba48270cd44c387869e6afe952ec"
+        },
+        "date": 1786835344803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6273,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11159,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3522,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8566,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 675,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1553,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 794,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 52132,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11175,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102102,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516181,
             "unit": "ns/op"
           }
         ]
