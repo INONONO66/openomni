@@ -4,6 +4,7 @@ import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
 import { emitRunCompleted, emitRunFailed, emitRunStarted, emitTurnStart } from "./run-events";
+import { runMachine } from "./run-machine";
 import { handleCompact, handleContinue, handleError, handleStop } from "./turn-outcome";
 import { assertToolExecutor, buildTurn, resolveToolChoice } from "./turn-prepare";
 import {
@@ -63,7 +64,9 @@ export async function runAgent(
    * raised from inside it — an abort from `Retry.sleep`, a non-`Error` throw
    * — escaped past its own record.
    */
+  const machine = runMachine();
   const finish = (result: AgentResult): AgentResult => {
+    machine.to("completed");
     emitRunCompleted(config.events, state, agentBase, result.finishReason);
     return result;
   };
@@ -79,10 +82,11 @@ export async function runAgent(
     maxAttempts: retryPolicy.maxAttempts,
   });
 
-  const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
-  if (preRunResult) return finish(preRunResult);
-
   try {
+    machine.to("pre_run");
+    const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
+    if (preRunResult) return finish(preRunResult);
+
     for (;;) {
       try {
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
@@ -94,6 +98,7 @@ export async function runAgent(
           const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
           if (budgetResult) return finish(budgetResult);
 
+          machine.to("turn_start");
           emitTurnStart(config.events, state, agentBase);
           const turnResult = await buildTurn(
             state,
@@ -107,6 +112,7 @@ export async function runAgent(
           );
           if (turnResult.type === "complete") return finish(turnResult.result);
 
+          machine.to("awaiting_model");
           const runLlm = config.llm?.run ?? llmRun;
           const modelRequestResult = await dispatchModelRequest(state, engine, config, agentBase);
           if (modelRequestResult) return finish(modelRequestResult);
@@ -123,6 +129,7 @@ export async function runAgent(
           );
           if (modelResponseResult) return finish(modelResponseResult);
 
+          machine.to("settling");
           if (outcome.type === "stop") {
             const stopOutcome = await handleStop(state, config, engine, agentBase, turnResult.turn);
             if (stopOutcome !== "continue") return finish(stopOutcome);
@@ -157,6 +164,7 @@ export async function runAgent(
           retryPolicy,
         );
         if (decision.action === "retry") {
+          machine.to("retrying");
           // Carried across the wait, not after it: an abort raises from inside
           // `Retry.sleep`, and the reason and ceiling it has to report are the
           // ones decided here — re-deriving them from the abort would make the
@@ -179,7 +187,13 @@ export async function runAgent(
       error instanceof Error ? error.message : String(error),
       thrownFailure ?? undecidedFacts(error),
     );
+    machine.to("failed");
     throw error;
+  } finally {
+    // A `return` that skipped `finish` leaves here, and a throw from a
+    // `finally` outranks it — so "started with no terminal" stops being a
+    // convention every exit has to remember.
+    machine.assertSettled();
   }
 }
 
