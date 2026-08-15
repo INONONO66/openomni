@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786790866435,
+  "lastUpdate": 1786792740832,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47345,6 +47345,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 507550,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa9447ede0ac531d5ecafe50a426f912e865c652",
+          "message": "fix(agent): close the run loop's reason-code vocabulary (#606) (#637)\n\n* fix(agent): close the run loop's reason-code vocabulary (#606)\n\nThree reason codes cross from openomni into the run loop as bare\nstrings, and the loop branches on all three: `stalled` picks the\nterminal `finishReason` and decides whether the abort was a guard's\ndoing, `budget_warning` and `budget_reassurance` gate telemetry. Rename\na producer's literal and nothing fails to compile — the loop just stops\nreacting, and a stalled run records itself as an ordinary stop.\n\nDeclares them once in `core/policy/reason-codes.ts`, routes both ends\nthrough it, and adds a `run-reason-code-vocabulary` guard over\n`reasonCodes:` arrays in shipped source, where such a rename starts.\n\nThe guard stops there on purpose. `\"stalled\"` is also a value of the\nunrelated `AgentResult.finishReason` union, and the tests asserting the\nliterals are the pins proving the constants' values — routing those\nthrough the constant would make them pass whatever it became. Verified\nboth layers by mutation: a producer reverting to a literal trips the\nguard; a producer switching to the wrong constant slips past it and\nfails the test pin instead.\n\nPhase 4 listed five rules to write. Checked against the tree the earlier\nphases produced, this was rule 1's real target — the point and effect\nliterals it named are already compile errors via `PolicyPointId` and the\neffect unions. Rule 2 names a directory that does not exist, rule 4's\nmint sites are all in other packages, and rule 3 is still true but\nblocked. The plan now records that instead of the original list.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): lock the consumer end and the guard's own types (#606)\n\nAdversarial review of the vocabulary lock found the lock one-sided and\nthe guard itself broken in a way no gate could see.\n\nThe guard rule id was never added to `GuardRuleId` — a type error in\n`script/lint-guards.ts` that nothing reports, because `script/` sits in\nno tsconfig and `check-types` is per-package. Added to the union; the\ncoverage gap is worth its own look.\n\nThe consumer end had zero enforcement: revert `turn.ts` to bare\n`reason === \"stalled\"` and everything stays green, after which changing\na constant's value breaks budget telemetry with a passing suite. The\nguard now also matches comparison and `.includes` positions against the\nthree values in shipped source — zero false positives in the tree, and\nthe mutation is caught at turn.ts:118/135.\n\nThe review also showed the fix welding the two vocabularies it argues\nare unrelated: writing `RunReasonCode.Stalled` into the `finishReason`\nposition made the constant un-renameable without editing that union.\nThe finishReason position now speaks the union's own literal; the\nconstant appears only where a reason code is read.\n\nHonesty fixes from the same review: the constant's doc claimed the\nguard rejects these literals \"anywhere but here\" (it is position-\nscoped, and the test pins lock the values — both comments now say so);\nthe plan doc claimed the reason codes were the only literals the\ncompiler couldn't see, but `tools.ts` classifies tool source from\nfree-form labels whose producers have already drifted (`source:` vs\n`source.`), so that sentence is corrected and the source-label\nvocabulary is a new Phase 4 row. Dropped the dead barrel re-export and\nthe unused type alias; violation messages print the captured code, not\nthe raw match.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T20:17:45+09:00",
+          "tree_id": "4facfbfc957e5fae179fa83ea651c2c2aa3a03d5",
+          "url": "https://github.com/INONONO66/openomni/commit/aa9447ede0ac531d5ecafe50a426f912e865c652"
+        },
+        "date": 1786792740144,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 664,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6175,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9485,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2949,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2421,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15986,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8335,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 502,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1143,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 789,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10763,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 509242,
             "unit": "ns/op"
           }
         ]
