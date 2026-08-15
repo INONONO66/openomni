@@ -1,7 +1,11 @@
 import type { RunInput } from "@openomni/llm";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, Sink, Tool } from "@openomni/protocol";
-import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
+import {
+  describeBudgetRemaining,
+  effectiveBudgetThresholds,
+  effectiveMaxToolCalls,
+} from "../budget";
 import { createAssistantMessage } from "../message-factory";
 import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
 import { measuredContextTokens } from "../../compaction/measure";
@@ -23,6 +27,7 @@ import {
 import {
   advanceRunContinuation,
   advanceRunTurn,
+  disarmWindowYield,
   appendRunMessages,
   appendRunStep,
   applyCompactionMessages,
@@ -206,11 +211,19 @@ export async function buildTurn(
     outputTokens: 0,
     totalTokens: 0,
   };
-  // The step cap is the REMAINING tool budget: a yielded-and-continued run
-  // re-enters here, and giving every turn the full budget would multiply it.
-  const stepCap = Math.max(1, (config.budget?.maxToolCalls ?? 24) - state.budgetState.toolCalls);
+  // The step cap is the REMAINING budget from the pool the budget actually
+  // enforces (-1 = unlimited): a yielded-and-continued run re-enters here,
+  // and a cap from any other pool starves or multiplies what an operator
+  // sized once. Tool calls and steps are different units — a parallel-call
+  // step spends several from the pool — so the cap is conservative, and an
+  // early end is a lossless re-entry, not a loss.
+  const toolCallPool = effectiveMaxToolCalls(config.budget);
+  const stepCap =
+    toolCallPool === -1
+      ? Number.MAX_SAFE_INTEGER
+      : Math.max(1, toolCallPool - state.budgetState.toolCalls);
   const yieldAtInputTokens =
-    state.contextWindowTokens === undefined
+    state.contextWindowTokens === undefined || state.windowYieldDisarmed === true
       ? undefined
       : Math.floor(state.contextWindowTokens * DEFAULT_THRESHOLD_RATIO);
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
@@ -351,7 +364,7 @@ function turnYield(
       lastReason = part.reason;
     }
   }
-  if (lastReason !== "tool-calls" && lastReason !== "tool_use") return null;
+  if (lastReason !== "tool-calls") return null;
   if (steps >= turn.stepCap) return "steps";
   return turn.windowYieldArmed ? "window" : "steps";
 }
@@ -416,28 +429,6 @@ export async function handleStop(
     }
   }
 
-  const yielded = turnYield(turn, assistantMessage);
-  if (yielded === "window") {
-    const compactionsBefore = state.compactionCount;
-    const blocked = await applyPostCompaction(state, engine, config, agentBase, false);
-    if (blocked) return blocked;
-    if (state.compactionCount > compactionsBefore) {
-      // History shrank; the model was mid-task (its last step asked for
-      // tools), so the run re-enters with the compacted window. The turn
-      // advances — a new provider call is a new turn against the budget.
-      advanceRunTurn(state);
-      return "continue";
-    }
-    // Triggered, nothing reclaimed (the policy recorded why). Continuing
-    // would re-yield after every step; the run ends on its resource cap.
-    return runResult(state, { finishReason: "max-steps" });
-  }
-  if (yielded === "steps") {
-    // The step budget ran out while the model still wanted tools. Ending as
-    // a plain stop pretended completion; the cap is the honest reason.
-    return runResult(state, { finishReason: "max-steps" });
-  }
-
   const continuationMessages = PolicyEffectApplier.continuationMessages(
     postTurnDecision,
     state.sessionId,
@@ -460,6 +451,31 @@ export async function handleStop(
       });
     }
     publishDenyDiagnostic(config.events, "turn.finish", postTurnDecision, state, agentBase);
+  }
+
+  // The yield branch sits AFTER the continuation path on purpose: the
+  // run.turn.post dispatch above DRAINS the injection queue, and a yield
+  // that early-returned before the continuation application would destroy
+  // the drained messages (#651 review BLOCKER — a child finishing during a
+  // long parent tool loop enqueues exactly there).
+  const yielded = turnYield(turn, assistantMessage);
+  if (yielded === "window") {
+    const compactionsBefore = state.compactionCount;
+    const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);
+    if (blocked) return blocked;
+    if (state.compactionCount === compactionsBefore) {
+      // The seam reclaimed nothing (recorded). The remaining headroom above
+      // the arm point is real — the run proceeds like a loop without the
+      // knob instead of dying at 80% of a window it never filled.
+      disarmWindowYield(state);
+    }
+    advanceRunTurn(state);
+    return "continue";
+  }
+  if (yielded === "steps") {
+    // The step budget ran out while the model still wanted tools. Ending as
+    // a plain stop pretended completion; the cap is the honest reason.
+    return runResult(state, { finishReason: "max-steps" });
   }
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
@@ -605,11 +621,13 @@ async function applyPostCompaction(
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
   isCompletion: boolean,
+  contextYielded = false,
 ): Promise<AgentResult | null> {
   const compactionDecision = await engine.dispatchPoint(
     "run.completion.pre",
     buildLifecyclePolicyContext(state, config, agentBase, {
       isCompletion,
+      contextYielded,
       completionCandidate: {
         isCompletion,
         messages: state.messages,

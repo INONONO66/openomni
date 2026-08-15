@@ -49,10 +49,19 @@ interface BudgetEvaluation {
  * telemetry needs. No Bus emit, no mutation — see {@link checkBudget} (query)
  * and {@link publishBudgetTelemetry} (command) for the split callers.
  */
+/**
+ * The tool-call pool the budget actually enforces (-1 = unlimited). Exported
+ * because the turn's step cap subtracts from this exact pool — a cap computed
+ * against any other number starves or overshoots the real enforcement.
+ */
+export function effectiveMaxToolCalls(budget?: AgentBudget): number {
+  return budget?.maxToolCalls ?? 40;
+}
+
 function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
   const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
   const maxTurns = budget?.maxTurns ?? 24;
-  const maxToolCalls = budget?.maxToolCalls ?? 40;
+  const maxToolCalls = effectiveMaxToolCalls(budget);
   const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);

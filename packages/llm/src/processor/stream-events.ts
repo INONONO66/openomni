@@ -51,8 +51,9 @@ export function createStreamEventState(): StreamEventState {
  * Provider finish reason → transcript finish vocabulary, mapped exactly
  * (#532-7): length and content-filter/error finishes are never rewritten to
  * "stop". The transcript vocabulary has no content-filter value, so a
- * filtered turn closes as "error" — abnormal stays abnormal; the raw
- * provider string is preserved verbatim on the step-finish part.
+ * filtered turn closes as "error" — abnormal stays abnormal. The step-finish
+ * part stores the ai-unified finishReason (e.g. "tool-calls"), not the raw
+ * provider string — the agent's yield detector reads exactly that vocabulary.
  */
 export function mapFinishReason(reason: string | undefined): Transcript.FinishReason {
   switch (reason) {

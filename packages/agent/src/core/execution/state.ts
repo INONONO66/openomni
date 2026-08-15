@@ -110,6 +110,12 @@ export interface RunState {
    * Undefined when the catalog does not know (proxy models report 0).
    */
   contextWindowTokens?: number;
+  /**
+   * Set when a window yield fired and the seam reclaimed nothing: the run
+   * proceeds with the yield disarmed — the remaining headroom is real, and
+   * re-yielding every step would kill a run the window could still carry.
+   */
+  windowYieldDisarmed?: boolean;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -205,6 +211,10 @@ export function recordCallContext(state: RunState, contextTokens: number): void 
 
 export function recordRunWindow(state: RunState, contextWindowTokens: number): void {
   state.contextWindowTokens = contextWindowTokens > 0 ? contextWindowTokens : undefined;
+}
+
+export function disarmWindowYield(state: RunState): void {
+  state.windowYieldDisarmed = true;
 }
 
 export function recordAssistantTokenDelta(

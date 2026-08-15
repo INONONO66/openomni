@@ -30,6 +30,13 @@ export interface PolicyContext extends GenericPolicyContext {
    * strategy. Config may still narrow it; it cannot need to restate it.
    */
   contextWindowTokens?: number;
+  /**
+   * True when this dispatch exists because the step loop yielded at the
+   * window. The yield IS the trigger — a threshold gate here would let a
+   * config ratio above the loop's arm point kill runs the seam never tried
+   * to reclaim.
+   */
+  contextYielded?: boolean;
 }
 
 export type PolicyFn = CanonicalPolicyRegistrationGeneric<PolicyContext>["fn"];
