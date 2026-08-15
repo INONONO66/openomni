@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786789172571,
+  "lastUpdate": 1786790866435,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47221,6 +47221,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 394959,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "74eeb6c70566a5c0a62c13ad48a5ec12f743f169",
+          "message": "refactor(agent): the five files Phase 4 rule 1 names (#606) (#636)\n\n* refactor(agent): the five files Phase 4 rule 1 names (#606)\n\nThe last Phase 2 row. Rule 1 locks \"core files (`run.ts`, `turn.ts`,\n`tools.ts`, `effects.ts`, `state.ts`) contain no domain string literals\",\nand none of those files existed.\n\nFour are renames: `runner` -> `run`, `run-state` -> `state`,\n`tool-executor` -> `tools`, `policy-effects` -> `effects`.\n\n`turn.ts` folds `turn-prepare` and `turn-outcome` together, which rule 2\nasks for rather than merely permits: a split needs a second consumer, a\ntrust boundary, or independent lifecycles, and preparing a turn and\nsettling it have none of the three — both are reached only from the run\nloop and both change when the turn's shape does. \"The file is getting\nlong is not on this list — line count is a review signal, never a split\ncriterion.\"\n\n`run-events.ts`, `lifecycle-dispatch.ts` and `compaction.ts` keep their\nnames. The first has many importers; the second is the run-level points,\nwhich the rule does not name; the third moves in Phase 3.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* refactor(agent): name the tests after the modules they cover (#606)\n\nAdversarial review of the rename found the drift the rename itself\ncreated: seven test files kept names that no longer point at anything.\n`tool-executor.test.ts` mirrored `tool-executor.ts` correctly until this\nbranch moved the source out from under it.\n\nAlso drops `prompt-builder.ts` from the AGENTS.md tree — deleted in\nf43ccdb6, and its one surviving function is what `turn.ts` just absorbed,\nso the phantom survived in the same block this branch rewrote to remove\nphantoms. Merges the duplicate same-kind `./turn` imports the fold left\nbehind, and repoints a disposition citation the import reflow shifted.\n\nThe merge rationale in the plan said \"independent lifecycles\"; the\nreview showed the two halves share zero symbols in either direction, so\nthat reading was wrong. They share the turn's state and a single\nconsumer, which is the claim that actually holds.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T19:46:37+09:00",
+          "tree_id": "a0a6418bd4c3b94d06fe5cb699385a0e936b508b",
+          "url": "https://github.com/INONONO66/openomni/commit/74eeb6c70566a5c0a62c13ad48a5ec12f743f169"
+        },
+        "date": 1786790865541,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 621,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5877,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9548,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15556,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 495,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1080,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 724,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47177,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10681,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100216,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 507550,
             "unit": "ns/op"
           }
         ]
