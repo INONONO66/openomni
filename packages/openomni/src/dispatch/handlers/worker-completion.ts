@@ -160,6 +160,7 @@ export async function reflectCoordinatorResult(
   workItemHash: string,
   result: Execution.Result,
   options: WorkerCompletionOptions,
+  traceId: string,
 ): Promise<CompletionReflection> {
   let item: WorkItem.Info;
   let sourceOrigin: WorkItem.CompletionSourceOrigin;
@@ -176,11 +177,11 @@ export async function reflectCoordinatorResult(
   if (result.status === "succeeded") {
     const completionService = options.completionService;
     if (!completionService) {
-      return blockCompletion(workItemHash, "completion writer is unavailable");
+      return blockCompletion(workItemHash, "completion writer is unavailable", traceId);
     }
     const parsed = parseCompletionEnvelope(result);
     if (!parsed.ok) {
-      return blockCompletion(workItemHash, parsed.reason);
+      return blockCompletion(workItemHash, parsed.reason, traceId);
     }
     const requestRoot = workerCompletionRequestRoot(item, result);
     const reservationRoot = workerCompletionReservationRoot(item, result, sourceOrigin);
@@ -220,8 +221,9 @@ export async function reflectCoordinatorResult(
           completionReport: replayed.report,
           readBackEvidenceBindings: replayed.readBackEvidenceBindings,
           now,
+          traceId,
         });
-        return completionOutcomeReflection(workItemHash, outcome);
+        return completionOutcomeReflection(workItemHash, outcome, traceId);
       }
       if (
         reservation.state === "busy" ||
@@ -254,6 +256,7 @@ export async function reflectCoordinatorResult(
           parsed.envelope,
           options,
           assertLease,
+          traceId,
         );
         assertLease();
         const outcome = await admitWorkerCompletion({
@@ -269,8 +272,9 @@ export async function reflectCoordinatorResult(
           completionReport: prepared.report,
           readBackEvidenceBindings: prepared.readBackEvidenceBindings,
           now,
+          traceId,
         });
-        return completionOutcomeReflection(workItemHash, outcome);
+        return completionOutcomeReflection(workItemHash, outcome, traceId);
       } finally {
         releaseActiveRequest();
       }
@@ -299,15 +303,19 @@ export async function reflectCoordinatorResult(
           err instanceof Error ? err.message : String(err),
         );
       }
-      return blockCompletion(workItemHash, err instanceof Error ? err.message : String(err));
+      return blockCompletion(
+        workItemHash,
+        err instanceof Error ? err.message : String(err),
+        traceId,
+      );
     }
   }
   if (result.status === "cancelled") {
-    await WorkItemStore.cancel(workItemHash);
+    await WorkItemStore.cancel(workItemHash, traceId);
     return completionReflection(workItemHash, false);
   }
   if (result.status === "failed" || result.status === "interrupted") {
-    await WorkItemStore.fail(workItemHash, result.error ?? result.status);
+    await WorkItemStore.fail(workItemHash, traceId, result.error ?? result.status);
   }
   return completionReflection(workItemHash, false);
 }
@@ -325,6 +333,7 @@ type WorkerCompletionAdmissionInput = Readonly<{
   completionReport: WorkItem.CompletionReport;
   readBackEvidenceBindings: ReadonlyMap<number, WorkerReadBackEvidenceBinding>;
   now: () => number;
+  traceId: string;
 }>;
 
 async function admitWorkerCompletion(
@@ -368,6 +377,7 @@ async function admitWorkerCompletion(
     effects: [],
   });
   return input.completionService.requestCompletion(request, input.completionReport, {
+    traceId: input.traceId,
     ...(input.completionReservation === undefined
       ? {}
       : { reservation: input.completionReservation }),
@@ -691,11 +701,13 @@ function digestCompletionEnvelope(envelope: CompletionEnvelope): string {
 async function completionOutcomeReflection(
   workItemHash: string,
   outcome: CompletionBoundaryOutcome,
+  traceId: string,
 ): Promise<CompletionReflection> {
   if (outcome.completed) return completionReflection(workItemHash, false);
   return blockCompletion(
     workItemHash,
     completionBlockerDescription(outcome.admission) ?? "completion admission blocked",
+    traceId,
   );
 }
 
@@ -759,6 +771,7 @@ async function prepareCompletionReport(
   envelope: CompletionEnvelope,
   options: WorkerCompletionOptions,
   assertLease: () => void,
+  traceId: string,
 ): Promise<PreparedCompletionReport> {
   if (envelope.readBackRequests.length === 0) {
     return {
@@ -817,7 +830,7 @@ async function prepareCompletionReport(
       now,
     );
     assertLease();
-    const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, {
+    const updated = await WorkItemStore.addReadBackEvidence(workItemHash, check, traceId, {
       expectedAttempt: item.attempt,
       expectedBasisRef: item.completionContract.basisRef,
       criterionId,
@@ -909,6 +922,7 @@ function applySharedDeadline(request: ReadBackRequest, remainingMs: number): Rea
 async function blockCompletion(
   workItemHash: string,
   description: string,
+  traceId: string,
 ): Promise<CompletionReflection> {
   const current = WorkItemStore.get(workItemHash);
   const currentStatus = current ? WorkItem.deriveStatus(current) : undefined;
@@ -926,10 +940,14 @@ async function blockCompletion(
   ) {
     return completionReflection(workItemHash, true, description);
   }
-  await WorkItemStore.addBlocker(workItemHash, {
-    kind: "error",
-    description,
-  });
+  await WorkItemStore.addBlocker(
+    workItemHash,
+    {
+      kind: "error",
+      description,
+    },
+    traceId,
+  );
   return completionReflection(workItemHash, true, description);
 }
 

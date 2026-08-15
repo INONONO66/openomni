@@ -47,7 +47,7 @@ export function createResidentInboundWaitHandler(
     // Acquire the wait: ONE serialized head CAS on the work stream (the
     // waiting_input blocker fact). A run that is terminal, already waiting,
     // or transitioned concurrently loses the acquire.
-    const acquiredWait = await WorkItemAttemptRun.beginWait(sessionId, runId);
+    const acquiredWait = await WorkItemAttemptRun.beginWait(sessionId, runId, traceId);
     if (!acquiredWait) {
       return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
     }
@@ -91,7 +91,7 @@ export function createResidentInboundWaitHandler(
     } finally {
       // Release the wait if it is still ours; a run finished mid-wait keeps
       // its terminal record (endWait is a no-op receipt then).
-      await WorkItemAttemptRun.endWait(sessionId, runId);
+      await WorkItemAttemptRun.endWait(sessionId, runId, traceId);
     }
   };
 }

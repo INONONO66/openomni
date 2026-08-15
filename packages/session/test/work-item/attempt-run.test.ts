@@ -41,24 +41,28 @@ function attemptIdentity(prompt: string) {
 }
 
 async function seedRun(sessionId: string, runId: string, allocate = true): Promise<string> {
-  const created = await WorkItemStore.create({
-    name: `run ${runId}`,
-    sourceMessageId: `seed:${runId}`,
-    sourceChannel: "ingress",
-    intent: "worker.dispatch",
-    goal: "do the work",
-    sessionId,
-    originSessionId: "parent-session",
-    workSessionId: sessionId,
-    workerRunId: runId,
-    executorKind: "internal_chat_agent",
-    acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
-  });
-  await WorkItemStore.start(created.hash);
+  const created = await WorkItemStore.create(
+    {
+      name: `run ${runId}`,
+      sourceMessageId: `seed:${runId}`,
+      sourceChannel: "ingress",
+      intent: "worker.dispatch",
+      goal: "do the work",
+      sessionId,
+      originSessionId: "parent-session",
+      workSessionId: sessionId,
+      workerRunId: runId,
+      executorKind: "internal_chat_agent",
+      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+    },
+    "trace-test",
+  );
+  await WorkItemStore.start(created.hash, "trace-test");
   if (allocate) {
     const allocation = await WorkItemStore.allocateAttempt(
       created.hash,
       attemptIdentity("do the work"),
+      "trace-test",
     );
     if (!allocation) throw new Error("attempt allocation failed");
   }
@@ -123,9 +127,15 @@ describe("WorkItemAttemptRun", () => {
   test("finish records endedAt/error as the attempt terminal fact", async () => {
     const hash = await seedRun("sess-finish", "run-finish");
 
-    const finished = await WorkItemAttemptRun.finish("sess-finish", "run-finish", "succeeded", {
-      endedAt: 1234,
-    });
+    const finished = await WorkItemAttemptRun.finish(
+      "sess-finish",
+      "run-finish",
+      "succeeded",
+      "trace-test",
+      {
+        endedAt: 1234,
+      },
+    );
     expect(finished).toBe(true);
 
     const view = WorkItemAttemptRun.find("sess-finish", "run-finish");
@@ -144,7 +154,9 @@ describe("WorkItemAttemptRun", () => {
     // Idempotent-finish semantics: a second terminal write is a no-op
     // receipt, never a second fact.
     await expect(
-      WorkItemAttemptRun.finish("sess-finish", "run-finish", "failed", { endedAt: 2000 }),
+      WorkItemAttemptRun.finish("sess-finish", "run-finish", "failed", "trace-test", {
+        endedAt: 2000,
+      }),
     ).resolves.toBe(false);
     expect(WorkItemAttemptRun.find("sess-finish", "run-finish")?.status).toBe("succeeded");
   });
@@ -152,7 +164,7 @@ describe("WorkItemAttemptRun", () => {
   test("failed/interrupted outcomes fold the work item to failed with the reason", async () => {
     const hash = await seedRun("sess-fail", "run-fail");
 
-    await WorkItemAttemptRun.finish("sess-fail", "run-fail", "interrupted", {
+    await WorkItemAttemptRun.finish("sess-fail", "run-fail", "interrupted", "trace-test", {
       endedAt: Date.now(),
       error: "coordinator restarted: run interrupted",
     });
@@ -167,27 +179,33 @@ describe("WorkItemAttemptRun", () => {
   test("beginWait acquires exclusively; endWait releases; terminal runs reject the wait", async () => {
     await seedRun("sess-wait", "run-wait");
 
-    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait")).toBe(true);
+    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait", "trace-test")).toBe(true);
     expect(WorkItemAttemptRun.find("sess-wait", "run-wait")?.status).toBe("waiting_input");
     // Second acquire loses.
-    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait")).toBe(false);
+    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait", "trace-test")).toBe(false);
 
-    expect(await WorkItemAttemptRun.endWait("sess-wait", "run-wait")).toBe(true);
+    expect(await WorkItemAttemptRun.endWait("sess-wait", "run-wait", "trace-test")).toBe(true);
     expect(WorkItemAttemptRun.find("sess-wait", "run-wait")?.status).toBe("running");
     // Releasing an unheld wait is a no-op receipt.
-    expect(await WorkItemAttemptRun.endWait("sess-wait", "run-wait")).toBe(false);
+    expect(await WorkItemAttemptRun.endWait("sess-wait", "run-wait", "trace-test")).toBe(false);
 
-    await WorkItemAttemptRun.finish("sess-wait", "run-wait", "cancelled", { endedAt: Date.now() });
-    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait")).toBe(false);
+    await WorkItemAttemptRun.finish("sess-wait", "run-wait", "cancelled", "trace-test", {
+      endedAt: Date.now(),
+    });
+    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait", "trace-test")).toBe(false);
   });
 
   test("a new allocation clears the previous attempt terminal", async () => {
     const hash = await seedRun("sess-realloc", "run-realloc");
-    await WorkItemAttemptRun.finish("sess-realloc", "run-realloc", "succeeded", {
+    await WorkItemAttemptRun.finish("sess-realloc", "run-realloc", "succeeded", "trace-test", {
       endedAt: 1,
     });
 
-    const allocation = await WorkItemStore.allocateAttempt(hash, attemptIdentity("again"));
+    const allocation = await WorkItemStore.allocateAttempt(
+      hash,
+      attemptIdentity("again"),
+      "trace-test",
+    );
     expect(allocation).toBeDefined();
     const view = WorkItemAttemptRun.find("sess-realloc", "run-realloc");
     expect(view?.status).toBe("running");
@@ -199,7 +217,9 @@ describe("WorkItemAttemptRun", () => {
     await seedRun("sess-active", "run-a");
     await seedRun("sess-active", "run-b");
     await seedRun("sess-active", "run-unallocated", false);
-    await WorkItemAttemptRun.finish("sess-active", "run-b", "succeeded", { endedAt: 1 });
+    await WorkItemAttemptRun.finish("sess-active", "run-b", "succeeded", "trace-test", {
+      endedAt: 1,
+    });
     seedLegacyRow("sess-active", "run-legacy-live", "running");
 
     const active = WorkItemAttemptRun.listActive("sess-active");
@@ -223,6 +243,8 @@ describe("WorkItemAttemptRun", () => {
     // Deterministic: the same archived row always produces the same view,
     // and the read wrote nothing.
     expect(WorkItemAttemptRun.find("sess-upcast", "run-legacy-open")).toEqual(open);
-    expect(await WorkItemAttemptRun.beginWait("sess-upcast", "run-legacy-open")).toBe(false);
+    expect(await WorkItemAttemptRun.beginWait("sess-upcast", "run-legacy-open", "trace-test")).toBe(
+      false,
+    );
   });
 });

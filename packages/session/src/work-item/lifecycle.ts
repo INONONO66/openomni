@@ -7,8 +7,11 @@ import { mutate, persistMutation } from "./mutation.js";
 import { recordWorkItemOutcome } from "./outcome.js";
 import { retryWorkItem } from "./retry.js";
 
-export async function startWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
+export async function startWorkItem(
+  hash: string,
+  traceId: string,
+): Promise<WorkItem.Info | undefined> {
+  return mutate(hash, traceId, (existing, now) => ({
     changedFields: ["timestamps"],
     target: "started",
     fact: { type: "work_item.started", data: { startedAt: now } },
@@ -37,9 +40,10 @@ export async function completeWorkItem(
 
 export async function failWorkItem(
   hash: string,
+  traceId: string,
   reason?: string,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
+  return mutate(hash, traceId, (existing, now) => ({
     changedFields: ["timestamps", "failureReason"],
     target: "failed",
     fact: {
@@ -51,9 +55,9 @@ export async function failWorkItem(
       timestamps: { ...existing.timestamps, failed: now, updated: now },
       failureReason: reason,
     },
-    afterPublish: (updated) => {
+    afterPublish: (updated, publishTraceId) => {
       Bus.publish(WorkItem.Events.Failed, {
-        traceId: crypto.randomUUID(),
+        traceId: publishTraceId,
         time: now,
         sessionId: updated.sessionId,
         payload: { hash, reason, sessionId: updated.sessionId },
@@ -62,8 +66,11 @@ export async function failWorkItem(
   }));
 }
 
-export async function cancelWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
+export async function cancelWorkItem(
+  hash: string,
+  traceId: string,
+): Promise<WorkItem.Info | undefined> {
+  return mutate(hash, traceId, (existing, now) => ({
     changedFields: ["timestamps"],
     target: "cancelled",
     fact: { type: "work_item.cancelled", data: { cancelledAt: now } },
@@ -81,8 +88,9 @@ export async function assignWorkItemExecution(
     workerRunId: string;
     workSessionId: string;
   }>,
+  traceId: string,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => {
+  return mutate(hash, traceId, (existing, now) => {
     const status = WorkItem.deriveStatus(existing);
     if (status === "completed" || status === "failed" || status === "cancelled") {
       throw new Error(`Cannot assign execution to a ${status} work item`);
@@ -122,9 +130,10 @@ export type AttemptAllocationInput = Readonly<{
 export async function allocateWorkItemAttempt(
   hash: string,
   identity: AttemptAllocationInput,
+  traceId: string,
 ): Promise<Readonly<{ item: WorkItem.Info; attempt: WorkItem.Attempt }> | undefined> {
   let allocated: WorkItem.Attempt | undefined;
-  const item = await mutate(hash, (existing, now) => {
+  const item = await mutate(hash, traceId, (existing, now) => {
     const status = WorkItem.deriveStatus(existing);
     if (status === "completed" || status === "cancelled" || status === "failed") {
       throw new Error(`Cannot allocate an attempt on a ${status} work item`);
@@ -159,8 +168,9 @@ export async function allocateWorkItemAttempt(
 export async function addWorkItemBlocker(
   hash: string,
   blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
+  traceId: string,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => {
+  return mutate(hash, traceId, (existing, now) => {
     const added = { ...blocker, id: blocker.id ?? crypto.randomUUID(), createdAt: now };
     return {
       changedFields: ["blockers"],
@@ -180,8 +190,9 @@ export async function addWorkItemBlocker(
 export async function resolveWorkItemBlocker(
   hash: string,
   blockerId: string,
+  traceId: string,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => ({
+  return mutate(hash, traceId, (existing, now) => ({
     changedFields: ["blockers"],
     fact: { type: "work_item.blocker_resolved", data: { blockerId, resolvedAt: now } },
     updated: {
@@ -198,6 +209,7 @@ export async function addWorkItemEvidence(
   hash: string,
   evidence: Omit<WorkItem.Evidence, "id" | "createdAt" | "attempt" | "basisRef"> &
     Readonly<{ id?: string }>,
+  traceId: string,
   expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
 ): Promise<WorkItem.Info | undefined> {
   const explicitId = evidence.id;
@@ -219,7 +231,7 @@ export async function addWorkItemEvidence(
       return existing;
     }
   }
-  return mutate(hash, (existing, now) => {
+  return mutate(hash, traceId, (existing, now) => {
     assertEvidenceScope(existing, expectedScope);
     const appended = WorkItem.Evidence.parse({
       ...evidence,
@@ -267,6 +279,7 @@ function assertEvidenceScope(
 export async function addWorkItemReadBackEvidence(
   hash: string,
   check: WorkItem.ReadBackCheck,
+  traceId: string,
   expectedScope?: Readonly<{
     expectedAttempt: number;
     expectedBasisRef: string;
@@ -286,6 +299,7 @@ export async function addWorkItemReadBackEvidence(
       criterionId: expectedScope?.criterionId,
       id: expectedScope?.evidenceId,
     },
+    traceId,
     expectedScope,
   );
 }
@@ -293,6 +307,9 @@ export async function addWorkItemReadBackEvidence(
 export const recordOutcome = recordWorkItemOutcome;
 export const areDependenciesMet = areWorkItemDependenciesMet;
 
-export async function retryStoredWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
-  return retryWorkItem(hash, Storage.get().workItem, persistMutation);
+export async function retryStoredWorkItem(
+  hash: string,
+  traceId: string,
+): Promise<WorkItem.Info | undefined> {
+  return retryWorkItem(hash, Storage.get().workItem, persistMutation, traceId);
 }

@@ -37,13 +37,18 @@ function reflectCoordinatorResult(
       verifierRegistry?: WorkerCompletionOptions["verifierRegistry"];
     }>,
 ) {
-  return reflectCoordinatorResultProduction(workItemHash, result, {
-    ...options,
-    completionService:
-      options.completionService ??
-      completionService(options.now === undefined ? {} : { now: options.now }),
-    verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
-  });
+  return reflectCoordinatorResultProduction(
+    workItemHash,
+    result,
+    {
+      ...options,
+      completionService:
+        options.completionService ??
+        completionService(options.now === undefined ? {} : { now: options.now }),
+      verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
+    },
+    "trace-test",
+  );
 }
 
 function completionResult(item: WorkItem.Info, readBackRequests: unknown[]) {
@@ -71,18 +76,21 @@ function completionResult(item: WorkItem.Info, readBackRequests: unknown[]) {
 }
 
 async function createStartedWorkItem(): Promise<WorkItem.Info> {
-  const workItem = await WorkItemStore.create({
-    name: "Dispatch worker coder",
-    sourceMessageId: "dispatch_1",
-    sourceChannel: "dispatch",
-    intent: "worker.spawn",
-    goal: "publish it",
-    executorKind: "internal_chat_agent",
-    workSessionId: "session_1",
-    workerRunId: "run_1",
-    acceptanceCriteria: ["archived source contains the recorded quote exactly"],
-  });
-  const started = await WorkItemStore.start(workItem.hash);
+  const workItem = await WorkItemStore.create(
+    {
+      name: "Dispatch worker coder",
+      sourceMessageId: "dispatch_1",
+      sourceChannel: "dispatch",
+      intent: "worker.spawn",
+      goal: "publish it",
+      executorKind: "internal_chat_agent",
+      workSessionId: "session_1",
+      workerRunId: "run_1",
+      acceptanceCriteria: ["archived source contains the recorded quote exactly"],
+    },
+    "trace-test",
+  );
+  const started = await WorkItemStore.start(workItem.hash, "trace-test");
   if (!started) throw new Error("missing started work item");
   return started;
 }
@@ -256,8 +264,8 @@ describe("worker completion read-back deadline", () => {
     let clock = 0;
     const persistEvidence = WorkItemStore.addReadBackEvidence;
     const persistSpy = spyOn(WorkItemStore, "addReadBackEvidence").mockImplementation(
-      async (hash, check, options) => {
-        const updated = await persistEvidence(hash, check, options);
+      async (hash, check, traceId, expectedScope) => {
+        const updated = await persistEvidence(hash, check, traceId, expectedScope);
         clock = 20; // the deadline passes while the final persist settles
         return updated;
       },
@@ -288,7 +296,7 @@ describe("worker completion read-back deadline", () => {
     expect(WorkItemStore.get(workItem.hash)?.evidence).toHaveLength(1);
     const blockerId = WorkItemStore.get(workItem.hash)?.blockers[0]?.id;
     if (!blockerId) throw new Error("missing deadline blocker");
-    await WorkItemStore.resolveBlocker(workItem.hash, blockerId);
+    await WorkItemStore.resolveBlocker(workItem.hash, blockerId, "trace-test");
     clock = 6_000;
     const retry = await reflectCoordinatorResult(
       workItem.hash,
@@ -403,7 +411,7 @@ describe("worker completion read-back deadline", () => {
     );
     const criterionId = workItem.completionFacts.criteria[0]?.id;
     if (!criterionId) throw new Error("missing read-back criterion");
-    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check, {
+    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check, "trace-test", {
       expectedAttempt: workItem.attempt,
       expectedBasisRef: workItem.completionContract.basisRef,
       criterionId,
@@ -430,19 +438,29 @@ describe("worker completion read-back deadline", () => {
     });
 
     const denyingService = completionService({ policyEngine });
-    await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
-      completionService: denyingService,
-      verifierRegistry: VerifierRegistry.create(),
-      sourceOrigin: { source: "internal_worker" },
-    });
+    await reflectCoordinatorResultProduction(
+      workItem.hash,
+      blockedResult,
+      {
+        completionService: denyingService,
+        verifierRegistry: VerifierRegistry.create(),
+        sourceOrigin: { source: "internal_worker" },
+      },
+      "trace-test",
+    );
     const blocked = WorkItemStore.get(workItem.hash);
     if (!blocked) throw new Error("missing blocked WorkItem");
 
-    const replay = await reflectCoordinatorResultProduction(workItem.hash, blockedResult, {
-      completionService: denyingService,
-      verifierRegistry: VerifierRegistry.create(),
-      sourceOrigin: { source: "internal_worker" },
-    });
+    const replay = await reflectCoordinatorResultProduction(
+      workItem.hash,
+      blockedResult,
+      {
+        completionService: denyingService,
+        verifierRegistry: VerifierRegistry.create(),
+        sourceOrigin: { source: "internal_worker" },
+      },
+      "trace-test",
+    );
 
     expect(replay).toMatchObject({ completionBlocked: true, workItemStatus: "blocked" });
     expect(WorkItemStore.get(workItem.hash)).toEqual(blocked);

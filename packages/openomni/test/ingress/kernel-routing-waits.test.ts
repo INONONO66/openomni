@@ -101,19 +101,22 @@ async function seedFrozenPending(
     title: runId,
     prompt: "complete assigned work",
   });
-  const workItem = await WorkItemStore.create({
-    name: `Connector run ${runId}`,
-    sourceMessageId: `seed:${id}`,
-    sourceChannel: "dispatch",
-    intent: "worker.complete",
-    goal: "complete assigned work",
-    sessionId: session.id,
-    workSessionId: session.id,
-    workerRunId: runId,
-    executorKind: "connector_endpoint",
-    acceptanceCriteria: ["the assigned Worker reports terminal state"],
-  });
-  await WorkItemStore.start(workItem.hash);
+  const workItem = await WorkItemStore.create(
+    {
+      name: `Connector run ${runId}`,
+      sourceMessageId: `seed:${id}`,
+      sourceChannel: "dispatch",
+      intent: "worker.complete",
+      goal: "complete assigned work",
+      sessionId: session.id,
+      workSessionId: session.id,
+      workerRunId: runId,
+      executorKind: "connector_endpoint",
+      acceptanceCriteria: ["the assigned Worker reports terminal state"],
+    },
+    "trace-test",
+  );
+  await WorkItemStore.start(workItem.hash, "trace-test");
   await allocateTestAttempt(workItem.hash);
   seedPendingInteraction({
     id,

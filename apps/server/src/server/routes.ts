@@ -297,7 +297,7 @@ function registerAdminEffectRoutes(app: Hono<Env>, options: RouterOptions): void
 
   app.post("/admin/effects/reconcile", (c) =>
     respondWithEffectWrite(c, async () => {
-      const summary = await effects.reconciler.reconcile();
+      const summary = await effects.reconciler.reconcile(c.get("requestId"));
       return c.json(summary);
     }),
   );

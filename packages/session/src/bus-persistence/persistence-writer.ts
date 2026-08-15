@@ -14,6 +14,14 @@ import type { PersistInput } from "./types.js";
  * are never a decision or authorization fact.
  */
 
+/**
+ * D11 — deliberate sentinel for events persisted without a traceId. A random
+ * mint here would launder an untraceable event into a plausible trace inside
+ * the ledger hash chain; refusing the row would drop the observe-only
+ * projection's record entirely. The sentinel is a loud, grepable absence.
+ */
+const UNTRACED_TRACE_ID = "untraced";
+
 interface QueueEntry {
   readonly db: Database;
   readonly input: PersistInput;
@@ -88,7 +96,7 @@ function writeRow(db: Database, input: PersistInput): void {
   const data = JSON.stringify(
     redactForPersistence(input.payload === undefined ? null : input.payload),
   );
-  const traceId = getTraceField(input.payload, "traceId") ?? crypto.randomUUID();
+  const traceId = getTraceField(input.payload, "traceId") ?? UNTRACED_TRACE_ID;
   const runId = getTraceField(input.payload, "runId");
   const rawDurationMs = getNumberTraceField(input.payload, "durationMs");
   const durationMs =

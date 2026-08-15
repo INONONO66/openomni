@@ -140,32 +140,43 @@ function guardedService(
       request: WorkItem.CompletionRequest,
       report: WorkItem.CompletionReport,
     ): Promise<unknown> {
-      return Reflect.apply(requestCompletion, service, [request, report]);
+      return Reflect.apply(requestCompletion, service, [
+        request,
+        report,
+        { traceId: "trace-test" },
+      ]);
     },
     resumeCompletion(
       hash: string,
       admissionId: string,
       report: WorkItem.CompletionReport,
     ): Promise<unknown> {
-      return Reflect.apply(resumeCompletion, service, [hash, admissionId, report]);
+      return Reflect.apply(resumeCompletion, service, [hash, admissionId, report, "trace-test"]);
     },
   };
 }
 
 async function fixture(origin: WorkItem.CompletionOrigin = "worker", evidencePassed = true) {
-  const item = await WorkItemStore.create({
-    name: `Admission ${origin}`,
-    sourceMessageId: `msg_${origin}`,
-    sourceChannel: "test",
-    intent: "complete",
-    goal: "close through one boundary",
-    acceptanceCriteria: ["criterion one"],
-  });
-  const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-    kind: "verification",
-    description: "boundary fixture",
-    passed: evidencePassed,
-  });
+  const item = await WorkItemStore.create(
+    {
+      name: `Admission ${origin}`,
+      sourceMessageId: `msg_${origin}`,
+      sourceChannel: "test",
+      intent: "complete",
+      goal: "close through one boundary",
+      acceptanceCriteria: ["criterion one"],
+    },
+    "trace-test",
+  );
+  const withEvidence = await WorkItemStore.addEvidence(
+    item.hash,
+    {
+      kind: "verification",
+      description: "boundary fixture",
+      passed: evidencePassed,
+    },
+    "trace-test",
+  );
   const current = WorkItemStore.get(item.hash);
   const criterion = current?.completionFacts.criteria[0];
   const evidenceId = withEvidence?.evidence.at(-1)?.id;
@@ -363,6 +374,62 @@ function field(value: unknown, key: string): unknown {
 }
 
 describe("WorkItem completion admission service", () => {
+  test("D11 pin: the terminal commit's three events share the request's ONE traceId", async () => {
+    configure();
+    const first = await fixture("worker");
+    const traces: Array<{ event: string; traceId: string }> = [];
+    Bus.subscribe(WorkItem.Events.CompletionRequested, (event) => {
+      if (event.payload.workItemHash === first.item.hash) {
+        traces.push({ event: "requested", traceId: event.traceId });
+      }
+    });
+    Bus.subscribe(WorkItem.Events.CompletionAdmissionRecorded, (event) => {
+      if (event.payload.hash === first.item.hash) {
+        traces.push({ event: "admission", traceId: event.traceId });
+      }
+    });
+    Bus.subscribe(WorkItem.Events.StatusChanged, (event) => {
+      if (event.payload.hash === first.item.hash) {
+        traces.push({
+          event: `status:${event.payload.from}->${event.payload.to}`,
+          traceId: event.traceId,
+        });
+      }
+    });
+    Bus.subscribe(WorkItem.Events.Updated, (event) => {
+      if (event.payload.hash === first.item.hash) {
+        traces.push({ event: "updated", traceId: event.traceId });
+      }
+    });
+    Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
+      if (event.payload.hash === first.item.hash) {
+        traces.push({ event: "completed", traceId: event.traceId });
+      }
+    });
+    const gateway = createWorkItemCompletionGateway({
+      completionWriter,
+      policyEngine: PolicyEngine.create(),
+      resultAuthorityPort: { validate: () => ({ ok: true }) },
+      now: () => NOW,
+    });
+
+    const outcome = await gateway.requestCompletion(first.request, first.report, {
+      traceId: "trace-commit",
+    });
+
+    expect(Reflect.get(outcome, "completed")).toBe(true);
+    // The whole request funnel — CompletionRequested, the admission record,
+    // and the atomic terminal commit's StatusChanged + Updated + CompletedV2
+    // — carries the caller's ONE traceId (was 5 per-publish mints pre-D11).
+    expect(traces).toEqual([
+      { event: "requested", traceId: "trace-commit" },
+      { event: "admission", traceId: "trace-commit" },
+      { event: "status:pending->completed", traceId: "trace-commit" },
+      { event: "updated", traceId: "trace-commit" },
+      { event: "completed", traceId: "trace-commit" },
+    ]);
+  });
+
   test("uses one kernel-internal guarded completion gateway for non-Worker origins", async () => {
     configure();
     expect(Reflect.get(OpenOmni, "createWorkItemCompletionGateway")).toBeUndefined();
@@ -383,7 +450,9 @@ describe("WorkItem completion admission service", () => {
       now: () => NOW,
     });
 
-    const outcome = await gateway.requestCompletion(first.request, first.report);
+    const outcome = await gateway.requestCompletion(first.request, first.report, {
+      traceId: "trace-test",
+    });
 
     expect(Reflect.get(outcome, "completed")).toBe(true);
     expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
@@ -411,12 +480,12 @@ describe("WorkItem completion admission service", () => {
       return compareAndSet(hash, expectedHead, candidate);
     };
 
-    await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
-      SimulatedBootCrash,
-    );
+    await expect(
+      gateway.requestCompletion(first.request, first.report, { traceId: "trace-test" }),
+    ).rejects.toBeInstanceOf(SimulatedBootCrash);
     adapter.workItem.compareAndSet = compareAndSet;
 
-    const receipt = await gateway.recoverRecordedCompletions();
+    const receipt = await gateway.recoverRecordedCompletions("trace-test");
 
     expect(receipt).toEqual({
       recovered: 1,
@@ -434,8 +503,8 @@ describe("WorkItem completion admission service", () => {
     const blockingService = guardedService(blockingAuthority());
     if (!blockingService) return;
     await blockingService.requestCompletion(first.request, first.report);
-    await WorkItemStore.fail(first.item.hash, "retry after historical admission");
-    const retried = await WorkItemStore.retry(first.item.hash);
+    await WorkItemStore.fail(first.item.hash, "trace-test", "retry after historical admission");
+    const retried = await WorkItemStore.retry(first.item.hash, "trace-test");
     if (!retried) throw new Error("missing retried WorkItem");
     const reservationInput = {
       completionWriter,
@@ -457,7 +526,7 @@ describe("WorkItem completion admission service", () => {
       now: () => NOW,
     });
 
-    const receipt = await gateway.recoverRecordedCompletions();
+    const receipt = await gateway.recoverRecordedCompletions("trace-test");
     const afterRecovery = WorkItemStore.get(retried.hash);
     const staleHolder = reserveCompletionRequest({
       ...reservationInput,
@@ -507,14 +576,14 @@ describe("WorkItem completion admission service", () => {
       }
       return compareAndSet(hash, expectedHead, candidate);
     };
-    await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
-      SimulatedBootCrash,
-    );
+    await expect(
+      gateway.requestCompletion(first.request, first.report, { traceId: "trace-test" }),
+    ).rejects.toBeInstanceOf(SimulatedBootCrash);
     adapter.workItem.compareAndSet = compareAndSet;
-    await WorkItemStore.fail(first.item.hash, "retry after crashed completion");
-    await WorkItemStore.retry(first.item.hash);
+    await WorkItemStore.fail(first.item.hash, "trace-test", "retry after crashed completion");
+    await WorkItemStore.retry(first.item.hash, "trace-test");
 
-    const receipt = await gateway.recoverRecordedCompletions();
+    const receipt = await gateway.recoverRecordedCompletions("trace-test");
 
     expect(receipt).toEqual({ recovered: 0, skipped: 1, failures: [] });
     expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
@@ -543,17 +612,23 @@ describe("WorkItem completion admission service", () => {
       now: () => NOW,
     });
 
-    const outcome = await gateway.requestCompletion(first.request, first.report);
+    const outcome = await gateway.requestCompletion(first.request, first.report, {
+      traceId: "trace-test",
+    });
     expect(outcome.completed).toBe(false);
     expect(outcome.admission.decision).toBe("block");
     expect(WorkItemStore.get(first.item.hash)?.blockers).toEqual([]);
-    await WorkItemStore.addEvidence(first.item.hash, {
-      kind: "verification",
-      description: "head changed after recorded block",
-      passed: true,
-    });
+    await WorkItemStore.addEvidence(
+      first.item.hash,
+      {
+        kind: "verification",
+        description: "head changed after recorded block",
+        passed: true,
+      },
+      "trace-test",
+    );
 
-    const receipt = await gateway.recoverRecordedCompletions();
+    const receipt = await gateway.recoverRecordedCompletions("trace-test");
     const recovered = WorkItemStore.get(first.item.hash);
     const reevaluatedAdmission = recovered?.completionFacts.admissions.at(-1);
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
@@ -563,7 +638,7 @@ describe("WorkItem completion admission service", () => {
     expect(recovered?.blockers).toHaveLength(1);
     expect(recovered?.blockers[0]?.id).toBe(`${reevaluatedAdmission?.id}:blocker`);
 
-    const replay = await gateway.recoverRecordedCompletions();
+    const replay = await gateway.recoverRecordedCompletions("trace-test");
     expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
     expect(WorkItemStore.get(first.item.hash)?.blockers).toHaveLength(1);
   });
@@ -586,18 +661,22 @@ describe("WorkItem completion admission service", () => {
       return compareAndSet(hash, expectedHead, candidate);
     };
 
-    await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
-      SimulatedBootCrash,
-    );
+    await expect(
+      gateway.requestCompletion(first.request, first.report, { traceId: "trace-test" }),
+    ).rejects.toBeInstanceOf(SimulatedBootCrash);
     adapter.workItem.compareAndSet = compareAndSet;
     const admitted = WorkItemStore.get(first.item.hash)?.completionFacts.admissions.at(-1);
     if (!admitted) throw new Error("missing crashed completion admission");
-    await WorkItemStore.addBlocker(first.item.hash, {
-      kind: "external",
-      description: "external state changed before restart",
-    });
+    await WorkItemStore.addBlocker(
+      first.item.hash,
+      {
+        kind: "external",
+        description: "external state changed before restart",
+      },
+      "trace-test",
+    );
 
-    const receipt = await gateway.recoverRecordedCompletions();
+    const receipt = await gateway.recoverRecordedCompletions("trace-test");
 
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
     const recovered = WorkItemStore.get(first.item.hash);
@@ -790,7 +869,7 @@ describe("WorkItem completion admission service", () => {
       now: () => NOW,
     });
 
-    const result = await gateway.requestCompletion(ownerRequest, report);
+    const result = await gateway.requestCompletion(ownerRequest, report, { traceId: "trace-test" });
     expect(result).toMatchObject({
       completed: true,
       admission: {
@@ -928,7 +1007,8 @@ describe("WorkItem completion admission service", () => {
       resultAuthorityPort: { validate: () => ({ ok: true }) },
       now: () => NOW + 1,
     });
-    const interruptedRecovery = await interruptedRecoveryGateway.recoverRecordedCompletions();
+    const interruptedRecovery =
+      await interruptedRecoveryGateway.recoverRecordedCompletions("trace-test");
     expect(interruptedRecovery).toMatchObject({
       recovered: 0,
       skipped: 0,
@@ -939,11 +1019,13 @@ describe("WorkItem completion admission service", () => {
       originalAdmission?.id,
     ]);
     expect(afterInterruptedRecovery?.completionTerminalReceipt).toBeUndefined();
-    expect(await interruptedRecoveryGateway.recoverRecordedCompletions()).toMatchObject({
-      recovered: 0,
-      skipped: 0,
-      failures: [{ admissionId: originalAdmission?.id }],
-    });
+    expect(await interruptedRecoveryGateway.recoverRecordedCompletions("trace-test")).toMatchObject(
+      {
+        recovered: 0,
+        skipped: 0,
+        failures: [{ admissionId: originalAdmission?.id }],
+      },
+    );
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions.map(({ id }) => id)).toEqual([
       originalAdmission?.id,
     ]);
@@ -958,7 +1040,7 @@ describe("WorkItem completion admission service", () => {
       },
       now: () => NOW + 2,
     });
-    expect(await recoveryGateway.recoverRecordedCompletions()).toEqual({
+    expect(await recoveryGateway.recoverRecordedCompletions("trace-test")).toEqual({
       recovered: 1,
       skipped: 0,
       failures: [],
@@ -1063,11 +1145,15 @@ describe("WorkItem completion admission service", () => {
       timestamps: { ...reservedItem.timestamps, updated: admission.createdAt },
     });
     expect(completionWriter(first.item.hash, reservedItem.revision, admittedItem)).toBe(true);
-    await WorkItemStore.addEvidence(first.item.hash, {
-      kind: "verification",
-      description: "head drift after admission",
-      passed: true,
-    });
+    await WorkItemStore.addEvidence(
+      first.item.hash,
+      {
+        kind: "verification",
+        description: "head drift after admission",
+        passed: true,
+      },
+      "trace-test",
+    );
 
     const takeover = reserveCompletionRequest({
       ...reservationInput,
@@ -1325,13 +1411,13 @@ describe("WorkItem completion admission service", () => {
       })),
     };
 
-    await expect(gateway.requestCompletion(request, invalidReport)).rejects.toThrow(
-      "completion report references missing evidence",
-    );
+    await expect(
+      gateway.requestCompletion(request, invalidReport, { traceId: "trace-test" }),
+    ).rejects.toThrow("completion report references missing evidence");
     const admission = WorkItemStore.get(item.hash)?.completionFacts.admissions.at(-1);
     if (!admission) throw new Error("missing invalid-report admission");
 
-    const receipt = await gateway.recoverRecordedCompletions();
+    const receipt = await gateway.recoverRecordedCompletions("trace-test");
     const recovered = WorkItemStore.get(item.hash);
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
     expect(recovered?.blockers).toHaveLength(1);
@@ -1340,7 +1426,7 @@ describe("WorkItem completion admission service", () => {
       "completion report references missing evidence",
     );
 
-    const replay = await gateway.recoverRecordedCompletions();
+    const replay = await gateway.recoverRecordedCompletions("trace-test");
     expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
     expect(WorkItemStore.get(item.hash)?.blockers).toHaveLength(1);
   });
@@ -1389,11 +1475,15 @@ describe("WorkItem completion admission service", () => {
   test("rejects evidence reachable only through a non-effective refuted result", async () => {
     configure();
     const first = await fixture();
-    const withEvidence = await WorkItemStore.addEvidence(first.item.hash, {
-      kind: "verification",
-      description: "passing artifact attached to a refuted result",
-      passed: true,
-    });
+    const withEvidence = await WorkItemStore.addEvidence(
+      first.item.hash,
+      {
+        kind: "verification",
+        description: "passing artifact attached to a refuted result",
+        passed: true,
+      },
+      "trace-test",
+    );
     const refutedEvidenceId = withEvidence?.evidence.at(-1)?.id;
     if (!withEvidence || !refutedEvidenceId) throw new Error("missing refuted-result evidence");
     const verifiedResult = first.request.results[0];
@@ -1466,11 +1556,15 @@ describe("WorkItem completion admission service", () => {
   test("canonicalizes report evidence order before admission and terminal linkage", async () => {
     configure();
     const first = await fixture();
-    const withSecondEvidence = await WorkItemStore.addEvidence(first.item.hash, {
-      kind: "verification",
-      description: "second terminal artifact",
-      passed: true,
-    });
+    const withSecondEvidence = await WorkItemStore.addEvidence(
+      first.item.hash,
+      {
+        kind: "verification",
+        description: "second terminal artifact",
+        passed: true,
+      },
+      "trace-test",
+    );
     const secondEvidenceId = withSecondEvidence?.evidence.at(-1)?.id;
     const firstEvidenceId = first.report.claims[0]?.evidenceIds[0];
     if (!withSecondEvidence || !secondEvidenceId || !firstEvidenceId) {
@@ -1685,7 +1779,11 @@ describe("WorkItem completion admission service", () => {
     await blockingService.requestCompletion(request, report);
     const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing blocking admission");
-    await WorkItemStore.update(item.hash, { name: "mutated before recovery re-evaluation" });
+    await WorkItemStore.update(
+      item.hash,
+      { name: "mutated before recovery re-evaluation" },
+      "trace-test",
+    );
     const unavailableService = guardedService({
       resolve() {
         throw new Error("authority backend unavailable");
@@ -1721,6 +1819,7 @@ describe("WorkItem completion admission service", () => {
           observations: [{ ...observation, ancestryRefs: ["observation:missing"] }],
         }),
         report,
+        { traceId: "trace-test" },
       ),
     );
 
@@ -1792,9 +1891,9 @@ describe("WorkItem completion admission service", () => {
     configure();
     const { item, request, report } = await fixture();
     if (terminalStatus === "failed") {
-      await WorkItemStore.fail(item.hash, "terminal before completion request");
+      await WorkItemStore.fail(item.hash, "trace-test", "terminal before completion request");
     } else {
-      await WorkItemStore.cancel(item.hash);
+      await WorkItemStore.cancel(item.hash, "trace-test");
     }
     const before = WorkItemStore.get(item.hash);
     const admissionAuthority = authority();
@@ -1942,9 +2041,9 @@ describe("WorkItem completion admission service", () => {
     const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing admitted completion");
     if (terminalStatus === "failed") {
-      await WorkItemStore.fail(item.hash, "terminal before completion resume");
+      await WorkItemStore.fail(item.hash, "trace-test", "terminal before completion resume");
     } else {
-      await WorkItemStore.cancel(item.hash);
+      await WorkItemStore.cancel(item.hash, "trace-test");
     }
     const before = WorkItemStore.get(item.hash);
     const events = completionEvents(item.hash);
@@ -2010,7 +2109,7 @@ describe("WorkItem completion admission service", () => {
     adapter.workItem.compareAndSet = compareAndSet;
     const originalAdmissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
     if (!originalAdmissionId) throw new Error("missing Owner admission");
-    await WorkItemStore.update(item.hash, { name: "advanced before Owner resume" });
+    await WorkItemStore.update(item.hash, { name: "advanced before Owner resume" }, "trace-test");
     const resumedService = guardedService(ownerAuthority);
     if (!resumedService) return;
 
@@ -2041,7 +2140,11 @@ describe("WorkItem completion admission service", () => {
     await service.requestCompletion(first.request, first.report);
     const firstRecorded = WorkItemStore.get(first.item.hash);
     if (!firstRecorded) throw new Error("missing first recorded admission");
-    await WorkItemStore.update(first.item.hash, { name: "head advanced after blocked admission" });
+    await WorkItemStore.update(
+      first.item.hash,
+      { name: "head advanced after blocked admission" },
+      "trace-test",
+    );
     const advanced = WorkItemStore.get(first.item.hash);
     if (!advanced) throw new Error("missing advanced WorkItem");
 
@@ -2400,7 +2503,7 @@ describe("WorkItem completion admission service", () => {
 
     const pending = service.requestCompletion(request, report);
     await entered.promise;
-    await WorkItemStore.update(item.hash, { name: "mutated during authority" });
+    await WorkItemStore.update(item.hash, { name: "mutated during authority" }, "trace-test");
     release.resolve();
     const outcome = await pending;
     const stored = WorkItemStore.get(item.hash);
@@ -2545,7 +2648,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     let mutation: Promise<WorkItem.Info | undefined> | undefined;
     const events = completionEvents(item.hash, () => {
-      mutation = WorkItemStore.update(item.hash, { name: "mutated after admission" });
+      mutation = WorkItemStore.update(item.hash, { name: "mutated after admission" }, "trace-test");
     });
 
     await service.requestCompletion(request, report);
@@ -2583,9 +2686,13 @@ describe("WorkItem completion admission service", () => {
         callCount += 1;
         if (callCount === 2) {
           if (terminalStatus === "failed") {
-            await WorkItemStore.fail(item.hash, "terminal during completion re-evaluation");
+            await WorkItemStore.fail(
+              item.hash,
+              "trace-test",
+              "terminal during completion re-evaluation",
+            );
           } else {
-            await WorkItemStore.cancel(item.hash);
+            await WorkItemStore.cancel(item.hash, "trace-test");
           }
         }
         return recheckAuthority.resolver.resolve(itemInput, requestInput);
@@ -2595,7 +2702,11 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     let mutation: Promise<WorkItem.Info | undefined> | undefined;
     const events = completionEvents(item.hash, () => {
-      mutation = WorkItemStore.update(item.hash, { name: "force completion re-evaluation" });
+      mutation = WorkItemStore.update(
+        item.hash,
+        { name: "force completion re-evaluation" },
+        "trace-test",
+      );
     });
 
     const code = await errorCode(service.requestCompletion(request, report));

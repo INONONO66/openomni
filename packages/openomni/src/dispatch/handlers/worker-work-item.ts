@@ -39,6 +39,7 @@ export async function allocateWorkerSpawnAttempt(
   prompt: string,
   executorKind: WorkItem.ExecutorKind,
   materials: WorkerSpawnAttemptMaterials,
+  traceId: string,
 ): Promise<string> {
   const contentFingerprint = WorkItem.contentFingerprintOf({
     workInput: prompt,
@@ -78,10 +79,14 @@ export async function allocateWorkerSpawnAttempt(
     providerParameters: absent("no provider parameters are configured at dispatch"),
     configRef: absent("no redacted config identity exists at the spawn site (#510 phase D)"),
   });
-  const allocation = await WorkItemStore.allocateAttempt(workItemHash, {
-    contentFingerprint,
-    environmentFingerprint,
-  });
+  const allocation = await WorkItemStore.allocateAttempt(
+    workItemHash,
+    {
+      contentFingerprint,
+      environmentFingerprint,
+    },
+    traceId,
+  );
   if (!allocation) {
     throw new Error(`WorkItem not found for attempt allocation: ${workItemHash}`);
   }
@@ -99,23 +104,26 @@ export async function createWorkerSpawnWorkItem(
   payload: WorkerSpawnLedgerPayload,
   executorKind: WorkItem.ExecutorKind,
 ): Promise<string> {
-  const workItem = await WorkItemStore.create({
-    name: `Dispatch worker ${request.agentName ?? "worker"}`,
-    sourceMessageId: command.dispatchId,
-    sourceChannel: "dispatch",
-    intent: command.action,
-    goal: request.prompt,
-    assigneeId: request.agentName,
-    sessionId: request.sessionId,
-    originSessionId: command.sessionId,
-    workSessionId: request.sessionId,
-    workerRunId: request.runId,
-    executorKind,
-    context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
-    constraints: payload.constraints,
-    acceptanceCriteria: payload.acceptanceCriteria,
-  });
-  await WorkItemStore.start(workItem.hash);
+  const workItem = await WorkItemStore.create(
+    {
+      name: `Dispatch worker ${request.agentName ?? "worker"}`,
+      sourceMessageId: command.dispatchId,
+      sourceChannel: "dispatch",
+      intent: command.action,
+      goal: request.prompt,
+      assigneeId: request.agentName,
+      sessionId: request.sessionId,
+      originSessionId: command.sessionId,
+      workSessionId: request.sessionId,
+      workerRunId: request.runId,
+      executorKind,
+      context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
+      constraints: payload.constraints,
+      acceptanceCriteria: payload.acceptanceCriteria,
+    },
+    command.traceId,
+  );
+  await WorkItemStore.start(workItem.hash, command.traceId);
   return workItem.hash;
 }
 
@@ -123,16 +131,21 @@ export async function failWorkerSpawnExecutor(
   workItemHash: string,
   executorKind: WorkItem.ExecutorKind,
   reason: string,
+  traceId: string,
 ): Promise<never> {
   const failure = new Error(reason);
   try {
-    await WorkItemStore.addEvidence(workItemHash, {
-      kind: "custom",
-      description: reason,
-      passed: false,
-      detail: `executorKind=${executorKind}`,
-    });
-    await WorkItemStore.fail(workItemHash, reason);
+    await WorkItemStore.addEvidence(
+      workItemHash,
+      {
+        kind: "custom",
+        description: reason,
+        passed: false,
+        detail: `executorKind=${executorKind}`,
+      },
+      traceId,
+    );
+    await WorkItemStore.fail(workItemHash, traceId, reason);
   } catch (reflectionFailure) {
     throwWithWorkItemReflectionFailure(failure, reflectionFailure);
   }

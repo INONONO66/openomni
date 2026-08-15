@@ -100,6 +100,8 @@ type ActorWorkItemCompletionSubmission = Readonly<{
   source: WorkItem.CompletionSourceOrigin & Readonly<{ identity: WorkItem.CompletionIdentity }>;
   request: Omit<WorkItem.CompletionRequest, "origin" | "sourceIdentity">;
   completionReport: WorkItem.CompletionReport;
+  /** The submitting boundary's trace (D11) — required, no fallback. */
+  traceId: string;
 }>;
 
 export type DefaultDispatchRuntime = DispatchRuntime &
@@ -146,16 +148,17 @@ export function createDefaultDispatchRuntime(
           sourceIdentity: WorkItem.projectCompletionSourceIdentity(source),
         }),
         submission.completionReport,
+        { traceId: submission.traceId },
       );
     },
     // Closure (not a detached method reference) so an injected service whose
     // recoverRecordedCompletions relies on `this` keeps its receiver.
-    recoverRecordedWorkItemCompletions: async () => {
+    recoverRecordedWorkItemCompletions: async (traceId: string) => {
       if (!completionService) throw new Error("completion writer is unavailable");
       if (!completionService.recoverRecordedCompletions) {
         throw new Error("injected completion service does not implement recovery");
       }
-      return completionService.recoverRecordedCompletions();
+      return completionService.recoverRecordedCompletions(traceId);
     },
   });
 }

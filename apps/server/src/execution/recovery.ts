@@ -14,15 +14,21 @@ export type RecoveryResult = {
  * legacy worker_run_state rows need no sweep: their upcast read already
  * folds non-terminal statuses to `interrupted`.
  */
-export async function recoverInterruptedRuns(): Promise<RecoveryResult> {
+export async function recoverInterruptedRuns(traceId: string): Promise<RecoveryResult> {
   const recovered: string[] = [];
 
   for (const run of WorkItemAttemptRun.listActive()) {
     if (run.executorKind !== "internal_chat_agent") continue;
-    const interrupted = await WorkItemAttemptRun.finish(run.sessionId, run.runId, "interrupted", {
-      endedAt: Date.now(),
-      error: "coordinator restarted: run interrupted",
-    });
+    const interrupted = await WorkItemAttemptRun.finish(
+      run.sessionId,
+      run.runId,
+      "interrupted",
+      traceId,
+      {
+        endedAt: Date.now(),
+        error: "coordinator restarted: run interrupted",
+      },
+    );
     if (interrupted) recovered.push(run.sessionId);
   }
 

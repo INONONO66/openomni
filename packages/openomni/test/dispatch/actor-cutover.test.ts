@@ -58,22 +58,26 @@ describe("dispatch actor trustTier (#510 D2b)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     const runId = "run-attempt-facts";
-    const item = await WorkItemStore.create({
-      name: "attempt-run",
-      sourceMessageId: "event-actor-cutover",
-      sourceChannel: "ingress",
-      intent: "worker.dispatch",
-      goal: "derive trust from attempt facts",
-      sessionId: session.id,
-      workSessionId: session.id,
-      workerRunId: runId,
-      executorKind: "internal_chat_agent",
-      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
-    });
-    await WorkItemStore.start(item.hash);
+    const item = await WorkItemStore.create(
+      {
+        name: "attempt-run",
+        sourceMessageId: "event-actor-cutover",
+        sourceChannel: "ingress",
+        intent: "worker.dispatch",
+        goal: "derive trust from attempt facts",
+        sessionId: session.id,
+        workSessionId: session.id,
+        workerRunId: runId,
+        executorKind: "internal_chat_agent",
+        acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+      },
+      "trace-test",
+    );
+    await WorkItemStore.start(item.hash, "trace-test");
     const allocation = await WorkItemStore.allocateAttempt(
       item.hash,
       attemptIdentity("derive trust from attempt facts"),
+      "trace-test",
     );
     if (!allocation) throw new Error("attempt allocation failed");
 

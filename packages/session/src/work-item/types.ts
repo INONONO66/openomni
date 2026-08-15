@@ -39,5 +39,10 @@ export type WorkItemMutation = {
   /** Decision-class fact appended before the projection CAS (#510 C1). */
   fact: WorkItemFact;
   target?: WorkItemTransitionTarget;
-  afterPublish?: (updated: WorkItem.Info) => void;
+  /**
+   * Receives the mutation's traceId (D11): every publish for one state
+   * transition — StatusChanged, Updated, and any afterPublish event — carries
+   * the caller's ONE trace, never a per-publish mint.
+   */
+  afterPublish?: (updated: WorkItem.Info, traceId: string) => void;
 };

@@ -244,12 +244,16 @@ describe("worker.spawn result reflection", () => {
           async dispatch(_sessionId, request) {
             const item = WorkItemStore.list()[0];
             if (!item) throw new Error("missing work item");
-            const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-              kind: "verification",
-              description: "kernel-recorded verifier input",
-              passed: true,
-              detail: recordedVerifierEvidence(item),
-            });
+            const withEvidence = await WorkItemStore.addEvidence(
+              item.hash,
+              {
+                kind: "verification",
+                description: "kernel-recorded verifier input",
+                passed: true,
+                detail: recordedVerifierEvidence(item),
+              },
+              "trace-test",
+            );
             const evidenceId = withEvidence?.evidence.at(-1)?.id;
             if (!evidenceId) throw new Error("missing verifier evidence");
             return {
@@ -301,12 +305,16 @@ describe("worker.spawn result reflection", () => {
           async dispatch(_sessionId, request) {
             const workItem = WorkItemStore.list()[0];
             if (!workItem) throw new Error("missing work item");
-            const withEvidence = await WorkItemStore.addEvidence(workItem.hash, {
-              kind: "test_result",
-              description: "kernel-recorded verifier input",
-              passed: true,
-              detail: recordedVerifierEvidence(workItem),
-            });
+            const withEvidence = await WorkItemStore.addEvidence(
+              workItem.hash,
+              {
+                kind: "test_result",
+                description: "kernel-recorded verifier input",
+                passed: true,
+                detail: recordedVerifierEvidence(workItem),
+              },
+              "trace-test",
+            );
             const evidenceId = withEvidence?.evidence.at(-1)?.id;
             if (!evidenceId) throw new Error("missing evidence");
             const criterion = workItem.completionFacts.criteria[0];
@@ -369,12 +377,16 @@ describe("worker.spawn result reflection", () => {
           async dispatch(_sessionId, request) {
             const workItem = WorkItemStore.list()[0];
             if (!workItem) throw new Error("missing work item");
-            const withEvidence = await WorkItemStore.addEvidence(workItem.hash, {
-              kind: "verification",
-              description: "kernel-recorded verifier input",
-              passed: true,
-              detail: recordedVerifierEvidence(workItem),
-            });
+            const withEvidence = await WorkItemStore.addEvidence(
+              workItem.hash,
+              {
+                kind: "verification",
+                description: "kernel-recorded verifier input",
+                passed: true,
+                detail: recordedVerifierEvidence(workItem),
+              },
+              "trace-test",
+            );
             const evidenceId = withEvidence?.evidence.at(-1)?.id;
             if (!evidenceId) throw new Error("missing verifier evidence");
             return {
@@ -418,26 +430,33 @@ describe("worker.spawn result reflection", () => {
     expect(stored?.completionTerminalReceipt).toBeUndefined();
     expect(stored?.completionReport).toBeUndefined();
 
-    const connectorCreated = await WorkItemStore.create({
-      name: "Connector completion policy",
-      sourceMessageId: "dispatch:connector-policy",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "prove connector completion policy composition",
-      executorKind: "connector_endpoint",
-      workSessionId: "session:connector-policy",
-      workerRunId: "run:connector-policy",
-      acceptanceCriteria: ["recorded numeric operands satisfy eq"],
-    });
-    const connectorItem = await WorkItemStore.start(connectorCreated.hash);
+    const connectorCreated = await WorkItemStore.create(
+      {
+        name: "Connector completion policy",
+        sourceMessageId: "dispatch:connector-policy",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "prove connector completion policy composition",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:connector-policy",
+        workerRunId: "run:connector-policy",
+        acceptanceCriteria: ["recorded numeric operands satisfy eq"],
+      },
+      "trace-test",
+    );
+    const connectorItem = await WorkItemStore.start(connectorCreated.hash, "trace-test");
     if (!connectorItem) throw new Error("missing connector WorkItem");
     await allocateTestAttempt(connectorItem.hash);
-    const connectorEvidence = await WorkItemStore.addEvidence(connectorItem.hash, {
-      kind: "verification",
-      description: "kernel-recorded verifier input",
-      passed: true,
-      detail: recordedVerifierEvidence(connectorItem),
-    });
+    const connectorEvidence = await WorkItemStore.addEvidence(
+      connectorItem.hash,
+      {
+        kind: "verification",
+        description: "kernel-recorded verifier input",
+        passed: true,
+        detail: recordedVerifierEvidence(connectorItem),
+      },
+      "trace-test",
+    );
     const connectorEvidenceId = connectorEvidence?.evidence.at(-1)?.id;
     if (!connectorEvidenceId) throw new Error("missing connector evidence");
 
@@ -486,26 +505,33 @@ describe("worker.spawn result reflection", () => {
     // recorded admission.
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
-    const created = await WorkItemStore.create({
-      name: "Blocked-then-retried connector completion",
-      sourceMessageId: "dispatch:blocked-retry-completion",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "retry a blocked completion on the same attempt",
-      executorKind: "connector_endpoint",
-      workSessionId: "session:blocked-retry",
-      workerRunId: "run:blocked-retry",
-      acceptanceCriteria: ["recorded numeric operands satisfy eq"],
-    });
-    const item = await WorkItemStore.start(created.hash);
+    const created = await WorkItemStore.create(
+      {
+        name: "Blocked-then-retried connector completion",
+        sourceMessageId: "dispatch:blocked-retry-completion",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "retry a blocked completion on the same attempt",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:blocked-retry",
+        workerRunId: "run:blocked-retry",
+        acceptanceCriteria: ["recorded numeric operands satisfy eq"],
+      },
+      "trace-test",
+    );
+    const item = await WorkItemStore.start(created.hash, "trace-test");
     if (!item) throw new Error("missing blocked-retry WorkItem");
     await allocateTestAttempt(item.hash);
-    const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-      kind: "verification",
-      description: "kernel-recorded verifier input",
-      passed: true,
-      detail: recordedVerifierEvidence(item),
-    });
+    const withEvidence = await WorkItemStore.addEvidence(
+      item.hash,
+      {
+        kind: "verification",
+        description: "kernel-recorded verifier input",
+        passed: true,
+        detail: recordedVerifierEvidence(item),
+      },
+      "trace-test",
+    );
     const evidenceId = withEvidence?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("missing blocked-retry evidence");
 
@@ -540,7 +566,7 @@ describe("worker.spawn result reflection", () => {
       (candidate) => candidate.resolvedAt === undefined,
     );
     if (!blocker) throw new Error("missing completion blocker after the blocked submission");
-    await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+    await WorkItemStore.resolveBlocker(item.hash, blocker.id, "trace-test");
     const retried = await submit(
       JSON.stringify({
         completionReport: {
@@ -567,16 +593,19 @@ describe("worker.spawn result reflection", () => {
   test("worker.complete requires one WorkItem bound to its target and result run", async () => {
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
-    const item = await WorkItemStore.create({
-      name: "Bound connector completion",
-      sourceMessageId: "dispatch:bound-connector-completion",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "bind completion to the owning run",
-      executorKind: "connector_endpoint",
-      workerRunId: "run:bound",
-      acceptanceCriteria: ["completion belongs to the owning run"],
-    });
+    const item = await WorkItemStore.create(
+      {
+        name: "Bound connector completion",
+        sourceMessageId: "dispatch:bound-connector-completion",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "bind completion to the owning run",
+        executorKind: "connector_endpoint",
+        workerRunId: "run:bound",
+        acceptanceCriteria: ["completion belongs to the owning run"],
+      },
+      "trace-test",
+    );
 
     await expectRejectsWithMessage(
       () =>
@@ -635,16 +664,19 @@ describe("worker.spawn result reflection", () => {
       "requires exactly one WorkItem",
     );
 
-    await WorkItemStore.create({
-      name: "Duplicate connector completion",
-      sourceMessageId: "dispatch:duplicate-connector-completion",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "reject ambiguous completion correlation",
-      executorKind: "connector_endpoint",
-      workerRunId: "run:bound",
-      acceptanceCriteria: ["completion is unambiguous"],
-    });
+    await WorkItemStore.create(
+      {
+        name: "Duplicate connector completion",
+        sourceMessageId: "dispatch:duplicate-connector-completion",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "reject ambiguous completion correlation",
+        executorKind: "connector_endpoint",
+        workerRunId: "run:bound",
+        acceptanceCriteria: ["completion is unambiguous"],
+      },
+      "trace-test",
+    );
     await expectRejectsWithMessage(
       () =>
         registry.get("worker.complete")?.(
@@ -668,18 +700,21 @@ describe("worker.spawn result reflection", () => {
   test("worker.complete rejects a non-Worker actor before terminal mutation", async () => {
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
-    const created = await WorkItemStore.create({
-      name: "Authenticated connector completion",
-      sourceMessageId: "dispatch:authenticated-connector-completion",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "only the assigned Worker may report terminal state",
-      executorKind: "connector_endpoint",
-      workSessionId: "session:authenticated",
-      workerRunId: "run:authenticated",
-      acceptanceCriteria: ["terminal state comes from the assigned Worker"],
-    });
-    const item = await WorkItemStore.start(created.hash);
+    const created = await WorkItemStore.create(
+      {
+        name: "Authenticated connector completion",
+        sourceMessageId: "dispatch:authenticated-connector-completion",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "only the assigned Worker may report terminal state",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:authenticated",
+        workerRunId: "run:authenticated",
+        acceptanceCriteria: ["terminal state comes from the assigned Worker"],
+      },
+      "trace-test",
+    );
+    const item = await WorkItemStore.start(created.hash, "trace-test");
     if (!item) throw new Error("missing authenticated completion WorkItem");
     const before = WorkItemStore.get(item.hash);
 
@@ -709,18 +744,21 @@ describe("worker.spawn result reflection", () => {
   test("worker.complete rejects a missing WorkerRun assignment before mutation", async () => {
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
-    const created = await WorkItemStore.create({
-      name: "Missing WorkerRun completion",
-      sourceMessageId: "dispatch:missing-worker-run",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "reject a completion without an assigned WorkerRun",
-      executorKind: "connector_endpoint",
-      workSessionId: "session:missing-worker-run",
-      workerRunId: "run:missing-worker-run",
-      acceptanceCriteria: ["persist no forged terminal state"],
-    });
-    const item = await WorkItemStore.start(created.hash);
+    const created = await WorkItemStore.create(
+      {
+        name: "Missing WorkerRun completion",
+        sourceMessageId: "dispatch:missing-worker-run",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "reject a completion without an assigned WorkerRun",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:missing-worker-run",
+        workerRunId: "run:missing-worker-run",
+        acceptanceCriteria: ["persist no forged terminal state"],
+      },
+      "trace-test",
+    );
+    const item = await WorkItemStore.start(created.hash, "trace-test");
     if (!item) throw new Error("missing WorkerRun completion fixture");
     const before = WorkItemStore.get(item.hash);
 
@@ -890,18 +928,21 @@ describe("worker.spawn result reflection", () => {
       Storage.initialize({ dbPath: ":memory:" });
       const registry = new DispatchRegistry();
       registerBuiltInDispatchHandlers(registry);
-      const created = await WorkItemStore.create({
-        name: scenario.name,
-        sourceMessageId: `dispatch:${scenario.name}`,
-        sourceChannel: "dispatch",
-        intent: "worker.complete",
-        goal: "reject forged completion authority",
-        executorKind: scenario.executorKind,
-        workSessionId: scenario.workSessionId,
-        workerRunId: "run:authorized",
-        acceptanceCriteria: ["terminal state comes from the assigned connector Worker"],
-      });
-      const item = await WorkItemStore.start(created.hash);
+      const created = await WorkItemStore.create(
+        {
+          name: scenario.name,
+          sourceMessageId: `dispatch:${scenario.name}`,
+          sourceChannel: "dispatch",
+          intent: "worker.complete",
+          goal: "reject forged completion authority",
+          executorKind: scenario.executorKind,
+          workSessionId: scenario.workSessionId,
+          workerRunId: "run:authorized",
+          acceptanceCriteria: ["terminal state comes from the assigned connector Worker"],
+        },
+        "trace-test",
+      );
+      const item = await WorkItemStore.start(created.hash, "trace-test");
       if (!item) throw new Error(`missing WorkItem for ${scenario.name}`);
       const before = WorkItemStore.get(item.hash);
 
@@ -951,17 +992,20 @@ describe("worker.spawn result reflection", () => {
   test("worker.complete returns connector evidence persistence failures", async () => {
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry);
-    const item = await WorkItemStore.create({
-      name: "Connector evidence persistence",
-      sourceMessageId: "dispatch:connector-evidence-persistence",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "record connector evidence durably",
-      executorKind: "connector_endpoint",
-      workSessionId: "session:connector-evidence",
-      workerRunId: "run:connector-evidence",
-      acceptanceCriteria: ["connector evidence persists"],
-    });
+    const item = await WorkItemStore.create(
+      {
+        name: "Connector evidence persistence",
+        sourceMessageId: "dispatch:connector-evidence-persistence",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "record connector evidence durably",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:connector-evidence",
+        workerRunId: "run:connector-evidence",
+        acceptanceCriteria: ["connector evidence persists"],
+      },
+      "trace-test",
+    );
     await allocateTestAttempt(item.hash);
     const workItemAdapter = Storage.getAdapter().workItem;
     if (!workItemAdapter) throw new Error("missing work item adapter");

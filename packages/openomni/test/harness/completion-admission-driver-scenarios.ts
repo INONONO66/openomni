@@ -191,7 +191,11 @@ async function runKnownBadCompletionAdmissionScenario() {
     const { service } = completionAdmissionDriverService(completionWriter, {
       resultAuthorityPort: completionAdmissionDriverVerifierPort(criterion, result, [observation]),
     });
-    const outcome = await service.requestCompletion(request, completionAdmissionDriverReport(item));
+    const outcome = await service.requestCompletion(
+      request,
+      completionAdmissionDriverReport(item),
+      { traceId: "trace-test" },
+    );
     const stored = requiredCompletionAdmissionDriverItem(item.hash);
     const status = WorkItem.deriveStatus(stored);
     const blocked =
@@ -477,8 +481,9 @@ export async function runAllOriginsCompletionAdmissionScenario(
               source: expectation.source,
               request: actorRequest,
               completionReport,
+              traceId: "trace-test",
             })
-          : await service.requestCompletion(request, completionReport);
+          : await service.requestCompletion(request, completionReport, { traceId: "trace-test" });
       const stored = requiredCompletionAdmissionDriverItem(item.hash);
       const persistedAdmission = stored.completionFacts.admissions.find(
         ({ id }) => id === outcome.admission.id,
@@ -564,7 +569,9 @@ async function runStaleBasisCompletionAdmissionScenario() {
     );
     const before = requiredCompletionAdmissionDriverItem(item.hash);
     const errorCode = await captureCompletionAdmissionDriverCode(
-      service.requestCompletion(request, completionAdmissionDriverReport(item)),
+      service.requestCompletion(request, completionAdmissionDriverReport(item), {
+        traceId: "trace-test",
+      }),
       CompletionAdmissionError,
     );
     const after = requiredCompletionAdmissionDriverItem(item.hash);
@@ -637,7 +644,9 @@ async function runRestartRecoveryCompletionAdmissionScenario() {
       return compareAndSet(hash, expectedHead, candidate);
     };
     await captureCompletionAdmissionDriverMessage(
-      service.requestCompletion(request, completionAdmissionDriverReport(item)),
+      service.requestCompletion(request, completionAdmissionDriverReport(item), {
+        traceId: "trace-test",
+      }),
       "simulated restart after admission",
     );
     const recorded = requiredCompletionAdmissionDriverItem(item.hash);
@@ -662,6 +671,7 @@ async function runRestartRecoveryCompletionAdmissionScenario() {
       item.hash,
       admissionId,
       completionAdmissionDriverReport(item),
+      "trace-test",
     );
     const completed = requiredCompletionAdmissionDriverItem(item.hash);
     const resumedAdmissionId = completed.completionFacts.admissions[0]?.id ?? "missing";

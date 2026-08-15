@@ -62,7 +62,7 @@ export type ExecutionCoordinator = {
     maxActiveWorkers: number;
   };
   waitUntilReady(timeoutMs?: number): Promise<void>;
-  recoverInterruptedRuns(): Promise<RecoveryResult>;
+  recoverInterruptedRuns(traceId: string): Promise<RecoveryResult>;
   shutdown(): Promise<void>;
 };
 
@@ -151,8 +151,8 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
       await workerManager.waitUntilReady(timeoutMs);
     },
 
-    async recoverInterruptedRuns() {
-      return _recoverInterruptedRuns();
+    async recoverInterruptedRuns(traceId: string) {
+      return _recoverInterruptedRuns(traceId);
     },
 
     async shutdown() {

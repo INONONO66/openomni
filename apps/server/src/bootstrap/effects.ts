@@ -92,10 +92,10 @@ function sanitizeManualInput(input: unknown): unknown {
 const TERMINAL_WORK_ITEM_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 function createEffectEscalation(): EffectEscalation {
-  return async (intent, detail) => {
-    const escalation = await recordEscalationBlocker(intent.workItemHash, intent, detail);
+  return async (intent, detail, traceId) => {
+    const escalation = await recordEscalationBlocker(intent.workItemHash, intent, detail, traceId);
     Bus.publish(Operational.Error, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: `effect reconciliation exhausted — escalated to Owner: ${intent.effectId}`,
@@ -122,6 +122,7 @@ async function recordEscalationBlocker(
   workItemHash: string | undefined,
   intent: Parameters<EffectEscalation>[0],
   detail: string,
+  traceId: string,
 ): Promise<string> {
   if (workItemHash === undefined) return "skipped:no_work_item_link";
   const blockerId = `effect-escalation:${intent.effectId}`;
@@ -134,11 +135,15 @@ async function recordEscalationBlocker(
       (blocker) => blocker.id === blockerId && blocker.resolvedAt === undefined,
     );
     if (existing) return "already_recorded";
-    const updated = await WorkItemStore.addBlocker(workItemHash, {
-      id: blockerId,
-      kind: "waiting_input",
-      description: `effect ${intent.effectId} (${intent.kind}) reconciliation exhausted — Owner decision required: ${detail}`,
-    });
+    const updated = await WorkItemStore.addBlocker(
+      workItemHash,
+      {
+        id: blockerId,
+        kind: "waiting_input",
+        description: `effect ${intent.effectId} (${intent.kind}) reconciliation exhausted — Owner decision required: ${detail}`,
+      },
+      traceId,
+    );
     return updated ? "recorded" : "failed:blocker_not_recorded";
   } catch (error) {
     return `failed:${error instanceof Error ? error.message : String(error)}`;

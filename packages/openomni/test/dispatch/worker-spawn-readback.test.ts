@@ -275,18 +275,21 @@ describe("worker.spawn read-back completion gate", () => {
     const internal = WorkItemStore.list()[0];
     if (!internal) throw new Error("missing internal WorkItem");
 
-    const connectorCreated = await WorkItemStore.create({
-      name: "Connector read-back composition",
-      sourceMessageId: "dispatch:connector-read-back-composition",
-      sourceChannel: "dispatch",
-      intent: "worker.complete",
-      goal: "prove connector read-back composition",
-      executorKind: "connector_endpoint",
-      workSessionId: "session:connector-read-back",
-      workerRunId: "run:connector-read-back",
-      acceptanceCriteria: ["archived source contains the recorded quote exactly"],
-    });
-    const connector = await WorkItemStore.start(connectorCreated.hash);
+    const connectorCreated = await WorkItemStore.create(
+      {
+        name: "Connector read-back composition",
+        sourceMessageId: "dispatch:connector-read-back-composition",
+        sourceChannel: "dispatch",
+        intent: "worker.complete",
+        goal: "prove connector read-back composition",
+        executorKind: "connector_endpoint",
+        workSessionId: "session:connector-read-back",
+        workerRunId: "run:connector-read-back",
+        acceptanceCriteria: ["archived source contains the recorded quote exactly"],
+      },
+      "trace-test",
+    );
+    const connector = await WorkItemStore.start(connectorCreated.hash, "trace-test");
     if (!connector) throw new Error("missing connector WorkItem");
     Storage.getAdapter().session.set("session:connector-read-back", {
       id: "session:connector-read-back",

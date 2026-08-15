@@ -8,11 +8,15 @@ export async function completeWorkItem(
   completionWriter: Storage.WorkItemCompletionWriter,
   hash: string,
 ): Promise<WorkItem.Info> {
-  const withEvidence = await WorkItemStore.addEvidence(hash, {
-    kind: "verification",
-    description: "server test completion evidence",
-    passed: true,
-  });
+  const withEvidence = await WorkItemStore.addEvidence(
+    hash,
+    {
+      kind: "verification",
+      description: "server test completion evidence",
+      passed: true,
+    },
+    "trace-test",
+  );
   const current = WorkItemStore.get(hash);
   const criterion = current?.completionFacts.criteria[0];
   const evidenceId = withEvidence?.evidence.at(-1)?.id;
@@ -29,6 +33,7 @@ export async function completeWorkItem(
     }),
   }).submitActorWorkItemCompletion({
     source: { source: "resident", identity: { kind: "resident", id: "resident:server-test" } },
+    traceId: "trace-test",
     request: {
       version: 1,
       id: `completion-request:${hash}:${current.revision}:server-test`,

@@ -29,7 +29,7 @@ async function createItem(
   name: string,
   extra?: Partial<Parameters<typeof WorkItemStore.create>[0]>,
 ): Promise<WorkItem.Info> {
-  return WorkItemStore.create({ ...baseInput, ...extra, name });
+  return WorkItemStore.create({ ...baseInput, ...extra, name }, "trace-test");
 }
 
 function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
@@ -114,7 +114,7 @@ describe("WorkItem oracle storage concurrency", () => {
       return originalCompareAndSet(hash, expectedHead, candidate);
     };
 
-    const recorded = await WorkItemStore.recordOutcome(item.hash, "adopted");
+    const recorded = await WorkItemStore.recordOutcome(item.hash, "adopted", "trace-test");
 
     expect(attemptedHeads).toEqual([[completed.revision, completed.revision + 1]]);
     expect(recorded).toMatchObject({ revision: completed.revision + 1, outcome: "adopted" });
@@ -145,13 +145,14 @@ describe("WorkItem oracle storage concurrency", () => {
           current.timestamps.updated + 1,
           ["name"],
           { type: "work_item.updated", data: { fields: ["name"] } },
+          "trace-test",
         );
       }
       return current;
     };
 
     await expectRejectsWithMessage(
-      WorkItemStore.recordOutcome(item.hash, "corrected"),
+      WorkItemStore.recordOutcome(item.hash, "corrected", "trace-test"),
       `stale WorkItem revision: ${item.hash}`,
     );
 
@@ -186,6 +187,7 @@ describe("WorkItem oracle storage concurrency", () => {
           current.timestamps.updated + 1,
           ["name"],
           { type: "work_item.updated", data: { fields: ["name"] } },
+          "trace-test",
         );
       }
       return current;

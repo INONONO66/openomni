@@ -157,7 +157,7 @@ describe("EffectReconciler", () => {
       { kind: "confirmed" },
       { kind: "confirmed", receipt: "probe" },
     );
-    const summary = await new EffectReconciler(manifestWith(driver)).reconcile();
+    const summary = await new EffectReconciler(manifestWith(driver)).reconcile("trace-test");
 
     expect(summary).toEqual({
       scanned: 1,
@@ -176,7 +176,7 @@ describe("EffectReconciler", () => {
       { kind: "unknown" },
       { kind: "unknown", reason: "still down" },
     );
-    const summary = await new EffectReconciler(manifestWith(driver)).reconcile();
+    const summary = await new EffectReconciler(manifestWith(driver)).reconcile("trace-test");
 
     expect(summary.resolved).toBe(0);
     expect(summary.stillUnknown).toBe(1);
@@ -193,7 +193,7 @@ describe("EffectReconciler", () => {
     const escalations: string[] = [];
     const summary = await new EffectReconciler(manifestWith(driver), (intent, detail) => {
       escalations.push(`${intent.effectId}:${detail}`);
-    }).reconcile();
+    }).reconcile("trace-test");
 
     expect(summary.escalated).toBe(1);
     expect(escalations).toEqual(["r3:gave up"]);
@@ -211,7 +211,7 @@ describe("EffectReconciler", () => {
 
     let threw = false;
     try {
-      await new EffectReconciler(manifestWith(driver)).reconcile();
+      await new EffectReconciler(manifestWith(driver)).reconcile("trace-test");
     } catch {
       threw = true;
     }
@@ -222,15 +222,18 @@ describe("EffectReconciler", () => {
 
 describe("effect ↔ completion admission linkage (#490)", () => {
   async function linkedWorkItem(): Promise<string> {
-    const item = await WorkItemStore.create({
-      name: "effect gated work",
-      sourceMessageId: "msg-gate",
-      sourceChannel: "test",
-      intent: "verification",
-      goal: "gate completion on an effect",
-      sessionId: "session-gate",
-      acceptanceCriteria: ["side effect confirmed"],
-    });
+    const item = await WorkItemStore.create(
+      {
+        name: "effect gated work",
+        sourceMessageId: "msg-gate",
+        sourceChannel: "test",
+        intent: "verification",
+        goal: "gate completion on an effect",
+        sessionId: "session-gate",
+        acceptanceCriteria: ["side effect confirmed"],
+      },
+      "trace-test",
+    );
     return item.hash;
   }
 
@@ -322,7 +325,7 @@ describe("effect ↔ completion admission linkage (#490)", () => {
     // The intent is terminal, so it is NOT outstanding and the driver's probe
     // must never be consulted — the pass only reads already-recorded facts.
     const driver = new ScriptedDriver("http.post", { kind: "unknown" });
-    const summary = await new EffectReconciler(manifestWith(driver)).reconcile();
+    const summary = await new EffectReconciler(manifestWith(driver)).reconcile("trace-test");
 
     expect(summary.reprojected).toBe(1);
     expect(summary.resolved).toBe(0);
@@ -331,7 +334,7 @@ describe("effect ↔ completion admission linkage (#490)", () => {
     expect(foldDecision(hash).reasonCodes).not.toContain("effect_outcome_unresolved");
 
     // Idempotent across sweeps: a healed WorkItem is not re-linked again.
-    const second = await new EffectReconciler(manifestWith(driver)).reconcile();
+    const second = await new EffectReconciler(manifestWith(driver)).reconcile("trace-test");
     expect(second.reprojected).toBe(0);
   });
 

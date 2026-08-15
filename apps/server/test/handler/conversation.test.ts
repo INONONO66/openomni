@@ -50,15 +50,18 @@ async function createWorkItem(
   name: string,
   extra?: Partial<Parameters<typeof WorkItemStore.create>[0]>,
 ) {
-  return WorkItemStore.create({
-    name,
-    sourceMessageId: `msg-${name.toLowerCase().replace(/\s+/g, "-")}`,
-    sourceChannel: "discord",
-    intent: "test",
-    goal: `handle ${name}`,
-    acceptanceCriteria: [`${name} is handled`],
-    ...extra,
-  });
+  return WorkItemStore.create(
+    {
+      name,
+      sourceMessageId: `msg-${name.toLowerCase().replace(/\s+/g, "-")}`,
+      sourceChannel: "discord",
+      intent: "test",
+      goal: `handle ${name}`,
+      acceptanceCriteria: [`${name} is handled`],
+      ...extra,
+    },
+    "trace-test",
+  );
 }
 
 const deps: BridgeDeps = {
@@ -185,29 +188,38 @@ describe("conversation task ledger command", () => {
       intent: "implement",
       goal: "build the feature",
     });
-    await WorkItemStore.start(running.hash);
+    await WorkItemStore.start(running.hash, "trace-test");
     const runningEarlierByName = await createWorkItem("Audit feature", {
       intent: "audit",
       goal: "audit the feature",
     });
-    await WorkItemStore.start(runningEarlierByName.hash);
+    await WorkItemStore.start(runningEarlierByName.hash, "trace-test");
     const blocked = await createWorkItem("Fix thing", {
       intent: "fix",
       goal: "fix the blocker",
       assigneeId: "worker-b",
       sessionId: "session-b",
     });
-    await WorkItemStore.start(blocked.hash);
-    await WorkItemStore.addBlocker(blocked.hash, {
-      kind: "waiting_input",
-      description: "needs owner input",
-    });
-    const resolvedBlocker = await WorkItemStore.addBlocker(blocked.hash, {
-      kind: "external",
-      description: "already handled elsewhere",
-    });
+    await WorkItemStore.start(blocked.hash, "trace-test");
+    await WorkItemStore.addBlocker(
+      blocked.hash,
+      {
+        kind: "waiting_input",
+        description: "needs owner input",
+      },
+      "trace-test",
+    );
+    const resolvedBlocker = await WorkItemStore.addBlocker(
+      blocked.hash,
+      {
+        kind: "external",
+        description: "already handled elsewhere",
+      },
+      "trace-test",
+    );
     const resolvedBlockerId = resolvedBlocker?.blockers.at(-1)?.id;
-    if (resolvedBlockerId) await WorkItemStore.resolveBlocker(blocked.hash, resolvedBlockerId);
+    if (resolvedBlockerId)
+      await WorkItemStore.resolveBlocker(blocked.hash, resolvedBlockerId, "trace-test");
     const completed = await createWorkItem("Done thing", {
       intent: "verify",
       goal: "verify complete items are hidden",
@@ -217,12 +229,12 @@ describe("conversation task ledger command", () => {
       intent: "verify",
       goal: "verify failed items are hidden",
     });
-    await WorkItemStore.fail(failed.hash, "not open");
+    await WorkItemStore.fail(failed.hash, "trace-test", "not open");
     const cancelled = await createWorkItem("Cancelled thing", {
       intent: "verify",
       goal: "verify cancelled items are hidden",
     });
-    await WorkItemStore.cancel(cancelled.hash);
+    await WorkItemStore.cancel(cancelled.hash, "trace-test");
     const handler = handlerFor();
 
     // When

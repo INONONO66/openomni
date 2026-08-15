@@ -13,12 +13,14 @@ type PersistMutation = (
   time: number,
   changedFields: string[],
   fact: WorkItemFact,
+  traceId: string,
 ) => WorkItem.Info;
 
 export function retryWorkItem(
   hash: string,
   adapter: ProtocolStorage.WorkItemSubAdapter | undefined,
   persistMutation: PersistMutation,
+  traceId: string,
 ): WorkItem.Info | undefined {
   if (!adapter) return undefined;
 
@@ -29,7 +31,7 @@ export function retryWorkItem(
     throw new Error("retry() can only be called on failed work items");
   }
   if (isRetryExhausted(existing)) {
-    recordRetryExhaustion(hash, adapter, existing, persistMutation);
+    recordRetryExhaustion(hash, adapter, existing, persistMutation, traceId);
   }
 
   const now = Date.now();
@@ -53,6 +55,7 @@ export function retryWorkItem(
       type: "work_item.retried",
       data: { attempt: retryable.attempt, basisRef: retryable.completionContract.basisRef },
     },
+    traceId,
   );
 }
 
@@ -61,19 +64,28 @@ function recordRetryExhaustion(
   adapter: ProtocolStorage.WorkItemSubAdapter,
   existing: WorkItem.Info,
   persistMutation: PersistMutation,
+  traceId: string,
 ): never {
   const now = Date.now();
   if (!hasRetryExhaustionBlocker(existing)) {
     const exhausted = exhaustedItem(existing, now);
     const blocker = exhausted.blockers.at(-1);
-    persistMutation(adapter, existing, exhausted, now, ["blockers", "timestamps"], {
-      type: "work_item.blocker_added",
-      data: {
-        blockerId: blocker?.id,
-        kind: blocker?.kind,
-        description: blocker?.description,
+    persistMutation(
+      adapter,
+      existing,
+      exhausted,
+      now,
+      ["blockers", "timestamps"],
+      {
+        type: "work_item.blocker_added",
+        data: {
+          blockerId: blocker?.id,
+          kind: blocker?.kind,
+          description: blocker?.description,
+        },
       },
-    });
+      traceId,
+    );
   }
   throw new Error(
     `retry attempts exhausted for work item ${hash}: attempt ${existing.attempt} of ${existing.maxAttempts}`,

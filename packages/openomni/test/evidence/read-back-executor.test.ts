@@ -127,14 +127,17 @@ describe("ReadBackExecutor", () => {
 
   test("returns a read-back check without persisting WorkItem evidence", async () => {
     Storage.initialize({ dbPath: ":memory:" });
-    const item = await WorkItemStore.create({
-      name: "Read-back execution isolation",
-      sourceMessageId: "read-back-execution-isolation",
-      sourceChannel: "test",
-      intent: "verify",
-      goal: "keep read-back execution free of storage side effects",
-      acceptanceCriteria: ["the executor returns a check without recording evidence"],
-    });
+    const item = await WorkItemStore.create(
+      {
+        name: "Read-back execution isolation",
+        sourceMessageId: "read-back-execution-isolation",
+        sourceChannel: "test",
+        intent: "verify",
+        goal: "keep read-back execution free of storage side effects",
+        acceptanceCriteria: ["the executor returns a check without recording evidence"],
+      },
+      "trace-test",
+    );
     const origin = await startFixtureServer();
 
     const check = await ReadBackExecutor.execute(

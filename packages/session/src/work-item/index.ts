@@ -21,8 +21,11 @@ import {
 import type { CreateWorkItemInput, DependencyReadiness, WorkItemListFilter } from "./types.js";
 
 export namespace WorkItemStore {
-  export async function create(input: CreateWorkItemInput): Promise<WorkItem.Info> {
-    return createWorkItem(input);
+  export async function create(
+    input: CreateWorkItemInput,
+    traceId: string,
+  ): Promise<WorkItem.Info> {
+    return createWorkItem(input, traceId);
   }
 
   export function get(hash: string): WorkItem.Info | undefined {
@@ -33,19 +36,20 @@ export namespace WorkItemStore {
     return listWorkItems(filter);
   }
 
-  export function remove(hash: string): boolean {
-    return removeWorkItem(hash);
+  export function remove(hash: string, traceId: string): boolean {
+    return removeWorkItem(hash, traceId);
   }
 
   export async function update(
     hash: string,
     fields: Partial<Omit<WorkItem.Info, "hash">>,
+    traceId: string,
   ): Promise<WorkItem.Info | undefined> {
-    return updateWorkItem(hash, fields);
+    return updateWorkItem(hash, fields, traceId);
   }
 
-  export async function start(hash: string): Promise<WorkItem.Info | undefined> {
-    return startWorkItem(hash);
+  export async function start(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
+    return startWorkItem(hash, traceId);
   }
 
   export async function assignExecution(
@@ -55,8 +59,9 @@ export namespace WorkItemStore {
       workerRunId: string;
       workSessionId: string;
     }>,
+    traceId: string,
   ): Promise<WorkItem.Info | undefined> {
-    return assignWorkItemExecution(hash, assignment);
+    return assignWorkItemExecution(hash, assignment, traceId);
   }
 
   export async function complete(
@@ -66,39 +71,47 @@ export namespace WorkItemStore {
     return completeWorkItem(hash, completionReport);
   }
 
-  export async function fail(hash: string, reason?: string): Promise<WorkItem.Info | undefined> {
-    return failWorkItem(hash, reason);
+  export async function fail(
+    hash: string,
+    traceId: string,
+    reason?: string,
+  ): Promise<WorkItem.Info | undefined> {
+    return failWorkItem(hash, traceId, reason);
   }
 
-  export async function cancel(hash: string): Promise<WorkItem.Info | undefined> {
-    return cancelWorkItem(hash);
+  export async function cancel(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
+    return cancelWorkItem(hash, traceId);
   }
 
   export async function addBlocker(
     hash: string,
     blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
+    traceId: string,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemBlocker(hash, blocker);
+    return addWorkItemBlocker(hash, blocker, traceId);
   }
 
   export async function resolveBlocker(
     hash: string,
     blockerId: string,
+    traceId: string,
   ): Promise<WorkItem.Info | undefined> {
-    return resolveWorkItemBlocker(hash, blockerId);
+    return resolveWorkItemBlocker(hash, blockerId, traceId);
   }
 
   export async function addEvidence(
     hash: string,
     evidence: Parameters<typeof addWorkItemEvidence>[1],
+    traceId: string,
     expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemEvidence(hash, evidence, expectedScope);
+    return addWorkItemEvidence(hash, evidence, traceId, expectedScope);
   }
 
   export async function addReadBackEvidence(
     hash: string,
     check: WorkItem.ReadBackCheck,
+    traceId: string,
     expectedScope?: Readonly<{
       expectedAttempt: number;
       expectedBasisRef: string;
@@ -106,7 +119,7 @@ export namespace WorkItemStore {
       evidenceId?: string;
     }>,
   ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemReadBackEvidence(hash, check, expectedScope);
+    return addWorkItemReadBackEvidence(hash, check, traceId, expectedScope);
   }
 
   export const recordOutcome = recordWorkItemOutcome;
@@ -125,8 +138,8 @@ export namespace WorkItemStore {
     return areStoredDependenciesMet(hash);
   }
 
-  export async function retry(hash: string): Promise<WorkItem.Info | undefined> {
-    return retryStoredWorkItem(hash);
+  export async function retry(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
+    return retryStoredWorkItem(hash, traceId);
   }
 
   /**
@@ -137,7 +150,8 @@ export namespace WorkItemStore {
   export async function allocateAttempt(
     hash: string,
     identity: AttemptAllocationInput,
+    traceId: string,
   ): Promise<Readonly<{ item: WorkItem.Info; attempt: WorkItem.Attempt }> | undefined> {
-    return allocateWorkItemAttempt(hash, identity);
+    return allocateWorkItemAttempt(hash, identity, traceId);
   }
 }

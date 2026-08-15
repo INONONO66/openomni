@@ -21,15 +21,18 @@ function intent(overrides: Partial<Parameters<typeof EffectStore.intend>[0]> = {
 }
 
 async function createWorkItem(hash = "linked"): Promise<string> {
-  const item = await WorkItemStore.create({
-    name: "effect-linked work",
-    sourceMessageId: `msg-${hash}`,
-    sourceChannel: "test",
-    intent: "verification",
-    goal: "link an effect",
-    sessionId: `session-${hash}`,
-    acceptanceCriteria: ["effect confirmed"],
-  });
+  const item = await WorkItemStore.create(
+    {
+      name: "effect-linked work",
+      sourceMessageId: `msg-${hash}`,
+      sourceChannel: "test",
+      intent: "verification",
+      goal: "link an effect",
+      sessionId: `session-${hash}`,
+      acceptanceCriteria: ["effect confirmed"],
+    },
+    "trace-test",
+  );
   return item.hash;
 }
 

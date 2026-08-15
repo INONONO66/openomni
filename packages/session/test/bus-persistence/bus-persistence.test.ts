@@ -116,6 +116,35 @@ describe("BusPersistence", () => {
     });
   });
 
+  test("D11 pin: an untraceable event persists under the loud 'untraced' sentinel, never a minted trace", async () => {
+    const session = createSession();
+    const untraceable = BusEvent.define(
+      "test.untraced.observed",
+      z.object({ sessionId: z.string(), time: z.number() }),
+    );
+    const traced = BusEvent.define(
+      "test.traced.observed",
+      z.object({ sessionId: z.string(), traceId: z.string(), time: z.number() }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(untraceable, { sessionId: session.id, time: Date.now() });
+    Bus.publish(traced, { sessionId: session.id, traceId: "trace-verbatim", time: Date.now() });
+
+    const persisted = await waitForRows(2);
+    expect(persisted).toHaveLength(2);
+    // Queryable absence: the sentinel is greppable in the ledger, and no
+    // random mint launders the untraceable event into a plausible trace.
+    const sentinelRows = db()
+      .query("SELECT event_type FROM bus_event WHERE trace_id = 'untraced'")
+      .all() as Array<{ event_type: string }>;
+    expect(sentinelRows).toEqual([{ event_type: "test.untraced.observed" }]);
+    const tracedRows = db()
+      .query("SELECT event_type FROM bus_event WHERE trace_id = 'trace-verbatim'")
+      .all() as Array<{ event_type: string }>;
+    expect(tracedRows).toEqual([{ event_type: "test.traced.observed" }]);
+  });
+
   test("persists schema-normalized payload defaults", async () => {
     const session = createSession();
     const time = Date.UTC(2026, 4, 10, 1, 2, 4);
@@ -381,20 +410,27 @@ describe("BusPersistence", () => {
     // #510 D2b: new runs never write worker_run_state — the canonical read
     // for a run's session is the fact-bound WorkItem projection.
     const workSession = createSession();
-    const item = await WorkItemStore.create({
-      name: "fact-backed-run",
-      sourceMessageId: "msg_fact_backed_run",
-      sourceChannel: "test",
-      intent: "verify",
-      goal: "resolve telemetry attribution from attempt facts",
-      sessionId: "session-origin",
-      acceptanceCriteria: ["session attribution rides the projection"],
-    });
-    await WorkItemStore.assignExecution(item.hash, {
-      executorKind: "internal_chat_agent",
-      workerRunId: "worker-run-fact",
-      workSessionId: workSession.id,
-    });
+    const item = await WorkItemStore.create(
+      {
+        name: "fact-backed-run",
+        sourceMessageId: "msg_fact_backed_run",
+        sourceChannel: "test",
+        intent: "verify",
+        goal: "resolve telemetry attribution from attempt facts",
+        sessionId: "session-origin",
+        acceptanceCriteria: ["session attribution rides the projection"],
+      },
+      "trace-test",
+    );
+    await WorkItemStore.assignExecution(
+      item.hash,
+      {
+        executorKind: "internal_chat_agent",
+        workerRunId: "worker-run-fact",
+        workSessionId: workSession.id,
+      },
+      "trace-test",
+    );
     const event = BusEvent.define(
       "worker_grant.evaluated",
       z.object({

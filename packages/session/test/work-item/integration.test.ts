@@ -28,11 +28,15 @@ function createInput(overrides: Partial<WorkItemInput> = {}): WorkItemInput {
 }
 
 async function addEvidenceBackedReport(hash: string): Promise<WorkItem.CompletionReport> {
-  const updated = await WorkItemStore.addEvidence(hash, {
-    kind: "verification",
-    description: "integration evidence recorded",
-    passed: true,
-  });
+  const updated = await WorkItemStore.addEvidence(
+    hash,
+    {
+      kind: "verification",
+      description: "integration evidence recorded",
+      passed: true,
+    },
+    "trace-test",
+  );
   const evidenceId = updated?.evidence.at(-1)?.id;
   if (!evidenceId) throw new Error("expected evidence id");
   return {
@@ -99,7 +103,7 @@ describe("WorkItem integration", () => {
 
     stop = BusPersistence.start({ resolveSessionId });
 
-    const item = await WorkItemStore.create(createInput({ sessionId }));
+    const item = await WorkItemStore.create(createInput({ sessionId }), "trace-test");
     const completed = persistCompletedFixture(item.hash, await addEvidenceBackedReport(item.hash), {
       publishTerminalEvents: true,
     });
@@ -127,6 +131,7 @@ describe("WorkItem integration", () => {
   test("tracks parent, child, and dependency readiness", async () => {
     const parent = await WorkItemStore.create(
       createInput({ name: "Parent", sourceMessageId: "msg-parent" }),
+      "trace-test",
     );
     const child1 = await WorkItemStore.create(
       createInput({
@@ -134,6 +139,7 @@ describe("WorkItem integration", () => {
         sourceMessageId: "msg-child-1",
         parentHash: parent.hash,
       }),
+      "trace-test",
     );
     const child2 = await WorkItemStore.create(
       createInput({
@@ -142,6 +148,7 @@ describe("WorkItem integration", () => {
         parentHash: parent.hash,
         dependsOn: [child1.hash],
       }),
+      "trace-test",
     );
 
     const storedParent = WorkItemStore.get(parent.hash);
@@ -170,6 +177,7 @@ describe("WorkItem integration", () => {
         sourceMessageId: "msg-round-trip",
         sessionId: "session-work-item-round-trip",
       }),
+      "trace-test",
     );
 
     const stored = adapter?.workItem?.get(item.hash);

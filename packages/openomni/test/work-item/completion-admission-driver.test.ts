@@ -52,14 +52,17 @@ describe("WorkItem completion admission driver", () => {
       createdEvents += 1;
     });
     try {
-      const hostItem = await WorkItemStore.create({
-        name: "Host state sentinel",
-        sourceMessageId: "msg_host_sentinel",
-        sourceChannel: "test",
-        intent: "preserve",
-        goal: "prove the public driver cannot clobber its host",
-        acceptanceCriteria: ["host state remains available"],
-      });
+      const hostItem = await WorkItemStore.create(
+        {
+          name: "Host state sentinel",
+          sourceMessageId: "msg_host_sentinel",
+          sourceChannel: "test",
+          intent: "preserve",
+          goal: "prove the public driver cannot clobber its host",
+          acceptanceCriteria: ["host state remains available"],
+        },
+        "trace-test",
+      );
 
       const execution = await publicDriver()(["--scenario", "known-bad", "--json"]);
       await Promise.resolve();
@@ -68,14 +71,17 @@ describe("WorkItem completion admission driver", () => {
       expect(Storage.get()).toBe(hostAdapter);
       expect(WorkItemStore.get(hostItem.hash)?.name).toBe("Host state sentinel");
       expect(Bus.stats().subscriberCount).toBe(1);
-      await WorkItemStore.create({
-        name: "Host event sentinel",
-        sourceMessageId: "msg_host_event",
-        sourceChannel: "test",
-        intent: "observe",
-        goal: "prove the host subscription remains active",
-        acceptanceCriteria: ["host subscriber receives this event"],
-      });
+      await WorkItemStore.create(
+        {
+          name: "Host event sentinel",
+          sourceMessageId: "msg_host_event",
+          sourceChannel: "test",
+          intent: "observe",
+          goal: "prove the host subscription remains active",
+          acceptanceCriteria: ["host subscriber receives this event"],
+        },
+        "trace-test",
+      );
       await Promise.resolve();
       expect(createdEvents).toBe(2);
     } finally {

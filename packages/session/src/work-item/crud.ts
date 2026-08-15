@@ -27,7 +27,7 @@ type RemovalResult = Readonly<{
   time: number;
 }>;
 
-export function removeWorkItem(hash: string): boolean {
+export function removeWorkItem(hash: string, traceId: string): boolean {
   const adapter = Storage.get();
   const workItem = adapter.workItem;
   if (!workItem) return false;
@@ -44,16 +44,18 @@ export function removeWorkItem(hash: string): boolean {
   }
   if (!removal) return false;
 
+  // ONE removal = ONE trace (D11): every orphaned-relation Updated and the
+  // Removed projection describe the same transaction, sharing the caller's id.
   for (const mutation of removal.mutations) {
     Bus.publish(WorkItem.Events.Updated, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: removal.time,
       sessionId: mutation.updated.sessionId,
       payload: { hash: mutation.updated.hash, fields: ["relations"] },
     });
   }
   Bus.publish(WorkItem.Events.Removed, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: removal.time,
     sessionId: removal.existing.sessionId,
     payload: { hash, sessionId: removal.existing.sessionId },
@@ -131,6 +133,7 @@ function removeWorkItemGraph(
 export async function updateWorkItem(
   hash: string,
   fields: Partial<Omit<WorkItem.Info, "hash">>,
+  traceId: string,
 ): Promise<WorkItem.Info | undefined> {
   const adapter = Storage.get();
   if (!adapter.workItem) return undefined;
@@ -191,8 +194,13 @@ export async function updateWorkItem(
     },
   };
 
-  return persistMutation(adapter.workItem, existing, updated, now, Object.keys(fields), {
-    type: "work_item.updated",
-    data: { fields: Object.keys(fields) },
-  });
+  return persistMutation(
+    adapter.workItem,
+    existing,
+    updated,
+    now,
+    Object.keys(fields),
+    { type: "work_item.updated", data: { fields: Object.keys(fields) } },
+    traceId,
+  );
 }

@@ -73,19 +73,22 @@ beforeEach(() => {
 describe("conversation task ledger exhaustion escalations", () => {
   it("shows retry-exhausted failed work items to the Owner", async () => {
     // Given
-    const item = await WorkItemStore.create({
-      name: "Retry exhausted worker",
-      sourceMessageId: "msg-retry-exhausted",
-      sourceChannel: "dispatch",
-      intent: "worker.spawn",
-      goal: "complete the exhausted task",
-      acceptanceCriteria: ["the exhausted task is complete"],
-      maxAttempts: 1,
-    });
-    await WorkItemStore.fail(item.hash, "permanent failure");
+    const item = await WorkItemStore.create(
+      {
+        name: "Retry exhausted worker",
+        sourceMessageId: "msg-retry-exhausted",
+        sourceChannel: "dispatch",
+        intent: "worker.spawn",
+        goal: "complete the exhausted task",
+        acceptanceCriteria: ["the exhausted task is complete"],
+        maxAttempts: 1,
+      },
+      "trace-test",
+    );
+    await WorkItemStore.fail(item.hash, "trace-test", "permanent failure");
     let thrown: unknown;
     try {
-      await WorkItemStore.retry(item.hash);
+      await WorkItemStore.retry(item.hash, "trace-test");
     } catch (error) {
       thrown = error;
     }
@@ -107,29 +110,35 @@ describe("conversation task ledger exhaustion escalations", () => {
 
   it("hides failed work items without an active retry-exhaustion blocker", async () => {
     // Given
-    const ordinaryFailed = await WorkItemStore.create({
-      name: "Ordinary failed worker",
-      sourceMessageId: "msg-ordinary-failed",
-      sourceChannel: "dispatch",
-      intent: "worker.spawn",
-      goal: "complete the ordinary failed task",
-      acceptanceCriteria: ["the ordinary failed task is complete"],
-    });
-    await WorkItemStore.fail(ordinaryFailed.hash, "non-retry failure");
+    const ordinaryFailed = await WorkItemStore.create(
+      {
+        name: "Ordinary failed worker",
+        sourceMessageId: "msg-ordinary-failed",
+        sourceChannel: "dispatch",
+        intent: "worker.spawn",
+        goal: "complete the ordinary failed task",
+        acceptanceCriteria: ["the ordinary failed task is complete"],
+      },
+      "trace-test",
+    );
+    await WorkItemStore.fail(ordinaryFailed.hash, "trace-test", "non-retry failure");
 
-    const resolvedExhaustion = await WorkItemStore.create({
-      name: "Resolved exhausted worker",
-      sourceMessageId: "msg-resolved-exhausted",
-      sourceChannel: "dispatch",
-      intent: "worker.spawn",
-      goal: "complete the resolved exhausted task",
-      acceptanceCriteria: ["the resolved exhausted task is complete"],
-      maxAttempts: 1,
-    });
-    await WorkItemStore.fail(resolvedExhaustion.hash, "permanent failure");
+    const resolvedExhaustion = await WorkItemStore.create(
+      {
+        name: "Resolved exhausted worker",
+        sourceMessageId: "msg-resolved-exhausted",
+        sourceChannel: "dispatch",
+        intent: "worker.spawn",
+        goal: "complete the resolved exhausted task",
+        acceptanceCriteria: ["the resolved exhausted task is complete"],
+        maxAttempts: 1,
+      },
+      "trace-test",
+    );
+    await WorkItemStore.fail(resolvedExhaustion.hash, "trace-test", "permanent failure");
     let thrown: unknown;
     try {
-      await WorkItemStore.retry(resolvedExhaustion.hash);
+      await WorkItemStore.retry(resolvedExhaustion.hash, "trace-test");
     } catch (error) {
       thrown = error;
     }
@@ -137,7 +146,7 @@ describe("conversation task ledger exhaustion escalations", () => {
     const exhausted = WorkItemStore.get(resolvedExhaustion.hash);
     const blockerId = exhausted?.blockers.at(-1)?.id;
     if (!blockerId) throw new Error("expected retry exhaustion blocker");
-    await WorkItemStore.resolveBlocker(resolvedExhaustion.hash, blockerId);
+    await WorkItemStore.resolveBlocker(resolvedExhaustion.hash, blockerId, "trace-test");
 
     const handler = createMessageHandler(deps);
 
