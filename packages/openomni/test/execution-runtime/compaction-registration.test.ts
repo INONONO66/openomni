@@ -1,0 +1,119 @@
+import { describe, expect, it } from "bun:test";
+import type { Policy } from "@openomni/protocol";
+import { collector } from "@openomni/telemetry";
+import { PolicyRegistry } from "@openomni/agent";
+import type { BudgetState, PolicyContext } from "@openomni/agent";
+import type { Message } from "@openomni/protocol";
+import { registerCompaction } from "../../src/execution-runtime/middleware/compaction-policy";
+
+// Moved from agent's registry.test.ts with the registration itself (#606):
+// the config parse and sink injection are this package's wiring now.
+
+function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
+  return { policies, labels: [] };
+}
+
+function registry() {
+  const instance = PolicyRegistry.create<PolicyContext>();
+  return instance;
+}
+
+function budget(inputTokens: number, outputTokens: number): BudgetState {
+  return {
+    startTime: Date.now(),
+    turns: 1,
+    toolCalls: 0,
+    toolRuntimeMs: 0,
+    totalInputTokens: inputTokens,
+    totalOutputTokens: outputTokens,
+  };
+}
+
+let idCounter = 0;
+function userMessage(text: string): Message.WithParts {
+  idCounter += 1;
+  const id = `reg-msg-${idCounter}`;
+  const sessionID = "reg-session";
+  return {
+    info: {
+      id,
+      sessionID,
+      role: "user",
+      time: { created: Date.now() },
+      agent: "test",
+      model: { providerID: "", modelID: "" },
+    },
+    parts: [{ id: `reg-part-${idCounter}`, sessionID, messageID: id, type: "text", text }],
+  };
+}
+
+describe("registerCompaction", () => {
+  it("resolves a typed plan config", () => {
+    const instance = registry();
+    registerCompaction(instance, collector());
+    const registrations = instance.resolve(
+      plan([
+        {
+          id: "builtin:compaction",
+          required: true,
+          config: { contextWindowTokens: 1000, thresholdRatio: 0.8 },
+        },
+      ]),
+      {},
+    );
+
+    expect(registrations.map((registration) => registration.name)).toEqual(["builtin:compaction"]);
+  });
+
+  it("rejects a malformed plan config at resolution", () => {
+    const instance = registry();
+    registerCompaction(instance, collector());
+    expect(() =>
+      instance.resolve(
+        plan([{ id: "builtin:compaction", required: true, config: { thresholdRatio: 0.8 } }]),
+        {},
+      ),
+    ).toThrow();
+  });
+
+  it("hands the policy the injected sink, and a plan cannot supply its own", async () => {
+    const injected = collector();
+    const smuggled = collector();
+    const instance = registry();
+    registerCompaction(instance, injected);
+    const registrations = instance.resolve(
+      plan([
+        {
+          id: "builtin:compaction",
+          required: true,
+          // `events` is not wire config: the schema's output type omits it, so
+          // parse drops this. Pinned as an outcome — the injected sink gets the
+          // record and the smuggled one stays empty — not as a claim about
+          // which layer of the registry produced that outcome.
+          config: { contextWindowTokens: 10, protectRecentMessages: 1, events: smuggled },
+        },
+      ]),
+      {},
+    );
+
+    const compaction = registrations.find((r) => r.name === "builtin:compaction");
+    if (!compaction || !("kind" in compaction)) throw new Error("expected builtin:compaction");
+
+    await compaction.fn({
+      timing: "turn.finish",
+      pointId: "run.completion.pre",
+      traceContext: { traceId: "trace-registry-inject" },
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: true,
+      continuationCount: 0,
+      elapsedMs: 0,
+      budgetState: budget(900, 100),
+      messages: [userMessage("one"), userMessage("two"), userMessage("three")],
+    });
+
+    expect(injected.events.length).toBeGreaterThan(0);
+    expect(smuggled.events).toHaveLength(0);
+  });
+});

@@ -49,7 +49,12 @@ describe("compaction through the lifecycle", () => {
     });
     const engine = PolicyEngine.create();
     engine.register(
-      createCompactionPolicy({ contextWindowTokens: 100, protectRecentMessages: 2, events: Bus }),
+      createCompactionPolicy({
+        contextWindowTokens: 100,
+        protectRecentMessages: 2,
+        events: Bus,
+        priority: 900,
+      }),
     );
     const agentBase = makeAgentBase();
 
@@ -74,7 +79,12 @@ describe("compaction through the lifecycle", () => {
   it("compacts rather than aborting when the threshold is exceeded", async () => {
     const engine = PolicyEngine.create();
     engine.register(
-      createCompactionPolicy({ contextWindowTokens: 100, protectRecentMessages: 2, events: Bus }),
+      createCompactionPolicy({
+        contextWindowTokens: 100,
+        protectRecentMessages: 2,
+        events: Bus,
+        priority: 900,
+      }),
     );
 
     const state = makeState();

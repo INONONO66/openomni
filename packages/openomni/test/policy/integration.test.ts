@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyEngine, defaultRegistry, type PolicyContext } from "@openomni/agent";
+import { PolicyEngine, PolicyRegistry, type PolicyContext } from "@openomni/agent";
+import { registerCompaction } from "../../src/execution-runtime/middleware/compaction-policy";
 import { registerIdleNudge } from "../../src/execution-runtime/middleware/idle-nudge-policy";
 import { registerToolPermission } from "../../src/execution-runtime/middleware/tool-permission-policy";
 import { PolicyDecision, type Policy } from "@openomni/protocol";
@@ -52,7 +53,8 @@ describe("policy pipeline integration", () => {
     ]);
     expect(plan.labels).toEqual(["actor.owner", "agent.reviewer", "run.direct", "surface.github"]);
 
-    const registry = defaultRegistry(Bus);
+    const registry = PolicyRegistry.create<PolicyContext>();
+    registerCompaction(registry, Bus);
     registerIdleNudge(registry);
     registerToolPermission(registry, Bus);
     registry.register("test:github-surface-guard", () => ({
@@ -115,7 +117,8 @@ describe("policy pipeline integration", () => {
       surfaceLabels: ["surface:github"],
     });
 
-    const registry = defaultRegistry(Bus);
+    const registry = PolicyRegistry.create<PolicyContext>();
+    registerCompaction(registry, Bus);
     registerIdleNudge(registry);
     registerToolPermission(registry, Bus);
     registry.register("policy:github-review-readonly", () => ({
@@ -197,8 +200,8 @@ describe("policy pipeline integration", () => {
       labels: ["agent:reviewer", "surface:github"],
     };
 
-    expect(() => defaultRegistry(Bus).resolve(plan, { agentName: "reviewer" })).toThrow(
-      "Required policy 'policy:missing-required' is not registered",
-    );
+    expect(() =>
+      PolicyRegistry.create<PolicyContext>().resolve(plan, { agentName: "reviewer" }),
+    ).toThrow("Required policy 'policy:missing-required' is not registered");
   });
 });

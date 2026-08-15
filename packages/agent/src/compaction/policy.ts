@@ -5,16 +5,18 @@ import type { CanonicalPolicyRegistration } from "../core/policy/types";
 type CompactionConfig = CompactionOptions & {
   /** Where the compaction record goes. The policy reports; it does not decide. */
   readonly events: BusEvent.Sink;
+  /** Ordering relative to the product's other run.completion.pre policies — the caller's opinion, not the mechanism's. */
+  readonly priority: number;
 };
 
 export function createCompactionPolicy(config: CompactionConfig): CanonicalPolicyRegistration {
-  const { events, ...compaction } = config;
+  const { events, priority, ...compaction } = config;
   return {
     name: "builtin:compaction",
     kind: "point",
     pointIds: ["run.completion.pre"],
     effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
-    priority: 900,
+    priority,
     fn: async (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });

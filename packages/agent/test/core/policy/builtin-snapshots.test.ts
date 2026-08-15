@@ -57,6 +57,7 @@ function testMessage(id: string): Message.WithParts {
 describe("snapshot: compaction", () => {
   it("continue — below token threshold", async () => {
     const mw = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 10000,
       thresholdRatio: 0.8,
@@ -74,7 +75,7 @@ describe("snapshot: compaction", () => {
 
 describe("snapshot: canonical registration metadata", () => {
   it("compaction: name, point, priority", () => {
-    const mw = createCompactionPolicy({ events: Bus, contextWindowTokens: 1000 });
+    const mw = createCompactionPolicy({ priority: 900, events: Bus, contextWindowTokens: 1000 });
     expect(mw.name).toBe("builtin:compaction");
     expect(mw.pointIds).toEqual(["run.completion.pre"]);
     expect(mw.effectCapabilities).toEqual({

@@ -7,7 +7,8 @@ type GuardRuleId =
   | "missing-canonical-policy-evaluator"
   | "policy-package-boundary"
   | "run-reason-code-vocabulary"
-  | "policy-point-registration";
+  | "policy-point-registration"
+  | "agent-registry-assembly";
 
 interface GuardViolation {
   readonly ruleId: GuardRuleId;
@@ -91,6 +92,15 @@ const policyPointsWithoutProductionRegistration = new Set([
 const pointIdsArrayPattern = /\bpointIds:\s*\[([^\]]*)\]/g;
 const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
 
+/**
+ * D5's lock, restated after builtin/ dissolved (#641) and the last default
+ * registration moved to openomni (#642): the agent package defines policy
+ * mechanism — the engine, the points, the factories — but never assembles a
+ * registry of opinions. A registry populated inside the library is a default
+ * the product did not choose.
+ */
+const agentRegistryAssemblyPattern = /\bPolicyRegistry\s*\.\s*create\s*\(|\bdefaultRegistry\s*\(/g;
+
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;
 
@@ -108,6 +118,7 @@ async function main(): Promise<void> {
     violations.push(...validateInlineAuthorization(filePath, source));
     violations.push(...validatePolicyPackageBoundary(filePath, source));
     violations.push(...validateRunReasonCodeVocabulary(filePath, source));
+    violations.push(...validateAgentRegistryAssembly(filePath, source));
   }
 
   violations.push(...validatePolicyPointRegistrations(registeredPoints));
@@ -237,6 +248,18 @@ function validateRunReasonCodeVocabulary(filePath: string, source: string): Guar
     line: lineNumberForOffset(source, match.index),
     ruleId: "run-reason-code-vocabulary",
     message: `run reason code "${match.captured}" written as a literal; use RunReasonCode from @openomni/agent so a rename fails the build instead of the run loop`,
+  }));
+}
+
+function validateAgentRegistryAssembly(filePath: string, source: string): GuardViolation[] {
+  if (!filePath.startsWith("packages/agent/src/")) return [];
+
+  return matches(source, agentRegistryAssemblyPattern).map((match) => ({
+    filePath,
+    line: lineNumberForOffset(source, match.index),
+    ruleId: "agent-registry-assembly",
+    message:
+      "the agent package defines policy mechanism but never assembles a registry of opinions — registration belongs to the product (openomni)",
   }));
 }
 

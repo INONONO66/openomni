@@ -113,8 +113,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | ✅ |
 | [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | ✅ |
 | [#629](https://github.com/INONONO66/openomni/pull/629) | dissolve `builtin/` per D5 — `builtin:tool-permission` moves to openomni | ✅ |
-| [#641](https://github.com/INONONO66/openomni/pull/641) | dissolve `builtin/`: the mechanism moved to its D6 home (`src/compaction/compact.ts`, namespace `Compaction` — the `InMemory` prefix implied a durable sibling that never existed) and the seam adapter sits beside it (`compaction/policy.ts` — wiring `run.completion.pre` + `run.replace_messages` is D8 mechanism, not opinion; the strategy still arrives as config — except `priority: 900`, an ordering opinion still hard-coded in the adapter; it moves out with the registration). The directory is gone. `defaultRegistry` remains until the registration moves to openomni like the other three (next row) | 🟨 |
-| — | move the compaction registration (config parse + `registry.register`) to openomni's `resolvePoliciesFromPlan` like idle-nudge/budget-nudge/tool-permission; `defaultRegistry` dies empty; restate Phase 4 rule 3 as its replacement guard | ⬜ |
+| [#641](https://github.com/INONONO66/openomni/pull/641) | dissolve `builtin/`: the mechanism moved to its D6 home (`src/compaction/compact.ts`, namespace `Compaction` — the `InMemory` prefix implied a durable sibling that never existed) and the seam adapter sits beside it (`compaction/policy.ts` — wiring `run.completion.pre` + `run.replace_messages` is D8 mechanism, not opinion; the strategy still arrives as config — except `priority: 900`, an ordering opinion that was still hard-coded in the adapter until #642 made it the caller's required parameter). The directory is gone. `defaultRegistry` remains until the registration moves to openomni like the other three (next row) | 🟨 |
+| [#642](https://github.com/INONONO66/openomni/pull/642) | compaction registration (config parse + `registry.register` + the `priority: 900` opinion) moved to openomni's `compaction-policy.ts`; `defaultRegistry` and `core/policy/registry.ts` deleted; rule 3 restated as the `agent-registry-assembly` guard (agent never assembles a registry of opinions) | 🟨 |
 | [#630](https://github.com/INONONO66/openomni/pull/630) | retry no longer double-counts the turn budget | ✅ |
 
 ### Phase 3 — compaction
@@ -167,8 +167,9 @@ since a rule that catches nothing is worse than no rule — it reads as coverage
    guard** (#641): the directory no longer exists. What the rule was locking —
    mechanism must not depend on opinion content — now holds by construction:
    `compaction/policy.ts` is seam wiring (D8), and the strategy enters as
-   config from the product. The replacement lock lands with the
-   `defaultRegistry` removal row.
+   config from the product. The replacement lock is the
+   `agent-registry-assembly` guard (#642): the agent package defines policy
+   mechanism but never assembles a registry of opinions.
 4. ~~No `crypto.randomUUID()` in a `traceId` position.~~ **Out of these
    packages.** Every `randomUUID` in agent mints a *message* id, not a trace;
    the D11 mint sites are 170 across server/openomni/session/coordinator, so

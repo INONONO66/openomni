@@ -16,7 +16,6 @@ src/
 │   ├── execution/              # The agent loop. Phase 4 rule 1 names five of these: run.ts (entry), turn.ts (prepare + settle), tools.ts (tool.native/mcp pre/post dispatch), effects.ts (effect application), state.ts (run state + lifecycle context). Beside them: run-events.ts (the records), lifecycle-dispatch.ts (run-level points)
 │   └── policy/
 │       ├── index.ts            # Agent-scoped PolicyEngine facade over @openomni/policy
-│       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution (compaction is the last registration; dies when it moves to openomni)
 │       └── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
 ├── compaction/                 # D6 home (#641): compact.ts (Compaction mechanism + boundary guard), policy.ts (run.completion.pre seam adapter), index.ts (config type + factory)
 └── runtime/
@@ -83,8 +82,8 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
-- **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids). Per D5 these are moving out one at a time — an id listed here but not below is registered by `openomni` instead:
-  - `builtin:compaction` — triggers `Compaction.compact()` (`src/compaction/compact.ts`) when the token threshold is exceeded; the seam adapter is `src/compaction/policy.ts` (#641)
+- **Builtins** — all registered by `openomni` since #642 (`defaultRegistry` is gone; the `agent-registry-assembly` guard keeps registry assembly out of this package). Stamped plans from the dispatch gate (#479) reference these ids:
+  - `builtin:compaction` — mechanism here (`src/compaction/compact.ts` + the `run.completion.pre` seam adapter `src/compaction/policy.ts`); registered by `openomni`'s `registerCompaction`, which supplies the strategy config and the ordering priority
   A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
   - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered by `registerIdleNudge`
   - Moved out (#629): `builtin:tool-permission` — `openomni`'s `execution-runtime/middleware/tool-permission-policy.ts`, registered by `registerToolPermission(registry, events)`. The executor still resolves the canonical policy name and the tool's labels; matching a ruleset against them is the policy's
