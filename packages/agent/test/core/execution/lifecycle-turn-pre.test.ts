@@ -232,7 +232,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     const descriptor: RuntimeResource.Descriptor = {
       id: "tool:skill-mcp:publish",
       kind: "tool",
-      labels: ["source.skill-mcp", "skill.release-workflow"],
+      labels: ["skill.release-workflow"],
       capabilities: [],
       effects: [],
       source: { type: "skill-mcp", serverId: "github", skillId: "release-workflow" },

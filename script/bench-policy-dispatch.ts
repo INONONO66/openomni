@@ -142,7 +142,7 @@ function buildContext(cell: Cell): Record<string, unknown> {
     resourceDescriptor: {
       id: "tool:bench",
       kind: "tool",
-      labels: ["source.agent"],
+      labels: ["source:agent"],
       capabilities: [],
       effects: [],
     },

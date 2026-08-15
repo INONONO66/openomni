@@ -57,7 +57,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "tool:system:bash",
     kind: "tool",
-    labels: ["source.system", "tool.shell"],
+    labels: ["source:system", "tool.shell"],
     capabilities: ["shell.exec"],
     effects: ["workspace.mutate"],
     source: { type: "system" },
@@ -74,7 +74,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "tool:skill-mcp:publish",
     kind: "tool",
-    labels: ["source.skill-mcp", "skill.github-workflow"],
+    labels: ["source:skill-mcp", "skill.github-workflow"],
     capabilities: ["github.write"],
     effects: ["network.write"],
     source: {
@@ -87,7 +87,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "tool:agent:delegate",
     kind: "tool",
-    labels: ["source.agent", "delegation.worker"],
+    labels: ["source:agent", "delegation.worker"],
     capabilities: ["worker.spawn"],
     effects: ["session.create"],
     source: { type: "agent", agentId: "main-persona", agentProfileRef: "agent-profile:main" },
@@ -95,7 +95,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "tool:server:telegram-send",
     kind: "tool",
-    labels: ["source.server", "surface.telegram"],
+    labels: ["source:server", "surface.telegram"],
     capabilities: ["message.send"],
     effects: ["network.write"],
     source: { type: "server", serverId: "server-main", remoteName: "telegram.send" },
@@ -103,7 +103,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "skill:project:git-master",
     kind: "skill",
-    labels: ["source.project", "skill.git"],
+    labels: ["source:project", "skill.git"],
     capabilities: ["behavior.inject"],
     effects: ["prompt.modify"],
     source: { type: "project", projectId: "openomni", path: ".opencode/skill/git-master" },
@@ -111,7 +111,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "mcpSource:server:filesystem",
     kind: "mcpSource",
-    labels: ["source.server", "mcp.filesystem"],
+    labels: ["source:server", "mcp.filesystem"],
     capabilities: ["tool.catalog"],
     effects: ["tool.expose"],
     source: { type: "server", serverId: "filesystem" },
@@ -119,7 +119,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "worker:coordinator:worker-1",
     kind: "worker",
-    labels: ["source.coordinator", "worker.coordinator"],
+    labels: ["source:coordinator", "worker.coordinator"],
     capabilities: [],
     effects: [],
     source: { type: "coordinator", coordinatorId: "coordinator-main" },
@@ -127,7 +127,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "credential:anthropic:api-key",
     kind: "credential",
-    labels: ["source.file", "credential.anthropic"],
+    labels: ["source:file", "credential.anthropic"],
     capabilities: [],
     effects: [],
     source: { type: "file", path: "/var/openomni/secrets/anthropic.json" },
@@ -135,7 +135,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "session:ses_child",
     kind: "session",
-    labels: ["source.runtime", "session.self-loop", "session.parent:ses_root"],
+    labels: ["source:runtime", "session.self-loop", "session.parent:ses_root"],
     capabilities: [],
     effects: [],
     source: { type: "runtime", runtimeId: "ses_child" },
@@ -144,7 +144,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "policy:operator:default",
     kind: "policy",
-    labels: ["source.user", "policy.default"],
+    labels: ["source:user", "policy.default"],
     capabilities: ["policy.evaluate"],
     effects: ["runtime.govern"],
     source: { type: "user", userId: "operator" },
@@ -189,7 +189,7 @@ describe("RuntimeResource.Descriptor conformance", () => {
     const credential = RuntimeResource.Descriptor.parse({
       id: "credential:anthropic:api-key",
       kind: "credential",
-      labels: ["source.file", "credential.anthropic"],
+      labels: ["source:file", "credential.anthropic"],
       capabilities: [],
       effects: [],
       source: { type: "file", path: secretPath },
