@@ -174,11 +174,21 @@ describe("a started run always records a terminal", () => {
   async function runThrowing(
     run: () => Promise<never>,
     signal?: AbortSignal,
-  ): Promise<{ readonly seen: string[]; readonly thrown: unknown }> {
+    middleware: PolicyEngineRegistration[] = [],
+  ): Promise<{
+    readonly seen: string[];
+    readonly thrown: unknown;
+    readonly failures: Array<{ context?: Record<string, unknown> }>;
+  }> {
     const seen: string[] = [];
-    const stop = Bus.observe((_event, payload) => {
+    const failures: Array<{ context?: Record<string, unknown> }> = [];
+    const stop = Bus.observe((event, payload) => {
       const msg = (payload as { msg?: string }).msg;
-      if (msg === "agent.run.started" || msg === "agent.run.failed") seen.push(msg);
+      if (msg === "agent.run.started") seen.push(msg);
+      if (event.name === Operational.Error.name && msg === "agent.run.failed") {
+        seen.push(msg);
+        failures.push(payload as { context?: Record<string, unknown> });
+      }
     });
     let thrown: unknown;
     try {
@@ -186,6 +196,7 @@ describe("a started run always records a terminal", () => {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         ...(signal === undefined ? {} : { signal }),
+        middleware,
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
@@ -197,22 +208,50 @@ describe("a started run always records a terminal", () => {
     } finally {
       stop();
     }
-    return { seen, thrown };
+    return { seen, thrown, failures };
   }
 
   it("when the run is aborted while sleeping out a retry backoff", async () => {
     const controller = new AbortController();
-    const { seen, thrown } = await runThrowing(async () => {
-      controller.abort();
-      throw new Error("connection timeout");
-    }, controller.signal);
+    // The ceiling is narrowed so the decided facts and what could be
+    // re-derived from the abort differ: decided says 2, re-derived would say
+    // the configured 3.
+    const { seen, thrown, failures } = await runThrowing(
+      async () => {
+        controller.abort();
+        throw new Error("connection timeout");
+      },
+      controller.signal,
+      [
+        {
+          kind: "point",
+          name: "test:narrow-retries",
+          pointIds: ["run.error.error"],
+          effectCapabilities: { "run.error.error": ["run.retry_after"] },
+          priority: 100,
+          fn: () =>
+            PolicyDecision.allow({
+              policyId: "test.narrow-retries",
+              effects: [{ type: "run.retry_after", delayMs: 50, maxRetries: 2 }],
+            }),
+        } as PolicyEngineRegistration,
+      ],
+    );
 
     expect(thrown).toBeInstanceOf(Error);
     expect(seen).toEqual(["agent.run.started", "agent.run.failed"]);
+    // The reason and ceiling decided before the wait, not ones re-derived
+    // from the abort — otherwise the terminal contradicts this run's own
+    // `agent.error.retry`, which reported `timeout` at attempt 1 of 3.
+    expect(failures[0]?.context).toMatchObject({
+      reason: "timeout",
+      attempt: 1,
+      maxAttempts: 2,
+    });
   });
 
   it("when something throws a value that is not an Error", async () => {
-    const { seen, thrown } = await runThrowing(async () => {
+    const { seen, thrown, failures } = await runThrowing(async () => {
       // The point of the case: the runner must record a terminal even for a
       // throw it cannot narrow to `Error`.
       // biome-ignore lint/style/useThrowOnlyError: that is the subject here
@@ -221,5 +260,8 @@ describe("a started run always records a terminal", () => {
 
     expect(thrown).toBe("a plain string blow-up");
     expect(seen).toEqual(["agent.run.started", "agent.run.failed"]);
+    // Nothing decided a reason for this one, so the record says what the
+    // throw itself supports.
+    expect(failures[0]?.context).toMatchObject({ attempt: 1, maxAttempts: 3 });
   });
 });

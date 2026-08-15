@@ -17,7 +17,7 @@ import {
   nonEmptyString,
   requireTrace,
   type AgentRunBase,
-  type ErrorDecision,
+  type RunFailureFacts,
 } from "./run-state";
 
 /**
@@ -35,7 +35,7 @@ export async function runAgent(
 ): Promise<AgentResult> {
   const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
-  let thrownFailure: Extract<ErrorDecision, { action: "throw" }>["failure"] | undefined;
+  let thrownFailure: RunFailureFacts | undefined;
 
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
@@ -68,8 +68,12 @@ export async function runAgent(
     return result;
   };
 
-  /** What a throw that never reached a retry decision can still say. */
-  const failureFacts = (error: unknown) => ({
+  /**
+   * A throw that never reached a retry decision — nothing decided a reason or
+   * a ceiling for it, so the record says what the throw itself can support.
+   * Every path that *did* reach one carries the decided facts instead.
+   */
+  const undecidedFacts = (error: unknown): RunFailureFacts => ({
     reason: Retry.classifyRetryReason(error instanceof Error ? error.message : String(error)),
     attempt,
     maxAttempts: retryPolicy.maxAttempts,
@@ -79,18 +83,6 @@ export async function runAgent(
   if (preRunResult) return finish(preRunResult);
 
   try {
-    return await attempts();
-  } catch (error) {
-    emitRunFailed(
-      config.events,
-      agentBase,
-      error instanceof Error ? error.message : String(error),
-      thrownFailure ?? failureFacts(error),
-    );
-    throw error;
-  }
-
-  async function attempts(): Promise<AgentResult> {
     for (;;) {
       try {
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
@@ -165,6 +157,13 @@ export async function runAgent(
           retryPolicy,
         );
         if (decision.action === "retry") {
+          // Carried across the wait, not after it: an abort raises from inside
+          // `Retry.sleep`, and the reason and ceiling it has to report are the
+          // ones decided here — re-deriving them from the abort would make the
+          // terminal record contradict this run's own retry record.
+          thrownFailure = decision.failure;
+          await Retry.sleep(decision.backoffMs, config.signal);
+          thrownFailure = undefined;
           attempt += 1;
           continue;
         }
@@ -173,6 +172,14 @@ export async function runAgent(
         throw decision.error;
       }
     }
+  } catch (error) {
+    emitRunFailed(
+      config.events,
+      agentBase,
+      error instanceof Error ? error.message : String(error),
+      thrownFailure ?? undecidedFacts(error),
+    );
+    throw error;
   }
 }
 

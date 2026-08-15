@@ -166,11 +166,7 @@ export async function handleError(
 
   if (PolicyDecision.isBlocking(onErrorDecision)) {
     if (effectOf(onErrorDecision, "run.abort")) {
-      return {
-        action: "complete",
-        result: guardAbortedResult(state),
-        errorMessage: normalizedError.message,
-      };
+      return { action: "complete", result: guardAbortedResult(state) };
     }
     publishDenyDiagnostic(config.events, "error", onErrorDecision, state, agentBase);
   }
@@ -195,14 +191,16 @@ export async function handleError(
       reason: retryReason,
       backoffMs,
     });
-    await Retry.sleep(backoffMs, config.signal);
-    return { action: "retry", errorMessage: lastError };
+    return {
+      action: "retry",
+      backoffMs,
+      failure: { reason: retryReason, attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
+    };
   }
 
   return {
     action: "throw",
     error: normalizedError,
-    errorMessage: lastError,
     failure: { reason: retryReason, attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
   };
 }

@@ -81,7 +81,12 @@ describe("handleError (error)", () => {
     expect(decision.action).toBe("retry");
   });
 
-  it("applies run.retry_after delayMs before retrying", async () => {
+  /**
+   * The wait itself is the runner's since #632; what `handleError` decides is
+   * how long. `run-terminal-record.test.ts` covers what an abort during that
+   * wait records.
+   */
+  it("reports the run.retry_after delay as the backoff", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
@@ -101,7 +106,6 @@ describe("handleError (error)", () => {
       backoffMs: { initial: 0, multiplier: 1, max: 0 },
     };
 
-    const started = Date.now();
     const decision = await handleError(
       state,
       engine,
@@ -113,46 +117,9 @@ describe("handleError (error)", () => {
     );
 
     expect(decision.action).toBe("retry");
-    expect(Date.now() - started).toBeGreaterThanOrEqual(15);
-  });
-
-  it("does not sleep when retry delay is already aborted", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-on-error-aborted-retry-delay",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.retry_after"] },
-      priority: 100,
-      fn: () =>
-        allow("test.aborted-retry-delay", "retry-after", [
-          { type: "run.retry_after", delayMs: 5_000 },
-        ]),
-    });
-
-    const controller = new AbortController();
-    controller.abort();
-    const state = makeState();
-    const config = makeConfig({ signal: controller.signal });
-    const retryPolicy = {
-      maxAttempts: 3,
-      backoffMs: { initial: 0, multiplier: 1, max: 0 },
-    };
-
-    const started = Date.now();
-    await expect(
-      handleError(
-        state,
-        engine,
-        config,
-        makeAgentBase(),
-        new Error("timeout while waiting"),
-        1,
-        retryPolicy,
-      ),
-    ).rejects.toThrow("aborted");
-    expect(Date.now() - started).toBeLessThan(500);
+    if (decision.action !== "retry") throw new Error("expected a retry decision");
+    // 20 from the effect, not the 0 the policy configured.
+    expect(decision.backoffMs).toBe(20);
   });
 
   it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
