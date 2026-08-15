@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786813709005,
+  "lastUpdate": 1786815217013,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48957,6 +48957,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 505389,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f48b59e355be976cfd5feec6f9da1cb6f0e1837",
+          "message": "refactor(policy): sweep the dead type re-exports repo-wide (#606) (#650)\n\n* refactor(policy): sweep the dead type re-exports repo-wide (#606)\n\nThe type half of the #647/#648 sweep, across policy, openomni, session,\nand ipc — plus the cascade each barrel trim exposed in its source\nmodule (stakes-seam-contract, verifier-conformance-*), followed until\nknip with --include-entry-exports reports zero dead exports anywhere in\nthe repo. Same rule, same verification: barrel lines nothing imports\nare deleted (the Stakes ledger surface loses 16 of its 25 re-exported\nnames, the policy root loses the audit/dispatch-context family),\ndefinition sites drop the export keyword where declaration emit does\nnot require it, and orphaned aliases the file itself stopped reading\nare deleted.\n\nThe two entries the ratchet still baselined (ChildStatus,\nDelegationPolicyPointId) fall to the same rule, so the baseline shrinks\nto one — the contract-test file entry, which is not an export at all.\n\nknip's config hints go with it: the redundant default src/index.ts\nentries and the protocol test/**/*.d.ts patterns that matched nothing\nsince the bun-test.d.ts files died — proven a no-op by identical knip\noutput before and after.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* refactor(policy): the script stragglers make zero literal (#606)\n\nReview found the headline overstating: ten pre-existing script-file\ntype exports still reported under the strict flag. Rather than temper\nthe claim, the same rule finishes them — all ten are same-file-only\ntypes in self-contained scripts, so the keyword drops and knip with\n--include-entry-exports now reports zero dead exports in the entire\nrepo, script/ included. The stale \"exported PolicyFactory contract\"\ncomment the review caught goes with it.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T02:32:26+09:00",
+          "tree_id": "40c6e97e8e8b2d458fcd5997234412c385b3b5a1",
+          "url": "https://github.com/INONONO66/openomni/commit/0f48b59e355be976cfd5feec6f9da1cb6f0e1837"
+        },
+        "date": 1786815215860,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 697,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10243,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3218,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2516,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16302,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1206,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 787,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10893,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101075,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 508708,
             "unit": "ns/op"
           }
         ]
