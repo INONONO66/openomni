@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786735576512,
+  "lastUpdate": 1786783635699,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46725,6 +46725,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 501930,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8201bd7c2266eb18ca27a0794292a2cf5ced3a1a",
+          "message": "fix(agent): a run that started always records that it ended (#606) (#631)\n\n* fix(agent): a run that started always records that it ended (#606)\n\n`agent.run.started` fires for every run. The terminal was emitted by\nwhichever branch happened to end the run, and only three of them did — a\nnormal stop, an exhausted budget, and a failure. Every other exit\nrecorded nothing: a policy denying at `run.lifecycle.pre`, `run.turn.pre`,\n`connection.llm.pre` or `connection.llm.post`, a blocked system prompt, a\ndenied tool catalog, an abort at `turn.finish`, a guard abort on error.\n\nSo a run a policy blocked emitted a start and nothing after it, and read\nas permanently in flight to anything folding the stream. That is the\nobservable half of D4's \"a run that started with no terminal should be\nunrepresentable\", and it is worth having before the state machine rather\nthan after.\n\nEvery return now goes through one `finish`, which records once. The two\nbranches that recorded themselves no longer do. Failures stay where they\nare decided, because that is where the attempt count and the retry reason\nlive, and `assertToolExecutor` moves above `emitRunStarted` so a\nconfiguration error never opens a run it cannot close.\n\nTwo dead guards go with it. The retry loop's `while (attempt <=\nmaxAttempts)` restated a ceiling `shouldRetry` already enforces — it\nreturns false at the ceiling, so the condition was always true and the\n`Max retry attempts exceeded` line after the loop was unreachable. `for\n(;;)` says what the loop actually does: it exits on the retry decision.\n`lastError` existed only to feed that line.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): the second validator opened runs it could not close (#606)\n\nReview findings.\n\nI moved `assertToolExecutor` above `emitRunStarted` and said in the PR\nbody that a configuration error therefore never opens a run it cannot\nclose. Its sibling sat seven lines below: `buildPolicyEngine` calls\n`engine.register`, which throws on a malformed middleware registration —\nso any misconfigured `config.middleware` emitted `agent.run.started` and\nnothing else. Hoisted; it depends only on `agentBase`, already computed.\n\nAnd \"the funnel is pinned per-exit\" was a generalisation from one sample.\nSweeping all eight exits one at a time, only three were guarded. The\nserious gap was the budget terminal, which this change *moved* out of\n`dispatchBudgetCheck` — nothing asserted it on either side, so dropping\nit during the move would have left the whole suite green. Four cases\nadded: exhausted budget, denied model request, aborted model response,\nand a guard abort on error. Seven of eight exits now fail when\nunfunneled; the eighth is the `compact` outcome, which no llm run\nproduces and which is dead alongside `Run.Outcome.compact`.\n\nTwo throw paths still record neither terminal: an abort raised inside\n`Retry.sleep`, which escapes past `emitRunFailed` because it rejects\nwithin the catch that would have emitted it, and a non-`Error` throw.\nBoth predate this change. The docstring now says so rather than claiming\nan unconditional invariant, and the FSM row carries them — a terminal\nstate is what makes them unrepresentable rather than merely unrecorded.\n\nAlso drops the \"anything folding that stream\" framing: `Operational.Info`\nis ephemeral and never reaches the ledger, so the audience is in-process\nobservers. And the inner loop becomes `for (;;)` too — two idioms for one\nthing, seven lines apart.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T17:45:56+09:00",
+          "tree_id": "d8ff3c7ba87aa680b341fc3a27aa510b44b8cafc",
+          "url": "https://github.com/INONONO66/openomni/commit/8201bd7c2266eb18ca27a0794292a2cf5ced3a1a"
+        },
+        "date": 1786783634457,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 397,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5205,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 7728,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2237,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2390,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2319,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16259,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 969,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 43,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1502,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 677,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 38121,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2034,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100033,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 495204,
             "unit": "ns/op"
           }
         ]
