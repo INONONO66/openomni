@@ -64,7 +64,7 @@ export namespace Dispatch {
 
   const EventBase = z.object({
     dispatchId: z.string().min(1),
-    traceId: z.string().min(1).optional(),
+    traceId: z.string().min(1),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     actor: ActorContext,

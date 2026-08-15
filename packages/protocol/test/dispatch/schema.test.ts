@@ -168,6 +168,17 @@ describe("Dispatch protocol schemas", () => {
     ).toBe("handler failed");
   });
 
+  test("Events refuse an untraced payload", () => {
+    // Pin (D11): Command.traceId is required and submit hard-rejects a missing
+    // one, so an event without it can only be a hand-built payload — the
+    // schema refuses it instead of letting it persist as "untraced".
+    const { traceId: _traceId, ...untraced } = eventBase;
+    expect(Dispatch.Events.Submitted.schema.safeParse(untraced).success).toBe(false);
+    expect(
+      Dispatch.Events.Failed.schema.safeParse({ ...untraced, reason: "handler failed" }).success,
+    ).toBe(false);
+  });
+
   test("Events use canonical descriptor names", () => {
     expect(Dispatch.Events.Submitted.name).toBe("dispatch.submitted");
     expect(Dispatch.Events.Authorized.name).toBe("dispatch.authorized");
