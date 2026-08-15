@@ -169,7 +169,12 @@ describe("createContextMiddleware", () => {
     });
 
     expect(result).toMatchObject({ verdict: "allow", effects: [] });
-    expect(warns.some((warn) => warn.msg === "middleware error")).toBe(true);
+    const warn = warns.find((entry) => entry.msg === "middleware error");
+    if (warn === undefined) throw new Error("no middleware error was recorded");
+    // Attribution: the dispatch has no trace, so the record files under the
+    // engine trace — and the refusal, not some other throw, is the cause.
+    expect(warn.traceId).toBe("trace-engine");
+    expect((warn.context as { error: string }).error).toContain("requires the run trace context");
   });
 
   it("returns allow when assembled context is empty string", async () => {
