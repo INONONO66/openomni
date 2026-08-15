@@ -275,7 +275,9 @@ describe("canonical tool policy execution", () => {
 describe("canonical builtin registrations", () => {
   it("declare their policy points and effect capabilities", () => {
     // Given / When
-    const registrations = [createCompactionPolicy({ events: Bus, contextWindowTokens: 100 })];
+    const registrations = [
+      createCompactionPolicy({ priority: 900, events: Bus, contextWindowTokens: 100 }),
+    ];
 
     // Then
     expect(registrations[0]?.pointIds).toEqual(["run.completion.pre"]);

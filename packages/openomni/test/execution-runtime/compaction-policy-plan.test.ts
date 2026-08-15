@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import type { Message, Policy } from "@openomni/protocol";
-import type { BudgetState } from "../../../src/core/budget";
-import { defaultRegistry } from "../../../src/core/policy";
-import type { PolicyFn } from "../../../src/core/policy";
-import { effectOf } from "../../helpers/policy-decision";
+import { PolicyRegistry } from "@openomni/agent";
+import type { BudgetState, PolicyContext, PolicyFn } from "@openomni/agent";
 import { Bus } from "@openomni/telemetry";
+import { registerCompaction } from "../../src/execution-runtime/middleware/compaction-policy";
 
 // #546 review F5: production configs never pass WorkerMiddlewareConfig.compaction,
-// but defaultRegistry registers builtin:compaction, so an external PolicyPlan
-// can activate compaction anyway. This suite proves the commit boundary
-// invariant holds on that backdoor path over tool-bearing history.
+// but the plan registry registers builtin:compaction (registerCompaction, since
+// the registration moved here from agent's defaultRegistry), so an external
+// PolicyPlan can activate compaction anyway. This suite proves the commit
+// boundary invariant holds on that backdoor path over tool-bearing history.
 
 let idCounter = 0;
 
@@ -116,7 +116,9 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
       ],
       labels: [],
     };
-    const registrations = defaultRegistry(Bus).resolve(plan, {});
+    const registry = PolicyRegistry.create<PolicyContext>();
+    registerCompaction(registry, Bus);
+    const registrations = registry.resolve(plan, {});
     const registration = registrations[0];
     if (registration === undefined || !("kind" in registration)) {
       throw new Error("expected canonical builtin:compaction registration");
@@ -139,7 +141,10 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
     const verdict = await registration.fn(ctx);
 
     expect(verdict.verdict).toBe("allow");
-    const replacement = effectOf(verdict, "run.replace_messages");
+    const replacement = verdict.effects.find(
+      (effect): effect is Extract<typeof effect, { type: "run.replace_messages" }> =>
+        effect.type === "run.replace_messages",
+    );
     expect(replacement).toBeDefined();
     // The effect carries `messages` as `unknown[]` — it crosses the wire, and
     // the schema will not vouch for a shape it does not own. Here the producer

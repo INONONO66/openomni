@@ -6,8 +6,8 @@ export type {
   PolicyRegistration,
 } from "./types";
 export type { PolicyDecision, PolicyAuditConfig, PolicyEngineConfig } from "@openomni/policy";
-export { PolicyRegistry, defaultRegistry } from "./registry";
-export type { PolicyFactory, PolicyRegistryInstance } from "./registry";
+export { PolicyRegistry } from "@openomni/policy";
+export type { PolicyFactory, PolicyRegistryInstance } from "@openomni/policy";
 
 import {
   PolicyEngine as GenericPolicyEngine,

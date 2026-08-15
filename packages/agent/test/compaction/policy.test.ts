@@ -66,6 +66,7 @@ describe("createCompactionPolicy", () => {
    */
   it("skips rather than aborting when no trace reaches it", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 100,
       protectRecentMessages: 2,
@@ -85,6 +86,7 @@ describe("createCompactionPolicy", () => {
   });
   it("continues when below threshold", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 10000,
       thresholdRatio: 0.8,
@@ -103,6 +105,7 @@ describe("createCompactionPolicy", () => {
 
   it("transforms when above threshold", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
@@ -125,6 +128,7 @@ describe("createCompactionPolicy", () => {
 
   it("transforms when reserve budget is reached before ratio threshold", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.95,
@@ -148,6 +152,7 @@ describe("createCompactionPolicy", () => {
 
   it("continues when no messages in context", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
@@ -165,6 +170,7 @@ describe("createCompactionPolicy", () => {
 
   it("continues when empty messages array", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
@@ -182,6 +188,7 @@ describe("createCompactionPolicy", () => {
 
   it("continues when no budget state", async () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
@@ -198,17 +205,19 @@ describe("createCompactionPolicy", () => {
     expect(verdict.verdict).toBe("allow");
   });
 
-  it("has priority 900", () => {
+  it("carries the caller's priority — no ordering opinion of its own", () => {
     const middleware = createCompactionPolicy({
+      priority: 42,
       events: Bus,
       contextWindowTokens: 1000,
     });
 
-    expect(middleware.priority).toBe(900);
+    expect(middleware.priority).toBe(42);
   });
 
   it("has name builtin:compaction", () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
     });
@@ -218,6 +227,7 @@ describe("createCompactionPolicy", () => {
 
   it("registers the canonical completion point", () => {
     const middleware = createCompactionPolicy({
+      priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
     });

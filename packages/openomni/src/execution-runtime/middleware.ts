@@ -1,11 +1,12 @@
-import { createCompactionPolicy, defaultRegistry } from "@openomni/agent";
-import type { PolicyEngineRegistration } from "@openomni/agent";
+import { createCompactionPolicy, PolicyRegistry } from "@openomni/agent";
+import type { PolicyContext, PolicyEngineRegistration } from "@openomni/agent";
 import { Bus } from "@openomni/telemetry";
 import { Policy } from "@openomni/protocol";
 import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "./middleware/injection-queue-policy.js";
 import { createIdleNudgePolicy, registerIdleNudge } from "./middleware/idle-nudge-policy.js";
+import { COMPACTION_PRIORITY, registerCompaction } from "./middleware/compaction-policy.js";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
@@ -77,7 +78,9 @@ function buildAgentLifecycleMiddleware(
   return [
     createBudgetReassurancePolicy(),
     createBudgetWarningPolicy(),
-    ...(compaction ? [createCompactionPolicy({ ...compaction, events: Bus })] : []),
+    ...(compaction
+      ? [createCompactionPolicy({ ...compaction, events: Bus, priority: COMPACTION_PRIORITY })]
+      : []),
   ];
 }
 
@@ -104,7 +107,8 @@ function resolvePoliciesFromPlan(
   plan: Policy.PolicyPlan,
   config: WorkerMiddlewareConfig,
 ): PolicyEngineRegistration[] {
-  const registry = defaultRegistry(Bus);
+  const registry = PolicyRegistry.create<PolicyContext>();
+  registerCompaction(registry, Bus);
   registerIdleNudge(registry);
   registerBudgetNudges(registry);
   registerToolPermission(registry, Bus);

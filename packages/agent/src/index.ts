@@ -10,7 +10,7 @@ export type {
   TokenUsage,
   Sink,
 } from "./core/types";
-export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
+export { PolicyEngine, PolicyRegistry } from "./core/policy";
 // Budget accounting stays core (the limits are loop invariants); the queries
 // and the types they read and return are exported so a product can decide what
 // to say about what is left (D5). Exporting the functions without the types
@@ -34,3 +34,4 @@ export type {
 export { McpClient } from "./runtime/mcp/index";
 export type { McpServerConfig } from "./runtime/mcp/index";
 export { createCompactionPolicy } from "./compaction";
+export type { CompactionOptions } from "./compaction";
