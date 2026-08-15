@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import type { BudgetState } from "../../../src/core/budget";
 import type { PolicyFn } from "../../../src/core/policy";
-import { createCompactionPolicy } from "../../../src/core/policy/builtin/compaction";
+import { createCompactionPolicy } from "../../../src/compaction";
 import { Bus } from "@openomni/telemetry";
 
 function baseCtx(overrides?: Partial<Parameters<PolicyFn>[0]>): Parameters<PolicyFn>[0] {

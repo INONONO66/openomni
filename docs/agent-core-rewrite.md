@@ -113,7 +113,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | ✅ |
 | [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | ✅ |
 | [#629](https://github.com/INONONO66/openomni/pull/629) | dissolve `builtin/` per D5 — `builtin:tool-permission` moves to openomni | ✅ |
-| — | dissolve `builtin/` per D5 — `builtin:compaction` is the last one, and its fate is the compaction rewrite in Phase 3, not a move. `defaultRegistry` and the directory go with it | ⬜ |
+| [#641](https://github.com/INONONO66/openomni/pull/641) | dissolve `builtin/`: the mechanism moved to its D6 home (`src/compaction/compact.ts`, namespace `Compaction` — the `InMemory` prefix implied a durable sibling that never existed) and the seam adapter sits beside it (`compaction/policy.ts` — wiring `run.completion.pre` + `run.replace_messages` is D8 mechanism, not opinion; the strategy still arrives as config — except `priority: 900`, an ordering opinion still hard-coded in the adapter; it moves out with the registration). The directory is gone. `defaultRegistry` remains until the registration moves to openomni like the other three (next row) | 🟨 |
+| — | move the compaction registration (config parse + `registry.register`) to openomni's `resolvePoliciesFromPlan` like idle-nudge/budget-nudge/tool-permission; `defaultRegistry` dies empty; restate Phase 4 rule 3 as its replacement guard | ⬜ |
 | [#630](https://github.com/INONONO66/openomni/pull/630) | retry no longer double-counts the turn budget | ✅ |
 
 ### Phase 3 — compaction
@@ -121,7 +122,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | PR | title | status |
 |---|---|---|
 | — | remove `handleContinue`, `handleCompact`, and the `Run.Outcome` `continue`/`compact` variants. Both are unproduced: `packages/llm/src/run.ts` returns only `stop`, `aborted`, `error`, and no production site injects `config.llm.run`. **Owner-gated** — deleting a union member trips `lint:tools`' positional schema snapshot (`Run.Outcome#4`), whose `--update` needs sign-off, and `.omo/evidence/p3/protocol-concept-disposition.json` records this symbol as claimed by #498's run→llm `StepResult` move. Not splittable: `run.ts`'s `_exhaustive: never` fails whichever half lands first | ⬜ |
-| — | `InMemoryCompactor` + `builtin:compaction` — **not dead**, and not covered by the row above. Reachable through `run.completion.pre` from an external policy plan (`compaction-policy-plan.test.ts` pins that path) and registered by the product kernel at `openomni/src/execution-runtime/middleware.ts`. Their fate is D5 and the compaction rewrite below, not a deletion | ⬜ |
+| [#641](https://github.com/INONONO66/openomni/pull/641) | ~~`InMemoryCompactor`~~ → `Compaction` in `src/compaction/` — **not dead**, and not deleted: mechanism and seam adapter moved to the D6 home, reachable exactly as before. The dead root re-export of the namespace (zero external importers, entry-exempt) is gone | 🟨 |
 | — | `compaction/`: measure, adaptive policy with yield feedback, guard | ⬜ |
 | — | deterministic no-LLM reduction, cut planning, incremental summarization | ⬜ |
 | — | speculative overlap and bounded overflow retry | ⬜ |
@@ -162,9 +163,12 @@ since a rule that catches nothing is worse than no rule — it reads as coverage
    consumer strips both). That vocabulary is a follow-up row below.
 2. ~~`packages/agent/src/pure/` may not import the telemetry package.~~
    **Vacuous** — no such directory exists, and none of the phases created one.
-3. **Core may not import `builtin/` — still true, still violated.**
-   `core/policy/registry.ts:6` and `core/policy/index.ts:11` both import it. The
-   rule cannot land before the `builtin:compaction` row, which is Owner-gated.
+3. ~~Core may not import `builtin/`.~~ **Resolved by dissolution, not by a
+   guard** (#641): the directory no longer exists. What the rule was locking —
+   mechanism must not depend on opinion content — now holds by construction:
+   `compaction/policy.ts` is seam wiring (D8), and the strategy enters as
+   config from the product. The replacement lock lands with the
+   `defaultRegistry` removal row.
 4. ~~No `crypto.randomUUID()` in a `traceId` position.~~ **Out of these
    packages.** Every `randomUUID` in agent mints a *message* id, not a trace;
    the D11 mint sites are 170 across server/openomni/session/coordinator, so

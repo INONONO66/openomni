@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { CompactionBoundaryError, InMemoryCompactor } from "../../../src/core/execution/compaction";
+import { CompactionBoundaryError, Compaction } from "../../src/compaction/compact";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */
 const TEST_TRACE_ID = "trace-compaction-test";
@@ -81,7 +81,7 @@ function makeToolAssistantMessage(text: string, callID: string): Message.WithPar
   return { info: base.info, parts: [...base.parts, toolPart] };
 }
 
-describe("InMemoryCompactor", () => {
+describe("Compaction", () => {
   /**
    * Compaction rewrites the run's history; the record of that has to be
    * readable against the run it changed. Re-minting here left the suite green.
@@ -93,7 +93,7 @@ describe("InMemoryCompactor", () => {
     });
 
     try {
-      await InMemoryCompactor.compact(
+      await Compaction.compact(
         Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
         { contextWindowTokens: 1000, protectRecentMessages: 2 },
         { traceId: TEST_TRACE_ID },
@@ -109,26 +109,26 @@ describe("InMemoryCompactor", () => {
 
   describe("shouldCompact", () => {
     it("returns false when tokens are below threshold", () => {
-      expect(InMemoryCompactor.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);
+      expect(Compaction.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);
     });
 
     it("returns true when tokens reach 80% threshold", () => {
-      expect(InMemoryCompactor.shouldCompact(800, { contextWindowTokens: 1000 })).toBe(true);
+      expect(Compaction.shouldCompact(800, { contextWindowTokens: 1000 })).toBe(true);
     });
 
     it("returns true when tokens exceed threshold", () => {
-      expect(InMemoryCompactor.shouldCompact(900, { contextWindowTokens: 1000 })).toBe(true);
+      expect(Compaction.shouldCompact(900, { contextWindowTokens: 1000 })).toBe(true);
     });
 
     it("respects custom thresholdRatio", () => {
       expect(
-        InMemoryCompactor.shouldCompact(600, {
+        Compaction.shouldCompact(600, {
           contextWindowTokens: 1000,
           thresholdRatio: 0.5,
         }),
       ).toBe(true);
       expect(
-        InMemoryCompactor.shouldCompact(400, {
+        Compaction.shouldCompact(400, {
           contextWindowTokens: 1000,
           thresholdRatio: 0.5,
         }),
@@ -137,13 +137,13 @@ describe("InMemoryCompactor", () => {
 
     it("compacts early when reserveTokens would be consumed", () => {
       expect(
-        InMemoryCompactor.shouldCompact(751, {
+        Compaction.shouldCompact(751, {
           contextWindowTokens: 1000,
           reserveTokens: 250,
         }),
       ).toBe(true);
       expect(
-        InMemoryCompactor.shouldCompact(749, {
+        Compaction.shouldCompact(749, {
           contextWindowTokens: 1000,
           reserveTokens: 250,
         }),
@@ -152,13 +152,13 @@ describe("InMemoryCompactor", () => {
 
     it("compacts early when reserveRatio would be consumed", () => {
       expect(
-        InMemoryCompactor.shouldCompact(701, {
+        Compaction.shouldCompact(701, {
           contextWindowTokens: 1000,
           reserveRatio: 0.3,
         }),
       ).toBe(true);
       expect(
-        InMemoryCompactor.shouldCompact(699, {
+        Compaction.shouldCompact(699, {
           contextWindowTokens: 1000,
           reserveRatio: 0.3,
         }),
@@ -167,14 +167,14 @@ describe("InMemoryCompactor", () => {
 
     it("prefers reserveTokens over reserveRatio", () => {
       expect(
-        InMemoryCompactor.shouldCompact(751, {
+        Compaction.shouldCompact(751, {
           contextWindowTokens: 1000,
           reserveTokens: 250,
           reserveRatio: 0.5,
         }),
       ).toBe(true);
       expect(
-        InMemoryCompactor.shouldCompact(749, {
+        Compaction.shouldCompact(749, {
           contextWindowTokens: 1000,
           reserveTokens: 250,
           reserveRatio: 0.5,
@@ -184,14 +184,14 @@ describe("InMemoryCompactor", () => {
 
     it("normalizes out-of-range reserve values", () => {
       expect(
-        InMemoryCompactor.shouldCompact(999, {
+        Compaction.shouldCompact(999, {
           contextWindowTokens: 1000,
           thresholdRatio: 1,
           reserveTokens: -100,
         }),
       ).toBe(false);
       expect(
-        InMemoryCompactor.shouldCompact(0, {
+        Compaction.shouldCompact(0, {
           contextWindowTokens: 1000,
           reserveTokens: 1200,
         }),
@@ -202,7 +202,7 @@ describe("InMemoryCompactor", () => {
   describe("compact", () => {
     it("does not compact when messages count is within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b")];
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -220,7 +220,7 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 10 }, (_, i) =>
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -245,7 +245,7 @@ describe("InMemoryCompactor", () => {
         makeUserMessage("recent-7"),
         makeAssistantMessage("recent-8"),
       ];
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -267,7 +267,7 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 8 }, (_, i) =>
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -286,7 +286,7 @@ describe("InMemoryCompactor", () => {
 
     it("does not compact when non-system messages are within protectRecent", async () => {
       const messages = [makeUserMessage("a"), makeAssistantMessage("b"), makeUserMessage("c")];
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -315,7 +315,7 @@ describe("InMemoryCompactor", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("a7"),
       ];
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -344,7 +344,7 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 8 }, (_, i) => makeAssistantMessage(`a${i}`));
       let caught: unknown;
       try {
-        await InMemoryCompactor.compact(
+        await Compaction.compact(
           messages,
           {
             contextWindowTokens: 1000,
@@ -373,7 +373,7 @@ describe("InMemoryCompactor", () => {
         makeUserMessage("u6"),
         makeAssistantMessage("a7"),
       ];
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,
@@ -393,7 +393,7 @@ describe("InMemoryCompactor", () => {
       const messages = Array.from({ length: 8 }, (_, i) =>
         i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
-      const result = await InMemoryCompactor.compact(
+      const result = await Compaction.compact(
         messages,
         {
           contextWindowTokens: 1000,

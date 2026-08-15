@@ -1,6 +1,6 @@
 import { PolicyDecision, type BusEvent } from "@openomni/protocol";
-import { InMemoryCompactor, type CompactionOptions } from "../../execution/compaction";
-import type { CanonicalPolicyRegistration } from "../types";
+import { Compaction, type CompactionOptions } from "./compact";
+import type { CanonicalPolicyRegistration } from "../core/policy/types";
 
 type CompactionConfig = CompactionOptions & {
   /** Where the compaction record goes. The policy reports; it does not decide. */
@@ -24,7 +24,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
       }
 
       const totalTokens = ctx.budgetState.totalInputTokens + ctx.budgetState.totalOutputTokens;
-      if (!InMemoryCompactor.shouldCompact(totalTokens, compaction)) {
+      if (!Compaction.shouldCompact(totalTokens, compaction)) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
@@ -40,7 +40,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_trace"],
         });
       }
-      const result = await InMemoryCompactor.compact(ctx.messages, compaction, { traceId }, events);
+      const result = await Compaction.compact(ctx.messages, compaction, { traceId }, events);
       if (!result.compacted) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }

@@ -6,7 +6,7 @@ import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tools";
 import { buildPolicyEngine } from "../../../src/core/execution/run";
 import { runAgent } from "../../../src/core/execution/run";
-import { createCompactionPolicy } from "../../../src/core/policy/builtin";
+import { createCompactionPolicy } from "../../../src/compaction";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import {

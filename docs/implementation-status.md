@@ -135,7 +135,7 @@ Engines whose consumer is absent. Listed here because an engine without a consum
 
 | Item | Evidence |
 | --- | --- |
-| **Compaction does not run.** `builtin:compaction` is registered only when `WorkerMiddlewareConfig.compaction` is supplied, and no production caller supplies it, so `InMemoryCompactor` never executes. The `Run.Outcome` `compact` variant has no producer, making `runner.ts`'s compact branch and `handleCompact` unreachable. | `packages/openomni/src/execution-runtime/middleware.ts`, `packages/agent/src/core/execution/compaction.ts` — rebuilt under [#606](https://github.com/INONONO66/openomni/issues/606) Phase 3 |
+| **Compaction does not run.** `builtin:compaction` is registered only when `WorkerMiddlewareConfig.compaction` is supplied, and no production caller supplies it, so `Compaction` (né `InMemoryCompactor`) never executes. The `Run.Outcome` `compact` variant has no producer, making `run.ts`'s compact branch and `handleCompact` unreachable. | `packages/openomni/src/execution-runtime/middleware.ts`, `packages/agent/src/compaction/compact.ts` — rebuilt under [#606](https://github.com/INONONO66/openomni/issues/606) Phase 3 |
 | **Eight of eighteen policy points have no production registration**, including `work.complete.pre`, which is declared fail-closed and described as a shipped gate. Its engine is also built without an `auditEmit`, so its verdicts are unobservable. | [#609](https://github.com/INONONO66/openomni/issues/609) |
 
 ## In-flight structural work
