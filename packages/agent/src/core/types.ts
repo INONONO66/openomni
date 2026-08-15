@@ -65,5 +65,3 @@ export interface AgentResult {
   compactionCount?: number;
   guardAborted?: boolean;
 }
-
-export type { Sink };
