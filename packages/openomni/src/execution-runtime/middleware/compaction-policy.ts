@@ -17,9 +17,10 @@ const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown
 });
 
 /**
- * Ordering opinion, stated where opinions live: compaction runs after every
- * product policy at run.completion.pre has had its say about the messages it
- * is about to rewrite.
+ * Ordering opinion, stated where opinions live. Compaction is currently the
+ * only policy at run.completion.pre, so 900 is unopposed — the high value is
+ * the standing intent that any future policy at that point speaks before its
+ * messages are rewritten (the engine orders ascending).
  */
 export const COMPACTION_PRIORITY = 900;
 
