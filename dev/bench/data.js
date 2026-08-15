@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786798474785,
+  "lastUpdate": 1786800915404,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47965,6 +47965,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511925,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "292d87c56c2122df3efa2697eda70e4f518c676e",
+          "message": "refactor(openomni): the last default registration moves home (#606) (#642)\n\ndefaultRegistry existed to hand the product a registry with the\nlibrary's opinions pre-installed. After #625/#626/#629 moved three of\nthe four out, it held exactly one: compaction. Now openomni's\ncompaction-policy.ts registers it the way the other three register —\nconfig parse at the product boundary, sink injected, and the\npriority-900 ordering opinion stated where opinions live. The agent\nfactory takes priority as a required parameter: the mechanism carries\nno ordering opinion of its own, and the pin that asserted 900 now\nasserts pass-through of a value the mechanism could not have invented.\n\ncore/policy/registry.ts is deleted, not emptied — what remained after\nthe registration left was two re-exports, which core/policy/index.ts\nalready owns.\n\nPhase 4 rule 3 is restated as the agent-registry-assembly guard: the\nagent package defines policy mechanism — engine, points, factories —\nbut never assembles a registry of opinions. Mutation-verified: a\nPolicyRegistry.create smuggled into agent src fails the guard at its\nline.\n\nThe tests that pinned defaultRegistry moved with the registration:\nthe plan-backdoor boundary suite and the config/sink pins now exercise\nregisterCompaction in openomni; the generic resolve pins were already\nowned by packages/policy (registry-portability), so agent's copies are\ndeleted rather than moved.\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T22:34:00+09:00",
+          "tree_id": "3c3dc206f0e6269cc221077df35a0dbfe0c40754",
+          "url": "https://github.com/INONONO66/openomni/commit/292d87c56c2122df3efa2697eda70e4f518c676e"
+        },
+        "date": 1786800914624,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9119,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2504,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2665,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2305,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15114,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7942,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 581,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 484,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1037,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2363,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10662,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 504314,
             "unit": "ns/op"
           }
         ]
