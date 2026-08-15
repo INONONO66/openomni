@@ -377,6 +377,17 @@ describe("Tool source label grammar", () => {
     // `source:system`); the closed parser is the fix, so its rejections are
     // pinned as literally as its acceptances.
     expect(Tool.sourceFromLabels(["source.mcp", "mcp.fixture"])).toBeUndefined();
+  });
+
+  test("round-trips a server id through mcpServerLabel/mcpServerFromLabels", () => {
+    expect(Tool.mcpServerLabel("github")).toBe("mcp.github");
+    expect(Tool.mcpServerFromLabels(["source:mcp", "mcp.github"])).toBe("github");
+  });
+
+  test("yields no server id from a bare or absent mcp label", () => {
+    expect(Tool.mcpServerFromLabels(["mcp."])).toBeUndefined();
+    expect(Tool.mcpServerFromLabels(["source:mcp"])).toBeUndefined();
+    expect(Tool.mcpServerFromLabels(undefined)).toBeUndefined();
     expect(Tool.sourceFromLabels(["source:skill-mcp"])).toBeUndefined();
     expect(Tool.sourceFromLabels(["source:"])).toBeUndefined();
     expect(Tool.sourceFromLabels(undefined)).toBeUndefined();

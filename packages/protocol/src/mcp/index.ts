@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export namespace McpConfig {
   const BaseServerConfig = z.object({
-    name: z.string(),
+    // Non-empty: this name becomes the tool-name prefix, the mcp.<serverId>
+    // label, and descriptor.source.serverId — an empty one poisons all three.
+    name: z.string().min(1),
     headers: z.record(z.string(), z.string()).optional(),
     /** Per-request timeout in milliseconds for MCP tool discovery and tool calls. */
     timeout: z.number().int().nonnegative().optional(),

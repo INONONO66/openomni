@@ -272,7 +272,7 @@ interface McpToolPolicyTarget {
 type ToolPolicyTarget = NativeToolPolicyTarget | McpToolPolicyTarget;
 
 function mcpServerId(labels: readonly string[] | undefined): string | undefined {
-  return labels?.find((label) => label.startsWith("mcp."))?.slice("mcp.".length);
+  return Tool.mcpServerFromLabels(labels);
 }
 
 function sourceFromLabels(

@@ -10,11 +10,13 @@ export function mcpToolMetadata(
   serverName: string,
   spec: Tool.Spec,
 ): { readonly labels: string[]; readonly descriptor: RuntimeResource.Descriptor } {
+  // Canonical labels first: the grammar parsers take the first match, so a
+  // remote spec shipping its own `mcp.*` or `source:*` label must not win.
   const labels = uniqueLabels([
-    ...(spec.labels ?? []),
     `tool:${spec.name}`,
     Tool.sourceLabel("mcp"),
-    `mcp.${serverName}`,
+    Tool.mcpServerLabel(serverName),
+    ...(spec.labels ?? []),
   ]);
 
   return {

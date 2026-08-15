@@ -54,7 +54,8 @@ function createToolCatalogEntry(
   tool: NativeTool,
   source: WorkerBootstrap.RuntimeToolCatalogEntry["source"],
 ): WorkerBootstrap.RuntimeToolCatalogEntry {
-  const mcpServer = source === "mcp" ? getMcpServerName(tool.spec.name) : undefined;
+  const mcpServer =
+    tool.descriptor?.source?.type === "mcp" ? tool.descriptor.source.serverId : undefined;
 
   return {
     canonicalName: tool.spec.name,
@@ -66,10 +67,4 @@ function createToolCatalogEntry(
     ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
     ...(mcpServer !== undefined && { mcpServer }),
   };
-}
-
-function getMcpServerName(toolName: string): string | undefined {
-  if (!toolName.includes(".")) return undefined;
-  const [serverName] = toolName.split(".");
-  return serverName;
 }
