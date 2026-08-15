@@ -67,6 +67,9 @@ describe("Communication protocol schemas", () => {
     };
     expect(Communication.PendingAsk.Events.Opened.schema.safeParse(askBase).success).toBe(false);
     expect(
+      Communication.PendingAsk.Events.Opened.schema.safeParse({ ...askBase, traceId: "" }).success,
+    ).toBe(false);
+    expect(
       Communication.PendingAsk.Events.Opened.schema.safeParse({ ...askBase, traceId: "trace-1" })
         .success,
     ).toBe(true);
@@ -82,6 +85,12 @@ describe("Communication protocol schemas", () => {
     };
     expect(
       Communication.PendingInteraction.Events.Opened.schema.safeParse(interactionBase).success,
+    ).toBe(false);
+    expect(
+      Communication.PendingInteraction.Events.Opened.schema.safeParse({
+        ...interactionBase,
+        traceId: "",
+      }).success,
     ).toBe(false);
     expect(
       Communication.PendingInteraction.Events.Opened.schema.safeParse({
