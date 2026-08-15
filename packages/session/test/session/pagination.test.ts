@@ -49,6 +49,7 @@ describe("Session.listMessagesPage", () => {
     ]);
 
     expect(page1.nextCursor).toBeDefined();
+    if (page1.nextCursor === null) throw new Error("shape");
     const page2 = Session.listMessagesPage(session.id, { limit: 10, before: page1.nextCursor });
     expect(page2.items).toHaveLength(10);
     expect(page2.more).toBe(true);

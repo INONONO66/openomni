@@ -129,6 +129,7 @@ describe("ingestInternal", () => {
     }
 
     expect(result.mode).toBe("internal");
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBeTruthy();
     expect(decisions).toHaveLength(1);
     expect(IngressEvent.RoutingDecision.schema.parse(decisions[0])).toMatchObject({

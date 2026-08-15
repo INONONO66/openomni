@@ -17,11 +17,13 @@ describe("completion report identity", () => {
       caveats: [],
       followUps: [],
     };
+    const firstClaim = first.claims[0];
+    if (firstClaim === undefined) throw new Error("shape");
     const reordered: WorkItem.CompletionReport = {
       ...first,
       claims: [
         {
-          ...first.claims[0],
+          ...firstClaim,
           evidenceIds: ["evidence:one", "evidence:two"],
         },
       ],

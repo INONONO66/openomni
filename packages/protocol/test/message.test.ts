@@ -362,7 +362,7 @@ describe("Message.WithParts", () => {
 
     expect(wp.info.role).toBe("user");
     expect(wp.parts).toHaveLength(1);
-    expect(wp.parts[0].type).toBe("text");
+    expect(wp.parts[0]?.type).toBe("text");
   });
 
   test("rejects missing info", () => {

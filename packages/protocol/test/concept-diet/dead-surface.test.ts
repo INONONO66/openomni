@@ -40,8 +40,10 @@ describe("#497 protocol dead-surface disposition ledger", () => {
   });
 
   test("every row carries exactly one disposition from the allowed set", () => {
+    const dispositions: readonly string[] = DISPOSITIONS;
     for (const row of inventory.symbols) {
-      expect(DISPOSITIONS).toContain(row.disposition);
+      if (typeof row.disposition !== "string") throw new Error("shape");
+      expect(dispositions).toContain(row.disposition);
     }
   });
 
@@ -50,7 +52,7 @@ describe("#497 protocol dead-surface disposition ledger", () => {
     const counts = computeCounts(inventory);
 
     // Then
-    expect(counts).toEqual(inventory.tally as Record<string, number>);
+    expect(inventory.tally).toEqual(counts);
     expect(validateInventory(inventory).tallyMatches).toBe(true);
   });
 

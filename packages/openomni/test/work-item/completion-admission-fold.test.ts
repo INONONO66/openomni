@@ -485,7 +485,9 @@ describe("completion admission pure fold", () => {
       name: "verification error criterion",
       facts: proposed({ verificationErrors: [verificationError("criterion:missing")] }),
     },
-  ] as const;
+    // No `as const`: the fold input requires mutable fact arrays, and the
+    // readonly tuples a const assertion infers are not assignable to them.
+  ];
   for (const invalidCase of invalidGraphCases) {
     test(`rejects a dangling or duplicate ${invalidCase.name}`, () => {
       const foldInput =

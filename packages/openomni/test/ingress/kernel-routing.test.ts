@@ -25,6 +25,7 @@ describe("IngressEngine kernel routing", () => {
     const result = await kernelEngine().ingest(ownerEvent);
 
     // Then
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(mappedSession.id);
     expect(result.result.output).toBe("resident response");
   });

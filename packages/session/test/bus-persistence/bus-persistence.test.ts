@@ -104,7 +104,9 @@ describe("BusPersistence", () => {
       duration_ms: 123,
       time_created: time,
     });
-    expect(JSON.parse(persisted[0].data)).toEqual({
+    const firstCompleted = persisted[0];
+    if (firstCompleted === undefined) throw new Error("shape");
+    expect(JSON.parse(firstCompleted.data)).toEqual({
       sessionId: session.id,
       runId: "run-1",
       traceId: "trace-1",
@@ -136,7 +138,9 @@ describe("BusPersistence", () => {
       trace_id: "trace-from-schema",
       time_created: time,
     });
-    expect(JSON.parse(persisted[0].data)).toEqual({
+    const firstNormalized = persisted[0];
+    if (firstNormalized === undefined) throw new Error("shape");
+    expect(JSON.parse(firstNormalized.data)).toEqual({
       sessionId: session.id,
       traceId: "trace-from-schema",
       time,
@@ -172,7 +176,9 @@ describe("BusPersistence", () => {
       session_id: session.id,
       trace_id: "trace-raw",
     });
-    expect(JSON.parse(persisted[0].data)).toEqual({
+    const firstRaw = persisted[0];
+    if (firstRaw === undefined) throw new Error("shape");
+    expect(JSON.parse(firstRaw.data)).toEqual({
       sessionId: session.id,
       traceId: "trace-raw",
       time: Date.UTC(2026, 4, 10, 1, 2, 6),
@@ -514,7 +520,10 @@ describe("BusPersistence", () => {
     });
     await BusPersistence.flush();
 
-    const data = JSON.parse((await waitForRows(1))[0].data) as {
+    const redactRows = await waitForRows(1);
+    const redactRow = redactRows[0];
+    if (redactRow === undefined) throw new Error("shape");
+    const data = JSON.parse(redactRow.data) as {
       context: {
         apiKey: string;
         credentials: string;
@@ -563,7 +572,10 @@ describe("BusPersistence", () => {
       context,
     });
 
-    const data = JSON.parse((await waitForRows(1))[0].data) as {
+    const cycleRows = await waitForRows(1);
+    const cycleRow = cycleRows[0];
+    if (cycleRow === undefined) throw new Error("shape");
+    const data = JSON.parse(cycleRow.data) as {
       context: { self: string; child: { parent: string } };
     };
     expect(data.context.self).toBe("[redacted]");
@@ -607,7 +619,10 @@ describe("BusPersistence", () => {
       writeSpy.mockRestore();
     }
 
-    const data = JSON.parse((await waitForRows(1))[0].data) as {
+    const msgRows = await waitForRows(1);
+    const msgRow = msgRows[0];
+    if (msgRow === undefined) throw new Error("shape");
+    const data = JSON.parse(msgRow.data) as {
       context: { msg: unknown; apiKey: string };
     };
     expect(data.context.msg).toEqual({ type: "string", length: 36 });

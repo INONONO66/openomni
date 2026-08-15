@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { Session } from "../../src/session/index.ts";
-import { Storage } from "../../src/storage/storage.ts";
+import { Session } from "../../src/session/index.js";
+import { Storage } from "../../src/storage/storage.js";
 
 function measureRSS(): number {
   Bun.gc(true);
@@ -15,6 +15,7 @@ function createMemoryStorage(): Storage.Adapter {
   const parts = new Map<string, Map<string, Message.Part>>();
 
   return {
+    transaction: <T>(operation: () => T): T => operation(),
     session: {
       get(id) {
         return sessions.get(id);

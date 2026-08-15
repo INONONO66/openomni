@@ -14,6 +14,7 @@ describe("McpConfig.ServerConfig", () => {
 
     expect(config.name).toBe("filesystem");
     expect(config.transport).toBe("stdio");
+    if (config.transport !== "stdio") throw new Error("shape");
     expect(config.args).toEqual(["/tmp"]);
   });
 

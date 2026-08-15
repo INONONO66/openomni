@@ -336,9 +336,9 @@ describe("worker.spawn result reflection", () => {
     const workItems = WorkItemStore.list();
     expect(workItems).toHaveLength(1);
     expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("completed");
-    expect(workItems[0]?.completionReport?.claims[0]?.evidenceIds).toEqual([
-      workItems[0]?.evidence[0]?.id,
-    ]);
+    const claimedEvidenceId = workItems[0]?.evidence[0]?.id;
+    if (claimedEvidenceId === undefined) throw new Error("shape");
+    expect(workItems[0]?.completionReport?.claims[0]?.evidenceIds).toEqual([claimedEvidenceId]);
     expect(result).toMatchObject({
       output: {
         workItemHash: workItems[0]?.hash,

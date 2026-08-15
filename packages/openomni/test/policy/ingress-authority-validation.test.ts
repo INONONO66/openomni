@@ -94,12 +94,16 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
         defaultTier: "observer",
         createdBy: "act_owner",
       },
-      "normal",
+      // "normal" was never in Actor.InboundTreatment — the enum was born
+      // full_access|evidence_only|drop (#250), and this fixture entered already
+      // illegal (#519). It passed for a year because the stamping path does no
+      // runtime validation; that finding is recorded at the stamping site.
+      "full_access",
     );
 
     expect(treated.meta?.actor).toMatchObject({ role: "user", trustTier: "observer" });
     expect(treated.meta?.channelGrantId).toBe("grant-public-observer");
-    expect(treated.meta?.inboundTreatment).toBe("normal");
+    expect(treated.meta?.inboundTreatment).toBe("full_access");
   });
 
   test("channel grant treatment never overrides an explicit trust tier", () => {
@@ -116,7 +120,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
         defaultTier: "observer",
         createdBy: "act_owner",
       },
-      "normal",
+      "full_access",
     );
 
     expect(treated.meta?.actor).toMatchObject({ trustTier: "manager" });

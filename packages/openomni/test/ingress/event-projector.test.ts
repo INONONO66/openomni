@@ -39,11 +39,13 @@ describe("IngressEventProjector", () => {
 
     const messages = Session.getMessages(sessionId);
     expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe("user");
+    const message = messages[0];
+    if (message === undefined) throw new Error("shape");
+    expect(message.role).toBe("user");
 
-    const parts = Session.getParts(messages[0].id);
+    const parts = Session.getParts(message.id);
     expect(parts).toHaveLength(1);
-    expect(parts[0].type).toBe("text");
+    expect(parts[0]?.type).toBe("text");
     expect((parts[0] as Message.TextPart).text).toBe("Hello, world!");
   });
 
@@ -69,7 +71,9 @@ describe("IngressEventProjector", () => {
     );
 
     const messages = Session.getMessages(sessionId);
-    const parts = Session.getParts(messages[0].id);
+    const message = messages[0];
+    if (message === undefined) throw new Error("shape");
+    const parts = Session.getParts(message.id);
     expect((parts[0] as Message.TextPart).text).toBe("Message from Discord");
   });
 
@@ -96,7 +100,9 @@ describe("IngressEventProjector", () => {
     );
 
     const messages = Session.getMessages(sessionId);
-    const parts = Session.getParts(messages[0].id);
+    const message = messages[0];
+    if (message === undefined) throw new Error("shape");
+    const parts = Session.getParts(message.id);
     expect((parts[0] as Message.TextPart).text).toBe(JSON.stringify(payload));
   });
 
@@ -123,7 +129,7 @@ describe("IngressEventProjector", () => {
 
     const messages = Session.getMessages(sessionId);
     expect((messages[0] as Message.UserMessage).agent).toBe("whatsapp");
-    expect(messages[0].role).toBe("user");
+    expect(messages[0]?.role).toBe("user");
   });
 
   it("should store both UserMessage and TextPart in session", () => {
@@ -151,6 +157,7 @@ describe("IngressEventProjector", () => {
     const messages = Session.getMessages(sessionId);
     expect(messages).toHaveLength(1);
     const message = messages[0];
+    if (message === undefined) throw new Error("shape");
     expect(message.role).toBe("user");
     expect(message.sessionID).toBe(sessionId);
 

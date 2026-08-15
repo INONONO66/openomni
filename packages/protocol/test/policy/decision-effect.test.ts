@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { z } from "zod";
 import { Policy } from "../../src/policy/index";
 
 const it = test;
 
 describe("Policy decision and effect schemas", () => {
-  const effects = [
+  const effects: z.input<typeof Policy.PolicyEffect>[] = [
     { type: "prompt.append_context", context: "Prefer concise answers." },
     { type: "prompt.inject_message", message: "Use read-only tools.", role: "user" },
     { type: "prompt.replace", prompt: "You are running in locked-down mode." },

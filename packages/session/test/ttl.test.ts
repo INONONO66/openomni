@@ -132,7 +132,7 @@ describe("Session TTL", () => {
 
       const sessions = Session.list();
       expect(sessions.length).toBe(1);
-      expect(sessions[0].id).toBe(activeSession.id);
+      expect(sessions[0]?.id).toBe(activeSession.id);
 
       // list() is a pure read: the expired row survives until the sweep.
       const stillStored = Storage.getAdapter().session.get(expiredSession.id);

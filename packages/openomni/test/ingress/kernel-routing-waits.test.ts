@@ -216,6 +216,7 @@ describe("IngressEngine wait routing", () => {
     expect(order).toEqual(["publish", "execute"]);
     expect(routed).toHaveLength(1);
     expect(handlerWorkspaceRoot).toBe("/trusted/workspace");
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(sessionId);
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-exact")?.status).toBe("open");
@@ -251,6 +252,7 @@ describe("IngressEngine wait routing", () => {
       pendingInteractionId: "pi-frozen-legacy",
     });
     expect(routed).toHaveLength(1);
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(sessionId);
     // The frozen row stays readable AND untransitioned (#548 read-only pin):
     // routing never depends on mutating it, so the row remains exactly as
@@ -274,6 +276,7 @@ describe("IngressEngine wait routing", () => {
       replyEvent("inbound-plain-text", "completed successfully"),
     );
 
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("");
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-plain-text")?.status).toBe("open");
@@ -394,6 +397,7 @@ describe("IngressEngine wait routing", () => {
       runId: "run-connector-ask",
       actor: { trustTier: "assigned_worker" },
     });
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(sessionId);
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-connector-ask")?.status).toBe("open");
@@ -553,6 +557,7 @@ describe("IngressEngine wait routing", () => {
       durableSessionId: ask.originSessionId,
       runId: ask.originRunId,
     });
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(ask.originSessionId);
     expect(PendingAskStore.get(ask.id)?.status).toBe("open");
   });
@@ -608,6 +613,7 @@ describe("IngressEngine wait routing", () => {
       activationId: "inbound-activation",
     });
     expect(projectedSessionId).toBe(ask.originSessionId);
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(ask.originSessionId);
     expect(residentExecutions).toEqual(["executed"]);
   });
@@ -959,6 +965,7 @@ describe("IngressEngine wait routing", () => {
 
     const result = await kernelEngine().ingest(replyEvent("inbound-structured-output"));
 
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("");
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-structured-output")?.status).toBe("open");
@@ -1050,6 +1057,7 @@ describe("IngressEngine durable wait routing", () => {
         `wait.owner:session:${wait.ownerRef.id}`,
       ],
     });
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(wait.ownerRef.id);
     expect(residentExecutions).toEqual(["executed"]);
     const record = WaitStore.get("wait-session-owner");
@@ -1072,6 +1080,7 @@ describe("IngressEngine durable wait routing", () => {
 
     const result = await kernelEngine().ingest(replyEvent("inbound-wait-quorum-first"));
 
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(wait.ownerRef.id);
     const record = WaitStore.get("wait-quorum");
     expect(record).toMatchObject({ status: "open" });
@@ -1136,6 +1145,8 @@ describe("IngressEngine durable wait routing", () => {
     // owner receives the recorded resolution again.
     const second = await kernelEngine().ingest(replyEvent("inbound-wait-redelivery"));
 
+    if (first.kind === "dropped") throw new Error("shape");
+    if (second.kind === "dropped") throw new Error("shape");
     expect(first.sessionId).toBe(wait.ownerRef.id);
     expect(second.sessionId).toBe(wait.ownerRef.id);
     expect(residentExecutions).toEqual(["executed", "executed"]);
@@ -1335,6 +1346,8 @@ describe("IngressEngine durable wait routing", () => {
 
     const second = await kernelEngine().ingest(responderReply("inbound-wired-r2", "responder-2"));
 
+    if (first.kind === "dropped") throw new Error("shape");
+    if (second.kind === "dropped") throw new Error("shape");
     expect(first.sessionId).toBe(session.id);
     expect(second.sessionId).toBe(session.id);
     expect(residentExecutions).toEqual(["executed", "executed"]);
@@ -1352,6 +1365,7 @@ describe("IngressEngine durable wait routing", () => {
 
     const result = await kernelEngine().ingest(replyEvent("inbound-new-interaction"));
 
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(wait.ownerRef.id);
     expect(WaitStore.get("wait-new-interaction")).toMatchObject({ status: "resolved" });
     // No PendingInteraction row exists or can be created: the write surface
@@ -1392,6 +1406,7 @@ describe("IngressEngine durable wait routing", () => {
 
     const result = await kernelEngine().ingest(replyEvent("inbound-wait-tier"));
 
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBe(wait.ownerRef.id);
     expect(PendingInteractionStore.get("pi-shadowed")?.status).toBe("open");
   });

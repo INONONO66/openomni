@@ -63,6 +63,7 @@ describe("ingress engine instance isolation", () => {
     const second = await engineB.ingest(directEvent("evt-observer-b"));
 
     // Each engine executed through its own resident runtime...
+    if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
     expect(first.result.output).toBe("engine-a");
     expect(second.result.output).toBe("engine-b");
     expect(runsA).toEqual(["engine-a"]);

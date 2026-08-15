@@ -140,6 +140,7 @@ describe("IngressEngine access routing", () => {
     });
     expect(captured.actor).toMatchObject({ role: "user", trustTier: "owner" });
     expect(captured.treatment).toBe("full_access");
+    if (event.userId === undefined) throw new Error("shape");
     expect(
       ActorRegistry.resolveEndpoint(event.surface, event.userId, event.workspace),
     ).toBeUndefined();
@@ -174,6 +175,7 @@ describe("IngressEngine access routing", () => {
     }
 
     // Then
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("resident response");
     expect(observed.decisions).toHaveLength(1);
     expect(observed.decisions[0]).toMatchObject({
@@ -209,6 +211,7 @@ describe("IngressEngine access routing", () => {
     }
 
     // Then
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("resident response");
     expect(observed.decisions).toHaveLength(1);
     expect(observed.decisions[0]).toMatchObject({
@@ -275,6 +278,7 @@ describe("IngressEngine access routing", () => {
     }
 
     // Then
+    if (result.kind === "dropped") throw new Error("shape");
     expect(result.result.output).toBe("resident response");
     expect(observed.decisions).toHaveLength(1);
     expect(observed.decisions[0]).toMatchObject({

@@ -72,7 +72,7 @@ function issueWithCapturedRequest(binding: CompletionStakesBinding | VoiceStakes
 
 function authorityFor(
   action: ReturnType<typeof boundaryAction>,
-  state: { window: typeof stakesWindow; actions: []; knownFingerprints: [] },
+  state: { window: typeof stakesWindow; actions: never[]; knownFingerprints: never[] },
 ) {
   return {
     read(request: StakesAuthorityRequest) {

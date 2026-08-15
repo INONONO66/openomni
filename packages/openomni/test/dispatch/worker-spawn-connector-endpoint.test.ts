@@ -251,11 +251,11 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
     const adapter = Storage.get().workItem;
     if (!adapter) throw new Error("missing WorkItem adapter");
     const compareAndSet = adapter.compareAndSet.bind(adapter);
-    adapter.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.compareAndSet = (hash, expectedHead, candidate) => {
       if (candidate.evidence.some(({ passed }) => !passed)) {
         throw new Error("work item write failed");
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
 
     let caught: unknown;
@@ -294,11 +294,11 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
     const adapter = Storage.get().workItem;
     if (!adapter) throw new Error("missing WorkItem adapter");
     const compareAndSet = adapter.compareAndSet.bind(adapter);
-    adapter.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.compareAndSet = (hash, expectedHead, candidate) => {
       if (candidate.failureReason === "runtime exploded") {
         throw new Error("work item write failed");
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
     const handlers = createConnectorEndpointHandlers(async () => {
       throw new Error("runtime exploded");

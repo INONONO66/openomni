@@ -250,8 +250,8 @@ function completionEvents(
 }> {
   const order: string[] = [];
   const admissionStates: WorkItem.Info[] = [];
-  let resolveAdmission = () => undefined;
-  let resolveCompleted = () => undefined;
+  let resolveAdmission: () => void = () => undefined;
+  let resolveCompleted: () => void = () => undefined;
   const admissionRecorded = new Promise<void>((resolve) => {
     resolveAdmission = resolve;
   });
@@ -350,6 +350,18 @@ afterEach(() => {
   for (const path of databasePaths.splice(0)) removeDatabase(path);
 });
 
+/**
+ * Typed replacement for the file's older Reflect.get idiom: returns unknown
+ * (never any) and fails the test loudly when the key is absent instead of
+ * yielding undefined into a matcher.
+ */
+function field(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || !(key in value)) {
+    throw new Error(`shape: missing ${key}`);
+  }
+  return (value as Record<string, unknown>)[key];
+}
+
 describe("WorkItem completion admission service", () => {
   test("uses one kernel-internal guarded completion gateway for non-Worker origins", async () => {
     configure();
@@ -392,11 +404,11 @@ describe("WorkItem completion admission service", () => {
     });
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     class SimulatedBootCrash extends Error {}
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       if (candidate.completionTerminalReceipt !== undefined) {
         throw new SimulatedBootCrash("crash before terminal append");
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
 
     await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
@@ -471,7 +483,7 @@ describe("WorkItem completion admission service", () => {
       leaseExpiresAt: NOW,
     });
     expect(recoveryFence?.id).not.toBe(reserved.reservation.id);
-    expect(recoveryFence?.ownerId.startsWith("completion-recovery:")).toBe(true);
+    expect(recoveryFence?.ownerId?.startsWith("completion-recovery:")).toBe(true);
     expect(staleHolder.state).toBe("busy");
     expect(takeover.state).toBe("reserved");
     expect(takeover.reservation.ownerId).toBe("process:after-restart");
@@ -489,11 +501,11 @@ describe("WorkItem completion admission service", () => {
     });
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     class SimulatedBootCrash extends Error {}
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       if (candidate.completionTerminalReceipt !== undefined) {
         throw new SimulatedBootCrash("crash before terminal append");
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
     await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
       SimulatedBootCrash,
@@ -567,11 +579,11 @@ describe("WorkItem completion admission service", () => {
     });
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     class SimulatedBootCrash extends Error {}
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       if (candidate.completionTerminalReceipt !== undefined) {
         throw new SimulatedBootCrash("crash before terminal append");
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
 
     await expect(gateway.requestCompletion(first.request, first.report)).rejects.toBeInstanceOf(
@@ -750,7 +762,8 @@ describe("WorkItem completion admission service", () => {
       completed: true,
       admission: { decision: "owner_override", ownerOverrideReceiptRef },
     });
-    expect(result.admission.ownerOverrideReceiptRef).toBe(ownerOverrideReceiptRef);
+    const resultAdmission = field(result, "admission");
+    expect(field(resultAdmission, "ownerOverrideReceiptRef")).toBe(ownerOverrideReceiptRef);
   });
 
   test("closes an Owner override without synthesizing a missing result", async () => {
@@ -897,6 +910,7 @@ describe("WorkItem completion admission service", () => {
       ({ requestId }) => requestId === request.id,
     );
     expect(originalAdmission).toBeDefined();
+    if (!originalAdmission) throw new Error("shape");
     expect(
       interrupted?.completionFacts.requestReservations.find(
         ({ requestId }) => requestId === request.id,
@@ -980,6 +994,7 @@ describe("WorkItem completion admission service", () => {
     );
     const originalAdmission = WorkItemStore.get(item.hash)?.completionFacts.admissions[0];
     expect(originalAdmission).toBeDefined();
+    if (!originalAdmission) throw new Error("shape");
 
     const replayService = guardedService(
       {
@@ -1001,8 +1016,9 @@ describe("WorkItem completion admission service", () => {
         completionTerminalReceipt: { admissionId: originalAdmission?.id },
       },
     });
-    expect(replay.workItem.completionFacts.admissions.map(({ id }) => id)).toEqual([
-      originalAdmission?.id,
+    const replayWorkItem = WorkItem.Info.parse(field(replay, "workItem"));
+    expect(replayWorkItem.completionFacts.admissions.map(({ id }) => id)).toEqual([
+      originalAdmission.id,
     ]);
   });
 
@@ -1211,9 +1227,9 @@ describe("WorkItem completion admission service", () => {
     const { item, request, report } = await fixture();
     const candidates: WorkItem.Info[] = [];
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       candidates.push(candidate);
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
     const admissionAuthority = authority();
     const service = guardedService(admissionAuthority.resolver);
@@ -1225,6 +1241,7 @@ describe("WorkItem completion admission service", () => {
 
     const stored = WorkItemStore.get(item.hash);
     const admission = stored?.completionFacts.admissions[0];
+    if (!stored || !admission) throw new Error("shape");
     expect(candidates).toHaveLength(2);
     expect(candidates[0]?.completionFacts.admissions).toHaveLength(1);
     expect(candidates[0] ? WorkItem.deriveStatus(candidates[0]) : undefined).not.toBe("completed");
@@ -1481,7 +1498,7 @@ describe("WorkItem completion admission service", () => {
     const stored = WorkItemStore.get(first.item.hash);
     const expectedEvidenceIds = [firstEvidenceId, secondEvidenceId].sort();
 
-    expect(outcome.completed).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(stored?.completionReport?.claims[0]?.evidenceIds).toEqual(expectedEvidenceIds);
     expect(
       stored?.completionFacts.admissions[0]?.completionReportSnapshot?.claims[0]?.evidenceIds,
@@ -1830,7 +1847,7 @@ describe("WorkItem completion admission service", () => {
     );
     const stored = WorkItemStore.get(item.hash);
 
-    expect(outcome.completed).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(admissionAuthority.calls).toEqual([
       {
         itemHead: item.revision,
@@ -1853,10 +1870,10 @@ describe("WorkItem completion admission service", () => {
     const compareAndSet = firstAdapter.workItem.compareAndSet.bind(firstAdapter.workItem);
     let writeCount = 0;
     class SimulatedCrashError extends Error {}
-    firstAdapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    firstAdapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       writeCount += 1;
       if (writeCount === 2) throw new SimulatedCrashError("crash after admission");
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
     const admissionEvent = completionEvents(item.hash);
 
@@ -1981,10 +1998,10 @@ describe("WorkItem completion admission service", () => {
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     let writeCount = 0;
     class SimulatedCrashError extends Error {}
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       writeCount += 1;
       if (writeCount === 2) throw new SimulatedCrashError("crash after Owner admission");
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
 
     await expect(service.requestCompletion(requestWithOverride, report)).rejects.toBeInstanceOf(
@@ -2319,8 +2336,9 @@ describe("WorkItem completion admission service", () => {
     stopCompleted();
     const stored = WorkItemStore.get(first.item.hash);
 
-    expect(firstOutcome.completed).toBe(true);
-    expect(replayOutcome?.completed).toBe(true);
+    expect(field(firstOutcome, "completed")).toBe(true);
+    if (replayOutcome === undefined) throw new Error("shape");
+    expect(field(replayOutcome, "completed")).toBe(true);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionTerminalReceipt?.admissionId).toBe(
       stored?.completionFacts.admissions[0]?.id,
@@ -2387,7 +2405,7 @@ describe("WorkItem completion admission service", () => {
     const outcome = await pending;
     const stored = WorkItemStore.get(item.hash);
 
-    expect(outcome.completed).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(authorityCalls).toBe(2);
     expect(stored?.name).toBe("mutated during authority");
     expect(stored?.completionFacts.admissions).toHaveLength(1);
@@ -2403,7 +2421,7 @@ describe("WorkItem completion admission service", () => {
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
     let terminalContended = false;
     let completedEvents = 0;
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       if (!terminalContended && candidate.completionTerminalReceipt !== undefined) {
         terminalContended = true;
         const current = adapter.workItem.get(hash);
@@ -2414,10 +2432,10 @@ describe("WorkItem completion admission service", () => {
           name: "mutated during terminal CAS",
           timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
         });
-        expect(compareAndSet(hash, expectedHead, competitor, writerCapability)).toBe(true);
+        expect(compareAndSet(hash, expectedHead, competitor)).toBe(true);
         return false;
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
     const stopCompleted = Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
       if (event.payload.hash === item.hash) completedEvents += 1;
@@ -2427,7 +2445,7 @@ describe("WorkItem completion admission service", () => {
     stopCompleted();
     const stored = WorkItemStore.get(item.hash);
 
-    expect(outcome.completed).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(terminalContended).toBe(true);
     expect(stored?.name).toBe("mutated during terminal CAS");
     expect(stored?.completionFacts.admissions).toHaveLength(2);
@@ -2478,11 +2496,11 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(authority().resolver);
     if (!service) return;
     const compareAndSet = adapter.workItem.compareAndSet.bind(adapter.workItem);
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       if (candidate.completionTerminalReceipt !== undefined) {
         throw new Error("crash after admission before terminal completion");
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
     await expect(service.requestCompletion(request, report)).rejects.toThrow(
       "crash after admission before terminal completion",
@@ -2490,7 +2508,7 @@ describe("WorkItem completion admission service", () => {
     const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing recorded admission");
     let terminalContended = false;
-    adapter.workItem.compareAndSet = (hash, expectedHead, candidate, writerCapability) => {
+    adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
       if (!terminalContended && candidate.completionTerminalReceipt !== undefined) {
         terminalContended = true;
         const current = adapter.workItem.get(hash);
@@ -2501,10 +2519,10 @@ describe("WorkItem completion admission service", () => {
           name: "head advanced during resume terminal CAS",
           timestamps: { ...current.timestamps, updated: current.timestamps.updated + 1 },
         });
-        expect(compareAndSet(hash, expectedHead, competitor, writerCapability)).toBe(true);
+        expect(compareAndSet(hash, expectedHead, competitor)).toBe(true);
         return false;
       }
-      return compareAndSet(hash, expectedHead, candidate, writerCapability);
+      return compareAndSet(hash, expectedHead, candidate);
     };
 
     const resumed = await service.resumeCompletion(item.hash, admissionId, report);

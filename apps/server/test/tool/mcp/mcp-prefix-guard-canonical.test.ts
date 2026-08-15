@@ -51,9 +51,13 @@ function captureCanonicalDispatch(
   const createPolicyEngine = PolicyEngine.create;
   const policyEngineSpy = spyOn(PolicyEngine, "create").mockImplementation((options) => {
     const engine = createPolicyEngine(options);
-    engine.dispatch = async () => {
-      throw new Error("legacy policy dispatch must not run");
-    };
+    // The legacy `dispatch` method no longer exists on the engine interface;
+    // plant a throwing trap property so any residual legacy call site fails loudly.
+    Object.assign(engine, {
+      dispatch: async () => {
+        throw new Error("legacy policy dispatch must not run");
+      },
+    });
     const dispatchPoint = engine.dispatchPoint;
     engine.dispatchPoint = async (pointId, context) => {
       captured.push({ pointId, context });

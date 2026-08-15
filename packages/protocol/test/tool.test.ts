@@ -70,6 +70,7 @@ describe("Tool.StateRunning", () => {
     });
 
     expect(state.status).toBe("running");
+    if (state.status !== "running") throw new Error("shape");
     expect(state.time.start).toBe(-5);
   });
 
@@ -104,6 +105,7 @@ describe("Tool.StateCompleted", () => {
     });
 
     expect(state.status).toBe("completed");
+    if (state.status !== "completed") throw new Error("shape");
     expect(state.time.end).toBe(0);
     expect(state.metadata).toEqual({});
   });
@@ -155,6 +157,7 @@ describe("Tool.StateError", () => {
     });
 
     expect(state.status).toBe("error");
+    if (state.status !== "error") throw new Error("shape");
     expect(state.error).toBe("failed");
   });
 

@@ -109,9 +109,9 @@ describe("Hash Chain", () => {
 
     const rows = await waitForRows(1);
     expect(rows).toHaveLength(1);
-    expect(rows[0].prev_hash).toBe(GENESIS_SEED);
-    expect(rows[0].event_hash).toBeString();
-    expect(rows[0].event_hash).toHaveLength(64);
+    expect(rows[0]?.prev_hash).toBe(GENESIS_SEED);
+    expect(rows[0]?.event_hash).toBeString();
+    expect(rows[0]?.event_hash).toHaveLength(64);
   });
 
   test("hash chain links consecutive events", async () => {
@@ -130,9 +130,13 @@ describe("Hash Chain", () => {
     const rows = await waitForRows(3);
     expect(rows).toHaveLength(3);
 
-    expect(rows[0].prev_hash).toBe(GENESIS_SEED);
-    expect(rows[1].prev_hash).toBe(rows[0].event_hash);
-    expect(rows[2].prev_hash).toBe(rows[1].event_hash);
+    const [row0, row1, row2] = rows;
+    if (row0 === undefined || row1 === undefined || row2 === undefined) {
+      throw new Error("shape");
+    }
+    expect(row0.prev_hash).toBe(GENESIS_SEED);
+    expect(row1.prev_hash).toBe(row0.event_hash);
+    expect(row2.prev_hash).toBe(row1.event_hash);
   });
 
   test("event_chain audit table mirrors bus_event hashes", async () => {
@@ -151,10 +155,16 @@ describe("Hash Chain", () => {
     const events = busRows(session.id);
 
     expect(chain).toHaveLength(1);
-    expect(chain[0].event_hash).toBe(events[0].event_hash);
-    expect(chain[0].prev_hash).toBe(events[0].prev_hash);
-    expect(chain[0].event_type).toBe("test.hash.event");
-    expect(chain[0].session_id).toBe(session.id);
+    const chainHead = chain[0];
+    const eventHead = events[0];
+    if (chainHead === undefined || eventHead === undefined) throw new Error("shape");
+    if (eventHead.event_hash === null || eventHead.prev_hash === null) {
+      throw new Error("shape");
+    }
+    expect(chainHead.event_hash).toBe(eventHead.event_hash);
+    expect(chainHead.prev_hash).toBe(eventHead.prev_hash);
+    expect(chainHead.event_type).toBe("test.hash.event");
+    expect(chainHead.session_id).toBe(session.id);
   });
 
   test("verifyChainIntegrity reports valid for untampered chain", async () => {
@@ -193,15 +203,17 @@ describe("Hash Chain", () => {
 
     await waitForRows(3);
     const rows = busRows(session.id);
+    const tamperedRow = rows[1];
+    if (tamperedRow === undefined) throw new Error("shape");
 
     db()
       .query("UPDATE bus_event SET event_hash = ? WHERE id = ?")
-      .run("deadbeef".repeat(8), rows[1].id);
+      .run("deadbeef".repeat(8), tamperedRow.id);
 
     const result = await BusQuery.verifyChainIntegrity(session.id);
 
     expect(result.valid).toBe(false);
-    expect(result.brokenAtId).toBe(rows[1].id);
+    expect(result.brokenAtId).toBe(tamperedRow.id);
   });
 
   test("verifyChainIntegrity detects tampered data", async () => {
@@ -217,13 +229,17 @@ describe("Hash Chain", () => {
 
     await waitForRows(1);
     const rows = busRows(session.id);
+    const tamperedRow = rows[0];
+    if (tamperedRow === undefined) throw new Error("shape");
 
-    db().query("UPDATE bus_event SET data = ? WHERE id = ?").run('{"tampered":true}', rows[0].id);
+    db()
+      .query("UPDATE bus_event SET data = ? WHERE id = ?")
+      .run('{"tampered":true}', tamperedRow.id);
 
     const result = await BusQuery.verifyChainIntegrity(session.id);
 
     expect(result.valid).toBe(false);
-    expect(result.brokenAtId).toBe(rows[0].id);
+    expect(result.brokenAtId).toBe(tamperedRow.id);
   });
 
   test("verifyChainIntegrity detects broken prev_hash link", async () => {
@@ -241,15 +257,17 @@ describe("Hash Chain", () => {
 
     await waitForRows(3);
     const rows = busRows(session.id);
+    const tamperedRow = rows[2];
+    if (tamperedRow === undefined) throw new Error("shape");
 
     db()
       .query("UPDATE bus_event SET prev_hash = ? WHERE id = ?")
-      .run("wrong_prev_hash", rows[2].id);
+      .run("wrong_prev_hash", tamperedRow.id);
 
     const result = await BusQuery.verifyChainIntegrity(session.id);
 
     expect(result.valid).toBe(false);
-    expect(result.brokenAtId).toBe(rows[2].id);
+    expect(result.brokenAtId).toBe(tamperedRow.id);
   });
 
   test("session-scoped chains are independent", async () => {
@@ -274,8 +292,8 @@ describe("Hash Chain", () => {
     const rowsA = busRows(sessionA.id);
     const rowsB = busRows(sessionB.id);
 
-    expect(rowsA[0].prev_hash).toBe(GENESIS_SEED);
-    expect(rowsB[0].prev_hash).toBe(GENESIS_SEED);
+    expect(rowsA[0]?.prev_hash).toBe(GENESIS_SEED);
+    expect(rowsB[0]?.prev_hash).toBe(GENESIS_SEED);
 
     const resultA = await BusQuery.verifyChainIntegrity(sessionA.id);
     const resultB = await BusQuery.verifyChainIntegrity(sessionB.id);
@@ -327,9 +345,13 @@ describe("Hash Chain", () => {
     const audit = await BusQuery.listAuditChain(session.id);
 
     expect(audit).toHaveLength(3);
-    expect(audit[0].prevHash).toBe(GENESIS_SEED);
-    expect(audit[1].prevHash).toBe(audit[0].eventHash);
-    expect(audit[2].prevHash).toBe(audit[1].eventHash);
+    const [audit0, audit1, audit2] = audit;
+    if (audit0 === undefined || audit1 === undefined || audit2 === undefined) {
+      throw new Error("shape");
+    }
+    expect(audit0.prevHash).toBe(GENESIS_SEED);
+    expect(audit1.prevHash).toBe(audit0.eventHash);
+    expect(audit2.prevHash).toBe(audit1.eventHash);
     for (const record of audit) {
       expect(record.sessionId).toBe(session.id);
       expect(record.eventType).toBe("test.hash.event");

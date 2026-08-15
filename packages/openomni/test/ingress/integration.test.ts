@@ -97,6 +97,7 @@ describe("IngressEngine integration pipeline", () => {
 
       expect(first.mode).toBe("direct");
       expect(second.mode).toBe("direct");
+      if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
       expect(first.sessionId).toBe(second.sessionId);
     });
   });
@@ -130,6 +131,7 @@ describe("IngressEngine integration pipeline", () => {
         },
       });
 
+      if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
       expect(first.sessionId).not.toBe(second.sessionId);
     });
   });

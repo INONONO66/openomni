@@ -102,8 +102,8 @@ describe("Artifact", () => {
 
       const items = await Artifact.list("sess-1");
       expect(items).toHaveLength(1);
-      expect(items[0].version).toBe(2);
-      expect(items[0].title).toBe("updated.txt");
+      expect(items[0]?.version).toBe(2);
+      expect(items[0]?.title).toBe("updated.txt");
     });
 
     it("isolates artifacts between sessions", async () => {
@@ -115,9 +115,9 @@ describe("Artifact", () => {
       const s1 = await Artifact.list("sess-1");
       const s2 = await Artifact.list("sess-2");
       expect(s1).toHaveLength(1);
-      expect(s1[0].id).toBe("art-1");
+      expect(s1[0]?.id).toBe("art-1");
       expect(s2).toHaveLength(1);
-      expect(s2[0].id).toBe("art-2");
+      expect(s2[0]?.id).toBe("art-2");
     });
   });
 
@@ -129,8 +129,8 @@ describe("Artifact", () => {
 
       const vers = await Artifact.versions("art-1");
       expect(vers).toHaveLength(1);
-      expect(vers[0].version).toBe(2);
-      expect(vers[0].title).toBe("v2");
+      expect(vers[0]?.version).toBe(2);
+      expect(vers[0]?.title).toBe("v2");
     });
 
     it("returns empty array for unknown artifact", async () => {

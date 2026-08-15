@@ -99,7 +99,10 @@ function citationRequest(target: string) {
   } as const;
 }
 
-function successfulReadBackRecorder(_hash: string, request: WorkItem.ReadBackRequest) {
+const successfulReadBackRecorder: NonNullable<WorkerCompletionOptions["readBackRecorder"]> = async (
+  _hash,
+  request,
+) => {
   if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
   return WorkItem.ReadBackCheck.parse({
     kind: "citation_match",
@@ -110,7 +113,7 @@ function successfulReadBackRecorder(_hash: string, request: WorkItem.ReadBackReq
     observedAt: 1,
     statusCode: 200,
   });
-}
+};
 
 describe("worker completion read-back deadline", () => {
   beforeEach(() => {
@@ -198,7 +201,7 @@ describe("worker completion read-back deadline", () => {
         sourceOrigin: { source: "internal_worker" },
         readBackEnvelopeTimeoutMs: 10,
         now: () => clock,
-        readBackRecorder(_hash, request) {
+        async readBackRecorder(_hash, request) {
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
           clock = 20;
           return WorkItem.ReadBackCheck.parse({

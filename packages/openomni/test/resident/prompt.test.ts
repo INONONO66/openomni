@@ -32,11 +32,11 @@ describe("ResidentAgent prompt public surface", () => {
     expect(gptPrompt).toContain("# OpenOmni Resident");
     expect(claudePrompt).toContain("# OpenOmni Resident");
     expect(gptPrompt).not.toBe(claudePrompt);
-    expect(Object.hasOwn(ResidentAgent, "getPrompt")).toBe(true);
-    expect(Object.hasOwn(ResidentAgent, "promptVariants")).toBe(false);
-    expect(Object.hasOwn(ResidentAgent, "buildPrompt")).toBe(false);
-    expect(Object.hasOwn(ResidentAgent, "inferPromptFamily")).toBe(false);
-    expect(Object.hasOwn(ResidentAgent, "getPromptVariant")).toBe(false);
+    expect(Object.getOwnPropertyNames(ResidentAgent).includes("getPrompt")).toBe(true);
+    expect(Object.getOwnPropertyNames(ResidentAgent).includes("promptVariants")).toBe(false);
+    expect(Object.getOwnPropertyNames(ResidentAgent).includes("buildPrompt")).toBe(false);
+    expect(Object.getOwnPropertyNames(ResidentAgent).includes("inferPromptFamily")).toBe(false);
+    expect(Object.getOwnPropertyNames(ResidentAgent).includes("getPromptVariant")).toBe(false);
     expect(promptSource).not.toMatch(/\bexport\s+const\s+promptVariants\b/);
     expect(promptSource).not.toMatch(/\bexport\s+const\s+buildPrompt\b/);
     expect(promptSource).not.toMatch(/\bexport\s+const\s+inferPromptFamily\b/);

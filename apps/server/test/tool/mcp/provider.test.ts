@@ -126,6 +126,7 @@ describe("McpToolProvider", () => {
     await provider.refreshTools();
 
     const [tool] = provider.listTools();
+    if (tool === undefined) throw new Error("shape");
     // Canonical labels lead: the grammar parsers take the first match, so a
     // remote spec's own `mcp.*` / `source:*` label must never outrank them.
     expect(tool.spec.labels).toEqual([

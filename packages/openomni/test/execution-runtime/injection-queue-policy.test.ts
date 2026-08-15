@@ -259,7 +259,9 @@ describe("createInjectionQueueDrainPolicy", () => {
     });
     const engine = PolicyEngine.create({ audit: false });
     engine.register(createInjectionQueueDrainPolicy(queue));
-    const context: TurnPostContext = {
+    // No TurnPostContext annotation: that union covers every policy point and
+    // would erase the run.turn.post-specific `turnResult` the target requires.
+    const context = {
       ...baseContext("unused-run", session.id),
       traceContext: undefined,
       runId: "legacy-run",

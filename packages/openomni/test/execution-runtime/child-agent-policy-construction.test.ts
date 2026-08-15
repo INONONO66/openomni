@@ -57,6 +57,13 @@ describe("child agent delegation construction settlement", () => {
         createChildAgentRuntime({
           ...(traceContext === undefined ? {} : { traceContext }),
           model: { provider: "test", id: "fixture" } as Model.Ref,
+          // Now-required options; the trace-context check throws before any
+          // of these are used, so a throwing agent factory is safe.
+          parentMessages: [],
+          parentTools: [],
+          createAgent: () => {
+            throw new Error("not under test");
+          },
         }),
       ).toThrow("child agent delegation requires the parent trace context");
     }

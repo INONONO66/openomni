@@ -25,7 +25,10 @@ describe("SurfaceKey SQLite persistence", () => {
   });
 
   test("persists across Storage re-init", () => {
-    const session = Session.create({ title: "persist-test" });
+    const session = Session.create({
+      title: "persist-test",
+      model: { providerID: "test", modelID: "test-model" },
+    });
     SurfaceKey.register("telegram:bot:chat:123", session.id);
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
@@ -34,7 +37,10 @@ describe("SurfaceKey SQLite persistence", () => {
   });
 
   test("unregister removes from SQLite", () => {
-    const session = Session.create({ title: "unregister-test" });
+    const session = Session.create({
+      title: "unregister-test",
+      model: { providerID: "test", modelID: "test-model" },
+    });
     SurfaceKey.register("slack:ws:dm:U1", session.id);
 
     SurfaceKey.unregister("slack:ws:dm:U1");
@@ -45,8 +51,14 @@ describe("SurfaceKey SQLite persistence", () => {
   });
 
   test("re-register updates session in SQLite", () => {
-    const session1 = Session.create({ title: "old-session" });
-    const session2 = Session.create({ title: "new-session" });
+    const session1 = Session.create({
+      title: "old-session",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    const session2 = Session.create({
+      title: "new-session",
+      model: { providerID: "test", modelID: "test-model" },
+    });
     SurfaceKey.register("slack:ws:channel:C1", session1.id);
     SurfaceKey.register("slack:ws:channel:C1", session2.id);
 

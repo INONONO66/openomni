@@ -50,6 +50,7 @@ describe("child agent synchronous run failure", () => {
 
     const failedChild = await runtime.spawn({ prompt: "fail synchronously" });
     const [failed] = await runtime.await([failedChild.id]);
+    if (failed === undefined) throw new Error("shape");
     const nextChild = await runtime.spawn({ prompt: "reuse capacity" });
     const [completed] = await runtime.await([nextChild.id]);
 

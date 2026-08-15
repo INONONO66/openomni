@@ -9,6 +9,10 @@ import {
 
 const digestA = `sha256:${"a".repeat(64)}`;
 
+function isJsonObject(value: unknown): value is { readonly [key: string]: unknown } {
+  return value !== null && !Array.isArray(value) && typeof value === "object";
+}
+
 function captureConformanceError(action: () => unknown): ReplayConformanceError {
   try {
     action();
@@ -112,13 +116,13 @@ describe("verifier replay interleaving and substitution conformance", () => {
       },
       (state, event) => {
         allStatesFrozen &&= Object.isFrozen(state);
-        if (
-          state === null ||
-          Array.isArray(state) ||
-          typeof state !== "object" ||
-          typeof state.total !== "number" ||
-          typeof event.value !== "number"
-        ) {
+        // Same runtime conditions as the original null/array/object/total
+        // chain; the predicate exists only because Array.isArray does not
+        // narrow readonly JSON arrays out of the union.
+        if (!isJsonObject(state) || typeof state.total !== "number") {
+          throw new Error("numeric object fold required");
+        }
+        if (typeof event.value !== "number") {
           throw new Error("numeric object fold required");
         }
         return { total: state.total + event.value };
@@ -131,13 +135,12 @@ describe("verifier replay interleaving and substitution conformance", () => {
   });
 
   test("substitutes recorded outputs without mutating the caller cassette", () => {
-    const commands = [
-      { op: "llm", promptHash: digestA },
-      { op: "device", id: "lamp" },
-    ];
-    const cassette = [
-      { command: commands[0], output: { text: "recorded" } },
-      { command: commands[1], output: { status: "off" } },
+    const llmCommand = { op: "llm", promptHash: digestA };
+    const deviceCommand = { op: "device", id: "lamp" };
+    const commands = [llmCommand, deviceCommand];
+    const cassette: Parameters<typeof substituteRecordedOutputs>[1] = [
+      { command: llmCommand, output: { text: "recorded" } },
+      { command: deviceCommand, output: { status: "off" } },
     ];
 
     const outputs = substituteRecordedOutputs(commands, cassette);
@@ -154,7 +157,7 @@ describe("verifier replay interleaving and substitution conformance", () => {
     ).toMatchObject({ kind: "unexpected_command", index: 1 });
     expect(
       captureConformanceError(() =>
-        substituteRecordedOutputs([{ op: "network", url: "redacted" }, commands[1]], cassette),
+        substituteRecordedOutputs([{ op: "network", url: "redacted" }, deviceCommand], cassette),
       ).facts,
     ).toMatchObject({ kind: "command_mismatch", index: 0 });
   });
