@@ -131,7 +131,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | PR | title | status |
 |---|---|---|
 | [#637](https://github.com/INONONO66/openomni/pull/637) | close the run loop's reason-code vocabulary (rule 1's real target); amend rules 2–4 with what the tree shows | 🟨 |
-| — | rule 5: policy points with zero production registration vs an explicit allowlist | ⬜ |
+| [#638](https://github.com/INONONO66/openomni/pull/638) | rule 5: policy points with zero production registration vs an explicit allowlist (`policy-point-registration` guard, 9 of 18 pinned) | 🟨 |
 | — | close the tool source-label vocabulary (`tools.ts` consumer vs `define.ts`/`client-descriptor.ts` producers, two prefix separators already coexist) | ⬜ |
 | — | rule 3: core may not import `builtin/` — blocked on the Owner-gated `builtin:compaction` row | ⬜ |
 
@@ -169,8 +169,10 @@ since a rule that catches nothing is worse than no rule — it reads as coverage
    this belongs to the Phase 1 remainder, not here.
 5. **The set of policy points with zero production registration equals an
    explicit allowlist** — a point silently losing its last registration fails
-   CI. Holds, implementable now, and the one rule of the five with nothing else
-   already enforcing it. Not yet written.
+   CI. Holds, and the one rule of the five with nothing else already enforcing
+   it: written as the `policy-point-registration` guard, pinned both ways
+   (losing a last registration fails; a stale allowlist entry fails). 9 of the
+   18 registry points are acknowledged empty.
 
 ## Measurement
 
