@@ -3,12 +3,7 @@ import { effectOf, PolicyEffectApplier } from "./policy-effects";
 import { publishBudgetTelemetry } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentResult, ChatAgentConfig } from "../types";
-import {
-  guardAbortedResult,
-  runResult,
-  emitRunCompleted,
-  publishDenyDiagnostic,
-} from "./run-events";
+import { guardAbortedResult, runResult, publishDenyDiagnostic } from "./run-events";
 import { buildLifecyclePolicyContext, type AgentRunBase, type RunState } from "./run-state";
 
 export async function dispatchPreRun(
@@ -62,7 +57,6 @@ export async function dispatchBudgetCheck(
   if (PolicyDecision.isBlocking(postRunDecision)) {
     publishDenyDiagnostic(config.events, "run.finish", postRunDecision, state, agentBase);
   }
-  emitRunCompleted(config.events, state, agentBase, "max-steps");
   return runResult(state, { finishReason: "max-steps" });
 }
 

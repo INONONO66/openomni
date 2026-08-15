@@ -3,7 +3,7 @@ import type { Sink } from "@openomni/protocol";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
-import { emitRunStarted, emitTurnStart } from "./run-events";
+import { emitRunCompleted, emitRunStarted, emitTurnStart } from "./run-events";
 import { handleCompact, handleContinue, handleError, handleStop } from "./turn-outcome";
 import { assertToolExecutor, buildTurn, resolveToolChoice } from "./turn-prepare";
 import {
@@ -29,36 +29,57 @@ export async function runAgent(
 ): Promise<AgentResult> {
   const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
-  let lastError = "";
 
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
   const actorId =
     nonEmptyString(input.metadata?.actorId) ?? nonEmptyString(trace.agentName) ?? runId;
   const agentBase = { traceId, sessionId, runId, actorId };
-  emitRunStarted(config.events, trace, config.model.id);
+  // Both validators run before the run is opened: `buildPolicyEngine`
+  // rejects a malformed middleware registration, and a configuration error
+  // must not open a run it cannot close.
   assertToolExecutor(config);
+  const engine = buildPolicyEngine(config, agentBase);
+  emitRunStarted(config.events, trace, config.model.id);
 
   // #546: run state and pre-run dispatch are run-scoped, living across
   // attempts — an agent-level retry regenerates only the attempt (turn
   // artifacts), never the history, budget/usage (no double-billing reset),
   // or run.lifecycle.pre effects (prompt injections apply exactly once).
   const state = createRunState({ ...input, traceContext: trace });
-  const engine = buildPolicyEngine(config, agentBase);
+
+  /**
+   * The run's one *returning* exit. Every terminal used to record itself, so
+   * only three of them did: a run a policy blocked emitted
+   * `agent.run.started` and nothing after it, and read as still in flight to
+   * an in-process observer of the stream.
+   *
+   * Failures record where they are decided — that is where the attempt count
+   * and the retry reason live. Two throw paths still record neither: an abort
+   * raised from inside `Retry.sleep`, which escapes past `emitRunFailed`
+   * because it rejects within the catch that would have emitted it, and a
+   * non-`Error` throw, which the catch rethrows untouched. Both predate this
+   * change and are carried on the FSM row, where a terminal state is the
+   * thing that makes them unrepresentable rather than merely unrecorded.
+   */
+  const finish = (result: AgentResult): AgentResult => {
+    emitRunCompleted(config.events, state, agentBase, result.finishReason);
+    return result;
+  };
 
   const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
-  if (preRunResult) return preRunResult;
+  if (preRunResult) return finish(preRunResult);
 
-  while (attempt <= retryPolicy.maxAttempts) {
+  for (;;) {
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
         config.model,
       );
       const configuredToolChoice = resolveToolChoice(config);
 
-      while (true) {
+      for (;;) {
         const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
-        if (budgetResult) return budgetResult;
+        if (budgetResult) return finish(budgetResult);
 
         emitTurnStart(config.events, state, agentBase);
         const turnResult = await buildTurn(
@@ -71,11 +92,11 @@ export async function runAgent(
           agentBase,
           sink,
         );
-        if (turnResult.type === "complete") return turnResult.result;
+        if (turnResult.type === "complete") return finish(turnResult.result);
 
         const runLlm = config.llm?.run ?? llmRun;
         const modelRequestResult = await dispatchModelRequest(state, engine, config, agentBase);
-        if (modelRequestResult) return modelRequestResult;
+        if (modelRequestResult) return finish(modelRequestResult);
         const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
         const modelResponseResult = await dispatchModelResponse(
           state,
@@ -87,11 +108,11 @@ export async function runAgent(
           },
           agentBase,
         );
-        if (modelResponseResult) return modelResponseResult;
+        if (modelResponseResult) return finish(modelResponseResult);
 
         if (outcome.type === "stop") {
           const stopOutcome = await handleStop(state, config, engine, agentBase, turnResult.turn);
-          if (stopOutcome !== "continue") return stopOutcome;
+          if (stopOutcome !== "continue") return finish(stopOutcome);
           continue;
         }
 
@@ -102,7 +123,7 @@ export async function runAgent(
 
         if (outcome.type === "compact") {
           const compactOutcome = await handleCompact(state, engine, config, agentBase);
-          if (compactOutcome !== "continue") return compactOutcome;
+          if (compactOutcome !== "continue") return finish(compactOutcome);
           continue;
         }
 
@@ -122,17 +143,14 @@ export async function runAgent(
         attempt,
         retryPolicy,
       );
-      lastError = decision.errorMessage;
       if (decision.action === "retry") {
         attempt += 1;
         continue;
       }
-      if (decision.action === "complete") return decision.result;
+      if (decision.action === "complete") return finish(decision.result);
       throw decision.error;
     }
   }
-
-  throw new Error(lastError || "Max retry attempts exceeded");
 }
 
 function unknownOutcomeType(value: unknown): string {
