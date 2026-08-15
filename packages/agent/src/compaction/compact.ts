@@ -11,8 +11,9 @@ export interface CompactionOptions {
   onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   /**
    * Opt-in deterministic reduction: when the trigger fires, old completed
-   * tool outputs are elided first, and the lossy cut runs only when elision
-   * reclaimed nothing. The knobs are strategy, so they arrive as config.
+   * tool outputs are elided first; the lossy cut joins the same round
+   * whenever the estimated net reclaim cannot cover the measured overage.
+   * The knobs are strategy, so they arrive as config.
    */
   elideToolOutputs?: ToolOutputElision;
 }
