@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786807880925,
+  "lastUpdate": 1786809276578,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48709,6 +48709,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509815,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d5d2e3bcbd01e4ae5aa6684b873de162a86d1ed3",
+          "message": "refactor(openomni): sweep the dead value exports repo-wide (#606) (#648)\n\n* refactor(openomni): sweep the dead value exports repo-wide (#606)\n\nThe #647 sweep covered the three target packages' types; this is the\nvalue-export half of the same knip listing, across the rest of the\nrepo. Every item verified individually against its actual readers:\n\nSame-file-only consumers drop the export keyword — the five builtin\ntool PROMPT constants, executor's createErrorResult, discord's\nsendDiscordMessage/calculateBackoff/FATAL_CLOSE_CODES, bridge's\nbuildResidentAgentDef, event-query's toEventRecord, the projection and\nmessaging zod pairs (StepOrder, VerifierStatus, AwaitSpec — orphaned\ntype aliases deleted where even the file stopped reading them), and\nthree script helpers.\n\nZero-reference functions die outright: getAllAgentNames, readSessionId,\nconnectUnixSocket. getPartStartTime looked like one but had a same-file\ncaller — restored un-exported, which the build caught immediately.\n\nBarrel-only pass-throughs lose the barrel line and keep the definition\ntheir tests import directly: ipc's LineDecoder, session's\nTranscriptRecordingError, messaging's MessagingEvents and grant helpers,\nprojection's mapVerdict companions.\n\nThe deletions cleared 14 of the ratchet's 17 baselined issues, so the\nbaseline shrinks with them — the shrink the ratchet header calls\nautonomous; 3 remain.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* refactor(coordinator): review minors — dup jsdoc, dead harness (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T00:53:23+09:00",
+          "tree_id": "2bdd31f116680db0fa1f198ac736713510e4b3cd",
+          "url": "https://github.com/INONONO66/openomni/commit/d5d2e3bcbd01e4ae5aa6684b873de162a86d1ed3"
+        },
+        "date": 1786809275918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 527,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 786,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 7245,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 3076,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2824,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 18557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 9889,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1320,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 58,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1784,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 954,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 54154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2819,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 117402,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 592183,
             "unit": "ns/op"
           }
         ]
