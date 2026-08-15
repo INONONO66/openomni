@@ -132,6 +132,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 |---|---|---|
 | [#637](https://github.com/INONONO66/openomni/pull/637) | close the run loop's reason-code vocabulary (rule 1's real target); amend rules 2–4 with what the tree shows | 🟨 |
 | — | rule 5: policy points with zero production registration vs an explicit allowlist | ⬜ |
+| — | close the tool source-label vocabulary (`tools.ts` consumer vs `define.ts`/`client-descriptor.ts` producers, two prefix separators already coexist) | ⬜ |
 | — | rule 3: core may not import `builtin/` — blocked on the Owner-gated `builtin:compaction` row | ⬜ |
 
 Then [#502](https://github.com/INONONO66/openomni/issues/502) runs against a `session` package that holds only durable facts.
@@ -149,9 +150,14 @@ since a rule that catches nothing is worse than no rule — it reads as coverage
    effect unions already make every policy-point and effect literal a compile
    error when misspelled — stricter than a regex, and it survives renames. What
    the rule was reaching for was real, but it was not in the literals the
-   compiler checks: it was in the three the compiler *couldn't* see, the reason
-   codes crossing in from openomni. Fixed as a closed vocabulary
-   (`core/policy/reason-codes.ts`) plus the `run-reason-code-vocabulary` guard.
+   compiler checks. The most consequential set the compiler *couldn't* see —
+   the three reason codes crossing in from openomni that the loop branches
+   on — is fixed as a closed vocabulary (`core/policy/reason-codes.ts`) plus
+   the `run-reason-code-vocabulary` guard. Not the only such set:
+   `tools.ts` classifies tool source from free-form label strings, and its
+   producers have already drifted (`define.ts` emits `source:`-prefixed labels,
+   `runtime/mcp/client-descriptor.ts` emits `source.`-prefixed ones — the
+   consumer strips both). That vocabulary is a follow-up row below.
 2. ~~`packages/agent/src/pure/` may not import the telemetry package.~~
    **Vacuous** — no such directory exists, and none of the phases created one.
 3. **Core may not import `builtin/` — still true, still violated.**

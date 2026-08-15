@@ -43,4 +43,3 @@ export type PolicyEngineInstance = Omit<
 > & {
   readonly register: (registration: PolicyEngineRegistration) => void;
 };
-export * from "./reason-codes";

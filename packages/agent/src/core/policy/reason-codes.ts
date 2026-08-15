@@ -10,7 +10,9 @@
  * reacting, and a stalled run records itself as an ordinary stop.
  *
  * So the vocabulary is closed and single-sourced. `script/lint-guards.ts`
- * rejects these values written as literals anywhere but here.
+ * rejects these values written as literals at producer (`reasonCodes:`) and
+ * consumer (comparison / `.includes`) positions in shipped source; the test
+ * pins asserting the raw strings are the layer that locks the values.
  */
 export const RunReasonCode = {
   /** The run made no progress; the loop reports `stalled`, not a guard abort. */
@@ -20,5 +22,3 @@ export const RunReasonCode = {
   /** Budget is ample; the loop emits `AgentExecution.BudgetReassurance`. */
   BudgetReassurance: "budget_reassurance",
 } as const;
-
-export type RunReasonCode = (typeof RunReasonCode)[keyof typeof RunReasonCode];

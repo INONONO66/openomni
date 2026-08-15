@@ -5,7 +5,8 @@ type GuardRuleId =
   | "inline-channel-trigger-evaluation"
   | "inline-authorization-throw"
   | "missing-canonical-policy-evaluator"
-  | "policy-package-boundary";
+  | "policy-package-boundary"
+  | "run-reason-code-vocabulary";
 
 interface GuardViolation {
   readonly ruleId: GuardRuleId;
@@ -17,6 +18,7 @@ interface GuardViolation {
 interface SourceMatch {
   readonly index: number;
   readonly text: string;
+  readonly captured?: string;
 }
 
 const scanRoots = ["packages", "apps"];
@@ -46,15 +48,20 @@ const inlineAuthorizationThrowPatterns = [
  * package, so a literal at the producer is a coupling the compiler cannot see:
  * rename one end and the loop silently stops reacting.
  *
- * Scoped to `reasonCodes:` arrays in shipped source, which is where such a
- * rename originates. Deliberately NOT matched elsewhere: `"stalled"` is also a
+ * Scoped to shipped source, at the two positions a rename starts: producers
+ * (`reasonCodes:` arrays) and consumers (equality or `.includes` against one
+ * of the values). Deliberately NOT matched elsewhere: `"stalled"` is also a
  * value of the unrelated `AgentResult.finishReason` union, and a test that
  * asserts the literal is the pin proving the constant's value — routing those
- * through the constant would make them pass no matter what it became.
+ * through the constant would make them pass no matter what it became. A code
+ * reaching a `reasonCodes` array through a variable or helper parameter is
+ * also out of reach; the test pins are the layer that catches a wrong value.
  */
 const runReasonCodeSource = "packages/agent/src/core/policy/reason-codes.ts";
 const runReasonCodeLiteralPattern =
-  /reasonCodes:\s*\[[^\]]*?["'](stalled|budget_warning|budget_reassurance)["']/g;
+  /reasonCodes:\s*\[[^\]]*?["'`](stalled|budget_warning|budget_reassurance)["'`]/g;
+const runReasonCodeComparisonPattern =
+  /(?:[!=]==\s*|\.includes\()["'`](stalled|budget_warning|budget_reassurance)["'`]/g;
 
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;
@@ -190,11 +197,14 @@ function validatePolicyPackageBoundary(filePath: string, source: string): GuardV
 function validateRunReasonCodeVocabulary(filePath: string, source: string): GuardViolation[] {
   if (filePath === runReasonCodeSource || !filePath.includes("/src/")) return [];
 
-  return matches(source, runReasonCodeLiteralPattern).map((match) => ({
+  return [
+    ...matches(source, runReasonCodeLiteralPattern),
+    ...matches(source, runReasonCodeComparisonPattern),
+  ].map((match) => ({
     filePath,
     line: lineNumberForOffset(source, match.index),
     ruleId: "run-reason-code-vocabulary",
-    message: `run reason code ${match.text} written as a literal; use RunReasonCode from @openomni/agent so a rename fails the build instead of the run loop`,
+    message: `run reason code "${match.captured}" written as a literal; use RunReasonCode from @openomni/agent so a rename fails the build instead of the run loop`,
   }));
 }
 
@@ -204,7 +214,7 @@ function matches(source: string, pattern: RegExp): SourceMatch[] {
 
   let match = pattern.exec(source);
   while (match !== null) {
-    results.push({ index: match.index, text: match[0] });
+    results.push({ index: match.index, text: match[0], captured: match[1] });
     match = pattern.exec(source);
   }
 

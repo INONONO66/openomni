@@ -115,7 +115,7 @@ export async function buildTurn(
     return {
       type: "complete",
       result: runResult(state, {
-        finishReason: reason === RunReasonCode.Stalled ? RunReasonCode.Stalled : "stop",
+        finishReason: reason === RunReasonCode.Stalled ? "stalled" : "stop",
         guardAborted: reason !== RunReasonCode.Stalled,
       }),
     };
@@ -392,7 +392,7 @@ export async function handleStop(
     const reason = PolicyDecision.reason(postTurnDecision, "stop");
     if (effectOf(postTurnDecision, "run.abort")) {
       return runResult(state, {
-        finishReason: reason === RunReasonCode.Stalled ? RunReasonCode.Stalled : "stop",
+        finishReason: reason === RunReasonCode.Stalled ? "stalled" : "stop",
         guardAborted: reason !== RunReasonCode.Stalled,
       });
     }
