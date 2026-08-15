@@ -149,8 +149,27 @@ describe("createContextMiddleware", () => {
     const middleware = createContextMiddleware({ workspaceRoot: ws });
     const mockCtx = { ...contextPolicyInput(), traceContext: undefined };
 
-    const result = await dispatchContextMiddleware(middleware, mockCtx);
+    // A bare allow is shape-identical to "middleware never selected", so the
+    // pin also asserts the LOUD half: the engine records the middleware error
+    // under its own trace (#656 review) — the drop is refuse-and-report, not
+    // silence.
+    const warns: Array<Record<string, unknown>> = [];
+    const engine = PolicyEngine.create<PolicyContext>({
+      traceContext: { traceId: "trace-engine", sessionId: "session-context", runId: "run-1" },
+      auditEmit: (descriptor, data) => {
+        if (descriptor.name === "operational.warn") warns.push(data as Record<string, unknown>);
+      },
+    });
+    engine.register(middleware);
+    const result = await engine.dispatchPoint("prompt.context.pre", {
+      ...mockCtx,
+      sessionId: "session-context",
+      runId: "run-1",
+      turnIndex: 0,
+    });
+
     expect(result).toMatchObject({ verdict: "allow", effects: [] });
+    expect(warns.some((warn) => warn.msg === "middleware error")).toBe(true);
   });
 
   it("returns allow when assembled context is empty string", async () => {
