@@ -81,14 +81,16 @@ describe("run() streamText arguments", () => {
     };
 
     expect(streamArgs.toolChoice).toBe("required");
-    expect(streamArgs.stopWhen).toBeFunction();
     expect(streamArgs.maxRetries).toBe(0);
     expect(aiCapture.__openomniAiStepCount).toBe(7);
 
-    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
-    expect(stopWhen({ steps: [] })).toBe(false);
-    expect(stopWhen({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
-    expect(stopWhen({ steps: [1, 2, 3, 4, 5, 6, 7] })).toBe(true);
+    // stopWhen is a condition list since the window yield joined the cap.
+    const conditions = streamArgs.stopWhen as Array<(input: { steps: unknown[] }) => boolean>;
+    expect(conditions).toBeArrayOfSize(1);
+    const stepCap = conditions[0] as (input: { steps: unknown[] }) => boolean;
+    expect(stepCap({ steps: [] })).toBe(false);
+    expect(stepCap({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
+    expect(stepCap({ steps: [1, 2, 3, 4, 5, 6, 7] })).toBe(true);
   });
 
   test("uses default stepCountIs threshold when maxSteps is not provided", async () => {
@@ -111,12 +113,51 @@ describe("run() streamText arguments", () => {
 
     expect(aiCapture.__openomniAiStreamArgs).toBeDefined();
     const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
-    expect(streamArgs.stopWhen).toBeFunction();
     expect(aiCapture.__openomniAiStepCount).toBe(24);
 
-    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
-    expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
-    expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
+    const conditions = streamArgs.stopWhen as Array<(input: { steps: unknown[] }) => boolean>;
+    expect(conditions).toBeArrayOfSize(1);
+    const stepCap = conditions[0] as (input: { steps: unknown[] }) => boolean;
+    expect(stepCap({ steps: Array.from({ length: 23 }) })).toBe(false);
+    expect(stepCap({ steps: Array.from({ length: 24 }) })).toBe(true);
+  });
+
+  test("arms a window-yield condition only when yieldAtInputTokens is set", async () => {
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [],
+        maxSteps: 24,
+        yieldAtInputTokens: 800,
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        auth: { type: "api", key: "test-key-run" },
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
+    const conditions = streamArgs.stopWhen as Array<
+      (input: { steps: Array<{ usage?: { inputTokens?: number } }> }) => boolean
+    >;
+    expect(conditions).toBeArrayOfSize(2);
+    const windowYield = conditions[1] as (input: {
+      steps: Array<{ usage?: { inputTokens?: number } }>;
+    }) => boolean;
+    // Reads the LAST step's cache-inclusive input — not a sum across steps.
+    expect(windowYield({ steps: [{ usage: { inputTokens: 900 } }] })).toBe(true);
+    expect(windowYield({ steps: [{ usage: { inputTokens: 799 } }] })).toBe(false);
+    expect(
+      windowYield({ steps: [{ usage: { inputTokens: 900 } }, { usage: { inputTokens: 700 } }] }),
+    ).toBe(false);
+    expect(windowYield({ steps: [{}] })).toBe(false);
+    expect(windowYield({ steps: [] })).toBe(false);
   });
 
   /**

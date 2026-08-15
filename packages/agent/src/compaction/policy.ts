@@ -42,7 +42,10 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
         });
       }
       const resolved = { ...compaction, contextWindowTokens };
-      if (!Compaction.shouldCompact(ctx.contextTokens, resolved)) {
+      // A yield-borne dispatch skips the threshold gate: the loop already
+      // measured and stopped. Gating it again lets a config ratio above the
+      // loop's arm point refuse runs the seam never tried to reclaim.
+      if (!ctx.contextYielded && !Compaction.shouldCompact(ctx.contextTokens, resolved)) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 

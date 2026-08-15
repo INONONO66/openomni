@@ -53,6 +53,8 @@ export function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtif
     turnAssistant: {},
     turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     toolPolicyDecisions: [],
+    stepCap: 24,
+    windowYieldArmed: false,
     ...overrides,
   };
 }

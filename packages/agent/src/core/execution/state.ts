@@ -110,6 +110,12 @@ export interface RunState {
    * Undefined when the catalog does not know (proxy models report 0).
    */
   contextWindowTokens?: number;
+  /**
+   * Set when a window yield fired and the seam reclaimed nothing: the run
+   * proceeds with the yield disarmed — the remaining headroom is real, and
+   * re-yielding every step would kill a run the window could still carry.
+   */
+  windowYieldDisarmed?: boolean;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -128,6 +134,10 @@ export interface TurnArtifacts {
   readonly turnAssistant: { message?: Message.WithParts };
   readonly turnUsage: TokenUsage;
   readonly toolPolicyDecisions: Array<{ readonly decision: Policy.PolicyDecision }>;
+  /** The step budget this turn was given — a turn that used all of it ended on the cap, not a window yield. */
+  readonly stepCap: number;
+  /** Whether the window-yield knob was armed (a known window existed). */
+  readonly windowYieldArmed: boolean;
 }
 
 export type BuildTurnResult =
@@ -201,6 +211,10 @@ export function recordCallContext(state: RunState, contextTokens: number): void 
 
 export function recordRunWindow(state: RunState, contextWindowTokens: number): void {
   state.contextWindowTokens = contextWindowTokens > 0 ? contextWindowTokens : undefined;
+}
+
+export function disarmWindowYield(state: RunState): void {
+  state.windowYieldDisarmed = true;
 }
 
 export function recordAssistantTokenDelta(

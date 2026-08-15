@@ -357,4 +357,44 @@ describe("createCompactionPolicy", () => {
     expect(verdict.verdict).toBe("allow");
     expect(verdict.reasonCodes).toContain("compaction_skipped_nothing_reclaimed");
   });
+
+  it("compacts a yield-borne dispatch even when the config ratio sits above the arm point", async () => {
+    // #651 review M2: the loop arms at the default ratio; a plan with
+    // thresholdRatio 0.95 would otherwise refuse at 80% measured and the run
+    // would die without the seam ever trying. The yield IS the trigger.
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      thresholdRatio: 0.95,
+      protectRecentMessages: 2,
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+        contextTokens: 800,
+        contextWindowTokens: 1000,
+        contextYielded: true,
+      }),
+    );
+
+    expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
+  });
+
+  it("still honors the config ratio on non-yield dispatches", async () => {
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      thresholdRatio: 0.95,
+      protectRecentMessages: 2,
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+        contextTokens: 800,
+        contextWindowTokens: 1000,
+      }),
+    );
+
+    expect(verdict.effects).toHaveLength(0);
+  });
 });

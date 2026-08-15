@@ -38,6 +38,8 @@ function makeTurnArtifacts(): TurnArtifacts {
     turnAssistant: {},
     turnUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     toolPolicyDecisions: [],
+    stepCap: 24,
+    windowYieldArmed: false,
   };
 }
 
