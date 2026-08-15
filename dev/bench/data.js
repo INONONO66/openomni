@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786806095851,
+  "lastUpdate": 1786807880925,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48585,6 +48585,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 521441,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8d5c674a5ff4d8990d44a0322fe25b223e6de54",
+          "message": "refactor(agent): delete the dead entry-export surface (#606) (#647)\n\n* refactor(agent): delete the dead entry-export surface (#606)\n\nThe dead-export ratchet exempts exports reachable from an entry file,\nso a barrel could carry type re-exports nothing imports and the gate\nstayed quiet. Running knip with --include-entry-exports listed them;\nthis deletes every one in the three target packages — agent 16,\ntelemetry 16, llm 0 — verified individually: barrels shrink to what a\nconsumer somewhere actually imports, definition-site exports drop the\nkeyword where declaration emit does not require it, and two lines were\npure pass-throughs of protocol types (Sink, McpServerConfig) that\ncallers already take from @openomni/protocol directly.\n\nThis was mis-parked as Owner-gated: flipping includeEntryExports in the\nratchet config or growing the baseline needs sign-off, but deleting the\ndead exports it would have surfaced is the shrink the ratchet header\ncalls autonomous and encouraged. No baseline entry changes; the ratchet\nreports 17 known, none new, and a re-run of knip with the flag shows\nzero remaining in agent, llm, and telemetry.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): adjudicate the entry-surface rule (#606)\n\nAdversarial review passed the deletions but caught three documents\nstill asserting the doctrine they violated — including a D5 comment I\nwrote earlier in this effort, sitting directly above a hunk that broke\nit. The position is now adjudicated and recorded consistently: the\npackage entry carries what a consumer somewhere actually imports;\ntypes reachable through exported signatures stay exported at their\ndefinition sites; a consumer that needs to name one adds the one-line\nre-export in the same PR that imports it.\n\nThe telemetry AGENTS.md paragraph that gated this surface's deletion on\n\"Phase 1b abandoned\" is superseded, not deleted silently: Phase 1b\nshipped its consumers, they hold everything structurally, and the types\nnever gained a reader — the paragraph now says so, and points at\nknip --include-entry-exports since the ratchet exempts exactly this\nsurface.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T00:30:09+09:00",
+          "tree_id": "e286861d6c6948a86170b3457a3c1908885439ac",
+          "url": "https://github.com/INONONO66/openomni/commit/b8d5c674a5ff4d8990d44a0322fe25b223e6de54"
+        },
+        "date": 1786807880420,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 665,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6192,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2957,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2415,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16085,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8368,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1123,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1521,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 739,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2320,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100472,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 509815,
             "unit": "ns/op"
           }
         ]
