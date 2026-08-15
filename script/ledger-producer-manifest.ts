@@ -44,7 +44,7 @@
 import { Glob } from "bun";
 import { join } from "node:path";
 
-export interface LedgerStreamProducer {
+interface LedgerStreamProducer {
   /** Stream class key — must match `LedgerAppend.StreamRegistry`. */
   readonly streamClass: "wait" | "work" | "route" | "command" | "effect";
   /** Repo-relative path of the ONE module that appends this class's facts. */

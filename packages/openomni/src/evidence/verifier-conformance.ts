@@ -14,7 +14,6 @@ export {
   createEnvironmentFingerprint,
   hashCanonicalJson,
   hashNondeterminismManifest,
-  type EnvironmentFingerprint,
   type JsonValue,
 } from "./verifier-conformance-canonical.js";
 export {
@@ -27,16 +26,11 @@ export {
   assertReplayConformance,
   createReplayKey,
   substituteRecordedOutputs,
-  type RecordedCommand,
-  type ReplayDivergence,
-  type ReplayKey,
 } from "./verifier-conformance-replay.js";
 export {
   UpcasterSchema,
   VersionedEventSchema,
   upcastOnRead,
-  type Upcaster,
-  type VersionedEvent,
 } from "./verifier-conformance-upcast.js";
 export {
   CommutativeEventSchema,
@@ -44,7 +38,4 @@ export {
   InterleavingReportSchema,
   fuzzCommutativeInterleavings,
   type CommutativeEvent,
-  type FoldReducer,
-  type InterleavingPlan,
-  type InterleavingReport,
 } from "./verifier-conformance-interleaving.js";

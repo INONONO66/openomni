@@ -1,7 +1,5 @@
 {
   "grandfathered": [
-    "files packages/openomni/test/dispatch/policy-registration.contract-test.ts",
-    "types packages/openomni/src/execution-runtime/child-agent/types.ts ChildStatus",
-    "types packages/openomni/src/execution-runtime/child-agent/types.ts DelegationPolicyPointId"
+    "files packages/openomni/test/dispatch/policy-registration.contract-test.ts"
   ]
 }

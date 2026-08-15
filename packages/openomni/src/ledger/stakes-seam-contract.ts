@@ -75,7 +75,7 @@ export type VoiceAuthorizationRequest = Readonly<{
   windowRef: string;
   asOfOwnerSeq: number;
 }>;
-export type VoiceAuthorizationSnapshot = VoiceAuthorizationRequest;
+type VoiceAuthorizationSnapshot = VoiceAuthorizationRequest;
 export type StakesAuthorityPort = Readonly<{
   read(request: StakesAuthorityRequest): StakesAuthoritySnapshot;
   readVoiceAuthorization(request: VoiceAuthorizationRequest): VoiceAuthorizationSnapshot;
@@ -85,7 +85,7 @@ export type StakesInjectionDenial = {
   readonly code: "invalid_subject" | "forged_local_value" | "surface_mismatch" | "binding_mismatch";
   readonly surface: "work.complete.pre" | "authorized_voice";
 };
-export type CompletionStakesContext = {
+type CompletionStakesContext = {
   readonly surface: "work.complete.pre";
   readonly workItemHash: string;
   readonly requestId: string;
@@ -94,7 +94,7 @@ export type CompletionStakesContext = {
   readonly expectedHead: number;
   readonly stakes: StakesValue;
 };
-export type VoiceStakesContext = {
+type VoiceStakesContext = {
   readonly surface: "authorized_voice";
   readonly evaluationId: string;
   readonly authorizationReceiptRef: string;

@@ -20,7 +20,7 @@ import { WorkerRunStateStore } from "./state-store.js";
 
 export type WorkerRunStatus = WorkerRunProtocol.Status;
 
-export interface WorkerRunRecord {
+interface WorkerRunRecord {
   runId: string;
   sessionId: string;
   parentSessionId?: string;

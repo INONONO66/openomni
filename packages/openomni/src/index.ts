@@ -99,8 +99,6 @@ export type {
 // namespace; the entry re-export keeps them public until archived replay lands)
 export * as VerifierConformance from "./evidence/verifier-conformance";
 
-export type { WorkItemCompletionRecoveryReceipt } from "./work-item";
-
 // Dispatch runtime
 export {
   DEFAULT_DISPATCH_MODEL,

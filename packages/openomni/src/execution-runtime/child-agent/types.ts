@@ -9,13 +9,13 @@ import type { Model, Policy, ToolSelection, TraceContext } from "@openomni/proto
 import type { InjectionQueue } from "../injection-queue.js";
 import type { NativeTool } from "../tool/types.js";
 
-export type ChildStatus = "running" | "completed" | "failed" | "cancelled";
+type ChildStatus = "running" | "completed" | "failed" | "cancelled";
 
 export const DEFAULT_MAX_CHILDREN = 4;
 export const DEFAULT_AWAIT_TIMEOUT_MS = 60_000;
 export const DEFAULT_MAX_OUTPUT_CHARS = 4_000;
 
-export type DelegationPolicyPointId = Extract<
+type DelegationPolicyPointId = Extract<
   keyof typeof Policy.PolicyPoint.Registry,
   `delegation.worker.${string}`
 >;

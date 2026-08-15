@@ -21,7 +21,6 @@
     },
     "apps/server": {
       "entry": [
-        "src/index.ts",
         "src/cli.ts",
         "src/execution/worker-entry.ts",
         "src/manual/*.ts",
@@ -31,16 +30,16 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/coordinator": {
-      "entry": ["src/index.ts", "test/**/*.test.ts", "test/harness/*.ts"],
+      "entry": ["test/**/*.test.ts", "test/harness/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/ipc": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/protocol": {
-      "entry": ["src/index.ts", "test/**/*.test.ts", "test/**/*.d.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts"]
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     }
   }
 }

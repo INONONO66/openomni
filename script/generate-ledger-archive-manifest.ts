@@ -36,7 +36,7 @@ const FROZEN_TABLES: readonly { table: string; idColumn: string }[] = [
   { table: "worker_run_state", idColumn: "run_id" },
 ];
 
-export interface LedgerArchiveTableEntry {
+interface LedgerArchiveTableEntry {
   readonly table: string;
   readonly sourceSchemaVersion: string;
   readonly rowCount: number;
