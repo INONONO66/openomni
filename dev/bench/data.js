@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786822412834,
+  "lastUpdate": 1786825850511,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -49329,6 +49329,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 503112,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c76cd9eb916d56a0bdd5628dc14e087c139ba6d",
+          "message": "refactor(openomni): d11 batch 1 — origins mint w3c, boots inherit (#606) (#653)\n\n* refactor(openomni): d11 batch 1 — origins mint w3c, boots inherit (#606)\n\nA read-only classifier walked all 102 sites that write a random uuid\ninto a traceId position and split them: 30 genuine origins, 39 with an\ninheritable trace already in reach, 33 needing API changes. This lands\nthe mechanical half — every pure origin and every inherit whose source\nis at most one signature away.\n\nOrigins mint via newTraceId(): channel lifecycle and gateway events,\nthe worker process boot (one module-level trace for its three\nemitters), inbound bootstrap IPC, the telegram poll loop, the fatal\nmain() catch, and the two ?? fallback anchors in recovery/shutdown.\nDiscord's close-reconnect chain mints once at the close and threads\nthrough reconnect() — the retry loop and the terminal failure carry the\nchain's id, not one per attempt.\n\nInherits thread what already existed: the boot sweep now runs under ONE\ntrace through recoverInterruptedMessages, processRetryQueue,\nsweepExpired, registerServerMessaging, loadConfig, and\nparseMcpServerConfigs (mcp-config HELD the trace and dropped it) —\npreviously a single boot emitted 10+ unrelated ids. The coordinator's\nQueueSaturated carries the delivering run's trace like its siblings,\nand the wall-time kill carries the trace of the run it kills — until\nnow that kill and its own RunSettled{interrupted} were unlinkable. The\nhttp request log reads the requestId the same file already uses as a\ntrace three times; the X-Request-Id mint itself is externally visible\nand stays a uuid.\n\nThe channels band contract (#499 readiness gate) widens to the leaf\ntelemetry package, with the rationale in the contract comment: channels\nare genuine trace origins under D11, and the alternative — minting W3C\nlocally — forks the vocabulary. The socket-dir sweep collapses three\nids to one but stays uuid: coordinator's ring-2 dep set excludes\ntelemetry by an explicit Owner-gated ratchet comment, now recorded in\nthe plan alongside the other 57 remaining sites and the deliberate\npersistence-writer decision.\n\nThe Stakes value surface ruling request rides along in the plan doc.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(coordinator): the type requires the trace (#606)\n\nReview M1: the wall-time-kill's empty-string fallback was an unreachable\nfootgun with a false comment — the pool's normalizer already throws on a\nmissing trace, and had the branch ever run, \"\" would not read as absent:\nthe persistence backstop maps \"\" to undefined and launders a fresh mint\ninto trace_id and the event hash, the exact defect this PR's own plan\nrow names. deliver() now types the trace as required and the ternary is\ngone; the tests supply what production always did.\n\nReview M2: the band-widening's citation was wrong — #499's text pins\nthe band to {protocol, ipc}, so \"no contract text\" was false even\nthough no owner-gate wording exists. The contract comment now cites the\namendment against #499 for Owner review (posted there) instead of\nasserting silence.\n\nThe discord op-notice/close-chain two-trace tradeoff is stated at the\nsite (threading the notice id through instance state could leak across\nunrelated closes), and the plan's remainder row now classifies the\nworker-bootstrap IPC mints as inherit-blocked-on-API rather than\norigins.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T05:29:36+09:00",
+          "tree_id": "9a230de3d93920d50f51e67fdc1e60e29920b81b",
+          "url": "https://github.com/INONONO66/openomni/commit/7c76cd9eb916d56a0bdd5628dc14e087c139ba6d"
+        },
+        "date": 1786825849502,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 677,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6291,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9968,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2627,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3097,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2430,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16060,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8368,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 626,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2325,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10839,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100561,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 508144,
             "unit": "ns/op"
           }
         ]
