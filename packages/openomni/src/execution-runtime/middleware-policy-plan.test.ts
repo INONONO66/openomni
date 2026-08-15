@@ -21,6 +21,7 @@ describe("buildWorkerMiddleware policy plan path", () => {
     expect(registrations.map((registration) => registration.name)).toEqual([
       "builtin:budget-reassurance",
       "builtin:budget-warning",
+      "builtin:compaction",
       "builtin:tool-permission",
       "builtin:idle-nudge",
     ]);
@@ -48,6 +49,7 @@ describe("buildWorkerMiddleware policy plan path", () => {
     expect(registrations.map((r) => r.name)).toEqual([
       "builtin:budget-reassurance",
       "builtin:budget-warning",
+      "builtin:compaction",
       "builtin:tool-permission",
       "builtin:idle-nudge",
     ]);
@@ -123,6 +125,7 @@ describe("buildWorkerMiddleware policy plan path", () => {
     expect(registrations.map((r) => r.name)).toEqual([
       "builtin:budget-reassurance",
       "builtin:budget-warning",
+      "builtin:compaction",
       "builtin:tool-permission",
       "builtin:idle-nudge",
     ]);

@@ -287,6 +287,7 @@ describe("buildWorkerMiddleware injection queue integration", () => {
     expect(registrations.map((registration) => registration.name)).toEqual([
       "builtin:budget-reassurance",
       "builtin:budget-warning",
+      "builtin:compaction",
       "builtin:tool-permission",
       "builtin:injection-queue-drain",
       "builtin:idle-nudge",

@@ -3,7 +3,12 @@ import { Operational, type Message } from "@openomni/protocol";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 
 export interface CompactionOptions {
-  contextWindowTokens: number;
+  /**
+   * Optional narrowing of the model's window. The loop records the resolved
+   * model's real limit and the policy reads it from the dispatch context, so
+   * strategy config only sets this to compact as if the window were smaller.
+   */
+  contextWindowTokens?: number;
   thresholdRatio?: number;
   reserveTokens?: number;
   reserveRatio?: number;
@@ -18,24 +23,17 @@ export interface CompactionOptions {
   elideToolOutputs?: ToolOutputElision;
 }
 
+/** Options with the window already resolved — the mechanism never guesses it. */
+type ResolvedCompactionOptions = CompactionOptions & { contextWindowTokens: number };
+
 interface CompactionResult {
   messages: Message.WithParts[];
   compacted: boolean;
   removedCount: number;
-}
-
-/**
- * Raised when compaction cannot commit a provider-valid kept window: no
- * summary user message will anchor the window (onSummarize unset) and no user
- * boundary exists at or before the cutoff. Thrown BEFORE anything is
- * committed — the fail-closed `run.completion.pre` contract turns it into a
- * deny plus a published middleware error, never commit-then-400.
- */
-export class CompactionBoundaryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CompactionBoundaryError";
-  }
+  /** Set when the trigger fired but no provider-valid cut exists: no summary
+   * anchor and no user boundary at or before the cutoff. The caller records
+   * it; killing the run over housekeeping would be worse than a full window. */
+  blocked?: "no_user_boundary";
 }
 
 const DEFAULT_THRESHOLD_RATIO = 0.8;
@@ -44,7 +42,7 @@ const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_PROTECT_RECENT = 6;
 
 export namespace Compaction {
-  export function shouldCompact(totalTokens: number, options: CompactionOptions): boolean {
+  export function shouldCompact(totalTokens: number, options: ResolvedCompactionOptions): boolean {
     const threshold = resolveThresholdTokens(options);
     return totalTokens >= threshold;
   }
@@ -60,7 +58,7 @@ export namespace Compaction {
    */
   export async function compact(
     messages: Message.WithParts[],
-    options: CompactionOptions,
+    options: ResolvedCompactionOptions,
     trace: { readonly traceId: string },
     events: BusEvent.Sink,
     measuredContextTokens?: number,
@@ -133,6 +131,15 @@ export namespace Compaction {
       options.onSummarize === undefined
         ? snapToUserBoundary(working, naturalCutoff)
         : naturalCutoff;
+    if (cutoff === undefined) {
+      // No provider-valid kept window exists (assistant-first history, no
+      // summary anchor). Adversarial review of the live wiring showed this
+      // reachable from resumed worker hydration — a throw here would turn a
+      // fail-closed run.completion.pre into a mid-conversation kill.
+      return elidedChars > 0
+        ? { messages: working, compacted: true, removedCount: 0 }
+        : { messages: working, compacted: false, removedCount: 0, blocked: "no_user_boundary" };
+    }
     if (cutoff === 0) {
       return elidedChars > 0
         ? { messages: working, compacted: true, removedCount: 0 }
@@ -174,7 +181,7 @@ export namespace Compaction {
   }
 }
 
-function resolveThresholdTokens(options: CompactionOptions): number {
+function resolveThresholdTokens(options: ResolvedCompactionOptions): number {
   const ratioThreshold =
     options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
   const reserveTokens = resolveReserveTokens(options);
@@ -182,7 +189,7 @@ function resolveThresholdTokens(options: CompactionOptions): number {
   return Math.min(ratioThreshold, options.contextWindowTokens - reserveTokens);
 }
 
-function resolveReserveTokens(options: CompactionOptions): number | undefined {
+function resolveReserveTokens(options: ResolvedCompactionOptions): number | undefined {
   const reserveTokens =
     options.reserveTokens ??
     (options.reserveRatio === undefined
@@ -192,13 +199,14 @@ function resolveReserveTokens(options: CompactionOptions): number | undefined {
   return Math.min(options.contextWindowTokens, Math.max(0, reserveTokens));
 }
 
-function snapToUserBoundary(messages: Message.WithParts[], naturalCutoff: number): number {
+function snapToUserBoundary(
+  messages: Message.WithParts[],
+  naturalCutoff: number,
+): number | undefined {
   for (let index = naturalCutoff; index >= 0; index -= 1) {
     if (messages[index]?.info.role === "user") return index;
   }
-  throw new CompactionBoundaryError(
-    "no valid compaction boundary: the kept window would start with an assistant message and no summary user message anchors it (onSummarize unset); refusing to commit",
-  );
+  return undefined;
 }
 
 function buildSummaryMessage(

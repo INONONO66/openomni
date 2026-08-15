@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { CompactionBoundaryError, Compaction } from "../../src/compaction/compact";
+import { Compaction } from "../../src/compaction/compact";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */
 const TEST_TRACE_ID = "trace-compaction-test";
@@ -337,27 +337,25 @@ describe("Compaction", () => {
       expect(toolParts[0]?.state.status).toBe("completed");
     });
 
-    it("fails loudly with a typed error when no valid user boundary exists", async () => {
+    it("refuses as a value when no valid user boundary exists — never a throw", async () => {
       // No user message at or before the cutoff: there is no boundary that can
-      // anchor the kept window without a summary. Committing anyway would be
-      // commit-then-400; the compactor must refuse with a typed error instead.
+      // anchor the kept window without a summary. The wiring review proved
+      // assistant-first histories reachable from resumed worker hydration, and
+      // run.completion.pre is fail-closed — a throw here kills a live run over
+      // housekeeping. The refusal is a value the policy records.
       const messages = Array.from({ length: 8 }, (_, i) => makeAssistantMessage(`a${i}`));
-      let caught: unknown;
-      try {
-        await Compaction.compact(
-          messages,
-          {
-            contextWindowTokens: 1000,
-            protectRecentMessages: 3,
-          },
-          { traceId: TEST_TRACE_ID },
-          Bus,
-        );
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(CompactionBoundaryError);
-      expect((caught as Error).name).toBe("CompactionBoundaryError");
+      const result = await Compaction.compact(
+        messages,
+        {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 3,
+        },
+        { traceId: TEST_TRACE_ID },
+        Bus,
+      );
+      expect(result.compacted).toBe(false);
+      expect(result.blocked).toBe("no_user_boundary");
+      expect(result.messages).toHaveLength(8);
     });
 
     it("keeps the natural cutoff when a summary user message anchors the window", async () => {

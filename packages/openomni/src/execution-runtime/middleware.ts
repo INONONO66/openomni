@@ -18,7 +18,7 @@ import {
 } from "./middleware/tool-permission-policy.js";
 
 type WorkerCompactionConfig = {
-  readonly contextWindowTokens: number;
+  readonly contextWindowTokens?: number;
   readonly thresholdRatio?: number;
   readonly reserveTokens?: number;
   readonly reserveRatio?: number;
@@ -73,15 +73,29 @@ function shouldAppendIdleNudge(
   return !policyPlanMiddleware?.some((registration) => registration.name === "builtin:idle-nudge");
 }
 
+/**
+ * The product's default compaction strategy (#606 wiring ruling): the window
+ * itself is the loop's fact — the resolved model's limit — so the default
+ * carries only opinions. Elision knobs: outputs under ~1k tokens are not
+ * worth rewriting history for, and half a k of head keeps the record legible.
+ * No summarizer by default — the boundary-snap cut is deterministic and
+ * needs no LLM. Hosts opt out or override by passing their own block.
+ */
+const DEFAULT_WORKER_COMPACTION: WorkerCompactionConfig = {
+  elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+};
+
 function buildAgentLifecycleMiddleware(
   compaction: WorkerMiddlewareConfig["compaction"],
 ): PolicyEngineRegistration[] {
   return [
     createBudgetReassurancePolicy(),
     createBudgetWarningPolicy(),
-    ...(compaction
-      ? [createCompactionPolicy({ ...compaction, events: Bus, priority: COMPACTION_PRIORITY })]
-      : []),
+    createCompactionPolicy({
+      ...(compaction ?? DEFAULT_WORKER_COMPACTION),
+      events: Bus,
+      priority: COMPACTION_PRIORITY,
+    }),
   ];
 }
 
