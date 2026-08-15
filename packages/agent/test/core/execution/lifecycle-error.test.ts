@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { AgentExecution, Operational } from "@openomni/protocol";
+import { AgentExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -81,7 +81,12 @@ describe("handleError (error)", () => {
     expect(decision.action).toBe("retry");
   });
 
-  it("applies run.retry_after delayMs before retrying", async () => {
+  /**
+   * The wait itself is the runner's since #632; what `handleError` decides is
+   * how long. `run-terminal-record.test.ts` covers what an abort during that
+   * wait records.
+   */
+  it("reports the run.retry_after delay as the backoff", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
@@ -101,7 +106,6 @@ describe("handleError (error)", () => {
       backoffMs: { initial: 0, multiplier: 1, max: 0 },
     };
 
-    const started = Date.now();
     const decision = await handleError(
       state,
       engine,
@@ -113,46 +117,9 @@ describe("handleError (error)", () => {
     );
 
     expect(decision.action).toBe("retry");
-    expect(Date.now() - started).toBeGreaterThanOrEqual(15);
-  });
-
-  it("does not sleep when retry delay is already aborted", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-on-error-aborted-retry-delay",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.retry_after"] },
-      priority: 100,
-      fn: () =>
-        allow("test.aborted-retry-delay", "retry-after", [
-          { type: "run.retry_after", delayMs: 5_000 },
-        ]),
-    });
-
-    const controller = new AbortController();
-    controller.abort();
-    const state = makeState();
-    const config = makeConfig({ signal: controller.signal });
-    const retryPolicy = {
-      maxAttempts: 3,
-      backoffMs: { initial: 0, multiplier: 1, max: 0 },
-    };
-
-    const started = Date.now();
-    await expect(
-      handleError(
-        state,
-        engine,
-        config,
-        makeAgentBase(),
-        new Error("timeout while waiting"),
-        1,
-        retryPolicy,
-      ),
-    ).rejects.toThrow("aborted");
-    expect(Date.now() - started).toBeLessThan(500);
+    if (decision.action !== "retry") throw new Error("expected a retry decision");
+    // 20 from the effect, not the 0 the policy configured.
+    expect(decision.backoffMs).toBe(20);
   });
 
   it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
@@ -237,15 +204,12 @@ describe("handleError (error)", () => {
    * after a `run.retry_after` effect narrows the configured one, exists
    * nowhere else at all.
    */
-  it("records the decision on the terminal failure, with the narrowed ceiling", async () => {
-    const failures: Array<{
-      traceId: string;
-      sessionId?: string;
-      context?: Record<string, unknown>;
-    }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Error, (event) => {
-      failures.push(event as unknown as (typeof failures)[number]);
-    });
+  /**
+   * `handleError` reports the facts; the runner records them (#632), so this
+   * asserts the report rather than the event. The record itself, and that a
+   * throw always produces one, is `run-terminal-record.test.ts`.
+   */
+  it("reports the decision on the terminal failure, with the narrowed ceiling", async () => {
     const engine = PolicyEngine.create();
     engine.register({
       kind: "point",
@@ -258,29 +222,21 @@ describe("handleError (error)", () => {
           { type: "run.retry_after", delayMs: 0, maxRetries: 1 },
         ]),
     });
-    const agentBase = makeAgentBase();
+    const decision = await handleError(
+      makeState(),
+      engine,
+      makeConfig(),
+      makeAgentBase(),
+      new Error("schema validation failed"),
+      // Not 1: `attempt` is a pass-through, and asserting it at its input
+      // value of 1 also holds when the field is hardcoded to 1.
+      2,
+      { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
+    );
 
-    try {
-      await handleError(
-        makeState(),
-        engine,
-        makeConfig(),
-        agentBase,
-        new Error("schema validation failed"),
-        // Not 1: `attempt` is a pass-through, and asserting it at its input
-        // value of 1 also holds when the field is hardcoded to 1.
-        2,
-        { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
-      );
-      await Bun.sleep(0);
-    } finally {
-      unsubscribe();
-    }
-
-    expect(failures).toHaveLength(1);
-    expect(failures[0]?.traceId).toBe(agentBase.traceId);
-    expect(failures[0]?.sessionId).toBe(agentBase.sessionId);
-    expect(failures[0]?.context).toEqual({
+    expect(decision.action).toBe("throw");
+    if (decision.action !== "throw") throw new Error("expected a terminal decision");
+    expect(decision.failure).toEqual({
       reason: "validation_error",
       attempt: 2,
       // 1 from the effect, not the 5 the policy configured.

@@ -9,6 +9,7 @@ import {
 } from "../budget";
 import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import type { DispatchContext } from "../policy";
+import type { RetryReason } from "../retry";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
 function toMessagesWithParts(
@@ -123,13 +124,22 @@ export type BuildTurnResult =
 
 /**
  * What the run does after an attempt raised. `complete` carries the result a
- * guard settled on; the other two carry the error, which the caller either
- * sleeps on and retries or rethrows.
+ * guard settled on. The other two carry what the terminal record would need,
+ * because the runner owns that record and the wait between attempts: a run
+ * aborted mid-backoff has to report the reason and ceiling that were decided,
+ * not ones re-derived from the abort.
  */
+/** What the terminal record needs. Emitted by the runner, which owns it. */
+export interface RunFailureFacts {
+  readonly reason: RetryReason;
+  readonly attempt: number;
+  readonly maxAttempts: number;
+}
+
 export type ErrorDecision =
-  | { action: "retry"; errorMessage: string }
-  | { action: "complete"; result: AgentResult; errorMessage: string }
-  | { action: "throw"; error: Error; errorMessage: string };
+  | { action: "retry"; backoffMs: number; failure: RunFailureFacts }
+  | { action: "complete"; result: AgentResult }
+  | { action: "throw"; error: Error; failure: RunFailureFacts };
 
 export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
   const sessionId = input.traceContext.sessionId;
