@@ -66,8 +66,7 @@ export type Verdict = z.infer<typeof Verdict>;
  * verifier-registry-contract.ts, mirrored by protocol `ResultValue`). A step
  * with no verification carries `null` (see `ProjectionStep.verifierStatus`).
  */
-export const VerifierStatus = z.enum(["verified", "refuted", "inconclusive", "asserted"]);
-export type VerifierStatus = z.infer<typeof VerifierStatus>;
+const VerifierStatus = z.enum(["verified", "refuted", "inconclusive", "asserted"]);
 
 // ---------------------------------------------------------------------------
 // verdict mapper — PURE, throw-on-unknown
@@ -193,14 +192,14 @@ export const FLAT_EVENT_FIELDS = Object.keys(FlatEvent.shape) as (keyof FlatEven
  * same way, on any machine, at any time. `timeCreated`/`streamId`/`seq` come
  * straight off the immutable row — the fold NEVER reads `Date.now()`.
  */
-export const StepOrder = z
+const StepOrder = z
   .object({
     timeCreated: z.number().int(),
     streamId: z.string().min(1),
     seq: z.number().int().nonnegative(),
   })
   .strict();
-export type StepOrder = z.infer<typeof StepOrder>;
+type StepOrder = z.infer<typeof StepOrder>;
 
 /**
  * One assembled per-step fact bundle. The assembler (later increments) reads

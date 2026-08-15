@@ -43,7 +43,7 @@ export interface BreadcrumbRef {
 }
 
 /** Extracts `#NNN` comment refs from one file's source. */
-export function scanSource(filePath: string, source: string): BreadcrumbRef[] {
+function scanSource(filePath: string, source: string): BreadcrumbRef[] {
   const refs: BreadcrumbRef[] = [];
   const lines = source.split("\n");
   let inBlockComment = false;
@@ -92,7 +92,7 @@ export function scanSource(filePath: string, source: string): BreadcrumbRef[] {
   return refs;
 }
 
-export function groupByIssue(refs: readonly BreadcrumbRef[]): Map<number, BreadcrumbRef[]> {
+function groupByIssue(refs: readonly BreadcrumbRef[]): Map<number, BreadcrumbRef[]> {
   const grouped = new Map<number, BreadcrumbRef[]>();
   for (const ref of refs) {
     const bucket = grouped.get(ref.issue);

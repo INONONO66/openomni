@@ -16,10 +16,6 @@ export function getAgentDefinition(name: string): AgentDefinition | undefined {
   return factory?.();
 }
 
-export function getAllAgentNames(): string[] {
-  return [...agentSources.keys()];
-}
-
 export function createAllAgents(): Map<string, AgentDefinition> {
   const result = new Map<string, AgentDefinition>();
   for (const [name, factory] of agentSources) {

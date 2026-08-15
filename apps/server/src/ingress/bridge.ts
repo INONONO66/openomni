@@ -79,7 +79,7 @@ export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.Agen
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
-export function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
+function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
   const model = deps.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const definition: AgentDefinition = {
     name: "resident",

@@ -408,7 +408,7 @@ export function readInventory(path: string): Inventory {
   return JSON.parse(readFileSync(path, "utf8")) as Inventory;
 }
 
-export function readFixture(path: string): Fixture {
+function readFixture(path: string): Fixture {
   return JSON.parse(readFileSync(path, "utf8")) as Fixture;
 }
 

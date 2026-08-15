@@ -7,7 +7,4 @@ export {
   mapVerdict,
   ProjectionInput,
   ProjectionStep,
-  StepOrder,
-  Verdict,
-  VerifierStatus,
 } from "./flat-event.js";

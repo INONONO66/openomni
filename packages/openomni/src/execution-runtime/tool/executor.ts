@@ -480,7 +480,7 @@ function requireCallTraceId(context: ToolExecutionContext | undefined): string {
   return traceId;
 }
 
-export function createErrorResult(call: Tool.Call, message: string): Tool.Result {
+function createErrorResult(call: Tool.Call, message: string): Tool.Result {
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
