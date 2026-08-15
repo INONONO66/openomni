@@ -13,13 +13,12 @@ src/
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
-│   ├── execution/              # The agent loop. Phase 4 rule 1 names five of these: run.ts (entry), turn.ts (prepare + settle), tools.ts (tool.native/mcp pre/post dispatch), effects.ts (effect application), state.ts (run state + lifecycle context). Beside them: run-events.ts (the records), lifecycle-dispatch.ts (run-level points), compaction.ts (InMemoryCompactor)
+│   ├── execution/              # The agent loop. Phase 4 rule 1 names five of these: run.ts (entry), turn.ts (prepare + settle), tools.ts (tool.native/mcp pre/post dispatch), effects.ts (effect application), state.ts (run state + lifecycle context). Beside them: run-events.ts (the records), lifecycle-dispatch.ts (run-level points)
 │   └── policy/
 │       ├── index.ts            # Agent-scoped PolicyEngine facade over @openomni/policy
-│       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution
-│       ├── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
-│       └── builtin/
-│           └── compaction.ts   # createCompactionPolicy
+│       ├── registry.ts         # PolicyRegistry + defaultRegistry(events) — builtin policy id → factory resolution (compaction is the last registration; dies when it moves to openomni)
+│       └── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
+├── compaction/                 # D6 home (#641): compact.ts (Compaction mechanism + boundary guard), policy.ts (run.completion.pre seam adapter), index.ts (config type + factory)
 └── runtime/
     ├── index.ts                # Re-exports mcp
     └── mcp/
@@ -85,7 +84,7 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
 - **Builtins** (resolved by id through `defaultRegistry(events)`, which hands the reporting builtins the caller's sink; stamped plans from the dispatch gate (#479) reference these ids). Per D5 these are moving out one at a time — an id listed here but not below is registered by `openomni` instead:
-  - `builtin:compaction` — triggers `InMemoryCompactor.compact()` when the token threshold is exceeded
+  - `builtin:compaction` — triggers `Compaction.compact()` (`src/compaction/compact.ts`) when the token threshold is exceeded; the seam adapter is `src/compaction/policy.ts` (#641)
   A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
   - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered by `registerIdleNudge`
   - Moved out (#629): `builtin:tool-permission` — `openomni`'s `execution-runtime/middleware/tool-permission-policy.ts`, registered by `registerToolPermission(registry, events)`. The executor still resolves the canonical policy name and the tool's labels; matching a ruleset against them is the policy's

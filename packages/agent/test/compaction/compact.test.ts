@@ -81,7 +81,7 @@ function makeToolAssistantMessage(text: string, callID: string): Message.WithPar
   return { info: base.info, parts: [...base.parts, toolPart] };
 }
 
-describe("InMemoryCompactor", () => {
+describe("Compaction", () => {
   /**
    * Compaction rewrites the run's history; the record of that has to be
    * readable against the run it changed. Re-minting here left the suite green.
