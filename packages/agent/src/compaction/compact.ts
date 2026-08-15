@@ -1,5 +1,6 @@
 import type { BusEvent } from "@openomni/protocol";
 import { Operational, type Message } from "@openomni/protocol";
+import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 
 export interface CompactionOptions {
   contextWindowTokens: number;
@@ -8,6 +9,12 @@ export interface CompactionOptions {
   reserveRatio?: number;
   protectRecentMessages?: number;
   onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+  /**
+   * Opt-in deterministic reduction: when the trigger fires, old completed
+   * tool outputs are elided first, and the lossy cut runs only when elision
+   * reclaimed nothing. The knobs are strategy, so they arrive as config.
+   */
+  elideToolOutputs?: ToolOutputElision;
 }
 
 interface CompactionResult {
@@ -58,6 +65,28 @@ export namespace Compaction {
 
     if (messages.length <= protectRecent) {
       return { messages, compacted: false, removedCount: 0 };
+    }
+
+    // Reduction before the cut: eliding old tool outputs reclaims window
+    // without dropping a message, so the cut below is the fallback for a
+    // history with nothing left to elide. The next measured call reports the
+    // yield — one reduction per trigger, no same-pass re-measure guessing.
+    if (options.elideToolOutputs !== undefined) {
+      const reduction = elideToolOutputs(messages, protectRecent, options.elideToolOutputs);
+      if (reduction.elidedChars > 0) {
+        events.publish(Operational.Info, {
+          traceId: trace.traceId,
+          time: Date.now(),
+          component: "agent.compaction",
+          msg: "compaction reduced tool outputs",
+          context: {
+            elidedChars: reduction.elidedChars,
+            messageCount: messages.length,
+            reason: "context window threshold exceeded",
+          },
+        });
+        return { messages: reduction.messages, compacted: true, removedCount: 0 };
+      }
     }
 
     // Commit boundary invariant (#531, representable since #557/#560).

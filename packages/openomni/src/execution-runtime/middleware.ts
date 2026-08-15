@@ -24,6 +24,7 @@ type WorkerCompactionConfig = {
   readonly reserveRatio?: number;
   readonly protectRecentMessages?: number;
   readonly onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+  readonly elideToolOutputs?: { minOutputChars: number; keepHeadChars: number };
 };
 
 export interface WorkerMiddlewareConfig {
