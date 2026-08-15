@@ -21,12 +21,17 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
       if (!ctx.messages || ctx.messages.length === 0) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
-      if (!ctx.budgetState) {
-        return PolicyDecision.allow({ policyId: "builtin.compaction" });
+      // The trigger reads the provider-measured context of the last call —
+      // cumulative run spend re-counts every prior turn's input and would fire
+      // on long runs whose window is nowhere near full. No call yet means
+      // nothing measured, and an unmeasured skip is itself recorded.
+      if (ctx.contextTokens === undefined) {
+        return PolicyDecision.allow({
+          policyId: "builtin.compaction",
+          reasonCodes: ["compaction_skipped_no_measurement"],
+        });
       }
-
-      const totalTokens = ctx.budgetState.totalInputTokens + ctx.budgetState.totalOutputTokens;
-      if (!Compaction.shouldCompact(totalTokens, compaction)) {
+      if (!Compaction.shouldCompact(ctx.contextTokens, compaction)) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 

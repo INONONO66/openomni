@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Policy } from "@openomni/protocol";
 import { collector } from "@openomni/telemetry";
 import { PolicyRegistry } from "@openomni/agent";
-import type { BudgetState, PolicyContext } from "@openomni/agent";
+import type { PolicyContext } from "@openomni/agent";
 import type { Message } from "@openomni/protocol";
 import { registerCompaction } from "../../src/execution-runtime/middleware/compaction-policy";
 
@@ -16,17 +16,6 @@ function plan(policies: Policy.PolicyPlan["policies"]): Policy.PolicyPlan {
 function registry() {
   const instance = PolicyRegistry.create<PolicyContext>();
   return instance;
-}
-
-function budget(inputTokens: number, outputTokens: number): BudgetState {
-  return {
-    startTime: Date.now(),
-    turns: 1,
-    toolCalls: 0,
-    toolRuntimeMs: 0,
-    totalInputTokens: inputTokens,
-    totalOutputTokens: outputTokens,
-  };
 }
 
 let idCounter = 0;
@@ -109,7 +98,7 @@ describe("registerCompaction", () => {
       isCompletion: true,
       continuationCount: 0,
       elapsedMs: 0,
-      budgetState: budget(900, 100),
+      contextTokens: 900,
       messages: [userMessage("one"), userMessage("two"), userMessage("three")],
     });
 

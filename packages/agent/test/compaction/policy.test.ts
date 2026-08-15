@@ -1,9 +1,8 @@
+import { createBudgetState } from "../../src/core/budget";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { createBudgetState } from "../../src/core/budget";
 import { createCompactionPolicy } from "../../src/compaction";
 import type { PolicyFn } from "../../src/core/policy";
-import type { BudgetState } from "../../src/core/budget";
 import { effectOf } from "../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
@@ -47,17 +46,6 @@ function createTestMessage(id: string): Message.WithParts {
   };
 }
 
-function budgetState(inputTokens: number, outputTokens: number): BudgetState {
-  return {
-    startTime: Date.now(),
-    turns: 1,
-    toolCalls: 0,
-    toolRuntimeMs: 0,
-    totalInputTokens: inputTokens,
-    totalOutputTokens: outputTokens,
-  };
-}
-
 describe("createCompactionPolicy", () => {
   /**
    * `run.completion.pre` is fail-closed: a throw here becomes a deny carrying
@@ -76,7 +64,7 @@ describe("createCompactionPolicy", () => {
         baseCtx({
           traceContext,
           messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-          budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
+          contextTokens: 900,
         }),
       );
 
@@ -95,7 +83,7 @@ describe("createCompactionPolicy", () => {
     const messages = [createTestMessage("msg1"), createTestMessage("msg2")];
     const ctx = baseCtx({
       messages,
-      budgetState: budgetState(1000, 500),
+      contextTokens: 1500,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -115,7 +103,7 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: budgetState(7000, 1000),
+      contextTokens: 8000,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -139,7 +127,7 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: budgetState(700, 60),
+      contextTokens: 760,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -160,7 +148,7 @@ describe("createCompactionPolicy", () => {
 
     const ctx = baseCtx({
       messages: undefined,
-      budgetState: budgetState(7000, 1000),
+      contextTokens: 8000,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -178,7 +166,7 @@ describe("createCompactionPolicy", () => {
 
     const ctx = baseCtx({
       messages: [],
-      budgetState: budgetState(7000, 1000),
+      contextTokens: 8000,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -186,7 +174,7 @@ describe("createCompactionPolicy", () => {
     expect(verdict.verdict).toBe("allow");
   });
 
-  it("continues when no budget state", async () => {
+  it("skips with a recorded reason when nothing was measured", async () => {
     const middleware = createCompactionPolicy({
       priority: 900,
       events: Bus,
@@ -197,12 +185,13 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: undefined,
+      contextTokens: undefined,
     });
 
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.verdict).toBe("allow");
+    expect(verdict.reasonCodes).toContain("compaction_skipped_no_measurement");
   });
 
   it("carries the caller's priority — no ordering opinion of its own", () => {
@@ -234,5 +223,27 @@ describe("createCompactionPolicy", () => {
 
     expect(middleware.pointIds).toEqual(["run.completion.pre"]);
     expect(middleware.effectCapabilities["run.completion.pre"]).toEqual(["run.replace_messages"]);
+  });
+
+  it("ignores run spend entirely — a huge budget with a small window stays uncompacted", async () => {
+    // The regression this whole change exists to prevent: the trigger must
+    // read the measured window, never the cumulative spend.
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      contextWindowTokens: 1000,
+      thresholdRatio: 0.8,
+      protectRecentMessages: 2,
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+        contextTokens: 100,
+        budgetState: { ...createBudgetState(), totalInputTokens: 900000, totalOutputTokens: 90000 },
+      }),
+    );
+
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.effects).toHaveLength(0);
   });
 });
