@@ -3,6 +3,7 @@ import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, Sink, Tool } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import { createAssistantMessage } from "../message-factory";
+import { measuredContextTokens } from "../../compaction/measure";
 import { RunReasonCode } from "../policy/reason-codes";
 import type { PolicyEngineInstance } from "../policy";
 import * as Retry from "../retry";
@@ -26,6 +27,7 @@ import {
   applyCompactionMessages,
   buildLifecyclePolicyContext,
   recordAssistantTokenDelta,
+  recordCallContext,
   recordRunToolCall,
   recordRunTurn,
   setLastAssistantText,
@@ -262,6 +264,7 @@ function createTrackingSink(
           turnUsage.outputTokens += deltaOutput;
           turnUsage.totalTokens += deltaInput + deltaOutput;
           recordAssistantTokenDelta(state, deltaInput, deltaOutput);
+          recordCallContext(state, measuredContextTokens(tokens));
         }
       }
       const text = message.parts

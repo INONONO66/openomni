@@ -19,6 +19,12 @@ export interface PolicyContext extends GenericPolicyContext {
   elapsedMs: number;
   budgetState?: BudgetState;
   budget?: AgentBudget;
+  /**
+   * Provider-measured context of the last model call (input + both cache
+   * lanes). What the compaction trigger compares against its window; absent
+   * until a call completes.
+   */
+  contextTokens?: number;
 }
 
 export type PolicyFn = CanonicalPolicyRegistrationGeneric<PolicyContext>["fn"];

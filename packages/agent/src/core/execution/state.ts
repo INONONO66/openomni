@@ -98,6 +98,12 @@ export interface RunState {
   readonly totalUsage: TokenUsage;
   continuationCount: number;
   compactionCount: number;
+  /**
+   * Provider-measured context of the most recent model call
+   * (input + cache read + cache write), undefined until one completes.
+   * The compaction trigger reads this — never the cumulative run spend.
+   */
+  lastCallContextTokens?: number;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -183,6 +189,10 @@ export function recordRunToolCall(state: RunState, durationMs: number): void {
   state.budgetState = recordToolCall(state.budgetState, durationMs);
 }
 
+export function recordCallContext(state: RunState, contextTokens: number): void {
+  state.lastCallContextTokens = contextTokens;
+}
+
 export function recordAssistantTokenDelta(
   state: RunState,
   inputTokens: number,
@@ -258,6 +268,7 @@ export function buildLifecyclePolicyContext<
     messages: state.messages,
     budgetState: state.budgetState,
     budget: config.budget,
+    contextTokens: state.lastCallContextTokens,
     // Every builtin dispatched at a lifecycle point reads its trace from here.
     // Omitting it made a policy that reports — compaction — refuse at a
     // fail-closed point, which reads as the run aborting.

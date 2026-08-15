@@ -62,8 +62,7 @@ describe("compaction through the lifecycle", () => {
     state.messages = Array.from({ length: 12 }, (_unused, index) =>
       createUserMessage(`message ${index}`, state.sessionId),
     );
-    state.budgetState.totalInputTokens = 900;
-    state.budgetState.totalOutputTokens = 100;
+    state.lastCallContextTokens = 900;
 
     try {
       await handleCompact(state, engine, makeConfig(), agentBase);
@@ -91,8 +90,7 @@ describe("compaction through the lifecycle", () => {
     state.messages = Array.from({ length: 12 }, (_unused, index) =>
       createUserMessage(`message ${index}`, state.sessionId),
     );
-    state.budgetState.totalInputTokens = 900;
-    state.budgetState.totalOutputTokens = 100;
+    state.lastCallContextTokens = 900;
 
     const decision = await handleCompact(state, engine, makeConfig(), makeAgentBase());
 

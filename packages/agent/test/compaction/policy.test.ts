@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { createBudgetState } from "../../src/core/budget";
 import { createCompactionPolicy } from "../../src/compaction";
 import type { PolicyFn } from "../../src/core/policy";
-import type { BudgetState } from "../../src/core/budget";
 import { effectOf } from "../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
@@ -47,17 +45,6 @@ function createTestMessage(id: string): Message.WithParts {
   };
 }
 
-function budgetState(inputTokens: number, outputTokens: number): BudgetState {
-  return {
-    startTime: Date.now(),
-    turns: 1,
-    toolCalls: 0,
-    toolRuntimeMs: 0,
-    totalInputTokens: inputTokens,
-    totalOutputTokens: outputTokens,
-  };
-}
-
 describe("createCompactionPolicy", () => {
   /**
    * `run.completion.pre` is fail-closed: a throw here becomes a deny carrying
@@ -76,7 +63,7 @@ describe("createCompactionPolicy", () => {
         baseCtx({
           traceContext,
           messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-          budgetState: { ...createBudgetState(), totalInputTokens: 900, totalOutputTokens: 100 },
+          contextTokens: 900,
         }),
       );
 
@@ -95,7 +82,7 @@ describe("createCompactionPolicy", () => {
     const messages = [createTestMessage("msg1"), createTestMessage("msg2")];
     const ctx = baseCtx({
       messages,
-      budgetState: budgetState(1000, 500),
+      contextTokens: 1500,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -115,7 +102,7 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: budgetState(7000, 1000),
+      contextTokens: 8000,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -139,7 +126,7 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: budgetState(700, 60),
+      contextTokens: 760,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -160,7 +147,7 @@ describe("createCompactionPolicy", () => {
 
     const ctx = baseCtx({
       messages: undefined,
-      budgetState: budgetState(7000, 1000),
+      contextTokens: 8000,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -178,7 +165,7 @@ describe("createCompactionPolicy", () => {
 
     const ctx = baseCtx({
       messages: [],
-      budgetState: budgetState(7000, 1000),
+      contextTokens: 8000,
     });
 
     const verdict = await middleware.fn(ctx);
@@ -197,7 +184,7 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: undefined,
+      contextTokens: undefined,
     });
 
     const verdict = await middleware.fn(ctx);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Message, Policy } from "@openomni/protocol";
 import { PolicyRegistry } from "@openomni/agent";
-import type { BudgetState, PolicyContext, PolicyFn } from "@openomni/agent";
+import type { PolicyContext, PolicyFn } from "@openomni/agent";
 import { Bus } from "@openomni/telemetry";
 import { registerCompaction } from "../../src/execution-runtime/middleware/compaction-policy";
 
@@ -76,17 +76,6 @@ function makeAssistantMessage(text: string, options?: { toolCallID?: string }): 
   };
 }
 
-function budgetState(inputTokens: number, outputTokens: number): BudgetState {
-  return {
-    startTime: Date.now(),
-    turns: 1,
-    toolCalls: 0,
-    toolRuntimeMs: 0,
-    totalInputTokens: inputTokens,
-    totalOutputTokens: outputTokens,
-  };
-}
-
 function baseCtx(overrides?: Partial<Parameters<PolicyFn>[0]>): Parameters<PolicyFn>[0] {
   return {
     timing: "turn.finish",
@@ -136,7 +125,7 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
       makeUserMessage("u6"),
       makeAssistantMessage("a7"),
     ];
-    const ctx = baseCtx({ messages, budgetState: budgetState(700, 200) });
+    const ctx = baseCtx({ messages, contextTokens: 900 });
 
     const verdict = await registration.fn(ctx);
 
