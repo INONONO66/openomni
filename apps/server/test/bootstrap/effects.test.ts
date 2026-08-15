@@ -9,15 +9,18 @@ import { assembleEffectRuntime } from "../../src/bootstrap/effects";
  */
 
 async function createWorkItem(name: string) {
-  const item = await WorkItemStore.create({
-    name,
-    sourceMessageId: `msg_${name}`,
-    sourceChannel: "test",
-    intent: "verify",
-    goal: "effect escalation branches",
-    sessionId: "session_effects_unit",
-    acceptanceCriteria: ["escalation is durable and deduplicated"],
-  });
+  const item = await WorkItemStore.create(
+    {
+      name,
+      sourceMessageId: `msg_${name}`,
+      sourceChannel: "test",
+      intent: "verify",
+      goal: "effect escalation branches",
+      sessionId: "session_effects_unit",
+      acceptanceCriteria: ["escalation is durable and deduplicated"],
+    },
+    "trace-test",
+  );
   if (!item) throw new Error("work item fixture failed");
   return item;
 }
@@ -47,9 +50,9 @@ describe("effect escalation seam (#492)", () => {
     const { service, reconciler } = assembleEffectRuntime();
     await service.run({ effectId: "fx-unit-1", kind: "exhausting-probe", workItemHash: item.hash });
 
-    await reconciler.reconcile();
-    await reconciler.reconcile();
-    await reconciler.reconcile();
+    await reconciler.reconcile("trace-test");
+    await reconciler.reconcile("trace-test");
+    await reconciler.reconcile("trace-test");
 
     const escalated = await WorkItemStore.get(item.hash);
     const blockers = escalated?.blockers.filter((b) => b.kind === "waiting_input") ?? [];
@@ -64,9 +67,9 @@ describe("effect escalation seam (#492)", () => {
     const item = await createWorkItem("escalation-terminal");
     const { service, reconciler } = assembleEffectRuntime();
     await service.run({ effectId: "fx-unit-2", kind: "exhausting-probe", workItemHash: item.hash });
-    await WorkItemStore.cancel(item.hash);
+    await WorkItemStore.cancel(item.hash, "trace-test");
 
-    const summary = await reconciler.reconcile();
+    const summary = await reconciler.reconcile("trace-test");
     expect(summary.escalated).toBe(1);
 
     const cancelled = await WorkItemStore.get(item.hash);
@@ -86,7 +89,7 @@ describe("effect escalation seam (#492)", () => {
       workItemHash: "wi_never_existed",
     });
 
-    const summary = await reconciler.reconcile();
+    const summary = await reconciler.reconcile("trace-test");
     expect(summary.escalated).toBe(1);
     expect(EffectStore.status("fx-unit-3").status).toBe("pending");
     await new Promise<void>((resolve) => queueMicrotask(resolve));

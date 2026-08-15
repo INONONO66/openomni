@@ -12,12 +12,15 @@ import {
 import { commitMutation } from "./mutation.js";
 import type { CreateWorkItemInput } from "./types.js";
 
-export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkItem.Info> {
+export async function createWorkItem(
+  input: CreateWorkItemInput,
+  traceId: string,
+): Promise<WorkItem.Info> {
   const storage = Storage.get();
   const workItem = storage.workItem;
   if (!workItem) {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       sessionId: input.sessionId,
       component: "work-item",
@@ -73,16 +76,18 @@ export async function createWorkItem(input: CreateWorkItemInput): Promise<WorkIt
     }
   });
 
+  // ONE create = ONE trace (D11): the parent-link Updated and the Created
+  // projection describe the same transaction, so they share the caller's id.
   if (linkedParent) {
     Bus.publish(WorkItem.Events.Updated, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: now,
       sessionId: linkedParent.sessionId,
       payload: { hash: linkedParent.hash, fields: ["relations"] },
     });
   }
   Bus.publish(WorkItem.Events.Created, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: now,
     sessionId: item.sessionId,
     payload: {

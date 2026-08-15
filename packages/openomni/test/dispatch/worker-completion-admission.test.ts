@@ -112,11 +112,16 @@ function reflectCoordinatorResult(
     completionService: _completionService,
     ...rest
   } = options;
-  return reflectCoordinatorResultProduction(workItemHash, result, {
-    ...rest,
-    completionService: completionServiceFor(options),
-    verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
-  });
+  return reflectCoordinatorResultProduction(
+    workItemHash,
+    result,
+    {
+      ...rest,
+      completionService: completionServiceFor(options),
+      verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
+    },
+    "trace-test",
+  );
 }
 
 function projectConnectorCompletion(
@@ -134,11 +139,16 @@ function projectConnectorCompletion(
     completionService: _completionService,
     ...rest
   } = options;
-  return projectConnectorCompletionProduction(workItemHash, result, {
-    ...rest,
-    completionService: completionServiceFor(options),
-    verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
-  });
+  return projectConnectorCompletionProduction(
+    workItemHash,
+    result,
+    {
+      ...rest,
+      completionService: completionServiceFor(options),
+      verifierRegistry: options.verifierRegistry ?? VerifierRegistry.create(),
+    },
+    "trace-test",
+  );
 }
 
 beforeEach(() => {
@@ -150,18 +160,21 @@ async function startedItem(
   executorKind?: WorkItem.ExecutorKind,
   criterionStatement = "recorded numeric operands satisfy eq",
 ): Promise<WorkItem.Info> {
-  const created = await WorkItemStore.create({
-    name: `Completion ${executorKind}`,
-    sourceMessageId: `dispatch:${executorKind}`,
-    sourceChannel: "dispatch",
-    intent: "worker.spawn",
-    goal: "prove completion admission convergence",
-    executorKind,
-    workSessionId: WORKER_SESSION_ID,
-    workerRunId: WORKER_RUN_ID,
-    acceptanceCriteria: [criterionStatement],
-  });
-  const started = await WorkItemStore.start(created.hash);
+  const created = await WorkItemStore.create(
+    {
+      name: `Completion ${executorKind}`,
+      sourceMessageId: `dispatch:${executorKind}`,
+      sourceChannel: "dispatch",
+      intent: "worker.spawn",
+      goal: "prove completion admission convergence",
+      executorKind,
+      workSessionId: WORKER_SESSION_ID,
+      workerRunId: WORKER_RUN_ID,
+      acceptanceCriteria: [criterionStatement],
+    },
+    "trace-test",
+  );
+  const started = await WorkItemStore.start(created.hash, "trace-test");
   if (!started) throw new Error("missing started work item");
   return started;
 }
@@ -179,20 +192,24 @@ async function evidenceBackedEnvelope(
   const current = WorkItemStore.get(hash);
   const criterion = current?.completionFacts.criteria[0];
   if (!current || !criterion) throw new Error("missing completion fixture");
-  const withEvidence = await WorkItemStore.addEvidence(hash, {
-    kind: "test_result",
-    description: "kernel-recorded verifier input",
-    passed: true,
-    detail: JSON.stringify({
-      type: "verifier_recorded_inputs",
-      version: 1,
-      workItemHash: current.hash,
-      basisRef: current.completionContract.basisRef,
-      criterionId: criterion.id,
-      verifierKind: verification.kind,
-      recordedInputs: verification.recordedInputs,
-    }),
-  });
+  const withEvidence = await WorkItemStore.addEvidence(
+    hash,
+    {
+      kind: "test_result",
+      description: "kernel-recorded verifier input",
+      passed: true,
+      detail: JSON.stringify({
+        type: "verifier_recorded_inputs",
+        version: 1,
+        workItemHash: current.hash,
+        basisRef: current.completionContract.basisRef,
+        criterionId: criterion.id,
+        verifierKind: verification.kind,
+        recordedInputs: verification.recordedInputs,
+      }),
+    },
+    "trace-test",
+  );
   const evidenceId = withEvidence?.evidence.at(-1)?.id;
   if (!evidenceId) throw new Error("missing completion fixture");
   return JSON.stringify({
@@ -232,11 +249,15 @@ async function bindRetryAttempt(
     runId: `${WORKER_RUN_ID}:attempt:${attempt}`,
     sessionId: `${WORKER_SESSION_ID}:attempt:${attempt}`,
   };
-  const updated = await WorkItemStore.assignExecution(hash, {
-    workerRunId: identity.runId,
-    workSessionId: identity.sessionId,
-    executorKind,
-  });
+  const updated = await WorkItemStore.assignExecution(
+    hash,
+    {
+      workerRunId: identity.runId,
+      workSessionId: identity.sessionId,
+      executorKind,
+    },
+    "trace-test",
+  );
   if (!updated) throw new Error("failed to bind retry Worker identity");
   return identity;
 }
@@ -643,7 +664,7 @@ describe("worker completion admission convergence", () => {
   test("rejects a terminal WorkItem before reserving its completion request", async () => {
     const item = await startedItem("internal_chat_agent");
     const output = await evidenceBackedEnvelope(item.hash);
-    await WorkItemStore.fail(item.hash, "worker failed first");
+    await WorkItemStore.fail(item.hash, "trace-test", "worker failed first");
     const before = WorkItemStore.get(item.hash);
     if (!before) throw new Error("missing terminal completion fixture");
 
@@ -780,6 +801,7 @@ describe("worker completion admission convergence", () => {
         observedAt: NOW,
         statusCode: 200,
       }),
+      "trace-test",
       {
         expectedAttempt: item.attempt,
         expectedBasisRef: item.completionContract.basisRef,
@@ -1120,11 +1142,15 @@ describe("worker completion admission convergence", () => {
       completionPolicyEngine,
       now: () => NOW,
     });
-    await WorkItemStore.addEvidence(item.hash, {
-      kind: "verification",
-      description: "unrelated passing artifact",
-      passed: true,
-    });
+    await WorkItemStore.addEvidence(
+      item.hash,
+      {
+        kind: "verification",
+        description: "unrelated passing artifact",
+        passed: true,
+      },
+      "trace-test",
+    );
     const stored = WorkItemStore.get(item.hash);
     const criterion = stored?.completionFacts.criteria[0];
     const result = stored?.completionFacts.results[0];
@@ -1186,18 +1212,21 @@ describe("worker completion admission convergence", () => {
 
   test("rejects actor reuse of read-back evidence across duplicate criteria", async () => {
     const statement = "archived source contains the recorded quote exactly";
-    const created = await WorkItemStore.create({
-      name: "Duplicate criterion binding",
-      sourceMessageId: "dispatch:duplicate-criterion-binding",
-      sourceChannel: "dispatch",
-      intent: "worker.spawn",
-      goal: "keep read-back evidence criterion-local",
-      executorKind: "internal_chat_agent",
-      workSessionId: WORKER_SESSION_ID,
-      workerRunId: WORKER_RUN_ID,
-      acceptanceCriteria: [statement, statement],
-    });
-    const item = await WorkItemStore.start(created.hash);
+    const created = await WorkItemStore.create(
+      {
+        name: "Duplicate criterion binding",
+        sourceMessageId: "dispatch:duplicate-criterion-binding",
+        sourceChannel: "dispatch",
+        intent: "worker.spawn",
+        goal: "keep read-back evidence criterion-local",
+        executorKind: "internal_chat_agent",
+        workSessionId: WORKER_SESSION_ID,
+        workerRunId: WORKER_RUN_ID,
+        acceptanceCriteria: [statement, statement],
+      },
+      "trace-test",
+    );
+    const item = await WorkItemStore.start(created.hash, "trace-test");
     const sourceCriterion = item?.completionFacts.criteria[0];
     const targetCriterion = item?.completionFacts.criteria[1];
     if (!item || !sourceCriterion || !targetCriterion) {
@@ -1214,6 +1243,7 @@ describe("worker completion admission convergence", () => {
         observedAt: NOW,
         statusCode: 200,
       },
+      "trace-test",
       {
         expectedAttempt: item.attempt,
         expectedBasisRef: item.completionContract.basisRef,
@@ -1269,10 +1299,10 @@ describe("worker completion admission convergence", () => {
     });
     const firstBlocked = WorkItemStore.get(item.hash);
     for (const blocker of firstBlocked?.blockers ?? []) {
-      await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+      await WorkItemStore.resolveBlocker(item.hash, blocker.id, "trace-test");
     }
-    await WorkItemStore.fail(item.hash, "first attempt failed");
-    const retried = await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "trace-test", "first attempt failed");
+    const retried = await WorkItemStore.retry(item.hash, "trace-test");
     if (!retried) throw new Error("failed to retry WorkItem");
     expect(retried.workerRunId).toBeUndefined();
     expect(retried.workSessionId).toBeUndefined();
@@ -1307,8 +1337,8 @@ describe("worker completion admission convergence", () => {
     "interrupted",
   ] as const)("rejects a late %s result from the prior Worker assignment without mutation", async (status) => {
     const item = await startedItem("internal_chat_agent");
-    await WorkItemStore.fail(item.hash, "retry before late terminal result");
-    const retried = await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "trace-test", "retry before late terminal result");
+    const retried = await WorkItemStore.retry(item.hash, "trace-test");
     if (!retried) throw new Error("failed to retry late-result fixture");
     const result: Execution.Result =
       status === "cancelled"
@@ -1358,8 +1388,8 @@ describe("worker completion admission convergence", () => {
       now: () => NOW,
     });
     await entered.promise;
-    await WorkItemStore.fail(item.hash, "retry while completion is in flight");
-    await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "trace-test", "retry while completion is in flight");
+    await WorkItemStore.retry(item.hash, "trace-test");
     release.resolve();
 
     const stale = await priorAttempt;
@@ -1436,8 +1466,8 @@ describe("worker completion admission convergence", () => {
       },
     });
     await entered.promise;
-    await WorkItemStore.fail(item.hash, "retry while read-back is in flight");
-    await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "trace-test", "retry while read-back is in flight");
+    await WorkItemStore.retry(item.hash, "trace-test");
     release.resolve();
 
     const stale = await priorAttempt;
@@ -1465,10 +1495,10 @@ describe("worker completion admission convergence", () => {
     const priorEvidenceId = firstBlocked?.evidence[0]?.id;
     if (!firstBlocked || !priorEvidenceId) throw new Error("missing prior-attempt evidence");
     for (const blocker of firstBlocked.blockers) {
-      await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+      await WorkItemStore.resolveBlocker(item.hash, blocker.id, "trace-test");
     }
-    await WorkItemStore.fail(item.hash, "retry with fresh evidence");
-    await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "trace-test", "retry with fresh evidence");
+    await WorkItemStore.retry(item.hash, "trace-test");
     const staleEvidence = await reflectCoordinatorResult(item.hash, succeeded(firstOutput), {
       sourceOrigin: { source: "internal_worker" },
       completionPolicyEngine: PolicyEngine.create(),
@@ -1476,10 +1506,14 @@ describe("worker completion admission convergence", () => {
     });
     expect(staleEvidence.completionBlocker).toContain("Worker completion identity mismatch");
     for (const blocker of WorkItemStore.get(item.hash)?.blockers ?? []) {
-      await WorkItemStore.resolveBlocker(item.hash, blocker.id);
+      await WorkItemStore.resolveBlocker(item.hash, blocker.id, "trace-test");
     }
-    await WorkItemStore.fail(item.hash, "retry again with a current verifier artifact");
-    await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(
+      item.hash,
+      "trace-test",
+      "retry again with a current verifier artifact",
+    );
+    await WorkItemStore.retry(item.hash, "trace-test");
     const retryIdentity = await bindRetryAttempt(item.hash, 3);
     const currentOutput = JSON.parse(await evidenceBackedEnvelope(item.hash)) as {
       completionReport: WorkItem.CompletionReport;
@@ -1733,20 +1767,24 @@ describe("worker completion admission convergence", () => {
 
       const evidenceIds: string[] = [];
       for (const inputs of recordedInputs) {
-        const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-          kind: "test_result",
-          description: "conflicting durable verifier input",
-          passed: inputs.right === 1,
-          detail: JSON.stringify({
-            type: "verifier_recorded_inputs",
-            version: 1,
-            workItemHash: item.hash,
-            basisRef: item.completionContract.basisRef,
-            criterionId: criterion.id,
-            verifierKind: "numeric_recheck",
-            recordedInputs: inputs,
-          }),
-        });
+        const withEvidence = await WorkItemStore.addEvidence(
+          item.hash,
+          {
+            kind: "test_result",
+            description: "conflicting durable verifier input",
+            passed: inputs.right === 1,
+            detail: JSON.stringify({
+              type: "verifier_recorded_inputs",
+              version: 1,
+              workItemHash: item.hash,
+              basisRef: item.completionContract.basisRef,
+              criterionId: criterion.id,
+              verifierKind: "numeric_recheck",
+              recordedInputs: inputs,
+            }),
+          },
+          "trace-test",
+        );
         const evidenceId = withEvidence?.evidence.at(-1)?.id;
         if (!evidenceId) throw new Error("missing verifier evidence");
         evidenceIds.push(evidenceId);
@@ -1802,18 +1840,21 @@ describe("worker completion admission convergence", () => {
 
   test("rejects cross-criterion reuse of one read-back evidence binding", async () => {
     const predicate = "archived source contains the recorded quote exactly";
-    const created = await WorkItemStore.create({
-      name: "Cross-criterion read-back binding",
-      sourceMessageId: "dispatch:cross-criterion-read-back",
-      sourceChannel: "dispatch",
-      intent: "worker.spawn",
-      goal: "prove criterion-local read-back binding",
-      executorKind: "internal_chat_agent",
-      workSessionId: WORKER_SESSION_ID,
-      workerRunId: WORKER_RUN_ID,
-      acceptanceCriteria: [predicate, predicate],
-    });
-    const item = await WorkItemStore.start(created.hash);
+    const created = await WorkItemStore.create(
+      {
+        name: "Cross-criterion read-back binding",
+        sourceMessageId: "dispatch:cross-criterion-read-back",
+        sourceChannel: "dispatch",
+        intent: "worker.spawn",
+        goal: "prove criterion-local read-back binding",
+        executorKind: "internal_chat_agent",
+        workSessionId: WORKER_SESSION_ID,
+        workerRunId: WORKER_RUN_ID,
+        acceptanceCriteria: [predicate, predicate],
+      },
+      "trace-test",
+    );
+    const item = await WorkItemStore.start(created.hash, "trace-test");
     if (!item) throw new Error("missing started WorkItem");
     const output = JSON.stringify({
       completionReport: {
@@ -1977,11 +2018,15 @@ describe("worker completion admission convergence", () => {
 
   test("rejects claimant-fabricated inline verifier inputs", async () => {
     const item = await startedItem("internal_chat_agent");
-    const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-      kind: "test_result",
-      description: "terminal prose evidence only",
-      passed: true,
-    });
+    const withEvidence = await WorkItemStore.addEvidence(
+      item.hash,
+      {
+        kind: "test_result",
+        description: "terminal prose evidence only",
+        passed: true,
+      },
+      "trace-test",
+    );
     const evidenceId = withEvidence?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("missing terminal evidence");
     const output = JSON.stringify({
@@ -2044,20 +2089,24 @@ describe("worker completion admission convergence", () => {
     const item = await startedItem("internal_chat_agent");
     const criterion = item.completionFacts.criteria[0];
     if (!criterion) throw new Error("missing criterion");
-    const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-      kind: "verification",
-      description: "mismatched verifier input",
-      passed: true,
-      detail: JSON.stringify({
-        type: "verifier_recorded_inputs",
-        version: 1,
-        workItemHash: item.hash,
-        basisRef: item.completionContract.basisRef,
-        criterionId: `${criterion.id}:foreign`,
-        verifierKind: "numeric_recheck",
-        recordedInputs: { operator: "eq", left: 1, right: 1 },
-      }),
-    });
+    const withEvidence = await WorkItemStore.addEvidence(
+      item.hash,
+      {
+        kind: "verification",
+        description: "mismatched verifier input",
+        passed: true,
+        detail: JSON.stringify({
+          type: "verifier_recorded_inputs",
+          version: 1,
+          workItemHash: item.hash,
+          basisRef: item.completionContract.basisRef,
+          criterionId: `${criterion.id}:foreign`,
+          verifierKind: "numeric_recheck",
+          recordedInputs: { operator: "eq", left: 1, right: 1 },
+        }),
+      },
+      "trace-test",
+    );
     const evidenceId = withEvidence?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("missing evidence");
     const output = JSON.stringify({

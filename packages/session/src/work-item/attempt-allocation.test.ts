@@ -31,15 +31,18 @@ afterEach(() => {
 });
 
 async function createItem(name: string) {
-  return WorkItemStore.create({
-    name,
-    sourceMessageId: `msg_${name}`,
-    sourceChannel: "test",
-    intent: "implement",
-    goal: "verify attempt allocation",
-    sessionId: "session_attempt",
-    acceptanceCriteria: ["the attempt identity is recorded before anything acts"],
-  });
+  return WorkItemStore.create(
+    {
+      name,
+      sourceMessageId: `msg_${name}`,
+      sourceChannel: "test",
+      intent: "implement",
+      goal: "verify attempt allocation",
+      sessionId: "session_attempt",
+      acceptanceCriteria: ["the attempt identity is recorded before anything acts"],
+    },
+    "trace-test",
+  );
 }
 
 function identity(workInput = "verify attempt allocation") {
@@ -90,7 +93,7 @@ describe("WorkItemStore.allocateAttempt", () => {
   test("appends the full attempt identity as a fact at seq === projected revision", async () => {
     const item = await createItem("attempt-append");
 
-    const allocation = await WorkItemStore.allocateAttempt(item.hash, identity());
+    const allocation = await WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test");
     if (!allocation) throw new Error("expected an allocation");
 
     expect(allocation.attempt.attemptSeq).toBe(1);
@@ -121,15 +124,19 @@ describe("WorkItemStore.allocateAttempt", () => {
   test("attemptSeq is monotonic and never reused; retryOf records the prior attempt lineage", async () => {
     const item = await createItem("attempt-monotonic");
 
-    const first = await WorkItemStore.allocateAttempt(item.hash, identity());
+    const first = await WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test");
     if (!first) throw new Error("expected the first allocation");
 
     // A failed run retried through the existing retry path keeps the
     // attempt-identity watermark: the next allocation advances the seq and
     // points its lineage at the recorded prior attempt.
-    await WorkItemStore.fail(item.hash, "first attempt failed");
-    await WorkItemStore.retry(item.hash);
-    const second = await WorkItemStore.allocateAttempt(item.hash, identity("retry the goal"));
+    await WorkItemStore.fail(item.hash, "trace-test", "first attempt failed");
+    await WorkItemStore.retry(item.hash, "trace-test");
+    const second = await WorkItemStore.allocateAttempt(
+      item.hash,
+      identity("retry the goal"),
+      "trace-test",
+    );
     if (!second) throw new Error("expected the second allocation");
 
     expect(first.attempt.attemptSeq).toBe(1);
@@ -143,7 +150,7 @@ describe("WorkItemStore.allocateAttempt", () => {
 
   test("a non-monotonic seq is an explosive backstop, not a silent skip", async () => {
     const item = await createItem("attempt-backstop");
-    const allocation = await WorkItemStore.allocateAttempt(item.hash, identity());
+    const allocation = await WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test");
     if (!allocation) throw new Error("expected an allocation");
 
     expect(() =>
@@ -156,10 +163,10 @@ describe("WorkItemStore.allocateAttempt", () => {
 
   test("terminal work items allocate nothing", async () => {
     const item = await createItem("attempt-terminal");
-    await WorkItemStore.cancel(item.hash);
+    await WorkItemStore.cancel(item.hash, "trace-test");
 
-    await expect(WorkItemStore.allocateAttempt(item.hash, identity())).rejects.toThrow(
-      "Cannot allocate an attempt on a cancelled work item",
-    );
+    await expect(
+      WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test"),
+    ).rejects.toThrow("Cannot allocate an attempt on a cancelled work item");
   });
 });

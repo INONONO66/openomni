@@ -159,12 +159,13 @@ function viewOfLegacyRow(record: WorkerRunStateStore.Record): AttemptRunView {
 async function mutateRun(
   sessionId: string,
   runId: string,
-  build: Parameters<typeof mutate>[1],
+  traceId: string,
+  build: Parameters<typeof mutate>[2],
 ): Promise<boolean> {
   const item = findItem(sessionId, runId);
   if (!item) return false;
   try {
-    return (await mutate(item.hash, build)) !== undefined;
+    return (await mutate(item.hash, traceId, build)) !== undefined;
   } catch (error) {
     // Contention (a concurrent transition won the head) and losing the
     // acquire race both mean "not acquired/finished" — the caller retries
@@ -216,8 +217,12 @@ export namespace WorkItemAttemptRun {
    * transition wins the head CAS — the acquire semantics the retired
    * worker-run `updateStatusIfCurrent(running -> waiting_input)` provided.
    */
-  export async function beginWait(sessionId: string, runId: string): Promise<boolean> {
-    return mutateRun(sessionId, runId, (existing, now) => {
+  export async function beginWait(
+    sessionId: string,
+    runId: string,
+    traceId: string,
+  ): Promise<boolean> {
+    return mutateRun(sessionId, runId, traceId, (existing, now) => {
       if (!isActiveItem(existing) || openAttemptWaitBlocker(existing)) {
         throw new AttemptRunNotActiveError();
       }
@@ -243,8 +248,12 @@ export namespace WorkItemAttemptRun {
   }
 
   /** Releases the inbound wait (resolves the attempt-wait blocker). */
-  export async function endWait(sessionId: string, runId: string): Promise<boolean> {
-    return mutateRun(sessionId, runId, (existing, now) => {
+  export async function endWait(
+    sessionId: string,
+    runId: string,
+    traceId: string,
+  ): Promise<boolean> {
+    return mutateRun(sessionId, runId, traceId, (existing, now) => {
       const open = openAttemptWaitBlocker(existing);
       if (!open) throw new AttemptRunNotActiveError();
       return {
@@ -281,9 +290,10 @@ export namespace WorkItemAttemptRun {
     sessionId: string,
     runId: string,
     outcome: WorkItem.AttemptOutcome,
+    traceId: string,
     extra: AttemptRunTerminalExtra = {},
   ): Promise<boolean> {
-    return mutateRun(sessionId, runId, (existing, now) => {
+    return mutateRun(sessionId, runId, traceId, (existing, now) => {
       const completedSucceeded =
         outcome === "succeeded" &&
         existing.currentAttemptId !== undefined &&

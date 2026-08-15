@@ -17,7 +17,11 @@ import type { EffectManifest } from "./manifest.js";
  * fails closed: with no escalation seam wired, an exhausted intent throws
  * rather than being force-terminalized.
  */
-export type EffectEscalation = (intent: EffectIntent, detail: string) => void | Promise<void>;
+export type EffectEscalation = (
+  intent: EffectIntent,
+  detail: string,
+  traceId: string,
+) => void | Promise<void>;
 
 export type ReconcileSummary = Readonly<{
   scanned: number;
@@ -39,7 +43,8 @@ export class EffectReconciler {
     private readonly escalate?: EffectEscalation,
   ) {}
 
-  async reconcile(): Promise<ReconcileSummary> {
+  /** `traceId` is the sweep caller's trace (boot recovery / admin request) — escalations record under it. */
+  async reconcile(traceId: string): Promise<ReconcileSummary> {
     const outstanding = EffectStore.outstandingIntents();
     let resolved = 0;
     let stillUnknown = 0;
@@ -55,6 +60,7 @@ export class EffectReconciler {
         escalated += await this.escalateOrThrow(
           intent,
           `no driver manifested for outstanding effect kind: ${intent.kind}`,
+          traceId,
         );
         continue;
       }
@@ -77,6 +83,7 @@ export class EffectReconciler {
             escalated += await this.escalateOrThrow(
               intent,
               execution.reason ?? "effect reconciliation exhausted",
+              traceId,
             );
           }
           break;
@@ -113,13 +120,17 @@ export class EffectReconciler {
     return reprojected;
   }
 
-  private async escalateOrThrow(intent: EffectIntent, detail: string): Promise<number> {
+  private async escalateOrThrow(
+    intent: EffectIntent,
+    detail: string,
+    traceId: string,
+  ): Promise<number> {
     if (!this.escalate) {
       throw new Error(
         `effect ${intent.effectId} reconciliation exhausted with no escalation seam — refusing to terminalize (${detail})`,
       );
     }
-    await this.escalate(intent, detail);
+    await this.escalate(intent, detail, traceId);
     return 1;
   }
 

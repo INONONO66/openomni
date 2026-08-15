@@ -102,7 +102,12 @@ async function failConnectorEndpointWorkerSpawn(
     payload,
     CONNECTOR_ENDPOINT_EXECUTOR_KIND,
   );
-  return failWorkerSpawnExecutor(workItemHash, CONNECTOR_ENDPOINT_EXECUTOR_KIND, reason);
+  return failWorkerSpawnExecutor(
+    workItemHash,
+    CONNECTOR_ENDPOINT_EXECUTOR_KIND,
+    reason,
+    command.traceId,
+  );
 }
 
 export function isConnectorEndpointTarget(target: Dispatch.Target): boolean {
@@ -146,6 +151,7 @@ export async function handleConnectorEndpointWorkerSpawn(
     payload.prompt,
     CONNECTOR_ENDPOINT_EXECUTOR_KIND,
     { model, workspaceRoot: command.workspaceRoot },
+    command.traceId,
   );
   let result: Execution.Result;
   try {
@@ -156,13 +162,22 @@ export async function handleConnectorEndpointWorkerSpawn(
     });
   } catch (err) {
     try {
-      await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+      await WorkItemStore.fail(
+        workItemHash,
+        command.traceId,
+        err instanceof Error ? err.message : String(err),
+      );
     } catch (reflectionFailure) {
       throwWithWorkItemReflectionFailure(err, reflectionFailure);
     }
     throw err;
   }
-  const projection = await projectConnectorCompletion(workItemHash, result, options);
+  const projection = await projectConnectorCompletion(
+    workItemHash,
+    result,
+    options,
+    command.traceId,
+  );
   return {
     output: {
       sessionId: request.sessionId,

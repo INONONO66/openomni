@@ -54,7 +54,9 @@ async function processRetryQueue(
 
 export type BootstrapRecoveryInput = Readonly<{
   handler: Adapter.MessageHandler | undefined;
-  coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> };
+  coordinator?: {
+    recoverInterruptedRuns(traceId: string): Promise<{ recovered: number; sessions: string[] }>;
+  };
   traceId?: string;
   completionRuntime: Pick<DefaultDispatchRuntime, "recoverRecordedWorkItemCompletions">;
   /** #492 finish reconciliation — probes every outcome-less effect intent at boot. */
@@ -147,7 +149,7 @@ async function reconcileOutstandingEffects(
   traceId: string,
 ): Promise<void> {
   try {
-    const summary = await effects.reconcile();
+    const summary = await effects.reconcile(traceId);
     Bus.publish(Operational.Info, {
       traceId,
       time: Date.now(),
@@ -182,11 +184,11 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     if (input.effects) {
       await reconcileOutstandingEffects(input.effects, id);
     }
-    const recoveryResult = await coordinator?.recoverInterruptedRuns();
+    const recoveryResult = await coordinator?.recoverInterruptedRuns(id);
     sessionsRecovered = recoveryResult?.sessions.length ?? 0;
     if (completionRecovery) {
       try {
-        const receipt = await completionRecovery.recoverRecordedWorkItemCompletions();
+        const receipt = await completionRecovery.recoverRecordedWorkItemCompletions(id);
         // Loud per-failure surfacing (#510 review fix F4): a completion
         // resume that fails (e.g. a staleHead against a 0014-shifted
         // recorded head) names its work item in its own Operational.Error —

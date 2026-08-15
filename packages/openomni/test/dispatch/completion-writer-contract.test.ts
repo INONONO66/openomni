@@ -9,7 +9,7 @@ describe("default dispatch completion writer contract", () => {
     const submission = runtime.submitActorWorkItemCompletion(
       {} as Parameters<typeof runtime.submitActorWorkItemCompletion>[0],
     );
-    const recovery = runtime.recoverRecordedWorkItemCompletions();
+    const recovery = runtime.recoverRecordedWorkItemCompletions("trace-test");
 
     expect(submission).toBeInstanceOf(Promise);
     expect(recovery).toBeInstanceOf(Promise);
@@ -31,7 +31,7 @@ describe("default dispatch completion writer contract", () => {
     };
     const runtime = createDefaultDispatchRuntime({ completionAdmissionService: injected });
 
-    const recovery = runtime.recoverRecordedWorkItemCompletions();
+    const recovery = runtime.recoverRecordedWorkItemCompletions("trace-test");
 
     expect(recovery).toBeInstanceOf(Promise);
     await expect(recovery).rejects.toThrow(

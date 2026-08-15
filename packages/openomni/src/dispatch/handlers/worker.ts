@@ -202,6 +202,7 @@ export function createWorkerDispatchHandlers(
         request.prompt,
         INTERNAL_EXECUTOR_KIND,
         { model, policyPlan, workspaceRoot: command.workspaceRoot },
+        command.traceId,
       );
       let result: Execution.Result;
       try {
@@ -210,10 +211,16 @@ export function createWorkerDispatchHandlers(
         // A thrown dispatch is an interrupted execution instance (#510 D2b):
         // the attempt terminal fact folds the item to failed with the reason.
         try {
-          await WorkItemAttemptRun.finish(request.sessionId, request.runId, "interrupted", {
-            endedAt: Date.now(),
-            error: err instanceof Error ? err.message : String(err),
-          });
+          await WorkItemAttemptRun.finish(
+            request.sessionId,
+            request.runId,
+            "interrupted",
+            command.traceId,
+            {
+              endedAt: Date.now(),
+              error: err instanceof Error ? err.message : String(err),
+            },
+          );
         } catch (reflectionFailure) {
           throwWithWorkItemReflectionFailure(err, reflectionFailure);
         }
@@ -222,19 +229,30 @@ export function createWorkerDispatchHandlers(
       // The execution instance ended (#510 D2b): record the attempt terminal
       // fact before completion reflection — admission stays the separate
       // #490 verdict on the same work stream.
-      await WorkItemAttemptRun.finish(request.sessionId, request.runId, result.status, {
-        endedAt: Date.now(),
-        ...(result.status !== "succeeded" && result.error ? { error: result.error } : {}),
-      });
-      const reflection = await reflectCoordinatorResult(workItemHash, result, {
-        completionService: options.completionService,
-        verifierRegistry,
-        sourceOrigin: { source: "internal_worker" },
-        readBack: options.readBack,
-        readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
-        readBackRecorder: options.readBackRecorder,
-        now: options.now,
-      });
+      await WorkItemAttemptRun.finish(
+        request.sessionId,
+        request.runId,
+        result.status,
+        command.traceId,
+        {
+          endedAt: Date.now(),
+          ...(result.status !== "succeeded" && result.error ? { error: result.error } : {}),
+        },
+      );
+      const reflection = await reflectCoordinatorResult(
+        workItemHash,
+        result,
+        {
+          completionService: options.completionService,
+          verifierRegistry,
+          sourceOrigin: { source: "internal_worker" },
+          readBack: options.readBack,
+          readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+          readBackRecorder: options.readBackRecorder,
+          now: options.now,
+        },
+        command.traceId,
+      );
       return {
         output: {
           sessionId: request.sessionId,
@@ -267,25 +285,32 @@ export function createWorkerDispatchHandlers(
           payload.result.sessionId,
           payload.result.runId,
           payload.result.status,
+          command.traceId,
           {
             endedAt: Date.now(),
             ...(payload.result.error ? { error: payload.result.error } : {}),
           },
         );
       }
-      const projection = await projectConnectorCompletion(workItemHash, payload.result, {
-        completionService: options.completionService,
-        verifierRegistry,
-        readBack: options.readBack,
-        readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
-        readBackRecorder: options.readBackRecorder,
-        now: options.now,
-      });
+      const projection = await projectConnectorCompletion(
+        workItemHash,
+        payload.result,
+        {
+          completionService: options.completionService,
+          verifierRegistry,
+          readBack: options.readBack,
+          readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+          readBackRecorder: options.readBackRecorder,
+          now: options.now,
+        },
+        command.traceId,
+      );
       if (payload.result.status === "succeeded" && !projection.reflection.completionBlocked) {
         await WorkItemAttemptRun.finish(
           payload.result.sessionId,
           payload.result.runId,
           "succeeded",
+          command.traceId,
           {
             endedAt: Date.now(),
           },

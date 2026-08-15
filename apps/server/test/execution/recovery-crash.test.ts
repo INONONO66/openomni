@@ -46,30 +46,41 @@ async function seedAttemptRun(
   state: RunState | "unallocated",
   executorKind: WorkItem.ExecutorKind = "internal_chat_agent",
 ): Promise<string> {
-  const created = await WorkItemStore.create({
-    name: `run ${runId}`,
-    sourceMessageId: `seed:${runId}`,
-    sourceChannel: "ingress",
-    intent: "worker.dispatch",
-    goal: "do it",
-    sessionId,
-    workSessionId: sessionId,
-    workerRunId: runId,
-    executorKind,
-    acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
-  });
-  await WorkItemStore.start(created.hash);
+  const created = await WorkItemStore.create(
+    {
+      name: `run ${runId}`,
+      sourceMessageId: `seed:${runId}`,
+      sourceChannel: "ingress",
+      intent: "worker.dispatch",
+      goal: "do it",
+      sessionId,
+      workSessionId: sessionId,
+      workerRunId: runId,
+      executorKind,
+      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+    },
+    "trace-test",
+  );
+  await WorkItemStore.start(created.hash, "trace-test");
   if (state === "unallocated") return created.hash;
-  const allocation = await WorkItemStore.allocateAttempt(created.hash, attemptIdentity("do it"));
+  const allocation = await WorkItemStore.allocateAttempt(
+    created.hash,
+    attemptIdentity("do it"),
+    "trace-test",
+  );
   if (!allocation) throw new Error(`attempt allocation failed for ${runId}`);
   if (state === "allocated") return created.hash;
   if (state === "waiting_input") {
-    if (!(await WorkItemAttemptRun.beginWait(sessionId, runId))) {
+    if (!(await WorkItemAttemptRun.beginWait(sessionId, runId, "trace-test"))) {
       throw new Error(`beginWait failed for ${runId}`);
     }
     return created.hash;
   }
-  if (!(await WorkItemAttemptRun.finish(sessionId, runId, state, { endedAt: Date.now() }))) {
+  if (
+    !(await WorkItemAttemptRun.finish(sessionId, runId, state, "trace-test", {
+      endedAt: Date.now(),
+    }))
+  ) {
     throw new Error(`finish failed for ${runId}`);
   }
   return created.hash;
@@ -88,7 +99,7 @@ describe("recoverInterruptedRuns", () => {
   test("marks active runs as interrupted with the terminal attempt fact", async () => {
     await seedAttemptRun("s1", "r1", "allocated");
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     const run = WorkItemAttemptRun.find("s1", "r1");
     expect(run?.status).toBe("interrupted");
@@ -101,7 +112,7 @@ describe("recoverInterruptedRuns", () => {
   test("marks waiting_input runs as interrupted and releases the wait blocker", async () => {
     const hash = await seedAttemptRun("s-waiting", "r-waiting", "waiting_input");
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     const run = WorkItemAttemptRun.find("s-waiting", "r-waiting");
     expect(run?.status).toBe("interrupted");
@@ -114,7 +125,7 @@ describe("recoverInterruptedRuns", () => {
     await seedAttemptRun("s3", "r3a", "allocated");
     await seedAttemptRun("s3", "r3b", "allocated");
 
-    await recoverInterruptedRuns();
+    await recoverInterruptedRuns("trace-test");
 
     const ledger = Storage.get().ledger;
     if (!ledger) throw new Error("ledger sub-adapter missing");
@@ -136,7 +147,7 @@ describe("recoverInterruptedRuns", () => {
     await seedAttemptRun("s4", "r-cancelled", "cancelled");
     await seedAttemptRun("s4", "r-interrupted", "interrupted");
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     expect(result.recovered).toBe(0);
     expect(result.sessions).toHaveLength(0);
@@ -150,7 +161,7 @@ describe("recoverInterruptedRuns", () => {
   test("runs without an allocated attempt are not affected", async () => {
     const hash = await seedAttemptRun("s5", "r5", "unallocated");
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     expect(result.recovered).toBe(0);
     expect(WorkItemStore.get(hash)?.attemptTerminal).toBeUndefined();
@@ -159,7 +170,7 @@ describe("recoverInterruptedRuns", () => {
   test("connector-endpoint attempts survive a kernel restart", async () => {
     await seedAttemptRun("s-connector", "r-connector", "allocated", "connector_endpoint");
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     expect(result.recovered).toBe(0);
     expect(WorkItemAttemptRun.find("s-connector", "r-connector")?.status).toBe("running");
@@ -177,14 +188,14 @@ describe("recoverInterruptedRuns", () => {
       if (!finishedAfterScan) {
         finishedAfterScan = true;
         // The concurrent writer wins the head CAS between scan and write.
-        void WorkItemAttemptRun.finish("s-active", "r-active", "succeeded", {
+        void WorkItemAttemptRun.finish("s-active", "r-active", "succeeded", "trace-test", {
           endedAt: Date.now(),
         });
       }
       return rows;
     };
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     expect(WorkItemAttemptRun.find("s-active", "r-active")?.status).toBe("succeeded");
     expect(result.recovered).toBe(0);
@@ -195,7 +206,7 @@ describe("recoverInterruptedRuns", () => {
     await seedAttemptRun("s6", "r6a", "allocated");
     await seedAttemptRun("s6", "r6b", "allocated");
 
-    const result = await recoverInterruptedRuns();
+    const result = await recoverInterruptedRuns("trace-test");
 
     expect(result.recovered).toBe(2);
     expect(result.sessions).toEqual(["s6"]);
@@ -207,7 +218,7 @@ describe("recoverInterruptedRuns", () => {
     }
 
     const start = Date.now();
-    await recoverInterruptedRuns();
+    await recoverInterruptedRuns("trace-test");
     const elapsed = Date.now() - start;
 
     expect(elapsed).toBeLessThan(10_000);

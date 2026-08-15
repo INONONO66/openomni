@@ -26,14 +26,17 @@ function authorizedCompareAndSet(
 }
 
 async function createItem() {
-  return WorkItemStore.create({
-    name: "Admission persistence",
-    sourceMessageId: "msg_admission",
-    sourceChannel: "test",
-    intent: "complete",
-    goal: "record before close",
-    acceptanceCriteria: ["criterion one"],
-  });
+  return WorkItemStore.create(
+    {
+      name: "Admission persistence",
+      sourceMessageId: "msg_admission",
+      sourceChannel: "test",
+      intent: "complete",
+      goal: "record before close",
+      acceptanceCriteria: ["criterion one"],
+    },
+    "trace-test",
+  );
 }
 
 function admissionCandidate(
@@ -180,11 +183,15 @@ describe("WorkItemStore completion admission storage boundary", () => {
   test("uses the shared WorkItem row revision after an ordinary mutation", async () => {
     const adapter = configure();
     const item = await createItem();
-    const mutated = await WorkItemStore.addEvidence(item.hash, {
-      kind: "verification",
-      description: "ordinary mutation",
-      passed: true,
-    });
+    const mutated = await WorkItemStore.addEvidence(
+      item.hash,
+      {
+        kind: "verification",
+        description: "ordinary mutation",
+        passed: true,
+      },
+      "trace-test",
+    );
     if (!mutated) throw new Error("missing mutated item");
     const candidate = admissionCandidate(mutated);
 

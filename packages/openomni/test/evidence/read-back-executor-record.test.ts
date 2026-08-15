@@ -15,14 +15,17 @@ afterEach(async () => {
 
 describe("ReadBackExecutor.execute", () => {
   test("returns a read-back check without persisting evidence", async () => {
-    const item = await WorkItemStore.create({
-      name: "Read-back execution isolation",
-      sourceMessageId: "read-back-executor-record-isolation",
-      sourceChannel: "test",
-      intent: "verify",
-      goal: "keep direct read-back execution free of storage side effects",
-      acceptanceCriteria: ["the WorkItem remains byte-for-byte unchanged"],
-    });
+    const item = await WorkItemStore.create(
+      {
+        name: "Read-back execution isolation",
+        sourceMessageId: "read-back-executor-record-isolation",
+        sourceChannel: "test",
+        intent: "verify",
+        goal: "keep direct read-back execution free of storage side effects",
+        acceptanceCriteria: ["the WorkItem remains byte-for-byte unchanged"],
+      },
+      "trace-test",
+    );
     const before = structuredClone(WorkItemStore.get(item.hash));
     const origin = await startFixtureServer();
 

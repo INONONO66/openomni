@@ -5,8 +5,9 @@ import { mutate } from "./mutation.js";
 export async function recordWorkItemOutcome(
   hash: string,
   outcome: WorkItem.Outcome,
+  traceId: string,
 ): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, (existing, now) => {
+  return mutate(hash, traceId, (existing, now) => {
     const status = WorkItem.deriveStatus(existing);
     if (status !== "completed") {
       throw new Error(`Cannot record outcome for a ${status} work item`);
@@ -21,9 +22,9 @@ export async function recordWorkItemOutcome(
         outcome: parsedOutcome,
         timestamps: { ...existing.timestamps, updated: now },
       },
-      afterPublish: (updated) => {
+      afterPublish: (updated, publishTraceId) => {
         Bus.publish(WorkItem.Events.OutcomeRecorded, {
-          traceId: crypto.randomUUID(),
+          traceId: publishTraceId,
           time: now,
           sessionId: updated.sessionId,
           payload: { hash, outcome: parsedOutcome, sessionId: updated.sessionId },

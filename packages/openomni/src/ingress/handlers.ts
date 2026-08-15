@@ -113,25 +113,29 @@ export namespace IngressHandlers {
       typeof ctx.event.meta?.actor === "object" && ctx.event.meta.actor !== null
         ? String((ctx.event.meta.actor as Record<string, unknown>).sessionId ?? "") || undefined
         : undefined;
-    const workItem = await WorkItemStore.create({
-      name: `Ingress worker ${request.agentName ?? "worker"}`,
-      sourceMessageId: ctx.event.id,
-      sourceChannel: ctx.event.surface,
-      intent: "worker.dispatch",
-      // The content fingerprint's canonical work input rejects the empty
-      // string; an empty ingress payload is declared as such.
-      goal: prompt || "(empty ingress payload)",
-      assigneeId: request.agentName,
-      sessionId: ctx.sessionId,
-      originSessionId: parentSessionId,
-      workSessionId: ctx.sessionId,
-      workerRunId: request.runId,
-      executorKind: "internal_chat_agent",
-      // Ingress dispatch carries no caller acceptance criteria; the run's
-      // terminal truth is its attempt outcome, not a completion admission.
-      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
-    });
-    await WorkItemStore.start(workItem.hash);
+    const traceId = requireTraceId(ctx);
+    const workItem = await WorkItemStore.create(
+      {
+        name: `Ingress worker ${request.agentName ?? "worker"}`,
+        sourceMessageId: ctx.event.id,
+        sourceChannel: ctx.event.surface,
+        intent: "worker.dispatch",
+        // The content fingerprint's canonical work input rejects the empty
+        // string; an empty ingress payload is declared as such.
+        goal: prompt || "(empty ingress payload)",
+        assigneeId: request.agentName,
+        sessionId: ctx.sessionId,
+        originSessionId: parentSessionId,
+        workSessionId: ctx.sessionId,
+        workerRunId: request.runId,
+        executorKind: "internal_chat_agent",
+        // Ingress dispatch carries no caller acceptance criteria; the run's
+        // terminal truth is its attempt outcome, not a completion admission.
+        acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+      },
+      traceId,
+    );
+    await WorkItemStore.start(workItem.hash, traceId);
     await allocateWorkerSpawnAttempt(
       workItem.hash,
       prompt || "(empty ingress payload)",
@@ -141,6 +145,7 @@ export namespace IngressHandlers {
         policyPlan: ctx.event.agent.policyPlan,
         workspaceRoot: ctx.event.agent.toolConfig?.workspaceRoot,
       },
+      traceId,
     );
   }
 
@@ -149,12 +154,18 @@ export namespace IngressHandlers {
     request: Execution.Request,
     coordinatorResult: Execution.Result,
   ): Promise<void> {
-    await WorkItemAttemptRun.finish(ctx.sessionId, request.runId, coordinatorResult.status, {
-      endedAt: Date.now(),
-      ...(coordinatorResult.status !== "succeeded" && coordinatorResult.error
-        ? { error: coordinatorResult.error }
-        : {}),
-    });
+    await WorkItemAttemptRun.finish(
+      ctx.sessionId,
+      request.runId,
+      coordinatorResult.status,
+      requireTraceId(ctx),
+      {
+        endedAt: Date.now(),
+        ...(coordinatorResult.status !== "succeeded" && coordinatorResult.error
+          ? { error: coordinatorResult.error }
+          : {}),
+      },
+    );
   }
 
   async function markDispatchThrown(
@@ -164,10 +175,16 @@ export namespace IngressHandlers {
   ): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     // finish() is a no-op receipt (false) when the run already ended.
-    await WorkItemAttemptRun.finish(ctx.sessionId, request.runId, "interrupted", {
-      endedAt: Date.now(),
-      error: message,
-    });
+    await WorkItemAttemptRun.finish(
+      ctx.sessionId,
+      request.runId,
+      "interrupted",
+      requireTraceId(ctx),
+      {
+        endedAt: Date.now(),
+        error: message,
+      },
+    );
   }
 
   // ---- worker cancel / delivery / background dispatch ----
@@ -196,9 +213,15 @@ export namespace IngressHandlers {
           typeof result === "object" &&
           (result as { cancelled?: unknown }).cancelled === true;
         if (cancelled) {
-          await WorkItemAttemptRun.finish(ctx.sessionId, run.runId, "cancelled", {
-            endedAt: Date.now(),
-          });
+          await WorkItemAttemptRun.finish(
+            ctx.sessionId,
+            run.runId,
+            "cancelled",
+            requireTraceId(ctx),
+            {
+              endedAt: Date.now(),
+            },
+          );
         }
         return { runId: run.runId, cancelled, result };
       }),

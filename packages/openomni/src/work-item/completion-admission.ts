@@ -847,6 +847,13 @@ export type CompletionBoundaryOutcome = Readonly<{
 }>;
 
 export type CompletionRequestCallOptions = Readonly<{
+  /**
+   * The caller's trace (D11) — required, no fallback: the dispatch path
+   * supplies the command's traceId, boot recovery supplies the boot trace.
+   * Every event this request publishes (CompletionRequested, admission
+   * record, terminal commit) carries this ONE id.
+   */
+  traceId: string;
   reservation?: Readonly<{
     requestRoot: string;
     envelopeDigest: string;
@@ -876,12 +883,13 @@ export type CompletionAdmissionService = Readonly<{
   requestCompletion(
     request: WorkItem.CompletionRequest,
     completionReport: WorkItem.CompletionReport,
-    options?: CompletionRequestCallOptions,
+    options: CompletionRequestCallOptions,
   ): Promise<CompletionBoundaryOutcome>;
   resumeCompletion(
     workItemHash: string,
     admissionId: string,
     completionReport: WorkItem.CompletionReport,
+    traceId: string,
   ): Promise<CompletionBoundaryOutcome>;
   /**
    * Reserves a completion request under the service's internal owner identity
@@ -922,6 +930,7 @@ type CompletionAdmissionServiceOptions = Readonly<{
 type CompletionServiceContext = Readonly<{
   completionWriter: Storage.WorkItemCompletionWriter;
   now: () => number;
+  traceId: string;
   decision: CompletionDecision;
   beforeAdmissionWrite?: () => void;
   reservation?: ResolvedCompletionReservation;
@@ -938,17 +947,18 @@ export function createCompletionAdmissionService(
   const baseDecision =
     options.decision ??
     createCompletionDecision(decisionDependencies(options, options.verificationErrorAuthorityPort));
-  const contextFor = (perCall?: CompletionRequestCallOptions): CompletionServiceContext => ({
+  const contextFor = (perCall: CompletionRequestCallOptions): CompletionServiceContext => ({
     completionWriter: options.completionWriter,
     now: options.now,
+    traceId: perCall.traceId,
     decision:
-      options.decision === undefined && perCall?.verificationErrorAuthorityPort !== undefined
+      options.decision === undefined && perCall.verificationErrorAuthorityPort !== undefined
         ? createCompletionDecision(
             decisionDependencies(options, perCall.verificationErrorAuthorityPort),
           )
         : baseDecision,
-    beforeAdmissionWrite: perCall?.beforeAdmissionWrite ?? options.beforeAdmissionWrite,
-    reservation: resolveReservation(options.reservation, serviceOwnerId, perCall?.reservation),
+    beforeAdmissionWrite: perCall.beforeAdmissionWrite ?? options.beforeAdmissionWrite,
+    reservation: resolveReservation(options.reservation, serviceOwnerId, perCall.reservation),
   });
   return Object.freeze({
     async requestCompletion(requestInput, completionReportInput, perCall) {
@@ -1023,7 +1033,7 @@ export function createCompletionAdmissionService(
             }
           }
           if (!requestedPublished) {
-            publishRequested(request, initial.sessionId, ctx.now());
+            publishRequested(request, initial.sessionId, ctx.now(), ctx.traceId);
             requestedPublished = true;
           }
 
@@ -1035,7 +1045,7 @@ export function createCompletionAdmissionService(
           assertReservation?.();
           ctx.beforeAdmissionWrite?.();
           assertUnchangedAfterAuthority(adapter, initial);
-          const recorded = await appendAdmission(adapter, initial, request, admission);
+          const recorded = await appendAdmission(adapter, initial, request, admission, ctx.traceId);
           if (!isAdmitted(admission)) {
             return { admission, workItem: recorded, completed: false };
           }
@@ -1069,8 +1079,8 @@ export function createCompletionAdmissionService(
       throw staleHead(`completion admission contention did not converge: ${request.id}`);
     },
 
-    async resumeCompletion(workItemHash, admissionId, completionReportInput) {
-      const ctx = contextFor();
+    async resumeCompletion(workItemHash, admissionId, completionReportInput, traceId) {
+      const ctx = contextFor({ traceId });
       const completionReport = WorkItem.canonicalCompletionReport(
         WorkItem.CompletionReport.parse(completionReportInput),
       );
@@ -1314,6 +1324,7 @@ async function resumeCompletionAtHead(
         completionReport,
         ctx.now(),
         assertReservation,
+        ctx.traceId,
         true,
       );
       return { admission, workItem: completed, completed: true };
@@ -1328,6 +1339,7 @@ async function resumeCompletionAtHead(
       completionReport,
       ctx.now(),
       assertReservation,
+      ctx.traceId,
     );
     return { admission, workItem: completed, completed: true };
   }
@@ -1340,7 +1352,7 @@ async function resumeCompletionAtHead(
   assertReservation?.();
   ctx.beforeAdmissionWrite?.();
   assertUnchangedAfterAuthority(adapter, item);
-  const recorded = await appendAdmission(adapter, item, request, nextAdmission);
+  const recorded = await appendAdmission(adapter, item, request, nextAdmission, ctx.traceId);
   if (!isAdmitted(nextAdmission)) {
     return { admission: nextAdmission, workItem: recorded, completed: false };
   }
@@ -1351,6 +1363,7 @@ async function resumeCompletionAtHead(
     completionReport,
     ctx.now(),
     assertReservation,
+    ctx.traceId,
   );
   return { admission: nextAdmission, workItem: completed, completed: true };
 }
@@ -1416,6 +1429,7 @@ async function replayRequest(
       completionReport,
       ctx.now(),
       assertReservation,
+      ctx.traceId,
     );
     return { admission, workItem: completed, completed: true };
   }
@@ -1435,6 +1449,7 @@ async function replayRequest(
       completionReport,
       ctx.now(),
       assertReservation,
+      ctx.traceId,
       true,
     );
     return { admission, workItem: completed, completed: true };
@@ -1486,6 +1501,7 @@ async function completeOrReevaluate(
       completionReport,
       ctx.now(),
       assertReservation,
+      ctx.traceId,
     );
     return { admission, workItem: completed, completed: true };
   }
@@ -1500,7 +1516,7 @@ async function completeOrReevaluate(
   assertReservation?.();
   ctx.beforeAdmissionWrite?.();
   assertUnchangedAfterAuthority(adapter, latest);
-  const nextRecorded = await appendAdmission(adapter, latest, recheck, nextAdmission);
+  const nextRecorded = await appendAdmission(adapter, latest, recheck, nextAdmission, ctx.traceId);
   if (!isAdmitted(nextAdmission)) {
     return { admission: nextAdmission, workItem: nextRecorded, completed: false };
   }
@@ -1515,6 +1531,7 @@ async function completeOrReevaluate(
     completionReport,
     ctx.now(),
     assertReservation,
+    ctx.traceId,
   );
   return { admission: nextAdmission, workItem: completed, completed: true };
 }
@@ -1524,6 +1541,7 @@ async function appendAdmission(
   existing: WorkItem.Info,
   request: WorkItem.CompletionRequest,
   admission: WorkItem.CompletionAdmission,
+  traceId: string,
 ): Promise<WorkItem.Info> {
   const proposed = canonicalCompletionRequest(request);
   const knownFactIds = new Set(
@@ -1586,7 +1604,7 @@ async function appendAdmission(
     throw staleHead(`WorkItem changed while recording completion admission: ${existing.hash}`);
   }
   Bus.publish(WorkItem.Events.CompletionAdmissionRecorded, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: admission.createdAt,
     sessionId: updated.sessionId,
     payload: {
@@ -1606,6 +1624,7 @@ function commitTerminal(
   completionReport: WorkItem.CompletionReport,
   time: number,
   assertReservation: (() => void) | undefined,
+  traceId: string,
   reservationBridged = false,
 ): WorkItem.Info {
   const current = requiredItem(adapter.get(existing.hash), existing.hash);
@@ -1639,18 +1658,21 @@ function commitTerminal(
   if (!adapter.compareAndSet(current.hash, current.revision, completed)) {
     throw staleHead(`WorkItem changed during terminal completion: ${current.hash}`);
   }
+  // The three publishes below project ONE atomic terminal commit, so they
+  // share ONE traceId (D11) — the requesting caller's — instead of the three
+  // per-publish mints that used to split a single commit across traces.
   const previousStatus = WorkItem.deriveStatus(current);
   const completedStatus = WorkItem.deriveStatus(completed);
   if (previousStatus !== completedStatus) {
     Bus.publish(WorkItem.Events.StatusChanged, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time,
       sessionId: completed.sessionId,
       payload: { hash: completed.hash, from: previousStatus, to: completedStatus },
     });
   }
   Bus.publish(WorkItem.Events.Updated, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time,
     sessionId: completed.sessionId,
     payload: {
@@ -1659,7 +1681,7 @@ function commitTerminal(
     },
   });
   Bus.publish(WorkItem.Events.CompletedV2, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time,
     sessionId: completed.sessionId,
     payload: { ...receipt, sessionId: completed.sessionId },
@@ -1879,9 +1901,10 @@ function publishRequested(
   request: WorkItem.CompletionRequest,
   sessionId: string | undefined,
   time: number,
+  traceId: string,
 ): void {
   Bus.publish(WorkItem.Events.CompletionRequested, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time,
     sessionId,
     payload: request,
@@ -2209,7 +2232,8 @@ type WorkItemCompletionRecoveryReceipt = Readonly<{
 
 export type WorkItemCompletionGateway = CompletionAdmissionService &
   Readonly<{
-    recoverRecordedCompletions(): Promise<WorkItemCompletionRecoveryReceipt>;
+    /** `traceId` is the boot/recovery pass's trace — every resumed write records under it. */
+    recoverRecordedCompletions(traceId: string): Promise<WorkItemCompletionRecoveryReceipt>;
   }>;
 
 type WorkItemCompletionGatewayOptions = Readonly<{
@@ -2243,7 +2267,7 @@ export function createWorkItemCompletionGateway(
   });
   return Object.freeze({
     ...service,
-    async recoverRecordedCompletions() {
+    async recoverRecordedCompletions(traceId: string) {
       const adapter = Storage.get().workItem;
       if (!adapter) return { recovered: 0, skipped: 0, failures: [] };
       let recovered = 0;
@@ -2325,6 +2349,7 @@ export function createWorkItemCompletionGateway(
                   item.hash,
                   admission,
                   admission.completionReportSnapshot,
+                  traceId,
                 ))
               ) {
                 throw new Error("completion recovery remained incomplete");
@@ -2333,7 +2358,12 @@ export function createWorkItemCompletionGateway(
               continue;
             }
             if (
-              await materializeBlocker(item.hash, `${admission.id}:blocker`, blockerDescription)
+              await materializeBlocker(
+                item.hash,
+                `${admission.id}:blocker`,
+                blockerDescription,
+                traceId,
+              )
             ) {
               recovered += 1;
             } else {
@@ -2346,7 +2376,13 @@ export function createWorkItemCompletionGateway(
             continue;
           }
           if (
-            await resumeAndSettle(service, item.hash, admission, admission.completionReportSnapshot)
+            await resumeAndSettle(
+              service,
+              item.hash,
+              admission,
+              admission.completionReportSnapshot,
+              traceId,
+            )
           ) {
             recovered += 1;
           } else {
@@ -2367,6 +2403,7 @@ export function createWorkItemCompletionGateway(
                 item.hash,
                 `${admission.id}:recovery-blocker`,
                 `completion recovery blocked: ${message}`,
+                traceId,
               )
             ) {
               recovered += 1;
@@ -2402,11 +2439,13 @@ async function resumeAndSettle(
   workItemHash: string,
   admission: WorkItem.CompletionAdmission,
   completionReportSnapshot: WorkItem.CompletionReport,
+  traceId: string,
 ): Promise<boolean> {
   const outcome = await service.resumeCompletion(
     workItemHash,
     admission.id,
     completionReportSnapshot,
+    traceId,
   );
   const reevaluated = outcome.workItem;
   if (WorkItem.deriveStatus(reevaluated) === "completed") return true;
@@ -2415,7 +2454,7 @@ async function resumeAndSettle(
   if (
     latest !== undefined &&
     description !== undefined &&
-    (await materializeBlocker(workItemHash, `${latest.id}:blocker`, description))
+    (await materializeBlocker(workItemHash, `${latest.id}:blocker`, description, traceId))
   ) {
     return true;
   }
@@ -2426,6 +2465,7 @@ async function materializeBlocker(
   workItemHash: string,
   blockerId: string,
   description: string,
+  traceId: string,
 ): Promise<boolean> {
   const current = WorkItemStore.get(workItemHash);
   if (
@@ -2433,10 +2473,14 @@ async function materializeBlocker(
   ) {
     return false;
   }
-  await WorkItemStore.addBlocker(workItemHash, {
-    id: blockerId,
-    description,
-    kind: "error",
-  });
+  await WorkItemStore.addBlocker(
+    workItemHash,
+    {
+      id: blockerId,
+      description,
+      kind: "error",
+    },
+    traceId,
+  );
   return true;
 }

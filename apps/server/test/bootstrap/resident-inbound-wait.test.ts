@@ -114,23 +114,27 @@ async function createActiveRun(runId: string) {
     title: "worker",
     model: { providerID: "test", modelID: "worker-model" },
   });
-  const created = await WorkItemStore.create({
-    name: `worker run ${runId}`,
-    sourceMessageId: `seed:${runId}`,
-    sourceChannel: "ingress",
-    intent: "worker.dispatch",
-    goal: "ask the Resident",
-    sessionId: workerSession.id,
-    originSessionId: residentSession.id,
-    workSessionId: workerSession.id,
-    workerRunId: runId,
-    executorKind: "internal_chat_agent",
-    acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
-  });
-  await WorkItemStore.start(created.hash);
+  const created = await WorkItemStore.create(
+    {
+      name: `worker run ${runId}`,
+      sourceMessageId: `seed:${runId}`,
+      sourceChannel: "ingress",
+      intent: "worker.dispatch",
+      goal: "ask the Resident",
+      sessionId: workerSession.id,
+      originSessionId: residentSession.id,
+      workSessionId: workerSession.id,
+      workerRunId: runId,
+      executorKind: "internal_chat_agent",
+      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+    },
+    "trace-test",
+  );
+  await WorkItemStore.start(created.hash, "trace-test");
   const allocation = await WorkItemStore.allocateAttempt(
     created.hash,
     attemptIdentity("ask the Resident"),
+    "trace-test",
   );
   if (!allocation) throw new Error("attempt allocation failed");
   return {
@@ -263,7 +267,7 @@ describe("resident inbound wait kernel dispatch", () => {
 
   it("rejects a run whose attempt already ended before the wait", async () => {
     const run = await createActiveRun("run-cancelled-before-wait");
-    await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", {
+    await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", "trace-test", {
       endedAt: Date.now(),
     });
     const submit = mock(
@@ -295,7 +299,7 @@ describe("resident inbound wait kernel dispatch", () => {
     );
     WorkItemAttemptRun.beginWait = mock(async (...args: Parameters<typeof originalBeginWait>) => {
       // The cancel lands between the handler's read and the acquire CAS.
-      await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", {
+      await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", "trace-test", {
         endedAt: Date.now(),
       });
       return originalBeginWait(...args);
@@ -323,7 +327,7 @@ describe("resident inbound wait kernel dispatch", () => {
     WorkItemAttemptRun.endWait = mock(async (...args: Parameters<typeof originalEndWait>) => {
       // The cancel lands while the Resident's answer is in flight: the
       // terminal fact resolves the wait, so the release is a no-op receipt.
-      await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", {
+      await WorkItemAttemptRun.finish(run.workerSessionId, run.runId, "cancelled", "trace-test", {
         endedAt: Date.now(),
       });
       return originalEndWait(...args);
@@ -339,19 +343,22 @@ describe("resident inbound wait kernel dispatch", () => {
   it("rejects a run without a parent Resident session and a missing runId alike", async () => {
     const run = await createActiveRun("run-parentless");
     // A run whose WorkItem carries no originSessionId has no Resident to ask.
-    const orphan = await WorkItemStore.create({
-      name: "orphan run",
-      sourceMessageId: "seed:run-orphan",
-      sourceChannel: "ingress",
-      intent: "worker.dispatch",
-      goal: "ask nobody",
-      sessionId: run.workerSessionId,
-      workSessionId: run.workerSessionId,
-      workerRunId: "run-orphan",
-      executorKind: "internal_chat_agent",
-      acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
-    });
-    await WorkItemStore.start(orphan.hash);
+    const orphan = await WorkItemStore.create(
+      {
+        name: "orphan run",
+        sourceMessageId: "seed:run-orphan",
+        sourceChannel: "ingress",
+        intent: "worker.dispatch",
+        goal: "ask nobody",
+        sessionId: run.workerSessionId,
+        workSessionId: run.workerSessionId,
+        workerRunId: "run-orphan",
+        executorKind: "internal_chat_agent",
+        acceptanceCriteria: ["the dispatched worker run reaches a terminal attempt outcome"],
+      },
+      "trace-test",
+    );
+    await WorkItemStore.start(orphan.hash, "trace-test");
     const submit = mock(
       async (): Promise<Dispatch.Result> => ({ dispatchId: "never", status: "completed" }),
     );

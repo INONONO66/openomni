@@ -12,6 +12,7 @@ import type { WorkItemAdapter, WorkItemMutation, WorkItemTransitionTarget } from
 
 export async function mutate(
   hash: string,
+  traceId: string,
   build: (existing: WorkItem.Info, now: number) => WorkItemMutation,
 ): Promise<WorkItem.Info | undefined> {
   const adapter = Storage.get().workItem;
@@ -23,7 +24,16 @@ export async function mutate(
   const now = Date.now();
   const { updated, changedFields, fact, target, afterPublish } = build(existing, now);
   if (target) assertTransition(existing, target);
-  return persistMutation(adapter, existing, updated, now, changedFields, fact, afterPublish);
+  return persistMutation(
+    adapter,
+    existing,
+    updated,
+    now,
+    changedFields,
+    fact,
+    traceId,
+    afterPublish,
+  );
 }
 
 /**
@@ -60,7 +70,8 @@ export function persistMutation(
   time: number,
   changedFields: string[],
   fact: WorkItemFact,
-  afterPublish?: (updated: WorkItem.Info) => void,
+  traceId: string,
+  afterPublish?: (updated: WorkItem.Info, traceId: string) => void,
 ): WorkItem.Info {
   const storage = Storage.get();
   const ledger = requireWorkItemLedger(storage);
@@ -70,20 +81,22 @@ export function persistMutation(
 
   // Bus stays observe-only for the work-item decision class (#510): these
   // publishes are lossy projections of the appended facts and fire only
-  // AFTER the append+projection transaction committed.
+  // AFTER the append+projection transaction committed. They are ONE state
+  // transition, so they share the caller's ONE traceId (D11) — previously
+  // each publish minted its own, splitting one transition across 2-3 traces.
   const previousStatus = WorkItem.deriveStatus(existing);
   const nextStatus = WorkItem.deriveStatus(versioned);
   if (previousStatus !== nextStatus) {
     Bus.publish(WorkItem.Events.StatusChanged, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time,
       sessionId: versioned.sessionId,
       payload: { hash: versioned.hash, from: previousStatus, to: nextStatus },
     });
   }
-  afterPublish?.(versioned);
+  afterPublish?.(versioned, traceId);
   Bus.publish(WorkItem.Events.Updated, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time,
     sessionId: versioned.sessionId,
     payload: { hash: versioned.hash, fields: changedFields },

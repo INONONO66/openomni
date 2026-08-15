@@ -77,15 +77,18 @@ function effectFactsOf(effectId: string): FactRow[] {
 }
 
 async function createEffectWorkItem(name: string): Promise<WorkItem.Info> {
-  const item = await WorkItemStore.create({
-    name,
-    sourceMessageId: `msg_${name}`,
-    sourceChannel: "conformance",
-    intent: "verify",
-    goal: "prove effect reconciliation conformance",
-    sessionId: "session_effects_conformance",
-    acceptanceCriteria: ["every intent reaches exactly one terminal outcome"],
-  });
+  const item = await WorkItemStore.create(
+    {
+      name,
+      sourceMessageId: `msg_${name}`,
+      sourceChannel: "conformance",
+      intent: "verify",
+      goal: "prove effect reconciliation conformance",
+      sessionId: "session_effects_conformance",
+      acceptanceCriteria: ["every intent reaches exactly one terminal outcome"],
+    },
+    "trace-test",
+  );
   if (!item) throw new Error("failed to create conformance work item");
   return item;
 }
@@ -146,7 +149,7 @@ describe("p2 effects conformance (#492)", () => {
     expect(EffectStore.status("fx-restart").status).toBe("pending");
 
     const { reconciler } = assembleEffectRuntime();
-    const summary = await reconciler.reconcile();
+    const summary = await reconciler.reconcile("trace-test");
     expect(summary.resolved).toBe(1);
 
     const status = EffectStore.status("fx-restart");
@@ -155,7 +158,7 @@ describe("p2 effects conformance (#492)", () => {
     expect(effectFactsOf("fx-restart")).toHaveLength(2);
 
     // Same key, second sweep: nothing outstanding, no new materialization.
-    const second = await reconciler.reconcile();
+    const second = await reconciler.reconcile("trace-test");
     expect(second.scanned).toBe(0);
     expect(effectFactsOf("fx-restart")).toHaveLength(2);
   });
@@ -221,7 +224,7 @@ describe("p2 effects conformance (#492)", () => {
 
     // The boot sweep alone (no replay) re-projects the ALREADY-RECORDED outcome.
     const { reconciler } = assembleEffectRuntime();
-    const summary = await reconciler.reconcile();
+    const summary = await reconciler.reconcile("trace-test");
     expect(summary.reprojected).toBe(1);
     expect(summary.resolved).toBe(0);
 
@@ -237,7 +240,7 @@ describe("p2 effects conformance (#492)", () => {
     ]);
 
     // Idempotent across every boot: a healed WorkItem is not re-linked again.
-    const second = await reconciler.reconcile();
+    const second = await reconciler.reconcile("trace-test");
     expect(second.reprojected).toBe(0);
   });
 
@@ -265,7 +268,7 @@ describe("p2 effects conformance (#492)", () => {
 
     // kernel-contract §retry policy: exhausted reconciliation adds a
     // waiting_input blocker instead of terminalizing.
-    const summary = await reconciler.reconcile();
+    const summary = await reconciler.reconcile("trace-test");
     expect(summary.escalated).toBe(1);
     expect(summary.resolved).toBe(0);
 
@@ -276,8 +279,8 @@ describe("p2 effects conformance (#492)", () => {
     expect(blockers[0]?.description).toContain("fx-exhaust");
 
     // Re-escalation across sweeps (every boot) must NOT stack blockers.
-    await reconciler.reconcile();
-    await reconciler.reconcile();
+    await reconciler.reconcile("trace-test");
+    await reconciler.reconcile("trace-test");
     const afterSweeps = await WorkItemStore.get(item.hash);
     expect(afterSweeps?.blockers.filter((entry) => entry.kind === "waiting_input")).toHaveLength(1);
 
@@ -288,6 +291,6 @@ describe("p2 effects conformance (#492)", () => {
     // Fail-closed without a seam: the same exhaustion with no escalation
     // wiring throws rather than silently terminalizing.
     const bare = new EffectReconciler(manifest);
-    await expect(bare.reconcile()).rejects.toThrow(/no escalation seam/);
+    await expect(bare.reconcile("trace-test")).rejects.toThrow(/no escalation seam/);
   });
 });

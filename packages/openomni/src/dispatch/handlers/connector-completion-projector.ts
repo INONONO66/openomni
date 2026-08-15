@@ -17,20 +17,26 @@ export async function projectConnectorCompletion(
   workItemHash: string,
   result: Execution.Result,
   options: ConnectorCompletionOptions,
+  traceId: string,
 ): Promise<ConnectorCompletionProjection> {
   const item = requireWorkerCompletionIdentity(workItemHash, result);
   const expectedScope = {
     expectedAttempt: item.attempt,
     expectedBasisRef: item.completionContract.basisRef,
   };
-  await recordConnectorArtifacts(workItemHash, result, expectedScope);
-  await recordConnectorLogEvents(workItemHash, result, expectedScope);
-  await recordConnectorTokenUsage(workItemHash, result, expectedScope);
-  await recordConnectorToolCalls(workItemHash, result, expectedScope);
-  const reflection = await reflectCoordinatorResult(workItemHash, result, {
-    ...options,
-    sourceOrigin: { source: "connector_worker" },
-  });
+  await recordConnectorArtifacts(workItemHash, result, expectedScope, traceId);
+  await recordConnectorLogEvents(workItemHash, result, expectedScope, traceId);
+  await recordConnectorTokenUsage(workItemHash, result, expectedScope, traceId);
+  await recordConnectorToolCalls(workItemHash, result, expectedScope, traceId);
+  const reflection = await reflectCoordinatorResult(
+    workItemHash,
+    result,
+    {
+      ...options,
+      sourceOrigin: { source: "connector_worker" },
+    },
+    traceId,
+  );
   return { reflection };
 }
 
@@ -38,6 +44,7 @@ async function recordConnectorArtifacts(
   workItemHash: string,
   result: Execution.Result,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
+  traceId: string,
 ): Promise<void> {
   for (const artifact of result.artifacts ?? []) {
     await WorkItemStore.addEvidence(
@@ -49,6 +56,7 @@ async function recordConnectorArtifacts(
         passed: true,
         detail: JSON.stringify(artifact),
       },
+      traceId,
       expectedScope,
     );
   }
@@ -58,6 +66,7 @@ async function recordConnectorLogEvents(
   workItemHash: string,
   result: Execution.Result,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
+  traceId: string,
 ): Promise<void> {
   for (const event of result.logEvents ?? []) {
     await WorkItemStore.addEvidence(
@@ -69,6 +78,7 @@ async function recordConnectorLogEvents(
         passed: true,
         detail: JSON.stringify(event),
       },
+      traceId,
       expectedScope,
     );
   }
@@ -78,6 +88,7 @@ async function recordConnectorTokenUsage(
   workItemHash: string,
   result: Execution.Result,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
+  traceId: string,
 ): Promise<void> {
   if (result.usage === undefined) return;
   await WorkItemStore.addEvidence(
@@ -89,6 +100,7 @@ async function recordConnectorTokenUsage(
       passed: true,
       detail: JSON.stringify(result.usage),
     },
+    traceId,
     expectedScope,
   );
 }
@@ -97,6 +109,7 @@ async function recordConnectorToolCalls(
   workItemHash: string,
   result: Execution.Result,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
+  traceId: string,
 ): Promise<void> {
   for (const event of result.logEvents ?? []) {
     const toolCall = event.toolCall;
@@ -110,6 +123,7 @@ async function recordConnectorToolCalls(
         passed: toolCall.status !== "failed" && toolCall.status !== "error",
         detail: JSON.stringify(toolCall),
       },
+      traceId,
       expectedScope,
     );
   }
