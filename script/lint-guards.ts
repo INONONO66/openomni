@@ -1,4 +1,4 @@
-export {};
+import { Policy } from "../packages/protocol/src/index";
 
 type GuardRuleId =
   | "ad-hoc-list-membership"
@@ -6,7 +6,8 @@ type GuardRuleId =
   | "inline-authorization-throw"
   | "missing-canonical-policy-evaluator"
   | "policy-package-boundary"
-  | "run-reason-code-vocabulary";
+  | "run-reason-code-vocabulary"
+  | "policy-point-registration";
 
 interface GuardViolation {
   readonly ruleId: GuardRuleId;
@@ -63,6 +64,34 @@ const runReasonCodeLiteralPattern =
 const runReasonCodeComparisonPattern =
   /(?:[!=]==\s*|\.includes\()["'`](stalled|budget_warning|budget_reassurance)["'`]/g;
 
+/**
+ * Policy points the engine dispatches at but nothing in shipped source
+ * registers a policy for — dispatch runs, collects no opinions, allows.
+ * That is a legitimate state for an extension point, but reaching it by
+ * losing a registration is a silent behavioral regression: the policy
+ * stops running and every suite that doesn't exercise the full product
+ * wiring stays green. So the zero-registration set is pinned both ways —
+ * a point leaving it means this list is stale; a point entering it means
+ * a registration was lost (or must be acknowledged here, in review).
+ *
+ * This counts registration *sites* (`pointIds:` literals under `/src/`),
+ * not live wiring — a site that exists but is never reached is out of a
+ * static guard's reach.
+ */
+const policyPointsWithoutProductionRegistration = new Set([
+  "connection.llm.pre",
+  "connection.llm.post",
+  "delegation.worker.pre",
+  "delegation.worker.post",
+  "run.error.error",
+  "run.lifecycle.pre",
+  "run.lifecycle.post",
+  "tool.catalog.pre",
+  "work.complete.pre",
+]);
+const pointIdsArrayPattern = /pointIds:\s*\[([^\]]*)\]/g;
+const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
+
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;
 
@@ -70,8 +99,10 @@ async function main(): Promise<void> {
   const files = await collectSourceFiles();
   const violations: GuardViolation[] = [];
 
+  const registeredPoints = new Map<string, string>();
   for (const filePath of files) {
     const source = await Bun.file(filePath).text();
+    collectPolicyPointRegistrations(filePath, source, registeredPoints);
     violations.push(...validateCanonicalPolicyUsage(filePath, source));
     violations.push(...validateChannelTriggerEvaluation(filePath, source));
     violations.push(...validateListMembership(filePath, source));
@@ -79,6 +110,8 @@ async function main(): Promise<void> {
     violations.push(...validatePolicyPackageBoundary(filePath, source));
     violations.push(...validateRunReasonCodeVocabulary(filePath, source));
   }
+
+  violations.push(...validatePolicyPointRegistrations(registeredPoints));
 
   if (violations.length === 0) {
     process.stdout.write(`OK: guard lint scanned ${files.length} TypeScript files\n`);
@@ -206,6 +239,48 @@ function validateRunReasonCodeVocabulary(filePath: string, source: string): Guar
     ruleId: "run-reason-code-vocabulary",
     message: `run reason code "${match.captured}" written as a literal; use RunReasonCode from @openomni/agent so a rename fails the build instead of the run loop`,
   }));
+}
+
+function collectPolicyPointRegistrations(
+  filePath: string,
+  source: string,
+  registeredPoints: Map<string, string>,
+): void {
+  if (!filePath.includes("/src/")) return;
+
+  for (const arrayMatch of matches(source, pointIdsArrayPattern)) {
+    for (const idMatch of matches(arrayMatch.captured ?? "", pointIdLiteralPattern)) {
+      const pointId = idMatch.captured ?? "";
+      if (!registeredPoints.has(pointId)) registeredPoints.set(pointId, filePath);
+    }
+  }
+}
+
+function validatePolicyPointRegistrations(registeredPoints: Map<string, string>): GuardViolation[] {
+  const violations: GuardViolation[] = [];
+
+  for (const pointId of Object.keys(Policy.PolicyPoint.Registry)) {
+    const registeredAt = registeredPoints.get(pointId);
+    const allowlisted = policyPointsWithoutProductionRegistration.has(pointId);
+    if (registeredAt === undefined && !allowlisted) {
+      violations.push({
+        filePath: "script/lint-guards.ts",
+        line: 0,
+        ruleId: "policy-point-registration",
+        message: `policy point "${pointId}" has no production registration site left — a policy silently stopped running, or acknowledge the empty point in policyPointsWithoutProductionRegistration`,
+      });
+    }
+    if (registeredAt !== undefined && allowlisted) {
+      violations.push({
+        filePath: registeredAt,
+        line: 0,
+        ruleId: "policy-point-registration",
+        message: `policy point "${pointId}" is registered here but still listed in policyPointsWithoutProductionRegistration — remove the stale allowlist entry`,
+      });
+    }
+  }
+
+  return violations;
 }
 
 function matches(source: string, pattern: RegExp): SourceMatch[] {
