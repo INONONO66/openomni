@@ -235,7 +235,7 @@ export function advanceRunContinuation(state: RunState): void {
 
 export function applyCompactionMessages(state: RunState, messages: Message.WithParts[]): number {
   const messagesBefore = state.messages.length;
-  state.messages = messages;
+  replaceRunMessages(state, messages);
   state.compactionCount += 1;
   return messagesBefore;
 }

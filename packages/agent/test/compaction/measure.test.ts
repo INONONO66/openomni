@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { PolicyEngine } from "../../src/core/policy";
 import { buildTurn } from "../../src/core/execution/turn";
-import { replaceRunMessages } from "../../src/core/execution/state";
+import { applyCompactionMessages, replaceRunMessages } from "../../src/core/execution/state";
 import { measuredContextTokens } from "../../src/compaction/measure";
 import {
   makeAgentBase,
@@ -111,5 +111,20 @@ describe("the run measures the final call", () => {
     replaceRunMessages(state, []);
 
     expect(state.lastCallContextTokens).toBeUndefined();
+  });
+
+  it("clears the measurement on the compaction path itself, not just the effect path", async () => {
+    // The re-review proved the first clearing pin tested a function the
+    // compaction application bypassed. This one drives applyCompactionMessages,
+    // which is what applyPostCompaction actually calls.
+    const state = makeState();
+    const turn = await preparedTurn(state);
+    turn.trackingSink.onMessage(assistantMessage([stepFinishPart(1100, 1000, 0)], { input: 1100 }));
+    expect(state.lastCallContextTokens).toBe(1100);
+
+    applyCompactionMessages(state, []);
+
+    expect(state.lastCallContextTokens).toBeUndefined();
+    expect(state.compactionCount).toBe(1);
   });
 });
