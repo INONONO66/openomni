@@ -9,7 +9,6 @@ import {
   runResult,
   emitCompaction,
   emitErrorRetry,
-  emitRunFailed,
   emitTurnComplete,
   publishDenyDiagnostic,
 } from "./run-events";
@@ -200,12 +199,12 @@ export async function handleError(
     return { action: "retry", errorMessage: lastError };
   }
 
-  emitRunFailed(config.events, agentBase, lastError, {
-    reason: retryReason,
-    attempt,
-    maxAttempts: effectiveRetryPolicy.maxAttempts,
-  });
-  return { action: "throw", error: normalizedError, errorMessage: lastError };
+  return {
+    action: "throw",
+    error: normalizedError,
+    errorMessage: lastError,
+    failure: { reason: retryReason, attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
+  };
 }
 
 /**

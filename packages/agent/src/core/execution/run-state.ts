@@ -9,6 +9,7 @@ import {
 } from "../budget";
 import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import type { DispatchContext } from "../policy";
+import type { RetryReason } from "../retry";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
 function toMessagesWithParts(
@@ -129,7 +130,17 @@ export type BuildTurnResult =
 export type ErrorDecision =
   | { action: "retry"; errorMessage: string }
   | { action: "complete"; result: AgentResult; errorMessage: string }
-  | { action: "throw"; error: Error; errorMessage: string };
+  | {
+      action: "throw";
+      error: Error;
+      errorMessage: string;
+      /** What the record needs. Emitted by the runner, which owns the terminal. */
+      readonly failure: {
+        readonly reason: RetryReason;
+        readonly attempt: number;
+        readonly maxAttempts: number;
+      };
+    };
 
 export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
   const sessionId = input.traceContext.sessionId;

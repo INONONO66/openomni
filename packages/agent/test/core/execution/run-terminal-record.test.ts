@@ -163,4 +163,63 @@ describe("a started run always records a terminal", () => {
 
     expect(seen).toEqual(["agent.run.started", "agent.run.completed"]);
   });
+
+  /**
+   * The two paths #631 left open. Both raise from a place that runs *after*
+   * `handleError` decided, so neither reached the record the decision would
+   * have produced — an abort from inside `Retry.sleep`, and a throw that is
+   * not an `Error` and so is rethrown untouched. The runner owns both
+   * terminals now, so both are recorded (#632).
+   */
+  async function runThrowing(
+    run: () => Promise<never>,
+    signal?: AbortSignal,
+  ): Promise<{ readonly seen: string[]; readonly thrown: unknown }> {
+    const seen: string[] = [];
+    const stop = Bus.observe((_event, payload) => {
+      const msg = (payload as { msg?: string }).msg;
+      if (msg === "agent.run.started" || msg === "agent.run.failed") seen.push(msg);
+    });
+    let thrown: unknown;
+    try {
+      await runAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        ...(signal === undefined ? {} : { signal }),
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run,
+        }),
+      });
+    } catch (error) {
+      thrown = error;
+    } finally {
+      stop();
+    }
+    return { seen, thrown };
+  }
+
+  it("when the run is aborted while sleeping out a retry backoff", async () => {
+    const controller = new AbortController();
+    const { seen, thrown } = await runThrowing(async () => {
+      controller.abort();
+      throw new Error("connection timeout");
+    }, controller.signal);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(seen).toEqual(["agent.run.started", "agent.run.failed"]);
+  });
+
+  it("when something throws a value that is not an Error", async () => {
+    const { seen, thrown } = await runThrowing(async () => {
+      // The point of the case: the runner must record a terminal even for a
+      // throw it cannot narrow to `Error`.
+      // biome-ignore lint/style/useThrowOnlyError: that is the subject here
+      throw "a plain string blow-up";
+    });
+
+    expect(thrown).toBe("a plain string blow-up");
+    expect(seen).toEqual(["agent.run.started", "agent.run.failed"]);
+  });
 });
