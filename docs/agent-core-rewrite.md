@@ -107,7 +107,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#623](https://github.com/INONONO66/openomni/pull/623) | slop comments and `agentBaseForState`; the last `as unknown as` is earned, not removed | 🟨 |
 | [#624](https://github.com/INONONO66/openomni/pull/624) | duplicate helpers: one `requireTrace`, one `nonEmptyString` | 🟨 |
 | [#631](https://github.com/INONONO66/openomni/pull/631) | one run exit, one terminal record — the observable half of D4's "started with no terminal is unrepresentable" | 🟨 |
-| — | file layout + the FSM guard itself (`run.ts`/`turn.ts`/`state.ts`, transition table as the injection-point map) | ⬜ |
+| — | file layout + the FSM guard itself (`run.ts`/`turn.ts`/`state.ts`, transition table as the injection-point map). Carries the two throw paths #631 could not close: an abort raised inside `Retry.sleep`, and a non-`Error` throw — both emit `agent.run.started` and no terminal | ⬜ |
 | [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | 🟨 |
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | 🟨 |
 | [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | 🟨 |

@@ -35,7 +35,11 @@ export async function runAgent(
   const actorId =
     nonEmptyString(input.metadata?.actorId) ?? nonEmptyString(trace.agentName) ?? runId;
   const agentBase = { traceId, sessionId, runId, actorId };
+  // Both validators run before the run is opened: `buildPolicyEngine`
+  // rejects a malformed middleware registration, and a configuration error
+  // must not open a run it cannot close.
   assertToolExecutor(config);
+  const engine = buildPolicyEngine(config, agentBase);
   emitRunStarted(config.events, trace, config.model.id);
 
   // #546: run state and pre-run dispatch are run-scoped, living across
@@ -43,14 +47,20 @@ export async function runAgent(
   // artifacts), never the history, budget/usage (no double-billing reset),
   // or run.lifecycle.pre effects (prompt injections apply exactly once).
   const state = createRunState({ ...input, traceContext: trace });
-  const engine = buildPolicyEngine(config, agentBase);
 
   /**
-   * The run's one exit. Every terminal used to record itself, so only three of
-   * them did: a run a policy blocked emitted `agent.run.started` and nothing
-   * after it, and read as permanently in flight to anything folding the
-   * stream. Failures still record where they are decided, because that is
-   * where the attempt count and retry reason live.
+   * The run's one *returning* exit. Every terminal used to record itself, so
+   * only three of them did: a run a policy blocked emitted
+   * `agent.run.started` and nothing after it, and read as still in flight to
+   * an in-process observer of the stream.
+   *
+   * Failures record where they are decided — that is where the attempt count
+   * and the retry reason live. Two throw paths still record neither: an abort
+   * raised from inside `Retry.sleep`, which escapes past `emitRunFailed`
+   * because it rejects within the catch that would have emitted it, and a
+   * non-`Error` throw, which the catch rethrows untouched. Both predate this
+   * change and are carried on the FSM row, where a terminal state is the
+   * thing that makes them unrepresentable rather than merely unrecorded.
    */
   const finish = (result: AgentResult): AgentResult => {
     emitRunCompleted(config.events, state, agentBase, result.finishReason);
@@ -67,7 +77,7 @@ export async function runAgent(
       );
       const configuredToolChoice = resolveToolChoice(config);
 
-      while (true) {
+      for (;;) {
         const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
         if (budgetResult) return finish(budgetResult);
 
