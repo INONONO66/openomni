@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { ToolExecution } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
-import { createToolExecutor } from "../../../src/core/execution/tool-executor";
+import { createToolExecutor } from "../../../src/core/execution/tools";
 import type { Tool } from "@openomni/protocol";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import { abortRun } from "../../helpers/policy-decision";

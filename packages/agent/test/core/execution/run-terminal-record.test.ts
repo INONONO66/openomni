@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { runAgent } from "../../../src/core/execution/runner";
+import { runAgent } from "../../../src/core/execution/run";
 import type { PolicyEngineRegistration } from "../../../src/core/policy";
 import {
   createMockLlmConfig,

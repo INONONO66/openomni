@@ -6,7 +6,7 @@ import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import { abortRun, allow, appendContext } from "../../helpers/policy-decision";
-import { buildTurn } from "../../../src/core/execution/turn-prepare";
+import { buildTurn } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
 
 /**

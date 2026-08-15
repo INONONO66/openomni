@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildSystemPrompt } from "../../src/core/execution/turn-prepare";
+import { buildSystemPrompt } from "../../src/core/execution/turn";
 
 describe("buildSystemPrompt", () => {
   it("combines base prompt with tool prompt", () => {

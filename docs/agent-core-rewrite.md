@@ -108,7 +108,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#624](https://github.com/INONONO66/openomni/pull/624) | duplicate helpers: one `requireTrace`, one `nonEmptyString` | ✅ |
 | [#631](https://github.com/INONONO66/openomni/pull/631) | one run exit, one terminal record — the observable half of D4's "started with no terminal is unrepresentable" | ✅ |
 | [#632](https://github.com/INONONO66/openomni/pull/632) | the runner owns both terminals — every exit, return or throw, records one | ✅ |
-| — | file layout (`run.ts`/`turn.ts`/`tools.ts`/`effects.ts`/`state.ts`), which Phase 4 rule 1 names | ⬜ |
+| [#636](https://github.com/INONONO66/openomni/pull/636) | file layout: the five files Phase 4 rule 1 names | ✅ |
 | [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | ✅ |
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | ✅ |
 | [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | ✅ |
@@ -120,7 +120,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| — | remove `handleContinue`, `handleCompact`, and the `Run.Outcome` `continue`/`compact` variants. Both are unproduced: `packages/llm/src/run.ts` returns only `stop`, `aborted`, `error`, and no production site injects `config.llm.run`. **Owner-gated** — deleting a union member trips `lint:tools`' positional schema snapshot (`Run.Outcome#4`), whose `--update` needs sign-off, and `.omo/evidence/p3/protocol-concept-disposition.json` records this symbol as claimed by #498's run→llm `StepResult` move. Not splittable: `runner.ts`'s `_exhaustive: never` fails whichever half lands first | ⬜ |
+| — | remove `handleContinue`, `handleCompact`, and the `Run.Outcome` `continue`/`compact` variants. Both are unproduced: `packages/llm/src/run.ts` returns only `stop`, `aborted`, `error`, and no production site injects `config.llm.run`. **Owner-gated** — deleting a union member trips `lint:tools`' positional schema snapshot (`Run.Outcome#4`), whose `--update` needs sign-off, and `.omo/evidence/p3/protocol-concept-disposition.json` records this symbol as claimed by #498's run→llm `StepResult` move. Not splittable: `run.ts`'s `_exhaustive: never` fails whichever half lands first | ⬜ |
 | — | `InMemoryCompactor` + `builtin:compaction` — **not dead**, and not covered by the row above. Reachable through `run.completion.pre` from an external policy plan (`compaction-policy-plan.test.ts` pins that path) and registered by the product kernel at `openomni/src/execution-runtime/middleware.ts`. Their fate is D5 and the compaction rewrite below, not a deletion | ⬜ |
 | — | `compaction/`: measure, adaptive policy with yield feedback, guard | ⬜ |
 | — | deterministic no-LLM reduction, cut planning, incremental summarization | ⬜ |

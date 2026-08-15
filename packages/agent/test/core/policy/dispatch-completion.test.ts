@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import type { PolicyContext } from "../../../src/core/policy";
 import { PolicyEngine } from "../../../src/core/policy";
-import { createToolExecutor } from "../../../src/core/execution/tool-executor";
+import { createToolExecutor } from "../../../src/core/execution/tools";
 import {
   abortRun,
   allow,

@@ -2,7 +2,7 @@ import { Message } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
 import type { ChatAgentConfig } from "../types";
-import { appendRunMessages, replaceRunMessages, type RunState } from "./run-state";
+import { appendRunMessages, replaceRunMessages, type RunState } from "./state";
 
 export function effectOf<T extends Policy.PolicyEffect["type"]>(
   decision: Policy.PolicyDecision,

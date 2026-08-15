@@ -3,8 +3,8 @@ import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
-import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
-import { nonEmptyString, requireTrace } from "./run-state";
+import { effectOf, effectsOf, matchesToolPattern } from "./effects";
+import { nonEmptyString, requireTrace } from "./state";
 
 type BlockedResultMetadata = {
   verdict: Policy.PolicyDecision["verdict"];

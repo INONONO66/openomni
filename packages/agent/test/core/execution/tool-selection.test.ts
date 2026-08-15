@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
-import { buildTurn } from "../../../src/core/execution/turn-prepare";
+import { buildTurn } from "../../../src/core/execution/turn";
 import {
   createRunState,
   type AgentRunBase,
   type RunTrace,
-} from "../../../src/core/execution/run-state";
+} from "../../../src/core/execution/state";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool } from "@openomni/protocol";
 import type { ChatAgentConfig } from "../../../src/core/types";

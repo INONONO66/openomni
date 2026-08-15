@@ -3,17 +3,17 @@ import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { AgentResult, ChatAgentConfig } from "../../../src/core/types";
-import { buildTurn } from "../../../src/core/execution/turn-prepare";
-import { runAgent } from "../../../src/core/execution/runner";
+import { buildTurn } from "../../../src/core/execution/turn";
+import { runAgent } from "../../../src/core/execution/run";
 import {
   createRunState,
   type AgentRunBase,
   type RunState,
   type RunTrace,
   type TurnArtifacts,
-} from "../../../src/core/execution/run-state";
+} from "../../../src/core/execution/state";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
-import { handleCompact, handleStop } from "../../../src/core/execution/turn-outcome";
+import { handleCompact, handleStop } from "../../../src/core/execution/turn";
 import { deny } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 

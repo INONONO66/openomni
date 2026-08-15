@@ -1,10 +1,10 @@
 import { PolicyDecision, type Run } from "@openomni/protocol";
-import { effectOf, PolicyEffectApplier } from "./policy-effects";
+import { effectOf, PolicyEffectApplier } from "./effects";
 import { publishBudgetTelemetry } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentResult, ChatAgentConfig } from "../types";
 import { guardAbortedResult, runResult, publishDenyDiagnostic } from "./run-events";
-import { buildLifecyclePolicyContext, type AgentRunBase, type RunState } from "./run-state";
+import { buildLifecyclePolicyContext, type AgentRunBase, type RunState } from "./state";
 
 export async function dispatchPreRun(
   state: RunState,

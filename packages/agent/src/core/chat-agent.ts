@@ -1,6 +1,6 @@
 import type { Sink } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput, AgentResult } from "./types";
-import { runAgent } from "./execution/runner";
+import { runAgent } from "./execution/run";
 
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;

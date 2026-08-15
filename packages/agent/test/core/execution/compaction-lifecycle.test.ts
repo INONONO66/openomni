@@ -4,8 +4,8 @@ import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createCompactionPolicy } from "../../../src/core/policy/builtin/compaction";
 import { createUserMessage } from "../../../src/core/message-factory";
-import { handleCompact } from "../../../src/core/execution/turn-outcome";
-import { buildLifecyclePolicyContext } from "../../../src/core/execution/run-state";
+import { handleCompact } from "../../../src/core/execution/turn";
+import { buildLifecyclePolicyContext } from "../../../src/core/execution/state";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
 /**

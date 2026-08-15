@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine } from "../../../src/core/policy";
-import { handleStop } from "../../../src/core/execution/turn-outcome";
+import { handleStop } from "../../../src/core/execution/turn";
 import {
   createRunState,
   type AgentRunBase,
   type TurnArtifacts,
-} from "../../../src/core/execution/run-state";
+} from "../../../src/core/execution/state";
 import { allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";

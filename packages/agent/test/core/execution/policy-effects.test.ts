@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { PolicyEffectApplier } from "../../../src/core/execution/policy-effects";
-import { createRunState } from "../../../src/core/execution/run-state";
+import { PolicyEffectApplier } from "../../../src/core/execution/effects";
+import { createRunState } from "../../../src/core/execution/state";
 import { runInput } from "../../helpers/run-input";
 
 describe("PolicyEffectApplier", () => {

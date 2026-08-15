@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
-import { createToolExecutor } from "../../../../src/core/execution/tool-executor";
+import { createToolExecutor } from "../../../../src/core/execution/tools";
 import {
   PolicyEngine,
   type PolicyContext,
