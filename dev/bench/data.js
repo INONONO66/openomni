@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786829174990,
+  "lastUpdate": 1786833133936,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -49577,6 +49577,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 462037,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8027abe10d8aea1feaa3db415f72151e809f0094",
+          "message": "refactor(session): d11 batch 3 — one transition, one trace (#606) (#655)\n\n* refactor(session): d11 batch 3 — one transition, one trace (#606)\n\nThe session store's mutation API took no trace, so every caller that\nhad one — ingress handlers, dispatch commands, boot recovery — watched\nthe store mint three unrelated ids per state transition. The whole\nWorkItemStore surface now takes a required traceId: persistMutation's\ntwo publishes and the afterPublish callback carry the caller's one id,\ncreate's parent link and Created share it, remove's unlinks and Removed\nshare it, and every real caller threads its honest source (the ingress\ncontext's refuse-not-fallback helper, command.traceId, the boot id, the\nwait handler's own trace, the admin route's requestId).\n\ncompletion-admission does the same through its call options: the\nrequest's trace rides from requestCompletion or the boot recovery into\nCompletionRequested, AdmissionRecorded, and the terminal commit's three\nback-to-back events — one atomic commit, one id, where there were\nthree.\n\nThe persistence backstop stops minting: an event that arrives without a\ntrace persists under the loud \"untraced\" sentinel instead of a random\nid laundered into trace_id and the event hash — refusing would drop the\nobserve-only projection's record entirely, and a plausible fake is\nworse than a grepable absence. The effects reconciler escalation\ninherits the trace its seam now carries — a bonus site the batch's\nthreading made dishonest to leave.\n\nFive pins enforce the new semantics, including the exact five-event\nsequence of a terminal commit sharing one id and the sentinel\nround-trip. One type-invisible hazard was hand-audited: fail's new\nparam order (hash, traceId, reason?) lets an old two-arg call bind a\nreason as the trace, so every fail( call site was checked, not just\ncompiled. 33 sites remain 17 — coordinator's Owner-gated cluster, the\nscheduler-owner pair, and eight server-side loaders and retries.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(openomni): the sentinel is steady-state — remainder says so (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T07:31:01+09:00",
+          "tree_id": "50d780ca13ed1f9c082708aa6c30b413974a16d5",
+          "url": "https://github.com/INONONO66/openomni/commit/8027abe10d8aea1feaa3db415f72151e809f0094"
+        },
+        "date": 1786833133459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 352,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2033,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2560,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1855,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6638,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 414,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 995,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1198,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 35934,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1870,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8395,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 78505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 397142,
             "unit": "ns/op"
           }
         ]
