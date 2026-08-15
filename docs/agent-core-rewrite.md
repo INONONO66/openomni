@@ -103,18 +103,18 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | PR | title | status |
 |---|---|---|
 | [#610](https://github.com/INONONO66/openomni/pull/610) | delete the unimplemented second event channel | ✅ |
-| [#621](https://github.com/INONONO66/openomni/pull/621) | single output channel: remove the `AgentEvent` generator and `ChatAgent.stream` | 🟨 |
-| [#623](https://github.com/INONONO66/openomni/pull/623) | slop comments and `agentBaseForState`; the last `as unknown as` is earned, not removed | 🟨 |
-| [#624](https://github.com/INONONO66/openomni/pull/624) | duplicate helpers: one `requireTrace`, one `nonEmptyString` | 🟨 |
-| [#631](https://github.com/INONONO66/openomni/pull/631) | one run exit, one terminal record — the observable half of D4's "started with no terminal is unrepresentable" | 🟨 |
-| [#632](https://github.com/INONONO66/openomni/pull/632) | the runner owns both terminals — every exit, return or throw, records one | 🟨 |
+| [#621](https://github.com/INONONO66/openomni/pull/621) | single output channel: remove the `AgentEvent` generator and `ChatAgent.stream` | ✅ |
+| [#623](https://github.com/INONONO66/openomni/pull/623) | slop comments and `agentBaseForState`; the last `as unknown as` is earned, not removed | ✅ |
+| [#624](https://github.com/INONONO66/openomni/pull/624) | duplicate helpers: one `requireTrace`, one `nonEmptyString` | ✅ |
+| [#631](https://github.com/INONONO66/openomni/pull/631) | one run exit, one terminal record — the observable half of D4's "started with no terminal is unrepresentable" | ✅ |
+| [#632](https://github.com/INONONO66/openomni/pull/632) | the runner owns both terminals — every exit, return or throw, records one | ✅ |
 | — | file layout (`run.ts`/`turn.ts`/`tools.ts`/`effects.ts`/`state.ts`), which Phase 4 rule 1 names | ⬜ |
-| [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | 🟨 |
-| [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | 🟨 |
-| [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | 🟨 |
-| [#629](https://github.com/INONONO66/openomni/pull/629) | dissolve `builtin/` per D5 — `builtin:tool-permission` moves to openomni | 🟨 |
+| [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | ✅ |
+| [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | ✅ |
+| [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | ✅ |
+| [#629](https://github.com/INONONO66/openomni/pull/629) | dissolve `builtin/` per D5 — `builtin:tool-permission` moves to openomni | ✅ |
 | — | dissolve `builtin/` per D5 — `builtin:compaction` is the last one, and its fate is the compaction rewrite in Phase 3, not a move. `defaultRegistry` and the directory go with it | ⬜ |
-| [#630](https://github.com/INONONO66/openomni/pull/630) | retry no longer double-counts the turn budget | 🟨 |
+| [#630](https://github.com/INONONO66/openomni/pull/630) | retry no longer double-counts the turn budget | ✅ |
 
 ### Phase 3 — compaction
 
