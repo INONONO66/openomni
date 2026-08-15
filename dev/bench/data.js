@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786795444314,
+  "lastUpdate": 1786796910342,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47717,6 +47717,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511358,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c2a87fe7b4ff9efd909d3b0ae40f115a73117cb",
+          "message": "refactor(protocol): close the mcp server-label vocabulary (#606) (#640)\n\n* refactor(protocol): close the mcp server-label vocabulary (#606)\n\nThe follow-up row #639's review opened: the tool's MCP server identity\nexisted as three forms of the same fact — the typed\ndescriptor.source.serverId, the mcp.<serverId> label, and the\nserverName-dot prefix of the tool name — with four derivation sites\nacross three packages, each reading raw strings.\n\nThe label grammar now lives beside the source grammar in the Tool\nnamespace (mcpServerLabel/mcpServerFromLabels); both producers and the\none consumer route through it, spelling unchanged.\n\nworker-bootstrap stops re-deriving the server name from the tool name\nand reads the typed descriptor field. The name split was correct only\nbecause convert.ts happens to prefix names; a custom MCP client listing\nunprefixed names would have produced wrong provenance while the\ndescriptor stayed right. The catalog fixture now builds its MCP tool\nwith the production mcpToolMetadata, so the fixture cannot drift from\nthe shape every real tool has.\n\nThe prefix-guard keeps its own name split: validating the prefix claim\nis its job, so parsing the name there is the point, not a duplicate.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(protocol): harden the mcp server identity at its roots (#606)\n\nThree findings from the adversarial review of the vocabulary close, each\nfixed where the value is born rather than where it is read.\n\nMcpServerConfig.name requires min(1): the name becomes the tool-name\nprefix, the mcp.<serverId> label, and descriptor.source.serverId — an\nempty one poisons all three, and every downstream check would have to\nre-litigate it.\n\nmcpToolMetadata puts the canonical labels first. The grammar parsers\ntake the first match, so a remote spec shipping its own mcp.* or\nsource:* label could outrank the server's own metadata. The one test\npinning label order now pins the canonical-first order and says why.\n\nThe catalog fixture also mirrors spec.labels, completing the claim that\nit carries the shape every real tool has — refreshMcpTools rewrites\nspec.labels too, and the worker proxy reads labels from spec.\n\nThe review also found RuntimeToolCatalogEntry.mcpServer has no\nproduction reader — write-only on the wire. Deleting a protocol field\nis schema-snapshot surface, so that is a plan row, not this commit.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T21:27:11+09:00",
+          "tree_id": "24856d9e644e33969b51938bbcb237f16eda4f2d",
+          "url": "https://github.com/INONONO66/openomni/commit/7c2a87fe7b4ff9efd909d3b0ae40f115a73117cb"
+        },
+        "date": 1786796909372,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 621,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5876,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9897,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2888,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15435,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 492,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100010,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 503210,
             "unit": "ns/op"
           }
         ]
