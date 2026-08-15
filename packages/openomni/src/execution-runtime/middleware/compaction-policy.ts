@@ -14,6 +14,12 @@ const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown
   reserveRatio: z.number().optional(),
   protectRecentMessages: z.number().optional(),
   onSummarize: MessageSummarizerSchema.optional(),
+  elideToolOutputs: z
+    .object({
+      minOutputChars: z.number().int().positive(),
+      keepHeadChars: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 /**

@@ -1,5 +1,6 @@
 import type { BusEvent } from "@openomni/protocol";
 import { Operational, type Message } from "@openomni/protocol";
+import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 
 export interface CompactionOptions {
   contextWindowTokens: number;
@@ -8,6 +9,13 @@ export interface CompactionOptions {
   reserveRatio?: number;
   protectRecentMessages?: number;
   onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+  /**
+   * Opt-in deterministic reduction: when the trigger fires, old completed
+   * tool outputs are elided first; the lossy cut joins the same round
+   * whenever the estimated net reclaim cannot cover the measured overage.
+   * The knobs are strategy, so they arrive as config.
+   */
+  elideToolOutputs?: ToolOutputElision;
 }
 
 interface CompactionResult {
@@ -31,6 +39,8 @@ export class CompactionBoundaryError extends Error {
 }
 
 const DEFAULT_THRESHOLD_RATIO = 0.8;
+// Only decides the cut's eagerness after an elision round — never the trigger.
+const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_PROTECT_RECENT = 6;
 
 export namespace Compaction {
@@ -53,11 +63,51 @@ export namespace Compaction {
     options: CompactionOptions,
     trace: { readonly traceId: string },
     events: BusEvent.Sink,
+    measuredContextTokens?: number,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
     if (messages.length <= protectRecent) {
       return { messages, compacted: false, removedCount: 0 };
+    }
+
+    // Reduction before the cut: eliding old tool outputs reclaims window
+    // without dropping a message. But under sustained tool use each turn ages
+    // a fresh output past the protected tail, so "cut when nothing is left to
+    // elide" starves the cut while un-elidable residue accumulates
+    // (adversarial review, #645). The round therefore keeps its elision only
+    // when the estimated net reclaim plausibly covers the measured overage;
+    // otherwise the cut below ALSO runs, on the already-elided history. The
+    // estimate (chars/4) only decides the cut's eagerness — the next call
+    // measures ground truth, and a wrong estimate costs one earlier or one
+    // extra round, never convergence.
+    let working = messages;
+    let elidedChars = 0;
+    if (options.elideToolOutputs !== undefined) {
+      const reduction = elideToolOutputs(messages, protectRecent, options.elideToolOutputs);
+      if (reduction.elidedChars > 0) {
+        working = reduction.messages;
+        elidedChars = reduction.elidedChars;
+        events.publish(Operational.Info, {
+          traceId: trace.traceId,
+          time: Date.now(),
+          component: "agent.compaction",
+          msg: "compaction reduced tool outputs",
+          context: {
+            elidedChars: reduction.elidedChars,
+            messageCount: messages.length,
+            reason: "context window threshold exceeded",
+          },
+        });
+        const overageTokens =
+          measuredContextTokens === undefined
+            ? undefined
+            : measuredContextTokens - resolveThresholdTokens(options);
+        const estimatedReclaimTokens = elidedChars / ESTIMATED_CHARS_PER_TOKEN;
+        if (overageTokens === undefined || estimatedReclaimTokens >= overageTokens) {
+          return { messages: working, compacted: true, removedCount: 0 };
+        }
+      }
     }
 
     // Commit boundary invariant (#531, representable since #557/#560).
@@ -78,17 +128,19 @@ export namespace Compaction {
     // anchoring the kept window, a window beginning with an assistant message
     // violates provider first-message rules. Snap the cutoff back to the
     // nearest user boundary; refuse loudly when none exists.
-    const naturalCutoff = messages.length - protectRecent;
+    const naturalCutoff = working.length - protectRecent;
     const cutoff =
       options.onSummarize === undefined
-        ? snapToUserBoundary(messages, naturalCutoff)
+        ? snapToUserBoundary(working, naturalCutoff)
         : naturalCutoff;
     if (cutoff === 0) {
-      return { messages, compacted: false, removedCount: 0 };
+      return elidedChars > 0
+        ? { messages: working, compacted: true, removedCount: 0 }
+        : { messages: working, compacted: false, removedCount: 0 };
     }
 
-    const toRemove = messages.slice(0, cutoff);
-    const toKeep = messages.slice(cutoff);
+    const toRemove = working.slice(0, cutoff);
+    const toKeep = working.slice(cutoff);
 
     let summaryMessages: Message.WithParts[] = [];
     const firstRemoved = toRemove[0];
@@ -107,7 +159,7 @@ export namespace Compaction {
       component: "agent.compaction",
       msg: "compaction triggered",
       context: {
-        messagesBefore: messages.length,
+        messagesBefore: working.length,
         messagesAfter: compacted.length,
         removedCount: toRemove.length,
         reason: "context window threshold exceeded",
