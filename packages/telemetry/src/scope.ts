@@ -13,7 +13,7 @@ import {
  * child run and a delegated actor belong to the same trace, and span linkage is
  * the emitter's job, not the caller's.
  */
-export type ScopeNarrowing = Omit<Partial<TraceScope>, "traceId" | "spanId" | "parentSpanId">;
+type ScopeNarrowing = Omit<Partial<TraceScope>, "traceId" | "spanId" | "parentSpanId">;
 
 export interface Emitter {
   /**

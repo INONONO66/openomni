@@ -105,7 +105,7 @@ const TRACE_FIELDS = [
   "agentName",
 ] as const;
 
-export type TraceField = (typeof TRACE_FIELDS)[number];
+type TraceField = (typeof TRACE_FIELDS)[number];
 
 /** A payload with the emitter-owned fields removed. */
 export type EmitPayload<T> = Omit<T, TraceField | "time">;

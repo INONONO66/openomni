@@ -1,6 +1,6 @@
 import type { BusEvent } from "@openomni/protocol";
 
-export interface CollectedEvent {
+interface CollectedEvent {
   readonly name: string;
   readonly data: unknown;
 }

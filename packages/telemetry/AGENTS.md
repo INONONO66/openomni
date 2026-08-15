@@ -50,9 +50,16 @@ First `settle()` wins, so an inner guard is not overwritten by an outer one on t
 
 ## WHAT IS WIRED TODAY
 
-`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `span`, `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, the span status helpers (`spanStatus`, `spanStatusMessage`), and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`, `InvalidTraceScopeError`) — is used only by this package's own tests, and `scope` only by a `packages/session` test fixture. `createSpanHandle` and `failedOutcome` are not exported from the barrel at all: `scope.ts` is their only consumer, and an export with no reader is the thing this rule exists to catch. The exported *types* — `Emitter`, `ScopeNarrowing`, `ScopeOptions`, `CollectedEvent`, `CollectingSink`, `TeeOptions`, `SpanHandle`, `SpanStatus`, `EmitPayload`, `SpanId`, `TraceId`, `TraceField`, `TraceScopeInput` — have no reader at all, not even a test. They are the public API's type surface and stand or fall with the functions they describe. `check-dead-exports` is satisfied because tests count as consumers, so it will not tell you this.
-
-That is deliberate and bounded: the surface exists so Phase 1b has something to convert *to*, and Phase 1b is what gives it callers. If Phase 1b is abandoned, this surface is dead and should be deleted, not kept for a future that is not coming.
+`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `span`, `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, the span status helpers (`spanStatus`, `spanStatusMessage`), and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`, `InvalidTraceScopeError`) — is used only by this package's own tests, and `scope` only by a `packages/session` test fixture. `createSpanHandle` and `failedOutcome` are not exported from the barrel at all: `scope.ts` is their only consumer, and an export with no reader is the thing this rule exists to catch. The reader-less *type* re-exports that used to ride the barrel (`Emitter`,
+`CollectingSink`, `SpanHandle`, …) were deleted in #647, which supersedes the
+earlier stand-or-fall doctrine here: Phase 1b shipped its consumers (they use
+`Bus` and the id mints, and hold everything else structurally), so the types
+never gained a reader and the entry no longer carries them. Definition-site
+exports remain where declaration emit or an internal importer needs them; a
+consumer that needs to name one adds the one-line barrel re-export in the same
+PR that imports it. `check-dead-exports` will not tell you any of this — entry
+exports are exempt, and tests count as consumers — so re-check with
+`bunx knip --include-entry-exports` when touching this surface.
 
 ## CONVENTIONS
 
