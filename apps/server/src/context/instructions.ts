@@ -14,11 +14,18 @@ interface InstructionFile {
   label: string;
 }
 
+// Memoized: only the FIRST run for a given key pays the filesystem walk, so
+// any warn below fires under that first run's trace — later runs hit the cache.
 const discoverCache = new Map<string, InstructionFile[]>();
 const loadCache = new Map<string, string>();
 
 export namespace InstructionLoader {
-  export function discover(workspaceRoot: string, globalConfigDir?: string): InstructionFile[] {
+  /** `traceId` is the assembling run's dispatch trace (D11) — loader warns inherit it, never mint. */
+  export function discover(
+    workspaceRoot: string,
+    traceId: string,
+    globalConfigDir?: string,
+  ): InstructionFile[] {
     const key = `${workspaceRoot}\0${globalConfigDir ?? ""}`;
     const cached = discoverCache.get(key);
     if (cached) return cached;
@@ -46,7 +53,7 @@ export namespace InstructionLoader {
         }
       } catch {
         Bus.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "server",
           msg: "failed to read rules dir, skipping",
@@ -65,7 +72,7 @@ export namespace InstructionLoader {
     return sorted;
   }
 
-  export function load(files: InstructionFile[]): string {
+  export function load(files: InstructionFile[], traceId: string): string {
     if (files.length === 0) return "";
 
     const key = files.map((f) => f.path).join("\0");
@@ -80,7 +87,7 @@ export namespace InstructionLoader {
         content = readFileSync(file.path, "utf-8");
       } catch {
         Bus.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "server",
           msg: "failed to read instruction file, skipping",

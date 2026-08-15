@@ -49,7 +49,7 @@ export class TelegramAdapter implements Adapter.Surface {
       throw new Error("[telegram] No message handler registered. Call onMessage() before start().");
     }
 
-    const me = await this.client.getMe();
+    const me = await this.client.getMe(traceId);
     const botId = String(me.id);
     const botUsername = me.username ?? "";
     this.botUsername = botUsername;
@@ -103,9 +103,12 @@ export class TelegramAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
+    // Origin: outbound send-as-surface carries no inbound trace to inherit
+    // until Wait/#215 threading lands — this send is its own causal chain.
+    const traceId = newTraceId();
     const parsed = Adapter.SurfaceKey.parse(surfaceKey);
     const chatId = parsed.id ?? "";
-    await this.sendOutbound(chatId, message);
+    await this.sendOutbound(chatId, message, traceId);
   }
 
   /**
@@ -114,7 +117,10 @@ export class TelegramAdapter implements Adapter.Surface {
    * the final chunk (the message a reply would reference).
    */
   async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
-    const externalMessageId = await this.sendOutbound(externalId, { text: body });
+    // Origin: the messaging kernel's deliver seam does not thread the
+    // sender's trace yet (#215) — this delivery is its own causal chain.
+    const traceId = newTraceId();
+    const externalMessageId = await this.sendOutbound(externalId, { text: body }, traceId);
     return externalMessageId === undefined ? {} : { externalMessageId };
   }
 
@@ -159,7 +165,7 @@ export class TelegramAdapter implements Adapter.Surface {
 
     try {
       const outbound = await this.getHandler()(inbound);
-      if (outbound) await this.sendOutbound(chatId, outbound);
+      if (outbound) await this.sendOutbound(chatId, outbound, traceId);
     } catch (err) {
       this.publish(Operational.Error, {
         traceId,
@@ -168,7 +174,7 @@ export class TelegramAdapter implements Adapter.Surface {
         msg: "telegram message handler error",
         context: { chatId, err: String(err) },
       });
-      await this.sendOutbound(chatId, { text: "Sorry, an error occurred." });
+      await this.sendOutbound(chatId, { text: "Sorry, an error occurred." }, traceId);
     } finally {
       clearInterval(typingInterval);
     }
@@ -184,11 +190,12 @@ export class TelegramAdapter implements Adapter.Surface {
   private async sendOutbound(
     chatId: string,
     message: Adapter.OutboundMessage,
+    traceId: string,
   ): Promise<string | undefined> {
     if (!message.text) return undefined;
     let lastMessageId: string | undefined;
     for (const chunk of splitText(message.text, TELEGRAM_MESSAGE_LIMIT)) {
-      lastMessageId = (await this.client.send(chatId, chunk)) ?? lastMessageId;
+      lastMessageId = (await this.client.send(chatId, chunk, traceId)) ?? lastMessageId;
     }
     return lastMessageId;
   }

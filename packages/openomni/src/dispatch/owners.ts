@@ -4,8 +4,9 @@ import type { IngressEngine } from "../ingress/engine.js";
 import type { ResidentRuntime } from "../resident/runtime.js";
 
 export interface DispatchSchedulerOwner {
-  register(job: CronJob.Info): string;
-  remove(jobId: string): boolean;
+  /** `traceId` is the dispatching command's trace — schedule lifecycle events inherit it, never mint. */
+  register(job: CronJob.Info, traceId: string): string;
+  remove(jobId: string, traceId: string): boolean;
 }
 
 export interface OutboundDispatchOwnerInput {

@@ -130,7 +130,7 @@ describe("resolveDefaultProviderModel", () => {
       makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
     ];
 
-    const resolved = await resolveDefaultProviderModel();
+    const resolved = await resolveDefaultProviderModel("trace-default-model-test");
     expect(resolved).toMatchObject({
       providerID: "anthropic",
       id: "claude-sonnet-4-5-20250929",

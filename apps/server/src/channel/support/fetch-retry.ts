@@ -11,7 +11,9 @@ const MAX_API_RETRIES = 3;
 export async function fetchWithRetry(
   url: string,
   init: RequestInit,
-  options?: {
+  options: {
+    /** The logical request's trace (D11): every retry of one request shares this ONE id — never re-minted per attempt. */
+    traceId: string;
     /** retry-after seconds from 429 body; defaults to 5s */
     parseRetryAfter?: (body: unknown) => number;
     retries?: number;
@@ -20,8 +22,8 @@ export async function fetchWithRetry(
     publish?: PublishPort;
   },
 ): Promise<Response> {
-  const retries = options?.retries ?? 0;
-  const label = options?.label ?? url;
+  const retries = options.retries ?? 0;
+  const label = options.label ?? url;
 
   const response = await fetch(url, init);
 
@@ -31,7 +33,7 @@ export async function fetchWithRetry(
     }
 
     let retryAfter = 5;
-    if (options?.parseRetryAfter) {
+    if (options.parseRetryAfter) {
       const body = await response.json().catch(() => null);
       if (body !== null) {
         try {
@@ -42,8 +44,8 @@ export async function fetchWithRetry(
       }
     }
 
-    options?.publish?.(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+    options.publish?.(Operational.Warn, {
+      traceId: options.traceId,
       time: Date.now(),
       component: "server",
       msg: "rate limited, retrying",

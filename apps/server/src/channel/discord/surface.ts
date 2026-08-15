@@ -1,4 +1,5 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
 import { Dedupe } from "../support/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordGateway } from "./gateway";
@@ -45,7 +46,9 @@ export class DiscordAdapter implements Adapter.Surface {
             triggers: this.config.triggers,
           });
           this.publish(Operational.Info, {
-            traceId: crypto.randomUUID(),
+            // Origin: a gateway READY is a distinct occurrence (initial connect
+            // AND every re-identify) — deliberately its own trace, not the boot's.
+            traceId: newTraceId(),
             time: Date.now(),
             component: "server",
             msg: "discord bot started",
@@ -83,13 +86,16 @@ export class DiscordAdapter implements Adapter.Surface {
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
+    // Origin: outbound send-as-surface carries no inbound trace to inherit
+    // until Wait/#215 threading lands — this send is its own causal chain.
+    const traceId = newTraceId();
     const parsed = Adapter.SurfaceKey.parse(surfaceKey);
     if (!parsed.id) {
       throw new Error(`[discord] surface key missing id: ${surfaceKey}`);
     }
     const channelId =
-      parsed.kind === "dm" ? await this.client.createDmChannel(parsed.id) : parsed.id;
-    await sendDiscordMessage(this.client, channelId, message);
+      parsed.kind === "dm" ? await this.client.createDmChannel(parsed.id, traceId) : parsed.id;
+    await sendDiscordMessage(this.client, channelId, message, traceId);
   }
 
   /**
@@ -98,8 +104,16 @@ export class DiscordAdapter implements Adapter.Surface {
    * the final chunk (the message a reply would reference).
    */
   async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
-    const channelId = await this.client.createDmChannel(externalId);
-    const externalMessageId = await sendDiscordMessage(this.client, channelId, { text: body });
+    // Origin: the messaging kernel's deliver seam does not thread the
+    // sender's trace yet (#215) — this delivery is its own causal chain.
+    const traceId = newTraceId();
+    const channelId = await this.client.createDmChannel(externalId, traceId);
+    const externalMessageId = await sendDiscordMessage(
+      this.client,
+      channelId,
+      { text: body },
+      traceId,
+    );
     return externalMessageId === undefined ? {} : { externalMessageId };
   }
 
@@ -167,7 +181,7 @@ export class DiscordAdapter implements Adapter.Surface {
 
     try {
       const outbound = await handler(inbound);
-      if (outbound) await sendDiscordMessage(this.client, channelId, outbound);
+      if (outbound) await sendDiscordMessage(this.client, channelId, outbound, traceId);
     } catch (err) {
       this.publish(Operational.Error, {
         traceId,
@@ -176,7 +190,12 @@ export class DiscordAdapter implements Adapter.Surface {
         msg: "discord message handler error",
         context: { channelId, err: String(err) },
       });
-      await sendDiscordMessage(this.client, channelId, { text: "Sorry, an error occurred." });
+      await sendDiscordMessage(
+        this.client,
+        channelId,
+        { text: "Sorry, an error occurred." },
+        traceId,
+      );
     } finally {
       clearInterval(typingInterval);
     }
@@ -193,11 +212,12 @@ async function sendDiscordMessage(
   client: ChannelClient,
   channelId: string,
   message: Adapter.OutboundMessage,
+  traceId: string,
 ): Promise<string | undefined> {
   if (!message.text) return undefined;
   let lastMessageId: string | undefined;
   for (const chunk of splitText(message.text, DISCORD_MESSAGE_LIMIT)) {
-    lastMessageId = (await client.send(channelId, chunk)) ?? lastMessageId;
+    lastMessageId = (await client.send(channelId, chunk, traceId)) ?? lastMessageId;
   }
   return lastMessageId;
 }

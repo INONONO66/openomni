@@ -114,7 +114,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
   );
-  const model = await resolveModel(config);
+  const model = await resolveModel(bootTraceId, config);
   const residentProfile = model
     ? await createResidentProfile({ model: { provider: model.providerID, id: model.id } })
     : undefined;
@@ -329,9 +329,9 @@ export async function main(options: MainOptions = {}): Promise<void> {
 import { resolveDefaultProviderModel } from "../agents/model-resolution";
 import type { ServerConfig } from "../config";
 
-async function resolveModel(config?: ServerConfig) {
+async function resolveModel(traceId: string, config?: ServerConfig) {
   if (config?.model) {
     return { providerID: config.model.provider, id: config.model.id, name: config.model.id };
   }
-  return resolveDefaultProviderModel();
+  return resolveDefaultProviderModel(traceId);
 }

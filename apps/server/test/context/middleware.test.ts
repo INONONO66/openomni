@@ -39,6 +39,10 @@ function contextPolicyInput(): ContextPolicyInput {
     sessionId: "session-context",
     runId: "run-context",
     turnIndex: 0,
+    // Pin: context assembly inherits the run's dispatch trace via
+    // ctx.traceContext — a revert to discarding ctx (or a fallback mint)
+    // would let the middleware run without this and go untraced.
+    traceContext: { traceId: "trace-context-test", sessionId: "session-context" },
   };
 }
 
@@ -133,6 +137,20 @@ describe("createContextMiddleware", () => {
     expect(result.effects[0]).toMatchObject({ type: "prompt.append_context" });
     expect((result.effects[0] as { context?: string }).context).toContain("Agent Configuration");
     expect((result.effects[0] as { context?: string }).context).toContain("MaxTurns: 10");
+  });
+
+  it("refuses to assemble without the run trace context (no fallback mint)", async () => {
+    // Pin (D11): a missing traceContext is a wiring bug — the middleware
+    // throws (fail-open swallows it into a bare allow) instead of minting a
+    // fallback trace, so AGENTS.md content is deliberately NOT appended.
+    const ws = makeWorkspace("no-trace-context");
+    writeFileSync(join(ws, "AGENTS.md"), "# Should not be appended");
+
+    const middleware = createContextMiddleware({ workspaceRoot: ws });
+    const mockCtx = { ...contextPolicyInput(), traceContext: undefined };
+
+    const result = await dispatchContextMiddleware(middleware, mockCtx);
+    expect(result).toMatchObject({ verdict: "allow", effects: [] });
   });
 
   it("returns allow when assembled context is empty string", async () => {

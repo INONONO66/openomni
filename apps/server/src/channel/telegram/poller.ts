@@ -32,10 +32,14 @@ export class TelegramPoller {
 
   private async poll(): Promise<void> {
     while (this.running) {
+      // Origin: one long-poll cycle is one logical request — its getUpdates
+      // call (retries included) and any poll-error warn share this ONE id.
+      const pollTraceId = newTraceId();
       try {
         this.pollController = new AbortController();
         const updates = (await this.client.getUpdates(
           this.offset,
+          pollTraceId,
           this.pollController.signal,
         )) as TelegramUpdate[];
 
@@ -48,7 +52,7 @@ export class TelegramPoller {
       } catch (err) {
         if (!this.running) break;
         this.publish(Operational.Warn, {
-          traceId: newTraceId(),
+          traceId: pollTraceId,
           time: Date.now(),
           component: "server",
           msg: "telegram poll error",

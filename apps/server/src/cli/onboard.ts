@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { Auth } from "@openomni/llm";
+import { newTraceId } from "@openomni/telemetry";
 import { resolveDefaultProviderModel } from "../agents/model-resolution";
 import { installDaemon } from "./systemd";
 
@@ -182,7 +183,11 @@ async function resolveModelChoice(input: {
   const credentials = await Auth.withFile(input.authPath, () => Auth.all());
   const firstProvider = input.provider ?? Object.keys(credentials)[0];
   if (!firstProvider) return undefined;
-  const suggested = await Auth.withFile(input.authPath, () => resolveDefaultProviderModel());
+  // Origin: an interactive `openomni onboard` invocation is a genuine trace root.
+  const onboardTraceId = newTraceId();
+  const suggested = await Auth.withFile(input.authPath, () =>
+    resolveDefaultProviderModel(onboardTraceId),
+  );
   const fallback = suggested?.id ?? "";
   const answer = await io.ask(`Default model for ${firstProvider}`, fallback);
   if (answer === "") return undefined;
