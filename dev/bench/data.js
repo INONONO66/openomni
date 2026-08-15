@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786825850511,
+  "lastUpdate": 1786829174990,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -49453,6 +49453,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 508144,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "489a48482f288f8bb32f15a7ff9797a262d8dcb2",
+          "message": "refactor(openomni): d11 batch 2 — inbound trace from frame one (#606) (#654)\n\n* refactor(openomni): d11 batch 2 — inbound trace from frame one (#606)\n\nThe keystone the classifier named: Adapter.InboundMessage had no trace\nfield and ingress re-minted on every ingest, so a channel message\ncollected two-plus unrelated ids before its run began. The trace now\nenters at the wire and never forks.\n\nProtocol carries it as required fields — InboundMessage.traceId, the\nshared ingress InboundEventBase (both event schemas inherit it), and\nSurface.start/stop params. Additive, so the schema snapshot passes; no\noptional-with-fallback anywhere, so a producer that cannot say its\ntrace does not compile.\n\nBoth engine mints become inherits. Each channel mints exactly one\norigin per inbound frame: discord threads it from handleDispatch — the\ntrue first frame, one earlier than planned, because the gateway\ncallback is package-local — through the message handler, the typing\nindicator, and the dispatch-error catch; telegram and github anchor\ntheir handlers the same way, github logging the x-github-delivery id\nalongside; websocket promotes its existing debug mint to the frame's\nsingle anchor. conversation.processMessage stops minting on error and\nresolveRuntimeModel takes the message trace. Surface lifecycle inherits\nboot and shutdown traces. The cron runner mints once per job and the\ntrace rides CronAdapter.fire into the internal event — a fired job\nfinally has one identity from tick to run.\n\nOne documented outbound origin remains: github Surface.send receives\nnothing traceable through the delivery seam, so it mints at its top\nwith the #215 note — the Wait threading owns that conversion.\n\n57 sites remain 33; what is left sits behind the session store API,\ncompletion-admission context, the worker-bootstrap IPC field, and the\ntwo deliberate decisions already recorded in the plan.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(openomni): pin the inherit; snapshot carries the field (#606)\n\nReview MAJOR: the keystone landed correct but unenforced — zero new\nassertions, so reverting the engine to a fresh mint kept the whole\nsuite green, the exact blindness that produced this series' six\nfirst-review FAILs. Three pins close it, each mutation-verified: the\nReceived event's traceId equals the ingested event's (the re-mint\nmutation now fails at the pin), and the cron adapter's internal event\ncarries the tick's trace.\n\nThe schema snapshot gains the four traceId entries surgically — a full\nregeneration produced a 727-line diff of accumulated additive drift\nthat would bury this PR's two-line semantic in noise, so the drift\nstays for its own Owner-review pass and only the new field is pinned:\nremoving traceId from the ingress schemas now trips the Greg Young\ngate.\n\nThe remainder row also names cron-job-registry's register/cancel pair\nand the effects reconciler escalation, which the 33-site enumeration\nhad folded into clusters.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T06:25:02+09:00",
+          "tree_id": "2610a71540297d69287a4a66e2e9df6f82c34f20",
+          "url": "https://github.com/INONONO66/openomni/commit/489a48482f288f8bb32f15a7ff9797a262d8dcb2"
+        },
+        "date": 1786829174477,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 375,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4806,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 7138,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2209,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14854,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7941,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 495,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 421,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 792,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 40,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 33619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 9789,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 94277,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 462037,
             "unit": "ns/op"
           }
         ]
