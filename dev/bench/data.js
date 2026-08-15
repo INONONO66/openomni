@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786793923333,
+  "lastUpdate": 1786795444314,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47593,6 +47593,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512083,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d237dd8a04d01597a5c190ec809891c93392c5b",
+          "message": "refactor(protocol): give the tool source label a single grammar (#606) (#639)\n\n* refactor(protocol): give the tool source label a single grammar (#606)\n\nThe tool source label had producers in three packages and its one\nconsumer in a fourth, with no definition anywhere — and the ends had\ndrifted: define.ts writes `source:system` while the three mcp producers\nwrite `source.mcp`, and the consumer quietly strips both separators. A\nproducer renaming its literal degrades tool-source classification (the\ntool dispatches as native instead of mcp) with nothing failing — the\nsame failure family the reason-code lock closed.\n\nThe grammar now lives beside the vocabulary it speaks: Tool.sourceLabel\nand Tool.sourceFromLabels next to the Tool.Source enum, keyed off the\nenum so the parser accepts exactly its values. All four producers and\nthe consumer route through it; the dot separator is retired and its\nrejection pinned as literally as the acceptances.\n\nClosing the parser to Tool.Source also ends the consumer's label-path\n\"skill-mcp\" branch: nothing in shipped source has ever produced a\nskill-mcp label or descriptor, and the descriptor-path comparisons that\nhandle the protocol union's member remain. The union member itself is\nschema-snapshot surface (Owner review), untouched here.\n\nLabels are computed at runtime from tool definitions and never\npersisted, so no stored dot-form label survives the change.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(protocol): retire the dot spelling from every fixture (#606)\n\nAdversarial review found the vocabulary this branch closes surviving in\n23 fixture strings across 7 files — including one fixture array half\nmigrated, colon on line 69 and dot below it. Nothing parses these\nlabels, but dead grammar posing as exemplary fixtures is how the next\nproducer learns the wrong spelling.\n\nAlso drops the trap the review flagged: lifecycle-turn-pre paired a\nsource.skill-mcp label with an explicit descriptor, so removing the\ndescriptor later would silently reclassify the tool native while the\nlabel kept claiming otherwise. The descriptor is the source of truth;\nthe label said nothing true.\n\nThe one surviving dot string is the rejection pin in tool.test.ts,\nwhich exists to keep the retired form retired. The mcp.<serverId>\nvocabulary the review flagged as the same multi-package shape gets its\nown plan row.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T21:02:47+09:00",
+          "tree_id": "c768a593511189716886f49b1457fbfc86022a4b",
+          "url": "https://github.com/INONONO66/openomni/commit/6d237dd8a04d01597a5c190ec809891c93392c5b"
+        },
+        "date": 1786795443582,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 721,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6263,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10953,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2609,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3256,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16327,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8571,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 647,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1256,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 791,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46264,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2339,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10783,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511358,
             "unit": "ns/op"
           }
         ]
