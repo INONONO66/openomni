@@ -35,7 +35,7 @@ const LINE_COMMENT_REF = /(?:^|[^:])\/\/[^\n]*?#(\d{2,5})\b/g;
 const BLOCK_LINE_REF = /^\s*\*[^\n]*?#(\d{2,5})\b/;
 const REF_IN_TEXT = /#(\d{2,5})\b/g;
 
-export interface BreadcrumbRef {
+interface BreadcrumbRef {
   readonly issue: number;
   readonly filePath: string;
   readonly line: number;

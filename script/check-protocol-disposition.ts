@@ -39,7 +39,7 @@ export const DISPOSITIONS = [
   "already-removed",
 ] as const;
 
-export type Disposition = (typeof DISPOSITIONS)[number];
+type Disposition = (typeof DISPOSITIONS)[number];
 
 const DISPOSITION_SET = new Set<string>(DISPOSITIONS);
 
@@ -63,14 +63,14 @@ const DEFAULT_FIXTURES_DIR = "packages/protocol/test/concept-diet/fixtures";
 // types
 // ---------------------------------------------------------------------------
 
-export interface SymbolEvidence {
+interface SymbolEvidence {
   readonly productionConsumers?: unknown;
   readonly testPins?: unknown;
   readonly snapshotPin?: unknown;
   readonly runtimeConsumer?: unknown;
 }
 
-export interface SymbolRow {
+interface SymbolRow {
   readonly symbol?: unknown;
   readonly family?: string;
   readonly disposition?: unknown;
@@ -87,7 +87,7 @@ export interface Inventory {
 
 export type DispositionCounts = Record<Disposition, number>;
 
-export interface InventoryProblem {
+interface InventoryProblem {
   readonly symbol: string;
   readonly issue: string;
 }
@@ -120,9 +120,9 @@ export interface Fixture {
   readonly rule?: string;
 }
 
-export type ReferenceRole = "import" | "removed" | "retained-owner" | "required-owner";
+type ReferenceRole = "import" | "removed" | "retained-owner" | "required-owner";
 
-export interface FixtureReference {
+interface FixtureReference {
   readonly symbol: string;
   readonly role: ReferenceRole;
   readonly disposition: Disposition | "unknown";
@@ -130,7 +130,7 @@ export interface FixtureReference {
   readonly handoff?: string;
 }
 
-export interface FixtureRejection {
+interface FixtureRejection {
   readonly symbol: string;
   readonly rule: string;
 }

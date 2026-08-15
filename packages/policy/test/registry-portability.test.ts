@@ -151,7 +151,7 @@ describe("PolicyRegistry portability", () => {
   });
 
   it("hands each factory the plan config and the resolve runtime", () => {
-    // The exported PolicyFactory contract: factory(config, runtime). Pinned by
+    // The factory contract: factory(config, runtime). Pinned by
     // building the registration name from both.
     const registry = PolicyRegistry.create();
     registry.register("contract-policy", (config, runtime) => ({
