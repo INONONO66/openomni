@@ -99,7 +99,7 @@ const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
  * registry of opinions. A registry populated inside the library is a default
  * the product did not choose.
  */
-const agentRegistryAssemblyPattern = /\bPolicyRegistry\s*\.\s*create\s*\(|\bdefaultRegistry\s*\(/g;
+const agentRegistryAssemblyPattern = /\bPolicyRegistry\s*\.\s*create\b|\bdefaultRegistry\s*\(/g;
 
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;

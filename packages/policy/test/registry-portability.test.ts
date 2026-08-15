@@ -110,4 +110,69 @@ describe("PolicyRegistry portability", () => {
     expect(registrations.length).toBe(1);
     expect(registrations[0]?.name).toBe("policy-1");
   });
+
+  it("records the skipped optional policy under the caller's trace, and stays silent without one", () => {
+    // Moved here from agent's registry suite when defaultRegistry died (#642):
+    // this package owns resolve(), so it owns the pin. Two decisions live in
+    // publishOptionalPolicyMissing — the record itself, and the deliberate
+    // no-trace-no-record gate (a minted traceId correlates to nothing).
+    const registry = PolicyRegistry.create();
+    const emitted: unknown[] = [];
+
+    registry.resolve(
+      { policies: [{ id: "optional-missing", required: false, config: {} }], labels: [] },
+      {
+        traceId: "trace-optional-missing",
+        sessionId: "ses-optional-missing",
+        auditEmit: (_event, payload) => {
+          emitted.push(payload);
+        },
+      },
+    );
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      traceId: "trace-optional-missing",
+      sessionId: "ses-optional-missing",
+      component: "agent.policy.registry",
+      msg: "optional policy missing",
+      context: { policyId: "optional-missing" },
+    });
+
+    const silent: unknown[] = [];
+    registry.resolve(
+      { policies: [{ id: "optional-missing", required: false, config: {} }], labels: [] },
+      {
+        auditEmit: (_event, payload) => {
+          silent.push(payload);
+        },
+      },
+    );
+    expect(silent).toHaveLength(0);
+  });
+
+  it("hands each factory the plan config and the resolve runtime", () => {
+    // The exported PolicyFactory contract: factory(config, runtime). Pinned by
+    // building the registration name from both.
+    const registry = PolicyRegistry.create();
+    registry.register("contract-policy", (config, runtime) => ({
+      kind: "point",
+      name: `contract:${runtime.agentName}:${(config as { mode: string }).mode}`,
+      pointIds: ["run.turn.pre"],
+      effectCapabilities: { "run.turn.pre": [] },
+      priority: 100,
+      fn: () => PolicyDecision.allow({ policyId: "contract" }),
+    }));
+
+    const registrations = registry.resolve(
+      {
+        policies: [{ id: "contract-policy", required: true, config: { mode: "strict" } }],
+        labels: [],
+      },
+      { agentName: "primary" },
+    );
+
+    expect(registrations.map((registration) => registration.name)).toEqual([
+      "contract:primary:strict",
+    ]);
+  });
 });
