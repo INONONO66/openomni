@@ -185,7 +185,7 @@ import type { ChannelClient } from "../types";
 
 const DISCORD_MESSAGE_LIMIT = 2000;
 
-export async function sendDiscordMessage(
+async function sendDiscordMessage(
   client: ChannelClient,
   channelId: string,
   message: Adapter.OutboundMessage,

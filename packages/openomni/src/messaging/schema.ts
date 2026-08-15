@@ -64,7 +64,7 @@ export type MessageDenialCode = z.infer<typeof MessageDenialCode>;
  * NOT re-refined here — `Wait.Record.parse` at WaitStore.create is the one
  * enforcement layer for that invariant (#215 rule 4).
  */
-export const AwaitSpec = z
+const AwaitSpec = z
   .object({
     waitId: z.string().min(1),
     ownerRef: WaitSchemas.OwnerRef,
@@ -78,7 +78,6 @@ export const AwaitSpec = z
     correlation: WaitSchemas.Correlation.optional(),
   })
   .strict();
-export type AwaitSpec = z.infer<typeof AwaitSpec>;
 
 const SendInputBase = z
   .object({

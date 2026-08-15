@@ -45,7 +45,7 @@ export function listForLlmReasoning(
 }
 
 // merged from event-record-mapper.ts (#453 hygiene: sub-30-LOC single-importer)
-export function toEventRecord(row: BusEventRow): EventRecord {
+function toEventRecord(row: BusEventRow): EventRecord {
   return {
     id: String(row.id),
     sessionId: row.session_id,
