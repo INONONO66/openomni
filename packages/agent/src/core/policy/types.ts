@@ -25,6 +25,11 @@ export interface PolicyContext extends GenericPolicyContext {
    * until a call completes.
    */
   contextTokens?: number;
+  /**
+   * The resolved model's context window, recorded by the loop — a fact, not
+   * strategy. Config may still narrow it; it cannot need to restate it.
+   */
+  contextWindowTokens?: number;
 }
 
 export type PolicyFn = CanonicalPolicyRegistrationGeneric<PolicyContext>["fn"];

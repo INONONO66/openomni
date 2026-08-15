@@ -31,7 +31,18 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_measurement"],
         });
       }
-      if (!Compaction.shouldCompact(ctx.contextTokens, compaction)) {
+      // The window is the loop's fact (the resolved model's limit); config may
+      // narrow it. Neither known — proxy models report 0 — means no threshold
+      // to compare against, and the skip says so.
+      const contextWindowTokens = compaction.contextWindowTokens ?? ctx.contextWindowTokens;
+      if (contextWindowTokens === undefined) {
+        return PolicyDecision.allow({
+          policyId: "builtin.compaction",
+          reasonCodes: ["compaction_skipped_no_window"],
+        });
+      }
+      const resolved = { ...compaction, contextWindowTokens };
+      if (!Compaction.shouldCompact(ctx.contextTokens, resolved)) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
@@ -49,13 +60,23 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
       }
       const result = await Compaction.compact(
         ctx.messages,
-        compaction,
+        resolved,
         { traceId },
         events,
         ctx.contextTokens,
       );
       if (!result.compacted) {
-        return PolicyDecision.allow({ policyId: "builtin.compaction" });
+        // The trigger fired and nothing was reclaimed — the one silent path
+        // the wiring review found. A full window with no visible reason is
+        // how a provider 400 arrives unexplained.
+        return PolicyDecision.allow({
+          policyId: "builtin.compaction",
+          reasonCodes: [
+            result.blocked === "no_user_boundary"
+              ? "compaction_skipped_no_boundary"
+              : "compaction_skipped_nothing_reclaimed",
+          ],
+        });
       }
 
       return PolicyDecision.allow({
