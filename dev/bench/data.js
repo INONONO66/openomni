@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786809276578,
+  "lastUpdate": 1786813709005,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48833,6 +48833,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 592183,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "92e5c34c9b929d8225d5be05ef960e745b3fba6d",
+          "message": "feat(openomni): compaction runs by default (#606) (#649)\n\n* feat(openomni): compaction runs by default (#606)\n\nOwner ruled the #646 wiring question: proceed. Two changes make the\nwiring one line of strategy instead of a per-host fact plumbing job.\n\nThe window is the loop's fact, not the product's opinion: run.ts\nrecords the resolved model's limit.context on the run state, the\ndispatch context exposes it, and CompactionOptions.contextWindowTokens\nbecomes optional everywhere — config narrows the window, it never has\nto restate it. The mechanism takes a resolved-window type internally,\nso it never guesses; a window known nowhere (proxy models report 0)\nskips with compaction_skipped_no_window, recorded like the other skips.\n\nbuildWorkerMiddleware then registers builtin:compaction by default with\nthe product's strategy, which is opinions only: elide outputs over\n4000 chars keeping a 500-char head, no summarizer — the boundary-snap\ncut is deterministic and needs no LLM. Hosts opt out or override by\npassing their own block; the Resident and Worker paths both go live\nthrough their existing assembly.\n\nPins: triggers from the loop's fact with no config restatement; skips\nrecorded when no window is known anywhere; config narrows the fact\n(500-token window trips at 450 measured while the model claims 100k).\nAssembly pins across both packages now expect builtin:compaction.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): seam reachability honesty; refusal as value (#606)\n\nThe adversarial review of the wiring traced the seam end-to-end and\nfailed the claim: run.completion.pre dispatches only from\napplyPostCompaction, reachable only when run.turn.post produced\ncontinuation messages — worker-parent injected-continuation turns. The\nResident passes no injection queue, children have no continuation\nproducer, a non-injected worker run ends at plain stop, and the long\ntool loop overflows inside one llmRun where no seam exists. Both doc\nrows now state that map instead of \"runs by default\", and the\ncontinuation-independent seam is a new Phase 3 row with the review's\nreachability map as its requirement.\n\nThe two degrades the review demanded ship with it. The boundary\nrefusal is a value, not a throw: assistant-first histories are\nreachable from resumed worker hydration, run.completion.pre is\nfail-closed, and killing a live run over housekeeping is worse than a\nfull window — CompactionBoundaryError is deleted and the policy records\ncompaction_skipped_no_boundary. And a triggered round that reclaimed\nnothing records compaction_skipped_nothing_reclaimed instead of the\nsilent allow that would let a provider 400 arrive unexplained.\n\nPlan-config bounds tightened while the schema was open: the window\noverride must be a positive int (it overrides a correct recorded fact),\nratios sit in (0,1], reserves are nonnegative.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T02:07:14+09:00",
+          "tree_id": "ee50f28f1bd573f07c8057d05702a345cccd0574",
+          "url": "https://github.com/INONONO66/openomni/commit/92e5c34c9b929d8225d5be05ef960e745b3fba6d"
+        },
+        "date": 1786813707959,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 691,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6227,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2630,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3171,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 643,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 528,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1193,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 799,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10906,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100315,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 505389,
             "unit": "ns/op"
           }
         ]
