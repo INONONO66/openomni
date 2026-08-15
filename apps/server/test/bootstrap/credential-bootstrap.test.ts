@@ -7,6 +7,7 @@ import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners"
 import { assembleBootstrap } from "../../src/bootstrap/worker-bootstrap";
 import type { CustomToolProvider } from "../../src/tool/custom";
 import type { McpToolProvider } from "../../src/tool/mcp";
+import { mcpToolMetadata } from "../../src/tool/mcp/provider-metadata";
 
 const tempRoots: string[] = [];
 
@@ -30,13 +31,10 @@ function fakeMcpProvider(): Pick<McpToolProvider, "listTools"> {
 }
 
 function fakeMcpProviderWithTool(): Pick<McpToolProvider, "listTools"> {
+  const tool = makeTool({ name: "filesystem.read", category: "mcp" });
+  const metadata = mcpToolMetadata("filesystem", tool.spec);
   return {
-    listTools: () => [
-      makeTool({
-        name: "filesystem.read",
-        category: "mcp",
-      }),
-    ],
+    listTools: () => [{ ...tool, labels: metadata.labels, descriptor: metadata.descriptor }],
   };
 }
 

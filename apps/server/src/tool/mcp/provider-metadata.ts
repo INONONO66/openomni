@@ -14,7 +14,7 @@ export function mcpToolMetadata(
     ...(spec.labels ?? []),
     `tool:${spec.name}`,
     Tool.sourceLabel("mcp"),
-    `mcp.${serverName}`,
+    Tool.mcpServerLabel(serverName),
   ]);
 
   return {

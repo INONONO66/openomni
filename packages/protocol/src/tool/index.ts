@@ -31,6 +31,23 @@ export namespace Tool {
     return parsed.success ? parsed.data : undefined;
   }
 
+  /**
+   * MCP server provenance as a catalog label: `mcp.<serverId>`. Same
+   * cross-package shape as the source label — two producers, one consumer —
+   * so the same rule: the grammar is written once, here.
+   */
+  const mcpServerLabelPrefix = "mcp.";
+
+  export function mcpServerLabel(serverId: string): string {
+    return `${mcpServerLabelPrefix}${serverId}`;
+  }
+
+  export function mcpServerFromLabels(labels: readonly string[] | undefined): string | undefined {
+    const label = labels?.find((candidate) => candidate.startsWith(mcpServerLabelPrefix));
+    const serverId = label?.slice(mcpServerLabelPrefix.length);
+    return serverId ? serverId : undefined;
+  }
+
   export const RiskTier = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
   export type RiskTier = z.infer<typeof RiskTier>;
 

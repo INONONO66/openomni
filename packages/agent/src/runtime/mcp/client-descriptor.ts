@@ -14,7 +14,7 @@ function createMcpToolDescriptor(serverId: string, remoteName: string): RuntimeR
       serverId,
       remoteName,
     },
-    labels: [Tool.sourceLabel("mcp"), `mcp.${serverId}`],
+    labels: [Tool.sourceLabel("mcp"), Tool.mcpServerLabel(serverId)],
     capabilities: ["network.write"],
     effects: ["external.write"],
   };
