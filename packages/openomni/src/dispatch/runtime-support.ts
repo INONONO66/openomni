@@ -3,7 +3,7 @@ import type { DispatchHandler } from "./registry.js";
 
 export type DispatchEventPayload = {
   readonly dispatchId: string;
-  readonly traceId?: string;
+  readonly traceId: string;
   readonly sessionId?: string;
   readonly runId?: string;
   readonly actor: DispatchProtocol.ActorContext;
@@ -16,7 +16,7 @@ export type DispatchEventPayload = {
 export function eventBase(command: DispatchProtocol.Command): DispatchEventPayload {
   return {
     dispatchId: command.dispatchId,
-    ...(command.traceId ? { traceId: command.traceId } : {}),
+    traceId: command.traceId,
     ...(command.sessionId ? { sessionId: command.sessionId } : {}),
     ...(command.runId ? { runId: command.runId } : {}),
     actor: command.actor,
@@ -38,9 +38,9 @@ export function resourceDescriptor(action: string): RuntimeResource.Descriptor {
   };
 }
 
-export function policyTraceContext(command: DispatchProtocol.Command, fallbackTraceId: string) {
+export function policyTraceContext(command: DispatchProtocol.Command) {
   return {
-    traceId: command.traceId ?? fallbackTraceId,
+    traceId: command.traceId,
     ...(command.sessionId ? { sessionId: command.sessionId } : {}),
     ...(command.runId ? { runId: command.runId } : {}),
   };

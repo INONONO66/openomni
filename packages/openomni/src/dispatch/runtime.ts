@@ -286,7 +286,7 @@ export class DispatchRuntime {
     });
 
     const engine = PolicyEngine.create<DispatchPolicyContext>({
-      traceContext: policyTraceContext(command, trace.traceId),
+      traceContext: policyTraceContext(command),
       onDecision: options.onPolicyDecision ?? this.onPolicyDecision,
       auditEmit: Bus.publish,
     });
@@ -312,7 +312,7 @@ export class DispatchRuntime {
         { value: `target.${command.target.kind}`, source: "system" },
       ],
       resourceDescriptor: resourceDescriptor(command.action),
-      traceContext: policyTraceContext(command, trace.traceId),
+      traceContext: policyTraceContext(command),
     });
 
     if (Decision.isBlocking(decision)) {
