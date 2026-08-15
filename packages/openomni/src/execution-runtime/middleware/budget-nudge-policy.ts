@@ -1,5 +1,6 @@
 import { PolicyDecision } from "@openomni/protocol";
 import {
+  RunReasonCode,
   checkBudget,
   describeBudgetRemaining,
   type CanonicalPolicyRegistration,
@@ -24,7 +25,7 @@ export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
         return PolicyDecision.allow({
           policyId: "builtin.budget.reassurance",
-          reasonCodes: ["budget_reassurance"],
+          reasonCodes: [RunReasonCode.BudgetReassurance],
           effects: [
             {
               type: "prompt.inject_message",
@@ -55,7 +56,7 @@ export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
         const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
         return PolicyDecision.allow({
           policyId: "builtin.budget.warning",
-          reasonCodes: ["budget_warning"],
+          reasonCodes: [RunReasonCode.BudgetWarning],
           effects: [
             {
               type: "prompt.inject_message",

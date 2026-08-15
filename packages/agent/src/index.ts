@@ -16,6 +16,7 @@ export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
 // to say about what is left (D5). Exporting the functions without the types
 // leaves a consumer unable to name what it is holding.
 export { checkBudget, describeBudgetRemaining } from "./core/budget";
+export { RunReasonCode } from "./core/policy/reason-codes";
 export type { BudgetState, BudgetStatus } from "./core/budget";
 export type {
   CanonicalPolicyRegistration,
