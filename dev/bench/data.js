@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786818540031,
+  "lastUpdate": 1786822412834,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -49205,6 +49205,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509647,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6e8a0425faa3a0fb0bc520c736f5fd14c24e4fa",
+          "message": "test(protocol): the other four packages' tests type-check (#606) (#652)\n\n* test(protocol): the other four packages' tests type-check (#606)\n\nThe #614 remainder. Four packages ran their suites green while 473 type\nerrors sat in the test code — apps/server 128, session 130, openomni\n200, protocol 15 — fixture-vs-schema rot the runner never sees:\nfixtures missing now-required fields, unions read without narrowing,\nindexed access without guards, mocks with a parameter the interface\ndropped, one fixture passing a treatment value the enum renamed away.\n\nEach package gains a tsconfig.test.json on the agent/llm pattern (#614)\nand check-types now runs it, so the rot cannot regrow. Cross-package\nimports in server/session/protocol tests needed rootDir widened to the\nrepo root; protocol's one script-importing test also needed\nallowImportingTsExtensions.\n\nFix rules held throughout: assertions unchanged except one stale\nliteral (\"normal\" -> \"full_access\", chasing the InboundTreatment enum —\nthe test proved verbatim stamping with a value outside the enum; it now\nproves it with a legal one); unions narrowed with the repo's\nthrow-on-shape idiom; zero any, zero as-unknown-as, zero\nts-expect-error, no option loosening. Fixtures that gained required\nfields are listed in the PR body with what each means.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(openomni): review deltas — honest archaeology, no any (#606)\n\nAdversarial review passed the diff but corrected the record in three\nplaces. The \"renamed\" story on the treatment literal was false: the\nenum was born full_access|evidence_only|drop (#250) and the fixture\nentered already illegal (#519) — the comment now says so and points at\nthe real finding, which is recorded at the stamping site:\napplyChannelGrantTreatment stamps treatment onto meta verbatim with no\nruntime validation, bounded today by Zod at every producer, converging\nunder #498.\n\nThe eight new Reflect.get sites returned any behind a grep-clean claim;\na file-local field() helper returns unknown and fails loudly on a\nmissing key — stronger than the undefined those sites could feed a\nmatcher. The file's older Reflect.get idiom at base stays as-is.\n\nturbo gains globalDependencies: script/** — protocol's test config\ntype-checks a script file that sat outside every task input, so a\nscript change could replay a stale green check-types. Pre-existing hole\nfor the test task; this PR extended it to check-types, so it seals it.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T04:32:14+09:00",
+          "tree_id": "11fc19a9dac023c3e23e445391280d4530c683f4",
+          "url": "https://github.com/INONONO66/openomni/commit/d6e8a0425faa3a0fb0bc520c736f5fd14c24e4fa"
+        },
+        "date": 1786822412082,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5934,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9204,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2776,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15387,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1012,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45564,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2376,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99266,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 503112,
             "unit": "ns/op"
           }
         ]
