@@ -66,7 +66,17 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
         ctx.contextTokens,
       );
       if (!result.compacted) {
-        return PolicyDecision.allow({ policyId: "builtin.compaction" });
+        // The trigger fired and nothing was reclaimed — the one silent path
+        // the wiring review found. A full window with no visible reason is
+        // how a provider 400 arrives unexplained.
+        return PolicyDecision.allow({
+          policyId: "builtin.compaction",
+          reasonCodes: [
+            result.blocked === "no_user_boundary"
+              ? "compaction_skipped_no_boundary"
+              : "compaction_skipped_nothing_reclaimed",
+          ],
+        });
       }
 
       return PolicyDecision.allow({

@@ -304,4 +304,57 @@ describe("createCompactionPolicy", () => {
 
     expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
   });
+
+  it("records the boundary refusal instead of dying at a fail-closed point", async () => {
+    // Assistant-first history (reachable from resumed worker hydration), no
+    // summarizer, nothing elidable: the round must end as a recorded skip.
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      protectRecentMessages: 2,
+    });
+    const assistantOnly = Array.from({ length: 8 }, (_unused, index) => {
+      const message = createTestMessage(`a${index}`);
+      return { ...message, info: { ...message.info, role: "assistant" as const } };
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: assistantOnly as Parameters<PolicyFn>[0]["messages"],
+        contextTokens: 900,
+        contextWindowTokens: 1000,
+      }),
+    );
+
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.reasonCodes).toContain("compaction_skipped_no_boundary");
+    expect(verdict.effects).toHaveLength(0);
+  });
+
+  it("records a triggered round that reclaimed nothing", async () => {
+    // Cutoff snaps to a user message at index 0 → no cut, nothing elidable:
+    // the silent path the wiring review found. A full window with no visible
+    // reason is how a provider 400 arrives unexplained.
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      protectRecentMessages: 2,
+    });
+    const messages = [
+      createTestMessage("u0"),
+      ...Array.from({ length: 7 }, (_unused, index) => {
+        const message = createTestMessage(`a${index}`);
+        return { ...message, info: { ...message.info, role: "assistant" as const } };
+      }),
+    ];
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: messages as Parameters<PolicyFn>[0]["messages"],
+        contextTokens: 900,
+        contextWindowTokens: 1000,
+      }),
+    );
+
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.reasonCodes).toContain("compaction_skipped_nothing_reclaimed");
+  });
 });

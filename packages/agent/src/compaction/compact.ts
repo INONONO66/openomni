@@ -30,20 +30,10 @@ interface CompactionResult {
   messages: Message.WithParts[];
   compacted: boolean;
   removedCount: number;
-}
-
-/**
- * Raised when compaction cannot commit a provider-valid kept window: no
- * summary user message will anchor the window (onSummarize unset) and no user
- * boundary exists at or before the cutoff. Thrown BEFORE anything is
- * committed — the fail-closed `run.completion.pre` contract turns it into a
- * deny plus a published middleware error, never commit-then-400.
- */
-export class CompactionBoundaryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CompactionBoundaryError";
-  }
+  /** Set when the trigger fired but no provider-valid cut exists: no summary
+   * anchor and no user boundary at or before the cutoff. The caller records
+   * it; killing the run over housekeeping would be worse than a full window. */
+  blocked?: "no_user_boundary";
 }
 
 const DEFAULT_THRESHOLD_RATIO = 0.8;
@@ -141,6 +131,15 @@ export namespace Compaction {
       options.onSummarize === undefined
         ? snapToUserBoundary(working, naturalCutoff)
         : naturalCutoff;
+    if (cutoff === undefined) {
+      // No provider-valid kept window exists (assistant-first history, no
+      // summary anchor). Adversarial review of the live wiring showed this
+      // reachable from resumed worker hydration — a throw here would turn a
+      // fail-closed run.completion.pre into a mid-conversation kill.
+      return elidedChars > 0
+        ? { messages: working, compacted: true, removedCount: 0 }
+        : { messages: working, compacted: false, removedCount: 0, blocked: "no_user_boundary" };
+    }
     if (cutoff === 0) {
       return elidedChars > 0
         ? { messages: working, compacted: true, removedCount: 0 }
@@ -200,13 +199,14 @@ function resolveReserveTokens(options: ResolvedCompactionOptions): number | unde
   return Math.min(options.contextWindowTokens, Math.max(0, reserveTokens));
 }
 
-function snapToUserBoundary(messages: Message.WithParts[], naturalCutoff: number): number {
+function snapToUserBoundary(
+  messages: Message.WithParts[],
+  naturalCutoff: number,
+): number | undefined {
   for (let index = naturalCutoff; index >= 0; index -= 1) {
     if (messages[index]?.info.role === "user") return index;
   }
-  throw new CompactionBoundaryError(
-    "no valid compaction boundary: the kept window would start with an assistant message and no summary user message anchors it (onSummarize unset); refusing to commit",
-  );
+  return undefined;
 }
 
 function buildSummaryMessage(
