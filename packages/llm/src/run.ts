@@ -25,6 +25,14 @@ export interface RunInput {
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
+  /**
+   * Step-boundary yield: stop the step loop once the last finished step's
+   * input tokens (the ai SDK's cache-inclusive prompt total) reach this.
+   * The loop ends gracefully at a step boundary — tool pairs complete, the
+   * message finishes with the model's own finishReason — so the caller can
+   * compact history at its deterministic seam and re-enter. Absent = never.
+   */
+  yieldAtInputTokens?: number;
   providerOptions?: Record<string, unknown>;
   /**
    * The run this call belongs to. Required, and not defaulted: a model round
@@ -142,7 +150,16 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       tools: sdkTools,
       toolChoice: input.toolChoice,
       maxRetries: 0,
-      stopWhen: ai.stepCountIs(input.maxSteps ?? 24),
+      stopWhen: [
+        ai.stepCountIs(input.maxSteps ?? 24),
+        ...(input.yieldAtInputTokens === undefined
+          ? []
+          : [
+              ({ steps }: { steps: ReadonlyArray<{ usage?: { inputTokens?: number } }> }) =>
+                (steps[steps.length - 1]?.usage?.inputTokens ?? 0) >=
+                (input.yieldAtInputTokens as number),
+            ]),
+      ],
       onError: ({ error }: { error: unknown }) => {
         input.events.publish(Operational.Error, {
           traceId,

@@ -128,6 +128,10 @@ export interface TurnArtifacts {
   readonly turnAssistant: { message?: Message.WithParts };
   readonly turnUsage: TokenUsage;
   readonly toolPolicyDecisions: Array<{ readonly decision: Policy.PolicyDecision }>;
+  /** The step budget this turn was given — a turn that used all of it ended on the cap, not a window yield. */
+  readonly stepCap: number;
+  /** Whether the window-yield knob was armed (a known window existed). */
+  readonly windowYieldArmed: boolean;
 }
 
 export type BuildTurnResult =

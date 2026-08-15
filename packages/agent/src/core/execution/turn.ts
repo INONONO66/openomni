@@ -3,6 +3,7 @@ import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, Sink, Tool } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import { createAssistantMessage } from "../message-factory";
+import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
 import { measuredContextTokens } from "../../compaction/measure";
 import { RunReasonCode } from "../policy/reason-codes";
 import type { PolicyEngineInstance } from "../policy";
@@ -205,6 +206,13 @@ export async function buildTurn(
     outputTokens: 0,
     totalTokens: 0,
   };
+  // The step cap is the REMAINING tool budget: a yielded-and-continued run
+  // re-enters here, and giving every turn the full budget would multiply it.
+  const stepCap = Math.max(1, (config.budget?.maxToolCalls ?? 24) - state.budgetState.toolCalls);
+  const yieldAtInputTokens =
+    state.contextWindowTokens === undefined
+      ? undefined
+      : Math.floor(state.contextWindowTokens * DEFAULT_THRESHOLD_RATIO);
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
   const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant);
 
@@ -223,13 +231,20 @@ export async function buildTurn(
         allowAuthFallback: config.allowAuthFallback,
         toolExecutor: hookedExecutor,
         toolChoice: configuredToolChoice,
-        maxSteps: config.budget?.maxToolCalls ?? 24,
+        maxSteps: stepCap,
+        // Yield at the same ratio the compaction trigger defaults to: the
+        // loop stops at a step boundary once the window fills, the seam
+        // below gets its chance on every path — Resident and tool loops
+        // included, not just injected continuations (#649 reachability map).
+        ...(yieldAtInputTokens === undefined ? {} : { yieldAtInputTokens }),
         providerOptions: config.providerOptions,
         trace: { traceId: trace.traceId, sessionId: trace.sessionId, runId: trace.runId },
       },
       trackingSink,
       turnAssistant,
       turnUsage,
+      stepCap,
+      windowYieldArmed: yieldAtInputTokens !== undefined,
       toolPolicyDecisions,
     },
   };
@@ -319,6 +334,28 @@ ${effect.message}`
 /** The run ends with this result, or it takes another turn. */
 export type StopOutcome = AgentResult | "continue";
 
+/**
+ * A turn whose last step still asked for tools did not finish — the llm loop
+ * stopped it: at the step cap, or at the window-yield boundary the loop arms
+ * from the recorded model window. Anything else is the model's own stop.
+ */
+function turnYield(
+  turn: TurnArtifacts,
+  assistantMessage: Message.WithParts,
+): "window" | "steps" | null {
+  let steps = 0;
+  let lastReason: string | undefined;
+  for (const part of assistantMessage.parts) {
+    if (part.type === "step-finish") {
+      steps += 1;
+      lastReason = part.reason;
+    }
+  }
+  if (lastReason !== "tool-calls" && lastReason !== "tool_use") return null;
+  if (steps >= turn.stepCap) return "steps";
+  return turn.windowYieldArmed ? "window" : "steps";
+}
+
 export async function handleStop(
   state: RunState,
   config: ChatAgentConfig,
@@ -377,6 +414,28 @@ export async function handleStop(
       );
       return guardAbortedResult(state);
     }
+  }
+
+  const yielded = turnYield(turn, assistantMessage);
+  if (yielded === "window") {
+    const compactionsBefore = state.compactionCount;
+    const blocked = await applyPostCompaction(state, engine, config, agentBase, false);
+    if (blocked) return blocked;
+    if (state.compactionCount > compactionsBefore) {
+      // History shrank; the model was mid-task (its last step asked for
+      // tools), so the run re-enters with the compacted window. The turn
+      // advances — a new provider call is a new turn against the budget.
+      advanceRunTurn(state);
+      return "continue";
+    }
+    // Triggered, nothing reclaimed (the policy recorded why). Continuing
+    // would re-yield after every step; the run ends on its resource cap.
+    return runResult(state, { finishReason: "max-steps" });
+  }
+  if (yielded === "steps") {
+    // The step budget ran out while the model still wanted tools. Ending as
+    // a plain stop pretended completion; the cap is the honest reason.
+    return runResult(state, { finishReason: "max-steps" });
   }
 
   const continuationMessages = PolicyEffectApplier.continuationMessages(

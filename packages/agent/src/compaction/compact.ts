@@ -36,7 +36,12 @@ interface CompactionResult {
   blocked?: "no_user_boundary";
 }
 
-const DEFAULT_THRESHOLD_RATIO = 0.8;
+/**
+ * One ratio, two readers: the compaction trigger's default threshold, and the
+ * loop's step-boundary yield — they must agree, or the loop yields at a level
+ * the trigger refuses to act on (or never yields where the trigger would).
+ */
+export const DEFAULT_THRESHOLD_RATIO = 0.8;
 // Only decides the cut's eagerness after an elision round — never the trigger.
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_PROTECT_RECENT = 6;
