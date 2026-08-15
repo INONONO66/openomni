@@ -21,6 +21,7 @@ import {
 } from "./lifecycle-dispatch";
 import {
   createRunState,
+  recordRunWindow,
   nonEmptyString,
   requireTrace,
   type AgentRunBase,
@@ -95,6 +96,7 @@ export async function runAgent(
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
           config.model,
         );
+        recordRunWindow(state, providerModel.limit?.context ?? 0);
         const configuredToolChoice = resolveToolChoice(config);
 
         for (;;) {

@@ -104,6 +104,12 @@ export interface RunState {
    * The compaction trigger reads this — never the cumulative run spend.
    */
   lastCallContextTokens?: number;
+  /**
+   * The resolved model's context window — a fact of the model, recorded when
+   * the loop resolves it, so strategy config never has to re-derive it.
+   * Undefined when the catalog does not know (proxy models report 0).
+   */
+  contextWindowTokens?: number;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -193,6 +199,10 @@ export function recordCallContext(state: RunState, contextTokens: number): void 
   state.lastCallContextTokens = contextTokens;
 }
 
+export function recordRunWindow(state: RunState, contextWindowTokens: number): void {
+  state.contextWindowTokens = contextWindowTokens > 0 ? contextWindowTokens : undefined;
+}
+
 export function recordAssistantTokenDelta(
   state: RunState,
   inputTokens: number,
@@ -273,6 +283,7 @@ export function buildLifecyclePolicyContext<
     budgetState: state.budgetState,
     budget: config.budget,
     contextTokens: state.lastCallContextTokens,
+    contextWindowTokens: state.contextWindowTokens,
     // Every builtin dispatched at a lifecycle point reads its trace from here.
     // Omitting it made a policy that reports — compaction — refuse at a
     // fail-closed point, which reads as the run aborting.

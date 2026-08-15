@@ -246,4 +246,62 @@ describe("createCompactionPolicy", () => {
     expect(verdict.verdict).toBe("allow");
     expect(verdict.effects).toHaveLength(0);
   });
+
+  it("triggers from the loop's window fact when config does not restate it", async () => {
+    // The wiring PR's point: the product default carries no window — the loop
+    // records the resolved model's limit, and the policy reads it from the
+    // dispatch context.
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      protectRecentMessages: 2,
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+        contextTokens: 900,
+        contextWindowTokens: 1000,
+      }),
+    );
+
+    expect(verdict.verdict).toBe("allow");
+    expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
+  });
+
+  it("skips with a recorded reason when no window is known anywhere", async () => {
+    // Proxy models report limit.context 0, which the loop records as unknown.
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      protectRecentMessages: 2,
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+        contextTokens: 900,
+      }),
+    );
+
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.reasonCodes).toContain("compaction_skipped_no_window");
+    expect(verdict.effects).toHaveLength(0);
+  });
+
+  it("lets config narrow the loop's window, never widen the trigger away", async () => {
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      protectRecentMessages: 2,
+      contextWindowTokens: 500,
+    });
+    const verdict = await middleware.fn(
+      baseCtx({
+        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
+        contextTokens: 450,
+        contextWindowTokens: 100_000,
+      }),
+    );
+
+    expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
+  });
 });

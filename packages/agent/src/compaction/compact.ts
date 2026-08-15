@@ -3,7 +3,12 @@ import { Operational, type Message } from "@openomni/protocol";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 
 export interface CompactionOptions {
-  contextWindowTokens: number;
+  /**
+   * Optional narrowing of the model's window. The loop records the resolved
+   * model's real limit and the policy reads it from the dispatch context, so
+   * strategy config only sets this to compact as if the window were smaller.
+   */
+  contextWindowTokens?: number;
   thresholdRatio?: number;
   reserveTokens?: number;
   reserveRatio?: number;
@@ -17,6 +22,9 @@ export interface CompactionOptions {
    */
   elideToolOutputs?: ToolOutputElision;
 }
+
+/** Options with the window already resolved — the mechanism never guesses it. */
+type ResolvedCompactionOptions = CompactionOptions & { contextWindowTokens: number };
 
 interface CompactionResult {
   messages: Message.WithParts[];
@@ -44,7 +52,7 @@ const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_PROTECT_RECENT = 6;
 
 export namespace Compaction {
-  export function shouldCompact(totalTokens: number, options: CompactionOptions): boolean {
+  export function shouldCompact(totalTokens: number, options: ResolvedCompactionOptions): boolean {
     const threshold = resolveThresholdTokens(options);
     return totalTokens >= threshold;
   }
@@ -60,7 +68,7 @@ export namespace Compaction {
    */
   export async function compact(
     messages: Message.WithParts[],
-    options: CompactionOptions,
+    options: ResolvedCompactionOptions,
     trace: { readonly traceId: string },
     events: BusEvent.Sink,
     measuredContextTokens?: number,
@@ -174,7 +182,7 @@ export namespace Compaction {
   }
 }
 
-function resolveThresholdTokens(options: CompactionOptions): number {
+function resolveThresholdTokens(options: ResolvedCompactionOptions): number {
   const ratioThreshold =
     options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
   const reserveTokens = resolveReserveTokens(options);
@@ -182,7 +190,7 @@ function resolveThresholdTokens(options: CompactionOptions): number {
   return Math.min(ratioThreshold, options.contextWindowTokens - reserveTokens);
 }
 
-function resolveReserveTokens(options: CompactionOptions): number | undefined {
+function resolveReserveTokens(options: ResolvedCompactionOptions): number | undefined {
   const reserveTokens =
     options.reserveTokens ??
     (options.reserveRatio === undefined

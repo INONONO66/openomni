@@ -11,6 +11,7 @@ describe("buildWorkerMiddleware backward compatibility", () => {
     expect(registrations.map((r) => r.name)).toEqual([
       "builtin:budget-reassurance",
       "builtin:budget-warning",
+      "builtin:compaction",
       "builtin:tool-permission",
       "builtin:idle-nudge",
     ]);

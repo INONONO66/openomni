@@ -8,7 +8,7 @@ const MessageSummarizerSchema = z.custom<(messages: Message.WithParts[]) => Prom
 );
 
 const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown> = z.object({
-  contextWindowTokens: z.number(),
+  contextWindowTokens: z.number().optional(),
   thresholdRatio: z.number().optional(),
   reserveTokens: z.number().optional(),
   reserveRatio: z.number().optional(),

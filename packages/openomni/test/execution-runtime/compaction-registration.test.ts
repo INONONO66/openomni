@@ -55,11 +55,15 @@ describe("registerCompaction", () => {
   });
 
   it("rejects a malformed plan config at resolution", () => {
+    // contextWindowTokens is optional since the loop records the model fact —
+    // malformed now means wrong type, not absent field.
     const instance = registry();
     registerCompaction(instance, collector());
     expect(() =>
       instance.resolve(
-        plan([{ id: "builtin:compaction", required: true, config: { thresholdRatio: 0.8 } }]),
+        plan([
+          { id: "builtin:compaction", required: true, config: { contextWindowTokens: "wide" } },
+        ]),
         {},
       ),
     ).toThrow();
