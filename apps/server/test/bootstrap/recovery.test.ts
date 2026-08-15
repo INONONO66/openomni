@@ -98,11 +98,12 @@ describe("server recovery", () => {
       },
       channels: [
         {
-          start() {
+          start(_traceId: string) {
             events.push("channel");
           },
         },
       ],
+      traceId: "trace-bootstrap-wiring",
     });
 
     expect(recoveredRuntime).toBe(runtime);

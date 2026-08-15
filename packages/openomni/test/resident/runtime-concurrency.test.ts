@@ -12,6 +12,7 @@ beforeEach(() => {
 function makeEvent() {
   return {
     id: crypto.randomUUID(),
+    traceId: "trace-test",
     surface: "slack",
     payload: "hello",
     mode: "direct" as const,

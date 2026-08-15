@@ -128,12 +128,17 @@ async function processMessage(
       return listOpenTasks();
     }
     const event = buildInboundEvent(message, deps);
-    event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
+    event.agent.model = await resolveRuntimeModel(
+      event.agent.model,
+      message.traceId,
+      deps.defaultModel,
+    );
     return toResponseText(await ingress.ingest(event));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     Bus.publish(Operational.Error, {
-      traceId: crypto.randomUUID(),
+      // D11: the failing ingest belongs to the inbound message's trace.
+      traceId: message.traceId,
       time: Date.now(),
       component: "server",
       msg: "ingress error",

@@ -128,6 +128,7 @@ describe("IngressHandlers", () => {
     };
     const event: Ingress.InboundEvent = {
       id: "event-request-1",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "payload",
@@ -162,6 +163,7 @@ describe("IngressHandlers", () => {
   it("buildExecutionRequest refuses a context with no usable trace", () => {
     const event: Ingress.InboundEvent = {
       id: "event-traceless",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "payload",
@@ -191,6 +193,7 @@ describe("IngressHandlers", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-direct-1",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "payload",
@@ -239,6 +242,7 @@ describe("IngressHandlers", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-worker-deliver",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "adjust your plan",
@@ -279,6 +283,7 @@ describe("IngressHandlers", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-worker-deliver-fallback",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "adjust later",
@@ -322,6 +327,7 @@ describe("IngressHandlers", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-worker-background",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "start in background",
@@ -368,6 +374,7 @@ describe("IngressHandlers", () => {
     const sessionId = createSession();
     const event: Ingress.InboundEvent = {
       id: "event-worker-start-failure",
+      traceId: "trace-test",
       surface: "tui",
       mode: "direct",
       payload: "start work",

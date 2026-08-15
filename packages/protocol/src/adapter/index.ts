@@ -42,6 +42,8 @@ export namespace Adapter {
 
   export interface InboundMessage {
     id: string;
+    /** Trace minted by the surface at the first frame of this inbound message (D11 origin) and carried unchanged to the run. */
+    traceId: string;
     surfaceKey: string;
     text: string;
     sender: {
@@ -102,8 +104,8 @@ export namespace Adapter {
     readonly capabilities: Capabilities;
     readonly config: Config;
 
-    start(): Promise<void>;
-    stop(): void;
+    start(traceId: string): Promise<void>;
+    stop(traceId: string): void;
 
     onMessage(handler: MessageHandler): void;
     /** When set on a streaming-capable adapter, called instead of the regular message handler */

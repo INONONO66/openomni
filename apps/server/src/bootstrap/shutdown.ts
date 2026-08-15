@@ -13,7 +13,7 @@ function isClosableStorage(storage: unknown): storage is ClosableStorage {
 }
 
 interface ShutdownDeps {
-  channels: Array<{ stop(): void }>;
+  channels: Array<{ stop(traceId: string): void }>;
   server: { stop(force: boolean): void };
   mcpProvider: McpToolProvider;
   coordinator?: { shutdown(): Promise<void> };
@@ -47,7 +47,7 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
       await deps.coordinator?.shutdown();
 
       for (const channel of deps.channels) {
-        channel.stop();
+        channel.stop(traceId);
       }
 
       deps.server.stop(true);

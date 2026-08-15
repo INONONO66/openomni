@@ -129,6 +129,8 @@ function createBaseEvent(
 ): Omit<Ingress.DirectEvent, "mode" | "agent"> {
   return {
     id: message.id,
+    // D11: the DirectEvent carries the message's first-frame trace unchanged.
+    traceId: message.traceId,
     surface: descriptor.surface,
     workspace: descriptor.namespace || undefined,
     channel: descriptor.id ?? undefined,

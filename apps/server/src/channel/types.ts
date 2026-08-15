@@ -17,7 +17,8 @@ export type PublishPort = BusEvent.Sink["publish"];
  */
 export interface ChannelClient {
   send(channelId: string, text: string): Promise<string | undefined>;
-  sendTyping?(channelId: string): Promise<void>;
+  /** `traceId` is the inbound message's trace (D11) — typing is part of that message's causal chain. */
+  sendTyping?(channelId: string, traceId: string): Promise<void>;
 }
 
 /**
@@ -26,5 +27,6 @@ export interface ChannelClient {
  * Pure transformation function — same input always produces same output.
  */
 export interface InboundNormalizer<TPayload = unknown> {
-  normalize(payload: TPayload): Adapter.InboundMessage | null;
+  /** `traceId` is the surface's first-frame mint (D11) — the normalizer stamps it onto the InboundMessage, never mints. */
+  normalize(payload: TPayload, traceId: string): Adapter.InboundMessage | null;
 }

@@ -46,6 +46,7 @@ function replyEvent(
 ): Ingress.DirectEvent {
   return {
     id,
+    traceId: "trace-test",
     surface: "telegram",
     channel: "telegram:dm",
     userId: "seller-1",

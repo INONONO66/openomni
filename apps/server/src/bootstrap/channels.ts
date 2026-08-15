@@ -6,8 +6,8 @@ import type { ServerConfig } from "../config";
 import type { ChannelDeliveryRoute } from "./messaging";
 
 type Surface = {
-  start(): Promise<void> | void;
-  stop(): void;
+  start(traceId: string): Promise<void> | void;
+  stop(traceId: string): void;
 };
 
 export interface ChannelSetup {

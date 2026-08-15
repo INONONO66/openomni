@@ -13,6 +13,7 @@ export class GitHubNormalizer {
   normalize(
     content: GitHubEventContent,
     eventKey: string,
+    traceId: string,
     deliveryId?: string,
   ): Adapter.InboundMessage | null {
     const surfaceKey = Adapter.SurfaceKey.fromChannel({
@@ -27,6 +28,7 @@ export class GitHubNormalizer {
     return {
       id:
         deliveryId ?? `${eventKey}-${content.issueNumber}-${content.sender}-${content.text.length}`,
+      traceId,
       surfaceKey,
       text: normalizedText,
       sender: { id: content.sender, name: content.sender },

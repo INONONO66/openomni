@@ -61,6 +61,7 @@ describe("AgentDef", () => {
   test("should parse full canonical budget fields through direct events", () => {
     const event = Ingress.DirectEventSchema.parse({
       id: "event-budget",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       payload: "budgeted work",
@@ -122,6 +123,7 @@ describe("DirectEvent", () => {
   test("should parse valid direct event with agent", () => {
     const event = Ingress.DirectEventSchema.parse({
       id: "event-1",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       payload: { query: "What is 2+2?" },
@@ -141,6 +143,7 @@ describe("InboundEvent", () => {
   test("should parse direct event", () => {
     const event = Ingress.InboundEventSchema.parse({
       id: "event-1",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       payload: { query: "What is 2+2?" },
@@ -174,6 +177,7 @@ describe("InboundEvent", () => {
   test("parses ADR-008 target aliases and actor metadata", () => {
     const resident = Ingress.InboundEventSchema.parse({
       id: "event-resident-1",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       target: "resident",
@@ -186,6 +190,7 @@ describe("InboundEvent", () => {
 
     const worker = Ingress.InboundEventSchema.parse({
       id: "event-worker-1",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       target: "worker:worker-7",
@@ -199,6 +204,7 @@ describe("InboundEvent", () => {
   test("parses worker target without workerId or sessionId", () => {
     const event = Ingress.InboundEventSchema.parse({
       id: "event-worker-new",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       target: { type: "worker" },

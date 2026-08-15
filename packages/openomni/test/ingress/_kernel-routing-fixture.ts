@@ -18,6 +18,7 @@ import { ResidentRuntime } from "../../src/resident/runtime";
 
 export const ownerEvent = {
   id: "inbound-owner-dm",
+  traceId: "trace-test",
   surface: "discord",
   workspace: "owner-workspace",
   channel: "owner-dm",

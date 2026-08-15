@@ -84,6 +84,7 @@ export function makeEvent(
 ): Ingress.InboundEvent {
   return {
     id: `event-${userId}`,
+    traceId: "trace-test",
     surface: "discord",
     workspace: "guild",
     channel: "dev",

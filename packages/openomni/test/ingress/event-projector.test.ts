@@ -19,6 +19,7 @@ describe("IngressEventProjector", () => {
   it("should store TextPart with string payload verbatim", () => {
     const event: Ingress.InboundEvent = {
       id: "event-1",
+      traceId: "trace-test",
       surface: "slack",
       mode: "direct",
       payload: "Hello, world!",
@@ -52,6 +53,7 @@ describe("IngressEventProjector", () => {
   it("should extract text field from object payload", () => {
     const event: Ingress.InboundEvent = {
       id: "event-2",
+      traceId: "trace-test",
       surface: "discord",
       mode: "direct",
       payload: { text: "Message from Discord", author: "user123" },
@@ -81,6 +83,7 @@ describe("IngressEventProjector", () => {
     const payload = { type: "reaction", emoji: "👍", count: 5 };
     const event: Ingress.InboundEvent = {
       id: "event-3",
+      traceId: "trace-test",
       surface: "telegram",
       mode: "direct",
       payload,
@@ -109,6 +112,7 @@ describe("IngressEventProjector", () => {
   it("should set UserMessage.agent to event.surface", () => {
     const event: Ingress.InboundEvent = {
       id: "event-4",
+      traceId: "trace-test",
       surface: "whatsapp",
       mode: "direct",
       payload: "Test message",
@@ -135,6 +139,7 @@ describe("IngressEventProjector", () => {
   it("should store both UserMessage and TextPart in session", () => {
     const event: Ingress.InboundEvent = {
       id: "event-5",
+      traceId: "trace-test",
       surface: "email",
       mode: "direct",
       payload: "Email body content",

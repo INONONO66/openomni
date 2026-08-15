@@ -17,13 +17,13 @@ export class DiscordClient implements ChannelClient {
     return typeof message.id === "string" ? message.id : undefined;
   }
 
-  async sendTyping(channelId: string): Promise<void> {
+  async sendTyping(channelId: string, traceId: string): Promise<void> {
     await fetch(`${BASE_URL}/channels/${channelId}/typing`, {
       method: "POST",
       headers: { Authorization: `Bot ${this.token}` },
     }).catch((e) =>
       this.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "discord typing indicator failed",

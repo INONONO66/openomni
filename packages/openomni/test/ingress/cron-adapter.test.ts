@@ -32,7 +32,11 @@ describe("CronAdapter.fire", () => {
       },
     };
 
-    await CronAdapter.fire({ id: "job-1", agentName: "dev", payload: "hello" }, engine);
+    await CronAdapter.fire(
+      { id: "job-1", agentName: "dev", payload: "hello" },
+      engine,
+      "trace-test",
+    );
 
     expect(capturedEvent?.surface).toBe("cron");
     expect(capturedEvent?.mode).toBe("internal");
@@ -72,6 +76,7 @@ describe("CronAdapter.fire", () => {
           target: { kind: "worker" },
         },
         engine,
+        "trace-test",
       );
     } finally {
       unsubscribe();

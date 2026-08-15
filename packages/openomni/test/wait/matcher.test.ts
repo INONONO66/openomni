@@ -19,6 +19,7 @@ const correlation = Object.freeze({
 function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.DirectEvent {
   return {
     id: "inbound-1",
+    traceId: "trace-test",
     surface: "telegram",
     mode: "direct",
     payload: "reply",

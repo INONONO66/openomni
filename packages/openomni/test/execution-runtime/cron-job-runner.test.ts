@@ -348,8 +348,8 @@ describe("CronJobRunner", () => {
     try {
       await CronJobRunner.tick({
         nowMs: () => created.createdAt + 60_000,
-        fire: async (job) => {
-          await CronAdapter.fire(job, engine);
+        fire: async (job, traceId) => {
+          await CronAdapter.fire(job, engine, traceId);
         },
       });
     } finally {

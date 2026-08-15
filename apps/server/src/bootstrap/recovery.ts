@@ -25,6 +25,9 @@ async function processRetryQueue(
     try {
       await handler({
         id: item.messageId,
+        // D11: retried messages replay under the recovery pass's trace — the
+        // original inbound trace did not survive the interruption.
+        traceId,
         surfaceKey: item.surfaceKey,
         text: item.text,
         sender: { id: "recovery", name: "recovery" },
@@ -58,18 +61,20 @@ export type BootstrapRecoveryInput = Readonly<{
   effects?: Pick<EffectReconciler, "reconcile">;
 }>;
 
-type InboundSurface = Readonly<{ start(): Promise<void> | void }>;
+type InboundSurface = Readonly<{ start(traceId: string): Promise<void> | void }>;
 
 export async function startInboundSurfacesAfterRecovery<T>(
   input: Readonly<{
     recover(): Promise<void>;
     createServer(): T;
     channels: readonly InboundSurface[];
+    /** Boot trace — channel starts are part of the boot's causal chain (D11 group C). */
+    traceId: string;
   }>,
 ): Promise<T> {
   await input.recover();
   const server = input.createServer();
-  await Promise.all(input.channels.map((channel) => channel.start()));
+  await Promise.all(input.channels.map((channel) => channel.start(input.traceId)));
   return server;
 }
 

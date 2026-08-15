@@ -107,6 +107,7 @@ describe("IngressEngine", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-direct-1",
+      traceId: "trace-test",
       surface: "slack",
       workspace: "team-a",
       channel: "C1",
@@ -140,6 +141,7 @@ describe("IngressEngine", () => {
     try {
       await engine.ingest({
         id: "event-worker-target-key-1",
+        traceId: "trace-test",
         surface: "slack",
         workspace: "team-a",
         channel: "C1",
@@ -176,6 +178,7 @@ describe("IngressEngine", () => {
     const error = await catchError(
       engine.ingest({
         id: "event-no-coordinator-1",
+        traceId: "trace-test",
         surface: "tui",
         workspace: "/repo",
         mode: "direct",
@@ -212,6 +215,7 @@ describe("IngressEngine", () => {
     const error = await catchError(
       engine.ingest({
         id: "event-unauthorized-1",
+        traceId: "trace-test",
         surface: "internal",
         workspace: "/repo",
         mode: "direct",
@@ -236,6 +240,7 @@ describe("IngressEngine", () => {
 
     const eventA: Ingress.InboundEvent = {
       id: "event-reuse-1",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       channel: "resident",
@@ -249,6 +254,7 @@ describe("IngressEngine", () => {
 
     const eventB: Ingress.InboundEvent = {
       id: "event-reuse-2",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       channel: "resident",
@@ -273,6 +279,7 @@ describe("IngressEngine", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-reset-1",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       mode: "direct",
@@ -293,6 +300,7 @@ describe("IngressEngine", () => {
     const second = await engine.ingest({
       ...event,
       id: "event-reset-2",
+      traceId: "trace-test",
       payload: "After reset",
     });
 
@@ -303,6 +311,7 @@ describe("IngressEngine", () => {
   it("ingest() with unknown mode fails external ingress schema validation", async () => {
     const event = {
       id: "event-unknown-1",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       mode: "unknown-mode",

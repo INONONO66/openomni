@@ -36,7 +36,10 @@ describe("resolveRuntimeModel", () => {
       makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
     ];
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-5" });
+    const resolved = await resolveRuntimeModel(
+      { provider: "anthropic", id: "claude-sonnet-4-5" },
+      "trace-test",
+    );
     expect(resolved).toEqual({
       provider: "anthropic",
       id: "claude-sonnet-4-5-20250929",
@@ -49,7 +52,10 @@ describe("resolveRuntimeModel", () => {
       makeModel("claude-opus-4-5-20251101", "Claude Opus 4.5", "2025-11-01", "claude-opus"),
     ];
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-opus-4-5" });
+    const resolved = await resolveRuntimeModel(
+      { provider: "anthropic", id: "claude-opus-4-5" },
+      "trace-test",
+    );
     expect(resolved).toEqual({
       provider: "anthropic",
       id: "claude-opus-4-5-20251101",
@@ -63,7 +69,10 @@ describe("resolveRuntimeModel", () => {
       makeModel("claude-sonnet-4-20250514", "Claude Sonnet 4", "2025-05-22"),
     ];
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" });
+    const resolved = await resolveRuntimeModel(
+      { provider: "anthropic", id: "claude-sonnet-4-6" },
+      "trace-test",
+    );
     expect(resolved).toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
   });
 
@@ -73,6 +82,7 @@ describe("resolveRuntimeModel", () => {
 
     const resolved = await resolveRuntimeModel(
       { provider: "anthropic", id: "claude-sonnet-4-6" },
+      "trace-test",
       { provider: "anthropic", id: "claude-opus-4-20250514" },
     );
     expect(resolved).toEqual({
@@ -85,7 +95,10 @@ describe("resolveRuntimeModel", () => {
     Auth.get = async () => ({ type: "api", key: "test-key" });
     Provider.listModels = async () => [];
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" });
+    const resolved = await resolveRuntimeModel(
+      { provider: "anthropic", id: "claude-sonnet-4-6" },
+      "trace-test",
+    );
     expect(resolved).toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
   });
 
@@ -97,6 +110,7 @@ describe("resolveRuntimeModel", () => {
 
     const resolved = await resolveRuntimeModel(
       { provider: "anthropic", id: "claude-sonnet-4-6" },
+      "trace-test",
       { provider: "anthropic", id: "claude-opus-4-20250514" },
     );
     expect(resolved).toEqual({

@@ -13,9 +13,11 @@ export namespace CronAdapter {
   export function fire(
     job: CronJob,
     engine: Pick<IngressEngine, "ingestInternal">,
+    traceId: string,
   ): Promise<Ingress.IngressResult> {
     return engine.ingestInternal({
       id: crypto.randomUUID(),
+      traceId,
       surface: "cron",
       mode: "internal",
       agentName: job.agentName,

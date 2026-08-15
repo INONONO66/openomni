@@ -268,6 +268,7 @@ describe("IngressEngine access routing", () => {
     try {
       result = await kernelEngine().ingestInternal({
         id: "inbound-cron",
+        traceId: "trace-test",
         surface: "cron",
         mode: "internal",
         agentName: "resident",

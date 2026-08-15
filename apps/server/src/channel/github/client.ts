@@ -8,7 +8,12 @@ export class GitHubClient {
     private readonly token?: string,
   ) {}
 
-  async postComment(repo: string, issueNumber: number, body: string): Promise<void> {
+  async postComment(
+    repo: string,
+    issueNumber: number,
+    body: string,
+    traceId: string,
+  ): Promise<void> {
     if (!this.token) return;
 
     const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
@@ -36,7 +41,7 @@ export class GitHubClient {
     }
 
     this.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "github comment posted",

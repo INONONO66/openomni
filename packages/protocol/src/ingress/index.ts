@@ -123,6 +123,8 @@ export namespace Ingress {
 
   const InboundEventBase = {
     id: z.string(),
+    /** D11: minted once at the producer's first frame (channel surface, cron fire, dispatch command) — ingress inherits, never re-mints. */
+    traceId: z.string(),
     surface: z.string(),
     channel: z.string().optional(),
     workspace: z.string().optional(),

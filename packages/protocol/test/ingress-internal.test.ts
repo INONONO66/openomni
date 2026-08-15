@@ -5,6 +5,7 @@ describe("InternalEventSchema", () => {
   test("parses valid internal event", () => {
     const result = Ingress.InternalEventSchema.parse({
       id: "test-1",
+      traceId: "trace-test",
       surface: "cron",
       mode: "internal",
       agentName: "dev",
@@ -29,6 +30,7 @@ describe("InternalEventSchema", () => {
   test("discriminated union routes by mode", () => {
     const internal = Ingress.InboundEventSchema.parse({
       id: "t1",
+      traceId: "trace-test",
       surface: "cron",
       mode: "internal",
       agentName: "dev",
@@ -38,6 +40,7 @@ describe("InternalEventSchema", () => {
 
     const direct = Ingress.InboundEventSchema.parse({
       id: "t2",
+      traceId: "trace-test",
       surface: "discord",
       mode: "direct",
       agentName: "dev",
@@ -62,6 +65,7 @@ describe("InternalEventSchema", () => {
   test("trigger metadata parses correctly", () => {
     const result = Ingress.InternalEventSchema.parse({
       id: "test-3",
+      traceId: "trace-test",
       surface: "cron",
       mode: "internal",
       agentName: "dev",

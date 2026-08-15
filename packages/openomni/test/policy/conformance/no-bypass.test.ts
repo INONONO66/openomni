@@ -12,6 +12,7 @@ const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 function unauthorizedInboundEvent(): Ingress.InboundEvent {
   return {
     id: "event-no-bypass",
+    traceId: "trace-test",
     surface: "internal",
     workspace: "/repo",
     mode: "direct",
