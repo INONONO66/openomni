@@ -12,7 +12,7 @@ export interface TelegramNormalizerContext {
 export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
   constructor(private readonly ctx: TelegramNormalizerContext) {}
 
-  normalize(message: TelegramMessage): Adapter.InboundMessage | null {
+  normalize(message: TelegramMessage, traceId: string): Adapter.InboundMessage | null {
     const text = message.text;
     if (!text) return null;
     if (!message.from) return null;
@@ -32,6 +32,7 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
 
     return {
       id: String(message.message_id),
+      traceId,
       surfaceKey,
       text: content,
       sender: {

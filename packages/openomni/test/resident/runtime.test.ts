@@ -7,6 +7,7 @@ import { newTraceId } from "@openomni/telemetry";
 function makeEvent() {
   return {
     id: crypto.randomUUID(),
+    traceId: "trace-test",
     surface: "slack",
     payload: "hello",
     mode: "direct" as const,
@@ -70,6 +71,7 @@ describe("ResidentRuntime", () => {
       traceContext: { traceId: newTraceId() },
       event: {
         id: "evt-resident-1",
+        traceId: "trace-test",
         surface: "slack",
         payload: "hello",
         mode: "direct",

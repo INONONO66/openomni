@@ -5,7 +5,7 @@ import {
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus } from "@openomni/telemetry";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
@@ -115,7 +115,8 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       if (resolvedActorEvent.mode !== "direct") {
         throw new TypeError("external ingress actor resolution changed event mode");
       }
-      const trace = { traceId: newTraceId() };
+      // D11: inherit the trace minted at the channel's first frame — ingress never re-mints.
+      const trace = { traceId: externalEvent.traceId };
       const route = resolveAndRecordRoute(resolvedActorEvent, trace.traceId);
       const decision = requireRoutedDecision(route.decision);
       const waitExecution = await executeWaitRoute(deps.dispatchRuntime, trace, route, decision);
@@ -148,7 +149,8 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
         agentResolver?: AgentResolver;
       }>,
     ): Promise<Ingress.IngressResult> {
-      const trace = { traceId: newTraceId() };
+      // D11: inherit the producer's trace (cron fire, dispatch command) — ingress never re-mints.
+      const trace = { traceId: event.traceId };
       const route = resolveAndRecordRoute(event, trace.traceId);
       const decision = requireRoutedDecision(route.decision);
       const waitExecution = await executeWaitRoute(deps.dispatchRuntime, trace, route, decision);

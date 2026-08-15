@@ -332,6 +332,7 @@
     "runtime",
     "surface",
     "target",
+    "traceId",
     "userId",
     "workspace"
   ],
@@ -345,6 +346,7 @@
     "runtime",
     "surface",
     "target",
+    "traceId",
     "userId",
     "workspace"
   ],
@@ -358,6 +360,7 @@
     "runtime",
     "surface",
     "target",
+    "traceId",
     "userId",
     "workspace"
   ],
@@ -371,6 +374,7 @@
     "runtime",
     "surface",
     "target",
+    "traceId",
     "userId",
     "workspace"
   ],

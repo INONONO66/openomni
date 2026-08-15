@@ -107,6 +107,7 @@ describe("IngressEngine", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-direct-1",
+      traceId: "trace-test",
       surface: "slack",
       workspace: "team-a",
       channel: "C1",
@@ -132,7 +133,7 @@ describe("IngressEngine", () => {
       title: "worker target key test",
       model: { providerID: "test", modelID: "fixture" },
     });
-    const received: Array<{ target?: string }> = [];
+    const received: Array<{ target?: string; traceId?: string }> = [];
     const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
       received.push(event);
     });
@@ -140,6 +141,7 @@ describe("IngressEngine", () => {
     try {
       await engine.ingest({
         id: "event-worker-target-key-1",
+        traceId: "trace-test",
         surface: "slack",
         workspace: "team-a",
         channel: "C1",
@@ -156,6 +158,9 @@ describe("IngressEngine", () => {
     }
 
     expect(received.at(-1)?.target).toBe(`worker-session:${workerSession.id}`);
+    // D11 keystone pin (#654 review): ingest INHERITS the event's trace —
+    // reverting the engine to a fresh mint must fail here, not stay green.
+    expect(received.at(-1)?.traceId).toBe("trace-test");
   });
 
   it("ingest() with invalid event throws", async () => {
@@ -176,6 +181,7 @@ describe("IngressEngine", () => {
     const error = await catchError(
       engine.ingest({
         id: "event-no-coordinator-1",
+        traceId: "trace-test",
         surface: "tui",
         workspace: "/repo",
         mode: "direct",
@@ -212,6 +218,7 @@ describe("IngressEngine", () => {
     const error = await catchError(
       engine.ingest({
         id: "event-unauthorized-1",
+        traceId: "trace-test",
         surface: "internal",
         workspace: "/repo",
         mode: "direct",
@@ -236,6 +243,7 @@ describe("IngressEngine", () => {
 
     const eventA: Ingress.InboundEvent = {
       id: "event-reuse-1",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       channel: "resident",
@@ -249,6 +257,7 @@ describe("IngressEngine", () => {
 
     const eventB: Ingress.InboundEvent = {
       id: "event-reuse-2",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       channel: "resident",
@@ -273,6 +282,7 @@ describe("IngressEngine", () => {
 
     const event: Ingress.InboundEvent = {
       id: "event-reset-1",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       mode: "direct",
@@ -293,6 +303,7 @@ describe("IngressEngine", () => {
     const second = await engine.ingest({
       ...event,
       id: "event-reset-2",
+      traceId: "trace-test",
       payload: "After reset",
     });
 
@@ -303,6 +314,7 @@ describe("IngressEngine", () => {
   it("ingest() with unknown mode fails external ingress schema validation", async () => {
     const event = {
       id: "event-unknown-1",
+      traceId: "trace-test",
       surface: "tui",
       workspace: "/repo",
       mode: "unknown-mode",

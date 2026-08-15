@@ -910,6 +910,7 @@ function grantConformanceChannel(): void {
 function routedIngressEvent(id: string, workerSessionId: string) {
   return {
     id,
+    traceId: "trace-test",
     surface: "conformance",
     workspace: "team-conformance",
     channel: "C1",
@@ -1012,6 +1013,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     try {
       await createIngressEngine().ingest({
         id: "inbound-route-blocked-1",
+        traceId: "trace-test",
         surface: "conformance",
         workspace: "team-conformance",
         channel: "C1",
@@ -1084,6 +1086,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     try {
       await createIngressEngine().ingest({
         id: "inbound-route-replay-divergent-1",
+        traceId: "trace-test",
         surface: "conformance",
         workspace: "team-conformance",
         channel: "C1",
@@ -1149,6 +1152,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // replay).
     const blockedEvent = () => ({
       id: "inbound-route-replay-blocked-1",
+      traceId: "trace-test",
       surface: "conformance",
       workspace: "team-conformance",
       channel: "C1",

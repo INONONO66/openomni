@@ -6,6 +6,7 @@ describe("ingress target helpers", () => {
   it("defaults events without explicit target to resident", () => {
     const event = Ingress.InboundEventSchema.parse({
       id: "event-resident-default",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       payload: "hello",
@@ -18,6 +19,7 @@ describe("ingress target helpers", () => {
   it("resolves explicit target before metadata target", () => {
     const event = Ingress.InboundEventSchema.parse({
       id: "event-worker-explicit",
+      traceId: "trace-test",
       surface: "cli",
       mode: "direct",
       target: "worker:worker-7",

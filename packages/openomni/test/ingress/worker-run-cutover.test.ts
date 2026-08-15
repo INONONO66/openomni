@@ -67,6 +67,7 @@ function createSession(): string {
 function workerEvent(id: string, parentSessionId?: string): Ingress.DirectEvent {
   return {
     id,
+    traceId: "trace-test",
     surface: "tui",
     mode: "direct",
     payload: "run the cutover task",

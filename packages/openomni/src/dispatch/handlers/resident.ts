@@ -37,6 +37,8 @@ function eventFromCommand(
 ): Ingress.InternalEvent {
   return {
     id: command.dispatchId,
+    // D11: the dispatch command already carries the caller's trace — inherit it.
+    traceId: command.traceId,
     surface: "dispatch",
     mode: "internal",
     agentName: "resident",

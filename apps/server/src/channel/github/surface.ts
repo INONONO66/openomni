@@ -1,4 +1,5 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
 import { Dedupe } from "../support/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
@@ -43,23 +44,26 @@ export class GitHubAdapter implements Adapter.Surface {
     this.handler = handler;
   }
 
-  async start(): Promise<void> {
+  async start(traceId: string): Promise<void> {
     if (!this.handler) {
       throw new Error("[github] No message handler registered. Call onMessage() before start().");
     }
     this.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "github webhook handler ready",
     });
   }
 
-  stop(): void {
+  stop(_traceId: string): void {
     // no-op: GitHub adapter is webhook-based, no persistent connection to close
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
+    // Origin: outbound send-as-surface carries no inbound trace to inherit
+    // until Wait/#215 threading lands — this send is its own causal chain.
+    const traceId = newTraceId();
     const parsed = Adapter.SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
     const [, issueId] = (parsed.id ?? "").split("-");
@@ -67,7 +71,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
     if (Number.isNaN(issueNumber)) {
       this.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "github invalid surface key",
@@ -77,11 +81,14 @@ export class GitHubAdapter implements Adapter.Surface {
     }
 
     if (message.text) {
-      await this.client.postComment(repo, issueNumber, message.text);
+      await this.client.postComment(repo, issueNumber, message.text, traceId);
     }
   }
 
   async handleWebhook(request: Request): Promise<Response> {
+    // Origin: the first frame of an inbound webhook delivery — this ONE mint
+    // is the message's trace, carried to the run (D11).
+    const traceId = newTraceId();
     const auth = await ChannelAuthnMiddleware.authenticateGitHubWebhook({
       request,
       secret: this.secret,
@@ -104,11 +111,13 @@ export class GitHubAdapter implements Adapter.Surface {
     const payload = JSON.parse(body) as Record<string, unknown>;
     const eventKey = `${event}.${payload.action}`;
     this.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "github event received",
-      context: { event: eventKey },
+      // deliveryId: GitHub's own per-delivery id (x-github-delivery) — the
+      // natural correlation key between this trace and GitHub's audit log.
+      context: { event: eventKey, deliveryId },
     });
 
     const content = this.extractContent(event, payload);
@@ -131,11 +140,11 @@ export class GitHubAdapter implements Adapter.Surface {
     if (PolicyDecision.isBlocking(triggerAuth.verdict))
       return new Response("Filtered", { status: 200 });
 
-    const inbound = this.normalizer.normalize(content, eventKey, deliveryId ?? undefined);
+    const inbound = this.normalizer.normalize(content, eventKey, traceId, deliveryId ?? undefined);
     if (!inbound) return new Response("Filtered", { status: 200 });
 
     this.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "github message received",
@@ -149,11 +158,11 @@ export class GitHubAdapter implements Adapter.Surface {
     try {
       const outbound = await this.getHandler()(inbound);
       if (outbound?.text) {
-        await this.client.postComment(content.repo, content.issueNumber, outbound.text);
+        await this.client.postComment(content.repo, content.issueNumber, outbound.text, traceId);
       }
     } catch (err) {
       this.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "github message handler error",

@@ -36,6 +36,7 @@ function makeProvider(tools: readonly NativeTool[]): ToolProvider {
 function makeMessage(text: string): Adapter.InboundMessage {
   return {
     id: "message-1",
+    traceId: "trace-test",
     surfaceKey: "ws:local-test",
     text,
     sender: { id: "owner-1", name: "Owner" },

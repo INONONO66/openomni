@@ -66,6 +66,7 @@ describe("ingestInternal", () => {
   it("publishes a routing decision before reporting a missing resolver", async () => {
     const event: Ingress.InternalEvent = {
       id: "t1",
+      traceId: "trace-test",
       surface: "cron",
       mode: "internal",
       agentName: "dev",
@@ -119,6 +120,7 @@ describe("ingestInternal", () => {
     try {
       result = await engine.ingestInternal({
         id: "t2",
+        traceId: "trace-test",
         surface: "cron",
         mode: "internal",
         agentName: "dev",

@@ -1,11 +1,12 @@
 import { CronJob, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { newTraceId } from "@openomni/telemetry";
 import { Cron } from "croner";
 import { CronJobRegistry } from "./cron-job-registry.js";
 
 const DEFAULT_INTERVAL_MS = 30_000;
 
-type FireJob = (job: CronJob.Info) => Promise<void>;
+type FireJob = (job: CronJob.Info, traceId: string) => Promise<void>;
 
 interface TickOptions {
   readonly nowMs?: () => number;
@@ -112,7 +113,8 @@ export namespace CronJobRunner {
       jobs = CronJobRegistry.list();
     } catch (err) {
       Bus.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        // Origin: the tick itself — listing failed before any job existed to inherit from.
+        traceId: newTraceId(),
         time: Date.now(),
         component: "cron",
         msg: "cron job list failed",
@@ -121,14 +123,18 @@ export namespace CronJobRunner {
       return;
     }
     for (const job of jobs) {
+      // Origin: a cron fire starts a new causal chain — ONE trace per job
+      // iteration, shared by the fire, its CronJobFired record, and any
+      // fire failure, then inherited through ingestInternal (D11).
+      const jobTraceId = newTraceId();
       try {
         const nextFireAt = dueAt(job);
         if (job.nextFireAt === undefined) CronJobRegistry.save({ ...job, nextFireAt });
         if (nextFireAt > now) continue;
         if (!CronJobRegistry.get(job.id)) continue;
-        await fire({ ...job, nextFireAt });
+        await fire({ ...job, nextFireAt }, jobTraceId);
         Bus.publish(CronJob.Events.CronJobFired, {
-          traceId: crypto.randomUUID(),
+          traceId: jobTraceId,
           time: now,
           jobId: job.id,
           agentName: job.agentName,
@@ -138,7 +144,7 @@ export namespace CronJobRunner {
         }
       } catch (err) {
         Bus.publish(Operational.Error, {
-          traceId: crypto.randomUUID(),
+          traceId: jobTraceId,
           time: Date.now(),
           component: "cron",
           msg: "cron job fire failed",

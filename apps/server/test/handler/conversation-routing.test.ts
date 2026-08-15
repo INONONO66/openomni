@@ -31,14 +31,17 @@ function ingressResult(output: string): Ingress.IngressResult {
 }
 
 function normalizeDiscordMessage(replyToId?: string) {
-  const inbound = normalizer.normalize({
-    id: replyToId ? `inbound-${replyToId}` : "inbound-unmatched",
-    channel_id: "dev",
-    guild_id: "guild-1",
-    author: { id: "owner-1", username: "Owner" },
-    content: replyToId ? "SN-A2334" : "Start a new conversation",
-    ...(replyToId ? { message_reference: { message_id: replyToId } } : {}),
-  });
+  const inbound = normalizer.normalize(
+    {
+      id: replyToId ? `inbound-${replyToId}` : "inbound-unmatched",
+      channel_id: "dev",
+      guild_id: "guild-1",
+      author: { id: "owner-1", username: "Owner" },
+      content: replyToId ? "SN-A2334" : "Start a new conversation",
+      ...(replyToId ? { message_reference: { message_id: replyToId } } : {}),
+    },
+    "trace-test",
+  );
   if (!inbound) throw new Error("expected normalized Discord message");
   return inbound;
 }

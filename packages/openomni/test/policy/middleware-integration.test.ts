@@ -7,6 +7,7 @@ type WorkerControlTestAction = "cancel" | "resume" | "schedule";
 function makeInboundEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
   return {
     id: "evt-1",
+    traceId: "trace-test",
     surface: "test",
     mode: "direct",
     agent: {

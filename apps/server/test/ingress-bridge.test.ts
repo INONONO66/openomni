@@ -36,6 +36,7 @@ function makeProvider(tools: NativeTool[]): ToolProvider {
 function makeMessage(): Adapter.InboundMessage {
   return {
     id: "message-1",
+    traceId: "trace-test",
     surfaceKey: "discord:guild:channel:dev",
     text: "hello",
     sender: { id: "user-1", name: "User" },

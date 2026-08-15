@@ -11,6 +11,7 @@ import { ResidentRuntime } from "../../src/resident/runtime";
 function directEvent(id: string): Ingress.DirectEvent {
   return {
     id,
+    traceId: "trace-test",
     surface: "tui",
     workspace: "/repo",
     channel: "resident",

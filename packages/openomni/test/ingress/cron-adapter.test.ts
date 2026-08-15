@@ -32,8 +32,15 @@ describe("CronAdapter.fire", () => {
       },
     };
 
-    await CronAdapter.fire({ id: "job-1", agentName: "dev", payload: "hello" }, engine);
+    await CronAdapter.fire(
+      { id: "job-1", agentName: "dev", payload: "hello" },
+      engine,
+      "trace-test",
+    );
 
+    // D11 keystone pin (#654 review): the fired event carries the tick's
+    // trace — the run and CronJobFired share one identity.
+    expect(capturedEvent?.traceId).toBe("trace-test");
     expect(capturedEvent?.surface).toBe("cron");
     expect(capturedEvent?.mode).toBe("internal");
     expect(capturedEvent?.agentName).toBe("dev");
@@ -72,6 +79,7 @@ describe("CronAdapter.fire", () => {
           target: { kind: "worker" },
         },
         engine,
+        "trace-test",
       );
     } finally {
       unsubscribe();

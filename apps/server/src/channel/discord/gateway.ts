@@ -5,7 +5,8 @@ import type { PublishPort } from "../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
 
 export interface GatewayCallbacks {
-  onDispatch: (event: string, data: unknown) => void;
+  /** `traceId` is minted per dispatch — the first frame of an inbound gateway event (D11 origin). */
+  onDispatch: (event: string, data: unknown, traceId: string) => void;
   onReady: (info: { botId: string; botUsername: string }) => void;
 }
 
@@ -247,11 +248,14 @@ export class DiscordGateway {
       });
       return true;
     }
+    // Origin: the first frame of an inbound gateway event — this ONE mint is
+    // the message's trace, carried through the surface to the run (D11).
+    const traceId = newTraceId();
     try {
-      this.callbacks.onDispatch(event, data);
+      this.callbacks.onDispatch(event, data, traceId);
     } catch (err) {
       this.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "discord dispatch error",

@@ -1,4 +1,5 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
 import { Dedupe } from "../support/dedupe";
 import { splitText } from "../support/chunk-text";
 import { TelegramClient } from "./client";
@@ -43,7 +44,7 @@ export class TelegramAdapter implements Adapter.Surface {
     this.handler = handler;
   }
 
-  async start(): Promise<void> {
+  async start(traceId: string): Promise<void> {
     if (!this.handler) {
       throw new Error("[telegram] No message handler registered. Call onMessage() before start().");
     }
@@ -53,7 +54,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const botUsername = me.username ?? "";
     this.botUsername = botUsername;
     this.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "telegram bot started",
@@ -71,9 +72,12 @@ export class TelegramAdapter implements Adapter.Surface {
       {
         onMessage: (message) => {
           if (this.dedupe.isDuplicate(String(message.message_id))) return;
-          this.handleMessage(message).catch((err) => {
+          // Origin: the first frame of an inbound telegram message — this ONE
+          // mint is the message's trace, carried to the run (D11).
+          const messageTraceId = newTraceId();
+          this.handleMessage(message, messageTraceId).catch((err) => {
             this.publish(Operational.Error, {
-              traceId: crypto.randomUUID(),
+              traceId: messageTraceId,
               time: Date.now(),
               component: "server",
               msg: "telegram message handling failed",
@@ -88,10 +92,10 @@ export class TelegramAdapter implements Adapter.Surface {
     this.poller.start();
   }
 
-  stop(): void {
+  stop(traceId: string): void {
     this.poller?.stop();
     this.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "telegram bot stopped",
@@ -114,7 +118,7 @@ export class TelegramAdapter implements Adapter.Surface {
     return externalMessageId === undefined ? {} : { externalMessageId };
   }
 
-  private async handleMessage(message: TelegramMessage): Promise<void> {
+  private async handleMessage(message: TelegramMessage, traceId: string): Promise<void> {
     if (!this.normalizer) return;
     const text = message.text;
     if (!text) return;
@@ -137,11 +141,11 @@ export class TelegramAdapter implements Adapter.Surface {
     });
     if (PolicyDecision.isBlocking(auth.verdict)) return;
 
-    const inbound = this.normalizer.normalize(message);
+    const inbound = this.normalizer.normalize(message, traceId);
     if (!inbound) return;
 
     this.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "telegram message received",
@@ -149,16 +153,16 @@ export class TelegramAdapter implements Adapter.Surface {
     });
 
     const typingInterval = setInterval(() => {
-      this.client.sendTyping(chatId);
+      this.client.sendTyping(chatId, traceId);
     }, 4000);
-    this.client.sendTyping(chatId);
+    this.client.sendTyping(chatId, traceId);
 
     try {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound);
     } catch (err) {
       this.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "telegram message handler error",

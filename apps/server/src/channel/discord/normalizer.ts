@@ -11,7 +11,7 @@ export interface DiscordNormalizerContext {
 export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
   constructor(private readonly ctx: DiscordNormalizerContext) {}
 
-  normalize(message: DiscordMessage): Adapter.InboundMessage | null {
+  normalize(message: DiscordMessage, traceId: string): Adapter.InboundMessage | null {
     if (message.author.bot) return null;
     if (!message.content) return null;
 
@@ -34,6 +34,7 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
 
     return {
       id: message.id,
+      traceId,
       surfaceKey,
       text: content,
       sender: {

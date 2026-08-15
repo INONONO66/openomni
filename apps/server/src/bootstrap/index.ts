@@ -277,6 +277,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
         },
       }),
     channels,
+    traceId: bootTraceId,
   });
 
   if (channels.length === 0) {
@@ -302,8 +303,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
   });
 
   const cronRunner = CronJobRunner.start({
-    fire: async (job) => {
-      await CronAdapter.fire(job, ingressEngine);
+    fire: async (job, jobTraceId) => {
+      await CronAdapter.fire(job, ingressEngine, jobTraceId);
     },
   });
 

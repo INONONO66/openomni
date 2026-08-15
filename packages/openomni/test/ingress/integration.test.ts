@@ -71,6 +71,7 @@ describe("IngressEngine integration pipeline", () => {
 
       const first = await engine.ingest({
         id: "evt-direct-1",
+        traceId: "trace-test",
         mode: "direct",
         surface: "slack",
         workspace: "team-a",
@@ -84,6 +85,7 @@ describe("IngressEngine integration pipeline", () => {
 
       const second = await engine.ingest({
         id: "evt-direct-2",
+        traceId: "trace-test",
         mode: "direct",
         surface: "slack",
         workspace: "team-a",
@@ -109,6 +111,7 @@ describe("IngressEngine integration pipeline", () => {
 
       const first = await engine.ingest({
         id: "evt-isolation-a",
+        traceId: "trace-test",
         mode: "direct",
         surface: "tui",
         workspace: "/project-a",
@@ -121,6 +124,7 @@ describe("IngressEngine integration pipeline", () => {
 
       const second = await engine.ingest({
         id: "evt-isolation-b",
+        traceId: "trace-test",
         mode: "direct",
         surface: "tui",
         workspace: "/project-b",

@@ -31,14 +31,17 @@ export class WebSocketHandler {
     return {
       message(ws: { data: WsConnectionData; send(msg: string): void }, data: string | Buffer) {
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
+        // Origin: the first frame of an inbound websocket message — this ONE
+        // mint is the message's trace, carried to the run (D11).
+        const traceId = newTraceId();
         self.publish(Operational.Debug, {
-          traceId: newTraceId(),
+          traceId,
           time: Date.now(),
           component: "server",
           msg: "websocket message received",
           context: { surfaceKey: ws.data.surfaceKey },
         });
-        void self.handleMessage(ws, raw);
+        void self.handleMessage(ws, raw, traceId);
       },
       open(ws: { data: WsConnectionData }) {
         ws.data = {
@@ -92,6 +95,7 @@ export class WebSocketHandler {
   private async handleMessage(
     ws: { data: WsConnectionData; send(msg: string): void },
     raw: string,
+    traceId: string,
   ): Promise<void> {
     try {
       const parsed = JSON.parse(raw) as { type?: string; text?: string; surfaceKey?: string };
@@ -105,6 +109,7 @@ export class WebSocketHandler {
 
       const result = await this.handler({
         id: crypto.randomUUID(),
+        traceId,
         surfaceKey,
         text: parsed.text,
         sender: { id: "ws", name: "WebSocket" },

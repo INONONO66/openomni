@@ -6,14 +6,17 @@ describe("channel normalizers", () => {
   it("maps Discord message references to replyToId", () => {
     const normalizer = new DiscordNormalizer({ botId: "bot-1", triggers: [] });
 
-    const message = normalizer.normalize({
-      id: "discord-in-1",
-      channel_id: "dev",
-      guild_id: "guild-1",
-      author: { id: "seller-1", username: "Seller" },
-      content: "tracking number",
-      message_reference: { message_id: "discord-out-1" },
-    });
+    const message = normalizer.normalize(
+      {
+        id: "discord-in-1",
+        channel_id: "dev",
+        guild_id: "guild-1",
+        author: { id: "seller-1", username: "Seller" },
+        content: "tracking number",
+        message_reference: { message_id: "discord-out-1" },
+      },
+      "trace-test",
+    );
 
     expect(message).toMatchObject({
       id: "discord-in-1",
@@ -29,20 +32,23 @@ describe("channel normalizers", () => {
       triggers: [],
     });
 
-    const message = normalizer.normalize({
-      message_id: 12,
-      chat: { id: 34, type: "group" },
-      date: 1,
-      from: { id: 56, is_bot: false, first_name: "Seller" },
-      text: "tracking number",
-      reply_to_message: {
-        message_id: 11,
+    const message = normalizer.normalize(
+      {
+        message_id: 12,
         chat: { id: 34, type: "group" },
         date: 1,
-        from: { id: 78, is_bot: true, first_name: "OpenOmni" },
-        text: "please report",
+        from: { id: 56, is_bot: false, first_name: "Seller" },
+        text: "tracking number",
+        reply_to_message: {
+          message_id: 11,
+          chat: { id: 34, type: "group" },
+          date: 1,
+          from: { id: 78, is_bot: true, first_name: "OpenOmni" },
+          text: "please report",
+        },
       },
-    });
+      "trace-test",
+    );
 
     expect(message).toMatchObject({
       id: "12",

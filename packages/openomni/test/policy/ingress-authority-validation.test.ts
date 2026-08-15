@@ -12,6 +12,7 @@ type RestrictedTrustTier = "observer" | "collaborator" | "assigned_worker";
 function makeInboundEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
   return {
     id: "evt-1",
+    traceId: "trace-test",
     surface: "test",
     mode: "direct",
     agent: {
@@ -238,6 +239,7 @@ describe("IngressEngine channel default tier composite (e2e)", () => {
     });
     const event = {
       id: "evt-observer-default",
+      traceId: "trace-test",
       surface: "test",
       channel: "public",
       mode: "direct",

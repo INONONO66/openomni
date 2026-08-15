@@ -23,10 +23,10 @@ export class TelegramClient implements ChannelClient {
       : undefined;
   }
 
-  async sendTyping(channelId: string): Promise<void> {
+  async sendTyping(channelId: string, traceId: string): Promise<void> {
     await this.api("sendChatAction", { chat_id: channelId, action: "typing" }).catch((e) =>
       this.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "telegram typing indicator failed",

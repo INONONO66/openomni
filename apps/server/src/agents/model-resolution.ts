@@ -100,6 +100,7 @@ async function listProviderModels(providerID: string): Promise<CatalogModel[]> {
 
 export async function resolveRuntimeModel(
   model: RuntimeModel,
+  traceId: string,
   defaultModel?: RuntimeModel,
 ): Promise<RuntimeModel> {
   let catalogError: string | undefined;
@@ -118,7 +119,7 @@ export async function resolveRuntimeModel(
 
   if (defaultModel && defaultModel.provider === model.provider) {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "model resolution failed, falling back to default",
@@ -133,7 +134,7 @@ export async function resolveRuntimeModel(
   }
 
   Bus.publish(Operational.Warn, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: "model resolution failed, passing through unresolved",

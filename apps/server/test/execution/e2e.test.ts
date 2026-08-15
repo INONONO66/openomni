@@ -10,6 +10,7 @@ type CoordinatorLike = {
 function makeDirectEvent(): Ingress.DirectEvent {
   return {
     id: crypto.randomUUID(),
+    traceId: "trace-test",
     surface: "test",
     mode: "direct",
     payload: "hello",

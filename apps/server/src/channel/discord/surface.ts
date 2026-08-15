@@ -52,9 +52,9 @@ export class DiscordAdapter implements Adapter.Surface {
             context: { username: botUsername, botId },
           });
         },
-        onDispatch: (event, data) => {
+        onDispatch: (event, data, traceId) => {
           if (event !== "MESSAGE_CREATE") return;
-          this.handleMessageCreate(data as DiscordMessage);
+          this.handleMessageCreate(data as DiscordMessage, traceId);
         },
       },
       publish,
@@ -65,17 +65,17 @@ export class DiscordAdapter implements Adapter.Surface {
     this.handler = handler;
   }
 
-  async start(): Promise<void> {
+  async start(_traceId: string): Promise<void> {
     if (!this.handler) {
       throw new Error("[discord] No message handler registered. Call onMessage() before start().");
     }
     await this.gateway.start();
   }
 
-  stop(): void {
+  stop(traceId: string): void {
     this.gateway.stop();
     this.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "discord bot stopped",
@@ -103,7 +103,7 @@ export class DiscordAdapter implements Adapter.Surface {
     return externalMessageId === undefined ? {} : { externalMessageId };
   }
 
-  private handleMessageCreate(message: DiscordMessage): void {
+  private handleMessageCreate(message: DiscordMessage, traceId: string): void {
     if (!this.normalizer) return;
     if (this.dedupe.isDuplicate(message.id)) return;
     if (message.author.bot) return;
@@ -130,12 +130,12 @@ export class DiscordAdapter implements Adapter.Surface {
     });
     if (PolicyDecision.isBlocking(auth.verdict)) return;
 
-    const inbound = this.normalizer.normalize(message);
+    const inbound = this.normalizer.normalize(message, traceId);
     if (!inbound) return;
 
-    this.handleIncoming(inbound, message.channel_id).catch((err) => {
+    this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {
       this.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "discord message handling failed",
@@ -144,9 +144,13 @@ export class DiscordAdapter implements Adapter.Surface {
     });
   }
 
-  private async handleIncoming(inbound: Adapter.InboundMessage, channelId: string): Promise<void> {
+  private async handleIncoming(
+    inbound: Adapter.InboundMessage,
+    channelId: string,
+    traceId: string,
+  ): Promise<void> {
     this.publish(Operational.Debug, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "discord message received",
@@ -156,9 +160,9 @@ export class DiscordAdapter implements Adapter.Surface {
     const handler = this.handler;
     if (!handler) return;
 
-    this.client.sendTyping(channelId);
+    this.client.sendTyping(channelId, traceId);
     const typingInterval = setInterval(() => {
-      this.client.sendTyping(channelId);
+      this.client.sendTyping(channelId, traceId);
     }, 8000);
 
     try {
@@ -166,7 +170,7 @@ export class DiscordAdapter implements Adapter.Surface {
       if (outbound) await sendDiscordMessage(this.client, channelId, outbound);
     } catch (err) {
       this.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "discord message handler error",
