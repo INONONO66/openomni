@@ -89,7 +89,7 @@ const policyPointsWithoutProductionRegistration = new Set([
   "tool.catalog.pre",
   "work.complete.pre",
 ]);
-const pointIdsArrayPattern = /pointIds:\s*\[([^\]]*)\]/g;
+const pointIdsArrayPattern = /\bpointIds:\s*\[([^\]]*)\]/g;
 const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
 
 const policyPackageBoundaryPattern =

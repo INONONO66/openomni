@@ -172,7 +172,7 @@ since a rule that catches nothing is worse than no rule — it reads as coverage
    CI. Holds, and the one rule of the five with nothing else already enforcing
    it: written as the `policy-point-registration` guard, pinned both ways
    (losing a last registration fails; a stale allowlist entry fails). 9 of the
-   18 registered points are acknowledged empty.
+   18 registry points are acknowledged empty.
 
 ## Measurement
 
