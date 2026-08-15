@@ -40,6 +40,22 @@ const inlineAuthorizationThrowPatterns = [
   /if\s*\(\s*!\s*(?:[\w$]+\.)*(?:isAuthorized|authorized|hasAuthority|hasPermission|isAllowed|canAuthorize)(?:\s*\([^)]*\))?\s*\)\s*(?:\{\s*)?throw\b/gi,
   /if\s*\(\s*(?:[\w$]+\.)*(?:isAuthorized|authorized|hasAuthority|hasPermission|isAllowed|canAuthorize)\s*(?:===\s*false|!==\s*true)\s*\)\s*(?:\{\s*)?throw\b/gi,
 ];
+/**
+ * The run loop's closed reason-code vocabulary, declared once in
+ * `packages/agent/src/core/policy/reason-codes.ts` and produced from another
+ * package, so a literal at the producer is a coupling the compiler cannot see:
+ * rename one end and the loop silently stops reacting.
+ *
+ * Scoped to `reasonCodes:` arrays in shipped source, which is where such a
+ * rename originates. Deliberately NOT matched elsewhere: `"stalled"` is also a
+ * value of the unrelated `AgentResult.finishReason` union, and a test that
+ * asserts the literal is the pin proving the constant's value — routing those
+ * through the constant would make them pass no matter what it became.
+ */
+const runReasonCodeSource = "packages/agent/src/core/policy/reason-codes.ts";
+const runReasonCodeLiteralPattern =
+  /reasonCodes:\s*\[[^\]]*?["'](stalled|budget_warning|budget_reassurance)["']/g;
+
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;
 
@@ -54,6 +70,7 @@ async function main(): Promise<void> {
     violations.push(...validateListMembership(filePath, source));
     violations.push(...validateInlineAuthorization(filePath, source));
     violations.push(...validatePolicyPackageBoundary(filePath, source));
+    violations.push(...validateRunReasonCodeVocabulary(filePath, source));
   }
 
   if (violations.length === 0) {
@@ -167,6 +184,17 @@ function validatePolicyPackageBoundary(filePath: string, source: string): GuardV
     filePath,
     line: lineNumberForOffset(source, match.index),
     message: "packages/policy must not import from @openomni/agent or @openomni/session",
+  }));
+}
+
+function validateRunReasonCodeVocabulary(filePath: string, source: string): GuardViolation[] {
+  if (filePath === runReasonCodeSource || !filePath.includes("/src/")) return [];
+
+  return matches(source, runReasonCodeLiteralPattern).map((match) => ({
+    filePath,
+    line: lineNumberForOffset(source, match.index),
+    ruleId: "run-reason-code-vocabulary",
+    message: `run reason code ${match.text} written as a literal; use RunReasonCode from @openomni/agent so a rename fails the build instead of the run loop`,
   }));
 }
 

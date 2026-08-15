@@ -1,5 +1,6 @@
 import { PolicyDecision } from "@openomni/protocol";
 import { z } from "zod";
+import { RunReasonCode } from "@openomni/agent";
 import type {
   CanonicalPolicyRegistration,
   PolicyRegistryInstance,
@@ -50,8 +51,8 @@ export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): CanonicalPo
       if (nudgeCount >= maxNudges) {
         return PolicyDecision.deny({
           policyId: "builtin.idle_nudge",
-          reasonCodes: ["stalled"],
-          effects: [{ type: "run.abort", reason: "stalled" }],
+          reasonCodes: [RunReasonCode.Stalled],
+          effects: [{ type: "run.abort", reason: RunReasonCode.Stalled }],
         });
       }
 

@@ -3,6 +3,7 @@ import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, Sink, Tool } from "@openomni/protocol";
 import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import { createAssistantMessage } from "../message-factory";
+import { RunReasonCode } from "../policy/reason-codes";
 import type { PolicyEngineInstance } from "../policy";
 import * as Retry from "../retry";
 import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
@@ -114,15 +115,15 @@ export async function buildTurn(
     return {
       type: "complete",
       result: runResult(state, {
-        finishReason: reason === "stalled" ? "stalled" : "stop",
-        guardAborted: reason !== "stalled",
+        finishReason: reason === RunReasonCode.Stalled ? RunReasonCode.Stalled : "stop",
+        guardAborted: reason !== RunReasonCode.Stalled,
       }),
     };
   }
 
   PolicyEffectApplier.applyPromptMessageEffects(state, preTurnDecision);
 
-  if (preTurnDecision.reasonCodes.includes("budget_reassurance")) {
+  if (preTurnDecision.reasonCodes.includes(RunReasonCode.BudgetReassurance)) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
     emitBudgetReassurance(
       config.events,
@@ -131,7 +132,7 @@ export async function buildTurn(
       effectiveBudgetThresholds(config.budget).reassuranceThreshold,
     );
   }
-  if (preTurnDecision.reasonCodes.includes("budget_warning")) {
+  if (preTurnDecision.reasonCodes.includes(RunReasonCode.BudgetWarning)) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
     emitBudgetWarning(
       config.events,
@@ -391,8 +392,8 @@ export async function handleStop(
     const reason = PolicyDecision.reason(postTurnDecision, "stop");
     if (effectOf(postTurnDecision, "run.abort")) {
       return runResult(state, {
-        finishReason: reason === "stalled" ? "stalled" : "stop",
-        guardAborted: reason !== "stalled",
+        finishReason: reason === RunReasonCode.Stalled ? RunReasonCode.Stalled : "stop",
+        guardAborted: reason !== RunReasonCode.Stalled,
       });
     }
     publishDenyDiagnostic(config.events, "turn.finish", postTurnDecision, state, agentBase);

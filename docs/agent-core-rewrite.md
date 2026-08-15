@@ -130,19 +130,41 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 
 | PR | title | status |
 |---|---|---|
-| — | boundary rules in `lint-guards.ts`; baselines; structure docs; `packages/agent/AGENTS.md` rewrite | ⬜ |
+| [#637](https://github.com/INONONO66/openomni/pull/637) | close the run loop's reason-code vocabulary (rule 1's real target); amend rules 2–4 with what the tree shows | 🟨 |
+| — | rule 5: policy points with zero production registration vs an explicit allowlist | ⬜ |
+| — | rule 3: core may not import `builtin/` — blocked on the Owner-gated `builtin:compaction` row | ⬜ |
 
 Then [#502](https://github.com/INONONO66/openomni/issues/502) runs against a `session` package that holds only durable facts.
 
 ## What Phase 4 locks
 
-Each becomes a `script/lint-guards.ts` rule, so the boundary survives the next contributor:
+Each was to become a `script/lint-guards.ts` rule so the boundary survives the
+next contributor. Checking them against the tree the earlier phases actually
+produced, only one of the five was both true and worth a rule. The list is
+amended below with what each turned out to be; the reasoning is the deliverable,
+since a rule that catches nothing is worse than no rule — it reads as coverage.
 
-1. Core files (`run.ts`, `turn.ts`, `tools.ts`, `effects.ts`, `state.ts`) contain no domain string literals.
-2. `packages/agent/src/pure/` may not import the telemetry package.
-3. Core may not import `builtin/`.
-4. No `crypto.randomUUID()` in a `traceId` position.
-5. The set of policy points with zero production registration equals an explicit allowlist — a point silently losing its last registration fails CI.
+1. ~~Core files contain no domain string literals.~~ **Redundant, and aimed at
+   the wrong target.** `dispatchPoint<TPointId extends PolicyPointId>` and the
+   effect unions already make every policy-point and effect literal a compile
+   error when misspelled — stricter than a regex, and it survives renames. What
+   the rule was reaching for was real, but it was not in the literals the
+   compiler checks: it was in the three the compiler *couldn't* see, the reason
+   codes crossing in from openomni. Fixed as a closed vocabulary
+   (`core/policy/reason-codes.ts`) plus the `run-reason-code-vocabulary` guard.
+2. ~~`packages/agent/src/pure/` may not import the telemetry package.~~
+   **Vacuous** — no such directory exists, and none of the phases created one.
+3. **Core may not import `builtin/` — still true, still violated.**
+   `core/policy/registry.ts:6` and `core/policy/index.ts:11` both import it. The
+   rule cannot land before the `builtin:compaction` row, which is Owner-gated.
+4. ~~No `crypto.randomUUID()` in a `traceId` position.~~ **Out of these
+   packages.** Every `randomUUID` in agent mints a *message* id, not a trace;
+   the D11 mint sites are 170 across server/openomni/session/coordinator, so
+   this belongs to the Phase 1 remainder, not here.
+5. **The set of policy points with zero production registration equals an
+   explicit allowlist** — a point silently losing its last registration fails
+   CI. Holds, implementable now, and the one rule of the five with nothing else
+   already enforcing it. Not yet written.
 
 ## Measurement
 
