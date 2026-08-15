@@ -68,6 +68,7 @@ async function waitForRows(expectedCount: number): Promise<BusEventRow[]> {
 
 function createSession(): ReturnType<typeof Session.create> {
   return Session.create({
+    traceId: "trace-hash-chain",
     title: "hash chain test",
     model: { providerID: "test", modelID: "test-model" },
   });

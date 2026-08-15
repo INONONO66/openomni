@@ -11,11 +11,13 @@ describe("Session lineage APIs", () => {
 
   test("createChild links to parent and increments spawnDepth", () => {
     const parent = Session.create({
+      traceId: "trace-lineage",
       title: "Parent",
       model: { providerID: "test", modelID: "parent-model" },
     });
 
     const child = Session.createChild({
+      traceId: "trace-lineage",
       parentSessionId: parent.id,
       title: "Child",
       model: { providerID: "test", modelID: "child-model" },
@@ -29,17 +31,20 @@ describe("Session lineage APIs", () => {
 
   test("listChildren returns only direct children", () => {
     const parent = Session.create({
+      traceId: "trace-lineage",
       title: "Parent",
       model: { providerID: "test", modelID: "parent-model" },
     });
 
     const child = Session.createChild({
+      traceId: "trace-lineage",
       parentSessionId: parent.id,
       title: "Child",
       model: { providerID: "test", modelID: "child-model" },
     });
 
     const grandchild = Session.createChild({
+      traceId: "trace-lineage",
       parentSessionId: child.id,
       title: "Grandchild",
       model: { providerID: "test", modelID: "grandchild-model" },
@@ -52,17 +57,20 @@ describe("Session lineage APIs", () => {
 
   test("createChild increments spawnDepth from parent depth", () => {
     const root = Session.create({
+      traceId: "trace-lineage",
       title: "Root",
       model: { providerID: "test", modelID: "root-model" },
     });
 
     const child = Session.createChild({
+      traceId: "trace-lineage",
       parentSessionId: root.id,
       title: "Child",
       model: { providerID: "test", modelID: "child-model" },
     });
 
     const grandchild = Session.createChild({
+      traceId: "trace-lineage",
       parentSessionId: child.id,
       title: "Grandchild",
       model: { providerID: "test", modelID: "grandchild-model" },
@@ -75,11 +83,13 @@ describe("Session lineage APIs", () => {
 
   test("workerMeta round-trips through storage", () => {
     const parent = Session.create({
+      traceId: "trace-lineage",
       title: "Parent",
       model: { providerID: "test", modelID: "parent-model" },
     });
 
     const child = Session.createChild({
+      traceId: "trace-lineage",
       parentSessionId: parent.id,
       title: "Child",
       model: { providerID: "test", modelID: "child-model" },
@@ -105,6 +115,7 @@ describe("Session lineage APIs", () => {
   test("createChild rejects missing parents without creating a child", () => {
     expect(() =>
       Session.createChild({
+        traceId: "trace-lineage",
         parentSessionId: "missing-parent",
         title: "Orphan",
         model: { providerID: "test", modelID: "orphan-model" },

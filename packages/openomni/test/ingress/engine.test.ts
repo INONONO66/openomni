@@ -130,6 +130,7 @@ describe("IngressEngine", () => {
   it("emits canonical target keys for worker ingress events", async () => {
     testState.responseQueue.push("worker response");
     const workerSession = Session.create({
+      traceId: "trace-test",
       title: "worker target key test",
       model: { providerID: "test", modelID: "fixture" },
     });

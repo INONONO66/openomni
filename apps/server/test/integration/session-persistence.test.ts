@@ -37,6 +37,7 @@ afterEach(async () => {
 
 test("session persists across storage re-init", () => {
   const session = Session.create({
+    traceId: "trace-session-persistence",
     title: "persist-session",
     model: { providerID: "test", modelID: "test-model" },
   });
@@ -52,6 +53,7 @@ test("session persists across storage re-init", () => {
 
 test("message persists with status across storage re-init", () => {
   const session = Session.create({
+    traceId: "trace-session-persistence",
     title: "persist-message",
     model: { providerID: "test", modelID: "test-model" },
   });

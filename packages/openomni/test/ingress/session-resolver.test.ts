@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { SurfaceKey, Storage, Session } from "@openomni/session";
 import { IngressSessionResolver } from "../../src/ingress";
 
+/** resolve() with the test trace context; model stays on the resolver default unless given. */
+function resolveWithTrace(
+  event: Parameters<typeof IngressSessionResolver.resolve>[0],
+  model?: Parameters<typeof IngressSessionResolver.resolve>[2],
+) {
+  return IngressSessionResolver.resolve(event, { traceId: "trace-resolver-test" }, model);
+}
+
 describe("IngressSessionResolver", () => {
   beforeEach(() => {
     Storage.reset();
@@ -81,11 +89,12 @@ describe("IngressSessionResolver", () => {
   describe("resolve", () => {
     it("creates worker sessions as children when parent session is supplied", () => {
       const parent = Session.create({
+        traceId: "trace-resolver-test",
         title: "parent",
         model: { providerID: "test", modelID: "fixture" },
       });
 
-      const result = IngressSessionResolver.resolve({
+      const result = resolveWithTrace({
         surface: "resident-worker-tool",
         target: { kind: "worker", parentSessionId: parent.id },
       });
@@ -103,7 +112,7 @@ describe("IngressSessionResolver", () => {
         workspace: "team-a",
         channel: "C123",
       };
-      const result = IngressSessionResolver.resolve(event);
+      const result = resolveWithTrace(event);
 
       expect(result.isNew).toBe(true);
       expect(result.session.id).toBeDefined();
@@ -119,8 +128,8 @@ describe("IngressSessionResolver", () => {
         channel: "C123",
       };
 
-      const result1 = IngressSessionResolver.resolve(event);
-      const result2 = IngressSessionResolver.resolve(event);
+      const result1 = resolveWithTrace(event);
+      const result2 = resolveWithTrace(event);
 
       expect(result1.isNew).toBe(true);
       expect(result2.isNew).toBe(false);
@@ -135,6 +144,7 @@ describe("IngressSessionResolver", () => {
       };
       const key = IngressSessionResolver.extractSurfaceKey(event);
       const competing = Session.create({
+        traceId: "trace-resolver-test",
         title: "competing",
         model: { providerID: "test", modelID: "fixture" },
       });
@@ -148,7 +158,7 @@ describe("IngressSessionResolver", () => {
       };
 
       try {
-        const result = IngressSessionResolver.resolve(event);
+        const result = resolveWithTrace(event);
 
         expect(result.isNew).toBe(false);
         expect(result.session.id).toBe(competing.id);
@@ -173,7 +183,7 @@ describe("IngressSessionResolver", () => {
       };
 
       try {
-        expect(() => IngressSessionResolver.resolve(event)).toThrow("claim failed");
+        expect(() => resolveWithTrace(event)).toThrow("claim failed");
         expect(Session.list()).toEqual([]);
       } finally {
         surfaceKey.claim = originalClaim;
@@ -192,8 +202,8 @@ describe("IngressSessionResolver", () => {
         channel: "C456",
       };
 
-      const result1 = IngressSessionResolver.resolve(event1);
-      const result2 = IngressSessionResolver.resolve(event2);
+      const result1 = resolveWithTrace(event1);
+      const result2 = resolveWithTrace(event2);
 
       expect(result1.session.id).not.toBe(result2.session.id);
       expect(result1.isNew).toBe(true);
@@ -207,14 +217,14 @@ describe("IngressSessionResolver", () => {
       };
 
       // First resolve: creates new session
-      const result1 = IngressSessionResolver.resolve(event);
+      const result1 = resolveWithTrace(event);
       const sessionId1 = result1.session.id;
       expect(result1.isNew).toBe(true);
 
       // Delete the session
-      Session.remove(sessionId1);
+      Session.remove(sessionId1, "trace-resolver-test");
       // Second resolve: should create new session (stale key)
-      const result2 = IngressSessionResolver.resolve(event);
+      const result2 = resolveWithTrace(event);
       const sessionId2 = result2.session.id;
 
       expect(result2.isNew).toBe(true);
@@ -223,7 +233,7 @@ describe("IngressSessionResolver", () => {
 
     it("fails closed when worker target session is missing", () => {
       expect(() =>
-        IngressSessionResolver.resolve({
+        resolveWithTrace({
           surface: "internal",
           target: { kind: "worker", sessionId: "missing-session" },
         }),
@@ -240,7 +250,7 @@ describe("IngressSessionResolver", () => {
         modelID: "gpt-4",
       };
 
-      const result = IngressSessionResolver.resolve(event, customModel);
+      const result = resolveWithTrace(event, customModel);
 
       expect(result.session.model.providerID).toBe("openai");
       expect(result.session.model.modelID).toBe("gpt-4");

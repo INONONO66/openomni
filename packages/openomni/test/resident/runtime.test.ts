@@ -62,6 +62,7 @@ describe("ResidentRuntime", () => {
     });
 
     const session = Session.create({
+      traceId: "trace-test",
       title: "resident-runtime-test",
       model: { providerID: "test", modelID: "fixture" },
     });
@@ -102,6 +103,7 @@ describe("ResidentRuntime", () => {
     });
 
     const session = Session.create({
+      traceId: "trace-test",
       title: "resident-policy-plan-test",
       model: { providerID: "test", modelID: "fixture" },
     });

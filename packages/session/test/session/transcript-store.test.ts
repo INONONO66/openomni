@@ -51,6 +51,7 @@ function reopenStorage(): void {
 
 function createSession() {
   return Session.create({
+    traceId: "trace-transcript-store",
     title: "transcript",
     model: { providerID: "test", modelID: "test-model" },
   });

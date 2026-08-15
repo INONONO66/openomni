@@ -70,6 +70,7 @@ describe("scoped emit attribution", () => {
 
   test("declared identity is attributed; undeclared identity is dropped", async () => {
     const session = Session.create({
+      traceId: newTraceId(),
       title: "scoped emit",
       model: { providerID: "test", modelID: "test-model" },
     });

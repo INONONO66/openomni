@@ -43,11 +43,11 @@ export namespace IngressSessionResolver {
 
   export function resolve(
     event: ResolvableEvent,
+    traceContext: TraceContextProtocol.Type,
     defaultModel: ModelConfig = {
       providerID: DEFAULT_DISPATCH_MODEL.provider,
       modelID: DEFAULT_DISPATCH_MODEL.id,
     },
-    traceContext?: TraceContextProtocol.Type,
   ): ResolveResult {
     const target = resolveTarget(event);
     let session: Session.Info;
@@ -71,12 +71,14 @@ export namespace IngressSessionResolver {
         session =
           parentSessionId && Session.get(parentSessionId)
             ? Session.createChild({
+                traceId: traceContext.traceId,
                 parentSessionId,
                 title: `Worker session from ${event.surface}`,
                 model: defaultModel,
                 workerMeta: { target: "worker", surface: event.surface },
               })
             : Session.create({
+                traceId: traceContext.traceId,
                 title: `Worker session from ${event.surface}`,
                 model: defaultModel,
               });
@@ -93,30 +95,32 @@ export namespace IngressSessionResolver {
         isNew = false;
       } else {
         const surfaceKey = extractSurfaceKey(event);
-        const resolved = resolveResidentSurfaceSession(surfaceKey, event.surface, defaultModel);
+        const resolved = resolveResidentSurfaceSession(
+          surfaceKey,
+          event.surface,
+          defaultModel,
+          traceContext.traceId,
+        );
         session = resolved.session;
         isNew = resolved.isNew;
       }
     }
 
-    if (traceContext) {
-      Bus.publish(IngressEvent.SessionResolved, {
-        traceId: traceContext.traceId,
-        sessionId: session.id,
-        isNew,
-        target: target.kind,
-        time: Date.now(),
-      });
-      return { session, isNew, trace: { ...traceContext, sessionId: session.id } };
-    }
-
-    return { session, isNew };
+    Bus.publish(IngressEvent.SessionResolved, {
+      traceId: traceContext.traceId,
+      sessionId: session.id,
+      isNew,
+      target: target.kind,
+      time: Date.now(),
+    });
+    return { session, isNew, trace: { ...traceContext, sessionId: session.id } };
   }
 
   function resolveResidentSurfaceSession(
     surfaceKey: string,
     surface: string,
     defaultModel: ModelConfig,
+    traceId: string,
   ): ResolveResult {
     let staleSessionId: string | undefined;
     let lastOwnerSessionId: string | undefined;
@@ -134,6 +138,7 @@ export namespace IngressSessionResolver {
       // Optimistically create a candidate and keep it only if the surface-key
       // claim succeeds; losing candidates are removed below.
       const candidate = Session.create({
+        traceId,
         title: `Session from ${surface}`,
         model: defaultModel,
       });
@@ -141,7 +146,7 @@ export namespace IngressSessionResolver {
       try {
         ownerSessionId = SurfaceKey.claim(surfaceKey, candidate.id, staleSessionId);
       } catch (err) {
-        Session.remove(candidate.id);
+        Session.remove(candidate.id, traceId);
         throw err;
       }
       lastOwnerSessionId = ownerSessionId;
@@ -149,7 +154,7 @@ export namespace IngressSessionResolver {
         return { session: candidate, isNew: true };
       }
 
-      Session.remove(candidate.id);
+      Session.remove(candidate.id, traceId);
       const owner = Session.get(ownerSessionId);
       if (owner) return { session: owner, isNew: false };
       staleSessionId = ownerSessionId;

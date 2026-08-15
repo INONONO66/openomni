@@ -14,6 +14,7 @@ function db(): Database {
 
 function createSession(title = "test"): ReturnType<typeof Session.create> {
   return Session.create({
+    traceId: "trace-observability",
     title,
     model: { providerID: "test", modelID: "test-model" },
   });

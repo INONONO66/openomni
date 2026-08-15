@@ -19,6 +19,7 @@ const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resol
 // adapter layer, exactly as pre-freeze rows persist on disk.
 async function createWorkerRun(runId: string): Promise<string> {
   const session = Session.create({
+    traceId: "trace-pending-interaction",
     title: `${runId}-session`,
     model: { providerID: "test", modelID: "test" },
   });

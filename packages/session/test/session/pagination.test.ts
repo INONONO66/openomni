@@ -23,6 +23,7 @@ describe("Session.listMessagesPage", () => {
 
   test("returns paged items with cursor and more flag", () => {
     const session = Session.create({
+      traceId: "trace-pagination",
       title: "Pagination",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -70,6 +71,7 @@ describe("Session.listMessagesPage", () => {
 
   test("returns empty page for empty session", () => {
     const session = Session.create({
+      traceId: "trace-pagination",
       title: "Empty",
       model: { providerID: "test", modelID: "test-model" },
     });

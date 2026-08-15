@@ -59,6 +59,7 @@ afterAll(() => {
 
 function createSession(): string {
   return Session.create({
+    traceId: "trace-test",
     title: "worker-run cutover",
     model: { providerID: "anthropic", modelID: "claude-3-haiku-20240307" },
   }).id;

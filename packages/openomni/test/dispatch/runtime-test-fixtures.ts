@@ -15,6 +15,7 @@ export function resetDispatchTestState(): void {
 // satisfy the pending_interaction FK on worker_run_state).
 export async function createWorkerRunFixture(runId = "run-1", sessionTitle = `${runId}-session`) {
   const session = Session.create({
+    traceId: "trace-worker-run-fixture",
     title: sessionTitle,
     model: { providerID: "test", modelID: "test" },
   });
