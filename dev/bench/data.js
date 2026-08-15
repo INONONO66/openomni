@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786785922024,
+  "lastUpdate": 1786787378816,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46973,6 +46973,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 502069,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "92f049935fcc55b3582435afdd3d0288353cd2ec",
+          "message": "docs: amend D4 with what the FSM attempt proved (#606) (#634)\n\n#633 built the run machine and I closed it. The decision text should\ncarry why, so the next attempt does not repeat it.\n\nThe run half of D4 is already delivered, by construction rather than by\nassertion. #631 routed every returning exit through one `finish` and #632\ngave the runner both terminals, so a run cannot leave without recording\none — there is no bare `return` for a guard to catch. A machine layered\non top is a second, weaker model of that same fact, and a second model\ncan disagree with reality: mine did three times, turning retryable\nfailures into hard ones because the table omitted orderings the loop\nactually produces.\n\nThe other justification did not survive either. The map meant to double\nas the injection-point map had one entry wrong — `run.error.error` is\ndispatched inside `handleError`, which returns before the transition —\nomitted six of eleven points, and had no reader.\n\nRemoving the machine from the runner entirely left 377 pass / 0 fail.\nThat is the measurement that settles it: ~93 LOC and six runtime checks\nthat cannot detect any bug the code can produce, whose only observed\nfirings were false positives.\n\nIf a machine is wanted later it should be for a property the code does\nnot already have — resume, or the turn half — and the map has to be total\nand read by something.\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T18:48:21+09:00",
+          "tree_id": "cad2488a5b1d41d2f040e82fd127e5a88dbc3565",
+          "url": "https://github.com/INONONO66/openomni/commit/92f049935fcc55b3582435afdd3d0288353cd2ec"
+        },
+        "date": 1786787377524,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 720,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6282,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2617,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3314,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16353,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 627,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 792,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47789,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10823,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101554,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512607,
             "unit": "ns/op"
           }
         ]
