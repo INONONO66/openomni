@@ -9,7 +9,7 @@ src/
 ├── index.ts                    # Public API
 ├── core/
 │   ├── chat-agent.ts           # ChatAgent.create() — provides run()
-│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentBudget, TokenUsage, Sink
+│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult (+ internal AgentStep/AgentBudget/TokenUsage; Sink is protocol's, used in signatures)
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
@@ -48,10 +48,15 @@ const result = await agent.run({
 
 Also exported from `@openomni/agent`:
 
-- Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentBudget`, `TokenUsage`, `Sink`
-- Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyRegistration` (legacy compatibility), `PolicyEngineInstance`
-- Budget queries: `checkBudget`, `describeBudgetRemaining`, and the `BudgetState` / `BudgetStatus` they read and return — the accounting stays here, what to say about it does not (D5)
-- Runtime: `McpClient`, `McpServerConfig`
+- Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`
+- Policy: `PolicyEngine`, `PolicyRegistry`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistryInstance`
+- Budget queries: `checkBudget`, `describeBudgetRemaining`, `BudgetState` — the accounting stays here, what to say about it does not (D5)
+- Reason codes: `RunReasonCode`; Compaction: `createCompactionPolicy`, `CompactionOptions`; Runtime: `McpClient`
+
+The entry carries what a consumer somewhere actually imports (#647). Types
+reachable through exported signatures (`BudgetStatus`, `AgentStep`, `Sink`, …)
+stay exported at their definition sites; a consumer that needs to *name* one
+adds the one-line re-export in the same PR that imports it.
 
 ## ChatAgentConfig
 
