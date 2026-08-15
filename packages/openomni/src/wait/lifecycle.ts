@@ -56,8 +56,12 @@ export namespace WaitService {
    * isolation (#510 review fix F3): one corrupt wait (e.g. a stream whose
    * head disagrees with its row) records an Operational.Error and the sweep
    * continues — a single bad row must never kill boot recovery.
+   *
+   * `traceId` is the caller's (boot recovery's): the sweep is mid-flow, not a
+   * trace origin — ONE id covers the whole sweep, including every per-corrupt-
+   * wait error it records.
    */
-  export function sweepExpired(now = Date.now()): Wait.Record[] {
+  export function sweepExpired(traceId: string, now = Date.now()): Wait.Record[] {
     const expired: Wait.Record[] = [];
     for (const record of WaitStore.list(["open"])) {
       if (now <= record.expiresAt) continue;
@@ -66,7 +70,7 @@ export namespace WaitService {
         if (outcome.kind === "expired") expired.push(outcome.record);
       } catch (error) {
         Bus.publish(Operational.Error, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "wait",
           msg: `wait expiry sweep failed for ${record.id}`,

@@ -79,7 +79,7 @@ export function createRouter(
     await next();
     const duration = Math.round(performance.now() - start);
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId: c.get("requestId"),
       time: Date.now(),
       component: "server",
       msg: "http request",

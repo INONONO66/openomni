@@ -1,3 +1,4 @@
+import { newTraceId } from "@openomni/telemetry";
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
@@ -31,7 +32,7 @@ export class WebSocketHandler {
       message(ws: { data: WsConnectionData; send(msg: string): void }, data: string | Buffer) {
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
         self.publish(Operational.Debug, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "websocket message received",
@@ -45,7 +46,7 @@ export class WebSocketHandler {
           authenticated: ws.data.authenticated,
         };
         self.publish(Operational.Info, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "websocket connection opened",
@@ -54,7 +55,7 @@ export class WebSocketHandler {
       },
       close(ws: { data: WsConnectionData }) {
         self.publish(Operational.Info, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "websocket connection closed",

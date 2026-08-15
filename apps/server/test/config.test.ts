@@ -49,7 +49,7 @@ describe("config", () => {
       }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.telegram.token).toBe("file-telegram-token");
     expect(config.discord.token).toBe("file-discord-token");
     expect(config.github.secret).toBe("file-github-secret");
@@ -70,7 +70,7 @@ describe("config", () => {
     ];
     writeFileSync(configPath, JSON.stringify({ mcp: { servers } }));
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.mcp.servers).toEqual(servers);
   });
 
@@ -92,7 +92,7 @@ describe("config", () => {
       }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     await flushBus();
     unsubscribe();
 
@@ -123,7 +123,7 @@ describe("config", () => {
       JSON.stringify({ mcp: { servers: { name: "bad", transport: "stdio" } } }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     await flushBus();
     unsubscribe();
 
@@ -145,7 +145,7 @@ describe("config", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(configPath, JSON.stringify({ telegram: {} }));
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.telegram.token).toBe("env-telegram-token");
   });
 
@@ -154,7 +154,7 @@ describe("config", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(configPath, JSON.stringify({ discord: {} }));
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.discord.token).toBe("env-discord-token");
   });
 
@@ -163,7 +163,7 @@ describe("config", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(configPath, JSON.stringify({ github: {} }));
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.github.secret).toBe("env-github-secret");
   });
 
@@ -172,7 +172,7 @@ describe("config", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(configPath, JSON.stringify({ server: {} }));
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.server.wsToken).toBe("env-ws-token");
   });
 
@@ -186,7 +186,7 @@ describe("config", () => {
       }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.telegram.token).toBe("env-telegram-token");
   });
 
@@ -200,7 +200,7 @@ describe("config", () => {
       }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.discord.token).toBe("env-discord-token");
   });
 
@@ -214,7 +214,7 @@ describe("config", () => {
       }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.github.secret).toBe("env-github-secret");
   });
 
@@ -228,7 +228,7 @@ describe("config", () => {
       }),
     );
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.server.wsToken).toBe("env-ws-token");
   });
 
@@ -241,7 +241,7 @@ describe("config", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(configPath, JSON.stringify({}));
 
-    const config = loadConfig(configPath);
+    const config = loadConfig("trace-test", configPath);
     expect(config.telegram.token).toBeUndefined();
     expect(config.discord.token).toBeUndefined();
     expect(config.github.secret).toBeUndefined();

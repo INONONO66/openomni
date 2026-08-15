@@ -1,6 +1,7 @@
 import { createIpcServer } from "@openomni/ipc";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
+import { newTraceId } from "@openomni/telemetry";
 import { InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
@@ -14,6 +15,11 @@ function readCliArg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+// The worker process boot is ONE trace origin: every line this entry emits
+// (missing-arg exits through the started notice) belongs to the same boot
+// chain, so they share a single minted id instead of eight unrelated records.
+const workerBootTraceId = newTraceId();
+
 const workerId = readCliArg("--worker-id") ?? "unknown";
 const socketPath = readCliArg("--socket");
 const ipcAuthToken = process.env.OPENOMNI_WORKER_IPC_TOKEN;
@@ -21,7 +27,7 @@ delete process.env.OPENOMNI_WORKER_IPC_TOKEN;
 
 if (!socketPath) {
   Bus.publish(Operational.Error, {
-    traceId: crypto.randomUUID(),
+    traceId: workerBootTraceId,
     time: Date.now(),
     component: "server",
     msg: "worker-entry: missing --socket argument",
@@ -31,7 +37,7 @@ if (!socketPath) {
 
 if (!ipcAuthToken) {
   Bus.publish(Operational.Error, {
-    traceId: crypto.randomUUID(),
+    traceId: workerBootTraceId,
     time: Date.now(),
     component: "server",
     msg: "worker-entry: missing IPC auth token",
@@ -39,7 +45,7 @@ if (!ipcAuthToken) {
   process.exit(1);
 }
 
-const config = loadConfig();
+const config = loadConfig(workerBootTraceId);
 initialize({
   dbPath: resolveWorkerDbPath(config),
 });
@@ -119,7 +125,7 @@ process.on("SIGTERM", async () => {
 });
 
 Bus.publish(Operational.Info, {
-  traceId: crypto.randomUUID(),
+  traceId: workerBootTraceId,
   time: Date.now(),
   component: "server",
   msg: "worker started",

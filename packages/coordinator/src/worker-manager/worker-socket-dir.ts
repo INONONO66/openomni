@@ -14,11 +14,16 @@ export function createPrivateSocketDir(baseDir: string, events: BusEvent.Sink): 
 }
 
 function cleanupStaleSocketDirs(baseDir: string, events: BusEvent.Sink): void {
+  // One sweep, one trace: this cleanup warns up to three times per boot, and
+  // three unrelated ids for one causal pass is the D11 defect. The id stays a
+  // uuid until the Owner widens coordinator's ring-2 dep set to telemetry —
+  // minting W3C locally would fork the vocabulary, which is worse.
+  const sweepTraceId = crypto.randomUUID();
   let entries: string[];
   try {
     entries = fs.readdirSync(baseDir);
   } catch (err) {
-    warnCleanup(events, "failed to read socket base directory", {
+    warnCleanup(events, sweepTraceId, "failed to read socket base directory", {
       baseDir,
       error: String(err),
     });
@@ -31,22 +36,26 @@ function cleanupStaleSocketDirs(baseDir: string, events: BusEvent.Sink): void {
     try {
       if (!fs.lstatSync(dirPath).isDirectory()) continue;
     } catch (err) {
-      warnCleanup(events, "failed to stat worker directory during cleanup", {
+      warnCleanup(events, sweepTraceId, "failed to stat worker directory during cleanup", {
         dirPath,
         error: String(err),
       });
       continue;
     }
 
-    void cleanupIfStale(dirPath, events);
+    void cleanupIfStale(dirPath, events, sweepTraceId);
   }
 }
 
-async function cleanupIfStale(dirPath: string, events: BusEvent.Sink): Promise<void> {
+async function cleanupIfStale(
+  dirPath: string,
+  events: BusEvent.Sink,
+  sweepTraceId: string,
+): Promise<void> {
   try {
     await cleanupIfStaleUnsafe(dirPath);
   } catch (err) {
-    warnCleanup(events, "stale worker directory cleanup failed", {
+    warnCleanup(events, sweepTraceId, "stale worker directory cleanup failed", {
       dirPath,
       error: String(err),
     });
@@ -84,9 +93,14 @@ function isSocketAlive(socketPath: string): Promise<boolean> {
   });
 }
 
-function warnCleanup(events: BusEvent.Sink, msg: string, context: Record<string, unknown>): void {
+function warnCleanup(
+  events: BusEvent.Sink,
+  traceId: string,
+  msg: string,
+  context: Record<string, unknown>,
+): void {
   events.publish(Operational.Warn, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "coordinator.worker-manager",
     msg,

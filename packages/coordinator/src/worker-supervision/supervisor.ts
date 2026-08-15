@@ -274,7 +274,11 @@ export class WorkerSupervisor {
         // runaway runs are killed before policy ever sees anything. The kill
         // triggers the normal exited → restart path for the slot.
         this.events.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
+          // The kill is an event OF the run — the same trace its
+          // RunSettled{interrupted} carries (D11). The task's traceId is
+          // contract-required upstream; a malformed task degrades to the
+          // empty string the sinks already treat as absent.
+          traceId: typeof task.traceId === "string" ? task.traceId : "",
           time: Date.now(),
           component: "coordinator.worker",
           msg: "run exceeded wall-time ceiling; killing worker",

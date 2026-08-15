@@ -6,14 +6,16 @@ import {
   type EffectReconciler,
 } from "@openomni/openomni";
 import { Bus, Session, Storage } from "@openomni/session";
+import { newTraceId } from "@openomni/telemetry";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
   queue: RecoveryItem[],
   handler: Adapter.MessageHandler,
+  traceId: string,
 ): Promise<void> {
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: `recovery processing ${queue.length} retry item(s)`,
@@ -30,7 +32,7 @@ async function processRetryQueue(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       Bus.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: `recovery retry failed for ${item.messageId}`,
@@ -40,7 +42,7 @@ async function processRetryQueue(
   }
 
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: "recovery retry processing complete",
@@ -162,7 +164,7 @@ async function reconcileOutstandingEffects(
 export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> {
   const { handler, coordinator, traceId, completionRuntime: completionRecovery } = input;
   const startTime = Date.now();
-  const id = traceId ?? crypto.randomUUID();
+  const id = traceId ?? newTraceId();
 
   Bus.publish(Operational.RecoveryStarted, {
     traceId: id,
@@ -228,7 +230,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
       component: "server",
       msg: "recovery skipped the pending-interaction expiry sweep: store frozen (#548), read-time expiry gates frozen rows",
     });
-    const expiredWaits = WaitService.sweepExpired();
+    const expiredWaits = WaitService.sweepExpired(id);
     if (expiredWaits.length > 0) {
       Bus.publish(Operational.Info, {
         traceId: id,
@@ -250,12 +252,12 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
       });
     }
 
-    const retryQueue = await recoverInterruptedMessages();
+    const retryQueue = await recoverInterruptedMessages(id);
     if (handler && retryQueue.length > 0) {
-      await processRetryQueue(retryQueue, handler);
+      await processRetryQueue(retryQueue, handler, id);
     } else if (retryQueue.length > 0) {
       Bus.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId: id,
         time: Date.now(),
         component: "server",
         msg: `recovery ${retryQueue.length} message(s) need retry but no handler available`,

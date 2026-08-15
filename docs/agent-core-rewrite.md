@@ -95,7 +95,8 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#617](https://github.com/INONONO66/openomni/pull/617), [#618](https://github.com/INONONO66/openomni/pull/618) | `agent` and `llm` take an injected `Sink` rather than importing `Bus`; both `src/` trees are gate-enforced | ✅ |
 | [#612](https://github.com/INONONO66/openomni/pull/612) | move `TraceContext` off `packages/session` — it owned a second, contradictory trace convention | ✅ |
 | [#613](https://github.com/INONONO66/openomni/pull/613), [#615](https://github.com/INONONO66/openomni/pull/615) | convert every opaque-`traceId` site in `packages/agent/src` (D11) — 13 + 3, the package now mints none | ✅ |
-| — | convert the remaining 102 opaque-`traceId` sites (D11): server 72, openomni 11, session 10, coordinator 9 | ⬜ |
+| [#653](https://github.com/INONONO66/openomni/pull/653) | D11 batch 1 — 45 of 102: every pure origin mints W3C (`newTraceId()`), the boot sweep inherits ONE trace through recovery/shutdown/config/messaging (was 10+ unrelated ids per boot), discord's close→reconnect chain carries one id, the coordinator's queue-saturation and wall-time-kill events carry the run's own trace, and the channels band contract (#499 gate) widens to the leaf telemetry package because channels ARE trace origins | 🟨 |
+| — | D11 remainder — 57 sites: the channel per-inbound-message anchors (keystone: `Adapter.InboundMessage` has no `traceId` field and `ingress.ingest` re-mints — a protocol field addition), the session work-item funnel (`persistMutation` + store API trace params), completion-admission's `CompletionServiceContext`, supervisor generation traces, and the deliberate pair: `persistence-writer.ts:91` (the backstop mint is a ledger-hash input — refuse/sentinel decision needed, minting a plausible id for an untraceable event is the defect) and coordinator's remaining origins (**Owner-gated**: ring-2 dep set excludes telemetry by explicit ratchet comment; local W3C minting would fork the vocabulary) | ⬜ |
 | — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
 
 ### Phase 2 — core
@@ -143,6 +144,20 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | — | rule 3: core may not import `builtin/` — blocked on the Owner-gated `builtin:compaction` row | ⬜ |
 
 Then [#502](https://github.com/INONONO66/openomni/issues/502) runs against a `session` package that holds only durable facts.
+
+## Owner ruling requested: the Stakes value surface
+
+`packages/openomni/src/ledger/stakes-*.ts` is 1,033 LOC of mechanism whose
+only living connections are one type import (`CompletionStakesInjection` into
+`completion-admission.ts`) and an optional `stakesResolver` seam **with zero
+production suppliers**; every other reference in `effect/` and server
+`recovery` is prose in comments, and its remaining knip-visible consumers are
+its own tests (#650 review, re-verified 2026-08-16). Against deletion: the
+concept docs (`core-model.md`, `design-philosophy.md`, `bets-and-kill-criteria.md`)
+claim Stakes as designed future machinery, and the product thesis values the
+ledger as the delegated-trust safety anchor. This is a product call, not a
+hygiene call: **delete now and reimplement from the docs when a consumer
+arrives, or keep as a design asset and accept the standing dead cluster.**
 
 ## What Phase 4 locks
 

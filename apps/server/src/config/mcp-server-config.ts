@@ -9,6 +9,8 @@ const MAX_ZOD_ISSUES_PER_ENTRY = 3;
 const McpServerConfigParseOptionsSchema = z.object({
   source: z.enum(["server-config", "project-config"]),
   configPath: z.string().optional(),
+  /** The caller's trace (boot/config load) — parsing is never a trace origin. */
+  traceId: z.string(),
 });
 export type McpServerConfigParseOptions = z.infer<typeof McpServerConfigParseOptionsSchema>;
 
@@ -65,7 +67,7 @@ function publishInvalidMcpConfigWarning(
   }>,
 ): void {
   Bus.publish(Operational.Warn, {
-    traceId: crypto.randomUUID(),
+    traceId: options.traceId,
     time: Date.now(),
     component: "server",
     msg: "invalid mcp server config ignored",

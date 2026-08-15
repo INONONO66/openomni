@@ -38,7 +38,7 @@ afterEach(() => {
 describe("server messaging bootstrap wiring", () => {
   test("grants default empty: a send through the registered seam is denied ungranted", async () => {
     registerTarget("telegram");
-    registerServerMessaging({ deliveryRoutes: new Map(), grants: [] });
+    registerServerMessaging({ deliveryRoutes: new Map(), grants: [], traceId: "trace-test" });
 
     const receipt = await serverMessaging().send({
       messageId: "message:unconfigured",
@@ -62,6 +62,7 @@ describe("server messaging bootstrap wiring", () => {
       return { externalMessageId: "tg:9001" };
     };
     registerServerMessaging({
+      traceId: "trace-test",
       deliveryRoutes: new Map([["telegram", telegramRoute]]),
       grants: [
         {
@@ -103,6 +104,7 @@ describe("server messaging bootstrap wiring", () => {
   test("a resolved endpoint on a channel without a registered route fails closed", async () => {
     registerTarget("github");
     registerServerMessaging({
+      traceId: "trace-test",
       deliveryRoutes: new Map(),
       grants: [
         {

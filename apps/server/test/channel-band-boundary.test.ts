@@ -7,16 +7,18 @@ import ts from "typescript";
 /**
  * Channels band-extraction readiness gate (#499 precursor).
  *
- * The future channels band depends on exactly @openomni/protocol: channel
- * code observes through the injected publish port (channel/types.ts) and
- * speaks the Adapter.SurfaceKey codec. This static scan pins that seam —
- * every import in apps/server/src/channel/** must be @openomni/protocol,
- * a node builtin, or relative. When the band MOVE lands (post-#499) this
- * gate travels with it as the package's import contract.
+ * The future channels band depends on exactly @openomni/protocol plus the
+ * leaf @openomni/telemetry: channel code observes through the injected
+ * publish port (channel/types.ts), speaks the Adapter.SurfaceKey codec, and
+ * mints W3C trace ids at its genuine trace origins (D11 — gateway events,
+ * inbound frames). This static scan pins that seam — every import in
+ * apps/server/src/channel/** must be one of the allowed packages, a node
+ * builtin, or relative. When the band MOVE lands (post-#499) this gate
+ * travels with it as the package's import contract.
  */
 
 const CHANNEL_ROOT = fileURLToPath(new URL("../src/channel", import.meta.url));
-const ALLOWED_PACKAGE = "@openomni/protocol";
+const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/telemetry"] as const;
 
 type ScannedSource = Readonly<{ path: string; text: string }>;
 
@@ -73,8 +75,10 @@ function collectModuleSpecifiers(source: ts.SourceFile): readonly string[] {
 }
 
 function isAllowedSpecifier(specifier: string): boolean {
-  if (specifier === ALLOWED_PACKAGE) return true;
-  if (specifier.startsWith(`${ALLOWED_PACKAGE}/`)) return true;
+  for (const allowed of ALLOWED_PACKAGES) {
+    if (specifier === allowed) return true;
+    if (specifier.startsWith(`${allowed}/`)) return true;
+  }
   if (specifier.startsWith("./") || specifier.startsWith("../")) return true;
   if (specifier.startsWith("node:")) return true;
   return false;
@@ -153,9 +157,10 @@ describe("channels band import boundary", () => {
     });
   }
 
-  it("allows protocol, node builtin, and relative imports", () => {
+  it("allows protocol, telemetry, node builtin, and relative imports", () => {
     const text = [
       'import { Adapter, Operational } from "@openomni/protocol";',
+      'import { newTraceId } from "@openomni/telemetry";',
       'import { timingSafeEqual } from "node:crypto";',
       'import type { PublishPort } from "../types";',
       'import { GatewayOp } from "./types";',

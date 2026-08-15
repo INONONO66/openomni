@@ -10,12 +10,16 @@ export interface RecoveryItem {
   resumeExisting: true;
 }
 
-/** Never throws — server boot must not fail due to recovery errors. */
-export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
+/**
+ * Never throws — server boot must not fail due to recovery errors.
+ * `traceId` is the boot recovery's: this sweep is mid-flow, not a trace
+ * origin, so every line it emits inherits the caller's chain.
+ */
+export async function recoverInterruptedMessages(traceId: string): Promise<RecoveryItem[]> {
   const retryQueue: RecoveryItem[] = [];
 
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: "checking for interrupted messages",
@@ -29,7 +33,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
 
     if (interrupted.length === 0) {
       Bus.publish(Operational.Info, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "no interrupted messages found",
@@ -38,7 +42,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
     }
 
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "found interrupted messages",
@@ -63,7 +67,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
           Session.updateMessageStatus(messageId, "completed");
           recovered++;
           Bus.publish(Operational.Info, {
-            traceId: crypto.randomUUID(),
+            traceId,
             time: Date.now(),
             component: "server",
             msg: "marked message as completed",
@@ -75,7 +79,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
         const session = Session.get(sessionId);
         if (!session) {
           Bus.publish(Operational.Warn, {
-            traceId: crypto.randomUUID(),
+            traceId,
             time: Date.now(),
             component: "server",
             msg: "session not found, skipping message",
@@ -90,7 +94,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
 
         if (!textPart?.text) {
           Bus.publish(Operational.Warn, {
-            traceId: crypto.randomUUID(),
+            traceId,
             time: Date.now(),
             component: "server",
             msg: "no text found for message, skipping retry",
@@ -113,7 +117,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
           resumeExisting: true,
         });
         Bus.publish(Operational.Info, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "server",
           msg: "queued message for retry",
@@ -121,7 +125,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
         });
       } catch (err) {
         Bus.publish(Operational.Error, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "server",
           msg: "error processing message",
@@ -131,7 +135,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
     }
 
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "recovery done",
@@ -139,7 +143,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
     });
   } catch (err) {
     Bus.publish(Operational.Error, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "recovery failed",

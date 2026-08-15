@@ -1,4 +1,5 @@
 import { Operational } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
 import { sleep } from "../support/fetch-retry";
 import type { PublishPort } from "../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
@@ -46,7 +47,7 @@ export class DiscordGateway {
     this.ws = null;
   }
 
-  private async reconnect(): Promise<void> {
+  private async reconnect(traceId: string): Promise<void> {
     // A cold reconnect (no resumable session) needs a fresh gateway URL from
     // Discord's REST API. That call rejects during exactly the transient
     // outages that cluster reconnects — and a single rejection here used to
@@ -64,8 +65,10 @@ export class DiscordGateway {
       } catch (err) {
         this.reconnectAttempt++;
         const backoffMs = calculateBackoff(this.reconnectAttempt);
+        // Inherits the close-handler's trace: every retry of THIS reconnect is
+        // one causal chain (same id per reconnect() call, not per attempt).
         this.publish(Operational.Error, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "server",
           msg: "discord gateway url fetch failed, retrying",
@@ -103,7 +106,7 @@ export class DiscordGateway {
         if (FATAL_CLOSE_CODES.has(event.code)) {
           this.running = false;
           this.publish(Operational.Error, {
-            traceId: crypto.randomUUID(),
+            traceId: newTraceId(),
             time: Date.now(),
             component: "server",
             msg: "discord gateway fatal close code",
@@ -114,8 +117,12 @@ export class DiscordGateway {
         if (this.running) {
           this.reconnectAttempt++;
           const backoffMs = calculateBackoff(this.reconnectAttempt);
+          // ONE trace for the whole close→backoff→reconnect chain: the close
+          // notice, every url-fetch retry inside reconnect(), and a terminal
+          // reconnect failure all read back as a single causal sequence.
+          const traceId = newTraceId();
           this.publish(Operational.Warn, {
-            traceId: crypto.randomUUID(),
+            traceId,
             time: Date.now(),
             component: "server",
             msg: "discord connection closed, reconnecting",
@@ -126,9 +133,9 @@ export class DiscordGateway {
           });
           await sleep(backoffMs);
           if (this.running)
-            this.reconnect().catch((err) =>
+            this.reconnect(traceId).catch((err) =>
               this.publish(Operational.Error, {
-                traceId: crypto.randomUUID(),
+                traceId,
                 time: Date.now(),
                 component: "server",
                 msg: "discord reconnect failed",
@@ -140,7 +147,7 @@ export class DiscordGateway {
 
       ws.addEventListener("error", (err) =>
         this.publish(Operational.Error, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "discord websocket error",
@@ -187,7 +194,7 @@ export class DiscordGateway {
         return false;
       case GatewayOp.RECONNECT:
         this.publish(Operational.Info, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "discord server requested reconnect",
@@ -197,7 +204,7 @@ export class DiscordGateway {
       case GatewayOp.INVALID_SESSION: {
         const resumable = payload.d as boolean;
         this.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "discord invalid session",
@@ -229,7 +236,7 @@ export class DiscordGateway {
     if (event === "RESUMED") {
       this.reconnectAttempt = 0;
       this.publish(Operational.Info, {
-        traceId: crypto.randomUUID(),
+        traceId: newTraceId(),
         time: Date.now(),
         component: "server",
         msg: "discord session resumed",

@@ -1,3 +1,4 @@
+import { newTraceId } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
 import { sleep } from "../support/fetch-retry";
 import type { PublishPort } from "../types";
@@ -47,7 +48,7 @@ export class TelegramPoller {
       } catch (err) {
         if (!this.running) break;
         this.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
+          traceId: newTraceId(),
           time: Date.now(),
           component: "server",
           msg: "telegram poll error",
