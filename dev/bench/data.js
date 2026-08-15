@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786815217013,
+  "lastUpdate": 1786818540031,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -49081,6 +49081,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 508708,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2dc64d81b3acb1072bcc466dc5aaee3879f4a9aa",
+          "message": "feat(agent): the loop yields at the window; every path compacts (#606) (#651)\n\n* feat(agent): the loop yields at the window; every path compacts (#606)\n\nThe #649 review's reachability map, closed. run.completion.pre was\nreachable only from worker-parent injected-continuation turns; the\nResident never dispatched it, and the tool loop that actually fills a\nwindow lives inside one llmRun where no policy point exists.\n\nThe fix moves no application seam (D8: one deterministic seam). The llm\nstep loop takes yieldAtInputTokens — a second stopWhen condition on the\nlast finished step's cache-inclusive input — and stops gracefully at a\nstep boundary: tool pairs complete, the message finishes with the\nmodel's own reason. The agent arms it from the recorded window fact at\nthe same ratio the compaction trigger defaults to (one exported\nconstant, two readers, so the loop never yields where the trigger\nrefuses and vice versa), detects the yield in handleStop — the last\nstep-finish still asking for tools, below the step cap — dispatches the\nexisting seam, and re-enters a new turn when history shrank. A yield\nthe seam could not reduce ends the run honestly as max-steps:\ncontinuing would re-yield after every step.\n\nTwo adjacent honesty fixes ride along because the yield exposed them.\nA run that exhausts its step cap mid-task used to end as a fake \"stop\";\nit now ends as max-steps. And the per-turn step cap becomes the\nREMAINING tool budget rather than the full budget, so a yielded run\nthat re-enters cannot multiply what an operator sized once.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): injections outrank the yield; the yield never kills (#606)\n\nThe adversarial review failed the first integration on five findings,\none reproduced empirically: the yield branches sat after run.turn.post\n— whose injection-drain policy is destructive — and before the\ncontinuation application, so a window yield ate a child's completion\nnotification and a steps yield ended the run with it undelivered. The\nyield branch now sits after the continuation path: drained injections\nalways outrank the yield, and the continuation path already dispatches\nthe seam.\n\nThe yield also no longer kills. A seam that reclaimed nothing disarms\nthe yield and continues — the headroom above the arm point is real, and\ndying at 80% of a window the run never filled was a regression against\nmain for tail-heavy workloads (M4). Yield-borne seam dispatches carry\ncontextYielded and bypass the config threshold gate: the loop stopping\nIS the trigger, and a plan ratio above the arm point must not refuse a\ndispatch the seam never tried (M2).\n\nThe step cap now subtracts from the pool the budget actually enforces —\neffectiveMaxToolCalls, exported from the evaluator so the two readers\ncannot drift — and honors -1 as unlimited instead of inverting it into\none-step-then-die (M1/M3).\n\nThe dead \"tool_use\" detector branch goes with the stale comment that\nbred it: the step-finish part stores the ai-unified finishReason, never\nthe raw provider string. Docs now carry the unknown-window caveat.\n\nAll five findings pinned: injection preservation over the yield, -1\nunlimited, contextYielded bypass plus its non-yield complement, and\ndisarm-and-continue.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(agent): the natural-stop pin speaks ai's vocabulary (#606)\n\n* test(agent): abort precedence over the yield, pinned (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T03:27:41+09:00",
+          "tree_id": "caefaa4fbd850e0746ca5cce5b8839e368cd37d3",
+          "url": "https://github.com/INONONO66/openomni/commit/2dc64d81b3acb1072bcc466dc5aaee3879f4a9aa"
+        },
+        "date": 1786818539027,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5901,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10163,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3056,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2474,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8241,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 749,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48552,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11179,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101155,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 509647,
             "unit": "ns/op"
           }
         ]
