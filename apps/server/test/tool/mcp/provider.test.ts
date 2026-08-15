@@ -126,11 +126,13 @@ describe("McpToolProvider", () => {
     await provider.refreshTools();
 
     const [tool] = provider.listTools();
+    // Canonical labels lead: the grammar parsers take the first match, so a
+    // remote spec's own `mcp.*` / `source:*` label must never outrank them.
     expect(tool.spec.labels).toEqual([
-      "custom.label",
       "tool:search.query",
       "source:mcp",
       "mcp.search",
+      "custom.label",
     ]);
     expect(tool.descriptor).toMatchObject({
       id: "tool:mcp:search:search.query",

@@ -134,6 +134,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#638](https://github.com/INONONO66/openomni/pull/638) | rule 5: policy points with zero production registration vs an explicit allowlist (`policy-point-registration` guard, 9 of 18 pinned) | ✅ |
 | [#639](https://github.com/INONONO66/openomni/pull/639) | close the tool source-label vocabulary: grammar lives in `Tool.sourceLabel`/`Tool.sourceFromLabels` next to `Tool.Source`; dot separator retired; rejections pinned | ✅ |
 | [#640](https://github.com/INONONO66/openomni/pull/640) | close the `mcp.<serverId>` label vocabulary (`Tool.mcpServerLabel`/`Tool.mcpServerFromLabels`); `worker-bootstrap` reads the typed `descriptor.source.serverId` instead of re-deriving from the tool name | 🟨 |
+| — | `RuntimeToolCatalogEntry.mcpServer` is write-only on the wire — no production reader (#640 review); grow a consumer or delete the field (protocol schema surface, Owner review) | ⬜ |
 | — | rule 3: core may not import `builtin/` — blocked on the Owner-gated `builtin:compaction` row | ⬜ |
 
 Then [#502](https://github.com/INONONO66/openomni/issues/502) runs against a `session` package that holds only durable facts.

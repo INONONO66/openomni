@@ -34,7 +34,14 @@ function fakeMcpProviderWithTool(): Pick<McpToolProvider, "listTools"> {
   const tool = makeTool({ name: "filesystem.read", category: "mcp" });
   const metadata = mcpToolMetadata("filesystem", tool.spec);
   return {
-    listTools: () => [{ ...tool, labels: metadata.labels, descriptor: metadata.descriptor }],
+    listTools: () => [
+      {
+        ...tool,
+        spec: { ...tool.spec, labels: metadata.labels },
+        labels: metadata.labels,
+        descriptor: metadata.descriptor,
+      },
+    ],
   };
 }
 
