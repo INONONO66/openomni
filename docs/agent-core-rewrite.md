@@ -108,7 +108,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#624](https://github.com/INONONO66/openomni/pull/624) | duplicate helpers: one `requireTrace`, one `nonEmptyString` | ✅ |
 | [#631](https://github.com/INONONO66/openomni/pull/631) | one run exit, one terminal record — the observable half of D4's "started with no terminal is unrepresentable" | ✅ |
 | [#632](https://github.com/INONONO66/openomni/pull/632) | the runner owns both terminals — every exit, return or throw, records one | ✅ |
-| [#636](https://github.com/INONONO66/openomni/pull/636) | file layout: the five files Phase 4 rule 1 names | ✅ |
+| [#636](https://github.com/INONONO66/openomni/pull/636) | file layout: the five files Phase 4 rule 1 names — `turn.ts` folds prepare and settle, which share the turn's state and a single consumer rather than any symbol | ✅ |
 | [#622](https://github.com/INONONO66/openomni/pull/622) | drop the policy snapshot's `eventEmitter` carve-out — unreachable since #610, and `point-context-immutability.test.ts` asserts behavior with no production producer | ✅ |
 | [#625](https://github.com/INONONO66/openomni/pull/625) | dissolve `builtin/` per D5 — `builtin:idle-nudge` moves to openomni | ✅ |
 | [#626](https://github.com/INONONO66/openomni/pull/626) | dissolve `builtin/` per D5 — the two budget nudges move to openomni | ✅ |

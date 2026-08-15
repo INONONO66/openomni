@@ -678,7 +678,7 @@
           "packages/agent/test/helpers/policy-decision.ts:45",
           "packages/openomni/test/work-item/completion-admission-authority.test.ts:315",
           "packages/protocol/test/policy.test.ts:556",
-          "packages/agent/test/core/execution/tool-executor-verdicts.test.ts:93,117",
+          "packages/agent/test/core/execution/tools-verdicts.test.ts:86,112",
           "packages/protocol/test/policy/module-surface.test.ts (expectedPolicyDecisionKeys \"pending\")"
         ],
         "snapshotPin": null,

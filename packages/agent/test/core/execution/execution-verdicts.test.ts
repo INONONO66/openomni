@@ -1,9 +1,9 @@
+import { buildTurn, handleCompact, handleStop } from "../../../src/core/execution/turn";
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { AgentResult, ChatAgentConfig } from "../../../src/core/types";
-import { buildTurn } from "../../../src/core/execution/turn";
 import { runAgent } from "../../../src/core/execution/run";
 import {
   createRunState,
@@ -13,7 +13,6 @@ import {
   type TurnArtifacts,
 } from "../../../src/core/execution/state";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
-import { handleCompact, handleStop } from "../../../src/core/execution/turn";
 import { deny } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 
