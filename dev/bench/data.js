@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786803710221,
+  "lastUpdate": 1786805739537,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48337,6 +48337,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 506442,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4350bbe322618be0090fde946a2b7e73c2fadda7",
+          "message": "feat(agent): elide old tool outputs before cutting history (#606) (#645)\n\n* feat(agent): elide old tool outputs before cutting history (#606)\n\nPhase 3's reduction row. The model projection resends every kept tool\noutput verbatim on every call, so old bulky outputs dominate the window\nlong after anything reads them again — and the only relief the pipeline\nhad was the cut, which drops whole messages.\n\ncompaction/reduce.ts is the deterministic, no-LLM alternative that runs\nfirst: completed tool outputs in messages older than the protected tail\nare rewritten to a sized elision marker plus a head excerpt. Part\nidentities are preserved — a field of the same part is rewritten, no\nnew parts are minted — and the pass is idempotent by construction: an\nelided output is shorter than any sane minOutputChars, so the second\ntrigger falls through to the cut instead of looping. One reduction per\ntrigger; the next measured call reports the yield, which is the hook\nthe later adaptive row builds on.\n\nThe knobs are strategy, so they arrive as config: an opt-in\nelideToolOutputs block on CompactionOptions, mirrored in openomni's\nplan schema. Absent block means exactly the old behavior.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): structural termination and a cut that cannot starve (#606)\n\nAdversarial review failed the first design executably, in the same\nclass as the measure row's first failure: convergence semantics the\nsuite could not see.\n\nElision terminated only for configs where marker + head fit under\nminOutputChars — validated nowhere. With keepHead 80 / min 100 a\n110-char output GREW to ~124, was reported as +110 reclaimed, and\nmarker-stacking made every subsequent trigger elide its own elision\nforever, with the cut unreachable and the window climbing to provider\noverflow — the exact failure compaction exists to prevent. Termination\nis now structural, not configurational: an output is elided only when\nits replacement is strictly shorter, so every pass shrinks what it\ntouches and a fixed point exists for every config, including\nminOutputChars: 1. elidedChars is the net shrink, and the boundary pins\ndrive the exact configs the review broke.\n\nThe review's second finding was cut starvation under sustained tool\nuse: each turn ages a fresh output past the protected tail, so \"cut\nwhen nothing is left to elide\" never fires while un-elidable residue\naccumulates past the threshold. The round now keeps its elision alone\nonly when the estimated net reclaim (chars/4) covers the measured\noverage; otherwise the cut also runs, on the already-elided history,\nin the same round. The estimate decides only the cut's eagerness — the\nnext call measures ground truth, so a wrong estimate costs one earlier\nor one extra round, never convergence. Both directions pinned.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): the option comment says what the round does now (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T23:54:25+09:00",
+          "tree_id": "1ce82983f370bba8191571ab31fdacc46a47bb70",
+          "url": "https://github.com/INONONO66/openomni/commit/4350bbe322618be0090fde946a2b7e73c2fadda7"
+        },
+        "date": 1786805739120,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 350,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 568,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4840,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8504,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2026,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2571,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1875,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12720,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6906,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 406,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1005,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1191,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 36529,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1954,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 8404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 78684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 401763,
             "unit": "ns/op"
           }
         ]
