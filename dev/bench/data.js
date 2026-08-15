@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786796910342,
+  "lastUpdate": 1786798474785,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47841,6 +47841,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 503210,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7f368d884720326d8ec0175963e604a652097187",
+          "message": "refactor(agent): compaction to its D6 home; builtin/ dissolved (#606) (#641)\n\n* refactor(agent): compaction to its D6 home; builtin/ dissolved (#606)\n\nTwo moves the plan ordered and one rename it justified.\n\nThe mechanism moves from core/execution/compaction.ts to\nsrc/compaction/compact.ts — D6 verbatim: compaction lives in\nagent/src/compaction/ as pure modules, strategy opinions come in as\nconfig. The namespace drops its InMemory prefix: there is no other\ncompactor, and the prefix implied a durable sibling that never existed.\n\nThe seam adapter (the policy registration wiring run.completion.pre +\nrun.replace_messages) moves beside the mechanism as compaction/policy.ts\nrather than to the product: pinning WHERE compaction applies is D8\nmechanism — \"application stays at one deterministic seam\" — and only\nthe strategy (thresholds, onSummarize) is opinion, which still arrives\nas config. That empties core/policy/builtin/, so the directory is gone;\nPhase 4 rule 3 is resolved by dissolution rather than by a guard.\n\nFallout the gates caught while landing it: the check-deps depth rule\nrejected the transient deep import, which is what forced the policy\nfile's real home; the dead-export ratchet trimmed the new barrel twice\n(CompactionBoundaryError, then the Compaction namespace) down to the\nsurface something actually consumes; and the root InMemoryCompactor\nre-export had zero external importers, so it is deleted, not renamed.\n\nAlso removes a lint-guards canonicalPolicyRequiredFiles entry naming a\nfile that does not exist (builtin/messenger-allow-pattern.ts) — an\nentry for a nonexistent file is never scanned and enforces nothing.\n\ndefaultRegistry survives this PR; it dies when the registration moves\nto openomni like idle-nudge, budget-nudge, and tool-permission did.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* docs(agent): sync the maps the dissolution falsified (#606)\n\nAdversarial review caught the package's own AGENTS.md still drawing\ncore/execution/compaction.ts and the builtin/ directory this branch\ndeletes — the headline says \"builtin/ dissolved\" while the map shows it,\nand the commit-count staleness gate would stay quiet for ~50 commits.\nTree redrawn with the compaction/ home; implementation-status repointed;\nthe test describe drops the deleted name.\n\nThe review also called out the one opinion the mechanism/opinion\nargument left unstated: priority 900 in the seam adapter is an ordering\nopinion relative to product policies at the same point. The plan row now\nsays so, and it moves out with the registration.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T21:53:23+09:00",
+          "tree_id": "b767463e21703bd38cf045f878a3e4af79399f8f",
+          "url": "https://github.com/INONONO66/openomni/commit/7f368d884720326d8ec0175963e604a652097187"
+        },
+        "date": 1786798474344,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3032,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16088,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8635,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1191,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2437,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511925,
             "unit": "ns/op"
           }
         ]
