@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786800915404,
+  "lastUpdate": 1786801296497,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -48089,6 +48089,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 504314,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "716e3ead76a1b77320efc904cfc7709603d2adc2",
+          "message": "fix(policy): guard the generic create form; restore two pins (#606) (#643)\n\nThe adversarial review of #642 set four merge conditions; a commitlint\nreject (77-char header) dropped the fix commit while the merge command\nwent through, so #642 landed without them. This is that commit, on its\nown feet.\n\nThe agent-registry-assembly guard was defeated by its own codebase's\nidiom, and my mutation test had proven the wrong thing: I verified\nPolicyRegistry.create() fires, but everyone writes\ncreate<PolicyContext>() — including the deleted defaultRegistry — and\nthe pattern required \"(\" right after create. Reintroducing the deleted\ncode verbatim passed lint. The pattern now stops at the member access;\nthe reviewer's exact counterexample fires.\n\nThe review also mutation-proved two pins the registry deletion lost,\nboth surviving the full 3462-test suite: silencing the\noptional-policy-missing record (and with it the deliberate\nno-trace-no-record gate), and dropping the runtime argument from\nfactory(config, runtime). Both restored in packages/policy's\nregistry-portability suite — this package owns resolve(), so it owns\nthe pins — and both mutations now fail.\n\nAlso syncs the AGENTS.md of the directory the registration moved into\n(it still said defaultRegistry), and the COMPACTION_PRIORITY comment\nnow states what 900 does today — unopposed, the only policy at its\npoint — instead of an ordering that does not exist yet.\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T22:40:26+09:00",
+          "tree_id": "966d728e1b20b1fd5dea15c79f420c6ab9035926",
+          "url": "https://github.com/INONONO66/openomni/commit/716e3ead76a1b77320efc904cfc7709603d2adc2"
+        },
+        "date": 1786801295660,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 639,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2506,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2908,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8203,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1104,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 723,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46228,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2296,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100229,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 508746,
             "unit": "ns/op"
           }
         ]
