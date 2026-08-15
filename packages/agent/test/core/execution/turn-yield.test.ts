@@ -129,7 +129,7 @@ describe("window yield (#649 reachability fix)", () => {
     const turn = makeTurnArtifacts({
       windowYieldArmed: true,
       stepCap: 24,
-      turnAssistant: { message: assistantWithSteps(["tool-calls", "end_turn"]) },
+      turnAssistant: { message: assistantWithSteps(["tool-calls", "stop"]) },
     });
 
     const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
