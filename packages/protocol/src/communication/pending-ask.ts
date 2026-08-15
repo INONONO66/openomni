@@ -88,6 +88,7 @@ export type CorrelationQuery = z.infer<typeof CorrelationQuery>;
 
 const EventBase = z.object({
   id: z.string().min(1),
+  traceId: z.string().min(1),
   status: Status,
   originSessionId: z.string().min(1),
   originRunId: z.string().min(1).optional(),
