@@ -66,13 +66,13 @@ export interface ServerConfig {
 let _config: ServerConfig | null = null;
 let _configPath: string | null = null;
 
-function loadRaw(configPath: string): RawConfig {
+function loadRaw(configPath: string, traceId: string): RawConfig {
   if (!existsSync(configPath)) return {};
   try {
     return JSON.parse(readFileSync(configPath, "utf-8")) as RawConfig;
   } catch {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "failed to parse config, using defaults",
@@ -82,13 +82,17 @@ function loadRaw(configPath: string): RawConfig {
   }
 }
 
-function resolveMessagingGrants(raw: RawConfig, configPath: string): SenderTargetGrant[] {
+function resolveMessagingGrants(
+  raw: RawConfig,
+  configPath: string,
+  traceId: string,
+): SenderTargetGrant[] {
   if (raw.messaging?.grants === undefined) return [];
   const parsed = z.array(SenderTargetGrant).safeParse(raw.messaging.grants);
   if (parsed.success) return parsed.data;
   // Fail closed: a malformed grant list grants nothing.
   Bus.publish(Operational.Warn, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: "invalid messaging.grants config ignored; all existing-agent sends stay denied",
@@ -97,13 +101,13 @@ function resolveMessagingGrants(raw: RawConfig, configPath: string): SenderTarge
   return [];
 }
 
-function resolve(raw: RawConfig, configPath: string): ServerConfig {
+function resolve(raw: RawConfig, configPath: string, traceId: string): ServerConfig {
   const defaultDbPath = join(homedir(), ".openomni", "storage.db");
   const workspaceRoot = raw.workspace?.root;
 
   if (workspaceRoot && !existsSync(workspaceRoot)) {
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "workspace root not found",
@@ -127,6 +131,7 @@ function resolve(raw: RawConfig, configPath: string): ServerConfig {
       servers: parseMcpServerConfigs(raw.mcp?.servers, {
         source: "server-config",
         configPath,
+        traceId,
       }),
     },
     server: {
@@ -153,14 +158,19 @@ function resolve(raw: RawConfig, configPath: string): ServerConfig {
       allowedUsers: raw.discord?.allowedUsers ?? [],
     },
     messaging: {
-      grants: resolveMessagingGrants(raw, configPath),
+      grants: resolveMessagingGrants(raw, configPath, traceId),
     },
   };
 }
 
-export function loadConfig(configPath = DEFAULT_CONFIG_PATH): ServerConfig {
+/**
+ * `traceId` is the caller's boot trace: config loading is mid-boot, not a
+ * trace origin, so every parse/validation warning files under the startup
+ * that produced it.
+ */
+export function loadConfig(traceId: string, configPath = DEFAULT_CONFIG_PATH): ServerConfig {
   if (_config && _configPath === configPath) return _config;
-  _config = resolve(loadRaw(configPath), configPath);
+  _config = resolve(loadRaw(configPath, traceId), configPath, traceId);
   _configPath = configPath;
   return _config;
 }

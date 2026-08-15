@@ -40,11 +40,12 @@ export namespace McpConfigLoader {
     let result: McpServerConfig[] | null;
 
     if (Array.isArray(parsed)) {
-      result = parseMcpServerConfigs(parsed, { source: "project-config", configPath });
+      result = parseMcpServerConfigs(parsed, { source: "project-config", configPath, traceId });
     } else if (parsed !== null && typeof parsed === "object" && "servers" in parsed) {
       result = parseMcpServerConfigs((parsed as { servers: unknown }).servers, {
         source: "project-config",
         configPath,
+        traceId,
       });
     } else {
       Bus.publish(Operational.Warn, {

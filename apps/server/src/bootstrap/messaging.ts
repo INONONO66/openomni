@@ -31,6 +31,8 @@ let composed: ExistingAgentMessaging | undefined;
 export function registerServerMessaging(input: {
   readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
   readonly grants: readonly SenderTargetGrant[];
+  /** The boot's trace — registration is mid-boot, not a trace origin. */
+  readonly traceId: string;
 }): void {
   composed = createExistingAgentMessaging({
     deliver: async (message) => {
@@ -46,7 +48,7 @@ export function registerServerMessaging(input: {
     grants: () => input.grants,
   });
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId: input.traceId,
     time: Date.now(),
     component: "server",
     msg: "existing-agent messaging delivery owner registered",

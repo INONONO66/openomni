@@ -128,7 +128,7 @@ describe("WaitService", () => {
       at: 1_000,
     });
 
-    const expired = WaitService.sweepExpired(10_001);
+    const expired = WaitService.sweepExpired("trace-test", 10_001);
 
     expect(expired.map((record) => record.id)).toEqual(["wait-partial"]);
     expect(WaitStore.get("wait-partial")).toMatchObject({ status: "expired", partial: true });
@@ -162,7 +162,7 @@ describe("WaitService", () => {
     );
     expect(appended.kind).toBe("appended");
 
-    const expired = WaitService.sweepExpired(10_001);
+    const expired = WaitService.sweepExpired("trace-test", 10_001);
 
     // One bad wait never kills the sweep (#510 review fix F3): the healthy
     // wait still folds and the corrupt one is recorded as an error.

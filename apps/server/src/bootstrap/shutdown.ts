@@ -1,5 +1,6 @@
 import { Operational } from "@openomni/protocol";
 import { Storage, Bus, BusPersistence } from "@openomni/session";
+import { newTraceId } from "@openomni/telemetry";
 import type { McpToolProvider } from "../tool/mcp";
 
 interface ClosableStorage {
@@ -27,9 +28,9 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
     if (shuttingDown) return;
     shuttingDown = true;
 
-    const traceId = deps.traceId ?? crypto.randomUUID();
+    const traceId = deps.traceId ?? newTraceId();
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "server shutting down",
@@ -69,7 +70,7 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
       }
     } catch (err) {
       Bus.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "server error during shutdown",

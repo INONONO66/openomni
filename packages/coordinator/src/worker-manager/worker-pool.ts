@@ -109,7 +109,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     this.activeRuns.set(runId, activeRun);
     let slot: WorkerSlot;
     try {
-      slot = await this.acquireSlot(sessionId);
+      slot = await this.acquireSlot(sessionId, activeRun.traceId);
     } catch (error) {
       this.activeRuns.delete(runId);
       throw error;
@@ -310,11 +310,11 @@ class WorkerPool implements WorkerManager, Execution.Driver {
 
   // --- slot state machine: affinity → create → reclaim → waiters ---
 
-  private async acquireSlot(sessionId: string): Promise<WorkerSlot> {
+  private async acquireSlot(sessionId: string, traceId: string): Promise<WorkerSlot> {
     while (!this.stopping) {
       const slot = await this.tryAcquireSlot(sessionId);
       if (slot) return slot;
-      await this.waitForSlot();
+      await this.waitForSlot(traceId);
     }
     throw new WorkerDeliveryError({
       message: "worker driver is shutting down",
@@ -388,10 +388,12 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     return undefined;
   }
 
-  private waitForSlot(): Promise<void> {
+  private waitForSlot(traceId: string): Promise<void> {
     if (this.waiters.length >= this.maxQueuedDeliveries) {
+      // The saturation belongs to the delivery that hit it — the same trace
+      // RunDelivered/RunSettled already carry (D11).
       this.ports.events.publish(WorkerDriver.QueueSaturated, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         queued: this.waiters.length,
         maxQueuedDeliveries: this.maxQueuedDeliveries,

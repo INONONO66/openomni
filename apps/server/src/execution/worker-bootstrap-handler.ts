@@ -1,3 +1,4 @@
+import { newTraceId } from "@openomni/telemetry";
 import type { Auth } from "@openomni/llm";
 import { Operational, WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -75,7 +76,7 @@ export namespace WorkerBootstrapHandler {
         authToken: options.ipcAuthToken,
       });
       Bus.publish(Operational.Info, {
-        traceId: crypto.randomUUID(),
+        traceId: newTraceId(),
         time: Date.now(),
         component: "server",
         msg: "worker bootstrap received",
@@ -91,7 +92,7 @@ export namespace WorkerBootstrapHandler {
       options.state.rejectReady(error);
       options.respond({ ok: false, error: error.message });
       Bus.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
+        traceId: newTraceId(),
         time: Date.now(),
         component: "server",
         msg: "worker bootstrap failed",

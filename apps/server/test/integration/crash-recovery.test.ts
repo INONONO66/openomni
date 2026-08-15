@@ -46,13 +46,13 @@ test("marks processing message as received when no assistant response", async ()
     status: "processing",
   });
 
-  await recoverInterruptedMessages();
+  await recoverInterruptedMessages("trace-test");
 
   const received = Storage.get().message.findByStatus?.("received") ?? [];
   expect(received.some((m) => m.id === "user-msg-1")).toBe(true);
 });
 
 test("recovery does not throw on empty storage", async () => {
-  await recoverInterruptedMessages();
+  await recoverInterruptedMessages("trace-test");
   expect(true).toBe(true);
 });

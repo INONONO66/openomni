@@ -69,7 +69,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   // it is ONE trace. Every line the boot emits carries it, so a failed startup
   // reads as a single sequence instead of eight unrelated records.
   const bootTraceId = newTraceId();
-  const config = loadConfig();
+  const config = loadConfig(bootTraceId);
   if (process.env.OPENOMNI_MODE === "local") {
     throw new Error("OPENOMNI_MODE=local is disabled; OpenOmni requires coordinator mode");
   }
@@ -221,7 +221,11 @@ export async function main(options: MainOptions = {}): Promise<void> {
   // composed here, behind the kernel's injected-owner fail-closed seam.
   // Grants default to the empty list — granting requires explicit
   // `messaging.grants` configuration.
-  registerServerMessaging({ deliveryRoutes, grants: config.messaging.grants });
+  registerServerMessaging({
+    deliveryRoutes,
+    grants: config.messaging.grants,
+    traceId: bootTraceId,
+  });
 
   if (hasAnyChannel && !routingHandler) {
     Bus.publish(Operational.Warn, {

@@ -33,6 +33,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     const supervisor = createTestSupervisor(mockClient);
     const params = {
+      traceId: "trace-test",
       budget: {
         maxWallTimeMs: Infinity,
       },
@@ -56,6 +57,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     const supervisor = createTestSupervisor(mockClient);
     const params = {
+      traceId: "trace-test",
       budget: {
         maxWallTimeMs: 100_000,
       },
@@ -81,6 +83,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     const supervisor = createTestSupervisor(mockClient);
     const params = {
+      traceId: "trace-test",
       budget: {
         maxWallTimeMs: 1_000_000,
       },
@@ -106,6 +109,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     const supervisor = createTestSupervisor(mockClient);
     const params = {
+      traceId: "trace-test",
       budget: {
         maxWallTimeMs: -1,
       },
@@ -130,7 +134,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     };
 
     const supervisor = createTestSupervisor(mockClient);
-    const params = {};
+    const params = { traceId: "trace-test" };
 
     await supervisor.deliver("test-run-id", params);
 
