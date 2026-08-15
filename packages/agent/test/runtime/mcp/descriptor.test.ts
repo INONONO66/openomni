@@ -77,7 +77,7 @@ describe("McpClient tool descriptors", () => {
     const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
 
     expect(tool?.name).toBe("filesystem.write_file");
-    expect(tool?.labels).toEqual(["source.mcp", "mcp.filesystem"]);
+    expect(tool?.labels).toEqual(["source:mcp", "mcp.filesystem"]);
     expect(tool?.descriptor).toEqual({
       id: "tool:mcp:filesystem:write_file",
       kind: "tool",
@@ -86,7 +86,7 @@ describe("McpClient tool descriptors", () => {
         serverId: "filesystem",
         remoteName: "write_file",
       },
-      labels: ["source.mcp", "mcp.filesystem"],
+      labels: ["source:mcp", "mcp.filesystem"],
       capabilities: ["network.write"],
       effects: ["external.write"],
     });

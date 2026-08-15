@@ -186,7 +186,7 @@ describe("child agent delegation pre-policy", () => {
     const descriptor: RuntimeResource.Descriptor = {
       id: "tool:mcp:server-1:remote.read",
       kind: "tool",
-      labels: ["source.mcp", "capability.read"],
+      labels: ["source:mcp", "capability.read"],
       capabilities: ["read"],
       effects: ["network.read"],
       risk: 2,

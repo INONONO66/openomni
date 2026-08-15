@@ -121,14 +121,14 @@ describe("policy no-bypass conformance — agent governed paths", () => {
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
       toolExecutor: mcpExecutor,
       engine,
-      getToolLabels: () => ["source.mcp", "mcp.fixture"],
+      getToolLabels: () => ["source:mcp", "mcp.fixture"],
     });
     const result = await executor({ id: "mcp-call", tool: "mcp_fixture_read", input: {} });
 
     expect(mcpExecutor).toHaveBeenCalledTimes(0);
     expect(result.isError).toBe(true);
     expect(result.output).toContain("mcp tool denied by conformance policy");
-    expect(capturedLabels).toEqual([["source.mcp", "mcp.fixture"]]);
+    expect(capturedLabels).toEqual([["source:mcp", "mcp.fixture"]]);
   });
 
   it("blocks system prompt composition before prompt content is returned", async () => {

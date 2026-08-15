@@ -363,3 +363,23 @@ describe("Tool.Spec", () => {
     ).toThrow();
   });
 });
+
+describe("Tool source label grammar", () => {
+  test("round-trips every Source value through sourceLabel/sourceFromLabels", () => {
+    for (const source of Tool.Source.options) {
+      expect(Tool.sourceLabel(source)).toBe(`source:${source}`);
+      expect(Tool.sourceFromLabels([`risk:tier-1`, Tool.sourceLabel(source)])).toBe(source);
+    }
+  });
+
+  test("rejects the retired dot separator and values outside the vocabulary", () => {
+    // The two ends of this grammar drifted apart once (`source.mcp` vs
+    // `source:system`); the closed parser is the fix, so its rejections are
+    // pinned as literally as its acceptances.
+    expect(Tool.sourceFromLabels(["source.mcp", "mcp.fixture"])).toBeUndefined();
+    expect(Tool.sourceFromLabels(["source:skill-mcp"])).toBeUndefined();
+    expect(Tool.sourceFromLabels(["source:"])).toBeUndefined();
+    expect(Tool.sourceFromLabels(undefined)).toBeUndefined();
+    expect(Tool.sourceFromLabels([])).toBeUndefined();
+  });
+});

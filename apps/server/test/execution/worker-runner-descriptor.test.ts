@@ -14,7 +14,7 @@ describe("WorkerRunner tool descriptors", () => {
       id: "tool:mcp:filesystem:write_file",
       kind: "tool",
       source: { type: "mcp", serverId: "filesystem", remoteName: "write_file" },
-      labels: ["tool:write_file", "source.mcp", "mcp.filesystem"],
+      labels: ["tool:write_file", "source:mcp", "mcp.filesystem"],
       capabilities: ["workspace.write"],
       effects: ["filesystem.mutation"],
       risk: 2,

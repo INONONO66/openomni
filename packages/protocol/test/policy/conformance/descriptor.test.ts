@@ -66,7 +66,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "tool:mcp:filesystem-read",
     kind: "tool",
-    labels: ["source.mcp", "mcp.filesystem"],
+    labels: ["source:mcp", "mcp.filesystem"],
     capabilities: ["file.read"],
     effects: ["workspace.read"],
     source: { type: "mcp", serverId: "filesystem", remoteName: "read_file" },

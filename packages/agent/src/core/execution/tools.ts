@@ -1,5 +1,5 @@
-import type { BusEvent, Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
-import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
+import type { BusEvent, Policy, RuntimeResource, TraceContext } from "@openomni/protocol";
+import { Operational, PolicyDecision, Tool, ToolExecution } from "@openomni/protocol";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
@@ -278,18 +278,13 @@ function mcpServerId(labels: readonly string[] | undefined): string | undefined 
 function sourceFromLabels(
   labels: readonly string[] | undefined,
 ): RuntimeResource.Source | undefined {
-  const sourceLabel = labels?.find(
-    (label) => label.startsWith("source.") || label.startsWith("source:"),
-  );
-  const sourceType = sourceLabel?.replace(/^source[.:]/, "");
-  if (sourceType === "mcp" || sourceType === "skill-mcp") {
+  const sourceType = Tool.sourceFromLabels(labels);
+  if (sourceType === undefined) return undefined;
+  if (sourceType === "mcp") {
     const serverId = mcpServerId(labels);
     return serverId === undefined ? { type: sourceType } : { type: sourceType, serverId };
   }
-  if (sourceType === "agent") return { type: "agent" };
-  if (sourceType === "server") return { type: "server" };
-  if (sourceType === "system") return { type: "system" };
-  return undefined;
+  return { type: sourceType };
 }
 
 function policyTarget(

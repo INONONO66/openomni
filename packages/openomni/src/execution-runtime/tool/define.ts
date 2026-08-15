@@ -1,4 +1,5 @@
-import type { RuntimeResource, Tool as ProtocolTool } from "@openomni/protocol";
+import type { RuntimeResource } from "@openomni/protocol";
+import { Tool as ProtocolTool } from "@openomni/protocol";
 import type {
   ImplicitInputSource,
   NativeTool,
@@ -79,7 +80,7 @@ export function defineTool<TInput>(def: ToolDefinition<TInput>): NativeTool {
   const labels = [
     `tool:${def.name}`,
     `risk:tier-${def.riskTier ?? defaultRiskTier}`,
-    `source:${def.source ?? "system"}`,
+    ProtocolTool.sourceLabel(def.source ?? "system"),
     ...(typeof isReadOnly === "boolean" && isReadOnly ? ["capability:read"] : []),
     ...(typeof isReadOnly === "boolean" && !isReadOnly ? ["capability:write"] : []),
     ...(typeof isDestructive === "boolean" && isDestructive ? ["capability:destructive"] : []),

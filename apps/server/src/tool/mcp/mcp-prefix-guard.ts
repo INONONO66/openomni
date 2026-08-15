@@ -6,8 +6,8 @@ import {
 import {
   Policy,
   PolicyDecision,
+  Tool,
   type RuntimeResource,
-  type Tool,
   type TraceContext,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -92,7 +92,7 @@ function createMcpDescriptor(
   if (tool?.descriptor) return tool.descriptor;
 
   const toolName = tool?.spec.name ?? attemptedToolName;
-  const labels = tool?.spec.labels ?? tool?.labels ?? ["source.mcp"];
+  const labels = tool?.spec.labels ?? tool?.labels ?? [Tool.sourceLabel("mcp")];
   return {
     id: `tool:mcp:${toolName}`,
     kind: "tool",
