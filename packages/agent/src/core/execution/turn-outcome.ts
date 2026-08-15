@@ -9,7 +9,6 @@ import {
   runResult,
   emitCompaction,
   emitErrorRetry,
-  emitRunCompleted,
   emitRunFailed,
   emitTurnComplete,
   publishDenyDiagnostic,
@@ -116,7 +115,6 @@ export async function handleStop(
   }
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
-  emitRunCompleted(config.events, state, agentBase, "stop");
   return runResult(state, { finishReason: "stop" });
 }
 

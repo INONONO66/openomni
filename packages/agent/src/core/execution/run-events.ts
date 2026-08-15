@@ -86,7 +86,7 @@ export function emitRunCompleted(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
-  finishReason: "stop" | "max-steps",
+  finishReason: AgentResult["finishReason"],
 ): void {
   events.publish(Operational.Info, {
     traceId: agentBase.traceId,
