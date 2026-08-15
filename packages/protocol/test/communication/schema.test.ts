@@ -54,6 +54,52 @@ describe("Communication protocol schemas", () => {
     expect(parsed.correlation).toMatchObject({ replyToMessageId: "m-1" });
   });
 
+  test("PendingAsk and PendingInteraction events refuse an untraced payload", () => {
+    // Pin (D11): both stores are frozen writers today, so this is the whole
+    // contract — any future producer must carry the caller's trace or fail
+    // at parse instead of persisting as "untraced".
+    const askBase = {
+      id: "ask-1",
+      status: "open",
+      originSessionId: "session-1",
+      targetKind: "resident",
+      time: 1,
+    };
+    expect(Communication.PendingAsk.Events.Opened.schema.safeParse(askBase).success).toBe(false);
+    expect(
+      Communication.PendingAsk.Events.Opened.schema.safeParse({ ...askBase, traceId: "" }).success,
+    ).toBe(false);
+    expect(
+      Communication.PendingAsk.Events.Opened.schema.safeParse({ ...askBase, traceId: "trace-1" })
+        .success,
+    ).toBe(true);
+
+    const interactionBase = {
+      id: "pi-1",
+      workerRunId: "run-1",
+      sessionId: "session-1",
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      status: "open",
+      time: 1,
+    };
+    expect(
+      Communication.PendingInteraction.Events.Opened.schema.safeParse(interactionBase).success,
+    ).toBe(false);
+    expect(
+      Communication.PendingInteraction.Events.Opened.schema.safeParse({
+        ...interactionBase,
+        traceId: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      Communication.PendingInteraction.Events.Opened.schema.safeParse({
+        ...interactionBase,
+        traceId: "trace-1",
+      }).success,
+    ).toBe(true);
+  });
+
   test("WorkerGrant defaults external task creation to false", () => {
     const parsed = Communication.WorkerGrant.Record.parse({
       id: "grant-1",
