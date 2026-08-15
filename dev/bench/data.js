@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786792740832,
+  "lastUpdate": 1786793923333,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -47469,6 +47469,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509242,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b741a33d2d4bc77fa56747d72df606ea4320a17",
+          "message": "feat(policy): pin the zero-registration policy points (#606) (#638)\n\n* feat(policy): pin the zero-registration policy points (#606)\n\nThe engine dispatches at 18 registered points; 9 have no registration\nanywhere in shipped source. Dispatching into an empty point is a\nlegitimate state for an extension point — but arriving there by losing\na last registration is a silent regression: the policy stops running,\nthe decision defaults to allow, and every suite short of full product\nwiring stays green. effectCapabilities taught this lesson repeatedly —\nthe dangerous drop is the one nothing fails over.\n\nPhase 4 rule 5: the `policy-point-registration` guard reads the point\nlist from the protocol registry (not a copied list), counts `pointIds:`\nregistration sites under src, and pins the empty set both ways — a\npoint losing its last site fails CI naming the point, and a point\ngaining a site while still allowlisted fails CI naming the file. Both\ndirections mutation-verified.\n\nThe guard counts registration sites, not live wiring; a site that\nexists but is never reached is out of a static check's reach, and the\ncomment says so.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(policy): word-boundary the pointIds extraction (#606)\n\nAdversarial review proved `allowedEndpointIds:` matches the pattern as\na substring — harmless at head, but a future endpoint id string-equal\nto a registry point id would count as a registration. `\\b` closes it.\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T20:37:23+09:00",
+          "tree_id": "448faf78fb9f2c0774f413ef25595ebeff1a6094",
+          "url": "https://github.com/INONONO66/openomni/commit/0b741a33d2d4bc77fa56747d72df606ea4320a17"
+        },
+        "date": 1786793922246,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10383,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2526,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3060,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8220,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 616,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1151,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 768,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 49705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10822,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512083,
             "unit": "ns/op"
           }
         ]
