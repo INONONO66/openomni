@@ -33,22 +33,13 @@ import {
 export { StakesBrokerError } from "./stakes-seam-contract.js";
 export type {
   CompletionStakesBinding,
-  CompletionStakesContext,
   CompletionStakesInjection,
-  CompletionStakesToken,
   StakesAuthorityPort,
   StakesAuthorityRequest,
   StakesAuthoritySnapshot,
-  StakesInjectionDenial,
   VoiceStakesBinding,
-  VoiceStakesContext,
-  VoiceStakesInjection,
-  VoiceStakesToken,
   VoiceAuthorizationRequest,
-  VoiceAuthorizationSnapshot,
 } from "./stakes-seam-contract.js";
-
-export type StakesBroker = ReturnType<typeof createStakesBroker>;
 
 export function createStakesBroker(authority: StakesAuthorityPort) {
   const issuedTokens = new WeakMap<object, StakesTokenRecord>();

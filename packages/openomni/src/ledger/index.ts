@@ -35,31 +35,13 @@ export const Stakes = Object.freeze({
   assessCriterion: assessStakesCriterion,
 });
 
+export type { StakesAction } from "./stakes-contract.js";
 export type {
-  StakesAction,
-  StakesAxes,
-  StakesCriterionResult,
-  StakesKnownFingerprint,
-  StakesValue,
-  StakesWindow,
-  StakesWindowInput,
-  StakesWindowedLedgerState,
-} from "./stakes-contract.js";
-export type {
-  CompletionStakesContext,
   CompletionStakesBinding,
   CompletionStakesInjection,
-  CompletionStakesToken,
   StakesAuthorityPort,
   StakesAuthorityRequest,
   StakesAuthoritySnapshot,
-  StakesBroker,
-  StakesInjectionDenial,
-  VoiceStakesContext,
   VoiceStakesBinding,
-  VoiceStakesInjection,
-  VoiceStakesToken,
   VoiceAuthorizationRequest,
-  VoiceAuthorizationSnapshot,
 } from "./stakes-seams.js";
-export type { StakesCriterionAssessment } from "./stakes-assessment.js";

@@ -1,7 +1,6 @@
 import { createPolicyEngine } from "./dispatch";
 
 export type {
-  PolicyAuditConfig,
   PolicyDecision,
   PolicyEngineConfig,
   GenericPolicyContext,
@@ -9,10 +8,7 @@ export type {
   PolicyEngineRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
-  DispatchPointContextGeneric,
-  AuditDispatchContextGeneric,
   CanonicalAuditDispatchContextGeneric,
-  AuditEmit,
   PolicyPointId,
 } from "./types";
 

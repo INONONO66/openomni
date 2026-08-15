@@ -32,9 +32,9 @@ import { mutate } from "./mutation.js";
 
 const ATTEMPT_WAIT_PREFIX = "attempt-wait:";
 
-export type AttemptRunStatus = "running" | "waiting_input" | WorkItem.AttemptOutcome;
+type AttemptRunStatus = "running" | "waiting_input" | WorkItem.AttemptOutcome;
 
-export interface AttemptRunView {
+interface AttemptRunView {
   readonly runId: string;
   readonly sessionId: string;
   readonly parentSessionId?: string;

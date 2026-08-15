@@ -2197,7 +2197,7 @@ function parseJson(input: string): unknown {
   }
 }
 
-export type WorkItemCompletionRecoveryReceipt = Readonly<{
+type WorkItemCompletionRecoveryReceipt = Readonly<{
   recovered: number;
   skipped: number;
   failures: readonly Readonly<{

@@ -5,7 +5,7 @@ import type {
   GenericPolicyContext,
 } from "./engine/types";
 
-export interface RuntimeContext {
+interface RuntimeContext {
   readonly workspaceRoot?: string;
   readonly traceId?: string;
   readonly sessionId?: string;
@@ -14,7 +14,7 @@ export interface RuntimeContext {
   readonly auditEmit?: AuditEmit;
 }
 
-export type PolicyFactory<TCtx extends GenericPolicyContext = GenericPolicyContext> = (
+type PolicyFactory<TCtx extends GenericPolicyContext = GenericPolicyContext> = (
   config: unknown,
   runtime: RuntimeContext,
 ) => CanonicalPolicyRegistrationGeneric<TCtx>;

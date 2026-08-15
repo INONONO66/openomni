@@ -39,7 +39,7 @@ export type DispatchPointContextGeneric<
 
 export type PolicyDecision = Policy.PolicyDecision;
 
-export interface PolicyAuditConfig {
+interface PolicyAuditConfig {
   readonly sessionId?: string;
   readonly actor?: Record<string, unknown>;
   readonly action?: string;
