@@ -94,9 +94,10 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
         defaultTier: "observer",
         createdBy: "act_owner",
       },
-      // Stale fixture: the "normal" treatment was renamed "full_access" in
-      // Actor.InboundTreatment; the test still proves the passed treatment is
-      // stamped onto meta verbatim.
+      // "normal" was never in Actor.InboundTreatment — the enum was born
+      // full_access|evidence_only|drop (#250), and this fixture entered already
+      // illegal (#519). It passed for a year because the stamping path does no
+      // runtime validation; that finding is recorded at the stamping site.
       "full_access",
     );
 

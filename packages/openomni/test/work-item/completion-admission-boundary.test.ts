@@ -350,6 +350,18 @@ afterEach(() => {
   for (const path of databasePaths.splice(0)) removeDatabase(path);
 });
 
+/**
+ * Typed replacement for the file's older Reflect.get idiom: returns unknown
+ * (never any) and fails the test loudly when the key is absent instead of
+ * yielding undefined into a matcher.
+ */
+function field(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || !(key in value)) {
+    throw new Error(`shape: missing ${key}`);
+  }
+  return (value as Record<string, unknown>)[key];
+}
+
 describe("WorkItem completion admission service", () => {
   test("uses one kernel-internal guarded completion gateway for non-Worker origins", async () => {
     configure();
@@ -750,10 +762,8 @@ describe("WorkItem completion admission service", () => {
       completed: true,
       admission: { decision: "owner_override", ownerOverrideReceiptRef },
     });
-    const resultAdmission = Reflect.get(result as object, "admission");
-    expect(Reflect.get(resultAdmission as object, "ownerOverrideReceiptRef")).toBe(
-      ownerOverrideReceiptRef,
-    );
+    const resultAdmission = field(result, "admission");
+    expect(field(resultAdmission, "ownerOverrideReceiptRef")).toBe(ownerOverrideReceiptRef);
   });
 
   test("closes an Owner override without synthesizing a missing result", async () => {
@@ -1006,7 +1016,7 @@ describe("WorkItem completion admission service", () => {
         completionTerminalReceipt: { admissionId: originalAdmission?.id },
       },
     });
-    const replayWorkItem = WorkItem.Info.parse(Reflect.get(replay as object, "workItem"));
+    const replayWorkItem = WorkItem.Info.parse(field(replay, "workItem"));
     expect(replayWorkItem.completionFacts.admissions.map(({ id }) => id)).toEqual([
       originalAdmission.id,
     ]);
@@ -1488,7 +1498,7 @@ describe("WorkItem completion admission service", () => {
     const stored = WorkItemStore.get(first.item.hash);
     const expectedEvidenceIds = [firstEvidenceId, secondEvidenceId].sort();
 
-    expect(Reflect.get(outcome as object, "completed")).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(stored?.completionReport?.claims[0]?.evidenceIds).toEqual(expectedEvidenceIds);
     expect(
       stored?.completionFacts.admissions[0]?.completionReportSnapshot?.claims[0]?.evidenceIds,
@@ -1837,7 +1847,7 @@ describe("WorkItem completion admission service", () => {
     );
     const stored = WorkItemStore.get(item.hash);
 
-    expect(Reflect.get(outcome as object, "completed")).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(admissionAuthority.calls).toEqual([
       {
         itemHead: item.revision,
@@ -2326,9 +2336,9 @@ describe("WorkItem completion admission service", () => {
     stopCompleted();
     const stored = WorkItemStore.get(first.item.hash);
 
-    expect(Reflect.get(firstOutcome as object, "completed")).toBe(true);
+    expect(field(firstOutcome, "completed")).toBe(true);
     if (replayOutcome === undefined) throw new Error("shape");
-    expect(Reflect.get(replayOutcome as object, "completed")).toBe(true);
+    expect(field(replayOutcome, "completed")).toBe(true);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionTerminalReceipt?.admissionId).toBe(
       stored?.completionFacts.admissions[0]?.id,
@@ -2395,7 +2405,7 @@ describe("WorkItem completion admission service", () => {
     const outcome = await pending;
     const stored = WorkItemStore.get(item.hash);
 
-    expect(Reflect.get(outcome as object, "completed")).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(authorityCalls).toBe(2);
     expect(stored?.name).toBe("mutated during authority");
     expect(stored?.completionFacts.admissions).toHaveLength(1);
@@ -2435,7 +2445,7 @@ describe("WorkItem completion admission service", () => {
     stopCompleted();
     const stored = WorkItemStore.get(item.hash);
 
-    expect(Reflect.get(outcome as object, "completed")).toBe(true);
+    expect(field(outcome, "completed")).toBe(true);
     expect(terminalContended).toBe(true);
     expect(stored?.name).toBe("mutated during terminal CAS");
     expect(stored?.completionFacts.admissions).toHaveLength(2);
