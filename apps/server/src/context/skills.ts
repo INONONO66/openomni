@@ -14,7 +14,7 @@ interface SkillMeta {
   path: string;
 }
 
-function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
+function loadSkillsFromDir(skillsDir: string, traceId: string): SkillMeta[] {
   if (!existsSync(skillsDir)) return [];
 
   let entries: string[];
@@ -48,7 +48,7 @@ function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
     } catch {
       // gray-matter parse failure or unreadable file — fall back to directory name
       Bus.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         component: "server",
         msg: "failed to parse skill file, using directory name as fallback",
@@ -62,21 +62,28 @@ function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
   return skills;
 }
 
+// Memoized: only the FIRST run for a given key pays the filesystem walk, so
+// any parse warn fires under that first run's trace — later runs hit the cache.
 const discoverCache = new Map<string, SkillMeta[]>();
 
 export namespace SkillLoader {
-  export function discover(workspaceRoot: string, globalConfigDir?: string): SkillMeta[] {
+  /** `traceId` is the assembling run's dispatch trace (D11) — loader warns inherit it, never mint. */
+  export function discover(
+    workspaceRoot: string,
+    traceId: string,
+    globalConfigDir?: string,
+  ): SkillMeta[] {
     const key = `${workspaceRoot}\0${globalConfigDir === undefined ? "\0undef" : globalConfigDir}`;
     const cached = discoverCache.get(key);
     if (cached) return cached;
 
     const projectOpenomniDir = findUp(".openomni", workspaceRoot);
     const projectSkills = projectOpenomniDir
-      ? loadSkillsFromDir(join(projectOpenomniDir, "skills"))
+      ? loadSkillsFromDir(join(projectOpenomniDir, "skills"), traceId)
       : [];
 
     const globalRoot = globalConfigDir ?? join(homedir(), ".openomni");
-    const globalSkills = loadSkillsFromDir(join(globalRoot, "skills"));
+    const globalSkills = loadSkillsFromDir(join(globalRoot, "skills"), traceId);
 
     const seen = new Set<string>(projectSkills.map((s) => s.name));
     const merged = [...projectSkills];

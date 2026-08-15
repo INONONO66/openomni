@@ -21,21 +21,22 @@ describe("built-in dispatch handlers", () => {
   });
 
   test("schedule handlers call scheduler owner", async () => {
-    const registered: Array<{ summary: string; target: string }> = [];
-    const removed: string[] = [];
+    const registered: Array<{ summary: string; target: string; traceId: string }> = [];
+    const removed: Array<{ jobId: string; traceId: string }> = [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
       owners: {
         scheduler: {
-          register(job) {
+          register(job, traceId) {
             registered.push({
               summary: `${job.agentName}:${job.schedule}:${job.payload}`,
               target: job.target.kind,
+              traceId,
             });
             return "job-1";
           },
-          remove(jobId) {
-            removed.push(jobId);
+          remove(jobId, traceId) {
+            removed.push({ jobId, traceId });
             return true;
           },
         },
@@ -53,8 +54,12 @@ describe("built-in dispatch handlers", () => {
       command("schedule.cancel", { kind: "schedule", id: "job-1" }),
     );
 
-    expect(registered).toEqual([{ summary: "resident:0 9 * * *:report", target: "resident" }]);
-    expect(removed).toEqual(["job-1"]);
+    // Pin: schedule lifecycle events INHERIT the dispatching command's trace —
+    // a revert to per-publish minting would break this equality.
+    expect(registered).toEqual([
+      { summary: "resident:0 9 * * *:report", target: "resident", traceId: "trace-1" },
+    ]);
+    expect(removed).toEqual([{ jobId: "job-1", traceId: "trace-1" }]);
     expect(createResult).toEqual({
       output: { scheduled: true, jobId: "job-1", messageId: "job-1" },
     });

@@ -10,8 +10,12 @@ export class DiscordClient implements ChannelClient {
     private readonly publish: PublishPort,
   ) {}
 
-  async send(channelId: string, text: string): Promise<string | undefined> {
-    const message = (await this.api(`/channels/${channelId}/messages`, { content: text })) as {
+  async send(channelId: string, text: string, traceId: string): Promise<string | undefined> {
+    const message = (await this.api(
+      `/channels/${channelId}/messages`,
+      { content: text },
+      traceId,
+    )) as {
       id?: unknown;
     };
     return typeof message.id === "string" ? message.id : undefined;
@@ -32,10 +36,12 @@ export class DiscordClient implements ChannelClient {
     );
   }
 
-  async createDmChannel(recipientId: string): Promise<string> {
-    const channel = (await this.api("/users/@me/channels", {
-      recipient_id: recipientId,
-    })) as { id: string };
+  async createDmChannel(recipientId: string, traceId: string): Promise<string> {
+    const channel = (await this.api(
+      "/users/@me/channels",
+      { recipient_id: recipientId },
+      traceId,
+    )) as { id: string };
     return channel.id;
   }
 
@@ -53,7 +59,11 @@ export class DiscordClient implements ChannelClient {
     return `${url}?v=10&encoding=json`;
   }
 
-  private async api(path: string, body: Record<string, unknown>): Promise<unknown> {
+  private async api(
+    path: string,
+    body: Record<string, unknown>,
+    traceId: string,
+  ): Promise<unknown> {
     const res = await fetchWithRetry(
       `${BASE_URL}${path}`,
       {
@@ -65,6 +75,7 @@ export class DiscordClient implements ChannelClient {
         body: JSON.stringify(body),
       },
       {
+        traceId,
         publish: this.publish,
         parseRetryAfter: (data) => {
           const r = data as { retry_after?: number };

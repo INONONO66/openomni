@@ -75,7 +75,7 @@ describe("CronJobRunner", () => {
     tmpDir = paths.dir;
     Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
-    CronJobRegistry.register(dueJob());
+    CronJobRegistry.register(dueJob(), "trace-cron-test");
 
     Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
@@ -108,7 +108,7 @@ describe("CronJobRunner", () => {
 
   test("initializes jobs without nextFireAt before firing", async () => {
     const job = dueJob("job-created");
-    CronJobRegistry.register({ ...job, nextFireAt: undefined });
+    CronJobRegistry.register({ ...job, nextFireAt: undefined }, "trace-cron-test");
 
     const fired: CronJob.Info[] = [];
     await CronJobRunner.tick({
@@ -134,7 +134,7 @@ describe("CronJobRunner", () => {
       createdAt: Date.UTC(2026, 0, 1, 0, 0),
       nextFireAt: undefined,
     };
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
 
     await CronJobRunner.tick({ nowMs: () => Date.UTC(2026, 0, 1, 1, 0) });
 
@@ -148,7 +148,7 @@ describe("CronJobRunner", () => {
       createdAt: Date.UTC(2026, 0, 1, 0, 0),
       nextFireAt: undefined,
     };
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
 
     await CronJobRunner.tick({ nowMs: () => Date.UTC(2026, 0, 2, 0, 0) });
 
@@ -156,7 +156,7 @@ describe("CronJobRunner", () => {
   });
 
   test("start runs a boot tick and can be stopped", async () => {
-    CronJobRegistry.register(dueJob("job-boot"));
+    CronJobRegistry.register(dueJob("job-boot"), "trace-cron-test");
     const fired: string[] = [];
 
     const runner = CronJobRunner.start({
@@ -173,12 +173,15 @@ describe("CronJobRunner", () => {
   });
 
   test("continues after an invalid persisted schedule", async () => {
-    CronJobRegistry.register({
-      ...dueJob("job-bad"),
-      schedule: "1-2-3 * * * *",
-      nextFireAt: undefined,
-    });
-    CronJobRegistry.register(dueJob("job-good"));
+    CronJobRegistry.register(
+      {
+        ...dueJob("job-bad"),
+        schedule: "1-2-3 * * * *",
+        nextFireAt: undefined,
+      },
+      "trace-cron-test",
+    );
+    CronJobRegistry.register(dueJob("job-good"), "trace-cron-test");
 
     const fired: string[] = [];
     await CronJobRunner.tick({
@@ -192,12 +195,15 @@ describe("CronJobRunner", () => {
   });
 
   test("rejects second-precision schedules", async () => {
-    CronJobRegistry.register({
-      ...dueJob("job-six-field"),
-      schedule: "*/5 * * * * *",
-      nextFireAt: undefined,
-    });
-    CronJobRegistry.register(dueJob("job-good"));
+    CronJobRegistry.register(
+      {
+        ...dueJob("job-six-field"),
+        schedule: "*/5 * * * * *",
+        nextFireAt: undefined,
+      },
+      "trace-cron-test",
+    );
+    CronJobRegistry.register(dueJob("job-good"), "trace-cron-test");
 
     const fired: string[] = [];
     await CronJobRunner.tick({
@@ -221,13 +227,16 @@ describe("CronJobRunner", () => {
       "0 0 * * 1#2",
     ];
     for (const [index, schedule] of invalidSchedules.entries()) {
-      CronJobRegistry.register({
-        ...dueJob(`job-extension-${index}`),
-        schedule,
-        nextFireAt: undefined,
-      });
+      CronJobRegistry.register(
+        {
+          ...dueJob(`job-extension-${index}`),
+          schedule,
+          nextFireAt: undefined,
+        },
+        "trace-cron-test",
+      );
     }
-    CronJobRegistry.register(dueJob("job-good"));
+    CronJobRegistry.register(dueJob("job-good"), "trace-cron-test");
 
     const fired: string[] = [];
     await CronJobRunner.tick({
@@ -250,7 +259,7 @@ describe("CronJobRunner", () => {
       createdAt: Date.UTC(2026, 0, 1, 12, 1),
       nextFireAt: undefined,
     };
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
 
     await CronJobRunner.tick({ nowMs: () => Date.UTC(2026, 0, 1, 12, 2) });
 
@@ -259,13 +268,13 @@ describe("CronJobRunner", () => {
 
   test("does not reinsert jobs cancelled while firing", async () => {
     const job = dueJob("job-cancelled-during-fire");
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
 
     await CronJobRunner.tick({
       nowMs: () => 1_710_000_060_000,
       fire: async (candidate) => {
         expect(candidate.id).toBe(job.id);
-        expect(CronJobRegistry.remove(candidate.id)).toBe(true);
+        expect(CronJobRegistry.remove(candidate.id, "trace-cron-test")).toBe(true);
       },
     });
 
@@ -278,13 +287,13 @@ describe("CronJobRunner", () => {
     Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
     const job = dueJob("job-persisted-cancel");
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
 
     await CronJobRunner.tick({
       nowMs: () => 1_710_000_060_000,
       fire: async (candidate) => {
         expect(candidate.id).toBe(job.id);
-        expect(CronJobRegistry.remove(candidate.id)).toBe(true);
+        expect(CronJobRegistry.remove(candidate.id, "trace-cron-test")).toBe(true);
       },
     });
 
@@ -293,7 +302,7 @@ describe("CronJobRunner", () => {
 
   test("advances leap-day schedules instead of refiring them every tick", async () => {
     const job = leapDayJob();
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
 
     const fired: string[] = [];
     await CronJobRunner.tick({

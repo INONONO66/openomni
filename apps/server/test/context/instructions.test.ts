@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { InstructionLoader } from "../../src/context/instructions";
 
 let tempRoot: string;
@@ -25,7 +27,7 @@ describe("InstructionLoader.discover", () => {
     const ws = makeWorkspace("discover-project");
     writeFileSync(join(ws, "AGENTS.md"), "# Project instructions");
 
-    const files = InstructionLoader.discover(ws);
+    const files = InstructionLoader.discover(ws, "trace-instr-test");
     const project = files.find((f) => f.label === "Project");
     expect(project).toBeDefined();
     expect(project?.path).toBe(join(ws, "AGENTS.md"));
@@ -37,7 +39,7 @@ describe("InstructionLoader.discover", () => {
     const globalDir = makeWorkspace("global-config");
     writeFileSync(join(globalDir, "AGENTS.md"), "# Global instructions");
 
-    const files = InstructionLoader.discover(ws, globalDir);
+    const files = InstructionLoader.discover(ws, "trace-instr-test", globalDir);
     const global = files.find((f) => f.label === "Global");
     expect(global).toBeDefined();
     expect(global?.path).toBe(join(globalDir, "AGENTS.md"));
@@ -52,14 +54,14 @@ describe("InstructionLoader.discover", () => {
     const subdir = join(ws, "subdir");
     mkdirSync(subdir);
 
-    const files = InstructionLoader.discover(ws);
+    const files = InstructionLoader.discover(ws, "trace-instr-test");
     const local = files.find((f) => f.label === "Local");
     expect(local).toBeDefined();
     expect(local?.path).toBe(join(ws, "AGENTS.local.md"));
     expect(local?.priority).toBe(20);
 
     // Subdirectory should NOT find parent's AGENTS.local.md
-    const subdirFiles = InstructionLoader.discover(subdir);
+    const subdirFiles = InstructionLoader.discover(subdir, "trace-instr-test");
     expect(subdirFiles.find((f) => f.label === "Local")).toBeUndefined();
   });
 
@@ -71,7 +73,7 @@ describe("InstructionLoader.discover", () => {
     writeFileSync(join(rulesDir, "testing.md"), "# Testing rules");
     writeFileSync(join(rulesDir, "not-markdown.txt"), "ignored");
 
-    const files = InstructionLoader.discover(ws);
+    const files = InstructionLoader.discover(ws, "trace-instr-test");
     const ruleLabels = files.filter((f) => f.label.startsWith("Rules:")).map((f) => f.label);
     expect(ruleLabels).toContain("Rules: coding.md");
     expect(ruleLabels).toContain("Rules: testing.md");
@@ -88,7 +90,7 @@ describe("InstructionLoader.discover", () => {
     mkdirSync(rulesDir, { recursive: true });
     writeFileSync(join(rulesDir, "rule.md"), "# Rule");
 
-    const files = InstructionLoader.discover(ws, globalDir);
+    const files = InstructionLoader.discover(ws, "trace-instr-test", globalDir);
     const priorities = files.map((f) => f.priority);
 
     for (let i = 1; i < priorities.length; i++) {
@@ -104,21 +106,21 @@ describe("InstructionLoader.discover", () => {
 
   it("returns [] for empty directory with no relevant files", () => {
     const ws = makeWorkspace("discover-empty");
-    const files = InstructionLoader.discover(ws);
+    const files = InstructionLoader.discover(ws, "trace-instr-test");
     expect(files).toEqual([]);
   });
 
   it("skips global AGENTS.md when globalConfigDir has none", () => {
     const ws = makeWorkspace("discover-no-global");
     const globalDir = makeWorkspace("empty-global-config");
-    const files = InstructionLoader.discover(ws, globalDir);
+    const files = InstructionLoader.discover(ws, "trace-instr-test", globalDir);
     expect(files.find((f) => f.label === "Global")).toBeUndefined();
   });
 });
 
 describe("InstructionLoader.load", () => {
   it("returns empty string for empty file list", () => {
-    expect(InstructionLoader.load([])).toBe("");
+    expect(InstructionLoader.load([], "trace-instr-test")).toBe("");
   });
 
   it("returns content with section header for one file", () => {
@@ -126,7 +128,10 @@ describe("InstructionLoader.load", () => {
     const filePath = join(ws, "AGENTS.md");
     writeFileSync(filePath, "Hello world");
 
-    const result = InstructionLoader.load([{ path: filePath, priority: 10, label: "Project" }]);
+    const result = InstructionLoader.load(
+      [{ path: filePath, priority: 10, label: "Project" }],
+      "trace-instr-test",
+    );
     expect(result).toContain("**Instructions from Project:**");
     expect(result).toContain("Hello world");
   });
@@ -137,25 +142,45 @@ describe("InstructionLoader.load", () => {
     const bigContent = "x".repeat(13_000);
     writeFileSync(filePath, bigContent);
 
-    const result = InstructionLoader.load([{ path: filePath, priority: 0, label: "Big" }]);
+    const result = InstructionLoader.load(
+      [{ path: filePath, priority: 0, label: "Big" }],
+      "trace-instr-test",
+    );
     expect(result).toContain("[...truncated]");
     const xCount = (result.match(/x/g) ?? []).length;
     expect(xCount).toBeLessThanOrEqual(12_000);
   });
 
-  it("skips unreadable file silently and continues", () => {
+  it("skips unreadable file silently and continues", async () => {
     const ws = makeWorkspace("load-unreadable");
     const goodPath = join(ws, "good.md");
     const badPath = join(ws, "nonexistent.md");
     writeFileSync(goodPath, "Good content");
 
-    const result = InstructionLoader.load([
-      { path: badPath, priority: 0, label: "Bad" },
-      { path: goodPath, priority: 10, label: "Good" },
-    ]);
+    // Pin (D11): the skip-warn INHERITS the caller's dispatch trace — a
+    // revert to a per-warn mint would break this equality.
+    const warns: Array<{ traceId: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      warns.push(event);
+    });
+    let result: string;
+    try {
+      result = InstructionLoader.load(
+        [
+          { path: badPath, priority: 0, label: "Bad" },
+          { path: goodPath, priority: 10, label: "Good" },
+        ],
+        "trace-unreadable-pin",
+      );
+    } finally {
+      // Bus handlers are dispatched via queueMicrotask — flush before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      unsubscribe();
+    }
 
     expect(result).toContain("Good content");
     expect(result).not.toContain("ENOENT");
+    expect(warns.map((w) => w.traceId)).toEqual(["trace-unreadable-pin"]);
   });
 
   it("assembles multiple files in order with separators", () => {
@@ -165,10 +190,13 @@ describe("InstructionLoader.load", () => {
     writeFileSync(file1, "Alpha content");
     writeFileSync(file2, "Beta content");
 
-    const result = InstructionLoader.load([
-      { path: file1, priority: 0, label: "Alpha" },
-      { path: file2, priority: 10, label: "Beta" },
-    ]);
+    const result = InstructionLoader.load(
+      [
+        { path: file1, priority: 0, label: "Alpha" },
+        { path: file2, priority: 10, label: "Beta" },
+      ],
+      "trace-instr-test",
+    );
 
     const alphaPos = result.indexOf("Alpha content");
     const betaPos = result.indexOf("Beta content");
@@ -184,8 +212,8 @@ describe("InstructionLoader caching", () => {
     const ws = makeWorkspace("cache-discover");
     writeFileSync(join(ws, "AGENTS.md"), "# Original");
 
-    const first = InstructionLoader.discover(ws, ws);
-    const second = InstructionLoader.discover(ws, ws);
+    const first = InstructionLoader.discover(ws, "trace-instr-test", ws);
+    const second = InstructionLoader.discover(ws, "trace-instr-test", ws);
     expect(second).toBe(first);
   });
 
@@ -195,16 +223,16 @@ describe("InstructionLoader caching", () => {
     const agentsPath = join(globalDir, "AGENTS.md");
     writeFileSync(agentsPath, "# Will be deleted");
 
-    const first = InstructionLoader.discover(ws, globalDir);
+    const first = InstructionLoader.discover(ws, "trace-instr-test", globalDir);
     expect(first.some((f) => f.label === "Global")).toBe(true);
 
     unlinkSync(agentsPath);
 
-    const cached = InstructionLoader.discover(ws, globalDir);
+    const cached = InstructionLoader.discover(ws, "trace-instr-test", globalDir);
     expect(cached.some((f) => f.label === "Global")).toBe(true);
 
     const freshGlobalDir = makeWorkspace("cache-stale-fresh-global-config");
-    const fresh = InstructionLoader.discover(ws, freshGlobalDir);
+    const fresh = InstructionLoader.discover(ws, "trace-instr-test", freshGlobalDir);
     expect(fresh.some((f) => f.label === "Global")).toBe(false);
   });
 
@@ -214,17 +242,20 @@ describe("InstructionLoader caching", () => {
     writeFileSync(filePath, "Content A");
 
     const files = [{ path: filePath, priority: 0, label: "Test" }];
-    const first = InstructionLoader.load(files);
+    const first = InstructionLoader.load(files, "trace-instr-test");
     expect(first).toContain("Content A");
 
     writeFileSync(filePath, "Content B");
 
-    const cached = InstructionLoader.load(files);
+    const cached = InstructionLoader.load(files, "trace-instr-test");
     expect(cached).toContain("Content A");
 
     const freshPath = join(ws, "fresh.md");
     writeFileSync(freshPath, "Content B");
-    const fresh = InstructionLoader.load([{ path: freshPath, priority: 0, label: "Fresh" }]);
+    const fresh = InstructionLoader.load(
+      [{ path: freshPath, priority: 0, label: "Fresh" }],
+      "trace-instr-test",
+    );
     expect(fresh).toContain("Content B");
   });
 });

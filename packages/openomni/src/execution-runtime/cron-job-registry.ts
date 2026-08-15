@@ -18,10 +18,10 @@ function cronJobs(): ProtocolStorage.CronJobSubAdapter {
 }
 
 export namespace CronJobRegistry {
-  export function register(job: CronJob.Info): string {
+  export function register(job: CronJob.Info, traceId: string): string {
     cronJobs().set(job);
     Bus.publish(CronJob.Events.CronJobScheduled, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       jobId: job.id,
       agentName: job.agentName,
@@ -42,11 +42,11 @@ export namespace CronJobRegistry {
     return cronJobs().list();
   }
 
-  export function remove(jobId: string): boolean {
+  export function remove(jobId: string, traceId: string): boolean {
     const deleted = cronJobs().remove(jobId);
     if (deleted) {
       Bus.publish(CronJob.Events.CronJobCancelled, {
-        traceId: crypto.randomUUID(),
+        traceId,
         time: Date.now(),
         jobId,
       });

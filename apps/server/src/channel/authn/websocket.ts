@@ -1,5 +1,6 @@
 import { Operational } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
 import { WebSocketToken } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver, WebSocketAuthResult } from "./types";
@@ -8,6 +9,8 @@ import type { PublishPort } from "../types";
 interface WebSocketAuthState {
   readonly request: Request;
   readonly publish: PublishPort;
+  /** The upgrade attempt's trace (D11 origin, one per upgrade) — both auth warns inherit it. */
+  readonly traceId: string;
   readonly token?: string;
   headers?: Record<string, string>;
   response?: Response;
@@ -46,7 +49,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
   const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
   if (provided !== state.token) {
     state.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId: state.traceId,
       time: Date.now(),
       component: "server",
       msg: "websocket auth failure",
@@ -75,7 +78,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
   }
 
   state.publish(Operational.Warn, {
-    traceId: crypto.randomUUID(),
+    traceId: state.traceId,
     time: Date.now(),
     component: "server",
     msg: "websocket query token auth is deprecated",
@@ -100,6 +103,11 @@ export function authenticateWebSocketUpgrade(input: {
   const state: WebSocketAuthState = {
     request: input.request,
     publish: input.publish,
+    // Origin: an inbound upgrade attempt is a genuine trace root — ONE mint per
+    // upgrade; the two auth warns (mutually exclusive per upgrade) inherit it.
+    // Deliberately NOT shared with per-frame traces: an accepted connection's
+    // frames mint their own message origins (channel/websocket.ts).
+    traceId: newTraceId(),
     ...(input.token !== undefined ? { token: input.token } : {}),
   };
   const verdict = evaluateWebSocketToken(state);

@@ -147,7 +147,9 @@ export async function resolveRuntimeModel(
   return model;
 }
 
-export async function resolveDefaultProviderModel(): Promise<CatalogModel | undefined> {
+export async function resolveDefaultProviderModel(
+  traceId: string,
+): Promise<CatalogModel | undefined> {
   try {
     const credentials = await Auth.all();
     const entries = Object.entries(credentials);
@@ -165,7 +167,7 @@ export async function resolveDefaultProviderModel(): Promise<CatalogModel | unde
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
       msg: "failed to resolve model",

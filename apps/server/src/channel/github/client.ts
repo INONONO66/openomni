@@ -30,6 +30,7 @@ export class GitHubClient {
         body: JSON.stringify({ body }),
       },
       {
+        traceId,
         publish: this.publish,
         label: "github/postComment",
       },

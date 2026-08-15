@@ -38,7 +38,7 @@ describe("CronJobRegistry persistence", () => {
     Storage.initialize({ dbPath: paths.dbPath });
     const job = jobFixture();
 
-    CronJobRegistry.register(job);
+    CronJobRegistry.register(job, "trace-cron-test");
     Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
 
@@ -53,7 +53,7 @@ describe("CronJobRegistry persistence", () => {
     Storage.reset();
     const job = jobFixture();
 
-    expect(() => CronJobRegistry.register(job)).toThrow(/before initialize/);
+    expect(() => CronJobRegistry.register(job, "trace-cron-test")).toThrow(/before initialize/);
     expect(Storage.getInitializedDbPath()).toBeNull();
   });
 
@@ -61,8 +61,8 @@ describe("CronJobRegistry persistence", () => {
     const paths = tempDbPath();
     tmpDir = paths.dir;
     Storage.initialize({ dbPath: paths.dbPath });
-    CronJobRegistry.register(jobFixture("job-1"));
-    CronJobRegistry.register(jobFixture("job-2"));
+    CronJobRegistry.register(jobFixture("job-1"), "trace-cron-test");
+    CronJobRegistry.register(jobFixture("job-2"), "trace-cron-test");
     expect(CronJobRegistry.list()).toHaveLength(2);
 
     CronJobRegistry.clear();
@@ -77,13 +77,13 @@ describe("CronJobRegistry persistence", () => {
     const first = jobFixture("job-1");
     const second = jobFixture("job-2");
 
-    CronJobRegistry.register(first);
-    CronJobRegistry.register(second);
-    expect(CronJobRegistry.remove("job-1")).toBe(true);
+    CronJobRegistry.register(first, "trace-cron-test");
+    CronJobRegistry.register(second, "trace-cron-test");
+    expect(CronJobRegistry.remove("job-1", "trace-cron-test")).toBe(true);
     Storage.reset();
     Storage.initialize({ dbPath: paths.dbPath });
 
     expect(CronJobRegistry.list()).toEqual([second]);
-    expect(CronJobRegistry.remove("missing")).toBe(false);
+    expect(CronJobRegistry.remove("missing", "trace-cron-test")).toBe(false);
   });
 });

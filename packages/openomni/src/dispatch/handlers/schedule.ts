@@ -66,7 +66,7 @@ export function createScheduleDispatchHandlers(
         target: scheduleTarget(command),
         createdAt: Date.now(),
       });
-      const jobId = scheduler.register(job);
+      const jobId = scheduler.register(job, command.traceId);
       return { output: { scheduled: true, jobId, messageId: jobId } };
     },
 
@@ -74,7 +74,7 @@ export function createScheduleDispatchHandlers(
       const scheduler = requireScheduler(options.scheduler);
       const jobId = command.target.id ?? command.target.name;
       if (!jobId) throw new Error("schedule.cancel requires target.id");
-      return { output: { cancelled: scheduler.remove(jobId), jobId } };
+      return { output: { cancelled: scheduler.remove(jobId, command.traceId), jobId } };
     },
   };
 }

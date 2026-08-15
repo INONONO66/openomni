@@ -13,8 +13,8 @@ export class TelegramClient implements ChannelClient {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
 
-  async send(channelId: string, text: string): Promise<string | undefined> {
-    const message = await this.api<{ message_id?: unknown }>("sendMessage", {
+  async send(channelId: string, text: string, traceId: string): Promise<string | undefined> {
+    const message = await this.api<{ message_id?: unknown }>("sendMessage", traceId, {
       chat_id: channelId,
       text,
     });
@@ -24,7 +24,7 @@ export class TelegramClient implements ChannelClient {
   }
 
   async sendTyping(channelId: string, traceId: string): Promise<void> {
-    await this.api("sendChatAction", { chat_id: channelId, action: "typing" }).catch((e) =>
+    await this.api("sendChatAction", traceId, { chat_id: channelId, action: "typing" }).catch((e) =>
       this.publish(Operational.Warn, {
         traceId,
         time: Date.now(),
@@ -35,16 +35,18 @@ export class TelegramClient implements ChannelClient {
     );
   }
 
-  async getMe(): Promise<TelegramUser> {
-    return this.api<TelegramUser>("getMe");
+  async getMe(traceId: string): Promise<TelegramUser> {
+    return this.api<TelegramUser>("getMe", traceId);
   }
 
   async getUpdates(
     offset: number,
+    traceId: string,
     signal?: AbortSignal,
   ): Promise<Array<{ update_id: number; message?: unknown }>> {
     return this.api<Array<{ update_id: number; message?: unknown }>>(
       "getUpdates",
+      traceId,
       { offset, timeout: 30, allowed_updates: ["message"] },
       signal,
     );
@@ -52,6 +54,7 @@ export class TelegramClient implements ChannelClient {
 
   private async api<T>(
     method: string,
+    traceId: string,
     params?: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<T> {
@@ -65,6 +68,7 @@ export class TelegramClient implements ChannelClient {
         signal,
       },
       {
+        traceId,
         publish: this.publish,
         parseRetryAfter: (body) => {
           const r = body as { parameters?: { retry_after?: number } };
