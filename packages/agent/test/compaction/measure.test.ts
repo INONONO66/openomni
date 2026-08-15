@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import type { Message } from "@openomni/protocol";
 import { PolicyEngine } from "../../src/core/policy";
 import { buildTurn } from "../../src/core/execution/turn";
+import { replaceRunMessages } from "../../src/core/execution/state";
 import { measuredContextTokens } from "../../src/compaction/measure";
 import {
   makeAgentBase,
@@ -9,10 +11,22 @@ import {
   makeTrace,
 } from "../core/execution/lifecycle-dispatch-fixture";
 import { testProviderModel } from "../helpers/provider-model";
-import type { Message } from "@openomni/protocol";
 
-function assistantMessage(tokens: Message.AssistantMessage["tokens"]): Message.WithParts {
-  const sessionID = "measure-session";
+const sessionID = "measure-session";
+
+function stepFinishPart(input: number, read: number, write: number): Message.StepFinishPart {
+  return {
+    id: `step-${input}`,
+    sessionID,
+    messageID: "measure-msg",
+    type: "step-finish",
+    reason: "end_turn",
+    cost: 0,
+    tokens: { input, output: 10, reasoning: 0, cache: { read, write } },
+  };
+}
+
+function assistantMessage(parts: Message.Part[], turnTotals: { input: number }): Message.WithParts {
   return {
     info: {
       id: "measure-msg",
@@ -25,30 +39,42 @@ function assistantMessage(tokens: Message.AssistantMessage["tokens"]): Message.W
       agent: "test",
       path: { cwd: "/", root: "/" },
       cost: 0,
-      tokens,
+      tokens: {
+        input: turnTotals.input,
+        output: 10,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
     },
-    parts: [],
+    parts,
   };
 }
 
 describe("measuredContextTokens", () => {
-  it("counts fresh input and both cache lanes — a cached token still occupies the window", () => {
-    expect(
-      measuredContextTokens({
-        input: 800,
-        output: 10,
-        reasoning: 0,
-        cache: { read: 150, write: 50 },
-      }),
-    ).toBe(1000);
+  it("reads the LAST step's input — the turn total sums every step's resent conversation", () => {
+    // Pipeline-shaped: each step's `input` is the ai SDK's cache-inclusive
+    // prompt total (the token-tracker pin fixes input 100 = 90+7+3), and the
+    // message-level tokens field carries the SUM of the steps (3000), which
+    // is not a window size.
+    const message = assistantMessage(
+      [stepFinishPart(900, 800, 0), stepFinishPart(1000, 900, 20), stepFinishPart(1100, 1000, 0)],
+      { input: 3000 },
+    );
+    expect(measuredContextTokens(message)).toBe(1100);
+  });
+
+  it("does not add the cache lanes back — input already includes them", () => {
+    const message = assistantMessage([stepFinishPart(1000, 900, 50)], { input: 1000 });
+    expect(measuredContextTokens(message)).toBe(1000);
+  });
+
+  it("measures nothing when no step finished", () => {
+    expect(measuredContextTokens(assistantMessage([], { input: 0 }))).toBeUndefined();
   });
 });
 
-describe("the run measures each call", () => {
-  it("records the provider-measured context off the tracking sink, where tokens land", async () => {
-    const state = makeState();
-    expect(state.lastCallContextTokens).toBeUndefined();
-
+describe("the run measures the final call", () => {
+  async function preparedTurn(state: ReturnType<typeof makeState>) {
     const turn = await buildTurn(
       state,
       makeConfig(),
@@ -59,11 +85,31 @@ describe("the run measures each call", () => {
       makeAgentBase(),
     );
     if (turn.type !== "ready") throw new Error("expected a prepared turn");
+    return turn.turn;
+  }
 
-    turn.turn.trackingSink.onMessage(
-      assistantMessage({ input: 800, output: 10, reasoning: 0, cache: { read: 150, write: 50 } }),
+  it("records the last step's window off the tracking sink, where tokens land", async () => {
+    const state = makeState();
+    expect(state.lastCallContextTokens).toBeUndefined();
+    const turn = await preparedTurn(state);
+
+    turn.trackingSink.onMessage(
+      assistantMessage([stepFinishPart(900, 800, 0), stepFinishPart(1100, 1000, 0)], {
+        input: 2000,
+      }),
     );
 
-    expect(state.lastCallContextTokens).toBe(1000);
+    expect(state.lastCallContextTokens).toBe(1100);
+  });
+
+  it("clears the measurement when history is rewritten under it", async () => {
+    const state = makeState();
+    const turn = await preparedTurn(state);
+    turn.trackingSink.onMessage(assistantMessage([stepFinishPart(1100, 1000, 0)], { input: 1100 }));
+    expect(state.lastCallContextTokens).toBe(1100);
+
+    replaceRunMessages(state, []);
+
+    expect(state.lastCallContextTokens).toBeUndefined();
   });
 });

@@ -264,7 +264,8 @@ function createTrackingSink(
           turnUsage.outputTokens += deltaOutput;
           turnUsage.totalTokens += deltaInput + deltaOutput;
           recordAssistantTokenDelta(state, deltaInput, deltaOutput);
-          recordCallContext(state, measuredContextTokens(tokens));
+          const measured = measuredContextTokens(message);
+          if (measured !== undefined) recordCallContext(state, measured);
         }
       }
       const text = message.parts

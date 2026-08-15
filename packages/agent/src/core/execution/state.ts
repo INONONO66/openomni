@@ -218,6 +218,10 @@ export function appendRunMessages(state: RunState, messages: readonly Message.Wi
 
 export function replaceRunMessages(state: RunState, messages: Message.WithParts[]): void {
   state.messages = messages;
+  // The measurement described the window this rewrite just changed. Clearing
+  // it makes the next completion check skip-and-record rather than re-fire
+  // compaction on a number about history that no longer exists.
+  state.lastCallContextTokens = undefined;
 }
 
 export function advanceRunTurn(state: RunState): void {
