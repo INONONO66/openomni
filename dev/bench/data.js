@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786783635699,
+  "lastUpdate": 1786785922024,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -46849,6 +46849,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 495204,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2406a7a8dc5c4d21d26c14fe477dc77a16e7df79",
+          "message": "fix(agent): the runner owns both terminals (#606) (#632)\n\n* fix(agent): the runner owns both terminals (#606)\n\n#631 funneled every returning exit through one completion record and\nleft two throw paths open: an abort raised inside `Retry.sleep`, and a\nthrow that is not an `Error`. Both escape because `handleError` emitted\nthe failure itself, and both raise from inside the `catch` that would\nhave emitted it — a branch that records its own end can only be relied on\nfor the ends it knows about, and the ends it does not know about are\nexactly the ones that go unrecorded.\n\nSo the failure record moves to the runner, beside the completion one.\n`handleError` reports instead: its `throw` decision now carries the\nreason, the attempt, and the narrowed ceiling, and the runner emits them.\nA throw that never reached a retry decision still records, classified\nfrom its own message.\n\nBoth paths verified against the merge base: the two new cases fail there\nand pass here. `lifecycle-error.test.ts` asserted the emission inside\n`handleError`; it now asserts the report, and the record itself is\n`run-terminal-record.test.ts`, where the runner's guarantee lives.\n\nThis is the terminal half of D4, not the state machine: what remains on\nthat row is the transition table as the injection-point map and a\nserializable state tag.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): carry the decided facts across the wait (#606)\n\nReview findings, and the first is a real wrong-value bug I introduced.\n\n`failureFacts` re-derived the reason and read `retryPolicy.maxAttempts` —\na module constant, so always 3. On an abort during a backoff the terminal\nrecord therefore contradicted the same run's own `agent.error.retry`,\nwhich had reported the decided reason and the ceiling a `run.retry_after`\neffect had narrowed to. A record that disagrees with its own run is worse\nthan an absent field.\n\nThe cause was where the wait happened: `Retry.sleep` sat inside\n`handleError`, after the facts were computed and before they were\nreturned. It moves to the runner, which already owns the terminal.\n`ErrorDecision`'s retry variant carries `backoffMs` and the same\n`RunFailureFacts` as the throw variant, and the runner sets them before\nawaiting and clears them after, so a later unrelated throw cannot read\nstale ones. What is left of the fallback is for throws that never reached\na decision at all, and it says so.\n\nThe second finding is worse for having been mine to catch: the mechanism\nhad no coverage. Deleting the carried facts left the whole suite green,\nbecause I had also rewritten the one case that asserted the emitted\nrecord's content into one asserting a returned object. The two throw\ncases now assert `context`, and the abort case narrows the ceiling so the\ndecided facts and the re-derived ones differ — with the default policy\nthey coincide, which is why the first version of this assertion still\npassed with the mechanism removed.\n\nAlso drops `ErrorDecision.errorMessage`, written on every variant and\nread by nothing; collapses the `attempts()` helper back into a nested\n`try`, which is what it was for; and moves the two tests that observed\n`handleError` sleeping onto what it now decides.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T18:24:08+09:00",
+          "tree_id": "1bfd7ca096fccd6ad59593b6a71a075fa13d7f65",
+          "url": "https://github.com/INONONO66/openomni/commit/2406a7a8dc5c4d21d26c14fe477dc77a16e7df79"
+        },
+        "date": 1786785921269,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2492,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2673,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15033,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 586,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 489,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1031,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2365,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11051,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99123,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 502069,
             "unit": "ns/op"
           }
         ]
