@@ -48,10 +48,11 @@ type KernelWaitExecution =
   | Readonly<{ kind: "none" }>
   | Readonly<{
       kind: "wait";
-      // Optional: after recordDeliveryReceipt re-keys a wait to the platform
-      // message id, a channel may deliver the reply matched on
-      // externalMessageId alone, with no correlation envelope.
-      correlation?: Dispatch.Correlation;
+      // Required: a wait match can only come from resolveWaitTier, which
+      // refuses without a correlation envelope (externalMessageId re-keying
+      // feeds pendingAsk queries, never this tier) — the old optionality
+      // weakened the sender-match evidence below its real invariant.
+      correlation: Dispatch.Correlation;
       requestedAction: RequestedWaitAction;
       record: Wait.Record;
     }>
@@ -145,9 +146,12 @@ function kernelWaitExecution(
         case "pending_ask":
           return { kind: "pending_ask", record: resolution.candidate.record };
         case "wait":
+          if (correlation === undefined) {
+            throw new TypeError("wait match requires correlation");
+          }
           return {
             kind: "wait",
-            ...(correlation === undefined ? {} : { correlation }),
+            correlation,
             requestedAction,
             record: resolution.candidate.wait,
           };
