@@ -42,11 +42,11 @@ function rawExchange(socketPath: string, line: string): Promise<unknown> {
     }, 5000);
     socket.on("connect", () => socket.write(line));
     socket.on("data", (chunk) => {
-      const messages = decoder.push(chunk);
-      if (messages.length > 0) {
+      const { frames } = decoder.push(chunk);
+      if (frames.length > 0) {
         clearTimeout(timer);
         socket.destroy();
-        resolve(messages[0]);
+        resolve(frames[0]);
       }
     });
     socket.on("error", (err) => {
@@ -66,14 +66,17 @@ describe("framing round trips", () => {
       params: { runId: "run-1", prompt: "hello 😀" },
     };
     const bytes = encode(message);
-    expect(decoder.push(bytes.slice(0, 7))).toEqual([]);
-    expect(decoder.push(bytes.slice(7))).toEqual([message]);
+    expect(decoder.push(bytes.slice(0, 7))).toEqual({ frames: [], malformed: [] });
+    expect(decoder.push(bytes.slice(7))).toEqual({ frames: [message], malformed: [] });
   });
 
   test("oversized frame rejects with IpcProtocolError and the decoder recovers", () => {
     const decoder = new LineDecoder();
     expect(() => decoder.push("x".repeat(16 * 1024 * 1024 + 1))).toThrow(IpcProtocolError);
-    expect(decoder.push('{"recovered":true}\n')).toEqual([{ recovered: true }]);
+    expect(decoder.push('{"recovered":true}\n')).toEqual({
+      frames: [{ recovered: true }],
+      malformed: [],
+    });
   });
 });
 

@@ -16,7 +16,7 @@ type RequestHandler = (
   connectionId: string,
 ) => void;
 
-interface IpcServer {
+export interface IpcServer {
   readonly socketPath: string;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
@@ -28,6 +28,7 @@ type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  connectionId: string;
 };
 
 export function createIpcServer(socketPath: string, handler: RequestHandler): IpcServer {
@@ -79,12 +80,18 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
       // getActiveSocket() (it resolves the stale id, finds nothing, and never
       // falls through to a surviving connection), so no next connection binds.
       activeConnectionId = undefined;
-      failAllPending(new IpcConnectionError(reason));
-      return;
     }
-    if (connections.size === 0) {
-      activeConnectionId = undefined;
-      failAllPending(new IpcConnectionError(reason));
+    // A dead connection fails ITS in-flight requests as a connection loss —
+    // leaving them to age out would misreport the failure as a timeout.
+    failPendingOf(id, new IpcConnectionError(reason));
+  }
+
+  function failPendingOf(connId: string, err: Error): void {
+    for (const [reqId, handler] of pending) {
+      if (handler.connectionId !== connId) continue;
+      clearTimeout(handler.timer);
+      pending.delete(reqId);
+      handler.reject(err);
     }
   }
 
@@ -109,9 +116,11 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         if (!state) return;
 
         let messages: unknown[];
+        let malformed: string[];
         try {
-          messages = state.decoder.push(raw);
+          ({ frames: messages, malformed } = state.decoder.push(raw));
         } catch (error) {
+          // Oversize line/buffer — the decoder already reset its buffer (DoS guard).
           socket.write(
             encode(
               Ipc.createErrorResponse(
@@ -185,15 +194,24 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
             }
           }
         }
+
+        // A malformed line costs only itself: every parseable frame above was
+        // already processed; each bad line gets its own 4001 error frame and
+        // the connection survives.
+        for (const line of malformed) {
+          socket.write(
+            encode(
+              Ipc.createErrorResponse("unknown", 4001, `IPC frame is not valid JSON: ${line}`),
+            ),
+          );
+        }
       },
       close(socket: BunSocket) {
         const id = connectionId(socket);
         removeConnection(id, "socket closed");
       },
       error(socket: BunSocket, _err: Error) {
-        const id = connectionId(socket);
-        void socket;
-        removeConnection(id, "socket error");
+        removeConnection(connectionId(socket), "socket error");
       },
     },
   });
@@ -211,7 +229,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
           pending.delete(req.id);
           rej(new IpcTimeoutError(`request timeout: ${method}`));
         }, timeoutMs);
-        pending.set(req.id, { resolve: res, reject: rej, timer });
+        pending.set(req.id, { resolve: res, reject: rej, timer, connectionId: connectionId(sock) });
         sock.write(encode(req));
       });
     },
