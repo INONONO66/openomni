@@ -54,10 +54,7 @@ export class McpClient {
   async connect(): Promise<void> {
     let transport: Transport | undefined;
     let closeTracker: TransportCloseTracker | undefined;
-    const transportType =
-      this.config.transport === "streamable-http"
-        ? ("streamable-http" as const)
-        : (this.config.transport as "stdio" | "sse" | "http");
+    const transportType = this.config.transport;
 
     try {
       transport = this.createTransport(this.config);

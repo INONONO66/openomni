@@ -16,11 +16,11 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@openomni/llm": "workspace:*",
     "@openomni/policy": "workspace:*",
-    "@openomni/protocol": "workspace:*",
-    "zod": "^3.22.4"
+    "@openomni/protocol": "workspace:*"
   },
   "devDependencies": {
     "@openomni/telemetry": "workspace:*",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "zod": "^3.22.4"
   }
 }

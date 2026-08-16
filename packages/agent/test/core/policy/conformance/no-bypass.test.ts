@@ -172,8 +172,4 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
     "UNGOVERNED: WorkItem writes packages/session/src/work-item/index.ts — no policy gate",
     documentedSkip,
   );
-  itSkip(
-    "UNGOVERNED: Skill load/activation packages/openomni/src/skill/index.ts — no authorization policy point yet",
-    documentedSkip,
-  );
 });

@@ -277,4 +277,55 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       { pointId: "tool.mcp.post", serverId: "github" },
     ]);
   });
+
+  it("routes an underscore-mangled MCP call to tool.mcp.pre — never native (#606)", async () => {
+    // The tool registers under its dotted name with mcp labels and NO tool:
+    // canonical label; an executor calling the underscore-mangled alias must
+    // still resolve the labels — the old resolver returned the mangled name
+    // unresolved, downgrading the call to the fail-open tool.native.pre.
+    const seen: string[] = [];
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "mcp-route-observer",
+      pointIds: ["tool.mcp.pre", "tool.mcp.post", "tool.native.pre", "tool.native.post"],
+      effectCapabilities: {
+        "tool.mcp.pre": [],
+        "tool.mcp.post": [],
+        "tool.native.pre": [],
+        "tool.native.post": [],
+      },
+      priority: 1,
+      fn: (ctx: Readonly<CanonicalAuditDispatchContextGeneric<PolicyContext>>) => {
+        seen.push(ctx.pointId as string);
+        return allow();
+      },
+    });
+    const mcpTool: Tool.Spec = {
+      name: "server.tool",
+      inputSchema: {},
+      labels: ["source:mcp", "mcp.server"],
+    };
+    const toolExecutor = mock(
+      async (call: Tool.Call): Promise<Tool.Result> => ({
+        id: "result",
+        toolCallId: call.id,
+        output: "ok",
+      }),
+    );
+    const result = await buildTurn(
+      makeState(),
+      makeConfig({ tools: [mcpTool], toolExecutor }),
+      engine,
+      testProviderModel,
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+    if (result.type !== "ready") throw new Error("expected a prepared turn");
+
+    await result.turn.runInput.toolExecutor?.({ id: "call", tool: "server_tool", input: {} });
+
+    expect(seen).toEqual(["tool.mcp.pre", "tool.mcp.post"]);
+  });
 });
