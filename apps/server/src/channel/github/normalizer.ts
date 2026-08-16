@@ -24,6 +24,10 @@ export class GitHubNormalizer {
     });
 
     const normalizedText = normalizeContent(content.text, this.ctx.triggers, this.ctx.botUsername);
+    // Match the telegram/discord contract: a comment that normalizes to
+    // nothing (e.g. a bare @mention) is dropped, not dispatched as an empty
+    // run — the `| null` signature was previously unreachable (#606 audit).
+    if (normalizedText.trim().length === 0) return null;
 
     return {
       id:

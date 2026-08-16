@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PolicyContext } from "@openomni/agent";
 import { PolicyEngine, type PolicyEngineInstanceGeneric } from "@openomni/policy";
-import { createContextMiddleware } from "../../src/context/middleware";
+import { Bus } from "@openomni/telemetry";
+import { ContextAssembler, createContextMiddleware } from "../../src/context/middleware";
 
 let tempRoot: string;
 
@@ -112,15 +113,34 @@ describe("createContextMiddleware", () => {
     ]);
   });
 
-  it("returns allow when ContextAssembler throws", async () => {
-    // Create a workspace that will cause assembler to fail (e.g., permission issue)
-    // For this test, we'll just use a non-existent path
-    const middleware = createContextMiddleware({ workspaceRoot: "/nonexistent/path/xyz" });
+  it("records a warn when ContextAssembler throws — fail-open, not fail-silent", async () => {
+    // The loaders tolerate broken filesystem shapes, so the throw is driven
+    // at the assembler seam directly.
+    const ws = makeWorkspace("throwing-assembler");
+    const middleware = createContextMiddleware({ workspaceRoot: ws });
+    const assembleSpy = spyOn(ContextAssembler, "assemble").mockImplementation(() => {
+      throw new Error("loader exploded");
+    });
+    const warns: Array<Record<string, unknown>> = [];
+    const unsub = Bus.observe((event, data) => {
+      if (event.name === "operational.warn") warns.push(data as Record<string, unknown>);
+    });
 
-    const mockCtx = contextPolicyInput();
-
-    const result = await dispatchContextMiddleware(middleware, mockCtx);
-    expect(result).toMatchObject({ verdict: "allow", effects: [] });
+    try {
+      const result = await dispatchContextMiddleware(middleware, contextPolicyInput());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(result).toMatchObject({ verdict: "allow", effects: [] });
+      // Pin (#606 audit): the swallow must leave a record under the run trace.
+      const warn = warns.find(
+        (entry) => entry.msg === "context assembly failed — run continues without it",
+      );
+      if (warn === undefined) throw new Error("no assembly warn recorded");
+      expect(warn.traceId).toBe("trace-context-test");
+      expect((warn.context as { error: string }).error).toBe("loader exploded");
+    } finally {
+      unsub();
+      assembleSpy.mockRestore();
+    }
   });
 
   it("appendContext contains AGENTS.md content when present", async () => {

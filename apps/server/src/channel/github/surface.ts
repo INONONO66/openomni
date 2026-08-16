@@ -199,7 +199,10 @@ export class GitHubAdapter implements Adapter.Surface {
         if (p.action !== "opened") return null;
         if (p.issue.user.type === "Bot") return null;
         return {
-          text: p.issue.body ?? p.issue.title,
+          // `||`, not `??`: GitHub sends empty-STRING bodies too — an issue
+          // opened with no body must fall back to its title, or the empty
+          // normalization drop (#606) silently vanishes a label-triggered event.
+          text: p.issue.body || p.issue.title,
           sender: p.issue.user.login,
           senderType: p.issue.user.type,
           repo: p.repository.full_name,
