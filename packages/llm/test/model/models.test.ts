@@ -26,9 +26,7 @@ describe("ModelsDev", () => {
       const result = ModelsDev.Model.safeParse({
         id: "claude-sonnet-4",
         name: "Claude Sonnet 4",
-        cost: { input: 3, output: 15 },
-        limit: { context: 200000, output: 8192 },
-        modalities: { input: ["text", "image"], output: ["text"] },
+        limit: { context: 200000 },
       });
       expect(result.success).toBe(true);
     });
@@ -70,24 +68,6 @@ describe("ModelsDev", () => {
         name: "Claude Sonnet 4",
         family: "claude",
         release_date: "2025-05-22",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Model with interleaved as true", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test",
-        name: "Test",
-        interleaved: true,
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Model with interleaved as object", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test",
-        name: "Test",
-        interleaved: { field: "reasoning_content" },
       });
       expect(result.success).toBe(true);
     });

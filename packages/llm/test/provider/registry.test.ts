@@ -119,14 +119,4 @@ describe("Provider Registry", () => {
       return expect(Provider.listModels("unknown")).rejects.toThrow("Unknown provider: unknown");
     });
   });
-
-  describe("listProviders", () => {
-    it("should return available provider IDs", async () => {
-      const providers = await Provider.listProviders();
-      expect(Array.isArray(providers)).toBe(true);
-      expect(providers.length).toBeGreaterThan(0);
-      expect(providers).toContain("anthropic");
-      expect(providers).toContain("openai");
-    });
-  });
 });

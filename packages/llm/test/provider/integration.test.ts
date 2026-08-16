@@ -9,8 +9,6 @@ function makeAnthropicModel(id?: string): Provider.Model {
     providerID: "anthropic",
     name: "Claude Sonnet 4",
     api: { npm: "@ai-sdk/anthropic" },
-    capabilities: { reasoning: true },
-    cost: { input: 3, output: 15 },
   };
 }
 
@@ -20,8 +18,6 @@ function makeOpenAIModel(id?: string): Provider.Model {
     providerID: "openai",
     name: "GPT-4o",
     api: { npm: "@ai-sdk/openai" },
-    capabilities: { reasoning: false },
-    cost: { input: 2.5, output: 10 },
   };
 }
 
@@ -90,13 +86,6 @@ describe("Provider Integration", () => {
     expect(lm.modelId).toBe(model.id);
   });
 
-  it("should list all available providers", async () => {
-    const providers = await Provider.listProviders();
-    expect(Array.isArray(providers)).toBe(true);
-    expect(providers).toContain("anthropic");
-    expect(providers).toContain("openai");
-  });
-
   it("should list models for each provider", async () => {
     const anthropicModels = await Provider.listModels("anthropic");
     expect(Array.isArray(anthropicModels)).toBe(true);
@@ -117,11 +106,6 @@ describe("Provider Integration", () => {
     expect(apiModels.length).toBeGreaterThan(0);
   });
 
-  it("snapshot fallback provides data when ModelsDev is loaded", async () => {
-    const providers = await Provider.listProviders();
-    expect(providers.length).toBeGreaterThan(0);
-  });
-
   it("maps custom models without stale removed-provider npm metadata", () => {
     const provider = {
       id: "custom",
@@ -137,6 +121,20 @@ describe("Provider Integration", () => {
 
     expect(model.api?.npm).toBe("@ai-sdk/openai");
     expect(model.api?.url).toBe("http://localhost:8317/v1");
+  });
+
+  it("maps catalog limit.context through to the model (the run-window input)", () => {
+    const provider = { id: "custom", name: "Custom", env: [], models: {} };
+
+    const sized = Provider.fromModelsDevModel(provider, {
+      id: "m",
+      name: "M",
+      limit: { context: 200_000 },
+    });
+    expect(sized.limit?.context).toBe(200_000);
+
+    const unsized = Provider.fromModelsDevModel(provider, { id: "m", name: "M" });
+    expect(unsized.limit?.context).toBe(0);
   });
 
   it("resolves custom baseURL models through the OpenAI provider", () => {

@@ -11,9 +11,7 @@ function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
     providerID: "anthropic",
     name: "Claude Sonnet 4",
     api: { npm: "@ai-sdk/anthropic" },
-    capabilities: { reasoning: true },
-    cost: { input: 3, output: 15 },
-    limit: { context: 200000, output: 16384 },
+    limit: { context: 200000 },
     ...overrides,
   };
 }
