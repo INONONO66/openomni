@@ -16,9 +16,9 @@ import {
   workerCompletionReservationRoot,
   workerCompletionRequestRoot,
 } from "../../src/dispatch/handlers/worker-completion.js";
+import { createDurableCompletionResultAuthorityPort } from "../../src/evidence/verifier-recorded-input.js";
 import {
   createCompletionAdmissionService,
-  createDurableCompletionResultAuthorityPort,
   reserveCompletionRequest,
   type CompletionAdmissionService,
   type CompletionStakesResolver,
