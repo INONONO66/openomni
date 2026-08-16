@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786895912996,
+  "lastUpdate": 1786897509365,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53049,6 +53049,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512814,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd8cd51f40665a158aff0aaf54864aa2320e9cd0",
+          "message": "fix(session): session writes commit as one unit or fail loudly (#606) (#683)\n\n* fix(session): session writes commit as one unit or fail loudly (#606)\n\nAudit follow-up on packages/session write discipline:\n\n- addMessage's three statements (message row, status, session counters)\n  and remove()'s 2+2N manual cascade were independent autocommits — a\n  crash mid-way left a message without its counter bump or a\n  half-deleted session. Both now run inside the adapter transaction\n  (nested calls degrade to savepoints); publishes stay outside. The\n  single-writer property the counter RMW relies on is now stated at\n  the site instead of being an unwritten assumption.\n- addPart silently skipped its Event.Updated when the session row was\n  missing while addMessage throws for the same condition — one file,\n  two dispositions. addPart now fails closed too.\n- WorkerGrant's version-guarded upsert reported nothing: a lost race\n  was silently dropped while the store published Updated/Revoked and\n  returned the record as if persisted. The adapter now returns the\n  write receipt and the store throws before publishing.\n- The verbatim zod data-row envelope duplicated across four registry\n  adapters moves to sqlite-json-data.ts, which already owned the\n  concept.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(openomni): rebind transaction lost by adapter spread (#606)\n\n* fix(session): review deltas — honest comments, sweep isolation (#606)\n\n* test(session): pin the sweep's continue-past-failure property (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T01:23:50+09:00",
+          "tree_id": "357072f97f3254b9e84ea926f8c90de1e1aeb644",
+          "url": "https://github.com/INONONO66/openomni/commit/fd8cd51f40665a158aff0aaf54864aa2320e9cd0"
+        },
+        "date": 1786897508585,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9354,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2506,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15202,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7972,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 494,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1009,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 763,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45128,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2315,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 504302,
             "unit": "ns/op"
           }
         ]
