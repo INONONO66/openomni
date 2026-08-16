@@ -70,6 +70,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
   // it is ONE trace. Every line the boot emits carries it, so a failed startup
   // reads as a single sequence instead of eight unrelated records.
   const bootTraceId = newTraceId();
+  // Persistence needs the dbPath FROM config, so config loads first — but
+  // everything it publishes (malformed config.json → defaults, rejected
+  // grants/MCP entries) would land in a subscriber-less Bus and vanish.
+  // Buffer the pre-persistence window and republish once the journal is up.
+  const preBootEvents: Array<Parameters<typeof Bus.publish>> = [];
+  const stopBuffering = Bus.observe((descriptor, data) => {
+    preBootEvents.push([descriptor, data] as Parameters<typeof Bus.publish>);
+  });
   const config = loadConfig(bootTraceId);
   if (process.env.OPENOMNI_MODE === "local") {
     throw new Error("OPENOMNI_MODE=local is disabled; OpenOmni requires coordinator mode");
@@ -78,6 +86,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   const completionWriter = initialize({ dbPath: config.storage.dbPath });
   BusPersistence.start();
+  stopBuffering();
+  for (const [descriptor, data] of preBootEvents) Bus.publish(descriptor, data);
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProviderRef: { current?: AgentToolProvider } = {};
