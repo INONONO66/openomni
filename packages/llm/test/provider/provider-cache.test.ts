@@ -12,8 +12,6 @@ function makeAnthropicModel(id = "claude-sonnet-4-20250514"): Provider.Model {
     providerID: "anthropic",
     name: "Claude Sonnet 4",
     api: { npm: "@ai-sdk/anthropic" },
-    capabilities: { reasoning: true },
-    cost: { input: 3, output: 15 },
   };
 }
 
@@ -23,8 +21,6 @@ function makeOpenAIModel(id = "gpt-4o"): Provider.Model {
     providerID: "openai",
     name: "GPT-4o",
     api: { npm: "@ai-sdk/openai" },
-    capabilities: { reasoning: false },
-    cost: { input: 2.5, output: 10 },
   };
 }
 

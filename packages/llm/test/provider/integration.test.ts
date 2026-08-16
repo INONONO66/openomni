@@ -9,8 +9,6 @@ function makeAnthropicModel(id?: string): Provider.Model {
     providerID: "anthropic",
     name: "Claude Sonnet 4",
     api: { npm: "@ai-sdk/anthropic" },
-    capabilities: { reasoning: true },
-    cost: { input: 3, output: 15 },
   };
 }
 
@@ -20,8 +18,6 @@ function makeOpenAIModel(id?: string): Provider.Model {
     providerID: "openai",
     name: "GPT-4o",
     api: { npm: "@ai-sdk/openai" },
-    capabilities: { reasoning: false },
-    cost: { input: 2.5, output: 10 },
   };
 }
 
@@ -90,13 +86,6 @@ describe("Provider Integration", () => {
     expect(lm.modelId).toBe(model.id);
   });
 
-  it("should list all available providers", async () => {
-    const providers = await Provider.listProviders();
-    expect(Array.isArray(providers)).toBe(true);
-    expect(providers).toContain("anthropic");
-    expect(providers).toContain("openai");
-  });
-
   it("should list models for each provider", async () => {
     const anthropicModels = await Provider.listModels("anthropic");
     expect(Array.isArray(anthropicModels)).toBe(true);
@@ -115,11 +104,6 @@ describe("Provider Integration", () => {
     const apiModels = await Provider.listModels("openai", "api");
     expect(Array.isArray(apiModels)).toBe(true);
     expect(apiModels.length).toBeGreaterThan(0);
-  });
-
-  it("snapshot fallback provides data when ModelsDev is loaded", async () => {
-    const providers = await Provider.listProviders();
-    expect(providers.length).toBeGreaterThan(0);
   });
 
   it("maps custom models without stale removed-provider npm metadata", () => {

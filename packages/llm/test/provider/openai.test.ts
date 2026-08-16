@@ -14,8 +14,6 @@ function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
     providerID: "openai",
     name: "GPT-4o",
     api: { npm: "@ai-sdk/openai" },
-    capabilities: { reasoning: false },
-    cost: { input: 2.5, output: 10 },
     ...overrides,
   };
 }

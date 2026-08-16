@@ -15,44 +15,12 @@ export namespace ModelsDev {
     name: z.string(),
     family: z.string().optional(),
     release_date: z.string().optional(),
-    attachment: z.boolean().optional(),
-    reasoning: z.boolean().optional(),
-    temperature: z.boolean().optional(),
-    tool_call: z.boolean().optional(),
-    interleaved: z
-      .union([
-        z.literal(true),
-        z
-          .object({
-            field: z.enum(["reasoning_content", "reasoning_details"]),
-          })
-          .strict(),
-      ])
-      .optional(),
-    cost: z
-      .object({
-        input: z.number(),
-        output: z.number(),
-        cache_read: z.number().optional(),
-        cache_write: z.number().optional(),
-      })
-      .optional(),
     limit: z
       .object({
         context: z.number(),
-        input: z.number().optional(),
-        output: z.number(),
-      })
-      .optional(),
-    modalities: z
-      .object({
-        input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
-        output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
       })
       .optional(),
     status: ModelStatus.optional(),
-    options: z.record(z.string(), z.unknown()).optional(),
-    headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string() }).optional(),
   });
   export type Model = z.infer<typeof Model>;

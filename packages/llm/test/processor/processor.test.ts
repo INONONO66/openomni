@@ -721,15 +721,14 @@ describe("Processor", () => {
 
   describe("token accounting", () => {
     test("keeps local cost at zero and accumulates AI SDK token usage", async () => {
-      const modelWithCatalogCost: Provider.Model = {
+      const model: Provider.Model = {
         id: "claude-opus-4-5",
         providerID: "anthropic",
         name: "Claude Opus",
-        cost: { input: 15.0, output: 75.0, cache: { read: 1.5, write: 18.75 } },
       };
 
       const processor = createProcessor({
-        model: modelWithCatalogCost,
+        model,
         createStream: streamOf([
           {
             type: "step-finish",
@@ -749,15 +748,15 @@ describe("Processor", () => {
       expect(processor.message.tokens.output).toBe(5000);
     });
 
-    test("returns zero cost when model.cost is absent", async () => {
-      const modelNoCost: Provider.Model = {
+    test("keeps cost at zero for non-anthropic models too", async () => {
+      const model: Provider.Model = {
         id: "gpt-4o",
         providerID: "openai",
         name: "GPT-4o",
       };
 
       const processor = createProcessor({
-        model: modelNoCost,
+        model,
         createStream: streamOf([
           {
             type: "step-finish",
@@ -776,15 +775,14 @@ describe("Processor", () => {
     });
 
     test("accumulates tokens across multiple step-finish events", async () => {
-      const modelWithCatalogCost: Provider.Model = {
+      const model: Provider.Model = {
         id: "claude-3-5-sonnet-20241022",
         providerID: "anthropic",
         name: "Claude 3.5 Sonnet",
-        cost: { input: 3, output: 15 },
       };
 
       const processor = createProcessor({
-        model: modelWithCatalogCost,
+        model,
         createStream: streamOf([
           {
             type: "step-finish",

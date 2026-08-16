@@ -83,7 +83,6 @@ describe("proxy-models", () => {
           providerID: "openai",
           name: "GPT 5.4",
           status: "active",
-          capabilities: { reasoning: true },
         },
       };
 
