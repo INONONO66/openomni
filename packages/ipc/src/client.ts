@@ -85,7 +85,21 @@ export function connectIpcClient(
 
         const request = Ipc.Request.safeParse(raw);
         if (request.success) {
-          if (opts.onRequest) {
+          if (!opts.onRequest) {
+            // No handler is a remote failure the caller can classify — a
+            // silent drop would surface as a timeout on the server side.
+            socket.write(
+              encode(
+                Ipc.createErrorResponse(
+                  request.data.id,
+                  1000,
+                  `client has no request handler for ${request.data.method}`,
+                ),
+              ),
+            );
+            continue;
+          }
+          {
             const respond = (result: unknown) => {
               socket.write(encode(Ipc.createResponse(request.data.id, result)));
             };

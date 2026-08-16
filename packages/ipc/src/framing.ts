@@ -30,15 +30,26 @@ export class LineDecoder {
       throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
     }
 
-    return lines
-      .filter((l) => l.trim())
-      .map((l) => {
-        if (Buffer.byteLength(l, "utf-8") > MAX_FRAME_BYTES) {
-          this.reset();
-          throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
-        }
-        return JSON.parse(l);
-      });
+    const frames: unknown[] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (!line?.trim()) continue;
+      if (Buffer.byteLength(line, "utf-8") > MAX_FRAME_BYTES) {
+        this.reset();
+        throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
+      }
+      try {
+        frames.push(JSON.parse(line));
+      } catch {
+        // One malformed frame costs only itself: complete sibling lines go
+        // back on the buffer (each re-terminated) ahead of the partial tail,
+        // so the next push delivers them in order.
+        const rest = lines.slice(i + 1);
+        this.buffer = rest.map((l) => `${l}\n`).join("") + this.buffer;
+        throw new IpcProtocolError(`IPC frame is not valid JSON: ${line.slice(0, 64)}`);
+      }
+    }
+    return frames;
   }
 
   reset(): void {
