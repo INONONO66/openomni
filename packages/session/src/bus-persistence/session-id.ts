@@ -9,11 +9,14 @@ export function defaultResolveSessionId(
   const root = toRecord(payload);
   if (!root) return undefined;
 
+  // NO root-level `id` fallback: `id` names the event's own subject (a
+  // waitId, grantId, cron job id — or a just-deleted session, whose FK row is
+  // gone). Attributing it as a sessionId FK-failed the insert and silently
+  // dropped the row; subject-scoped events belong to the sessionless chain.
   const direct =
     sessionIdFromRecord(root) ??
     stringFromRecord(root, "originSessionId") ??
-    sessionIdFromWorkerRun(root) ??
-    stringFromRecord(root, "id");
+    sessionIdFromWorkerRun(root);
   if (direct !== undefined) return direct;
 
   const nestedPayload = toRecord(root.payload);
