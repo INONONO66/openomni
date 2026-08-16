@@ -7,6 +7,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Subprocess } from "bun";
 
 const root = join(import.meta.dir, "..");
 
@@ -47,7 +48,9 @@ const env = {
   OPENOMNI_DISABLE_MODELS_FETCH: "1",
 };
 
-let serve: ReturnType<typeof Bun.spawn> | undefined;
+// Pinned to the piped shape the spawn below configures: `ReturnType<typeof
+// Bun.spawn>` would erase the stdout/stderr inference back to the full union.
+let serve: Subprocess<"ignore", "pipe", "pipe"> | undefined;
 try {
   const onboard = Bun.spawnSync(
     [process.execPath, cli, "onboard", "--port", String(port), "--host", "127.0.0.1"],

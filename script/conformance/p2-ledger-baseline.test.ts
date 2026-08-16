@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   Communication,
+  type Ingress,
   LedgerAppend,
   PolicyDecision,
   Wait,
@@ -181,8 +182,8 @@ function workHeadOf(hash: string): number | undefined {
 
 describe("p2 ledger baseline — Wait decision-class facts", () => {
   test("append-before-act: every committed transition appends its fact at seq === projected revision", () => {
-    const created = WaitStore.create(buildWaitCreate());
-    const resolved = WaitStore.attachReply("wait-1", buildReplyInput());
+    const created = WaitStore.create(buildWaitCreate(), "trace-test");
+    const resolved = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-test");
     if (resolved.kind !== "resolved") throw new Error(`expected resolved, got ${resolved.kind}`);
 
     const facts = factsOf("wait-1");
@@ -221,7 +222,7 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
   });
 
   test("a failed append leaves no projection change, no extra fact, and no Bus event", async () => {
-    WaitStore.create(buildWaitCreate());
+    WaitStore.create(buildWaitCreate(), "trace-test");
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
 
@@ -229,10 +230,14 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
     // append: the appended cancel fact wins, the outer expire must fail as
     // a typed revision_conflict with nothing written.
     const error = captureStoreError(() =>
-      WaitStore.transition("wait-1", (record) => {
-        WaitStore.cancel("wait-1", 500);
-        return Wait.expire(record, { at: 20_000 });
-      }),
+      WaitStore.transition(
+        "wait-1",
+        (record) => {
+          WaitStore.cancel("wait-1", "trace-test", 500);
+          return Wait.expire(record, { at: 20_000 });
+        },
+        "trace-test",
+      ),
     );
 
     expect(error.data.code).toBe("revision_conflict");
@@ -249,7 +254,7 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
   });
 
   test("a stale expectedHead at the append core is a typed cas_conflict that writes nothing", () => {
-    WaitStore.create(buildWaitCreate());
+    WaitStore.create(buildWaitCreate(), "trace-test");
 
     const conflict = Ledger.append(
       inspect,
@@ -263,12 +268,12 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
   });
 
   test("a duplicate create conflicts on the owner stream and projects nothing", async () => {
-    WaitStore.create(buildWaitCreate());
+    WaitStore.create(buildWaitCreate(), "trace-test");
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
 
     const error = captureStoreError(() =>
-      WaitStore.create(buildWaitCreate({ originMessageId: "out-msg-2" })),
+      WaitStore.create(buildWaitCreate({ originMessageId: "out-msg-2" }), "trace-test"),
     );
 
     expect(error.data.code).toBe("duplicate");
@@ -280,7 +285,7 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
   });
 
   test("a pre-cutover wait row (revision >= 1, empty stream) is adopted lazily before its first transition", () => {
-    WaitStore.create(buildWaitCreate());
+    WaitStore.create(buildWaitCreate(), "trace-test");
     // Simulate an old-DB wait: the projection row exists at revision >= 1
     // but its owner stream is empty (every write predates the phase-B
     // cutover). Without adoption this row would brick every transition
@@ -289,7 +294,7 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
     inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run("wait:wait-1");
     expect(factsOf("wait-1")).toHaveLength(0);
 
-    const outcome = WaitStore.attachReply("wait-1", buildReplyInput());
+    const outcome = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-test");
 
     expect(outcome.kind).toBe("resolved");
     const facts = factsOf("wait-1");
@@ -321,10 +326,10 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
   });
 
   test("boot tail verification passes after a normal run and detects a tampered row", () => {
-    WaitStore.create(buildWaitCreate());
-    WaitStore.attachReply("wait-1", buildReplyInput());
-    WaitStore.create(buildWaitCreate({ id: "wait-2", originMessageId: "out-msg-2" }));
-    WaitStore.expire("wait-2", 10_001);
+    WaitStore.create(buildWaitCreate(), "trace-test");
+    WaitStore.attachReply("wait-1", buildReplyInput(), "trace-test");
+    WaitStore.create(buildWaitCreate({ id: "wait-2", originMessageId: "out-msg-2" }), "trace-test");
+    WaitStore.expire("wait-2", "trace-test", 10_001);
 
     expect(Ledger.verifyTail(inspect)).toEqual([]);
 
@@ -983,12 +988,22 @@ function configureFailingLedger(): void {
   });
 }
 
+// The routed scenarios pin the EXECUTED arm of the ingress result union —
+// a dropped result would mean the route never acted, so it fails loudly.
+function expectExecuted(result: Ingress.IngressResult): Ingress.ExecutedIngressResult {
+  if (result.kind === "dropped") {
+    throw new Error(`expected an executed ingress result, got dropped: ${result.reason}`);
+  }
+  return result;
+}
+
 describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
   // #549: the engine is an instance — each scenario constructs its own with
   // explicit deps instead of mutating module-global setters.
   test("route.decided is durable before the routed action's effects are observable", async () => {
     grantConformanceChannel();
     const workerSession = Session.create({
+      traceId: "trace-test",
       title: "route conformance",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -1020,15 +1035,18 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
 
     // The executor saw the durable route.decided fact BEFORE it acted.
     expect(observed).toEqual([{ factTypes: ["route.decided"], parsedOutcome: "route" }]);
-    expect(result.result.output).toBe("routed");
+    expect(expectExecuted(result).result.output).toBe("routed");
     // Single-fact stream discipline: expectedHead 0, seq 1, head 1, on the
     // channel-scoped stream key (review fix F1).
     const facts = factsOfStream(routeStreamOf("inbound-route-1"));
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
     expect(headOfStream(routeStreamOf("inbound-route-1"))).toBe(1);
     // The writer and the protocol stream registry agree on the vocabulary.
+    // Widened to string[]: the DB rows carry plain strings, and membership
+    // in the registry's literal vocabulary is exactly what's being pinned.
+    const routeVocabulary: readonly string[] = LedgerAppend.StreamRegistry.route.factTypes;
     for (const fact of facts) {
-      expect(LedgerAppend.StreamRegistry.route.factTypes).toContain(fact.type);
+      expect(routeVocabulary).toContain(fact.type);
     }
   });
 
@@ -1064,6 +1082,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
   test("an equivalent redelivered inbound replays: no second fact, the owner re-receives the action", async () => {
     grantConformanceChannel();
     const workerSession = Session.create({
+      traceId: "trace-test",
       title: "route replay conformance",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -1097,8 +1116,8 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       routedIngressEvent("inbound-route-replay-1", workerSession.id),
     );
 
-    expect(first.result.output).toBe("routed");
-    expect(second.result.output).toBe("routed");
+    expect(expectExecuted(first).result.output).toBe("routed");
+    expect(expectExecuted(second).result.output).toBe("routed");
     expect(dispatches).toBe(2);
     expect(dispatchedSessions).toEqual([workerSession.id, workerSession.id]);
     // Replay appended nothing: the stream still holds exactly the one fact.
@@ -1134,6 +1153,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // published.
     grantConformanceChannel();
     const workerSession = Session.create({
+      traceId: "trace-test",
       title: "route divergent replay conformance",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -1215,6 +1235,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
   test("a failing ledger append blocks the routed action: typed error, no publish, no act", async () => {
     grantConformanceChannel();
     const workerSession = Session.create({
+      traceId: "trace-test",
       title: "route fail-closed conformance",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -1313,8 +1334,9 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
       targetKind: "system",
     });
     expect(headOfStream(`command:${result.dispatchId}`)).toBe(1);
+    const commandVocabulary: readonly string[] = LedgerAppend.StreamRegistry.command.factTypes;
     for (const fact of facts) {
-      expect(LedgerAppend.StreamRegistry.command.factTypes).toContain(fact.type);
+      expect(commandVocabulary).toContain(fact.type);
     }
   });
 
@@ -1557,6 +1579,7 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
     const adapter = Storage.getAdapter().pendingInteraction;
     if (!adapter) throw new Error("conformance storage misses the pendingInteraction sub-adapter");
     const session = Session.create({
+      traceId: "trace-test",
       title: `pi-conformance-${id}`,
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -1923,8 +1946,9 @@ describe("p2 ledger baseline — effect decision-class facts (intent/outcome)", 
       [2, "effect.confirmed"],
     ]);
     // The writer and the protocol stream registry agree on the vocabulary.
+    const effectVocabulary: readonly string[] = LedgerAppend.StreamRegistry.effect.factTypes;
     for (const fact of factsOfStream("effect:eff-happy")) {
-      expect(LedgerAppend.StreamRegistry.effect.factTypes).toContain(fact.type);
+      expect(effectVocabulary).toContain(fact.type);
     }
   });
 });
@@ -1956,6 +1980,7 @@ describe("p2 ledger baseline — telemetry and Bus.publish cannot authorize", ()
   test("a forged NORMAL-durability telemetry row is rejected as a routing decision record", async () => {
     grantConformanceChannel();
     const workerSession = Session.create({
+      traceId: "trace-test",
       title: "telemetry forge conformance",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -2002,7 +2027,7 @@ describe("p2 ledger baseline — telemetry and Bus.publish cannot authorize", ()
     // followed the fresh ledger-recorded resolution (the real worker
     // session), never the forged target.
     expect(dispatchedSessions).toEqual([workerSession.id]);
-    expect(result.result.output).toBe("routed");
+    expect(expectExecuted(result).result.output).toBe("routed");
     const facts = factsOfStream(routeStreamOf("inbound-telemetry-forge"));
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
     const decided = LedgerAppend.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
@@ -2170,9 +2195,12 @@ describe("p2 ledger baseline — exact producer manifest", () => {
   });
 
   test("manifest stream classes equal the protocol StreamRegistry; one producer per class", () => {
-    expect(LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.streamClass).sort()).toEqual(
-      Object.keys(LedgerAppend.StreamRegistry).sort(),
+    // Widened to string[]: Object.keys erases the registry's literal key
+    // union, and set equality of the two name lists is what's being pinned.
+    const manifestClasses: string[] = LEDGER_PRODUCER_MANIFEST.streams.map(
+      (entry) => entry.streamClass,
     );
+    expect(manifestClasses.sort()).toEqual(Object.keys(LedgerAppend.StreamRegistry).sort());
     const producers = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.producer);
     expect(new Set(producers).size).toBe(producers.length);
   });
