@@ -1,14 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import {
-  BusPersistence,
-  BusQuery,
-  Session,
-  SqliteStorageAdapter,
-  Storage,
-  WorkItemStore,
-} from "../../src";
+import { BusPersistence, Session, SqliteStorageAdapter, Storage, WorkItemStore } from "../../src";
 import { Bus } from "@openomni/telemetry";
+import { getDatabase } from "../../src/bus-persistence/database.js";
 import { persistCompletedWorkItemFixture } from "./completed-fixture.js";
 
 type WorkItemInput = Parameters<typeof WorkItemStore.create>[0];
@@ -119,14 +113,17 @@ describe("WorkItem integration", () => {
     expect(emittedEvents).toContain(WorkItem.Events.StatusChanged.name);
     expect(emittedEvents).toContain(WorkItem.Events.CompletedV2.name);
 
-    const events = await BusQuery.listBySession(sessionId, { limit: 100 });
-    const eventTypes = events.map((event) => event.eventType);
+    const events = getDatabase()
+      .query<{ event_type: string; category: string }, [string]>(
+        "SELECT event_type, category FROM bus_event WHERE session_id = ?",
+      )
+      .all(sessionId);
+    const eventTypes = events.map((event) => event.event_type);
 
     expect(eventTypes).toContain(WorkItem.Events.Created.name);
     expect(eventTypes).toContain(WorkItem.Events.StatusChanged.name);
     expect(eventTypes).toContain(WorkItem.Events.CompletedV2.name);
     expect(events.every((event) => event.category === "work_item")).toBe(true);
-    expect(events.every((event) => event.sessionId === sessionId)).toBe(true);
   });
 
   test("tracks parent, child, and dependency readiness", async () => {

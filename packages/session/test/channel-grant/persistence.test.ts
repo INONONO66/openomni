@@ -70,4 +70,18 @@ describe("ChannelGrantStore SQLite persistence", () => {
 
     expect(ChannelGrantStore.resolve({ surface: "telegram" })).toBeUndefined();
   });
+
+  test("resolve fails closed when the channelGrant sub-adapter is absent", () => {
+    const bare = Storage.get();
+    Storage.configure({
+      transaction: bare.transaction.bind(bare),
+      session: bare.session,
+      message: bare.message,
+      part: bare.part,
+    });
+
+    expect(() => ChannelGrantStore.resolve({ surface: "discord" })).toThrow(
+      "does not implement channel grants",
+    );
+  });
 });

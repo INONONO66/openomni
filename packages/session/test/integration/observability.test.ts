@@ -100,9 +100,6 @@ describe("Observability Pipeline Integration", () => {
 
       await BusPersistence.flush();
 
-      const sessionEvents = await BusQuery.listBySession(sessionId);
-      expect(sessionEvents).toHaveLength(4);
-
       const stats = await BusQuery.getStats(sessionId);
       expect(stats.totalEvents).toBe(4);
       expect(stats.byCategory.agent).toBe(1);
@@ -110,8 +107,12 @@ describe("Observability Pipeline Integration", () => {
       expect(stats.byCategory.tool).toBe(1);
       expect(stats.byCategory.session).toBe(1);
 
-      const runEvents = await BusQuery.listByRun(runId);
-      expect(runEvents.map((event) => event.eventType).sort()).toEqual([
+      const runEvents = db()
+        .query<{ event_type: string }, [string]>(
+          "SELECT event_type FROM bus_event WHERE run_id = ? ORDER BY event_type ASC",
+        )
+        .all(runId);
+      expect(runEvents.map((row) => row.event_type)).toEqual([
         "agent.turn.complete",
         "tool.execution.completed",
       ]);
@@ -239,12 +240,6 @@ describe("Observability Pipeline Integration", () => {
       });
 
       await BusPersistence.flush();
-
-      const eventsA = await BusQuery.listBySession(sessionA.id);
-      expect(eventsA).toHaveLength(2);
-
-      const eventsB = await BusQuery.listBySession(sessionB.id);
-      expect(eventsB).toHaveLength(2);
 
       const statsA = await BusQuery.getStats(sessionA.id);
       expect(statsA.totalEvents).toBe(2);

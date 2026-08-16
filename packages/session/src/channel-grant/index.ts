@@ -13,12 +13,11 @@ interface ChannelGrantResolution {
   readonly inboundTreatment: Actor.InboundTreatment;
 }
 
-function adapter(): Storage.Adapter["channelGrant"] {
-  return Storage.get().channelGrant;
-}
-
 function requireAdapter(): NonNullable<Storage.Adapter["channelGrant"]> {
-  return requireSubAdapter(adapter(), "Storage adapter does not implement channel grants");
+  return requireSubAdapter(
+    Storage.get().channelGrant,
+    "Storage adapter does not implement channel grants",
+  );
 }
 
 function defaultTreatment(kind: Actor.ChannelGrantKind): Actor.InboundTreatment {
@@ -53,9 +52,9 @@ export namespace ChannelGrantStore {
   }
 
   export function resolve(input: ChannelGrantMatchInput): ChannelGrantResolution | undefined {
-    const store = adapter();
-    if (!store) return undefined;
-    const grants = store
+    // Absent adapter previously read as "no grant" (deny — benign), but reads
+    // and writes follow ONE rule here: the adapter is required (like put()).
+    const grants = requireAdapter()
       .list()
       .filter((grant) => matches(grant, input))
       .sort((a, b) => specificity(b) - specificity(a));

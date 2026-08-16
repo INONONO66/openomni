@@ -1,7 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { Database } from "bun:sqlite";
 import { SurfaceKey } from "../../src/surface-key";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import { createSqliteSurfaceKeyAdapter } from "../../src/storage/sqlite-surface-key-adapter";
 import "../../src/storage/initialize";
 import { Session } from "../../src/session";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -54,5 +56,30 @@ describe("SurfaceKey SQLite persistence", () => {
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
     expect(SurfaceKey.lookup("slack:ws:channel:C1")).toBe(session2.id);
+  });
+
+  test("claim throws loudly when the row is missing after INSERT OR IGNORE", () => {
+    // Impossible-state simulation: a trigger deletes every inserted row, so
+    // the read-back inside claim's own transaction finds nothing. The old
+    // `row?.session_id ?? sessionId` fallback silently fabricated ownership
+    // for exactly this unreachable state.
+    const db = new Database(":memory:");
+    db.exec(
+      `CREATE TABLE surface_key (
+         key TEXT PRIMARY KEY,
+         session_id TEXT NOT NULL,
+         time_created INTEGER NOT NULL
+       );
+       CREATE TRIGGER surface_key_vanish AFTER INSERT ON surface_key
+       BEGIN
+         DELETE FROM surface_key WHERE key = NEW.key;
+       END;`,
+    );
+    const adapter = createSqliteSurfaceKeyAdapter(db);
+
+    expect(() => adapter.claim("telegram:bot:chat:123", "ses-1")).toThrow(
+      "surface_key row missing after INSERT OR IGNORE",
+    );
+    db.close();
   });
 });

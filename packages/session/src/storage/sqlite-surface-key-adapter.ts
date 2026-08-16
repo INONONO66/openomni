@@ -25,8 +25,14 @@ export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
         const row = db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
           session_id: string;
         } | null;
+        if (row === null) {
+          // Impossible state: the INSERT OR IGNORE above ran inside this same
+          // immediate transaction, so the key MUST exist here. Falling back to
+          // the candidate sessionId would fabricate an ownership answer.
+          throw new Error(`surface_key row missing after INSERT OR IGNORE: ${key}`);
+        }
         db.exec("COMMIT");
-        return row?.session_id ?? sessionId;
+        return row.session_id;
       } catch (err) {
         try {
           db.exec("ROLLBACK");

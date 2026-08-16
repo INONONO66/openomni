@@ -545,7 +545,7 @@ describe("createConnectorEndpointProcessDriver", () => {
     });
     const artifactId = result.artifacts?.[0]?.artifactId;
     if (artifactId === undefined) throw new Error("expected log artifact id");
-    const artifact = await Artifact.get(artifactId);
+    const artifact = Artifact.get(artifactId);
     expect(artifact?.meta.sessionId).toBe("ses_fake");
     expect(artifact?.content).toBe("final log message with [REDACTED]");
     expect(artifact?.content).not.toContain("secret-value");
@@ -591,7 +591,7 @@ describe("createConnectorEndpointProcessDriver", () => {
     expect(result.artifacts).toHaveLength(1);
     const artifactId = result.artifacts?.[0]?.artifactId;
     if (artifactId === undefined) throw new Error("expected stdout log artifact id");
-    const artifact = await Artifact.get(artifactId);
+    const artifact = Artifact.get(artifactId);
     expect(artifact?.meta.mimeType).toBe("application/x-ndjson");
     expect(artifact?.content).toContain("final stdout log with [REDACTED]");
     expect(artifact?.content).not.toContain("secret-value");
@@ -650,7 +650,7 @@ describe("createConnectorEndpointProcessDriver", () => {
       expect(result.artifacts).toHaveLength(1);
       const artifactId = result.artifacts?.[0]?.artifactId;
       if (artifactId === undefined) throw new Error("expected glob log artifact id");
-      const artifact = await Artifact.get(artifactId);
+      const artifact = Artifact.get(artifactId);
       expect(artifact?.content).toContain("newest log with [REDACTED]");
       expect(artifact?.content).not.toContain("older log");
       expect(artifact?.content).not.toContain("secret-value");
