@@ -1,7 +1,7 @@
 import { Ipc } from "@openomni/protocol";
 import fs from "node:fs";
 
-import { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
+import { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
 import { LineDecoder, encode } from "./framing";
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
@@ -142,9 +142,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
               clearTimeout(handler.timer);
               pending.delete(parsed.id);
               if (parsed.error) {
-                handler.reject(
-                  new IpcConnectionError(`IPC error ${parsed.error.code}: ${parsed.error.message}`),
-                );
+                handler.reject(new IpcRemoteError(parsed.error.code, parsed.error.message));
               } else {
                 handler.resolve(parsed.result);
               }

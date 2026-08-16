@@ -10,7 +10,7 @@ src/
 ├── framing.ts    # encode() + LineDecoder (NDJSON, 16 MiB cap, streaming TextDecoder state)
 ├── client.ts     # connectIpcClient — outbound connection; onRequest/onNotification make it bidirectional
 ├── server.ts     # createIpcServer — Bun.listen Unix socket server, per-connection decoders, call/notify
-└── errors.ts     # IpcConnectionError / IpcTimeoutError / IpcProtocolError
+└── errors.ts     # IpcConnectionError / IpcTimeoutError / IpcProtocolError / IpcRemoteError
 ```
 
 ## DEPENDENCIES
@@ -22,7 +22,7 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 - Bidirectional: both ends can send requests, responses, and notifications over one socket — server → owner-device reverse connections ride the same pair.
 - Wire method names are frozen (Greg Young rule); the transport passes method/params through opaquely.
 - Authentication is the caller's job (workers check `authToken` in handlers); the transport carries but never inspects credentials.
-- Timeout (`IpcTimeoutError`), connection (`IpcConnectionError`), and malformed-frame (`IpcProtocolError`, wire error codes 4000/4001) behavior is part of the contract.
+- Timeout (`IpcTimeoutError`), connection (`IpcConnectionError`), remote-handler failure (`IpcRemoteError`, wire error code 1000 — a HEALTHY connection whose far side refused; both call directions file it identically), and malformed-frame (`IpcProtocolError`, wire error codes 4000/4001) behavior is part of the contract.
 
 ## CONSUMERS
 
