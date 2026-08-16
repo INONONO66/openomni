@@ -75,6 +75,7 @@ function createMemoryStorage(): Storage.Adapter {
 
 function createSession(index: number): Session.Info {
   return Session.create({
+    traceId: "trace-memory-regression",
     title: `memory-regression-${index}`,
     model: { providerID: "test", modelID: "test-model" },
   });
@@ -91,7 +92,7 @@ describe("session memory regression", () => {
 
     for (let index = 0; index < 200; index += 1) {
       const session = createSession(index);
-      Session.remove(session.id);
+      Session.remove(session.id, "trace-memory-regression");
     }
 
     const final = measureRSS();
@@ -107,7 +108,10 @@ describe("session memory regression", () => {
         /* noop handler for leak test */
       });
       for (let eventIndex = 0; eventIndex < 10; eventIndex += 1) {
-        Bus.publish(Session.Event.Deleted, { id: `${index}-${eventIndex}` });
+        Bus.publish(Session.Event.Deleted, {
+          traceId: "trace-memory-regression",
+          id: `${index}-${eventIndex}`,
+        });
       }
       unsubscribe();
     }
@@ -122,7 +126,7 @@ describe("session memory regression", () => {
   test("storage adapter session CRUD does not leak", () => {
     const adapter = Storage.getAdapter();
     const warmupSession = createSession(0);
-    Session.remove(warmupSession.id);
+    Session.remove(warmupSession.id, "trace-memory-regression");
     const baseline = measureRSS();
 
     for (let index = 0; index < 500; index += 1) {

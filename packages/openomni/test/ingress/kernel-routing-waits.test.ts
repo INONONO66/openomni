@@ -84,6 +84,7 @@ async function seedFrozenPending(
     });
   }
   const session = Session.create({
+    traceId: "trace-test",
     title: id,
     model: { providerID: "test", modelID: "test-model" },
   });
@@ -142,6 +143,7 @@ function createPendingAsk(
   originRunId: string | null = `run-${id}`,
 ): Communication.PendingAsk.Record {
   const session = Session.create({
+    traceId: "trace-test",
     title: sessionId,
     model: { providerID: "test", modelID: "test-model" },
   });
@@ -1020,6 +1022,7 @@ describe("IngressEngine durable wait routing", () => {
     overrides: Partial<Parameters<typeof WaitService.open>[0]> = {},
   ) {
     const session = Session.create({
+      traceId: "trace-test",
       title: id,
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -1287,6 +1290,7 @@ describe("IngressEngine durable wait routing", () => {
     registerResponder("actor-r2", "responder-2");
     registerResponder("actor-quorum-target", "quorum-target-1");
     const session = Session.create({
+      traceId: "trace-test",
       title: "wired-2-of-3",
       model: { providerID: "test", modelID: "test-model" },
     });

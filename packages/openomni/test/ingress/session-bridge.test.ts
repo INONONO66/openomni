@@ -8,6 +8,7 @@ const TEST_MODEL = { provider: "anthropic", id: "claude-3-haiku" };
 
 function createTestSession(): string {
   return Session.create({
+    traceId: "trace-session-bridge",
     title: "Test Session",
     model: { providerID: "anthropic", modelID: "claude-3-haiku" },
   }).id;

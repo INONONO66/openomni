@@ -37,6 +37,7 @@ afterEach(async () => {
 
 test("message status transitions received -> processing -> completed", () => {
   const session = Session.create({
+    traceId: "trace-message-lifecycle",
     title: "lifecycle",
     model: { providerID: "test", modelID: "test-model" },
   });
@@ -54,6 +55,7 @@ test("message status transitions received -> processing -> completed", () => {
 
 test("message defaults to completed when status is omitted", () => {
   const session = Session.create({
+    traceId: "trace-message-lifecycle",
     title: "lifecycle-default",
     model: { providerID: "test", modelID: "test-model" },
   });

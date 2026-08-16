@@ -90,6 +90,7 @@ export function registerOwnerDm(): void {
 
 export function createMappedOwnerSession(): Session.Info {
   const session = Session.create({
+    traceId: "trace-test",
     title: "Owner DM",
     model: { providerID: "test", modelID: "test-model" },
   });

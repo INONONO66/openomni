@@ -162,6 +162,7 @@ describe("createInjectionQueueDrainPolicy", () => {
 
   it("persists only responses marked for history injection", async () => {
     const session = Session.create({
+      traceId: "trace-1",
       title: "Policy Test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -196,6 +197,7 @@ describe("createInjectionQueueDrainPolicy", () => {
   // seam must record the injected response as synthesized facts.
   it("resume keeps injected responses in a fact-bearing session, in recording order", async () => {
     const session = Session.create({
+      traceId: "trace-1",
       title: "Resume Merge",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -247,6 +249,7 @@ describe("createInjectionQueueDrainPolicy", () => {
 
   it("uses canonical run and session identifiers when trace context is absent", async () => {
     const session = Session.create({
+      traceId: "trace-1",
       title: "Legacy Context Policy Test",
       model: { providerID: "test", modelID: "test-model" },
     });

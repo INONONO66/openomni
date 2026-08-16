@@ -11,6 +11,7 @@ describe("IngressEventProjector", () => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
     sessionId = Session.create({
+      traceId: "trace-test",
       title: "Test Session",
       model: { providerID: "anthropic", modelID: "claude-3-haiku" },
     }).id;

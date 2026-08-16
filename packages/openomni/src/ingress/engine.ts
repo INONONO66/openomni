@@ -78,11 +78,10 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
     });
 
     const agentModel = inboundEvent.agent.model;
-    const { session } = IngressSessionResolver.resolve(
-      inboundEvent,
-      { providerID: agentModel.provider, modelID: agentModel.id },
-      trace,
-    );
+    const { session } = IngressSessionResolver.resolve(inboundEvent, trace, {
+      providerID: agentModel.provider,
+      modelID: agentModel.id,
+    });
 
     const activeTrace = { ...trace, sessionId: session.id };
 

@@ -16,6 +16,7 @@ afterEach(() => {
 // adapter layer, exactly as pre-freeze rows persist on disk.
 async function createWorkerRun(runId: string, sessionId = `${runId}-session`): Promise<void> {
   const session = Session.create({
+    traceId: "trace-worker-grant",
     title: sessionId,
     model: { providerID: "test", modelID: "test" },
   });

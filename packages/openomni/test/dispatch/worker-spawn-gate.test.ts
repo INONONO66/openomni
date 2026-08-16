@@ -187,6 +187,7 @@ describe("worker.spawn dispatch gate", () => {
 
   test("worker.spawn preserves parent session lineage when provided", async () => {
     const parent = Session.create({
+      traceId: "trace-worker-spawn-gate",
       title: "parent",
       model: { providerID: "test", modelID: "test" },
     });

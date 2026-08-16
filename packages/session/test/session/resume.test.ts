@@ -6,6 +6,7 @@ import "../../src/storage/initialize";
 
 function createSession() {
   return Session.create({
+    traceId: "trace-resume",
     title: "Resume",
     model: { providerID: "test", modelID: "test-model" },
   });
@@ -123,10 +124,10 @@ describe("Session resume and abandon APIs", () => {
     await expect(Session.suspend(session.id)).resolves.toBe(true);
     await expect(Session.suspend("missing-session")).resolves.toBe(false);
 
-    await expect(Session.abandon(session.id)).resolves.toBe(true);
+    await expect(Session.abandon(session.id, "trace-resume")).resolves.toBe(true);
     expect(Session.get(session.id)).toBeUndefined();
     expect(Session.getMessages(session.id)).toEqual([]);
     expect(Session.getParts(assistant.id)).toEqual([]);
-    await expect(Session.abandon(session.id)).resolves.toBe(false);
+    await expect(Session.abandon(session.id, "trace-resume")).resolves.toBe(false);
   });
 });

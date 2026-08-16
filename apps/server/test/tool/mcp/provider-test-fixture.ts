@@ -111,6 +111,7 @@ export function seedProvider(
 
 export function createLedgerSession(): Session.Info {
   return Session.create({
+    traceId: "trace-mcp-test",
     title: "mcp-ledger-test",
     model: { providerID: "test", modelID: "test-model" },
   });
