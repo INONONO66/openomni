@@ -6,7 +6,7 @@ import "../src/storage/initialize";
 
 // The pure string codec (create/fromChannel/parse) lives in the protocol
 // adapter domain — see packages/protocol/test/adapter-surface-key.test.ts.
-// This suite covers the storage semantics: register/claim/lookup.
+// This suite covers the storage semantics: claim/lookup/listBySession.
 
 function seedSession(id: string): void {
   Storage.getAdapter().session.set(id, {
@@ -24,13 +24,13 @@ describe("SurfaceKey", () => {
     Storage.initialize({ dbPath: ":memory:" });
   });
 
-  describe("register and lookup", () => {
-    test("registers and looks up a surfaceKey", () => {
+  describe("claim and lookup", () => {
+    test("claims and looks up a surfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId = "session-123";
 
       seedSession(sessionId);
-      SurfaceKey.register(key, sessionId);
+      SurfaceKey.claim(key, sessionId);
       expect(SurfaceKey.lookup(key)).toBe(sessionId);
     });
 
@@ -38,27 +38,21 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.lookup("slack:unknown")).toBeUndefined();
     });
 
-    test("throws error on invalid format during register", () => {
-      expect(() => SurfaceKey.register("invalid", "session-123")).toThrow(
-        /Invalid surfaceKey format/,
-      );
-    });
-
     test("throws error on invalid format during claim", () => {
       expect(() => SurfaceKey.claim("invalid", "session-123")).toThrow(/Invalid surfaceKey format/);
     });
 
-    test("overwrites previous mapping for same key", () => {
+    test("claim with the current owner as expected reassigns the key", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId1 = "session-1";
       const sessionId2 = "session-2";
 
       seedSession(sessionId1);
       seedSession(sessionId2);
-      SurfaceKey.register(key, sessionId1);
+      SurfaceKey.claim(key, sessionId1);
       expect(SurfaceKey.lookup(key)).toBe(sessionId1);
 
-      SurfaceKey.register(key, sessionId2);
+      SurfaceKey.claim(key, sessionId2, sessionId1);
       expect(SurfaceKey.lookup(key)).toBe(sessionId2);
     });
   });
@@ -70,8 +64,8 @@ describe("SurfaceKey", () => {
       const key2 = "slack:workspaceA:channel:C456";
 
       seedSession(sessionId);
-      SurfaceKey.register(key1, sessionId);
-      SurfaceKey.register(key2, sessionId);
+      SurfaceKey.claim(key1, sessionId);
+      SurfaceKey.claim(key2, sessionId);
 
       expect(SurfaceKey.lookup(key1)).toBe(sessionId);
       expect(SurfaceKey.lookup(key2)).toBe(sessionId);
@@ -84,9 +78,9 @@ describe("SurfaceKey", () => {
       const key3 = "telegram:botId:chat:chatId";
 
       seedSession(sessionId);
-      SurfaceKey.register(key1, sessionId);
-      SurfaceKey.register(key2, sessionId);
-      SurfaceKey.register(key3, sessionId);
+      SurfaceKey.claim(key1, sessionId);
+      SurfaceKey.claim(key2, sessionId);
+      SurfaceKey.claim(key3, sessionId);
 
       const keys = SurfaceKey.listBySession(sessionId);
       expect(keys).toHaveLength(3);
@@ -100,55 +94,6 @@ describe("SurfaceKey", () => {
     });
   });
 
-  describe("unregister", () => {
-    test("unregisters a surfaceKey", () => {
-      const key = "slack:workspaceA:channel:C123";
-      const sessionId = "session-123";
-
-      seedSession(sessionId);
-      SurfaceKey.register(key, sessionId);
-      expect(SurfaceKey.lookup(key)).toBe(sessionId);
-
-      const removed = SurfaceKey.unregister(key);
-      expect(removed).toBe(true);
-      expect(SurfaceKey.lookup(key)).toBeUndefined();
-    });
-
-    test("returns false when unregistering non-existent key", () => {
-      const removed = SurfaceKey.unregister("slack:unknown");
-      expect(removed).toBe(false);
-    });
-
-    test("removes key from session's key list", () => {
-      const sessionId = "session-123";
-      const key1 = "slack:workspaceA:channel:C123";
-      const key2 = "slack:workspaceA:channel:C456";
-
-      seedSession(sessionId);
-      SurfaceKey.register(key1, sessionId);
-      SurfaceKey.register(key2, sessionId);
-
-      SurfaceKey.unregister(key1);
-
-      const keys = SurfaceKey.listBySession(sessionId);
-      expect(keys).toHaveLength(1);
-      expect(keys).toContain(key2);
-      expect(keys).not.toContain(key1);
-    });
-
-    test("cleans up session entry when last key is removed", () => {
-      const sessionId = "session-123";
-      const key = "slack:workspaceA:channel:C123";
-
-      seedSession(sessionId);
-      SurfaceKey.register(key, sessionId);
-      expect(SurfaceKey.listBySession(sessionId)).toHaveLength(1);
-
-      SurfaceKey.unregister(key);
-      expect(SurfaceKey.listBySession(sessionId)).toHaveLength(0);
-    });
-  });
-
   describe("collision handling", () => {
     test("handles key reassignment from one session to another", () => {
       const key = "slack:workspaceA:channel:C123";
@@ -157,11 +102,11 @@ describe("SurfaceKey", () => {
 
       seedSession(sessionId1);
       seedSession(sessionId2);
-      SurfaceKey.register(key, sessionId1);
+      SurfaceKey.claim(key, sessionId1);
       expect(SurfaceKey.lookup(key)).toBe(sessionId1);
       expect(SurfaceKey.listBySession(sessionId1)).toContain(key);
 
-      SurfaceKey.register(key, sessionId2);
+      SurfaceKey.claim(key, sessionId2, sessionId1);
       expect(SurfaceKey.lookup(key)).toBe(sessionId2);
       expect(SurfaceKey.listBySession(sessionId1)).not.toContain(key);
       expect(SurfaceKey.listBySession(sessionId2)).toContain(key);
@@ -171,7 +116,7 @@ describe("SurfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       seedSession("session-1");
       seedSession("session-2");
-      SurfaceKey.register(key, "session-1");
+      SurfaceKey.claim(key, "session-1");
 
       const owner = SurfaceKey.claim(key, "session-2");
 
@@ -183,7 +128,7 @@ describe("SurfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       seedSession("session-1");
       seedSession("session-2");
-      SurfaceKey.register(key, "session-1");
+      SurfaceKey.claim(key, "session-1");
 
       const owner = SurfaceKey.claim(key, "session-2", "session-1");
 
@@ -197,8 +142,8 @@ describe("SurfaceKey", () => {
       const key2 = "slack:workspaceA:channel:C456";
 
       seedSession(sessionId);
-      SurfaceKey.register(key1, sessionId);
-      SurfaceKey.register(key2, sessionId);
+      SurfaceKey.claim(key1, sessionId);
+      SurfaceKey.claim(key2, sessionId);
 
       expect(SurfaceKey.lookup(key1)).toBe(sessionId);
       expect(SurfaceKey.lookup(key2)).toBe(sessionId);
@@ -227,8 +172,8 @@ describe("SurfaceKey", () => {
 
       seedSession("session-dm");
       seedSession("session-group");
-      SurfaceKey.register(dmKey, "session-dm");
-      SurfaceKey.register(groupKey, "session-group");
+      SurfaceKey.claim(dmKey, "session-dm");
+      SurfaceKey.claim(groupKey, "session-group");
 
       expect(SurfaceKey.lookup(dmKey)).toBe("session-dm");
       expect(SurfaceKey.lookup(groupKey)).toBe("session-group");
@@ -251,17 +196,17 @@ describe("SurfaceKey", () => {
 
       seedSession("session-channel");
       seedSession("session-thread");
-      SurfaceKey.register(channelKey, "session-channel");
-      SurfaceKey.register(threadKey, "session-thread");
+      SurfaceKey.claim(channelKey, "session-channel");
+      SurfaceKey.claim(threadKey, "session-thread");
 
       expect(SurfaceKey.lookup(channelKey)).toBe("session-channel");
       expect(SurfaceKey.lookup(threadKey)).toBe("session-thread");
     });
 
-    test("existing keys without explicit kind still register/lookup", () => {
+    test("existing keys without explicit kind still claim/lookup", () => {
       const legacyKey = "tui:/Users/ino/Develop/OpenOmni";
       seedSession("session-tui");
-      SurfaceKey.register(legacyKey, "session-tui");
+      SurfaceKey.claim(legacyKey, "session-tui");
       expect(SurfaceKey.lookup(legacyKey)).toBe("session-tui");
     });
   });
@@ -273,8 +218,8 @@ describe("SurfaceKey", () => {
       const key2 = "slack:workspaceA:channel:C456";
 
       seedSession(sessionId);
-      SurfaceKey.register(key1, sessionId);
-      SurfaceKey.register(key2, sessionId);
+      SurfaceKey.claim(key1, sessionId);
+      SurfaceKey.claim(key2, sessionId);
 
       Storage.reset();
       Storage.initialize({ dbPath: ":memory:" });
@@ -298,10 +243,8 @@ describe("SurfaceKey", () => {
         part: bare.part,
       });
 
-      expect(() => SurfaceKey.register(key, "session-1")).toThrow(absentMessage);
       expect(() => SurfaceKey.claim(key, "session-1")).toThrow(absentMessage);
       expect(() => SurfaceKey.lookup(key)).toThrow(absentMessage);
-      expect(() => SurfaceKey.unregister(key)).toThrow(absentMessage);
       expect(() => SurfaceKey.listBySession("session-1")).toThrow(absentMessage);
     });
 

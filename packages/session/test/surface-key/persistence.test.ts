@@ -30,29 +30,14 @@ describe("SurfaceKey SQLite persistence", () => {
       title: "persist-test",
       model: { providerID: "test", modelID: "test-model" },
     });
-    SurfaceKey.register("telegram:bot:chat:123", session.id);
+    SurfaceKey.claim("telegram:bot:chat:123", session.id);
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
     expect(SurfaceKey.lookup("telegram:bot:chat:123")).toBe(session.id);
   });
 
-  test("unregister removes from SQLite", () => {
-    const session = Session.create({
-      traceId: "trace-surface-key",
-      title: "unregister-test",
-      model: { providerID: "test", modelID: "test-model" },
-    });
-    SurfaceKey.register("slack:ws:dm:U1", session.id);
-
-    SurfaceKey.unregister("slack:ws:dm:U1");
-
-    Storage.configure(new SqliteStorageAdapter(dbPath));
-
-    expect(SurfaceKey.lookup("slack:ws:dm:U1")).toBeUndefined();
-  });
-
-  test("re-register updates session in SQLite", () => {
+  test("re-claim with expected owner updates session in SQLite", () => {
     const session1 = Session.create({
       traceId: "trace-surface-key",
       title: "old-session",
@@ -63,8 +48,8 @@ describe("SurfaceKey SQLite persistence", () => {
       title: "new-session",
       model: { providerID: "test", modelID: "test-model" },
     });
-    SurfaceKey.register("slack:ws:channel:C1", session1.id);
-    SurfaceKey.register("slack:ws:channel:C1", session2.id);
+    SurfaceKey.claim("slack:ws:channel:C1", session1.id);
+    SurfaceKey.claim("slack:ws:channel:C1", session2.id, session1.id);
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
 

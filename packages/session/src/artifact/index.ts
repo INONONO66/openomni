@@ -17,17 +17,4 @@ export namespace Artifact {
     if (!row) return null;
     return { meta: JSON.parse(row.meta) as ArtifactSchema.Meta, content: row.content };
   }
-
-  export async function list(sessionId: string): Promise<ArtifactSchema.Meta[]> {
-    return (Storage.get().artifact?.list(sessionId) ?? []).map(
-      (r) => JSON.parse(r.meta) as ArtifactSchema.Meta,
-    );
-  }
-
-  // Returns only the latest stored version; full version history is not retained.
-  export async function versions(artifactId: string): Promise<ArtifactSchema.Meta[]> {
-    const row = Storage.get().artifact?.get(artifactId);
-    if (!row) return [];
-    return [JSON.parse(row.meta) as ArtifactSchema.Meta];
-  }
 }

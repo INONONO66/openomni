@@ -28,17 +28,6 @@ export namespace SurfaceKey {
   }
 
   /**
-   * Register a surfaceKey → sessionId mapping.
-   * Supports N:1 mapping (multiple keys can point to same session).
-   * @param key - The surfaceKey
-   * @param sessionId - The session ID
-   */
-  export function register(key: string, sessionId: string): void {
-    Adapter.SurfaceKey.assertWellFormed(key);
-    subAdapter().register(key, sessionId);
-  }
-
-  /**
    * Attempt to claim a surfaceKey for a session without clobbering a concurrent owner.
    * With expectedSessionId, replaces only if the current owner still equals it.
    * Without expectedSessionId, inserts only when the key is absent.
@@ -47,19 +36,6 @@ export namespace SurfaceKey {
   export function claim(key: string, sessionId: string, expectedSessionId?: string): string {
     Adapter.SurfaceKey.assertWellFormed(key);
     return subAdapter().claim(key, sessionId, expectedSessionId);
-  }
-
-  /**
-   * Unregister a surfaceKey.
-   * @param key - The surfaceKey to unregister
-   * @returns true if key was found and removed, false otherwise
-   */
-  export function unregister(key: string): boolean {
-    const sk = subAdapter();
-    const sessionId = sk.lookup(key);
-    if (!sessionId) return false;
-    sk.delete(key);
-    return true;
   }
 
   /**

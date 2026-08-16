@@ -9,7 +9,6 @@ export { AppConnectorInstallationStore } from "./app-connector/index.js";
 export { ActorRegistry } from "./actor/index.js";
 export { BlacklistStore } from "./blacklist/index.js";
 export { ChannelGrantStore } from "./channel-grant/index.js";
-export * from "./worker-run/index.js";
 export { WorkerRunStateStore } from "./worker-run/state-store.js";
 export { WorkItemStore } from "./work-item/index.js";
 export { WorkItemAttemptRun } from "./work-item/attempt-run.js";

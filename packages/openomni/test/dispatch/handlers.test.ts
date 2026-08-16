@@ -96,7 +96,7 @@ describe("built-in dispatch handlers", () => {
   test("resident.ask projects the question and runs the fully resolved Resident AgentDef", async () => {
     createSessionFixture("resident-session");
     createSessionFixture("unrelated-dispatch-surface-session");
-    SurfaceKey.register("dispatch:/workspace/resident:", "unrelated-dispatch-surface-session");
+    SurfaceKey.claim("dispatch:/workspace/resident:", "unrelated-dispatch-surface-session");
     let runConfig: ChatAgentConfig | undefined;
     let runInput: ChatAgentInput | undefined;
     let resolvedWorkspace: string | undefined;

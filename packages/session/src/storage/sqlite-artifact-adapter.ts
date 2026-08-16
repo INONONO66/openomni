@@ -29,19 +29,5 @@ export function createSqliteArtifactAdapter(db: Database): ArtifactAdapter {
       if (!row) return undefined;
       return { meta: row.meta, content: row.content, sessionId: row.session_id };
     },
-
-    list: (sessionId: string): Array<{ id: string; meta: string; content: string }> => {
-      return db
-        .query("SELECT id, meta, content FROM artifact WHERE session_id = ?")
-        .all(sessionId) as Array<{
-        id: string;
-        meta: string;
-        content: string;
-      }>;
-    },
-
-    delete: (id: string): void => {
-      db.query("DELETE FROM artifact WHERE id = ?").run(id);
-    },
   };
 }

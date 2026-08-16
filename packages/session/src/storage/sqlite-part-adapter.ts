@@ -37,16 +37,6 @@ export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
       return rows.map((r) => decodePart(r.data));
     },
 
-    listByMessageIDs: (messageIDs: string[]): Message.Part[] => {
-      if (messageIDs.length === 0) return [];
-      const placeholders = messageIDs.map(() => "?").join(", ");
-      // dynamic IN — can't cache this prepared statement
-      const rows = db
-        .prepare(`SELECT data FROM part WHERE message_id IN (${placeholders}) ORDER BY rowid ASC`)
-        .all(...messageIDs) as Array<{ data: string }>;
-      return rows.map((r) => decodePart(r.data));
-    },
-
     remove: (messageID: string, partID: string): boolean => {
       const result = db
         .query("DELETE FROM part WHERE id = ? AND message_id = ?")

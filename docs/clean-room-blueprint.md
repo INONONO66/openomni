@@ -92,7 +92,7 @@ duplicate events + double policy pass; agent keeps policy dispatch — event
 emission is single-sourced to the executor),
 `storage.ts` warn-and-auto-init `:memory:` (FIXED — #522: uninitialized
 `Storage.get()` throws, the pinning test is inverted to `fail-closed.test.ts`,
-and the SurfaceKey register/claim fail-open seams fail closed with it),
+and the SurfaceKey claim fail-open seams fail closed with it),
 ~3,400 LOC of test harnesses exported from src barrels (move to test/),
 `agent/src/bun-test.d.ts` leaking into dist.
 

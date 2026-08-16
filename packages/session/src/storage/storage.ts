@@ -14,12 +14,6 @@ export namespace Storage {
     item: WorkItem.Info,
   ) => boolean;
 
-  export type MessagePage = {
-    items: Message.Info[];
-    nextCursor: string | null;
-    more: boolean;
-  };
-
   /** One stored transcript fact: session-stream seq + the fact's JSON bytes. */
   export type TranscriptFactRow = {
     seq: number;
@@ -47,7 +41,6 @@ export namespace Storage {
       get(sessionID: string, messageID: string): Message.Info | undefined;
       set(sessionID: string, message: Message.Info): void;
       list(sessionID: string): Message.Info[];
-      listPage?(sessionID: string, options: { limit: number; before?: string }): MessagePage;
       remove(sessionID: string, messageID: string): boolean;
       setStatus?(messageID: string, status: string): void;
       findByStatus?(status: string): Array<{ id: string; sessionId: string }>;
@@ -56,7 +49,6 @@ export namespace Storage {
       get(messageID: string, partID: string): Message.Part | undefined;
       set(messageID: string, part: Message.Part): void;
       list(messageID: string): Message.Part[];
-      listByMessageIDs?(messageIDs: string[]): Message.Part[];
       remove(messageID: string, partID: string): boolean;
     };
     // #547 C3: append-only Transcript.Fact rows (recording tier). The surface
@@ -88,17 +80,13 @@ export namespace Storage {
     // (requireSubAdapter throw) when it is missing; production adapters wire
     // it as required (SqliteStorageAdapter).
     surfaceKey?: {
-      register(key: string, sessionId: string): void;
       claim(key: string, sessionId: string, expectedSessionId?: string): string;
       lookup(key: string): string | undefined;
-      delete(key: string): void;
       listBySession(sessionId: string): string[];
     };
     artifact?: {
       store(id: string, sessionId: string, meta: string, content: string): void;
       get(id: string): { meta: string; content: string; sessionId: string } | undefined;
-      list(sessionId: string): Array<{ id: string; meta: string; content: string }>;
-      delete(id: string): void;
     };
     workItem?: ProtocolStorage.WorkItemSubAdapter;
     // Optional here for test fakes only — WaitStore fails closed (typed
