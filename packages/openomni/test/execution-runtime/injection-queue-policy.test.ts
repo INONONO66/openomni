@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
-import { Session, Storage, TranscriptStore } from "@openomni/session";
+import { Bus, Session, Storage, TranscriptStore } from "@openomni/session";
 import type { Message, Transcript } from "@openomni/protocol";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "../../src/execution-runtime/middleware/injection-queue-policy.js";
@@ -257,6 +257,36 @@ describe("createInjectionQueueDrainPolicy", () => {
       },
     ]);
     expect(queue.hasPending("run-storage-failure")).toBe(false);
+  });
+
+  it("drains under the run turn's trace — not the runId, not a mint (D11)", async () => {
+    const queue = InjectionQueue.create();
+    queue.enqueue(
+      "traced-run",
+      { messageId: "msg-traced", output: "payload", timestamp: 3 },
+      "trace-enqueue",
+    );
+    const drainedEvents: Array<Record<string, unknown>> = [];
+    const unsub = Bus.observe((event, data) => {
+      if (event.name === "injection_queue.response.drained") {
+        drainedEvents.push(data as Record<string, unknown>);
+      }
+    });
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(createInjectionQueueDrainPolicy(queue));
+
+    await engine.dispatchPoint("run.turn.post", {
+      ...baseContext("unused-run", "session-traced"),
+      traceContext: { traceId: "trace-turn" },
+      runId: "traced-run",
+      sessionId: "session-traced",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(drainedEvents).toEqual([
+      { runId: "traced-run", traceId: "trace-turn", count: 1, time: expect.any(Number) },
+    ]);
+    unsub();
   });
 
   it("refuses to drain without the run trace and keeps the queue intact (D11)", async () => {

@@ -438,7 +438,12 @@ describe("on-demand WorkerManager", () => {
     let delivery: unknown;
     const deadline = Date.now() + 1_000;
     while (Date.now() < deadline) {
-      delivery = await manager.send("deliver-session", "adjust your plan", "run-deliver");
+      delivery = await manager.send(
+        "deliver-session",
+        "adjust your plan",
+        TEST_TRACE_ID,
+        "run-deliver",
+      );
       if (
         delivery !== null &&
         typeof delivery === "object" &&
@@ -448,7 +453,9 @@ describe("on-demand WorkerManager", () => {
       }
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
-    expect(delivery).toMatchObject({ accepted: true });
+    // Pin (D11): the wire params carry the caller's trace, not the runId —
+    // the fixture echoes what actually crossed the IPC boundary.
+    expect(delivery).toMatchObject({ accepted: true, traceId: TEST_TRACE_ID });
     await dispatch;
   });
 });

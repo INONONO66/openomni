@@ -141,6 +141,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
     const sessionId = typeof params?.sessionId === "string" ? params.sessionId : undefined;
     const runId = typeof params?.runId === "string" ? params.runId : undefined;
     const message = typeof params?.message === "string" ? params.message : undefined;
+    const traceId = typeof params?.traceId === "string" ? params.traceId : undefined;
     const active = [...activeRuns.entries()].find(
       ([activeRunId, run]) =>
         run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
@@ -150,7 +151,8 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       return;
     }
     active[1].inbox.push(message);
-    respond({ accepted: true });
+    // Echo the wire trace so tests pin what actually crossed the boundary.
+    respond({ accepted: true, ...(traceId === undefined ? {} : { traceId }) });
     return;
   }
 

@@ -76,7 +76,13 @@ describe("worker IPC handlers", () => {
     const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", runId: "missing", message: "new" },
+      params: {
+        authToken: "token",
+        traceId: "trace-ipc-test",
+        sessionId: "session-1",
+        runId: "missing",
+        message: "new",
+      },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
@@ -142,7 +148,12 @@ describe("worker IPC handlers", () => {
     const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", message: "new" },
+      params: {
+        authToken: "token",
+        traceId: "trace-ipc-test",
+        sessionId: "session-1",
+        message: "new",
+      },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,

@@ -89,7 +89,12 @@ export namespace WorkerIpcHandlers {
     const message = readString(params, "message");
     const traceId = readString(params, "traceId");
 
-    if (!sessionId || !runId || !message || !traceId) {
+    if (!traceId) {
+      // Distinct from the lifecycle refusals below: the run may well be
+      // active — the DELIVERY is malformed (a trace-wiring bug upstream).
+      return { accepted: false, error: "delivery missing traceId" };
+    }
+    if (!sessionId || !runId || !message) {
       return {
         accepted: false,
         error: `run not active for session: ${sessionId ?? "unknown"}`,
