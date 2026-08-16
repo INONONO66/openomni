@@ -1,5 +1,6 @@
 import {
   IngressEvent,
+  Operational,
   type Execution,
   type Ingress,
   type TraceContext as TraceContextProtocol,
@@ -169,6 +170,32 @@ export namespace IngressHandlers {
     );
   }
 
+  /**
+   * Last-resort recorder for a terminal-fact write that itself failed (e.g.
+   * SQLITE_BUSY rethrown by the store): the run's outcome is already decided,
+   * so the failure must be RECORDED, never rethrown — an escape here from the
+   * background dispatch's void IIFE is an unhandled rejection that kills the
+   * whole process under bun.
+   */
+  function recordTerminalFactFailure(
+    ctx: HandlerContext,
+    request: Execution.Request,
+    stage: string,
+    error: unknown,
+  ): void {
+    Bus.publish(Operational.Error, {
+      traceId: requireTraceId(ctx),
+      time: Date.now(),
+      sessionId: ctx.sessionId,
+      component: "ingress",
+      msg: `run terminal fact write failed (${stage})`,
+      context: {
+        runId: request.runId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+
   async function markDispatchThrown(
     ctx: HandlerContext,
     request: Execution.Request,
@@ -293,7 +320,14 @@ export namespace IngressHandlers {
     void (async () => {
       try {
         const result = await coordinator.dispatch(ctx.sessionId, request);
-        await finishCoordinatorDispatch(ctx, request, result);
+        try {
+          await finishCoordinatorDispatch(ctx, request, result);
+        } catch (finishError) {
+          // The dispatch SUCCEEDED: a failed fact write must not fall into
+          // the dispatch-thrown arm below (which would record the succeeded
+          // run as "interrupted").
+          recordTerminalFactFailure(ctx, request, "finish", finishError);
+        }
         if (result.output) {
           SessionBridge.storeDirectResult(
             requireTraceId(ctx),
@@ -309,7 +343,11 @@ export namespace IngressHandlers {
         publishFailed(ctx, target, start, result.error ?? result.status);
       } catch (error) {
         publishFailed(ctx, target, start, error);
-        await markDispatchThrown(ctx, request, error);
+        try {
+          await markDispatchThrown(ctx, request, error);
+        } catch (finishError) {
+          recordTerminalFactFailure(ctx, request, "interrupted", finishError);
+        }
       }
     })();
   }
@@ -411,7 +449,13 @@ export namespace IngressHandlers {
     let coordinatorResult: Execution.Result;
     try {
       coordinatorResult = await ctx.coordinator.dispatch(ctx.sessionId, request);
-      await finishCoordinatorDispatch(ctx, request, coordinatorResult);
+      try {
+        await finishCoordinatorDispatch(ctx, request, coordinatorResult);
+      } catch (finishError) {
+        // The dispatch already produced its result; record the fact-write
+        // failure instead of mislabeling the run "interrupted" below.
+        recordTerminalFactFailure(ctx, request, "finish", finishError);
+      }
       if (coordinatorResult.status !== "succeeded") {
         if (coordinatorResult.status === "cancelled") {
           const output = coordinatorResult.output ?? coordinatorResult.error ?? "cancelled";
@@ -438,7 +482,12 @@ export namespace IngressHandlers {
       }
     } catch (error) {
       publishFailed(ctx, target, start, error);
-      await markDispatchThrown(ctx, request, error);
+      try {
+        await markDispatchThrown(ctx, request, error);
+      } catch (finishError) {
+        // Never mask the original dispatch error with the fact-write failure.
+        recordTerminalFactFailure(ctx, request, "interrupted", finishError);
+      }
       throw error;
     }
     const output = coordinatorResult.output ?? "";

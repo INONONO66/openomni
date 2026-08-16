@@ -1,10 +1,14 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Storage } from "../../src/storage/storage";
 import { createWorkItem } from "../../src/work-item/create";
 import "../../src/storage/initialize";
 
 describe("work-item writes fail closed (#606 audit)", () => {
   beforeEach(() => {
+    Storage.reset();
+  });
+
+  afterEach(() => {
     Storage.reset();
   });
 
