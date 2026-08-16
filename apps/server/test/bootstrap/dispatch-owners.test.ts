@@ -263,11 +263,12 @@ describe("createServerDispatchOwners", () => {
 
   test("routes connector question bridge requests through resident.ask", async () => {
     const eventNames: string[] = [];
-    const syncAskPhases: string[] = [];
+    const syncAsks: Array<{ phase: string; traceId: string }> = [];
     const unsubscribe = Bus.observe((event, payload) => {
       if (event.name.startsWith("dispatch.")) eventNames.push(event.name);
       if (event.name === Wait.Events.SyncAsk.name) {
-        syncAskPhases.push(Wait.Events.SyncAsk.schema.parse(payload).phase);
+        const parsed = Wait.Events.SyncAsk.schema.parse(payload);
+        syncAsks.push({ phase: parsed.phase, traceId: parsed.traceId });
       }
     });
     const residentCalls: ResidentRuntimeCall[] = [];
@@ -342,7 +343,12 @@ describe("createServerDispatchOwners", () => {
       expect(eventNames).toContain(DispatchProtocol.Events.Completed.name);
       // The synchronous resident.ask path records wait.sync_ask audit events
       // only and writes no PendingAsk row (#215 owner decision 2).
-      expect(syncAskPhases).toEqual(["opened", "answered"]);
+      // Pin (D11): the nested resident.ask inherits the worker run's trace —
+      // the handler passthrough is value-asserted, not just type-checked.
+      expect(syncAsks).toEqual([
+        { phase: "opened", traceId: "trace_fake" },
+        { phase: "answered", traceId: "trace_fake" },
+      ]);
       expect(PendingAskStore.list()).toHaveLength(0);
     } finally {
       unsubscribe();

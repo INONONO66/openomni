@@ -50,6 +50,7 @@ export const Events = {
     "wait.sync_ask",
     z.object({
       dispatchId: z.string().min(1),
+      traceId: z.string().min(1),
       sessionId: z.string().min(1),
       phase: z.enum(["opened", "answered", "failed"]),
       time: z.number(),

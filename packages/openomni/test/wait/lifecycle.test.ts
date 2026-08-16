@@ -177,17 +177,39 @@ describe("WaitService", () => {
   });
 
   test("auditSyncAsk publishes the audit event and never writes a Wait row", async () => {
-    const phases: string[] = [];
+    const seen: Array<{ phase: string; traceId: string }> = [];
     Bus.observe((event, payload) => {
       if (event.name !== "wait.sync_ask") return;
-      phases.push((payload as { phase: string }).phase);
+      seen.push(payload as { phase: string; traceId: string });
     });
 
-    WaitService.auditSyncAsk({ dispatchId: "dispatch-1", sessionId: "ses-1", phase: "opened" });
-    WaitService.auditSyncAsk({ dispatchId: "dispatch-1", sessionId: "ses-1", phase: "answered" });
+    WaitService.auditSyncAsk({
+      dispatchId: "dispatch-1",
+      traceId: "trace-sync-ask",
+      sessionId: "ses-1",
+      phase: "opened",
+    });
+    WaitService.auditSyncAsk({
+      dispatchId: "dispatch-1",
+      traceId: "trace-sync-ask",
+      sessionId: "ses-1",
+      phase: "answered",
+    });
 
     await flushBus();
-    expect(phases).toEqual(["opened", "answered"]);
+    // Pin (D11): the service publishes exactly the caller's trace (the
+    // handler-level passthrough is pinned in dispatch-owners.test.ts).
+    expect(seen.map((event) => event.phase)).toEqual(["opened", "answered"]);
+    expect(seen.every((event) => event.traceId === "trace-sync-ask")).toBe(true);
     expect(WaitStore.list()).toHaveLength(0);
+  });
+
+  test("wait.sync_ask refuses an untraced payload", () => {
+    const base = { dispatchId: "dispatch-1", sessionId: "ses-1", phase: "opened", time: 1 };
+    expect(Wait.Events.SyncAsk.schema.safeParse(base).success).toBe(false);
+    expect(Wait.Events.SyncAsk.schema.safeParse({ ...base, traceId: "" }).success).toBe(false);
+    expect(Wait.Events.SyncAsk.schema.safeParse({ ...base, traceId: "trace-1" }).success).toBe(
+      true,
+    );
   });
 });
