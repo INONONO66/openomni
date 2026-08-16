@@ -26,6 +26,7 @@ describe("SurfaceKey SQLite persistence", () => {
 
   test("persists across Storage re-init", () => {
     const session = Session.create({
+      traceId: "trace-surface-key",
       title: "persist-test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -38,6 +39,7 @@ describe("SurfaceKey SQLite persistence", () => {
 
   test("unregister removes from SQLite", () => {
     const session = Session.create({
+      traceId: "trace-surface-key",
       title: "unregister-test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -52,10 +54,12 @@ describe("SurfaceKey SQLite persistence", () => {
 
   test("re-register updates session in SQLite", () => {
     const session1 = Session.create({
+      traceId: "trace-surface-key",
       title: "old-session",
       model: { providerID: "test", modelID: "test-model" },
     });
     const session2 = Session.create({
+      traceId: "trace-surface-key",
       title: "new-session",
       model: { providerID: "test", modelID: "test-model" },
     });

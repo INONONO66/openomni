@@ -34,6 +34,7 @@ describe("Session.hydrateMessages", () => {
 
   test("hydrates messages with all parts", async () => {
     const session = Session.create({
+      traceId: "trace-hydration",
       title: "Hydration",
       model: { providerID: "test", modelID: "test-model" },
     });

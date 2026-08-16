@@ -65,6 +65,7 @@ describe("Session.addMessage metadata hooks", () => {
   describe("messageCount", () => {
     test("increments messageCount from undefined to 1 on first message", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -79,6 +80,7 @@ describe("Session.addMessage metadata hooks", () => {
 
     test("increments messageCount from 1 to 2 on second message", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -92,6 +94,7 @@ describe("Session.addMessage metadata hooks", () => {
 
     test("increments for both user and assistant messages", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -109,6 +112,7 @@ describe("Session.addMessage metadata hooks", () => {
   describe("tokens accumulation", () => {
     test("does NOT update tokens for user messages", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -121,6 +125,7 @@ describe("Session.addMessage metadata hooks", () => {
 
     test("accumulates tokens from assistant message when session has no initial tokens", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -137,6 +142,7 @@ describe("Session.addMessage metadata hooks", () => {
 
     test("accumulates tokens across multiple assistant messages", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -154,6 +160,7 @@ describe("Session.addMessage metadata hooks", () => {
 
     test("user messages between assistants do not affect tokens", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -174,6 +181,7 @@ describe("Session.addMessage metadata hooks", () => {
   describe("time.updated", () => {
     test("updates time.updated when message is added", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -194,6 +202,7 @@ describe("Session.addMessage metadata hooks", () => {
   describe("part updates", () => {
     test("publishes the owning session when adding a part", async () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Test",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -223,6 +232,7 @@ describe("Session.addMessage metadata hooks", () => {
 
     test("preserves other session fields when updating metadata", () => {
       const session = Session.create({
+        traceId: "trace-metadata-hooks",
         title: "Original Title",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 60000,

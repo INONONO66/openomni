@@ -107,10 +107,12 @@ function attemptIdentity(prompt: string) {
 
 async function createActiveRun(runId: string) {
   const residentSession = Session.create({
+    traceId: "trace-test",
     title: "resident",
     model: { providerID: "test", modelID: "resident-model" },
   });
   const workerSession = Session.create({
+    traceId: "trace-test",
     title: "worker",
     model: { providerID: "test", modelID: "worker-model" },
   });

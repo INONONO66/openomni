@@ -34,11 +34,12 @@ function resolveSessionId(command: Dispatch.Command, model: Model.Ref): string {
   const modelInfo = { providerID: model.provider, modelID: model.id };
   const session = command.target.parentSessionId
     ? Session.createChild({
+        traceId: command.traceId,
         parentSessionId: command.target.parentSessionId,
         title,
         model: modelInfo,
       })
-    : Session.create({ title, model: modelInfo });
+    : Session.create({ traceId: command.traceId, title, model: modelInfo });
   return session.id;
 }
 

@@ -8,6 +8,7 @@ const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
 
 function createSession(): string {
   return Session.create({
+    traceId: TEST_DISPATCH_TRACE_ID,
     title: "resident-session",
     model: { providerID: "test", modelID: "test" },
   }).id;

@@ -20,6 +20,7 @@ describe("Session TTL", () => {
   describe("create with ttlMs", () => {
     test("should create session without expiresAt when ttlMs not provided", () => {
       const session = Session.create({
+        traceId: "trace-ttl-test",
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -32,6 +33,7 @@ describe("Session TTL", () => {
       const beforeCreate = Date.now();
 
       const session = Session.create({
+        traceId: "trace-ttl-test",
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs,
@@ -46,6 +48,7 @@ describe("Session TTL", () => {
   describe("get with expiry", () => {
     test("should return session when not expired", () => {
       const session = Session.create({
+        traceId: "trace-ttl-test",
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 5000,
@@ -60,6 +63,7 @@ describe("Session TTL", () => {
       // Reads are pure: expiry filtering never writes. Deletion is the
       // explicit sweep's job (sweepExpired below).
       const session = Session.create({
+        traceId: "trace-ttl-test",
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -1000,
@@ -83,6 +87,7 @@ describe("Session TTL", () => {
 
     test("should return session without expiresAt normally", () => {
       const session = Session.create({
+        traceId: "trace-ttl-test",
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -96,12 +101,14 @@ describe("Session TTL", () => {
   describe("list with expiry", () => {
     test("should include non-expired sessions", () => {
       const session1 = Session.create({
+        traceId: "trace-ttl-test",
         title: "Session 1",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 5000,
       });
 
       const session2 = Session.create({
+        traceId: "trace-ttl-test",
         title: "Session 2",
         model: { providerID: "test", modelID: "test-model" },
       });
@@ -114,12 +121,14 @@ describe("Session TTL", () => {
 
     test("should exclude expired sessions WITHOUT deleting them", async () => {
       const expiredSession = Session.create({
+        traceId: "trace-ttl-test",
         title: "Expired Session",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -1000,
       });
 
       const activeSession = Session.create({
+        traceId: "trace-ttl-test",
         title: "Active Session",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 5000,
@@ -144,23 +153,27 @@ describe("Session TTL", () => {
 
     test("should handle mixed sessions correctly and stay stable across repeated reads", () => {
       const expired1 = Session.create({
+        traceId: "trace-ttl-test",
         title: "Expired 1",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -1000,
       });
 
       const active1 = Session.create({
+        traceId: "trace-ttl-test",
         title: "Active 1",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 5000,
       });
 
       const noExpiry = Session.create({
+        traceId: "trace-ttl-test",
         title: "No Expiry",
         model: { providerID: "test", modelID: "test-model" },
       });
 
       const expired2 = Session.create({
+        traceId: "trace-ttl-test",
         title: "Expired 2",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -2000,
@@ -187,30 +200,33 @@ describe("Session TTL", () => {
   describe("sweepExpired", () => {
     test("removes expired sessions and leaves the rest untouched", async () => {
       const expired = Session.create({
+        traceId: "trace-ttl-test",
         title: "Expired",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: -1000,
       });
       const active = Session.create({
+        traceId: "trace-ttl-test",
         title: "Active",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 5000,
       });
       const noExpiry = Session.create({
+        traceId: "trace-ttl-test",
         title: "No Expiry",
         model: { providerID: "test", modelID: "test-model" },
       });
 
-      const deleted: string[] = [];
+      const deleted: Array<{ traceId: string; id: string }> = [];
       const unsub = Bus.subscribe(Session.Event.Deleted, (data) => {
-        deleted.push(data.id);
+        deleted.push({ traceId: data.traceId, id: data.id });
       });
 
-      const swept = Session.sweepExpired();
+      const swept = Session.sweepExpired("trace-ttl-test");
 
       expect(swept.map((s) => s.id)).toEqual([expired.id]);
       await flushBus();
-      expect(deleted).toEqual([expired.id]);
+      expect(deleted).toEqual([{ traceId: "trace-ttl-test", id: expired.id }]);
       expect(Storage.getAdapter().session.get(expired.id)).toBeUndefined();
       expect(Storage.getAdapter().session.get(active.id)).toBeDefined();
       expect(Storage.getAdapter().session.get(noExpiry.id)).toBeDefined();
@@ -219,12 +235,13 @@ describe("Session TTL", () => {
 
     test("is a no-op when nothing is expired", () => {
       Session.create({
+        traceId: "trace-ttl-test",
         title: "Active",
         model: { providerID: "test", modelID: "test-model" },
         ttlMs: 5000,
       });
 
-      expect(Session.sweepExpired()).toEqual([]);
+      expect(Session.sweepExpired("trace-ttl-test")).toEqual([]);
       expect(Storage.getAdapter().session.list().length).toBe(1);
     });
   });

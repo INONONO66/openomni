@@ -54,6 +54,7 @@ function attemptIdentity(prompt: string) {
 describe("dispatch actor trustTier (#510 D2b)", () => {
   test("pin (d): a new run with attempt facts and no worker_run row derives assigned_worker", async () => {
     const session = Session.create({
+      traceId: "trace-test",
       title: "actor-cutover-new",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -92,6 +93,7 @@ describe("dispatch actor trustTier (#510 D2b)", () => {
 
   test("pin (d): a legacy frozen worker_run row still derives assigned_worker via upcast", () => {
     const session = Session.create({
+      traceId: "trace-test",
       title: "actor-cutover-legacy",
       model: { providerID: "test", modelID: "test-model" },
     });

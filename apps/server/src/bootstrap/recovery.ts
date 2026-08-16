@@ -249,7 +249,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     // Session TTL expiry: reads (Session.get/list) only filter expired rows;
     // this sweep is the one deliberate deletion point (same seam as the wait
     // sweep above — boot-time only until a periodic scheduler exists).
-    const expiredSessions = Session.sweepExpired();
+    const expiredSessions = Session.sweepExpired(id);
     if (expiredSessions.length > 0) {
       Bus.publish(Operational.Info, {
         traceId: id,

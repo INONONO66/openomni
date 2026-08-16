@@ -51,6 +51,7 @@ export type Create = z.infer<typeof Create>;
 
 export const Evaluation = z
   .object({
+    traceId: z.string().min(1),
     workerRunId: z.string().min(1),
     action: z.string().min(1),
     sessionId: z.string().min(1).optional(),
@@ -74,6 +75,7 @@ export type EvaluationResult = z.infer<typeof EvaluationResult>;
 
 const EventBase = z.object({
   id: z.string().min(1),
+  traceId: z.string().min(1),
   workerRunId: z.string().min(1),
   status: Status,
   version: z.number().int().min(1),

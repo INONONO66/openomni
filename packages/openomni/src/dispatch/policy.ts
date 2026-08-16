@@ -102,7 +102,7 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
       }
 
       if (actor.kind === "worker" && action.startsWith("schedule.")) {
-        const granted = evaluateWorkerGrant(actor, action, target);
+        const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.schedule.denied"));
       }
 
@@ -139,12 +139,12 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
       }
 
       if (actor.kind === "worker" && isWorkerScopedEgress(action)) {
-        const granted = evaluateWorkerGrant(actor, action, target);
+        const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.scope.denied"));
       }
 
       if (actor.kind === "worker" && isExternalEgress(action)) {
-        const granted = evaluateWorkerGrant(actor, action, target);
+        const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.external.denied"));
       }
 
@@ -208,13 +208,30 @@ function isWorkerScopedEgress(action: string): boolean {
   return action === "worker.send" || action === "worker.resume" || action === "worker.cancel";
 }
 
+// A missing trace here is a wiring bug: the runtime builds every dispatch
+// point's traceContext from the command. The policy is fail-closed, so the
+// throw surfaces as an unconditional deny — never a mint. The middleware
+// error record is trace-gated: it files because the runtime also gives the
+// ENGINE the command trace (with neither trace, the engine denies silently).
+function requireDispatchTraceId(ctx: {
+  readonly traceContext?: { readonly traceId?: string };
+}): string {
+  const traceId = ctx.traceContext?.traceId;
+  if (traceId === undefined || traceId.length === 0) {
+    throw new Error("worker grant evaluation requires the command trace context");
+  }
+  return traceId;
+}
+
 function evaluateWorkerGrant(
   actor: Dispatch.ActorContext,
   action: string,
   target: Dispatch.Target | undefined,
+  traceId: string,
 ): { allowed: boolean; reason: string } {
   if (!actor.workerRunId) return { allowed: false, reason: "worker_grant.worker_run.required" };
   return WorkerGrantStore.evaluate({
+    traceId,
     workerRunId: actor.workerRunId,
     action,
     sessionId: target?.sessionId ?? target?.parentSessionId ?? actor.sessionId,

@@ -87,6 +87,7 @@ describe("WorkItem integration", () => {
 
   test("persists WorkItem bus events through BusPersistence", async () => {
     const sessionId = Session.create({
+      traceId: "trace-work-item",
       title: "WorkItem pipeline",
       model: { providerID: "test", modelID: "test" },
     }).id;
