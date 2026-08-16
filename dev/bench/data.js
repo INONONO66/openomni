@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786901644606,
+  "lastUpdate": 1786902265712,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53421,6 +53421,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509143,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b6261bf514e1e827eb738bf550a831b22372d3b8",
+          "message": "fix(session): fail closed everywhere, honest map, dead queries gone (#606) (#686)\n\n* fix(session): fail-closed stores, dead BusQuery surface kill (#606)\n\nSession re-audit fixes:\n- Artifact.store/get: requireSubAdapter fail-closed (was silent ?. write\n  no-op) and sync (no await inside); caller updated.\n- BlacklistStore.match fails closed via requireAdapter (absent adapter\n  read as \"not blacklisted\" for absolute-deny-gate data);\n  ChannelGrantStore.resolve aligned to the same rule.\n- WorkItem mutate()/updateWorkItem() fail closed on absent adapter (was\n  silent undefined, indistinguishable from not-found).\n- Delete production-orphaned BusQuery.listBySession/listByRun/\n  listForLlmReasoning/listAuditChain + event-query-filter.ts + dead\n  QueryOptions/AuditChainRecord contracts; oracle tests rewritten\n  against raw bus_event rows. WorkerRunStateStore.listBySession/\n  listByStatus KEPT: the preserve-marked #510 D2b freeze contract pins\n  \"rows stay readable\" (p2 conformance baseline; retirement is #498).\n- BusEventRow.session_id typed string | null (sessionless chain rows);\n  toEventRecord throws loudly on the impossible null.\n- surface-key claim: loud throw replaces the row?.session_id ??\n  sessionId fallback that masked impossible state.\n- facts.ts: record the adopted-genesis snapshot divergence vs the wait\n  family (Owner decision, #606); initialize(): note the bare :memory:\n  default is test-only.\n- AGENTS.md STRUCTURE: add wait/, effect/, ledger-core/, transcript.ts,\n  work-item facts/effect-link/completion-writer/attempt-run entries.\n\nAll pins mutation-verified (break source -> exactly the pin fails).\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(session): pin the updateWorkItem fail-closed refusal (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T02:43:04+09:00",
+          "tree_id": "f9115245405433add45f6fed4c56a3af604be44f",
+          "url": "https://github.com/INONONO66/openomni/commit/b6261bf514e1e827eb738bf550a831b22372d3b8"
+        },
+        "date": 1786902264929,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 579,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8893,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2327,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7987,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 576,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 490,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 945,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44554,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2313,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10959,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 501663,
             "unit": "ns/op"
           }
         ]
