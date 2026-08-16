@@ -62,7 +62,7 @@ function targetRunId(command: Dispatch.Command): string | undefined {
 async function deliverViaCoordinator(
   coordinatorOwner: CoordinatorLike | undefined,
   command: Dispatch.Command,
-  action: string,
+  action: "worker.send" | "worker.resume" | "actor.reply",
   outputFlag: "delivered" | "resumed",
 ) {
   const coordinator = requireCoordinator(coordinatorOwner);

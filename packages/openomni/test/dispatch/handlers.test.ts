@@ -281,6 +281,51 @@ describe("built-in dispatch handlers", () => {
     });
   });
 
+  test("delivery guards name the action that refused, not a shared label", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            throw new Error("delivery guards should not spawn workers");
+          },
+          async deliverMessage() {
+            return { status: "delivered" };
+          },
+        },
+      },
+    });
+
+    // One shared implementation now serves three actions — a mislabeled
+    // interpolation would misattribute every refusal at once.
+    for (const action of ["worker.send", "worker.resume", "actor.reply"] as const) {
+      await expectRejectsWithMessage(
+        () => registry.get(action)?.(command(action, { kind: "worker" }, "text")),
+        `${action} requires target.sessionId`,
+      );
+    }
+
+    const withoutDelivery = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(withoutDelivery, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            throw new Error("delivery guards should not spawn workers");
+          },
+        },
+      },
+    });
+    for (const action of ["worker.send", "worker.resume", "actor.reply"] as const) {
+      await expectRejectsWithMessage(
+        () =>
+          withoutDelivery.get(action)?.(
+            command(action, { kind: "worker", sessionId: "worker-session" }, "text"),
+          ),
+        `dispatch ${action} requires coordinator.deliverMessage owner`,
+      );
+    }
+  });
+
   test("outbound handlers call the outbound owner", async () => {
     const calls: Array<{ action: string; endpointId?: string; timeoutMs?: number }> = [];
     const registry = new DispatchRegistry();
