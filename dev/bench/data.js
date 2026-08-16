@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786897509365,
+  "lastUpdate": 1786898511163,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53173,6 +53173,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 504302,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f12750727f38d2a6a51d1d836c3f44ae1f5ea5ba",
+          "message": "refactor(openomni): recorded verifier input moves to evidence (#606) (#684)\n\n* refactor(openomni): recorded verifier input moves to evidence (#606)\n\nThe completion-admission split scoping ruled NO-GO on a semantic\nsplit (two production consumers both pull across every section; the\nfile is one transaction protocol whose re-assertion of head/basis/\nlease at every step IS the product; the seams a split would need are\nthe exact role-noun suffixes AGENTS.md bans). One extraction is\nearned: durableVerifierInput + createDurableCompletionResultAuthority-\nPort evolve with the VerifierRegistry obligation/read-back vocabulary,\nnot the admission protocol, and have a second consumer (worker-\ncompletion read-back). They move to evidence/verifier-recorded-input,\ntaking the VerifierRegistry and zod imports with them; the admission\nport contract stays where it is via a type-only back-edge (0 value\ncycles). Pure move — bodies verbatim, consumers repointed, no\nre-export residue.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(openomni): pin the recorded verifier-input refusals (#606)\n\n* docs(openomni): evidence dependency line gains its new edge (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T01:40:33+09:00",
+          "tree_id": "d368dcb99fbd2ff2d00c4507a1a341785f2ede4b",
+          "url": "https://github.com/INONONO66/openomni/commit/f12750727f38d2a6a51d1d836c3f44ae1f5ea5ba"
+        },
+        "date": 1786898510407,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5910,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9061,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2775,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15384,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 496,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1019,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1596,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47308,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2344,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 509383,
             "unit": "ns/op"
           }
         ]
