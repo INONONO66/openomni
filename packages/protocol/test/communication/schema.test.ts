@@ -145,8 +145,10 @@ describe("Communication protocol schemas", () => {
     ).toBe(false);
   });
 
-  test("WorkerGrant defaults external task creation to false", () => {
-    const parsed = Communication.WorkerGrant.Record.parse({
+  test("WorkerGrant refuses an unstated external-task capability", () => {
+    // The fail-closed default has ONE owner — the store's createRecord
+    // (`?? false`); a second zod default would be a silently driftable copy.
+    const record = {
       id: "grant-1",
       workerRunId: "run-1",
       status: "active",
@@ -154,8 +156,11 @@ describe("Communication protocol schemas", () => {
       allowedActions: ["resident.ask"],
       createdAt: 1,
       updatedAt: 1,
-    });
-
-    expect(parsed.canCreateExternalTasks).toBe(false);
+    };
+    expect(Communication.WorkerGrant.Record.safeParse(record).success).toBe(false);
+    expect(
+      Communication.WorkerGrant.Record.parse({ ...record, canCreateExternalTasks: false })
+        .canCreateExternalTasks,
+    ).toBe(false);
   });
 });

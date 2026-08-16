@@ -66,6 +66,9 @@ describe("Observability Pipeline Integration", () => {
         durationMs: 190,
         inputTokens: 1000,
         outputTokens: 500,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         finishReason: "end_turn",
       });
       Bus.publish(ToolExecution.Started, {
@@ -161,6 +164,9 @@ describe("Observability Pipeline Integration", () => {
         durationMs: 300,
         inputTokens: 10,
         outputTokens: 5,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         finishReason: "end_turn",
       });
 
@@ -226,6 +232,9 @@ describe("Observability Pipeline Integration", () => {
         durationMs: 300,
         inputTokens: 400,
         outputTokens: 100,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         finishReason: "end_turn",
       });
 

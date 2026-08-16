@@ -47,6 +47,9 @@ export namespace Message {
     tokens: z.object({
       input: Token.Count,
       output: Token.Count,
+      // DEFAULT-LIVE: read-side migration — parts persisted before #61
+      // (2026-03) lack the reasoning/cache lanes and the part adapter
+      // schema-parses every read; the producer states the lanes since then.
       reasoning: Token.Count.default(0),
       cache: z
         .object({

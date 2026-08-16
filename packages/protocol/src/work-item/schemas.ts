@@ -33,7 +33,12 @@ const ReadBackBase = z.object({
 
 const ReadBackRequestBase = z.object({
   timeoutMs: z.number().int().positive().optional(),
-  maxBodyBytes: z.number().int().positive().default(1_000_000),
+  // Omission must not be the most-permissive case (the old default EQUALLED
+  // the 1 MB enforcement ceiling), but the limit is reject-not-truncate: an
+  // over-cap body fails the whole check, so the default must still cover an
+  // ordinary article page. 256 KiB holds both — explicit requests up to the
+  // ceiling pass the worker-completion guard.
+  maxBodyBytes: z.number().int().positive().default(262_144),
 });
 
 // Deliberately NOT unified with AppConnector's CompletionReport.readBackRequests
@@ -187,7 +192,7 @@ const InfoShape = z.object({
   workSessionId: z.string().min(1).optional(),
   workerRunId: z.string().min(1).optional(),
   executorKind: ExecutorKind.optional(),
-  attempt: z.number().int().min(1).default(1),
+  attempt: z.number().int().min(1),
   maxAttempts: z.number().int().min(1).optional(),
   /**
    * #510 C2 attempt-identity watermark. `lastAttemptSeq` is the highest
@@ -198,6 +203,8 @@ const InfoShape = z.object({
    * next allocation. Full attempt identity lives in the
    * `work_item.attempt_allocated` facts, not in this projection.
    */
+  // DEFAULT-LIVE: pre-C2 rows persisted without the field; the builder also
+  // states the birth watermark explicitly.
   lastAttemptSeq: z.number().int().nonnegative().default(0),
   currentAttemptId: z.string().min(1).optional(),
   /**
@@ -218,18 +225,18 @@ const InfoShape = z.object({
   }),
   relations: z.object({
     parentHash: z.string().optional(),
-    childHashes: z.array(z.string()).default([]),
-    dependsOn: z.array(z.string()).default([]),
+    childHashes: z.array(z.string()),
+    dependsOn: z.array(z.string()),
   }),
   intent: z.string(),
   goal: z.string(),
   context: z.string().optional(),
-  constraints: z.array(z.string()).default([]),
+  constraints: z.array(z.string()),
   acceptanceCriteria: z.array(z.string().refine((value) => value.trim().length > 0)).min(1),
-  changedFiles: z.array(z.string()).default([]),
+  changedFiles: z.array(z.string()),
   failureReason: z.string().optional(),
-  blockers: z.array(Blocker).default([]),
-  evidence: z.array(Evidence).default([]),
+  blockers: z.array(Blocker),
+  evidence: z.array(Evidence),
   completionContract: CompletionContract,
   completionFacts: CompletionFacts.refine((facts) => facts.criteria.length > 0),
   completionReport: CompletionReport.optional(),

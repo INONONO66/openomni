@@ -38,8 +38,7 @@ export const Correlation = z
     tokenHash: z.string().min(1).optional(),
     externalConversationId: z.string().min(1).optional(),
   })
-  .strict()
-  .default({});
+  .strict();
 export type Correlation = z.infer<typeof Correlation>;
 
 export const ResolutionPolicy = z.enum(["first_reply", "quorum", "all"]);

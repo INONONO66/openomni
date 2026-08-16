@@ -17,34 +17,44 @@ describe("LlmCall BusEvents", () => {
     }
   }
 
-  test("Completed parses valid token counts", () => {
-    expect(
-      LlmCall.Completed.schema.parse({
-        ...base,
-        provider: "openai",
-        model: "gpt-4o",
-        durationMs: 100,
-        inputTokens: 100,
-        outputTokens: 50,
-        finishReason: "stop",
-      }),
-    ).toMatchObject({
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
+  test("Completed refuses missing token lanes — the producer states them", () => {
+    const completed = {
+      ...base,
+      provider: "openai",
+      model: "gpt-4o",
+      durationMs: 100,
+      inputTokens: 100,
+      outputTokens: 50,
+      reasoningTokens: 7,
+      cacheReadTokens: 90,
+      cacheWriteTokens: 3,
+      finishReason: "stop",
+    };
+    expect(LlmCall.Completed.schema.parse(completed)).toMatchObject({
+      reasoningTokens: 7,
+      cacheReadTokens: 90,
+      cacheWriteTokens: 3,
     });
+    // Pin: a defaulted zero is indistinguishable from "provider reported no
+    // reasoning tokens" — a producer that drops a lane must fail, not zero.
+    const { reasoningTokens: _r, ...missing } = completed;
+    expect(LlmCall.Completed.schema.safeParse(missing).success).toBe(false);
+    expect(LlmCall.Completed.name).toBe("llm.call.completed");
   });
 
-  test("Failed parses and defaults aborted to false", () => {
-    const parsed = LlmCall.Failed.schema.parse({
+  test("Failed refuses a missing aborted flag — false is load-bearing", () => {
+    const failed = {
       ...base,
       provider: "anthropic",
       model: "claude-3-5-sonnet",
       durationMs: 42,
       error: "No authentication found",
+    };
+    // Pin: a dropped field must not silently read as "genuine error".
+    expect(LlmCall.Failed.schema.safeParse(failed).success).toBe(false);
+    expect(LlmCall.Failed.schema.parse({ ...failed, aborted: true })).toMatchObject({
+      aborted: true,
     });
-
-    expect(parsed).toMatchObject({ aborted: false, error: "No authentication found" });
     expect(LlmCall.Failed.name).toBe("llm.call.failed");
   });
 

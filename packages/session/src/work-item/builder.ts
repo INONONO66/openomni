@@ -27,6 +27,7 @@ export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem
     executorKind: input.executorKind,
     maxAttempts,
     attempt: 1,
+    lastAttemptSeq: 0,
     timestamps: { created: now, updated: now },
     relations: {
       parentHash: input.parentHash,

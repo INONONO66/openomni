@@ -85,19 +85,32 @@ describe("Message.StepStartPart", () => {
 });
 
 describe("Message.StepFinishPart", () => {
-  test("parses valid step-finish part", () => {
+  test("step-finish lane defaults are read-side migration for pre-#61 parts", () => {
     const part = Message.StepFinishPart.parse({
+      ...base,
+      type: "step-finish",
+      reason: "end_turn",
+      cost: 0.05,
+      tokens: { input: 100, output: 50, reasoning: 7, cache: { read: 90, write: 3 } },
+    });
+    expect(part.tokens).toEqual({
+      input: 100,
+      output: 50,
+      reasoning: 7,
+      cache: { read: 90, write: 3 },
+    });
+
+    // Pin (DEFAULT-LIVE): parts persisted before #61 lack the lanes and the
+    // part adapter schema-parses EVERY read — dropping these defaults makes
+    // old transcripts unreadable (#669 review B1).
+    const legacy = Message.StepFinishPart.parse({
       ...base,
       type: "step-finish",
       reason: "end_turn",
       cost: 0.05,
       tokens: { input: 100, output: 50 },
     });
-
-    expect(part.type).toBe("step-finish");
-    expect(part.reason).toBe("end_turn");
-    expect(part.cost).toBe(0.05);
-    expect(part.tokens).toEqual({
+    expect(legacy.tokens).toEqual({
       input: 100,
       output: 50,
       reasoning: 0,
