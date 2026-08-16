@@ -16,12 +16,11 @@ src/
 │   ├── execution/              # The agent loop. Phase 4 rule 1 names five of these: run.ts (entry), turn.ts (prepare + settle), tools.ts (tool.native/mcp pre/post dispatch), effects.ts (effect application), state.ts (run state + lifecycle context). Beside them: run-events.ts (the records), lifecycle-dispatch.ts (run-level points)
 │   └── policy/
 │       ├── index.ts            # Agent-scoped PolicyEngine facade over @openomni/policy
-│       └── types.ts            # PolicyContext, canonical/legacy registration aliases, PolicyEngineRegistration
+│       └── types.ts            # PolicyContext, canonical registration types, PolicyEngineRegistration
 ├── compaction/                 # D6 home (#641): compact.ts (Compaction mechanism + boundary guard), policy.ts (run.completion.pre seam adapter), index.ts (config type + factory)
 └── runtime/
-    ├── index.ts                # Re-exports mcp
     └── mcp/
-        ├── client.ts           # McpClient — connect / disconnect / listTools / callTool (stdio / sse / http)
+        ├── client.ts           # McpClient — connect / disconnect / listTools / callTool (stdio / sse / streamable-http)
 ```
 
 ## PUBLIC API
@@ -42,7 +41,7 @@ const agent = ChatAgent.create({
 const result = await agent.run({
   messages: [{ role: "user", content: "Hello!" }],
 });
-// result.finishReason: 'stop' | 'tool-calls' | 'max-steps' | 'handoff' | 'stalled'
+// result.finishReason: 'stop' | 'max-steps' | 'stalled'
 // result.text / result.steps / result.usage
 ```
 
@@ -69,12 +68,12 @@ adds the one-line re-export in the same PR that imports it.
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>` | Custom tool executor; wrapped by `createToolExecutor` |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
-| `middleware?`    | `PolicyEngineRegistration[]`             | Caller-owned canonical point registrations; legacy timing registrations are accepted only for compatibility |
+| `middleware?`    | `PolicyEngineRegistration[]`             | Caller-owned canonical point registrations; legacy timing shapes are REJECTED fail-closed at registration (#530, typed `legacy_timing_registration`) |
 | `providerOptions?` | `Record<string, unknown>`              | Forwarded to the underlying provider SDK                                    |
 
 ## POLICY ENGINE
 
-The policy engine is the extension surface. `@openomni/agent` exposes an agent-scoped `PolicyEngine` facade over the generic engine in `@openomni/policy`; the facade binds the full agent `PolicyContext` and the explicit legacy-compatibility mapping. Agent execution dispatches through the registered policy points defined in `@openomni/protocol` `policy/point-registry.ts`:
+The policy engine is the extension surface. `@openomni/agent` exposes an agent-scoped `PolicyEngine` facade over the generic engine in `@openomni/policy`; the facade binds the full agent `PolicyContext`; legacy timing registrations are rejected fail-closed at the boundary (#530). Agent execution dispatches through the registered policy points defined in `@openomni/protocol` `policy/point-registry.ts`:
 
 ```
 run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
@@ -83,7 +82,7 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
         → run.turn.post → run.completion.pre → run.lifecycle.post → run.error.error
 ```
 
-- **Registration**: use `CanonicalPolicyRegistration { kind: "point", name, pointIds, effectCapabilities, priority, scope?, failPolicy?, fn }`. `pointIds` declares where the policy may run and `effectCapabilities` declares the effects it may return at each point. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; omitted `failPolicy` follows each protocol point contract. `PolicyEngineRegistration` also accepts the old timing-based `PolicyRegistration` shape, but only as an explicit compatibility boundary for existing callers.
+- **Registration**: use `CanonicalPolicyRegistration { kind: "point", name, pointIds, effectCapabilities, priority, scope?, failPolicy?, fn }`. `pointIds` declares where the policy may run and `effectCapabilities` declares the effects it may return at each point. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; omitted `failPolicy` follows each protocol point contract. `PolicyEngineRegistration` IS the canonical shape — the old timing-based form throws a typed `legacy_timing_registration` error at `register()` (#530); there is no compatibility path.
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
@@ -99,7 +98,8 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 ```
 run.ts (entry) → Promise<AgentResult>
   ├─ retry loop (maxAttempts)
-  │   ├─ build PolicyEngine (config.middleware only)
+  ├─ build PolicyEngine once (config.middleware only)
+  │
   │   ├─ dispatchPoint(run.lifecycle.pre)       → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
   │       ├─ checkBudget → if exceeded, dispatchPoint(run.lifecycle.post) + return result
@@ -149,7 +149,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 - **Invocation-scoped core**: Every `ChatAgent.run()` is independent — no session mutation, storage, durable orchestration, or scheduler. Per-run state such as budget and memory lives on the call context. For future replayable WorkItem attempts, the host supplies captured nondeterministic inputs; this package does not discover or persist them. The normative attempt contract lives in the [kernel contract](../../docs/kernel-contract.md).
 - **Sink-driven**: Callers pass a `Sink` (from `@openomni/protocol`) to receive streaming output. The agent never creates sessions on its own.
-- **Policy > ad-hoc hooks**: New extensions MUST use canonical point registrations in `middleware: [...]`. `PolicyEngine.create()` is the single extension surface; timing registrations exist only for legacy compatibility.
+- **Policy > ad-hoc hooks**: New extensions MUST use canonical point registrations in `middleware: [...]`. `PolicyEngine.create()` is the single extension surface; timing registrations are rejected fail-closed (#530).
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.
 - **A retried attempt is the same turn**: `recordRunTurn` charges once per `turnIndex`, so an attempt that failed and was retried is free in the *turns* unit and bounded by `maxAttempts` instead. Tokens and tool calls still charge per attempt, because they were really spent (#630).
 - **Message format**: `ChatAgentInput.messages` is a simple `{ role: "user" | "assistant"; content: string }[]`. Richer `Message.WithParts[]` is used internally only.

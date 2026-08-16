@@ -11,7 +11,7 @@ export namespace Mcp {
   export const Connected = BusEvent.define(
     "mcp.connected",
     Base.extend({
-      transport: z.enum(["stdio", "sse", "http", "streamable-http"]),
+      transport: z.enum(["stdio", "sse", "streamable-http"]),
       toolCount: z.number(),
     }),
     { visibility: "internal" },

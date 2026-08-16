@@ -98,9 +98,18 @@ function resolvePolicyToolName(
   toolName: string,
   metadata: Map<string, ToolPolicyMetadata>,
 ): string {
-  const toolMetadata = metadata.get(toolName) ?? metadata.get(toolName.replace(/_/g, "."));
+  // The resolved name must be a key the metadata map answers: an MCP tool
+  // registered "server.tool" and called with the underscore-mangled name has
+  // no `tool:` canonical label, and returning the mangled name unresolved
+  // sent its labels lookup into the void — downgrading the call from the
+  // fail-closed tool.mcp.pre to tool.native.pre (#606 audit).
+  const direct = metadata.get(toolName);
+  const dotted = toolName.replace(/_/g, ".");
+  const viaDotted = direct === undefined ? metadata.get(dotted) : undefined;
+  const toolMetadata = direct ?? viaDotted;
   const canonical = toolMetadata?.labels?.find((label) => label.startsWith("tool:"));
-  return canonical ? canonical.slice(5) : toolName;
+  if (canonical) return canonical.slice(5);
+  return viaDotted !== undefined ? dotted : toolName;
 }
 
 export async function buildTurn(

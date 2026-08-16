@@ -51,11 +51,11 @@
         "@openomni/llm": "workspace:*",
         "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
-        "zod": "^3.22.4",
       },
       "devDependencies": {
         "@openomni/telemetry": "workspace:*",
         "@types/bun": "latest",
+        "zod": "^3.22.4",
       },
     },
     "packages/coordinator": {

@@ -144,13 +144,6 @@ export type BuildTurnResult =
   | { type: "ready"; turn: TurnArtifacts }
   | { type: "complete"; result: AgentResult };
 
-/**
- * What the run does after an attempt raised. `complete` carries the result a
- * guard settled on. The other two carry what the terminal record would need,
- * because the runner owns that record and the wait between attempts: a run
- * aborted mid-backoff has to report the reason and ceiling that were decided,
- * not ones re-derived from the abort.
- */
 /** What the terminal record needs. Emitted by the runner, which owns it. */
 export interface RunFailureFacts {
   readonly reason: RetryReason;
@@ -158,6 +151,13 @@ export interface RunFailureFacts {
   readonly maxAttempts: number;
 }
 
+/**
+ * What the run does after an attempt raised. `complete` carries the result a
+ * guard settled on. The other two carry what the terminal record would need,
+ * because the runner owns that record and the wait between attempts: a run
+ * aborted mid-backoff has to report the reason and ceiling that were decided,
+ * not ones re-derived from the abort.
+ */
 export type ErrorDecision =
   | { action: "retry"; backoffMs: number; failure: RunFailureFacts }
   | { action: "complete"; result: AgentResult }

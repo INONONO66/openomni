@@ -50,18 +50,18 @@ export interface ChatAgentInput {
 }
 
 export interface AgentStep {
-  type: "tool-call" | "text";
+  type: "text";
   content: string;
-  toolCalls?: Tool.Call[];
-  toolResults?: Tool.Result[];
 }
 
 export interface AgentResult {
   text: string;
   steps: AgentStep[];
   usage: TokenUsage;
-  finishReason: "stop" | "tool-calls" | "max-steps" | "handoff" | "stalled";
-  handoffTarget?: string;
+  // Every member has a producer: runResult emits stop|stalled|max-steps.
+  // The phantom "tool-calls"/"handoff" members (and handoffTarget) forced
+  // every consumer to handle states that could not occur (#606 audit).
+  finishReason: "stop" | "max-steps" | "stalled";
   compactionCount?: number;
   guardAborted?: boolean;
 }

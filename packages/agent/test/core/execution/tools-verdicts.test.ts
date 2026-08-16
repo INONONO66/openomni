@@ -7,6 +7,7 @@ import {
   type Tool,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import { matchesToolPattern } from "../../../src/core/execution/effects";
 import { createToolExecutor, type BlockedToolResult } from "../../../src/core/execution/tools";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
 
@@ -218,6 +219,13 @@ describe("createToolExecutor effect application", () => {
       output: "[Denied: filtered_tool]",
       isError: true,
     });
+  });
+
+  it("a wildcard filter stops at the dot boundary — shell.* never blocks shellfish (#606)", () => {
+    expect(matchesToolPattern("shell.exec", "shell.*")).toBe(true);
+    expect(matchesToolPattern("shellfish", "shell.*")).toBe(false);
+    expect(matchesToolPattern("shell", "shell.*")).toBe(false);
+    expect(matchesToolPattern("shell.exec", "shell")).toBe(false);
   });
 
   it("allows non-matching tool.filter effects at invoke.prepare", async () => {
