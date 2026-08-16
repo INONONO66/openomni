@@ -187,8 +187,7 @@ describe("DispatchRuntime policy registration boundary", () => {
       | "priority"
       | "scope"
       | "failPolicy"
-      | "fn"
-      | "propagate";
+      | "fn";
     const reads: Record<CanonicalField, number> = {
       kind: 0,
       name: 0,
@@ -198,7 +197,6 @@ describe("DispatchRuntime policy registration boundary", () => {
       scope: 0,
       failPolicy: 0,
       fn: 0,
-      propagate: 0,
     };
     function observed<Value>(field: CanonicalField, value: Value): Value {
       reads[field] += 1;
@@ -237,9 +235,6 @@ describe("DispatchRuntime policy registration boundary", () => {
           return PolicyDecision.deny({ policyId: "changing-point-policy" });
         });
       },
-      get propagate() {
-        return observed("propagate", undefined);
-      },
     });
 
     const result = await submission;
@@ -254,7 +249,6 @@ describe("DispatchRuntime policy registration boundary", () => {
       scope: 1,
       failPolicy: 1,
       fn: 1,
-      propagate: 1,
     });
     expect(policyCalls).toBe(1);
     expect(handlerWasCalled()).toBe(false);

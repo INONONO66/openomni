@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import {
   PolicyEngine,
   type GenericPolicyContext,
-  type PolicyEngineRegistrationGeneric,
+  type CanonicalPolicyRegistrationGeneric,
 } from "@openomni/policy";
 import { PolicyDecision } from "@openomni/protocol";
 
 test("accepts union-typed registrations through the public engine overload", () => {
   const engine = PolicyEngine.create<GenericPolicyContext>();
-  const registerUnion = (registration: PolicyEngineRegistrationGeneric<GenericPolicyContext>) =>
+  const registerUnion = (registration: CanonicalPolicyRegistrationGeneric<GenericPolicyContext>) =>
     engine.register(registration);
 
   expect(() =>

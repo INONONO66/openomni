@@ -49,7 +49,6 @@ interface CanonicalFields {
   readonly scope: unknown;
   readonly failPolicy: unknown;
   readonly fn: unknown;
-  readonly propagate: unknown;
 }
 
 function isRecord(value: unknown): value is object {
@@ -69,7 +68,6 @@ function readCanonicalFields(value: object, name: unknown): CanonicalFields {
     scope: Reflect.get(value, "scope"),
     failPolicy: Reflect.get(value, "failPolicy"),
     fn: Reflect.get(value, "fn"),
-    propagate: Reflect.get(value, "propagate"),
   };
 }
 
@@ -165,11 +163,7 @@ function inspectDispatchPolicy(value: unknown): {
       scope,
       failPolicy: fields.failPolicy,
     });
-    if (
-      !metadata.success ||
-      !isCanonicalPolicyFunction(fields.fn) ||
-      (fields.propagate !== undefined && typeof fields.propagate !== "boolean")
-    ) {
+    if (!metadata.success || !isCanonicalPolicyFunction(fields.fn)) {
       throw new DispatchPolicyRegistrationError("invalid_policy_registration", name);
     }
     const trusted = {
@@ -181,7 +175,6 @@ function inspectDispatchPolicy(value: unknown): {
       ...(scope === undefined ? {} : { scope }),
       ...(metadata.data.failPolicy === undefined ? {} : { failPolicy: metadata.data.failPolicy }),
       fn: fields.fn,
-      ...(fields.propagate === undefined ? {} : { propagate: fields.propagate }),
     } satisfies DispatchPolicyRegistration;
     return { registration: Object.freeze(trusted), registrationName: name };
   } catch (error) {

@@ -76,7 +76,6 @@ interface SharedMetadataFields {
   readonly scope: unknown;
   readonly failPolicy: unknown;
   readonly fn: unknown;
-  readonly propagate: unknown;
 }
 
 function readClassificationFields(registration: object): ClassificationFields {
@@ -94,7 +93,6 @@ function readSharedMetadataFields(registration: object): SharedMetadataFields {
     scope: Reflect.get(registration, "scope"),
     failPolicy: Reflect.get(registration, "failPolicy"),
     fn: Reflect.get(registration, "fn"),
-    propagate: Reflect.get(registration, "propagate"),
   };
 }
 
@@ -138,11 +136,7 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     ...fields,
     scope: captureScope(fields.scope),
   });
-  if (
-    !metadata.success ||
-    !isCanonicalPolicyFunction<TCtx>(fields.fn) ||
-    (fields.propagate !== undefined && typeof fields.propagate !== "boolean")
-  ) {
+  if (!metadata.success || !isCanonicalPolicyFunction<TCtx>(fields.fn)) {
     throw registrationError(name, "invalid_canonical_registration");
   }
   if (!isObject(fields.effectCapabilities)) {
@@ -165,7 +159,6 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     ...(scope === undefined ? {} : { scope }),
     ...(metadata.data.failPolicy === undefined ? {} : { failPolicy: metadata.data.failPolicy }),
     fn: fields.fn,
-    ...(fields.propagate === undefined ? {} : { propagate: fields.propagate }),
   } satisfies CanonicalPolicyRegistrationGeneric<TCtx>);
   return trusted;
 }

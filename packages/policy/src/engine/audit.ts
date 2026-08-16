@@ -63,31 +63,11 @@ export function publishPolicyEvent(
   reg: { name: string },
   ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
 ): void {
-  if (options.audit === false) return;
-
-  const traceContext = ctx.traceContext ?? options.traceContext;
-  const traceId = traceContext?.traceId;
-  const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
-  if (!sessionId || !traceId) return;
-
-  options.auditEmit?.(PolicyEvent.Evaluated, {
-    traceId,
-    sessionId,
-    ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
-    time: Date.now(),
+  publishAuditRecord(options, ctx, decision, {
+    descriptor: PolicyEvent.Evaluated,
+    action: resolveAction(ctx.timing),
+    resource: resolveResource(reg, ctx),
     policyId: decision.policyId,
-    actor: options.audit?.actor ?? buildActor(traceContext),
-    action: options.audit?.action ?? resolveAction(ctx.timing),
-    resource: options.audit?.resource ?? resolveResource(reg, ctx),
-    verdict: decision.verdict,
-    reason: auditReason(decision),
-    effects: decision.effects,
-    ...(decision.obligations !== undefined && { obligations: decision.obligations }),
-    reasonCodes: decision.reasonCodes,
-    ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
-    durationMs: decision.durationMs,
-    ...resolveAuditPoint(ctx),
-    ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
   });
 }
 
@@ -97,6 +77,30 @@ export function publishComposedDecision(
   ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
   decision: Policy.PolicyDecision,
 ): void {
+  publishAuditRecord(options, ctx, decision, {
+    descriptor: PolicyEvent.DecisionComposed,
+    action: resolveAction(timing),
+    resource: resolveComposedResource(ctx),
+  });
+}
+
+/**
+ * One assembly for both audit records: the pair drifted before (same gate,
+ * same 10-field record, hand-copied). Gating stays sessionId AND traceId —
+ * stricter than the middleware-error publishers, which file under a trace
+ * alone; an audit row without its session names nothing queryable.
+ */
+function publishAuditRecord(
+  options: PolicyEngineConfig,
+  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
+  decision: Policy.PolicyDecision,
+  record: {
+    descriptor: typeof PolicyEvent.Evaluated | typeof PolicyEvent.DecisionComposed;
+    action: string;
+    resource: string;
+    policyId?: string;
+  },
+): void {
   if (options.audit === false) return;
 
   const traceContext = ctx.traceContext ?? options.traceContext;
@@ -104,14 +108,15 @@ export function publishComposedDecision(
   const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
   if (!sessionId || !traceId) return;
 
-  options.auditEmit?.(PolicyEvent.DecisionComposed, {
+  options.auditEmit?.(record.descriptor, {
     traceId,
     sessionId,
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
     time: Date.now(),
+    ...(record.policyId !== undefined && { policyId: record.policyId }),
     actor: options.audit?.actor ?? buildActor(traceContext),
-    action: options.audit?.action ?? resolveAction(timing),
-    resource: options.audit?.resource ?? resolveComposedResource(ctx),
+    action: options.audit?.action ?? record.action,
+    resource: options.audit?.resource ?? record.resource,
     verdict: decision.verdict,
     reason: auditReason(decision),
     effects: decision.effects,

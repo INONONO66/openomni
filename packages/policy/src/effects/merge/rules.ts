@@ -14,11 +14,9 @@ import {
 } from "./accumulators";
 import { appendMergedEffects } from "./output";
 import { assertNever, deepMergeRecords } from "../records";
-import { collectPostConflicts } from "../conflicts";
 
 export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   const merged: MergedEffect[] = [];
-  const postConflicts = collectPostConflicts(entries);
   const toolFilters = new Map<string, number>();
   let toolRewrite: { readonly input: Record<string, unknown>; readonly order: number } | undefined;
   let toolOutputRewrite: MergedEffect | undefined;
@@ -164,6 +162,5 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
 
   return {
     effects: merged.sort((left, right) => left.order - right.order).map(({ effect }) => effect),
-    postConflicts,
   };
 }
