@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentResult } from "@openomni/agent";
 import { PolicyDecision, PolicyEvent, type Model } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   ChildAgentEvents,
   createChildAgentRuntime,

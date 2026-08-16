@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { IngressEvent, type Ingress } from "@openomni/protocol";
-import { Bus, ChannelGrantStore, Session, Storage } from "@openomni/session";
+import { ChannelGrantStore, Session, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   defaultRunFn,
   mockModelsGet,

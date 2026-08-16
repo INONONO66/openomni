@@ -1,6 +1,7 @@
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { Stakes } from "../../src/ledger/index.js";
 import type {
   CompletionResultAuthorityCandidate,

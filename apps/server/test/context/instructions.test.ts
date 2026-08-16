@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { InstructionLoader } from "../../src/context/instructions";
 
 let tempRoot: string;

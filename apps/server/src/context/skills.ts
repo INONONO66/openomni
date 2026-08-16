@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import matter from "gray-matter";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { findUp } from "./find-up";
 
 const MAX_SKILLS = 200;

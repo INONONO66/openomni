@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { NativeTool } from "@openomni/openomni";
 import { mcpToolMetadata } from "./provider-metadata";
 import type { McpClientLike } from "./provider-types";

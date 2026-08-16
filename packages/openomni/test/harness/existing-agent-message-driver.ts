@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { Dispatch, WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import {
   ActorRegistry,
-  Bus,
   Session,
   SqliteStorageAdapter,
   Storage,
@@ -12,6 +11,7 @@ import {
   WorkItemStore,
   WorkerRunStateStore,
 } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   WaitService,
   dispatchEvidence,

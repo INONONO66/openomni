@@ -2,7 +2,8 @@ import { afterEach, beforeEach, mock } from "bun:test";
 
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
-import { Bus, Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { McpToolProvider } from "../../../src/tool/mcp";
 
 /** Boot is the trace origin an MCP provider reports connect failures under. */

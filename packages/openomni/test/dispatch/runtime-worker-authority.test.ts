@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus, Storage, WorkerGrantStore } from "@openomni/session";
+import { Storage, WorkerGrantStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createWorkerRunFixture, input, resetDispatchTestState } from "./runtime-test-fixtures";
 

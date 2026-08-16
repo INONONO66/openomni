@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { NativeTool } from "@openomni/openomni";
 import { PolicyEngine } from "@openomni/policy";
 import { Policy, PolicyEvent, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { McpPrefixGuardMiddleware } from "../../../src/tool/mcp/mcp-prefix-guard";
 
 type PointAuditEvent = {

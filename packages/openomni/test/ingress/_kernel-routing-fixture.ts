@@ -1,12 +1,6 @@
 import { Ingress as IngressNamespace, Operational, type Ingress } from "@openomni/protocol";
-import {
-  ActorRegistry,
-  Bus,
-  ChannelGrantStore,
-  Session,
-  Storage,
-  SurfaceKey,
-} from "@openomni/session";
+import { ActorRegistry, ChannelGrantStore, Session, Storage, SurfaceKey } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import {
   createIngressEngine,

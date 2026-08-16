@@ -1,5 +1,6 @@
 import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
-import { Bus, Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { DispatchPolicyRegistration } from "../../src/dispatch/policy-registration";
 
 export const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));

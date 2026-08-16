@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Operational, type McpServerConfig } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { McpConfigLoader } from "../../src/context/mcp-config";
 
 /** Discovery runs during boot and reports under the boot's trace. */

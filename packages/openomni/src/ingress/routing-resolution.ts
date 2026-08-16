@@ -7,7 +7,8 @@ import {
   type RoutingDecisionPayload,
   type Wait,
 } from "@openomni/protocol";
-import { BlacklistStore, Bus, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/session";
+import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   findWaitCandidates,
   requestedWaitAction,

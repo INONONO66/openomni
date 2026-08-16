@@ -1,7 +1,7 @@
 import { McpClient } from "@openomni/agent";
 import type { McpServerConfig, Tool } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type {
   NativeTool,
   ToolCategory,

@@ -10,7 +10,7 @@ import {
   type RuntimeResource,
   type TraceContext,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { NativeTool } from "@openomni/openomni";
 
 type McpPolicyContext = GenericPolicyContext;

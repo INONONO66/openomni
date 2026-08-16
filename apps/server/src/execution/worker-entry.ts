@@ -1,6 +1,7 @@
 import { createIpcServer } from "@openomni/ipc";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus, BusPersistence } from "@openomni/session";
+import { initialize, BusPersistence } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import { InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import { loadConfig } from "../config";

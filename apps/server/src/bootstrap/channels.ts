@@ -1,5 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "../channel";
 import type { PublishPort } from "../channel/types";
 import type { ServerConfig } from "../config";

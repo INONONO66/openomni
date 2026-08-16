@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
-import { Bus, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createDefaultDispatchRuntime } from "../../src/dispatch/setup.js";
 import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 import {

@@ -5,7 +5,7 @@ import {
   ToolExecution,
   type Policy,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { ToolRuntimeContext } from "./types.js";
 
 const TOOL_CALL_ACTION = "tool.call";

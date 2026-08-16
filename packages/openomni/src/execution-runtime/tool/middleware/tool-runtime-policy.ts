@@ -5,7 +5,7 @@ import {
   type RuntimeResource,
   type TraceContext,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { WorkspaceLock } from "../../workspace-lock.js";
 import type { ToolExecutorConfig, ToolRiskTier } from "../types.js";
 

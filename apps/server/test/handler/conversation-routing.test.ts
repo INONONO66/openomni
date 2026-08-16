@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { Operational, type Ingress } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { DiscordNormalizer } from "../../src/channel/discord/normalizer";
 import { createMessageHandler } from "../../src/handler/conversation";
 

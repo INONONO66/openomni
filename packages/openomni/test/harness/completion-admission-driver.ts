@@ -1,4 +1,5 @@
-import { Bus, Storage } from "@openomni/session";
+import { Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   CompletionAdmissionDriverScenarios,
   type CompletionAdmissionDriverScenario,

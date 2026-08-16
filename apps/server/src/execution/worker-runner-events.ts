@@ -1,5 +1,5 @@
 import { WorkerRun } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 export function publishWorkerRunStarted(input: {
   readonly traceId: string;

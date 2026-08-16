@@ -21,7 +21,6 @@ import { registerBuiltInDispatchHandlers } from "../../packages/openomni/src/dis
 import { createIngressEngine } from "../../packages/openomni/src/ingress/engine";
 import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing-resolution";
 import {
-  Bus,
   ChannelGrantStore,
   PendingAskStore,
   PendingInteractionStore,
@@ -33,6 +32,7 @@ import {
   WorkItemAttemptRun,
   WorkItemStore,
 } from "../../packages/session/src/index";
+import { Bus } from "../../packages/telemetry/src/index";
 import { Ledger } from "../../packages/session/src/ledger-core/index";
 import {
   hasRetryExhaustionBlocker,

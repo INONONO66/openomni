@@ -5,13 +5,13 @@ import { join } from "node:path";
 import type { Communication, Message } from "@openomni/protocol";
 import { Database } from "bun:sqlite";
 import {
-  Bus,
   PendingAskStore,
   PendingInteractionStore,
   Session,
   Storage,
   WorkerGrantStore,
 } from "../../src/index";
+import { Bus } from "@openomni/telemetry";
 
 // A corrupt persisted row must fail closed on READ — parse-don't-cast, matching
 // the wait/blacklist precedent. worker_grant is authz-critical: an unvalidated

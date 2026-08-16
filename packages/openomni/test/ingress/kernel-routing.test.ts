@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { IngressEvent } from "@openomni/protocol";
-import { BlacklistStore, Bus, ChannelGrantStore } from "@openomni/session";
+import { BlacklistStore, ChannelGrantStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 import {

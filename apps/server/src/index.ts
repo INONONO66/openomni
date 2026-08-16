@@ -1,6 +1,6 @@
 import { newTraceId } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { main } from "./bootstrap";
 
 main().catch((error) => {

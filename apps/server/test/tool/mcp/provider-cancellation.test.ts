@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { createToolExecutor, WorkspaceLock } from "@openomni/openomni";
 import { Operational, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
   TEST_BOOT_TRACE_ID,

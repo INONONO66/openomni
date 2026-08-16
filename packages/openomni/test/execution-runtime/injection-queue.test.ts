@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 
 describe("InjectionQueue", () => {

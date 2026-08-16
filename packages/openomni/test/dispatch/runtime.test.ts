@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import {
   allowDispatchPolicy,

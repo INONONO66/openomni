@@ -1,4 +1,4 @@
-import { Bus, BusEvent } from "@openomni/session";
+import { Bus, BusEvent } from "@openomni/telemetry";
 import { z } from "zod";
 import type { ChildAgentRuntimeOptions, ChildRecord } from "./types.js";
 

@@ -107,7 +107,7 @@ Status legend: ⬜ not started · 🟨 in review · ✅ merged
 | [#662](https://github.com/INONONO66/openomni/pull/662) | trace batch 5 — `wait.sync_ask` gains `traceId`: `auditSyncAsk`'s single caller holds `command.traceId` | ✅ |
 | [#663](https://github.com/INONONO66/openomni/pull/663) | trace batch 6 — the six Wait store events + the two messaging events share one call path: `SendInput` gains `traceId` (serving `messaging.*` and `WaitService.open`/`recordDeliveryReceipt`), and the `WaitStore` mutation API threads the caller's trace (routing-execution and the recovery sweep already hold one) — the biggest real reduction of untraced rows | ✅ |
 | [#664](https://github.com/INONONO66/openomni/pull/664) | trace batches 7+8 — injection-queue (also fixes its `timestamp` field name that dodges the persistence `time` reader): `drain` and the child-agent settlement enqueue have `traceContext` in scope; the worker IPC enqueue needs `traceId` on the `worker.deliver_message` contract (4 layers, precedent: `worker.inbound_wait`), so the field goes required in one shot with the IPC change | ✅ |
-| — | `openomni`/`server` import-path cleanup; remove the compatibility re-export | ⬜ |
+| [#666](https://github.com/INONONO66/openomni/pull/666) | `openomni`/`server` import-path cleanup; remove the compatibility re-export — 95 files (+7 session-local tests, +2 script/conformance deep-relative imports the CI conformance job caught) import `Bus`/`BusEvent` from `@openomni/telemetry` directly; the band-boundary fixture swaps `Bus`→`Storage` to stay a violation example | ✅ |
 
 ### Phase 2 — core
 

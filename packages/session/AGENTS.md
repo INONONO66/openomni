@@ -2,7 +2,7 @@
 
 Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
 
-`Bus` itself moved to `@openomni/telemetry` (#606) — this package re-exports it for compatibility while consumers migrate, and keeps the durable journal that subscribes to it.
+`Bus` itself lives in `@openomni/telemetry` (#606) — every consumer imports it from there directly; this package keeps the durable journal that subscribes to it.
 
 This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in `@openomni/openomni`.
 

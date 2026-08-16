@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "./executor.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type { NativeTool, ToolRiskTier } from "./types.js";

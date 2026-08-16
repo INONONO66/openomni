@@ -112,7 +112,7 @@ describe("channels band import boundary", () => {
   const violationFixtures = [
     [
       "named session import",
-      'import { Bus } from "@openomni/session";',
+      'import { Storage } from "@openomni/session";',
       "imports @openomni/session",
     ],
     [
