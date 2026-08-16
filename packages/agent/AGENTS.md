@@ -41,7 +41,7 @@ const agent = ChatAgent.create({
 const result = await agent.run({
   messages: [{ role: "user", content: "Hello!" }],
 });
-// result.finishReason: 'stop' | 'tool-calls' | 'max-steps' | 'handoff' | 'stalled'
+// result.finishReason: 'stop' | 'max-steps' | 'stalled'
 // result.text / result.steps / result.usage
 ```
 
