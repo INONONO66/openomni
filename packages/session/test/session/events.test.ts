@@ -60,6 +60,9 @@ describe("Session events carry the caller's trace (D11)", () => {
     expect(Session.Event.Created.schema.safeParse({ traceId: "", info }).success).toBe(false);
     expect(Session.Event.Created.schema.safeParse({ traceId: "trace-1", info }).success).toBe(true);
     expect(Session.Event.Deleted.schema.safeParse({ id: info.id }).success).toBe(false);
+    expect(Session.Event.Deleted.schema.safeParse({ traceId: "", id: info.id }).success).toBe(
+      false,
+    );
     expect(
       Session.Event.Deleted.schema.safeParse({ traceId: "trace-1", id: info.id }).success,
     ).toBe(true);

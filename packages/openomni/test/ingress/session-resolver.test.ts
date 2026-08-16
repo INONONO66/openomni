@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { SurfaceKey, Storage, Session } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { IngressSessionResolver } from "../../src/ingress";
 
 /** resolve() with the test trace context; model stays on the resolver default unless given. */
@@ -136,7 +137,7 @@ describe("IngressSessionResolver", () => {
       expect(result1.session.id).toBe(result2.session.id);
     });
 
-    it("returns a concurrent surface key owner instead of clobbering it", () => {
+    it("returns a concurrent surface key owner instead of clobbering it", async () => {
       const event = {
         surface: "slack",
         workspace: "team-a",
@@ -157,6 +158,10 @@ describe("IngressSessionResolver", () => {
         return originalClaim(claimKey, competing.id, expectedSessionId);
       };
 
+      const deleted: Array<{ traceId: string; id: string }> = [];
+      const unsub = Bus.subscribe(Session.Event.Deleted, (data) => {
+        deleted.push(data);
+      });
       try {
         const result = resolveWithTrace(event);
 
@@ -164,7 +169,14 @@ describe("IngressSessionResolver", () => {
         expect(result.session.id).toBe(competing.id);
         expect(SurfaceKey.lookup(key)).toBe(competing.id);
         expect(Session.list().map((session) => session.id)).toEqual([competing.id]);
+        // Pin (D11): the losing candidate's removal files under the inbound
+        // frame's trace — a wrong-but-nonempty id here would typecheck.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(deleted).toEqual([
+          { traceId: "trace-resolver-test", id: expect.not.stringMatching(competing.id) },
+        ]);
       } finally {
+        unsub();
         surfaceKey.claim = originalClaim;
       }
     });

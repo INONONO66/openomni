@@ -23,10 +23,13 @@ interface ModelConfig {
   modelID: string;
 }
 
-interface ResolveResult {
+interface ResolvedSession {
   session: Session.Info;
   isNew: boolean;
-  trace?: TraceContextProtocol.Type;
+}
+
+interface ResolveResult extends ResolvedSession {
+  trace: TraceContextProtocol.Type;
 }
 
 export namespace IngressSessionResolver {
@@ -121,7 +124,7 @@ export namespace IngressSessionResolver {
     surface: string,
     defaultModel: ModelConfig,
     traceId: string,
-  ): ResolveResult {
+  ): ResolvedSession {
     let staleSessionId: string | undefined;
     let lastOwnerSessionId: string | undefined;
 
