@@ -57,6 +57,30 @@ function targetRunId(command: Dispatch.Command): string | undefined {
   return command.target.runId ?? command.target.id;
 }
 
+// worker.send / worker.resume / actor.reply are one delivery semantic with
+// different result vocabulary — the coordinator call is identical.
+async function deliverViaCoordinator(
+  coordinatorOwner: CoordinatorLike | undefined,
+  command: Dispatch.Command,
+  action: string,
+  outputFlag: "delivered" | "resumed",
+) {
+  const coordinator = requireCoordinator(coordinatorOwner);
+  if (!coordinator.deliverMessage) {
+    throw new Error(`dispatch ${action} requires coordinator.deliverMessage owner`);
+  }
+  const sessionId = command.target.sessionId ?? command.sessionId;
+  if (!sessionId) throw new Error(`${action} requires target.sessionId`);
+  const runId = targetRunId(command);
+  const result = await coordinator.deliverMessage(
+    sessionId,
+    extractText(command.payload),
+    command.traceId,
+    runId,
+  );
+  return { output: { [outputFlag]: true, sessionId, runId, result } };
+}
+
 function parseWorkerCompletePayload(payload: unknown): WorkerCompletePayload {
   const parsed = WorkerCompletePayload.safeParse(payload);
   if (!parsed.success) {
@@ -328,35 +352,11 @@ export function createWorkerDispatchHandlers(
     },
 
     async [Dispatch.Actions.WorkerSend](command) {
-      const coordinator = requireCoordinator(options.coordinator);
-      if (!coordinator.deliverMessage) {
-        throw new Error("dispatch worker.send requires coordinator.deliverMessage owner");
-      }
-      const sessionId = command.target.sessionId ?? command.sessionId;
-      if (!sessionId) throw new Error("worker.send requires target.sessionId");
-      const result = await coordinator.deliverMessage(
-        sessionId,
-        extractText(command.payload),
-        command.traceId,
-        targetRunId(command),
-      );
-      return { output: { delivered: true, sessionId, runId: targetRunId(command), result } };
+      return deliverViaCoordinator(options.coordinator, command, "worker.send", "delivered");
     },
 
     async [Dispatch.Actions.WorkerResume](command) {
-      const coordinator = requireCoordinator(options.coordinator);
-      if (!coordinator.deliverMessage) {
-        throw new Error("dispatch worker.resume requires coordinator.deliverMessage owner");
-      }
-      const sessionId = command.target.sessionId ?? command.sessionId;
-      if (!sessionId) throw new Error("worker.resume requires target.sessionId");
-      const result = await coordinator.deliverMessage(
-        sessionId,
-        extractText(command.payload),
-        command.traceId,
-        targetRunId(command),
-      );
-      return { output: { resumed: true, sessionId, runId: targetRunId(command), result } };
+      return deliverViaCoordinator(options.coordinator, command, "worker.resume", "resumed");
     },
 
     async [Dispatch.Actions.WorkerCancel](command) {
@@ -371,20 +371,7 @@ export function createWorkerDispatchHandlers(
     },
 
     async "actor.reply"(command) {
-      const coordinator = requireCoordinator(options.coordinator);
-      if (!coordinator.deliverMessage) {
-        throw new Error("dispatch actor.reply requires coordinator.deliverMessage owner");
-      }
-      const sessionId = command.target.sessionId ?? command.sessionId;
-      if (!sessionId) throw new Error("actor.reply requires target.sessionId");
-      const runId = targetRunId(command);
-      const result = await coordinator.deliverMessage(
-        sessionId,
-        extractText(command.payload),
-        command.traceId,
-        runId,
-      );
-      return { output: { delivered: true, sessionId, runId, result } };
+      return deliverViaCoordinator(options.coordinator, command, "actor.reply", "delivered");
     },
   };
 }

@@ -248,6 +248,39 @@ describe("built-in dispatch handlers", () => {
     });
   });
 
+  test("worker.resume answers with the resume vocabulary, not a generic delivery", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            throw new Error("worker.resume should not spawn workers");
+          },
+          async deliverMessage() {
+            return { status: "delivered" };
+          },
+        },
+      },
+    });
+
+    const output = await registry.get("worker.resume")?.(
+      command(
+        "worker.resume",
+        { kind: "worker", sessionId: "worker-session", runId: "worker-run" },
+        "resume input",
+      ),
+    );
+
+    expect(output).toEqual({
+      output: {
+        resumed: true,
+        sessionId: "worker-session",
+        runId: "worker-run",
+        result: { status: "delivered" },
+      },
+    });
+  });
+
   test("outbound handlers call the outbound owner", async () => {
     const calls: Array<{ action: string; endpointId?: string; timeoutMs?: number }> = [];
     const registry = new DispatchRegistry();
