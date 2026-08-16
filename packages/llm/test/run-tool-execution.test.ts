@@ -204,7 +204,7 @@ describe("run() tool execution ownership", () => {
     expect(output).toEqual({ output: "" });
     // Pin (#606 audit): a minted id can never correlate with the stream's
     // tool part — execute without the SDK-supplied toolCallId refuses.
-    expect(tools.test_tool?.execute?.({})).rejects.toThrow(
+    await expect(tools.test_tool?.execute?.({})).rejects.toThrow(
       "tool execute called without toolCallId",
     );
   });
