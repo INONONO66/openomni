@@ -50,14 +50,15 @@ function collectPolicies(
   ];
 }
 
-export type CommandRecordErrorCode = "command_replayed" | "command_record_failed";
+export type CommandRecordErrorCode = "command_record_failed";
 
 /**
  * #510 C3 ruling 2 — recording the dispatch verdict failed, so the verdict
- * must not act (no record, no action). `command_replayed` is the meaningful
- * duplicate: the `command:<dispatchId>` stream already holds a verdict for
- * this id; `command_record_failed` covers a missing ledger sub-adapter or a
- * failed append. Both fail closed before the handler or the denial result.
+ * must not act (no record, no action): a missing ledger sub-adapter, a failed
+ * append, or a verdict stream that already has a head. There is NO replay
+ * semantics here: `dispatchId` is minted fresh per submit, so a head conflict
+ * can only mean id collision or ledger corruption — it fails closed as a
+ * record failure, it does not detect duplicates.
  */
 export class CommandRecordError extends Error {
   readonly code: CommandRecordErrorCode;
@@ -120,10 +121,12 @@ function appendCommandVerdict(command: DispatchProtocol.Command, fact: CommandVe
     );
   }
   if (appended.kind === "cas_conflict") {
+    // Unreachable for a fresh dispatchId; reachable only by id collision or
+    // a corrupted stream head — a record failure, not a detected replay.
     throw new CommandRecordError(
-      "command_replayed",
+      "command_record_failed",
       command.dispatchId,
-      `dispatch ${command.dispatchId} already holds a verdict — replay fails closed`,
+      `dispatch verdict stream for ${command.dispatchId} already has a head — fail closed`,
     );
   }
 }

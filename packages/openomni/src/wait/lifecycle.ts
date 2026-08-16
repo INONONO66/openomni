@@ -39,10 +39,6 @@ export namespace WaitService {
     return WaitStore.recordDeliveryReceipt(id, input, traceId);
   }
 
-  export function cancel(id: string, traceId: string, at = Date.now()): Wait.Outcome {
-    return WaitStore.cancel(id, traceId, at);
-  }
-
   /**
    * Lazy expiry entry: a late reply is often the first observer of a passed
    * deadline — the route folds the wait to expired (partial when replies had

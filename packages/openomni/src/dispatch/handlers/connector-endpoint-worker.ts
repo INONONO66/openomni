@@ -1,10 +1,11 @@
 import type { AppConnector, Dispatch, Execution, Model, WorkItem } from "@openomni/protocol";
-import { AppConnectorInstallationStore, Session, WorkItemStore } from "@openomni/session";
+import { AppConnectorInstallationStore, WorkItemStore } from "@openomni/session";
 import type { ConnectorEndpointDriverOwner } from "../owners.js";
 import {
   projectConnectorCompletion,
   type ConnectorCompletionOptions,
 } from "./connector-completion-projector.js";
+import { resolveWorkerSessionId } from "./shared.js";
 import {
   allocateWorkerSpawnAttempt,
   createWorkerSpawnWorkItem,
@@ -24,23 +25,8 @@ export interface ConnectorEndpointWorkerSpawnOptions extends ConnectorCompletion
   readonly driver?: ConnectorEndpointDriverOwner;
 }
 
-function resolveWorkerAgentName(target: Dispatch.Target): string | undefined {
+function resolveConnectorWorkerName(target: Dispatch.Target): string | undefined {
   return target.connectorInstallationId ?? target.endpointId ?? target.id ?? target.name;
-}
-
-function resolveSessionId(command: Dispatch.Command, model: Model.Ref): string {
-  if (command.target.sessionId) return command.target.sessionId;
-  const title = `Dispatch worker ${command.action}`;
-  const modelInfo = { providerID: model.provider, modelID: model.id };
-  const session = command.target.parentSessionId
-    ? Session.createChild({
-        traceId: command.traceId,
-        parentSessionId: command.target.parentSessionId,
-        title,
-        model: modelInfo,
-      })
-    : Session.create({ traceId: command.traceId, title, model: modelInfo });
-  return session.id;
 }
 
 function buildRequest(
@@ -48,14 +34,14 @@ function buildRequest(
   model: Model.Ref,
   payload: ConnectorEndpointWorkerSpawnPayload,
 ): Execution.Request {
-  const sessionId = resolveSessionId(command, model);
+  const sessionId = resolveWorkerSessionId(command, model);
   return {
     runId: crypto.randomUUID(),
     sessionId,
     mode: "direct",
     prompt: payload.prompt,
     model,
-    agentName: resolveWorkerAgentName(command.target),
+    agentName: resolveConnectorWorkerName(command.target),
     workspaceRoot: command.workspaceRoot,
     traceId: command.traceId,
   };
@@ -65,7 +51,7 @@ function targetMatchesInstallation(
   installation: AppConnector.Installation,
   target: Dispatch.Target,
 ): boolean {
-  const workerName = resolveWorkerAgentName(target);
+  const workerName = resolveConnectorWorkerName(target);
   if (workerName === undefined) return false;
   return (
     workerName === installation.endpointId ||
@@ -97,7 +83,7 @@ async function failConnectorEndpointWorkerSpawn(
     command,
     {
       prompt: payload.prompt,
-      agentName: resolveWorkerAgentName(command.target),
+      agentName: resolveConnectorWorkerName(command.target),
       sessionId: command.target.sessionId,
     },
     payload,
