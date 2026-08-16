@@ -317,7 +317,8 @@ function handleToolCall(
   state: StreamEventState,
   context: StreamEventContext,
 ): void {
-  const input = ((event.input ?? event.args) as Record<string, unknown>) || {};
+  // ai v6 tool-call chunks carry `input`; the v4 `args` leg fed only tests.
+  const input = (event.input as Record<string, unknown>) || {};
   const callID = String(event.toolCallId);
   const part: Message.ToolPart = {
     id: crypto.randomUUID(),

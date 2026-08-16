@@ -199,7 +199,7 @@ describe("run() tool execution ownership", () => {
         ) => Promise<{ output: string; isError?: boolean }>;
       }
     >;
-    const output = await tools.test_tool?.execute?.({});
+    const output = await tools.test_tool?.execute?.({}, { toolCallId: "call-missing-result" });
 
     expect(output).toEqual({ output: "" });
   });

@@ -340,7 +340,7 @@ describe("Processor", () => {
       const processor = createProcessor({
         sink: capture.sink,
         createStream: streamOf([
-          { type: "tool-call", toolCallId: "call-orphan", toolName: "lookup", args: { q: "x" } },
+          { type: "tool-call", toolCallId: "call-orphan", toolName: "lookup", input: { q: "x" } },
           { type: "finish" },
         ]),
       });
@@ -372,7 +372,7 @@ describe("Processor", () => {
                 type: "tool-call",
                 toolCallId: "call-attempt-1",
                 toolName: "lookup",
-                args: {},
+                input: {},
               };
               throw new APIError({
                 message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
@@ -440,7 +440,7 @@ describe("Processor", () => {
           { type: "text-start", providerMetadata: {} },
           { type: "text-delta", text: "Hello" },
           { type: "text-end", providerMetadata: {} },
-          { type: "tool-call", toolCallId: "call-1", toolName: "lookup", args: { q: "x" } },
+          { type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: { q: "x" } },
           { type: "tool-result", toolCallId: "call-1", toolName: "lookup", output: "ok" },
           { type: "finish" },
         ]),
@@ -690,7 +690,7 @@ describe("Processor", () => {
         sink: capture.sink,
         createStream: async () => ({
           fullStream: (async function* (shouldThrow = true) {
-            yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", args: {} };
+            yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: {} };
             if (shouldThrow) throw errorInstance;
           })(),
         }),

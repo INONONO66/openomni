@@ -123,8 +123,13 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
             args: Record<string, unknown>,
             options?: { toolCallId?: string; abortSignal?: AbortSignal },
           ) => {
+            // The SDK always supplies toolCallId; a minted id would never
+            // correlate with the stream's tool part, so refuse instead.
+            if (options?.toolCallId === undefined) {
+              throw new Error("tool execute called without toolCallId");
+            }
             const call: Tool.Call = {
-              id: options?.toolCallId ?? crypto.randomUUID(),
+              id: options.toolCallId,
               tool: spec.name,
               input: args,
             };
