@@ -28,7 +28,7 @@ delete process.env.OPENOMNI_WORKER_IPC_TOKEN;
 
 if (!socketPath) {
   // Pre-initialize there is no journal and no observer: stderr or nothing.
-  process.stderr.write("worker-entry: missing --socket argument\\n");
+  process.stderr.write("worker-entry: missing --socket argument\n");
   Bus.publish(Operational.Error, {
     traceId: workerBootTraceId,
     time: Date.now(),
@@ -40,7 +40,7 @@ if (!socketPath) {
 
 if (!ipcAuthToken) {
   // Pre-initialize there is no journal and no observer: stderr or nothing.
-  process.stderr.write("worker-entry: missing IPC auth token\\n");
+  process.stderr.write("worker-entry: missing IPC auth token\n");
   Bus.publish(Operational.Error, {
     traceId: workerBootTraceId,
     time: Date.now(),

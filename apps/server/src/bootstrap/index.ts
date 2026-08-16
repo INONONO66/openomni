@@ -86,8 +86,12 @@ export async function main(options: MainOptions = {}): Promise<void> {
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   const completionWriter = initialize({ dbPath: config.storage.dbPath });
   BusPersistence.start();
+  // Observer delivery is microtask-queued: without this turn the buffer is
+  // provably EMPTY at the republish (the #676 review demonstrated it live).
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
   stopBuffering();
   for (const [descriptor, data] of preBootEvents) Bus.publish(descriptor, data);
+  preBootEvents.length = 0;
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProviderRef: { current?: AgentToolProvider } = {};
