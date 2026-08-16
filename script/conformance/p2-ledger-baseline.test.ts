@@ -1384,6 +1384,53 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
     // The observe-only Authorized projection fires strictly AFTER the append.
     expect(events).not.toContain("dispatch.authorized");
   });
+
+  test("a conflicting verdict-stream head blocks the dispatch: fresh dispatchIds have no replay semantics", async () => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    let handlerCalls = 0;
+    runtime.register("conformance.act", () => {
+      handlerCalls += 1;
+      return { output: "acted" };
+    });
+    // The append itself succeeds at the adapter level but reports an occupied
+    // head: for a per-submit-minted dispatchId that can only mean id collision
+    // or a corrupted stream head — a record failure, never a detected replay.
+    const adapter = Storage.getAdapter();
+    const ledger = adapter.ledger;
+    if (!ledger) throw new Error("conformance storage misses the ledger sub-adapter");
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: {
+        ...ledger,
+        append: () => ({ kind: "cas_conflict", currentHead: 1 }),
+      },
+    });
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      await runtime.submit(
+        { action: "conformance.act", target: { kind: "system" }, payload: "go" },
+        {
+          traceId: "trace-conformance",
+          actorKind: "resident",
+          actorId: "resident:main",
+          policies: [allowPolicy],
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandRecordError);
+    expect((thrown as CommandRecordError).code).toBe("command_record_failed");
+    expect((thrown as CommandRecordError).message).toContain("already has a head");
+    expect(handlerCalls).toBe(0);
+    await flushBus();
+    expect(events).not.toContain("dispatch.authorized");
+  });
 });
 
 describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)", () => {
