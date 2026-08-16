@@ -22,7 +22,9 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 - Bidirectional: both ends can send requests, responses, and notifications over one socket — server → owner-device reverse connections ride the same pair.
 - Wire method names are frozen (Greg Young rule); the transport passes method/params through opaquely.
 - Authentication is the caller's job (workers check `authToken` in handlers); the transport carries but never inspects credentials.
-- Timeout (`IpcTimeoutError`), connection (`IpcConnectionError`), remote-handler failure (`IpcRemoteError`, wire error code 1000 — a HEALTHY connection whose far side refused; both call directions file it identically), and malformed-frame (`IpcProtocolError`, wire error codes 4000/4001) behavior is part of the contract.
+- Timeout (`IpcTimeoutError`), connection (`IpcConnectionError`), remote-handler failure (`IpcRemoteError`, wire error code 1000 — a HEALTHY connection whose far side refused; both call directions file it identically, and a handlerless client answers with it rather than silently dropping), and malformed-frame (`IpcProtocolError`, wire error codes 4000/4001) behavior is part of the contract.
+- Failure classification is per connection: a dying connection rejects ITS in-flight server calls as `IpcConnectionError` immediately, even while other connections survive — never left to age out as a timeout.
+- A malformed (non-JSON) frame costs only itself: every parseable frame in the same chunk still delivers immediately, in order. The server answers each malformed line with its own 4001 error frame and keeps the connection alive; the client stays conservative and tears the connection down — but only after draining the chunk's valid frames. An OVERSIZE frame (>16 MiB) is different by design: it is a DoS guard that resets the connection's entire decode buffer and throws `IpcProtocolError`.
 
 ## CONSUMERS
 
@@ -30,7 +32,7 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 
 ## TESTS
 
-`test/framing.test.ts` (frame cap, UTF-8 streaming state), `test/ipc-bidirectional.test.ts` (both directions over a real socket), `test/ipc-extraction.test.ts` (#496 extraction contract: round trips, auth rejection, malformed frames, timeout/protocol errors, secret non-leakage, worker-entry startup smoke).
+`test/framing.test.ts` (frame cap, UTF-8 streaming state, malformed-line skip-and-report), `test/failure-classes.test.ts` (per-connection failure classes, malformed-frame isolation over a real socket), `test/ipc-bidirectional.test.ts` (both directions over a real socket), `test/ipc-extraction.test.ts` (#496 extraction contract: round trips, auth rejection, malformed frames, timeout/protocol errors, secret non-leakage, worker-entry startup smoke).
 
 ## ANTI-PATTERNS
 
