@@ -202,5 +202,10 @@ describe("run() tool execution ownership", () => {
     const output = await tools.test_tool?.execute?.({}, { toolCallId: "call-missing-result" });
 
     expect(output).toEqual({ output: "" });
+    // Pin (#606 audit): a minted id can never correlate with the stream's
+    // tool part — execute without the SDK-supplied toolCallId refuses.
+    expect(tools.test_tool?.execute?.({})).rejects.toThrow(
+      "tool execute called without toolCallId",
+    );
   });
 });
