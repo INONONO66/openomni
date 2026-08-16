@@ -87,8 +87,9 @@ export namespace WorkerIpcHandlers {
     const sessionId = readString(params, "sessionId");
     const runId = readString(params, "runId");
     const message = readString(params, "message");
+    const traceId = readString(params, "traceId");
 
-    if (!sessionId || !runId || !message) {
+    if (!sessionId || !runId || !message || !traceId) {
       return {
         accepted: false,
         error: `run not active for session: ${sessionId ?? "unknown"}`,
@@ -103,11 +104,11 @@ export namespace WorkerIpcHandlers {
       };
     }
 
-    injectionQueue.enqueue(runId, {
-      messageId: crypto.randomUUID(),
-      output: message,
-      timestamp: Date.now(),
-    });
+    injectionQueue.enqueue(
+      runId,
+      { messageId: crypto.randomUUID(), output: message, timestamp: Date.now() },
+      traceId,
+    );
 
     return { accepted: true };
   }

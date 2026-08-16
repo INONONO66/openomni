@@ -7,15 +7,20 @@ export namespace InjectionQueue {
       "injection_queue.response.queued",
       z.object({
         runId: z.string(),
+        traceId: z.string().min(1),
         messageId: z.string(),
-        timestamp: z.number(),
+        // `time`, not `timestamp`: the persistence reader keys occurrence
+        // time off a `time` field and fell back to its own wall clock here.
+        time: z.number(),
       }),
     ),
     ResponseDrained: BusEvent.define(
       "injection_queue.response.drained",
       z.object({
         runId: z.string(),
+        traceId: z.string().min(1),
         count: z.number(),
+        time: z.number(),
       }),
     ),
   };
@@ -28,8 +33,8 @@ export namespace InjectionQueue {
   }
 
   export interface Instance {
-    enqueue(runId: string, response: PendingResponse): void;
-    drain(runId: string): PendingResponse[];
+    enqueue(runId: string, response: PendingResponse, traceId: string): void;
+    drain(runId: string, traceId: string): PendingResponse[];
     hasPending(runId: string): boolean;
     dispose(runId: string): void;
   }
@@ -37,11 +42,12 @@ export namespace InjectionQueue {
   export function create(): Instance {
     const pendingByRunId = new Map<string, PendingResponse[]>();
 
-    function enqueue(runId: string, response: PendingResponse): void {
+    function enqueue(runId: string, response: PendingResponse, traceId: string): void {
       Bus.publish(Events.ResponseQueued, {
         runId,
+        traceId,
         messageId: response.messageId,
-        timestamp: response.timestamp,
+        time: response.timestamp,
       });
 
       const pending = pendingByRunId.get(runId);
@@ -53,15 +59,20 @@ export namespace InjectionQueue {
       pending.push(response);
     }
 
-    function drain(runId: string): PendingResponse[] {
+    function drain(runId: string, traceId: string): PendingResponse[] {
       const pending = pendingByRunId.get(runId);
       if (pending === undefined) {
-        Bus.publish(Events.ResponseDrained, { runId, count: 0 });
+        Bus.publish(Events.ResponseDrained, { runId, traceId, count: 0, time: Date.now() });
         return [];
       }
 
       pendingByRunId.delete(runId);
-      Bus.publish(Events.ResponseDrained, { runId, count: pending.length });
+      Bus.publish(Events.ResponseDrained, {
+        runId,
+        traceId,
+        count: pending.length,
+        time: Date.now(),
+      });
       return pending.slice();
     }
 

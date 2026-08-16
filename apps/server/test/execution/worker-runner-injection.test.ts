@@ -33,11 +33,15 @@ describe("WorkerRunner", () => {
               );
               if (!drainPolicy) throw new Error("injection queue drain policy missing");
 
-              injectionQueue.enqueue("run-1", {
-                messageId: "message-1",
-                output: "queued response",
-                timestamp: Date.now(),
-              });
+              injectionQueue.enqueue(
+                "run-1",
+                {
+                  messageId: "message-1",
+                  output: "queued response",
+                  timestamp: Date.now(),
+                },
+                "trace-injection-test",
+              );
 
               const engine = PolicyEngine.create({ audit: false });
               engine.register(drainPolicy);

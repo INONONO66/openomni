@@ -254,6 +254,7 @@ export namespace IngressHandlers {
     const raw = await ctx.coordinator.deliverMessage(
       ctx.sessionId,
       extractText(ctx.event.payload),
+      requireTraceId(ctx),
       ctx.event.runtime?.runId,
     );
     const accepted =

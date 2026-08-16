@@ -11,7 +11,12 @@ describe("worker message dispatch handlers", () => {
   });
 
   test("worker send/resume/cancel call coordinator owner methods", async () => {
-    const delivered: Array<{ sessionId: string; message: string; runId?: string }> = [];
+    const delivered: Array<{
+      sessionId: string;
+      message: string;
+      traceId: string;
+      runId?: string;
+    }> = [];
     const cancelled: string[] = [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
@@ -20,8 +25,8 @@ describe("worker message dispatch handlers", () => {
           async dispatch() {
             throw new Error("not used");
           },
-          async deliverMessage(sessionId, message, runId) {
-            delivered.push({ sessionId, message, runId });
+          async deliverMessage(sessionId, message, traceId, runId) {
+            delivered.push({ sessionId, message, traceId, runId });
             return { accepted: true };
           },
           async cancelRun(runId) {
@@ -43,8 +48,9 @@ describe("worker message dispatch handlers", () => {
     );
 
     expect(delivered).toEqual([
-      { sessionId: "s1", message: "next", runId: "r1" },
-      { sessionId: "s1", message: "resume", runId: "r1" },
+      // Pin (D11): the delivery carries the dispatch command's trace.
+      { sessionId: "s1", message: "next", traceId: "trace-1", runId: "r1" },
+      { sessionId: "s1", message: "resume", traceId: "trace-1", runId: "r1" },
     ]);
     expect(cancelled).toEqual(["r1"]);
   });

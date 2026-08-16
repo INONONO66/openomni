@@ -148,8 +148,8 @@ describe("createInjectionQueueDrainPolicy", () => {
 
   it("drains pending responses into prompt injection effects", async () => {
     const queue = InjectionQueue.create();
-    queue.enqueue("run-1", { messageId: "msg-1", output: "first", timestamp: 1 });
-    queue.enqueue("run-1", { messageId: "msg-2", output: "second", timestamp: 2 });
+    queue.enqueue("run-1", { messageId: "msg-1", output: "first", timestamp: 1 }, "trace-1");
+    queue.enqueue("run-1", { messageId: "msg-2", output: "second", timestamp: 2 }, "trace-1");
 
     const decision = await dispatchTurnFinish(queue, "run-1");
 
@@ -167,13 +167,17 @@ describe("createInjectionQueueDrainPolicy", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     const queue = InjectionQueue.create();
-    queue.enqueue("run-1", { messageId: "msg-1", output: "transient", timestamp: 1 });
-    queue.enqueue("run-1", {
-      messageId: "msg-2",
-      output: "durable",
-      injectToHistory: true,
-      timestamp: 2,
-    });
+    queue.enqueue("run-1", { messageId: "msg-1", output: "transient", timestamp: 1 }, "trace-1");
+    queue.enqueue(
+      "run-1",
+      {
+        messageId: "msg-2",
+        output: "durable",
+        injectToHistory: true,
+        timestamp: 2,
+      },
+      "trace-1",
+    );
 
     const decision = await dispatchTurnFinish(queue, "run-1", session.id);
 
@@ -203,12 +207,16 @@ describe("createInjectionQueueDrainPolicy", () => {
     });
     recordToolTurn(session.id, "msg-turn");
     const queue = InjectionQueue.create();
-    queue.enqueue("run-resume", {
-      messageId: "msg-injected",
-      output: "resident answer",
-      injectToHistory: true,
-      timestamp: 2_000,
-    });
+    queue.enqueue(
+      "run-resume",
+      {
+        messageId: "msg-injected",
+        output: "resident answer",
+        injectToHistory: true,
+        timestamp: 2_000,
+      },
+      "trace-1",
+    );
 
     await dispatchTurnFinish(queue, "run-resume", session.id);
 
@@ -220,12 +228,16 @@ describe("createInjectionQueueDrainPolicy", () => {
 
   it("still emits drained responses when history persistence fails", async () => {
     const queue = InjectionQueue.create();
-    queue.enqueue("run-storage-failure", {
-      messageId: "msg-storage-failure",
-      output: "deliver despite storage failure",
-      injectToHistory: true,
-      timestamp: 4,
-    });
+    queue.enqueue(
+      "run-storage-failure",
+      {
+        messageId: "msg-storage-failure",
+        output: "deliver despite storage failure",
+        injectToHistory: true,
+        timestamp: 4,
+      },
+      "trace-1",
+    );
     const recordSpy = spyOn(TranscriptStore, "record").mockImplementation(() => {
       throw new Error("storage unavailable");
     });
@@ -247,26 +259,54 @@ describe("createInjectionQueueDrainPolicy", () => {
     expect(queue.hasPending("run-storage-failure")).toBe(false);
   });
 
-  it("uses canonical run and session identifiers when trace context is absent", async () => {
+  it("refuses to drain without the run trace and keeps the queue intact (D11)", async () => {
+    const queue = InjectionQueue.create();
+    queue.enqueue(
+      "untraced-run",
+      { messageId: "msg-untraced", output: "kept", injectToHistory: true, timestamp: 3 },
+      "trace-1",
+    );
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(createInjectionQueueDrainPolicy(queue));
+    const context = {
+      ...baseContext("unused-run", "session-untraced"),
+      traceContext: undefined,
+      runId: "untraced-run",
+      sessionId: "session-untraced",
+    };
+
+    // The point is fail-open: the refusal surfaces as a bare allow with no
+    // effects, and the injections stay queued for the next traced turn.
+    const decision = await engine.dispatchPoint("run.turn.post", context);
+
+    expect(decision.effects).toEqual([]);
+    expect(queue.hasPending("untraced-run")).toBe(true);
+  });
+
+  it("uses canonical run and session identifiers over trace-context fields", async () => {
     const session = Session.create({
       traceId: "trace-1",
       title: "Legacy Context Policy Test",
       model: { providerID: "test", modelID: "test-model" },
     });
     const queue = InjectionQueue.create();
-    queue.enqueue("legacy-run", {
-      messageId: "msg-legacy",
-      output: "legacy durable",
-      injectToHistory: true,
-      timestamp: 3,
-    });
+    queue.enqueue(
+      "legacy-run",
+      {
+        messageId: "msg-legacy",
+        output: "legacy durable",
+        injectToHistory: true,
+        timestamp: 3,
+      },
+      "trace-1",
+    );
     const engine = PolicyEngine.create({ audit: false });
     engine.register(createInjectionQueueDrainPolicy(queue));
     // No TurnPostContext annotation: that union covers every policy point and
     // would erase the run.turn.post-specific `turnResult` the target requires.
     const context = {
       ...baseContext("unused-run", session.id),
-      traceContext: undefined,
+      traceContext: { traceId: "trace-1" },
       runId: "legacy-run",
       sessionId: session.id,
     };

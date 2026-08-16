@@ -111,7 +111,7 @@ describe("WorkerRunner child agent completion notification", () => {
                 } satisfies Tool.Call,
                 toolCallContext(),
               );
-              injectedResponses.push(...injectionQueue.drain("run-1"));
+              injectedResponses.push(...injectionQueue.drain("run-1", "trace-child-notify"));
               return successfulResult;
             },
           }),

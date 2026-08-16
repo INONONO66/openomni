@@ -66,6 +66,13 @@ const methods = {
   "worker.deliver_message": {
     params: z.object({
       authToken: z.string(),
+      /**
+       * The trace of the flow delivering the message (dispatch command or
+       * inbound frame). Required for the same reason as worker.inbound_wait:
+       * the injection this delivery queues must file under the sender's
+       * trace, not a mint of the receiving worker's.
+       */
+      traceId: z.string().min(1),
       sessionId: z.string(),
       runId: z.string().optional(),
       message: z.string(),

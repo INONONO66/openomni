@@ -67,7 +67,7 @@ describe("child_agent completion notification", () => {
           parentRunId: "parent-run",
         }),
       );
-      expect(injectionQueue.drain("parent-run")).toEqual([
+      expect(injectionQueue.drain("parent-run", "trace-child-notify")).toEqual([
         expect.objectContaining({
           output: expect.stringContaining("background result"),
           injectToHistory: true,
@@ -105,7 +105,7 @@ describe("child_agent completion notification", () => {
       const childId = JSON.parse(spawn.output).childId;
       await tool.execute(makeCall({ action: "await", ids: [childId] }));
 
-      const [queued] = injectionQueue.drain("parent-run");
+      const [queued] = injectionQueue.drain("parent-run", "trace-child-notify");
       expect(queued?.output).toContain("status failed");
       expect(queued?.output).not.toContain("secret-provider-token");
       await flushBus();

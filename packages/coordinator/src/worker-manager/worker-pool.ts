@@ -221,7 +221,12 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     return supervisor.cancel(runId, activeRun.sessionId);
   }
 
-  async send(sessionId: string, message: string, runId?: string): Promise<unknown> {
+  async send(
+    sessionId: string,
+    message: string,
+    traceId: string,
+    runId?: string,
+  ): Promise<unknown> {
     const activeRun = [...this.activeRuns.entries()].find(
       ([activeRunId, run]) =>
         run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
@@ -237,7 +242,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
         error: `worker run not ready: ${runId ?? activeRunId}`,
       };
     }
-    return supervisor.send(sessionId, message, runId ?? activeRunId);
+    return supervisor.send(sessionId, message, traceId, runId ?? activeRunId);
   }
 
   stats(): WorkerManagerStats {
