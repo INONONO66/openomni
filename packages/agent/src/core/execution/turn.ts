@@ -72,12 +72,38 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
   }
 }
 
+/**
+ * Config-time validation: building the metadata map throws on a key
+ * collision (see {@link buildToolMetadataMap}). Run alongside
+ * `assertToolExecutor` so an ambiguous catalog refuses the run before it is
+ * opened, instead of surfacing mid-turn as a retryable "tool" error.
+ */
+export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
+  buildToolMetadataMap(config.tools);
+}
+
 type ToolPolicyMetadata = Pick<NonNullable<ChatAgentConfig["tools"]>[number], "descriptor"> & {
   readonly labels?: readonly string[];
 };
 
 function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, ToolPolicyMetadata> {
   const metadata = new Map<string, ToolPolicyMetadata>();
+  // Every key names the tool that claimed it. Two tools resolving to the same
+  // key (e.g. `a_b` alongside `a.b`, whose underscore-mangled alias is also
+  // `a.b`) used to be a silent last-writer-wins — the later tool's labels
+  // answered the earlier tool's policy lookups (#606 re-audit). A collision
+  // is a configuration error; refuse it loudly, naming both tools.
+  const owners = new Map<string, string>();
+  const claim = (key: string, tool: { name: string }, value: ToolPolicyMetadata): void => {
+    const owner = owners.get(key);
+    if (owner !== undefined && owner !== tool.name) {
+      throw new Error(
+        `tool metadata collision: "${key}" is claimed by both "${owner}" and "${tool.name}"`,
+      );
+    }
+    owners.set(key, tool.name);
+    metadata.set(key, value);
+  };
   for (const tool of tools ?? []) {
     const labels = tool.labels ?? tool.descriptor?.labels;
     if (labels === undefined && tool.descriptor === undefined) continue;
@@ -85,11 +111,11 @@ function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, Tool
       ...(labels !== undefined && { labels }),
       ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
     };
-    metadata.set(tool.name, value);
+    claim(tool.name, tool, value);
     const canonical = labels?.find((label) => label.startsWith("tool:"))?.slice(5);
-    if (canonical) metadata.set(canonical, value);
+    if (canonical) claim(canonical, tool, value);
     const dotted = tool.name.replace(/_/g, ".");
-    if (dotted !== tool.name) metadata.set(dotted, value);
+    if (dotted !== tool.name) claim(dotted, tool, value);
   }
   return metadata;
 }

@@ -84,4 +84,31 @@ describe("engine invariants hold under the package's own suite", () => {
     // Equal priority resolves by registration order (tie-a before tie-b).
     expect(calls).toEqual(["first", "tie-a", "tie-b", "last"]);
   });
+
+  test("a deny at a side-effect boundary escalates to run.abort", async () => {
+    // enforceDenyAbort (engine/decisions.ts): a deny composed at a point that
+    // is a side-effect boundary and allows run.abort must carry the abort
+    // effect even when no registration asserted one — a deny that stops
+    // nothing is the failure mode the escalation exists to prevent. This was
+    // previously pinned only by packages/agent's conformance suite; deleting
+    // the escalation survived this package's own 81 tests (#606 re-audit).
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register({
+      kind: "point",
+      name: "denier-without-abort",
+      pointIds: [POINT],
+      effectCapabilities: { [POINT]: [] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "denier-without-abort",
+          reasonCodes: ["invariant.deny_reason"],
+        }),
+    });
+
+    const decision = await engine.dispatchPoint(POINT, turnContext());
+
+    expect(decision.verdict).toBe("deny");
+    expect(decision.effects[0]).toEqual({ type: "run.abort", reason: "invariant.deny_reason" });
+  });
 });

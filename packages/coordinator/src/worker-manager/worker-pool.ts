@@ -61,6 +61,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   // holding the whole raw config object invited mutation-at-a-distance.
   private readonly workerScript: string;
   private readonly workerBootstrap?: WorkerBootstrap.Bootstrap;
+  private readonly extraWorkerEnvKeys: readonly string[];
   private readonly ports: WorkerPorts;
   private readonly socketDir: string;
   private readonly maxActiveWorkers: number;
@@ -77,6 +78,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   constructor(config: WorkerManagerConfig, ports: WorkerPorts) {
     this.workerScript = config.workerScript;
     this.workerBootstrap = config.bootstrap;
+    this.extraWorkerEnvKeys = config.extraWorkerEnvKeys ?? [];
     this.ports = ports;
     this.socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp", ports.events);
     this.maxActiveWorkers = normalizeMaxActiveWorkers(config.maxActiveWorkers);
@@ -369,6 +371,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
       bootstrap: this.workerBootstrap,
       toolRelay: bindToolRelayTrace(this.ports.toolRelay, this.activeRuns, slot),
       inboundWait: this.ports.inboundWait,
+      extraEnvKeys: this.extraWorkerEnvKeys,
     });
     return slot.supervisor;
   }
@@ -470,7 +473,10 @@ class WorkerPool implements WorkerManager, Execution.Driver {
 
   private scheduleIdleShutdown(slot: WorkerSlot): void {
     this.clearIdleTimer(slot);
-    if (this.idleShutdownMs < 0) return;
+    // A delivery can settle after shutdown() already swept the timers; arming
+    // a fresh timer here would leave a live handle on a slot the pool has
+    // forgotten (shutdown clears `this.slots`), keeping the process alive.
+    if (this.stopping || this.idleShutdownMs < 0) return;
 
     slot.idleTimer = setTimeout(() => {
       slot.idleTimer = null;

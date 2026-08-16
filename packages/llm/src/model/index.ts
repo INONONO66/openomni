@@ -127,21 +127,6 @@ export namespace ModelsDev {
   export async function get(): Promise<Record<string, Provider>> {
     return Data() as Promise<Record<string, Provider>>;
   }
-
-  export async function refresh(): Promise<void> {
-    try {
-      const response = await fetch(`${modelsUrl()}/api.json`, {
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (response.ok) {
-        const data = sanitizeRemoteCatalog(await response.json());
-        await writeCache(data);
-        Data.reset();
-      }
-    } catch {
-      /* non-fatal */
-    }
-  }
 }
 
 // merged from util/lazy.ts (#453 hygiene: sub-30-LOC single-importer)

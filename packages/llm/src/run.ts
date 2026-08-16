@@ -56,9 +56,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     return { type: "aborted" };
   }
 
-  const { traceId, sessionId: sessionID } = input.trace;
-  if (traceId.length === 0 || sessionID.length === 0) {
-    throw new Error("llm run requires a non-empty traceId and sessionId");
+  const { traceId, sessionId: sessionID, runId } = input.trace;
+  if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
+    throw new Error("llm run requires a non-empty traceId, sessionId, and runId");
   }
   const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";

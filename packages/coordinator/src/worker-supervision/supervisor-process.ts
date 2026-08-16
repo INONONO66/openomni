@@ -5,6 +5,10 @@ const MAX_RESTARTS_PER_WINDOW = 10;
 const MAX_BACKOFF_MS = 30_000;
 const MAX_DISPATCH_TIMEOUT_MS = 600_000;
 
+// Production allowlist only. Test fixtures that need extra keys (e.g.
+// OPENOMNI_WORKER_ENV_FIXTURE, OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS) pass them
+// explicitly through `extraEnvKeys` — they must never ride the default that
+// every production worker inherits.
 const workerEnvKeys = new Set([
   "PATH",
   "TMPDIR",
@@ -17,13 +21,14 @@ const workerEnvKeys = new Set([
   "OPENOMNI_MODELS_URL",
   "OPENOMNI_MODELS_PATH",
   "OPENOMNI_DISABLE_MODELS_FETCH",
-  "OPENOMNI_WORKER_ENV_FIXTURE",
-  "OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS",
 ]);
 
-export function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
+export function buildWorkerEnv(
+  source: NodeJS.ProcessEnv,
+  extraKeys: readonly string[] = [],
+): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const key of workerEnvKeys) {
+  for (const key of [...workerEnvKeys, ...extraKeys]) {
     const value = source[key];
     if (value !== undefined) env[key] = value;
   }

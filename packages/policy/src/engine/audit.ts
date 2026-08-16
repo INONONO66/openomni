@@ -105,7 +105,7 @@ function publishAuditRecord(
 
   const traceContext = ctx.traceContext ?? options.traceContext;
   const traceId = traceContext?.traceId;
-  const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
+  const sessionId = traceContext?.sessionId;
   if (!sessionId || !traceId) return;
 
   options.auditEmit?.(record.descriptor, {
@@ -114,9 +114,9 @@ function publishAuditRecord(
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
     time: Date.now(),
     ...(record.policyId !== undefined && { policyId: record.policyId }),
-    actor: options.audit?.actor ?? buildActor(traceContext),
-    action: options.audit?.action ?? record.action,
-    resource: options.audit?.resource ?? record.resource,
+    actor: buildActor(traceContext),
+    action: record.action,
+    resource: record.resource,
     verdict: decision.verdict,
     reason: auditReason(decision),
     effects: decision.effects,

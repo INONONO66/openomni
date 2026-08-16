@@ -44,6 +44,12 @@ export type WorkerSupervisorOptions = {
   bootstrap?: WorkerBootstrap.Bootstrap;
   toolRelay?: ToolCallHandler;
   inboundWait?: InboundWaitHandler;
+  /**
+   * Extra env keys forwarded to the worker on top of the production
+   * allowlist. A test seam: fixtures pass their OPENOMNI_WORKER_* knobs here
+   * instead of the knobs sitting in the default every production worker gets.
+   */
+  extraEnvKeys?: readonly string[];
 };
 
 export class WorkerSupervisor {
@@ -70,6 +76,7 @@ export class WorkerSupervisor {
   private readonly bootstrap?: WorkerBootstrap.Bootstrap;
   private readonly toolRelay?: ToolCallHandler;
   private readonly inboundWait?: InboundWaitHandler;
+  private readonly extraEnvKeys: readonly string[];
 
   constructor(options: WorkerSupervisorOptions) {
     this.id = options.id;
@@ -78,6 +85,7 @@ export class WorkerSupervisor {
     this.bootstrap = options.bootstrap;
     this.toolRelay = options.toolRelay;
     this.inboundWait = options.inboundWait;
+    this.extraEnvKeys = options.extraEnvKeys ?? [];
     this.socketPath = `${options.socketDir ?? "/tmp"}/openomni-worker-${options.id}.sock`;
     this.doStart();
   }
@@ -90,7 +98,10 @@ export class WorkerSupervisor {
     this.proc = Bun.spawn(
       ["bun", this.script, "--", "--worker-id", String(this.id), "--socket", this.socketPath],
       {
-        env: { ...buildWorkerEnv(process.env), OPENOMNI_WORKER_IPC_TOKEN: this.authToken },
+        env: {
+          ...buildWorkerEnv(process.env, this.extraEnvKeys),
+          OPENOMNI_WORKER_IPC_TOKEN: this.authToken,
+        },
         stdout: "pipe",
         stderr: "pipe",
       },
@@ -125,12 +136,22 @@ export class WorkerSupervisor {
     // the deadline warn below) can fire after a crash re-minted the field —
     // a warn for generation N must not file under N+1's trace.
     const generationTraceId = this.generationTraceId;
+    // Snapshot THIS generation too: `this.running` is live state, so a gen-N
+    // loop that survived a crash-restart would otherwise read gen-N+1's
+    // `running = true`, bootstrap the new generation's socket a second time,
+    // and overwrite `this.client` alongside the real gen-N+1 loop.
+    const generation = this.generation;
     const deadline = Date.now() + WORKER_CONNECT_TIMEOUT_MS;
     let lastError: Error | null = null;
     const bootstrap = this.bootstrap;
     const authToken = this.authToken;
 
-    while (Date.now() < deadline && !this.stopping && this.running) {
+    while (
+      Date.now() < deadline &&
+      !this.stopping &&
+      this.running &&
+      this.generation === generation
+    ) {
       if (!fs.existsSync(this.socketPath)) {
         await new Promise<void>((r) => setTimeout(r, 250));
         continue;
@@ -199,15 +220,18 @@ export class WorkerSupervisor {
         if (!isBootstrapAccepted(bootstrapResult)) {
           throw new Error("worker bootstrap rejected");
         }
-        if (!this.stopping && this.running) {
+        if (!this.stopping && this.running && this.generation === generation) {
           this.client = c;
           this.events.publish(WorkerDriver.Ready, {
             traceId: generationTraceId,
             time: Date.now(),
             workerId: this.id,
-            generation: this.generation,
+            generation,
           });
         } else {
+          // Stale (stopped, crashed, or superseded by a newer generation):
+          // installing this client would hand gen-N's bootstrap the socket
+          // gen-N+1's loop owns. Close what we just created and bail.
           c.close();
         }
         return;
@@ -221,7 +245,7 @@ export class WorkerSupervisor {
       }
     }
 
-    if (!this.stopping && this.running && lastError) {
+    if (!this.stopping && this.running && this.generation === generation && lastError) {
       // doStart() fires this promise without awaiting it, so a throw here would
       // surface as an unhandled rejection; report and let waitReady() time out.
       this.events.publish(Operational.Warn, {

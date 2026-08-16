@@ -1,5 +1,6 @@
 import {
   assertToolExecutor,
+  assertUnambiguousToolMetadata,
   buildTurn,
   handleCompact,
   handleContinue,
@@ -47,13 +48,18 @@ export async function runAgent(
 
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
-  const actorId =
-    nonEmptyString(input.metadata?.actorId) ?? nonEmptyString(trace.agentName) ?? runId;
+  // The actor defaults to the run identity: no production caller threads a
+  // real actor principal yet (none supplies `agentName` either), so today
+  // actor ≡ runId. A validated principal lane replaces this when one exists
+  // (#606). The former `input.metadata?.actorId` leg was an unvalidated
+  // side-channel with zero producers and is gone.
+  const actorId = nonEmptyString(trace.agentName) ?? runId;
   const agentBase = { traceId, sessionId, runId, actorId };
-  // Both validators run before the run is opened: `buildPolicyEngine`
+  // All validators run before the run is opened: `buildPolicyEngine`
   // rejects a malformed middleware registration, and a configuration error
   // must not open a run it cannot close.
   assertToolExecutor(config);
+  assertUnambiguousToolMetadata(config);
   const engine = buildPolicyEngine(config, agentBase);
   emitRunStarted(config.events, trace, config.model.id);
 

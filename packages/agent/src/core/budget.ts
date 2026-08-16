@@ -35,6 +35,20 @@ export function effectiveBudgetThresholds(budget?: AgentProfile.BudgetThresholdI
 
 export type BudgetStatus = "ok" | "reassurance" | "warning" | "exceeded";
 
+/**
+ * The default budget ceilings, written once. Both {@link evaluateBudget}
+ * (enforcement) and {@link describeBudgetRemaining} (narration) read these —
+ * they used to carry their own copies of the same four literals, so a change
+ * to one silently made the narration contradict the enforcement (#606
+ * re-audit). Exported so tests can pin the two sites against each other.
+ */
+export const BUDGET_DEFAULTS = {
+  maxTurns: 24,
+  maxToolCalls: 40,
+  maxWallTimeMs: 5 * 60 * 1000,
+  maxToolRuntimeMs: 2 * 60 * 1000,
+} as const;
+
 type ExceededLimit = "wall time" | "turns" | "tool calls" | "tool wall time";
 
 interface BudgetEvaluation {
@@ -50,7 +64,7 @@ interface BudgetEvaluation {
  * against any other number starves or overshoots the real enforcement.
  */
 export function effectiveMaxToolCalls(budget?: AgentBudget): number {
-  return budget?.maxToolCalls ?? 40;
+  return budget?.maxToolCalls ?? BUDGET_DEFAULTS.maxToolCalls;
 }
 
 /**
@@ -59,10 +73,10 @@ export function effectiveMaxToolCalls(budget?: AgentBudget): number {
  * and {@link publishBudgetTelemetry} (command) for the split callers.
  */
 function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
-  const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
-  const maxTurns = budget?.maxTurns ?? 24;
+  const maxWallTimeMs = budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs;
+  const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;
   const maxToolCalls = effectiveMaxToolCalls(budget);
-  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
+  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);
 
@@ -174,7 +188,7 @@ export function publishBudgetTelemetry(
 export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget): string {
   const parts: string[] = [];
 
-  const maxTurns = budget?.maxTurns ?? 24;
+  const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;
   if (maxTurns === -1) {
     parts.push("unlimited turns remaining");
   } else {
@@ -182,20 +196,20 @@ export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget
     parts.push(`${remaining} turn${remaining !== 1 ? "s" : ""} remaining`);
   }
 
-  const maxToolCalls = budget?.maxToolCalls ?? 40;
+  const maxToolCalls = budget?.maxToolCalls ?? BUDGET_DEFAULTS.maxToolCalls;
   if (maxToolCalls !== -1) {
     const remaining = maxToolCalls - state.toolCalls;
     parts.push(`${remaining} tool call${remaining !== 1 ? "s" : ""} remaining`);
   }
 
-  const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
+  const maxWallTimeMs = budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs;
   if (maxWallTimeMs !== -1) {
     const elapsed = Date.now() - state.startTime;
     const remaining = Math.max(0, maxWallTimeMs - elapsed);
     parts.push(`${Math.round(remaining / 1000)}s wall time remaining`);
   }
 
-  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
+  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
   if (maxToolRuntimeMs !== -1) {
     const remaining = Math.max(0, maxToolRuntimeMs - state.toolRuntimeMs);
     parts.push(`${Math.round(remaining / 1000)}s tool wall time remaining`);

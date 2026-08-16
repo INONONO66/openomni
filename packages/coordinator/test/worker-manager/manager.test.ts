@@ -191,6 +191,9 @@ describe("on-demand WorkerManager", () => {
         socketDir: makeSocketDir("startup-cancel"),
         maxActiveWorkers: 1,
         idleShutdownMs: 1_000,
+        // The bootstrap-delay knob is a fixture key, off the production
+        // allowlist; the test forwards it explicitly.
+        extraWorkerEnvKeys: ["OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS"],
       },
       collectorPorts(),
     );
@@ -283,6 +286,7 @@ describe("on-demand WorkerManager", () => {
         socketDir: makeSocketDir("dup-cancel"),
         maxActiveWorkers: 1,
         idleShutdownMs: 1_000,
+        extraWorkerEnvKeys: ["OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS"],
       },
       collectorPorts(),
     );

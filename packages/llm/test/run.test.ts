@@ -362,12 +362,16 @@ describe("run", () => {
   test.each([
     ["traceId", { traceId: "", sessionId: "s", runId: "r" }],
     ["sessionId", { traceId: "t", sessionId: "", runId: "r" }],
+    // The docstring always claimed a call "that cannot name its run" is
+    // refused; the guard only checked traceId/sessionId, so an empty runId
+    // sailed through into every LlmCall event (#606 re-audit).
+    ["runId", { traceId: "t", sessionId: "s", runId: "" }],
   ])("refuses an empty %s", async (_field, trace) => {
     await expect(
       run(
         { messages: [], tools: [], model: testModel, auth: testAuth, trace, events: collector() },
         mockSink,
       ),
-    ).rejects.toThrow("llm run requires a non-empty traceId and sessionId");
+    ).rejects.toThrow("llm run requires a non-empty traceId, sessionId, and runId");
   });
 });

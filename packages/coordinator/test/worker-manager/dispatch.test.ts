@@ -156,6 +156,9 @@ describe("worker manager dispatch", () => {
         maxActiveWorkers: 1,
         workerScript: WORKER_ENTRY,
         socketDir: envSocketDir,
+        // Explicit test seam: the fixture key is NOT on the production
+        // allowlist — a worker only sees it when its manager opts in.
+        extraWorkerEnvKeys: ["OPENOMNI_WORKER_ENV_FIXTURE"],
       },
       collectorPorts(),
     );
