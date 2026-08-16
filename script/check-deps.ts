@@ -1,35 +1,4 @@
-declare const Bun: {
-  argv: string[];
-  glob?: (pattern: string) => {
-    scan(options: {
-      cwd: string;
-      absolute: boolean;
-      dot: boolean;
-      onlyFiles: boolean;
-      followSymlinks: boolean;
-    }): AsyncIterable<string>;
-  };
-  file(path: string): {
-    exists(): Promise<boolean>;
-    text(): Promise<string>;
-  };
-  spawn(options: { cmd: string[]; stdout: "pipe"; stderr: "pipe" }): {
-    stdout: ReadableStream;
-    exited: Promise<number>;
-  };
-  Glob: new (
-    pattern: string,
-  ) => {
-    scan(options: {
-      cwd: string;
-      absolute: boolean;
-      dot: boolean;
-      onlyFiles: boolean;
-      followSymlinks: boolean;
-    }): AsyncIterable<string>;
-  };
-  exit(code: number): never;
-};
+import { Glob } from "bun";
 
 type PackageKey =
   | "protocol"
@@ -263,8 +232,8 @@ function lineNumberForOffset(source: string, offset: number): number {
 }
 
 function suggestBarrelImport(importPath: string): string {
-  const match = importPath.match(/^(@openomni\/[^/]+)/);
-  return match ? match[1] : importPath;
+  const packageName = importPath.match(/^(@openomni\/[^/]+)/)?.[1];
+  return packageName ?? importPath;
 }
 
 function parentTraversalDepth(importPath: string): number {
@@ -315,7 +284,7 @@ async function validateSourceImportDirection(): Promise<string[]> {
   }));
   const importPattern =
     /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
-  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+  const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
     cwd: ".",
@@ -332,18 +301,14 @@ async function validateSourceImportDirection(): Promise<string[]> {
     if (!owner) continue;
 
     const source = await Bun.file(filePath).text();
-    importPattern.lastIndex = 0;
-
-    let match = importPattern.exec(source);
-    while (match !== null) {
+    for (const match of source.matchAll(importPattern)) {
       const dep = match[1];
-      if (!isAllowedSourceDep(owner.rule, dep)) {
+      if (dep && !isAllowedSourceDep(owner.rule, dep)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
           `VIOLATION: ${filePath}:${line} source-imports ${dep} — not allowed by layer order for ${owner.rule.displayName} (manifest check cannot see phantom imports)`,
         );
       }
-      match = importPattern.exec(source);
     }
   }
 
@@ -354,7 +319,7 @@ async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
   const importPattern = /(?:from\s+|import\s+)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
-  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+  const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
     cwd: ".",
@@ -368,11 +333,9 @@ async function validateDeepImports(): Promise<string[]> {
     }
 
     const source = await Bun.file(filePath).text();
-    importPattern.lastIndex = 0;
-
-    let match = importPattern.exec(source);
-    while (match !== null) {
+    for (const match of source.matchAll(importPattern)) {
       const importPath = match[1];
+      if (!importPath) continue;
       const line = lineNumberForOffset(source, match.index);
       const isKnown = KNOWN_DEEP_IMPORTS.has(`${filePath}:${importPath}`);
       const prefix = isKnown ? "KNOWN" : "VIOLATION";
@@ -387,7 +350,6 @@ async function validateDeepImports(): Promise<string[]> {
       } else {
         violations.push(base);
       }
-      match = importPattern.exec(source);
     }
   }
 
@@ -397,7 +359,7 @@ async function validateDeepImports(): Promise<string[]> {
 async function validateDeepRelativeImports(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern = /(?:from\s+|import\s*\(\s*)["'](\.{2}\/[^"']*)["']/g;
-  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+  const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
     cwd: ".",
@@ -411,18 +373,15 @@ async function validateDeepRelativeImports(): Promise<string[]> {
     }
 
     const source = await Bun.file(filePath).text();
-    importPattern.lastIndex = 0;
-
-    let match = importPattern.exec(source);
-    while (match !== null) {
+    for (const match of source.matchAll(importPattern)) {
       const importPath = match[1];
+      if (!importPath) continue;
       const line = lineNumberForOffset(source, match.index);
       const key = `${filePath}:${importPath}`;
       const isSelfRootImport = importPath.startsWith("../../src/");
       const isDeepRelativeImport = parentTraversalDepth(importPath) >= 3;
 
       if (!isSelfRootImport && !isDeepRelativeImport) {
-        match = importPattern.exec(source);
         continue;
       }
 
@@ -436,8 +395,6 @@ async function validateDeepRelativeImports(): Promise<string[]> {
       } else {
         violations.push(base);
       }
-
-      match = importPattern.exec(source);
     }
   }
 
@@ -462,7 +419,7 @@ const KNOWN_EMPTY_CATCHES = new Set<string>();
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
-  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+  const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
     cwd: ".",
@@ -478,9 +435,8 @@ async function validateGoldenPrinciples(): Promise<string[]> {
     const source = await Bun.file(filePath).text();
     const lines = source.split("\n");
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (const [index, line] of lines.entries()) {
+      const lineNum = index + 1;
 
       // #5: No `as any` (except allowed files)
       if (!ALLOWED_AS_ANY_FILES.has(filePath) && /\bas\s+any\b/.test(line)) {
@@ -561,7 +517,7 @@ async function checkDocFreshness(): Promise<string[]> {
         cmd: ["git", "log", "--oneline", `HEAD`, "--", docPath],
         stdout: "pipe",
         stderr: "pipe",
-      }) as { stdout: ReadableStream; exited: Promise<number> };
+      });
 
       const output = await new Response(proc.stdout).text();
       await proc.exited;
@@ -577,7 +533,7 @@ async function checkDocFreshness(): Promise<string[]> {
         cmd: ["git", "log", "-1", "--format=%H", "--", docPath],
         stdout: "pipe",
         stderr: "pipe",
-      }) as { stdout: ReadableStream; exited: Promise<number> };
+      });
 
       const lastTouchHash = (await new Response(lastTouchProc.stdout).text()).trim();
       await lastTouchProc.exited;
@@ -588,7 +544,7 @@ async function checkDocFreshness(): Promise<string[]> {
         cmd: ["git", "rev-list", "--count", `${lastTouchHash}..HEAD`],
         stdout: "pipe",
         stderr: "pipe",
-      }) as { stdout: ReadableStream; exited: Promise<number> };
+      });
 
       const commitsSince = parseInt((await new Response(sinceProc.stdout).text()).trim(), 10);
       await sinceProc.exited;

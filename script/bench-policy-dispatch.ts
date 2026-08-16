@@ -124,7 +124,16 @@ interface Cell {
   readonly messageCount: number;
 }
 
-function buildContext(cell: Cell): Record<string, unknown> {
+/**
+ * The dispatch parameter shape for `run.turn.pre`, derived from the protocol's
+ * point-input contract so the bench context can never drift from what
+ * `dispatchPoint` actually requires.
+ */
+type RunTurnPreContext = GenericPolicyContext &
+  Policy.PolicyPointInputMap["run.turn.pre"] &
+  Record<string, unknown>;
+
+function buildContext(cell: Cell): RunTurnPreContext {
   const sessionID = "bench-session";
   const base = {
     sessionId: sessionID,

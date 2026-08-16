@@ -1,3 +1,9 @@
+// Module scope on purpose: script/ typechecks as one program, so a plain
+// script's top-level declarations (main, lineNumberForOffset, …) would
+// collide with the other scripts'. This file genuinely imports nothing —
+// it runs on Bun globals alone.
+export {};
+
 type SideEffectRuleId =
   | "tool-ledger-before-execute"
   | "mcp-ledger-before-execute"

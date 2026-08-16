@@ -10,6 +10,10 @@
 // downgrades in fresh installs and CI runs where neither the cache nor
 // models.dev is reachable.
 
+// Module scope on purpose: top-level await requires it, and script/ typechecks
+// as one program. This file genuinely imports nothing — it runs on Bun globals.
+export {};
+
 const MODELS_URL = process.env.MODELS_DEV_URL ?? "https://models.dev/api.json";
 const BUNDLED_PROVIDERS = ["anthropic", "openai"] as const;
 const SNAPSHOT_PATH = "packages/llm/src/model/models-snapshot.json";
