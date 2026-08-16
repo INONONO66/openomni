@@ -3,6 +3,7 @@ import type { DispatchRuntime } from "@openomni/openomni";
 import { Operational } from "@openomni/protocol";
 import { WorkItemAttemptRun } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
+import { z } from "zod";
 import type { ServerConfig } from "../config";
 
 export type ResidentInboundWaitConfig = {
@@ -10,16 +11,12 @@ export type ResidentInboundWaitConfig = {
   readonly dispatchRuntime: Pick<DispatchRuntime, "submit">;
 };
 
-// The kernel resident.ask handler returns { output, finishReason }; test
-// doubles may return the answer as a bare string.
-function residentAskOutput(output: unknown): string {
-  if (typeof output === "string") return output;
-  if (output && typeof output === "object" && "output" in output) {
-    const nested = (output as { output?: unknown }).output;
-    if (typeof nested === "string") return nested;
-  }
-  return "";
-}
+// The kernel resident.ask handler returns { output: string, ... }. STRICT
+// like dispatch-owners' question bridge (#606 audit): the old lenient shape
+// existed for test doubles returning bare strings, and it laundered any
+// unexpected shape into an empty "answer" reported as accepted:true — a
+// worker asking a question got "" and treated it as the resident's reply.
+const residentAskDispatchOutput = z.object({ output: z.string() });
 
 export function createResidentInboundWaitHandler(
   config: ResidentInboundWaitConfig,
@@ -85,10 +82,20 @@ export function createResidentInboundWaitHandler(
             `worker.inbound_wait dispatch ${dispatchResult.status}`,
         };
       }
+      const parsedOutput = residentAskDispatchOutput.safeParse(dispatchResult.output);
+      if (!parsedOutput.success) {
+        // Refuse, never launder: the old lenient shape turned any unexpected
+        // envelope into an empty "answer" reported accepted:true.
+        return {
+          requestId,
+          accepted: false,
+          error: `resident.ask returned an invalid inbound-wait response: ${parsedOutput.error.message}`,
+        };
+      }
       return {
         requestId,
         accepted: true,
-        output: residentAskOutput(dispatchResult.output),
+        output: parsedOutput.data.output,
       };
     } finally {
       // Release the wait if it is still ours; a run finished mid-wait keeps

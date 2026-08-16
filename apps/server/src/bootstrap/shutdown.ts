@@ -4,6 +4,8 @@ import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import type { McpToolProvider } from "../tool/mcp";
 
+const CHANNEL_TEARDOWN_GRACE_MS = 5_000;
+
 interface ClosableStorage {
   close(): void;
 }
@@ -53,7 +55,13 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
 
       deps.server.stop(true);
       await deps.mcpProvider.disconnectAll();
-      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      // Channel stop() is synchronous fire-and-forget (poller/gateway
+      // teardown) — in-flight I/O (a long-poll response, a close frame, a
+      // final reply) has no awaitable handle. This grace window lets those
+      // last publishes land before the telemetry drain below; shortening it
+      // drops tail events, it does not make shutdown more correct. Making
+      // the stops awaitable would retire it.
+      await new Promise((resolve) => setTimeout(resolve, CHANNEL_TEARDOWN_GRACE_MS));
       // Accepted-append drain (#510 D1). Decision-class appends need no
       // drain of their own: they run inside synchronous bun:sqlite
       // transactions, which the event loop cannot interleave — reaching

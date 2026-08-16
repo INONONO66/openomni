@@ -194,7 +194,11 @@ describe("resident inbound wait kernel dispatch", () => {
       calls.push(args);
       // The run holds the wait while the Resident answers.
       expect(currentStatus(run)).toBe("waiting_input");
-      return { dispatchId: "resident-ask", status: "completed", output: "Proceed carefully." };
+      return {
+        dispatchId: "resident-ask",
+        status: "completed",
+        output: { output: "Proceed carefully." },
+      };
     });
     const handler = createHandler(submit);
 
@@ -276,7 +280,7 @@ describe("resident inbound wait kernel dispatch", () => {
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-after-cancel",
         status: "completed",
-        output: "Already cancelled.",
+        output: { output: "Already cancelled." },
       }),
     );
 
@@ -296,7 +300,7 @@ describe("resident inbound wait kernel dispatch", () => {
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-after-entry-cancel",
         status: "completed",
-        output: "Already cancelled.",
+        output: { output: "Already cancelled." },
       }),
     );
     WorkItemAttemptRun.beginWait = mock(async (...args: Parameters<typeof originalBeginWait>) => {
@@ -323,7 +327,7 @@ describe("resident inbound wait kernel dispatch", () => {
       async (): Promise<Dispatch.Result> => ({
         dispatchId: "resident-ask-before-restoration-cancel",
         status: "completed",
-        output: "Answer delivered.",
+        output: { output: "Answer delivered." },
       }),
     );
     WorkItemAttemptRun.endWait = mock(async (...args: Parameters<typeof originalEndWait>) => {
@@ -384,7 +388,7 @@ describe("resident inbound wait kernel dispatch", () => {
     expect(waitBlockers(run)).toHaveLength(0);
   });
 
-  it("normalizes resident.ask outputs: nested envelope unwraps, non-string falls to empty", async () => {
+  it("unwraps the kernel envelope and REFUSES any other shape (#606)", async () => {
     const nestedRun = await createActiveRun("run-nested-output");
     const nested = await createHandler(
       mock(
@@ -397,6 +401,9 @@ describe("resident inbound wait kernel dispatch", () => {
     )(waitParams(nestedRun));
     expect(nested).toMatchObject({ accepted: true, output: "nested answer" });
 
+    // Pin: the old lenient parser laundered any unexpected shape into an
+    // empty "answer" reported accepted:true — a worker's question silently
+    // got "" as the resident's reply.
     const numericRun = await createActiveRun("run-numeric-output");
     const numeric = await createHandler(
       mock(
@@ -407,7 +414,10 @@ describe("resident inbound wait kernel dispatch", () => {
         }),
       ),
     )(waitParams(numericRun));
-    expect(numeric).toMatchObject({ accepted: true, output: "" });
+    expect(numeric).toMatchObject({ accepted: false });
+    expect(String((numeric as { error?: unknown }).error)).toContain(
+      "invalid inbound-wait response",
+    );
   });
 
   it("rejects an already-aborted wait without dispatching or changing run state", async () => {
