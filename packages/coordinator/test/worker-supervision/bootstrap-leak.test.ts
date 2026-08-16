@@ -6,13 +6,13 @@ import { WorkerSupervisor } from "../../src/worker-supervision/supervisor.js";
 
 const FIXTURE = new URL("../harness/rejecting-worker-fixture.ts", import.meta.url).pathname;
 
-let tempDir: string;
+let tempDir: string | undefined;
 let supervisor: WorkerSupervisor | undefined;
 
 afterEach(async () => {
   await supervisor?.stop();
   supervisor = undefined;
-  rmSync(tempDir, { recursive: true, force: true });
+  if (tempDir !== undefined) rmSync(tempDir, { recursive: true, force: true });
 });
 
 test("a rejected bootstrap attempt closes its IPC client instead of leaking it", async () => {

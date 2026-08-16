@@ -121,6 +121,10 @@ export class WorkerSupervisor {
   }
 
   private async connectWithRetry(): Promise<void> {
+    // Snapshot THIS generation's trace: the settled-notification closure (and
+    // the deadline warn below) can fire after a crash re-minted the field —
+    // a warn for generation N must not file under N+1's trace.
+    const generationTraceId = this.generationTraceId;
     const deadline = Date.now() + WORKER_CONNECT_TIMEOUT_MS;
     let lastError: Error | null = null;
     const bootstrap = this.bootstrap;
@@ -158,7 +162,7 @@ export class WorkerSupervisor {
                     // Ledger, not console: swallowing this into stdout is the
                     // exact failure mode the injected sink exists to prevent.
                     this.events.publish(Operational.Warn, {
-                      traceId: this.generationTraceId,
+                      traceId: generationTraceId,
                       time: Date.now(),
                       component: "coordinator",
                       msg: "worker.tool_call_settled notification failed",
@@ -198,7 +202,7 @@ export class WorkerSupervisor {
         if (!this.stopping && this.running) {
           this.client = c;
           this.events.publish(WorkerDriver.Ready, {
-            traceId: this.generationTraceId,
+            traceId: generationTraceId,
             time: Date.now(),
             workerId: this.id,
             generation: this.generation,
@@ -221,7 +225,7 @@ export class WorkerSupervisor {
       // doStart() fires this promise without awaiting it, so a throw here would
       // surface as an unhandled rejection; report and let waitReady() time out.
       this.events.publish(Operational.Warn, {
-        traceId: this.generationTraceId,
+        traceId: generationTraceId,
         time: Date.now(),
         component: "coordinator.worker",
         msg: "worker IPC connect failed within deadline",
