@@ -93,15 +93,18 @@ function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, Tool
   // `a.b`) used to be a silent last-writer-wins — the later tool's labels
   // answered the earlier tool's policy lookups (#606 re-audit). A collision
   // is a configuration error; refuse it loudly, naming both tools.
-  const owners = new Map<string, string>();
+  // Owners are keyed by tool IDENTITY, not name: two distinct tools carrying
+  // the same name (the underscore-mangling seam can manufacture that) must
+  // collide too, or the later one silently answers the earlier one's lookups.
+  const owners = new Map<string, { readonly name: string; readonly tool: object }>();
   const claim = (key: string, tool: { name: string }, value: ToolPolicyMetadata): void => {
     const owner = owners.get(key);
-    if (owner !== undefined && owner !== tool.name) {
+    if (owner !== undefined && owner.tool !== tool) {
       throw new Error(
-        `tool metadata collision: "${key}" is claimed by both "${owner}" and "${tool.name}"`,
+        `tool metadata collision: "${key}" is claimed by both "${owner.name}" and "${tool.name}"`,
       );
     }
-    owners.set(key, tool.name);
+    owners.set(key, { name: tool.name, tool });
     metadata.set(key, value);
   };
   for (const tool of tools ?? []) {

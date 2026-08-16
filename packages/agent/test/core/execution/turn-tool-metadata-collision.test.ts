@@ -52,6 +52,15 @@ describe("tool metadata key collisions", () => {
     ).rejects.toThrow('tool metadata collision: "a.b" is claimed by both "a_b" and "a.b"');
   });
 
+  it("refuses two distinct tools carrying the same name (identity, not name, owns a key)", async () => {
+    // The mangling seam can manufacture this: name-keyed ownership would see
+    // "same name, no conflict" and let the later tool answer the earlier
+    // tool's policy lookups.
+    await expect(
+      runAgent(runInput([{ role: "user", content: "hi" }]), config([spec("a.b"), spec("a.b")])),
+    ).rejects.toThrow('tool metadata collision: "a.b" is claimed by both "a.b" and "a.b"');
+  });
+
   it("a single tool claiming its own alias keys stays legal", async () => {
     const result = await runAgent(
       runInput([{ role: "user", content: "hi" }]),

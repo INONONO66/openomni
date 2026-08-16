@@ -24,11 +24,11 @@ async function observedActorId(trace: RunTrace): Promise<string> {
   });
   try {
     await runAgent(
-      // The metadata side-channel must stay severed: even a caller that still
-      // sends actorId through it does not get to name the actor.
+      // The metadata side-channel is gone from ChatAgentInput entirely —
+      // smuggling an actorId through it is now a compile error, not merely
+      // ignored at runtime.
       {
         messages: [{ role: "user", content: "hi" }],
-        metadata: { actorId: "smuggled-actor" },
         traceContext: trace,
       },
       {
