@@ -92,9 +92,11 @@ function handleToolCall(
     return;
   }
   const p = parsed.data;
-  // Authenticate like every other worker→coordinator verb (see handleInboundWait
-  // and worker-bootstrap-handler): the env-injected token proves the request
-  // came from the worker this supervisor spawned.
+  // The env-injected token proves the request came from the worker this
+  // supervisor spawned. NOT every verb authenticates: the cancel verbs
+  // (worker.tool_call_cancel, worker.inbound_wait_cancel) carry no token by
+  // contract — their blast radius is bounded to aborting this worker's own
+  // in-flight calls, and the 0700 per-pool socket dir is the transport gate.
   if (p.authToken !== context.authToken) {
     respond(toolCallError(p, "unauthorized worker request"));
     return;
