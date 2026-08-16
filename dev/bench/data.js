@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786888022283,
+  "lastUpdate": 1786889344373,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -52305,6 +52305,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 510925,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf74ee3a1545551e2a174979ddf0d7e75b2efda3",
+          "message": "fix(ipc): remote failures reject as their own class (#606) (#677)\n\n* fix(ipc): remote failures reject as their own class (#606)\n\n* fix(ipc): both socket sides file remote failures alike (#606)",
+          "timestamp": "2026-08-16T23:07:49+09:00",
+          "tree_id": "b728d29c06599149d5adb032e1c3b8b804784684",
+          "url": "https://github.com/INONONO66/openomni/commit/bf74ee3a1545551e2a174979ddf0d7e75b2efda3"
+        },
+        "date": 1786889343598,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 637,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5903,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2929,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15572,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8297,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 616,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1094,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 700,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46821,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2329,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10744,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 99938,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 506438,
             "unit": "ns/op"
           }
         ]
