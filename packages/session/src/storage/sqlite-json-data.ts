@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { z } from "zod";
 
 export type SqliteJsonDataTable = "pending_ask" | "pending_interaction" | "wait";
 
@@ -14,6 +15,12 @@ export type SqliteStringEqualityColumn =
 export type SqliteJsonDataRow = {
   readonly data: string;
 };
+
+// The one `SELECT data` row envelope, for adapters that zod-validate the
+// envelope before decoding (low-volume registry/config tables — the
+// streaming projection adapters deliberately cast instead).
+export const SqliteJsonDataRowSchema = z.object({ data: z.string() });
+export const SqliteJsonDataRowsSchema = z.array(SqliteJsonDataRowSchema);
 
 // Parse-don't-cast on read: every caller passes a `decode` that re-validates
 // the row's JSON across the persistence boundary (schema `.parse`), so a

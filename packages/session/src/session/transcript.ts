@@ -48,6 +48,11 @@ import { Storage } from "../storage/storage";
  * replay() is the fold's read-back — it reconstructs Message.WithParts from
  * the recorded stream and pins the live record() path (worker-runner
  * transcript and transcript-store tests fold what production wrote).
+ *
+ * This path deliberately publishes no Session.Event.Updated: it is a
+ * recording-tier write; Event.Updated is the ingress-tier notification
+ * (Session.addMessage/addPart). A subscriber that wants worker-produced
+ * turns must gate on message.finished facts, not on Event.Updated.
  */
 export class TranscriptRecordingError extends Error {
   readonly name = "TranscriptRecordingError";

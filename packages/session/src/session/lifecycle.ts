@@ -147,15 +147,18 @@ export function remove(id: string, traceId: string): boolean {
   const adapter = Storage.getAdapter();
   const exists = adapter.session.get(id) !== undefined;
   if (exists) {
-    const msgs = adapter.message.list(id);
-    for (const msg of msgs) {
-      const parts = adapter.part.list(msg.id);
-      for (const part of parts) {
-        adapter.part.remove(msg.id, part.id);
+    // One transaction: a crash mid-cascade must not leave a half-deleted
+    // session. The manual loop stays — it is the only cascade for adapters
+    // without FK enforcement.
+    adapter.transaction(() => {
+      for (const msg of adapter.message.list(id)) {
+        for (const part of adapter.part.list(msg.id)) {
+          adapter.part.remove(msg.id, part.id);
+        }
+        adapter.message.remove(id, msg.id);
       }
-      adapter.message.remove(id, msg.id);
-    }
-    adapter.session.remove(id);
+      adapter.session.remove(id);
+    });
     Bus.publish(Event.Deleted, { traceId, id });
   }
   return exists;

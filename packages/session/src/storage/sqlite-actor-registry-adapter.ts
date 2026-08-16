@@ -1,9 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { z } from "zod";
-
-const DataRow = z.object({ data: z.string() });
-const DataRows = z.array(DataRow);
+import { SqliteJsonDataRowSchema, SqliteJsonDataRowsSchema } from "./sqlite-json-data";
 
 function workspaceKey(workspace: string | undefined): string {
   return workspace ?? "";
@@ -14,7 +11,7 @@ export function createSqliteActorRegistryAdapter(
 ): ProtocolStorage.ActorRegistrySubAdapter {
   return {
     getIdentity(id) {
-      const row = DataRow.nullable().parse(
+      const row = SqliteJsonDataRowSchema.nullable().parse(
         db.query("SELECT data FROM actor_identity WHERE id = ?").get(id),
       );
       return row ? Actor.Identity.parse(JSON.parse(row.data)) : undefined;
@@ -42,7 +39,7 @@ export function createSqliteActorRegistryAdapter(
       );
     },
     listIdentities() {
-      const rows = DataRows.parse(
+      const rows = SqliteJsonDataRowsSchema.parse(
         db.query("SELECT data FROM actor_identity ORDER BY time_created ASC, id ASC").all(),
       );
       return rows.map((row) => Actor.Identity.parse(JSON.parse(row.data)));
@@ -51,7 +48,7 @@ export function createSqliteActorRegistryAdapter(
       return db.query("DELETE FROM actor_identity WHERE id = ?").run(id).changes > 0;
     },
     getEndpoint(id) {
-      const row = DataRow.nullable().parse(
+      const row = SqliteJsonDataRowSchema.nullable().parse(
         db.query("SELECT data FROM actor_endpoint WHERE id = ?").get(id),
       );
       return row ? Actor.Endpoint.parse(JSON.parse(row.data)) : undefined;
@@ -81,7 +78,7 @@ export function createSqliteActorRegistryAdapter(
       );
     },
     findEndpoint(channel, externalId, workspace) {
-      const row = DataRow.nullable().parse(
+      const row = SqliteJsonDataRowSchema.nullable().parse(
         db
           .query(
             `SELECT data FROM actor_endpoint
@@ -93,7 +90,7 @@ export function createSqliteActorRegistryAdapter(
     },
     listEndpoints(actorId, workspace) {
       const workspaceFilter = workspaceKey(workspace);
-      const rows = DataRows.parse(
+      const rows = SqliteJsonDataRowsSchema.parse(
         actorId === undefined && workspace === undefined
           ? db.query("SELECT data FROM actor_endpoint ORDER BY time_created ASC, id ASC").all()
           : actorId === undefined

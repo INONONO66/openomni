@@ -34,7 +34,7 @@ export function createSqliteWorkerGrantAdapter(
       return rows.map((row) => decodeGrant(row.data));
     },
     set(record) {
-      insertOrReplace(db, record, true);
+      return insertOrReplace(db, record, true).changes === 1;
     },
     remove(id) {
       return db.query("DELETE FROM worker_grant WHERE id = ?").run(id).changes > 0;
@@ -42,11 +42,7 @@ export function createSqliteWorkerGrantAdapter(
   };
 }
 
-function insertOrReplace(
-  db: Database,
-  record: Communication.WorkerGrant.Record,
-  replace: boolean,
-): void {
+function insertOrReplace(db: Database, record: Communication.WorkerGrant.Record, replace: boolean) {
   const sql = replace
     ? `INSERT INTO worker_grant (
          id, worker_run_id, data, status, version, time_created, time_updated, expires_at
@@ -62,14 +58,16 @@ function insertOrReplace(
     : `INSERT INTO worker_grant (
          id, worker_run_id, data, status, version, time_created, time_updated, expires_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-  db.query(sql).run(
-    record.id,
-    record.workerRunId,
-    JSON.stringify(record),
-    record.status,
-    record.version,
-    record.createdAt,
-    record.updatedAt,
-    record.expiresAt ?? null,
-  );
+  return db
+    .query(sql)
+    .run(
+      record.id,
+      record.workerRunId,
+      JSON.stringify(record),
+      record.status,
+      record.version,
+      record.createdAt,
+      record.updatedAt,
+      record.expiresAt ?? null,
+    );
 }

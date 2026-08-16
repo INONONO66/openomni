@@ -270,11 +270,57 @@ describe("WorkerGrantStore", () => {
     };
 
     WorkerGrantStore.revoke("grant-stale", "trace-grant-test");
-    Storage.get().workerGrant?.set(staleConcurrentUpdate);
+    // The version guard reports the drop — a silent false would let a caller
+    // believe a stale write persisted.
+    expect(Storage.get().workerGrant?.set(staleConcurrentUpdate)).toBe(false);
 
     expect(WorkerGrantStore.get("grant-stale")).toMatchObject({
       status: "revoked",
       version: created.version + 1,
     });
+  });
+
+  test("a lost version race fails loudly and publishes nothing", async () => {
+    await createWorkerRun("run-race");
+    const created = WorkerGrantStore.create(
+      {
+        id: "grant-race",
+        workerRunId: "run-race",
+        allowedActions: ["worker.send"],
+        canCreateExternalTasks: false,
+      },
+      "trace-grant-test",
+    );
+
+    // Simulate a concurrent writer landing between the store's read and its
+    // write: the store sees a stale copy while a newer version is persisted.
+    const adapter = Storage.getAdapter();
+    const grantAdapter = adapter.workerGrant;
+    if (!grantAdapter) throw new Error("workerGrant sub-adapter missing");
+    const newerConcurrent = {
+      ...created,
+      version: created.version + 2,
+      updatedAt: Date.now() + 1,
+    };
+    expect(grantAdapter.set(newerConcurrent)).toBe(true);
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      workerGrant: {
+        ...grantAdapter,
+        get: () => created,
+      },
+    });
+
+    const events: string[] = [];
+    Bus.observe((descriptor) => {
+      events.push(descriptor.name);
+    });
+
+    expect(() => WorkerGrantStore.revoke("grant-race", "trace-grant-test")).toThrow(
+      "lost a version race on grant-race",
+    );
+    await new Promise((resolve) => queueMicrotask(resolve));
+    expect(events).not.toContain("worker_grant.revoked");
   });
 });

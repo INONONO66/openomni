@@ -116,7 +116,14 @@ export namespace WorkerGrantStore {
       version: current.version + 1,
       updatedAt: Date.now(),
     });
-    adapter.set(updated);
+    if (!adapter.set(updated)) {
+      // The version guard dropped this write: a newer version persisted
+      // concurrently. Publishing or returning `updated` here would report a
+      // write that never happened — authz state must fail loudly instead.
+      throw new Error(
+        `WorkerGrant ${event} lost a version race on ${id} (v${updated.version}); re-read and retry`,
+      );
+    }
     const descriptor =
       event === "updated"
         ? Communication.WorkerGrant.Events.Updated
