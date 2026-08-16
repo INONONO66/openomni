@@ -12,7 +12,7 @@ import {
   type WorkerManager,
 } from "@openomni/coordinator";
 import type { ToolExecutionContext, ToolProvider } from "@openomni/openomni";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { recoverInterruptedRuns as _recoverInterruptedRuns, type RecoveryResult } from "./recovery";
 
 export type ToolDispatchHandler = (

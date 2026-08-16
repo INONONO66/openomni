@@ -9,7 +9,8 @@ import {
   type Execution,
 } from "@openomni/protocol";
 import { createIngressEngine, type DispatchOwners } from "@openomni/openomni";
-import { Bus, PendingAskStore, Storage } from "@openomni/session";
+import { PendingAskStore, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 
 const tempRoots: string[] = [];

@@ -1,6 +1,6 @@
 import type { Tool } from "@openomni/protocol";
 import { Mcp, PolicyDecision, PolicyEvent } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
 import { MCP_TOOL_ACTION, buildActor } from "./provider-audit";

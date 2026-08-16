@@ -1,5 +1,6 @@
 import { Operational, Wait } from "@openomni/protocol";
-import { Bus, WaitStore } from "@openomni/session";
+import { WaitStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 /**
  * Effectful kernel Wait service (#215). Definitions (schema + fold) live in

@@ -1,5 +1,5 @@
 import { CronJob, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import { Cron } from "croner";
 import { CronJobRegistry } from "./cron-job-registry.js";

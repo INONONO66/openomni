@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { parseMcpServerConfigs, type McpServerConfig } from "../config/mcp-server-config";
 
 const discoverCache = new Map<string, { result: McpServerConfig[] | null }>();

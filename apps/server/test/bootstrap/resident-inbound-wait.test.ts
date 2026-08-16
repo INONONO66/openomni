@@ -8,7 +8,6 @@ import {
 import { IngressEventProjector, IngressHandlers } from "../../../../packages/openomni/src/ingress";
 import { WorkItem, type Dispatch } from "@openomni/protocol";
 import {
-  Bus,
   PendingAskStore,
   Session,
   Storage,
@@ -16,6 +15,7 @@ import {
   WorkItemAttemptRun,
   WorkItemStore,
 } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createResidentInboundWaitHandler } from "../../src/bootstrap/resident-inbound-wait";
 import type { ServerConfig } from "../../src/config";
 import { CustomToolProvider } from "../../src/tool/custom";

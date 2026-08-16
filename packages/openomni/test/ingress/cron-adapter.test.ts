@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { IngressEvent, type Ingress } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 let CronAdapter: typeof import("../../src/ingress/cron-adapter").CronAdapter;
 let createIngressEngine: typeof import("../../src/ingress/engine")["createIngressEngine"];

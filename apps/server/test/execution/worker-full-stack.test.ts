@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createIngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
-import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import type { Execution, Ingress, Tool } from "@openomni/protocol";
 import {

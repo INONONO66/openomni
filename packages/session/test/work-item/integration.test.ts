@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import {
-  Bus,
   BusPersistence,
   BusQuery,
   Session,
@@ -9,6 +8,7 @@ import {
   Storage,
   WorkItemStore,
 } from "../../src";
+import { Bus } from "@openomni/telemetry";
 import { persistCompletedWorkItemFixture } from "./completed-fixture.js";
 
 type WorkItemInput = Parameters<typeof WorkItemStore.create>[0];

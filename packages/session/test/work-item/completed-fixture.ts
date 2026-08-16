@@ -1,5 +1,6 @@
 import { WorkItem } from "@openomni/protocol";
-import { Bus, Storage } from "../../src";
+import { Storage } from "../../src";
+import { Bus } from "@openomni/telemetry";
 
 export function completedFixtureResults(
   item: WorkItem.Info,

@@ -7,13 +7,13 @@ import {
   type DefaultDispatchRuntime,
 } from "@openomni/openomni";
 import {
-  Bus,
   EffectStore,
   PendingInteractionStore,
   Session,
   Storage,
   WaitStore,
 } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { assembleEffectRuntime } from "../../src/bootstrap/effects";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "../../src/bootstrap/recovery";
 

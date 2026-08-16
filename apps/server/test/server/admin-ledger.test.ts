@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createRouter } from "../../src/server/routes";
 
 const ADMIN_TOKEN = "admin-test-token";

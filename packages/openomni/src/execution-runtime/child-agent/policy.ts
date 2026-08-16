@@ -1,6 +1,6 @@
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, type TraceContext } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type {
   ChildAgentRuntimeOptions,
   ChildWorkerProfile,

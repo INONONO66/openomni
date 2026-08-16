@@ -8,7 +8,6 @@ import {
 import {
   ActorRegistry,
   BlacklistStore,
-  Bus,
   PendingAskStore,
   PendingInteractionStore,
   Session,
@@ -16,6 +15,7 @@ import {
   WaitStore,
   WorkItemStore,
 } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createDefaultDispatchRuntime } from "../../src/dispatch/setup";
 

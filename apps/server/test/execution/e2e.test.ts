@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createIngressEngine, type IngressEngine } from "@openomni/openomni";
 import type { Execution, Ingress } from "@openomni/protocol";
-import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 type CoordinatorLike = {
   dispatch(sessionId: string, request: Execution.Request): Promise<Execution.Result>;

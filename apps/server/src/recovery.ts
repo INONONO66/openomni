@@ -1,6 +1,7 @@
 import type { Message } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
+import { Session, Storage, SurfaceKey } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 export interface RecoveryItem {
   sessionId: string;

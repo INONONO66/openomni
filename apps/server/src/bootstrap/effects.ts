@@ -6,7 +6,8 @@ import {
   type EffectDriver,
   type EffectEscalation,
 } from "@openomni/openomni";
-import { Bus, WorkItemStore } from "@openomni/session";
+import { WorkItemStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 /**
  * #492 boot composition — the first production consumer of the effect

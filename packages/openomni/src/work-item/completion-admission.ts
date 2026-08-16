@@ -1,6 +1,7 @@
 import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Policy } from "@openomni/protocol";
-import { Bus, Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import { VerifierRegistry } from "../evidence/verifier-registry.js";
 import type { CompletionStakesInjection } from "../ledger/index.js";

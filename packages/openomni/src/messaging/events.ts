@@ -1,4 +1,4 @@
-import { BusEvent } from "@openomni/session";
+import { BusEvent } from "@openomni/telemetry";
 import { z } from "zod";
 import { MessageDenialCode, MessageOperation } from "./schema.js";
 

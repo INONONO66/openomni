@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ActorRegistry, Bus, Storage, WaitStore } from "@openomni/session";
+import { ActorRegistry, Storage, WaitStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   SendInput,
   createExistingAgentMessaging,

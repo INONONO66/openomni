@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
-import { Bus, Storage, WaitStore } from "../../src/index";
+import { Storage, WaitStore } from "../../src/index";
+import { Bus } from "@openomni/telemetry";
 import {
   bareStorageAdapter,
   buildReplyInput,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Bus, EffectStore, Storage } from "@openomni/session";
+import { EffectStore, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { assembleEffectRuntime } from "../../src/bootstrap/effects";
 import { createRouter } from "../../src/server/routes";
 

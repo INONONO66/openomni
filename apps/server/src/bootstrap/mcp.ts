@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { McpToolProvider } from "../tool/mcp";
 import type { ServerConfig } from "../config";
 

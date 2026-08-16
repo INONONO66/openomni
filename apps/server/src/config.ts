@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { SenderTargetGrant } from "@openomni/openomni/messaging";
 import { z } from "zod";
 import { parseMcpServerConfigs, type McpServerConfig } from "./config/mcp-server-config";

@@ -1,7 +1,7 @@
 import { newTraceId } from "@openomni/telemetry";
 import type { Auth } from "@openomni/llm";
 import { Operational, WorkerBootstrap } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 export namespace WorkerBootstrapHandler {
   interface ServerPort {

@@ -5,7 +5,8 @@ import {
   type DefaultDispatchRuntime,
   type EffectReconciler,
 } from "@openomni/openomni";
-import { Bus, Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 

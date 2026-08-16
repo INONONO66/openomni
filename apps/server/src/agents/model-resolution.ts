@@ -1,7 +1,7 @@
 import type { ChatAgentConfig } from "@openomni/agent";
 import { Auth, Provider } from "@openomni/llm";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 const DATE_SUFFIX_RE = /-\d{8}$/;
 

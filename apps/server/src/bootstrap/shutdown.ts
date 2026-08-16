@@ -1,5 +1,6 @@
 import { Operational } from "@openomni/protocol";
-import { Storage, Bus, BusPersistence } from "@openomni/session";
+import { Storage, BusPersistence } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import type { McpToolProvider } from "../tool/mcp";
 

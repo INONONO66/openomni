@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Communication } from "@openomni/protocol";
-import { Bus, PendingInteractionStore, Session, Storage } from "../../src/index";
+import { PendingInteractionStore, Session, Storage } from "../../src/index";
+import { Bus } from "@openomni/telemetry";
 
 beforeEach(() => {
   Bus.reset();

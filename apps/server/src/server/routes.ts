@@ -9,7 +9,8 @@ import {
   WorkItem,
 } from "@openomni/protocol";
 import { EffectRefusal, type EffectReconciler, type EffectService } from "@openomni/openomni";
-import { Bus, BusQuery, EffectStore, EffectStoreError, Storage } from "@openomni/session";
+import { BusQuery, EffectStore, EffectStoreError, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 
 type Env = { Variables: { requestId: string } };
 

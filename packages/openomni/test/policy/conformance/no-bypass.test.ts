@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
-import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { createIngressEngine } from "../../../src/ingress/engine";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };

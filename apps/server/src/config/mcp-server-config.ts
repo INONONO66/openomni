@@ -1,5 +1,5 @@
 import { McpConfig, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 
 export type McpServerConfig = McpConfig.ServerConfig;

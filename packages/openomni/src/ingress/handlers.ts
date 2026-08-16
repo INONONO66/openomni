@@ -4,7 +4,8 @@ import {
   type Ingress,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { allocateWorkerSpawnAttempt } from "../dispatch/handlers/worker-work-item";
 import type { ResidentRuntime } from "../resident/runtime";
 import type { CoordinatorLike } from "./coordinator-like";

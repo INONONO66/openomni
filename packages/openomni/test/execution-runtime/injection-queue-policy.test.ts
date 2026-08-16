@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
-import { Bus, Session, Storage, TranscriptStore } from "@openomni/session";
+import { Session, Storage, TranscriptStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { Message, Transcript } from "@openomni/protocol";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "../../src/execution-runtime/middleware/injection-queue-policy.js";

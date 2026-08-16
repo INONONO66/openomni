@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Execution, Ingress } from "@openomni/protocol";
-import { Bus, Session, Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Session, Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
 import { newTraceId } from "@openomni/telemetry";
 

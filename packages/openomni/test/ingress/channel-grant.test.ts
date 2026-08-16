@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus, ChannelGrantStore } from "@openomni/session";
+import { ChannelGrantStore } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import {
   flushBusObservers,
   getIngressEngine,

@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 
 import type { NativeTool } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
   TEST_BOOT_TRACE_ID,
