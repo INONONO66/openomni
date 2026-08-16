@@ -12,9 +12,10 @@ function requireAdapter() {
   );
 }
 
-function eventBase(record: Communication.WorkerGrant.Record) {
+function eventBase(record: Communication.WorkerGrant.Record, traceId: string) {
   return {
     id: record.id,
+    traceId,
     workerRunId: record.workerRunId,
     status: record.status,
     version: record.version,
@@ -86,12 +87,13 @@ function evaluateRecord(
 export namespace WorkerGrantStore {
   export function create(
     input: Communication.WorkerGrant.Create,
+    traceId: string,
   ): Communication.WorkerGrant.Record {
     const adapter = requireAdapter();
     const record = createRecord(input);
     if (adapter.get(record.id)) throw new Error(`WorkerGrant already exists: ${record.id}`);
     adapter.create(record);
-    Bus.publish(Communication.WorkerGrant.Events.Created, eventBase(record));
+    Bus.publish(Communication.WorkerGrant.Events.Created, eventBase(record, traceId));
     return record;
   }
 
@@ -103,6 +105,7 @@ export namespace WorkerGrantStore {
     id: string,
     patch: Partial<Omit<Communication.WorkerGrant.Record, "id" | "workerRunId">>,
     event: "updated" | "revoked" | "expired",
+    traceId: string,
   ): Communication.WorkerGrant.Record {
     const adapter = requireAdapter();
     const current = adapter.get(id);
@@ -120,23 +123,26 @@ export namespace WorkerGrantStore {
         : event === "revoked"
           ? Communication.WorkerGrant.Events.Revoked
           : Communication.WorkerGrant.Events.Expired;
-    Bus.publish(descriptor, eventBase(updated));
+    Bus.publish(descriptor, eventBase(updated, traceId));
     return updated;
   }
 
-  export function revoke(id: string): Communication.WorkerGrant.Record {
-    return persistUpdate(id, { status: "revoked", revokedAt: Date.now() }, "revoked");
+  export function revoke(id: string, traceId: string): Communication.WorkerGrant.Record {
+    return persistUpdate(id, { status: "revoked", revokedAt: Date.now() }, "revoked", traceId);
   }
 
-  function expire(id: string): Communication.WorkerGrant.Record {
-    return persistUpdate(id, { status: "expired" }, "expired");
+  function expire(id: string, traceId: string): Communication.WorkerGrant.Record {
+    return persistUpdate(id, { status: "expired" }, "expired", traceId);
   }
 
-  export function cleanupExpired(workerRunId?: string): Communication.WorkerGrant.Record[] {
+  export function cleanupExpired(
+    traceId: string,
+    workerRunId?: string,
+  ): Communication.WorkerGrant.Record[] {
     return requireAdapter()
       .list(workerRunId)
       .filter((grant) => isPastExpiry(grant))
-      .map((grant) => expire(grant.id));
+      .map((grant) => expire(grant.id, traceId));
   }
 
   export function evaluate(
@@ -152,7 +158,7 @@ export namespace WorkerGrantStore {
     for (const grant of grants) {
       const result = evaluateRecord(grant, parsed);
       Bus.publish(Communication.WorkerGrant.Events.Evaluated, {
-        ...eventBase(grant),
+        ...eventBase(grant, parsed.traceId),
         allowed: result.allowed,
         reason: result.reason,
         action: parsed.action,

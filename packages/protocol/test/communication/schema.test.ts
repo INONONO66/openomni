@@ -100,6 +100,51 @@ describe("Communication protocol schemas", () => {
     ).toBe(true);
   });
 
+  test("WorkerGrant events refuse an untraced payload", () => {
+    // Enforcement is compile-time for typed producers; the schema states the
+    // invariant so any future strict consumer refuses. All five events extend
+    // the one EventBase and none re-declares traceId.
+    const base = {
+      id: "grant-1",
+      workerRunId: "run-1",
+      status: "active",
+      version: 1,
+      time: 1,
+    };
+    expect(Communication.WorkerGrant.Events.Created.schema.safeParse(base).success).toBe(false);
+    expect(
+      Communication.WorkerGrant.Events.Created.schema.safeParse({ ...base, traceId: "" }).success,
+    ).toBe(false);
+    expect(
+      Communication.WorkerGrant.Events.Created.schema.safeParse({ ...base, traceId: "trace-1" })
+        .success,
+    ).toBe(true);
+    expect(
+      Communication.WorkerGrant.Events.Evaluated.schema.safeParse({
+        ...base,
+        allowed: true,
+        reason: "worker_grant.allowed",
+        action: "worker.send",
+      }).success,
+    ).toBe(false);
+    expect(
+      Communication.WorkerGrant.Events.Evaluated.schema.safeParse({
+        ...base,
+        traceId: "trace-1",
+        allowed: true,
+        reason: "worker_grant.allowed",
+        action: "worker.send",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      Communication.WorkerGrant.Evaluation.safeParse({
+        workerRunId: "run-1",
+        action: "worker.send",
+      }).success,
+    ).toBe(false);
+  });
+
   test("WorkerGrant defaults external task creation to false", () => {
     const parsed = Communication.WorkerGrant.Record.parse({
       id: "grant-1",

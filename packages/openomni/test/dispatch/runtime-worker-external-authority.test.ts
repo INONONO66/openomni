@@ -37,13 +37,16 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     await createWorkerRunFixture("run-1");
-    WorkerGrantStore.create({
-      id: "grant-api-ask",
-      workerRunId: "run-1",
-      allowedActions: ["api.ask"],
-      allowedEndpointIds: ["api:research"],
-      canCreateExternalTasks: true,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-api-ask",
+        workerRunId: "run-1",
+        allowedActions: ["api.ask"],
+        allowedEndpointIds: ["api:research"],
+        canCreateExternalTasks: true,
+      },
+      TEST_DISPATCH_TRACE_ID,
+    );
 
     const allowed = await runtime.submit(
       {
@@ -74,13 +77,16 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     await createWorkerRunFixture("run-1");
-    WorkerGrantStore.create({
-      id: "grant-empty-endpoints",
-      workerRunId: "run-1",
-      allowedActions: ["api.ask"],
-      allowedEndpointIds: [],
-      canCreateExternalTasks: true,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-empty-endpoints",
+        workerRunId: "run-1",
+        allowedActions: ["api.ask"],
+        allowedEndpointIds: [],
+        canCreateExternalTasks: true,
+      },
+      TEST_DISPATCH_TRACE_ID,
+    );
 
     const result = await runtime.submit(
       {
@@ -111,14 +117,17 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     await createWorkerRunFixture("run-1");
-    WorkerGrantStore.create({
-      id: "grant-manager-constrained",
-      workerRunId: "run-1",
-      allowedActions: ["external.ask"],
-      allowedEndpointIds: ["human:advisor"],
-      canCreateExternalTasks: true,
-      managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-manager-constrained",
+        workerRunId: "run-1",
+        allowedActions: ["external.ask"],
+        allowedEndpointIds: ["human:advisor"],
+        canCreateExternalTasks: true,
+        managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
+      },
+      TEST_DISPATCH_TRACE_ID,
+    );
 
     const result = await runtime.submit(
       {
@@ -148,14 +157,17 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     await createWorkerRunFixture("run-1");
-    WorkerGrantStore.create({
-      id: "grant-manager-labels",
-      workerRunId: "run-1",
-      allowedActions: ["external.ask"],
-      allowedEndpointIds: ["human:advisor"],
-      canCreateExternalTasks: true,
-      managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-manager-labels",
+        workerRunId: "run-1",
+        allowedActions: ["external.ask"],
+        allowedEndpointIds: ["human:advisor"],
+        canCreateExternalTasks: true,
+        managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
+      },
+      TEST_DISPATCH_TRACE_ID,
+    );
 
     const result = await runtime.submit(
       {
@@ -184,13 +196,16 @@ describe("DispatchRuntime", () => {
     runtime.register("external.ask", () => ({ output: "should not route" }));
     Storage.initialize({ dbPath: ":memory:" });
     await createWorkerRunFixture("run-1");
-    WorkerGrantStore.create({
-      id: "grant-external-followup",
-      workerRunId: "run-1",
-      allowedActions: ["external.ask"],
-      allowedEndpointIds: ["human:advisor"],
-      canCreateExternalTasks: false,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-external-followup",
+        workerRunId: "run-1",
+        allowedActions: ["external.ask"],
+        allowedEndpointIds: ["human:advisor"],
+        canCreateExternalTasks: false,
+      },
+      TEST_DISPATCH_TRACE_ID,
+    );
 
     const result = await runtime.submit(
       {
