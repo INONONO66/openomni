@@ -197,10 +197,10 @@ describe("createInjectionQueueDrainPolicy", () => {
   });
 
   // #562 F3 red pin: injected responses land in the SAME worker session that
-  // records transcript facts. Resume replays the fact stream once one exists,
-  // so a projection-only injected write silently vanishes from recovery. The
-  // seam must record the injected response as synthesized facts.
-  it("resume keeps injected responses in a fact-bearing session, in recording order", async () => {
+  // records transcript facts. The fold replay reads only recorded facts, so
+  // a projection-only injected write would be invisible to every fact-stream
+  // reader. The seam must record the injected response as synthesized facts.
+  it("replay keeps injected responses in a fact-bearing session, in recording order", async () => {
     const session = Session.create({
       traceId: "trace-1",
       title: "Resume Merge",
@@ -221,10 +221,18 @@ describe("createInjectionQueueDrainPolicy", () => {
 
     await dispatchTurnFinish(queue, "run-resume", session.id);
 
-    const recovered = await Session.resume(session.id);
+    const replayed = TranscriptStore.replay(session.id);
     // Ordering rule: replay order is the session fact-stream seq (recording
     // order) — the injected response drains after the turn that asked for it.
-    expect(recovered.map((entry) => entry.text)).toEqual(["worker turn output", "resident answer"]);
+    const texts = replayed
+      .filter((message) => message.info.role === "assistant")
+      .map((message) =>
+        message.parts
+          .filter((part): part is Message.TextPart => part.type === "text")
+          .map((part) => part.text)
+          .join("\n"),
+      );
+    expect(texts).toEqual(["worker turn output", "resident answer"]);
   });
 
   it("still emits drained responses when history persistence fails", async () => {

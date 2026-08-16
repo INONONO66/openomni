@@ -6,7 +6,7 @@ Durable state substrate: session lifecycle, message/part storage, hash-chained b
 
 This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in `@openomni/openomni`.
 
-`WorkerRun`, `PendingAsk`, and `PendingInteraction` are current legacy storage surfaces. The P2 target freezes writes to those shapes and read-upcasts existing records; new attempt and `Wait` writes begin only after the P2 cutover. That migration is planned, not wired; the canonical attempt and Wait contracts live in the [kernel contract](../../docs/kernel-contract.md).
+`WorkerRunStateStore`, `PendingAskStore`, and `PendingInteractionStore` are FROZEN legacy storage surfaces: every write throws a typed frozen error (#510 D2b / #548) and historical rows stay readable; the attempt-run view (`WorkItemAttemptRun`) read-upcasts them. New delegated-execution writes use the canonical WorkItem attempt and `Wait` contracts in the [kernel contract](../../docs/kernel-contract.md).
 
 ## STRUCTURE
 
@@ -17,7 +17,7 @@ src/
 │   ├── index.ts          # Session namespace barrel: public Session.* API re-exports
 │   ├── events.ts         # Session bus event descriptors
 │   ├── lifecycle.ts      # Session CRUD, child sessions, worker meta, TTL lazy deletion
-│   ├── messages.ts       # Message/part writes, pagination, hydration, resume recovery
+│   ├── messages.ts       # Message/part writes and reads, message status
 │   └── info.ts           # SessionInfo schema (leaf — breaks session ↔ storage cycle)
 ├── storage/
 │   ├── index.ts          # Barrel
@@ -33,7 +33,7 @@ src/
 ├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
 ├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
 ├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
-├── artifact/             # Artifact.store / get / list / versions with write-through caching
+├── artifact/             # Artifact.store / get — latest-version-wins upsert over SQLite
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
 ├── work-item/            # WorkItemStore — universal work state engine
@@ -47,7 +47,7 @@ src/
 │   ├── outcome.ts        # Owner adoption outcome recording (adopted/corrected/redone/ignored)
 │   ├── builder.ts        # WorkItem.Info construction
 │   └── types.ts          # Internal WorkItemStore implementation types
-└── worker-run/           # WorkerRun — current legacy delegated execution records
+└── worker-run/           # WorkerRunStateStore — frozen worker_run_state archive (reads only)
 ```
 
 ### Circular Dependency Avoidance
@@ -59,10 +59,10 @@ src/
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
 - **Storage.Adapter**: There is no default adapter — `Storage.get()` before `initialize({ dbPath })`/`configure(adapter)` throws (fail-closed, #522; no silent `:memory:` fallback). `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and, required-in-production but optional-in-type for test fakes, `artifact`, `surfaceKey`, `cronJob`, `workItem`, `workerRunState`, and `appConnectorInstallation`. App connector installation records include Owner consent metadata plus disable/uninstall lifecycle operations because the installation record is the lifecycle SSOT. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Stores consuming an absent sub-adapter fail closed (`requireSubAdapter` or a typed adapter_absent error), never degrade silently.
 - **Legacy task/todo tables** (`0001_initial`): remain in SQLite for data preservation, but no TypeScript storage sub-adapters expose them.
-- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; WorkerRun events flow through `WorkerRun.Events.*`.
+- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation. `worker.run.*` lifecycle events are published by the server worker runner (wire contract), never by this package — the frozen store publishes nothing.
 - **SurfaceKey records**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs, stored solely in `Storage.Adapter.surfaceKey` (no in-memory index); a missing sub-adapter fails closed — ownership answers are never fabricated (#522). This package stores and looks up the mapping; `openomni` decides when the mapping wins over PendingInteraction or other routing facts.
 - **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.addReadBackEvidence()`, `.areDependenciesMet()`, `.retry()`, and `.recordOutcome()` own lower-layer storage semantics. `WorkItemStore.complete()` remains only as a typed `admission_required` refusal so no Session caller can close product work. OpenOmni owns completion fact/admission appends and the terminal CAS through the low-level WorkItem adapter. Generic update cannot mutate admission- or lifecycle-owned fields; `parentHash` and stable completion criteria are immutable.
-- **WorkerRun**: Stored through the direct `workerRunState` adapter (`worker_run_state` table in SQLite). `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.updateStatusIfCurrent()`, `WorkerRun.get()`, and `WorkerRun.listBySession()` publish lifecycle bus events but do not depend on event-log replay. State transitions such as `waiting_input → running` increment `resumeCount`.
+- **WorkerRunStateStore**: the frozen `worker_run_state` archive (#510 D2b, pending-ask precedent). Reads (`get` / `listBySession` / `listByStatus`) keep serving historical rows — including the upcast-on-read attempt-run view in `WorkItemAttemptRun.find` — while every write throws the typed `WorkerRun.FrozenError` (`worker_run_frozen`) and persists nothing. Run lifecycle lives on WorkItem attempt facts (`work_item.attempt_allocated` / `attempt_finished`).
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
 - **Session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child Worker trees. Future work should add explicit metadata conventions before adding new storage shapes.
 
@@ -89,7 +89,7 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 - **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
-- Do NOT persist ad-hoc delegated execution state alongside `Session`. Until the P2 cutover, current code uses `WorkerRun`; after cutover, new writes use the canonical WorkItem attempt contract rather than extending the legacy shape.
+- Do NOT persist ad-hoc delegated execution state alongside `Session`. `worker_run_state` is a frozen read-only archive; new writes use the canonical WorkItem attempt contract rather than reviving the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.
 - Do NOT add communication routing or authority evaluation here. Session is the durable substrate; OpenOmni is the kernel.
 - Do NOT add a second completion-admission append or terminal method here. The only product completion boundary is `packages/openomni/src/work-item/`.

@@ -22,11 +22,6 @@ export namespace Session {
   export const addMessage = Messages.addMessage;
   export const updateMessageStatus = Messages.updateMessageStatus;
   export const getMessages = Messages.getMessages;
-  export const listMessagesPage = Messages.listMessagesPage;
-  export const hydrateMessages = Messages.hydrateMessages;
   export const addPart = Messages.addPart;
   export const getParts = Messages.getParts;
-  export const suspend = Lifecycle.suspend;
-  export const resume = Messages.resume;
-  export const abandon = Lifecycle.abandon;
 }

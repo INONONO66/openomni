@@ -88,7 +88,7 @@ export function createMappedOwnerSession(): Session.Info {
     title: "Owner DM",
     model: { providerID: "test", modelID: "test-model" },
   });
-  SurfaceKey.register(IngressSessionResolver.extractSurfaceKey(ownerEvent), session.id);
+  SurfaceKey.claim(IngressSessionResolver.extractSurfaceKey(ownerEvent), session.id);
   return session;
 }
 

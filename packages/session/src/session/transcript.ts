@@ -31,6 +31,23 @@ import { Storage } from "../storage/storage";
  *   - attempt boundary = state boundary: each attempt folds from scratch
  *     under its attemptId (mirroring the llm processor), and a message's
  *     projection is its LATEST attempt's fold state.
+ *
+ * Writer census (which assistant writers record facts):
+ *   - worker turns: facts (worker-runner onFact sink);
+ *   - injected responses: facts (injection-queue persistResponse
+ *     synthesizes message.created/part.appended/message.finished — #562);
+ *   - resident direct runs: projection-only via
+ *     SessionBridge.storeDirectResult (see defaultRunAgent in
+ *     packages/openomni/src/resident/runtime.ts) — resident sessions have
+ *     empty fact streams by design;
+ *   - ingress writeback of worker output: projection-only, duplicating the
+ *     worker's final fact-recorded turn;
+ *   - child-agent streams: record nothing (bounded — child output reaches
+ *     the parent as tool results carried by the parent's fact-recorded
+ *     turns).
+ * replay() is the fold's read-back — it reconstructs Message.WithParts from
+ * the recorded stream and pins the live record() path (worker-runner
+ * transcript and transcript-store tests fold what production wrote).
  */
 export class TranscriptRecordingError extends Error {
   readonly name = "TranscriptRecordingError";

@@ -73,7 +73,7 @@ describe("Artifact persistence (SQLite)", () => {
     adapter2.close();
   });
 
-  test("list recovers from SQLite after reset", async () => {
+  test("independent artifacts recover from SQLite after reset", async () => {
     await Artifact.store("sess-1", makeMeta({ id: "art-1" }), "content-1");
     await Artifact.store("sess-1", makeMeta({ id: "art-2" }), "content-2");
     adapter.close();
@@ -81,9 +81,8 @@ describe("Artifact persistence (SQLite)", () => {
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
 
-    const items = await Artifact.list("sess-1");
-    expect(items).toHaveLength(2);
-    expect(items.map((m) => m.id).sort()).toEqual(["art-1", "art-2"]);
+    expect((await Artifact.get("art-1"))?.content).toBe("content-1");
+    expect((await Artifact.get("art-2"))?.content).toBe("content-2");
 
     adapter2.close();
   });

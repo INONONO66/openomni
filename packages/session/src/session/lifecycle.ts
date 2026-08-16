@@ -160,11 +160,3 @@ export function remove(id: string, traceId: string): boolean {
   }
   return exists;
 }
-
-export async function suspend(id: string): Promise<boolean> {
-  return get(id) !== undefined;
-}
-
-export async function abandon(id: string, traceId: string): Promise<boolean> {
-  return remove(id, traceId);
-}

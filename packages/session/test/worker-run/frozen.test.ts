@@ -3,7 +3,6 @@ import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
-import { WorkerRun } from "../../src/worker-run/index";
 import { WorkerRunStateStore } from "../../src/worker-run/state-store";
 
 /**
@@ -70,61 +69,12 @@ function expectFrozen(thrown: unknown, method: WorkerRunProtocol.WriteMethod): v
 }
 
 describe("WorkerRun freeze (#510 D2b)", () => {
-  test("WorkerRun.create throws the typed frozen error and persists nothing", async () => {
-    let thrown: unknown;
-    try {
-      await WorkerRun.create("sess-frozen", {
-        runId: "run-frozen-create",
-        title: "t",
-        prompt: "p",
-      });
-    } catch (error) {
-      thrown = error;
-    }
-    expectFrozen(thrown, "create");
-    expect(WorkerRunStateStore.get("sess-frozen", "run-frozen-create")).toBeUndefined();
-  });
-
-  test("WorkerRun.updateStatus / updateStatusIfCurrent throw frozen and publish no events", async () => {
-    seedFrozenRun("sess-frozen", "run-legacy", "running");
-    const events: string[] = [];
-    Bus.observe((event) => {
-      events.push(event.name);
-    });
-
-    let thrown: unknown;
-    try {
-      await WorkerRun.updateStatus("sess-frozen", "run-legacy", "succeeded", {
-        endedAt: Date.now(),
-      });
-    } catch (error) {
-      thrown = error;
-    }
-    expectFrozen(thrown, "updateStatus");
-
-    const current = WorkerRunStateStore.get("sess-frozen", "run-legacy");
-    if (!current) throw new Error("frozen row must stay readable");
-    let thrownIfCurrent: unknown;
-    try {
-      await WorkerRun.updateStatusIfCurrent(
-        "sess-frozen",
-        "run-legacy",
-        { status: "running", timeUpdated: current.timeUpdated },
-        "waiting_input",
-      );
-    } catch (error) {
-      thrownIfCurrent = error;
-    }
-    expectFrozen(thrownIfCurrent, "updateStatusIfCurrent");
-
-    await flushBus();
-    expect(events).toEqual([]);
-    // The frozen row is untouched.
-    expect(WorkerRunStateStore.get("sess-frozen", "run-legacy")?.status).toBe("running");
-  });
-
-  test("WorkerRunStateStore write surfaces throw the same typed frozen error", () => {
+  test("write surfaces throw the typed frozen error, persist nothing, publish nothing", async () => {
     seedFrozenRun("sess-frozen", "run-legacy-store", "starting");
+    const events: string[] = [];
+    Bus.observe((descriptor) => {
+      events.push(descriptor.name);
+    });
 
     let thrownCreate: unknown;
     try {
@@ -139,6 +89,7 @@ describe("WorkerRun freeze (#510 D2b)", () => {
       thrownCreate = error;
     }
     expectFrozen(thrownCreate, "create");
+    expect(WorkerRunStateStore.get("sess-frozen", "run-frozen-store-create")).toBeUndefined();
 
     let thrownUpdate: unknown;
     try {
@@ -162,24 +113,24 @@ describe("WorkerRun freeze (#510 D2b)", () => {
       thrownIfCurrent = error;
     }
     expectFrozen(thrownIfCurrent, "updateStatusIfCurrent");
+
+    await flushBus();
+    expect(events).toEqual([]);
+    expect(WorkerRunStateStore.get("sess-frozen", "run-legacy-store")?.status).toBe("starting");
   });
 
-  test("legacy rows keep answering every read surface after the freeze", async () => {
+  test("legacy rows keep answering every read surface after the freeze", () => {
     seedFrozenRun("sess-frozen", "run-read-1", "succeeded");
     seedFrozenRun("sess-frozen", "run-read-2", "waiting_input");
 
-    const record = await WorkerRun.get("sess-frozen", "run-read-1");
+    const record = WorkerRunStateStore.get("sess-frozen", "run-read-1");
     expect(record?.runId).toBe("run-read-1");
     expect(record?.parentSessionId).toBe("parent-sess");
     expect(record?.status).toBe("succeeded");
-    // Terminal legacy rows derive endedAt from their persisted update time —
-    // never from in-memory state.
-    expect(record?.endedAt).toBe(record?.timeUpdated);
 
-    expect(await WorkerRun.listBySession("sess-frozen")).toHaveLength(2);
-    expect((await WorkerRun.listByStatus("waiting_input")).map((run) => run.runId)).toContain(
+    expect(WorkerRunStateStore.listBySession("sess-frozen")).toHaveLength(2);
+    expect(WorkerRunStateStore.listByStatus("waiting_input").map((run) => run.runId)).toContain(
       "run-read-2",
     );
-    expect(WorkerRunStateStore.listBySession("sess-frozen")).toHaveLength(2);
   });
 });

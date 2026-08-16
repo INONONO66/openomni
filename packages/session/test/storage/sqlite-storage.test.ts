@@ -6,7 +6,6 @@ import { Database } from "bun:sqlite";
 import type { Message } from "@openomni/protocol";
 import type { SessionInfo } from "../../src/session/info";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
-import type { Storage } from "../../src/storage/storage";
 
 type TextPart = Extract<Message.Part, { type: "text" }>;
 
@@ -56,29 +55,6 @@ function findMessagesByStatus(
     throw new Error("SQLite message adapter must support status lookup");
   }
   return findByStatus(status);
-}
-
-function listMessagePage(
-  adapter: SqliteStorageAdapter,
-  sessionID: string,
-  options: { limit: number; before?: string },
-): Storage.MessagePage {
-  const listPage = adapter.message.listPage;
-  if (listPage === undefined) {
-    throw new Error("SQLite message adapter must support cursor pagination");
-  }
-  return listPage(sessionID, options);
-}
-
-function listPartsByMessageIDs(
-  adapter: SqliteStorageAdapter,
-  messageIDs: string[],
-): Message.Part[] {
-  const listByMessageIDs = adapter.part.listByMessageIDs;
-  if (listByMessageIDs === undefined) {
-    throw new Error("SQLite part adapter must support batch message part lookup");
-  }
-  return listByMessageIDs(messageIDs);
 }
 
 function applyMigrationFixture(db: Database, name: string): void {
@@ -554,69 +530,6 @@ describe("SqliteStorageAdapter", () => {
     });
   });
 
-  describe("message.listPage (cursor pagination)", () => {
-    beforeEach(() => {
-      adapter.session.set("s1", makeSession("s1"));
-      for (let i = 1; i <= 10; i++) {
-        adapter.message.set("s1", makeUserMessage("s1", `m${String(i).padStart(2, "0")}`, i * 100));
-      }
-    });
-
-    test("returns first page without cursor", () => {
-      const page = listMessagePage(adapter, "s1", { limit: 3 });
-      expect(page.items).toHaveLength(3);
-      expect(page.more).toBe(true);
-      expect(page.nextCursor).not.toBeNull();
-      expect(page.items.map((m) => m.id)).toEqual(["m08", "m09", "m10"]);
-    });
-
-    test("returns all items when limit exceeds count", () => {
-      const page = listMessagePage(adapter, "s1", { limit: 20 });
-      expect(page.items).toHaveLength(10);
-      expect(page.more).toBe(false);
-      expect(page.nextCursor).toBeNull();
-    });
-
-    test("cursor-based pagination returns next page", () => {
-      const first = listMessagePage(adapter, "s1", { limit: 3 });
-      expect(first.nextCursor).not.toBeNull();
-
-      const cursor = first.nextCursor ?? "";
-      const second = listMessagePage(adapter, "s1", {
-        limit: 3,
-        before: cursor,
-      });
-      expect(second.items).toHaveLength(3);
-      expect(second.items.map((m) => m.id)).toEqual(["m05", "m06", "m07"]);
-    });
-
-    test("full traversal via cursor yields all messages in order", () => {
-      const allIds: string[] = [];
-      let cursor: string | null = null;
-
-      do {
-        const page = listMessagePage(adapter, "s1", {
-          limit: 3,
-          before: cursor ?? undefined,
-        });
-        allIds.unshift(...page.items.map((m) => m.id));
-        cursor = page.nextCursor;
-      } while (cursor !== null);
-
-      expect(allIds).toEqual(
-        Array.from({ length: 10 }, (_, i) => `m${String(i + 1).padStart(2, "0")}`),
-      );
-    });
-
-    test("empty session returns empty page", () => {
-      adapter.session.set("s2", makeSession("s2"));
-      const page = listMessagePage(adapter, "s2", { limit: 5 });
-      expect(page.items).toEqual([]);
-      expect(page.more).toBe(false);
-      expect(page.nextCursor).toBeNull();
-    });
-  });
-
   describe("part", () => {
     beforeEach(() => {
       adapter.session.set("s1", makeSession("s1"));
@@ -676,32 +589,6 @@ describe("SqliteStorageAdapter", () => {
 
     test("remove: returns false for non-existent", () => {
       expect(adapter.part.remove("m1", "missing")).toBe(false);
-    });
-
-    test("listByMessageIDs: returns empty for empty input", () => {
-      expect(listPartsByMessageIDs(adapter, [])).toEqual([]);
-    });
-
-    test("listByMessageIDs: batch-loads parts across multiple messages", () => {
-      adapter.part.set("m1", makeTextPart("s1", "m1", "p1", 100));
-      adapter.part.set("m1", makeTextPart("s1", "m1", "p2", 200));
-      adapter.part.set("m2", makeTextPart("s1", "m2", "p3", 50));
-
-      const parts = listPartsByMessageIDs(adapter, ["m1", "m2"]);
-      expect(parts).toHaveLength(3);
-      const ids = parts.map((p) => p.id);
-      expect(ids).toContain("p1");
-      expect(ids).toContain("p2");
-      expect(ids).toContain("p3");
-    });
-
-    test("listByMessageIDs: only returns parts for requested message IDs", () => {
-      adapter.message.set("s1", makeUserMessage("s1", "m3"));
-      adapter.part.set("m1", makeTextPart("s1", "m1", "p1", 100));
-      adapter.part.set("m3", makeTextPart("s1", "m3", "p9", 100));
-
-      const parts = listPartsByMessageIDs(adapter, ["m1"]);
-      expect(parts.map((p) => p.id)).toEqual(["p1"]);
     });
   });
 
@@ -772,7 +659,7 @@ describe("SqliteStorageAdapter", () => {
 
     test("deleting session cascades to surface_key", () => {
       adapter.session.set("s1", makeSession("s1"));
-      adapter.surfaceKey?.register("channel:123", "s1");
+      adapter.surfaceKey?.claim("channel:123", "s1");
 
       adapter.session.remove("s1");
 
@@ -822,25 +709,15 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.surfaceKey?.lookup("channel:999")).toBeUndefined();
     });
 
-    test("register and lookup", () => {
-      adapter.surfaceKey?.register("channel:123", "s1");
+    test("claim and lookup", () => {
+      adapter.surfaceKey?.claim("channel:123", "s1");
       expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s1");
     });
 
-    test("register: upsert updates session mapping", () => {
-      adapter.surfaceKey?.register("channel:123", "s1");
-      adapter.surfaceKey?.register("channel:123", "s2");
+    test("claim with the current owner as expected reassigns the mapping", () => {
+      adapter.surfaceKey?.claim("channel:123", "s1");
+      adapter.surfaceKey?.claim("channel:123", "s2", "s1");
       expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s2");
-    });
-
-    test("delete: removes the key", () => {
-      adapter.surfaceKey?.register("channel:123", "s1");
-      adapter.surfaceKey?.delete("channel:123");
-      expect(adapter.surfaceKey?.lookup("channel:123")).toBeUndefined();
-    });
-
-    test("delete: no-op for non-existent key", () => {
-      expect(() => adapter.surfaceKey?.delete("nonexistent")).not.toThrow();
     });
   });
 
@@ -869,31 +746,6 @@ describe("SqliteStorageAdapter", () => {
       adapter.artifact?.store("a1", "s1", "{}", "new content");
       expect(adapter.artifact?.get("a1")?.content).toBe("new content");
     });
-
-    test("list: returns all artifacts for session", () => {
-      adapter.artifact?.store("a1", "s1", "{}", "c1");
-      adapter.artifact?.store("a2", "s1", "{}", "c2");
-      adapter.artifact?.store("a3", "s2", "{}", "c3");
-
-      const list = adapter.artifact?.list("s1");
-      expect(list).toHaveLength(2);
-      expect(list.map((a) => a.id).sort()).toEqual(["a1", "a2"]);
-    });
-
-    test("list: returns empty for session with no artifacts", () => {
-      expect(adapter.artifact?.list("s1")).toEqual([]);
-    });
-
-    test("delete: removes artifact", () => {
-      adapter.artifact?.store("a1", "s1", "{}", "content");
-      adapter.artifact?.delete("a1");
-      expect(adapter.artifact?.get("a1")).toBeUndefined();
-      expect(adapter.artifact?.list("s1")).toEqual([]);
-    });
-
-    test("delete: no-op for non-existent", () => {
-      expect(() => adapter.artifact?.delete("missing")).not.toThrow();
-    });
   });
 
   describe("clear", () => {
@@ -901,7 +753,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.session.set("s1", makeSession("s1"));
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1", 10));
-      adapter.surfaceKey?.register("channel:1", "s1");
+      adapter.surfaceKey?.claim("channel:1", "s1");
       adapter.artifact?.store("a1", "s1", "{}", "content");
       adapter.clear();
 

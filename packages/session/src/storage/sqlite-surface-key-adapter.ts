@@ -5,16 +5,6 @@ type SurfaceKeyAdapter = NonNullable<Storage.Adapter["surfaceKey"]>;
 
 export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
   return {
-    register: (key: string, sessionId: string): void => {
-      db.query(
-        `INSERT INTO surface_key (key, session_id, time_created)
-         VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET
-           session_id = excluded.session_id,
-           time_created = excluded.time_created`,
-      ).run(key, sessionId, Date.now());
-    },
-
     claim: (key: string, sessionId: string, expectedSessionId?: string): string => {
       const now = Date.now();
       db.exec("BEGIN IMMEDIATE TRANSACTION");
@@ -52,10 +42,6 @@ export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
         session_id: string;
       } | null;
       return row?.session_id;
-    },
-
-    delete: (key: string): void => {
-      db.query("DELETE FROM surface_key WHERE key = ?").run(key);
     },
 
     listBySession: (sessionId: string): string[] => {

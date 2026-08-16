@@ -49,6 +49,13 @@ function reopenStorage(): void {
   Storage.initialize({ dbPath });
 }
 
+function projectionWithParts(sessionID: string): Message.WithParts[] {
+  return Session.getMessages(sessionID).map((info) => ({
+    info,
+    parts: Session.getParts(info.id),
+  }));
+}
+
 function createSession() {
   return Session.create({
     traceId: "trace-transcript-store",
@@ -150,14 +157,14 @@ function toolTurnFacts(sessionID: string, messageID: string, attemptId: string):
 }
 
 describe("TranscriptStore resume-by-replay (pin 1)", () => {
-  test("tool-bearing turn refolds byte-identical across a storage kill/reopen", async () => {
+  test("tool-bearing turn refolds byte-identical across a storage kill/reopen", () => {
     const session = createSession();
     for (const fact of toolTurnFacts(session.id, "msg-1", "msg-1#1")) {
       TranscriptStore.record(session.id, fact);
     }
 
     const preKillReplay = TranscriptStore.replay(session.id);
-    const preKillProjection = await Session.hydrateMessages(Session.getMessages(session.id));
+    const preKillProjection = projectionWithParts(session.id);
     expect(JSON.stringify(preKillReplay)).toBe(JSON.stringify(preKillProjection));
 
     reopenStorage();
@@ -173,7 +180,7 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
     expect(tool?.type === "tool" ? tool.state.status : undefined).toBe("completed");
   });
 
-  test("retry attempts: replay projects the latest attempt only, matching the projection", async () => {
+  test("retry attempts: replay projects the latest attempt only, matching the projection", () => {
     const session = createSession();
     const messageID = "msg-retry";
 
@@ -213,11 +220,11 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
       `${messageID}-tool`,
     ]);
 
-    const projection = await Session.hydrateMessages(Session.getMessages(session.id));
+    const projection = projectionWithParts(session.id);
     expect(JSON.stringify(replayed)).toBe(JSON.stringify(projection));
   });
 
-  test("Session.resume recovers assistant text through the fold replay", async () => {
+  test("replay recovers the turn from the fact stream alone", () => {
     const session = createSession();
     for (const fact of toolTurnFacts(session.id, "msg-1", "msg-1#1")) {
       TranscriptStore.record(session.id, fact);
@@ -225,7 +232,7 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
 
     reopenStorage();
 
-    // Drop the read-model projection rows: resume must recover from the
+    // Drop the read-model projection rows: replay must recover from the
     // fact stream itself (the record), not from the projection tables.
     const adapter = Storage.getAdapter();
     for (const part of adapter.part.list("msg-1")) {
@@ -233,20 +240,20 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
     }
     adapter.message.remove(session.id, "msg-1");
 
-    await expect(Session.resume(session.id)).resolves.toEqual([
-      {
-        role: "assistant",
-        text: "listing files",
-        timestamp: new Date(1_000).toISOString(),
-        sequence: 1,
-        turnIndex: 0,
-      },
-    ]);
+    const replayed = TranscriptStore.replay(session.id);
+    expect(replayed).toHaveLength(1);
+    const [message] = replayed;
+    expect(message?.info.role).toBe("assistant");
+    const text = message?.parts
+      .filter((part): part is Message.TextPart => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    expect(text).toBe("listing files");
   });
 });
 
 describe("TranscriptStore record-path fold cache (#562 F7)", () => {
-  test("kill/reopen mid-attempt: recording continues and replay matches the projection", async () => {
+  test("kill/reopen mid-attempt: recording continues and replay matches the projection", () => {
     const session = createSession();
     const facts = toolTurnFacts(session.id, "msg-cache", "msg-cache#1");
 
@@ -255,13 +262,13 @@ describe("TranscriptStore record-path fold cache (#562 F7)", () => {
     for (const fact of facts.slice(3)) TranscriptStore.record(session.id, fact);
 
     const replayed = TranscriptStore.replay(session.id);
-    const projection = await Session.hydrateMessages(Session.getMessages(session.id));
+    const projection = projectionWithParts(session.id);
     expect(JSON.stringify(replayed)).toBe(JSON.stringify(projection));
     const [message] = replayed;
     expect(message?.info.role === "assistant" ? message.info.finish : undefined).toBe("stop");
   });
 
-  test("outer-transaction rollback: count continuity refolds instead of trusting the cache", async () => {
+  test("outer-transaction rollback: count continuity refolds instead of trusting the cache", () => {
     const session = createSession();
     const facts = toolTurnFacts(session.id, "msg-rollback", "msg-rollback#1");
     const [created, appended, ...rest] = facts;
@@ -284,7 +291,7 @@ describe("TranscriptStore record-path fold cache (#562 F7)", () => {
     for (const fact of [appended, ...rest]) TranscriptStore.record(session.id, fact);
 
     const replayed = TranscriptStore.replay(session.id);
-    const projection = await Session.hydrateMessages(Session.getMessages(session.id));
+    const projection = projectionWithParts(session.id);
     expect(JSON.stringify(replayed)).toBe(JSON.stringify(projection));
     expect(replayed[0]?.parts.map((part) => part.id)).toEqual([
       "msg-rollback-text",

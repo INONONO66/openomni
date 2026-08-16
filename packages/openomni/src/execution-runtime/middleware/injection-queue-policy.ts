@@ -75,12 +75,12 @@ function contextString(
  * (message.created + part.appended + message.finished), not as
  * projection-only message/part rows. This seam writes into the same worker
  * session whose own turns record facts via the worker-runner onFact sink;
- * Session.resume replays the fact stream once one exists, so a
- * projection-only write here would silently vanish from recovery.
- * TranscriptStore.record commits each fact and its message/part projection
- * in one storage transaction — one source of truth, and one more assistant
- * writer off the projection-fallback removal condition (see
- * packages/session/src/session/messages.ts resume()).
+ * a projection-only write here would be invisible to every fact-stream
+ * reader (TranscriptStore.replay folds only recorded facts), splitting the
+ * session's history across two sources. TranscriptStore.record commits each
+ * fact and its message/part projection in one storage transaction — one
+ * source of truth (see the writer census in
+ * packages/session/src/session/transcript.ts).
  *
  * The attemptId is derived from the injected messageId: injected responses
  * arrive whole (no retries, no streaming), so one message = one attempt, and

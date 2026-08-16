@@ -43,47 +43,6 @@ export function createSqliteMessageAdapter(db: Database): Storage.Adapter["messa
       return rows.map((r) => decodeMessage(r.data));
     },
 
-    listPage: (
-      sessionID: string,
-      options: { limit: number; before?: string },
-    ): Storage.MessagePage => {
-      const cursor = options.before ? decodeCursor(options.before) : undefined;
-
-      type Row = { id: string; time_created: number; data: string };
-      let rows: Row[];
-
-      if (cursor) {
-        rows = db
-          .query(
-            `SELECT id, time_created, data FROM message
-             WHERE session_id = ? AND (time_created < ? OR (time_created = ? AND id < ?))
-             ORDER BY time_created DESC, id DESC
-             LIMIT ?`,
-          )
-          .all(sessionID, cursor.time, cursor.time, cursor.id, options.limit + 1) as Row[];
-      } else {
-        rows = db
-          .query(
-            `SELECT id, time_created, data FROM message
-             WHERE session_id = ?
-             ORDER BY time_created DESC, id DESC
-             LIMIT ?`,
-          )
-          .all(sessionID, options.limit + 1) as Row[];
-      }
-
-      const more = rows.length > options.limit;
-      const page = more ? rows.slice(0, options.limit) : rows;
-      const items = page.map((r) => decodeMessage(r.data)).reverse();
-      const tail = page.at(-1);
-
-      return {
-        items,
-        more,
-        nextCursor: more && tail ? encodeCursor(tail.id, tail.time_created) : null,
-      };
-    },
-
     remove: (sessionID: string, messageID: string): boolean => {
       const result = db
         .query("DELETE FROM message WHERE id = ? AND session_id = ?")
@@ -101,16 +60,5 @@ export function createSqliteMessageAdapter(db: Database): Storage.Adapter["messa
         .all(status) as Array<{ id: string; session_id: string }>;
       return rows.map((r) => ({ id: r.id, sessionId: r.session_id }));
     },
-  };
-}
-
-function encodeCursor(id: string, time: number): string {
-  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
-}
-
-function decodeCursor(cursor: string): { id: string; time: number } {
-  return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as {
-    id: string;
-    time: number;
   };
 }
