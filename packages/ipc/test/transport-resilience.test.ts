@@ -31,8 +31,8 @@ describe("IPC transport resilience (#QB1)", () => {
     });
     clients.push(client);
 
-    // Today the throw escapes the socket 'data' listener and crashes the
-    // process; fixed, it comes back as a typed error response.
+    // Pre-fix the throw escaped the socket 'data' listener and crashed the
+    // process; it now comes back as a typed error response.
     await expect(srv.call("boom", { x: 1 })).rejects.toThrow("handler blew up");
 
     // Process + socket survived: a normal request still round-trips.
@@ -64,8 +64,8 @@ describe("IPC transport resilience (#QB1)", () => {
     c1.close();
     await Bun.sleep(40);
 
-    // Fixed: activeConnectionId is cleared, so the surviving connection binds.
-    // Today it stays pinned to the dead conn-1 and this call finds no socket.
+    // activeConnectionId is cleared on close, so the surviving connection
+    // binds (pre-fix it stayed pinned to the dead conn-1 and found no socket).
     expect(await srv.call("ping")).toEqual({ from: "c2" });
   });
 });

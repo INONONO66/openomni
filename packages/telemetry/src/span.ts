@@ -6,8 +6,10 @@ import type { EmitPayload } from "./trace";
  *
  * `guard_denied` and `budget_exhausted` are first-class because they are how a
  * run most often stops: without them a policy block looks like a normal return
- * and emits no terminal event at all. Before spans, twelve of the agent's
- * fifteen run-terminating paths did exactly that.
+ * and emits no terminal event at all — at the time this vocabulary was cut,
+ * twelve of the agent's fifteen run-terminating paths did exactly that.
+ * NOTE: `Emitter.span` has no production caller yet (D11 roadmap surface);
+ * the vocabulary is ahead of its adoption.
  */
 export type SpanOutcome =
   | { readonly kind: "completed" }

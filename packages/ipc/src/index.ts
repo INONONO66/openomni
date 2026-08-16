@@ -3,6 +3,6 @@
 // Driver-band packages (channels, remote, browser, machines, …) consume this
 // barrel as a published contract; it never grows a kernel/ledger/policy import.
 export { connectIpcClient, type IpcClient } from "./client";
-export { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
+export { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
 export { encode } from "./framing";
 export { createIpcServer } from "./server";

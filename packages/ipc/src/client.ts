@@ -1,7 +1,7 @@
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { LineDecoder, encode } from "./framing";
-import { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
+import { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
 
 export interface IpcClient {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
@@ -25,19 +25,11 @@ export type ConnectIpcClientOptions = {
   onNotification?: (method: string, params: Record<string, unknown> | undefined) => void;
 };
 
-export function connectIpcClient(socketPath: string, connectTimeoutMs?: number): Promise<IpcClient>;
 export function connectIpcClient(
   socketPath: string,
   options?: ConnectIpcClientOptions,
-): Promise<IpcClient>;
-export function connectIpcClient(
-  socketPath: string,
-  optionsOrTimeout?: ConnectIpcClientOptions | number,
 ): Promise<IpcClient> {
-  const opts: ConnectIpcClientOptions =
-    typeof optionsOrTimeout === "number"
-      ? { connectTimeoutMs: optionsOrTimeout }
-      : (optionsOrTimeout ?? {});
+  const opts: ConnectIpcClientOptions = options ?? {};
   const connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
 
   return new Promise((resolve, reject) => {
@@ -84,7 +76,7 @@ export function connectIpcClient(
           clearTimeout(handler.timer);
           pending.delete(id);
           if (error) {
-            handler.reject(new IpcConnectionError(`IPC error ${error.code}: ${error.message}`));
+            handler.reject(new IpcRemoteError(error.code, error.message));
           } else {
             handler.resolve(result);
           }

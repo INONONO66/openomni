@@ -107,7 +107,7 @@ export namespace Bus {
     state.observers.clear();
   }
 
-  /** Diagnostic counters for tests and runtime observability; not control-flow state. */
+  /** Diagnostic counters for tests; no runtime consumer exists today. Not control-flow state. */
   export function stats(): {
     readonly subscriberEventCount: number;
     readonly subscriberCount: number;
