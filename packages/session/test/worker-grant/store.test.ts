@@ -35,26 +35,31 @@ async function createWorkerRun(runId: string, sessionId = `${runId}-session`): P
 describe("WorkerGrantStore", () => {
   test("evaluates active matching grants and denies revoked grants", async () => {
     await createWorkerRun("run-1");
-    WorkerGrantStore.create({
-      id: "grant-1",
-      workerRunId: "run-1",
-      allowedActions: ["worker.send"],
-      allowedSessionIds: ["session-1"],
-      canCreateExternalTasks: false,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-1",
+        workerRunId: "run-1",
+        allowedActions: ["worker.send"],
+        allowedSessionIds: ["session-1"],
+        canCreateExternalTasks: false,
+      },
+      "trace-grant-test",
+    );
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-1",
         action: "worker.send",
         sessionId: "session-1",
       }),
     ).toMatchObject({ allowed: true, grantId: "grant-1" });
 
-    WorkerGrantStore.revoke("grant-1");
+    WorkerGrantStore.revoke("grant-1", "trace-grant-test");
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-1",
         action: "worker.send",
         sessionId: "session-1",
@@ -64,16 +69,20 @@ describe("WorkerGrantStore", () => {
 
   test("requires explicit manager grant for new external tasks", async () => {
     await createWorkerRun("run-2");
-    WorkerGrantStore.create({
-      id: "grant-2",
-      workerRunId: "run-2",
-      allowedActions: ["external.ask"],
-      canCreateExternalTasks: true,
-      managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-2",
+        workerRunId: "run-2",
+        allowedActions: ["external.ask"],
+        canCreateExternalTasks: true,
+        managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
+      },
+      "trace-grant-test",
+    );
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-2",
         action: "external.ask",
         createsExternalTask: true,
@@ -84,6 +93,7 @@ describe("WorkerGrantStore", () => {
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-2",
         action: "external.ask",
         createsExternalTask: true,
@@ -94,6 +104,7 @@ describe("WorkerGrantStore", () => {
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-2",
         action: "external.ask",
         createsExternalTask: true,
@@ -104,6 +115,7 @@ describe("WorkerGrantStore", () => {
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-2",
         action: "external.ask",
         createsExternalTask: true,
@@ -115,16 +127,20 @@ describe("WorkerGrantStore", () => {
 
   test("treats explicit empty scope lists as deny-all", async () => {
     await createWorkerRun("run-empty");
-    WorkerGrantStore.create({
-      id: "grant-empty-endpoints",
-      workerRunId: "run-empty",
-      allowedActions: ["api.ask"],
-      allowedEndpointIds: [],
-      canCreateExternalTasks: true,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-empty-endpoints",
+        workerRunId: "run-empty",
+        allowedActions: ["api.ask"],
+        allowedEndpointIds: [],
+        canCreateExternalTasks: true,
+      },
+      "trace-grant-test",
+    );
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-empty",
         action: "api.ask",
         endpointId: "api:any",
@@ -135,17 +151,21 @@ describe("WorkerGrantStore", () => {
 
   test("manager constraints fail closed when evaluation omits required context", async () => {
     await createWorkerRun("run-manager");
-    WorkerGrantStore.create({
-      id: "grant-manager-context",
-      workerRunId: "run-manager",
-      allowedActions: ["external.ask"],
-      allowedEndpointIds: ["human:advisor"],
-      canCreateExternalTasks: true,
-      managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-manager-context",
+        workerRunId: "run-manager",
+        allowedActions: ["external.ask"],
+        allowedEndpointIds: ["human:advisor"],
+        canCreateExternalTasks: true,
+        managerGrant: { allowedActorGroups: ["design"], riskCeiling: "low" },
+      },
+      "trace-grant-test",
+    );
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-manager",
         action: "external.ask",
         endpointId: "human:advisor",
@@ -157,18 +177,28 @@ describe("WorkerGrantStore", () => {
   test("evaluation stays read-only for past-expiry active grants; cleanup emits expiration", async () => {
     await createWorkerRun("run-expired");
     const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
-    WorkerGrantStore.create({
-      id: "grant-expired",
-      workerRunId: "run-expired",
-      allowedActions: ["worker.send"],
-      allowedSessionIds: ["session-1"],
-      expiresAt: Date.now() - 1,
-      canCreateExternalTasks: false,
+    const expired: Array<{ name: string; traceId: unknown }> = [];
+    Bus.observe((event, data) => {
+      events.push(event.name);
+      if (event.name === "worker_grant.expired") {
+        expired.push({ name: event.name, traceId: (data as { traceId?: string }).traceId });
+      }
     });
+    WorkerGrantStore.create(
+      {
+        id: "grant-expired",
+        workerRunId: "run-expired",
+        allowedActions: ["worker.send"],
+        allowedSessionIds: ["session-1"],
+        expiresAt: Date.now() - 1,
+        canCreateExternalTasks: false,
+      },
+      "trace-grant-test",
+    );
 
     expect(
       WorkerGrantStore.evaluate({
+        traceId: "trace-grant-test",
         workerRunId: "run-expired",
         action: "worker.send",
         sessionId: "session-1",
@@ -177,21 +207,60 @@ describe("WorkerGrantStore", () => {
 
     expect(WorkerGrantStore.get("grant-expired")?.status).toBe("active");
 
-    WorkerGrantStore.cleanupExpired("run-expired");
+    WorkerGrantStore.cleanupExpired("trace-cleanup", "run-expired");
     expect(WorkerGrantStore.get("grant-expired")?.status).toBe("expired");
     await new Promise((resolve) => queueMicrotask(resolve));
-    expect(events).toContain("worker_grant.expired");
+    // Pin (D11): (traceId, workerRunId?) is swap-prone — both are strings and
+    // the old signature was (workerRunId?). Asserting the exact trace catches
+    // a stale-style cleanupExpired(runId) call that stamps the runId as trace.
+    expect(expired).toEqual([{ name: "worker_grant.expired", traceId: "trace-cleanup" }]);
     expect(events.filter((event) => event === "worker_grant.updated")).toHaveLength(0);
+  });
+
+  test("every grant event inherits the caller's trace — no mint in the store (D11)", async () => {
+    await createWorkerRun("run-trace");
+    const traced: Array<{ name: string; traceId: unknown }> = [];
+    Bus.observe((event, data) => {
+      if (event.name.startsWith("worker_grant.")) {
+        traced.push({ name: event.name, traceId: (data as { traceId?: string }).traceId });
+      }
+    });
+
+    WorkerGrantStore.create(
+      {
+        id: "grant-trace",
+        workerRunId: "run-trace",
+        allowedActions: ["worker.send"],
+        canCreateExternalTasks: false,
+      },
+      "trace-create",
+    );
+    WorkerGrantStore.evaluate({
+      traceId: "trace-evaluate",
+      workerRunId: "run-trace",
+      action: "worker.send",
+    });
+    WorkerGrantStore.revoke("grant-trace", "trace-revoke");
+
+    await new Promise((resolve) => queueMicrotask(resolve));
+    expect(traced).toEqual([
+      { name: "worker_grant.created", traceId: "trace-create" },
+      { name: "worker_grant.evaluated", traceId: "trace-evaluate" },
+      { name: "worker_grant.revoked", traceId: "trace-revoke" },
+    ]);
   });
 
   test("stale direct adapter writes cannot reactivate a revoked grant", async () => {
     await createWorkerRun("run-stale");
-    const created = WorkerGrantStore.create({
-      id: "grant-stale",
-      workerRunId: "run-stale",
-      allowedActions: ["worker.send"],
-      canCreateExternalTasks: false,
-    });
+    const created = WorkerGrantStore.create(
+      {
+        id: "grant-stale",
+        workerRunId: "run-stale",
+        allowedActions: ["worker.send"],
+        canCreateExternalTasks: false,
+      },
+      "trace-grant-test",
+    );
     const staleConcurrentUpdate = {
       ...created,
       status: "active" as const,
@@ -199,7 +268,7 @@ describe("WorkerGrantStore", () => {
       updatedAt: Date.now() + 60_000,
     };
 
-    WorkerGrantStore.revoke("grant-stale");
+    WorkerGrantStore.revoke("grant-stale", "trace-grant-test");
     Storage.get().workerGrant?.set(staleConcurrentUpdate);
 
     expect(WorkerGrantStore.get("grant-stale")).toMatchObject({

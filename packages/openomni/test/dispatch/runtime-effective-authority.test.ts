@@ -141,13 +141,16 @@ describe("DispatchRuntime", () => {
 
     Storage.initialize({ dbPath: ":memory:" });
     await createWorkerRunFixture("run-1");
-    WorkerGrantStore.create({
-      id: "grant-effective-worker-send",
-      workerRunId: "run-1",
-      allowedActions: ["worker.send"],
-      allowedSessionIds: ["child-session"],
-      canCreateExternalTasks: false,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-effective-worker-send",
+        workerRunId: "run-1",
+        allowedActions: ["worker.send"],
+        allowedSessionIds: ["child-session"],
+        canCreateExternalTasks: false,
+      },
+      TEST_DISPATCH_TRACE_ID,
+    );
 
     const result = await runtime.submit(
       {

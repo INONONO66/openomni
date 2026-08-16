@@ -139,12 +139,15 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
 
   test("a corrupt worker_grant row rejects on read instead of reaching evaluate()", async () => {
     await seedWorkerRun("run-corrupt");
-    WorkerGrantStore.create({
-      id: "grant-corrupt",
-      workerRunId: "run-corrupt",
-      allowedActions: ["worker.send"],
-      canCreateExternalTasks: false,
-    });
+    WorkerGrantStore.create(
+      {
+        id: "grant-corrupt",
+        workerRunId: "run-corrupt",
+        allowedActions: ["worker.send"],
+        canCreateExternalTasks: false,
+      },
+      "trace-read-validation",
+    );
 
     // Structurally-valid-looking but schema-invalid: missing id/workerRunId/
     // version/timestamps. Before the fix this row parses to an object that
@@ -158,7 +161,11 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
 
     expect(() => WorkerGrantStore.get("grant-corrupt")).toThrow();
     expect(() =>
-      WorkerGrantStore.evaluate({ workerRunId: "run-corrupt", action: "worker.send" }),
+      WorkerGrantStore.evaluate({
+        traceId: "trace-read-validation",
+        workerRunId: "run-corrupt",
+        action: "worker.send",
+      }),
     ).toThrow();
   });
 
