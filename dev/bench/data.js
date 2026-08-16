@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786902265712,
+  "lastUpdate": 1786905520261,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53545,6 +53545,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 501663,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1e580f9726df982bf34ab0871353b5f3cd4dd1ac",
+          "message": "fix(agent): land #606 re-audit fixes with mutation-verified pins (#687)\n\n* fix(agent): land #606 re-audit fixes with mutation-verified pins\n\nFixes 14 re-audit findings across agent, llm, policy, coordinator, and\ntelemetry (scope limited to those five packages).\n\nagent:\n- delete the unvalidated metadata.actorId side-channel (zero producers);\n  actor resolves trace.agentName -> runId, pinned in\n  run-actor-resolution.test.ts\n- hoist the duplicated 24/40/5min/2min budget defaults into\n  BUDGET_DEFAULTS so narration cannot drift from enforcement; pinned\n- buildToolMetadataMap key collisions (a_b vs a.b) now throw naming both\n  tools, validated before the run opens; pinned\n\nllm:\n- delete dead ModelsDev.refresh and Auth.remove (+ their tests)\n- run() now refuses an empty runId alongside traceId/sessionId,\n  enforcing its own docstring; pinned\n- remove TokenTracker from the root barrel (only llm-internal\n  consumers); public-surface test and AGENTS.md updated\n\npolicy:\n- in-package invariant pin for the deny -> run.abort escalation\n  (previously only guarded by packages/agent conformance)\n- delete the dead PolicyAuditConfig object form; audit config is now\n  only `audit?: false`, records derive from the trace context\n- delete registry has()/list() (test-only); mergeEntries off the root\n  barrel (in-package test deep-imports); composeEffects kept as the\n  documented cross-package conformance seam\n\ncoordinator:\n- connectWithRetry snapshots its generation and bails out (closing any\n  just-created client) when superseded, so a stale gen-N loop can no\n  longer double-bootstrap gen-N+1's socket; pinned deterministically\n- scheduleIdleShutdown no longer arms timers while the pool is\n  stopping; pinned\n- test-only env keys leave the production worker allowlist; tests pass\n  them via the new extraWorkerEnvKeys/extraEnvKeys seam; pinned\n\ntelemetry:\n- AGENTS.md \"WHAT IS WIRED TODAY\" now states honestly that the non-Bus\n  surface has zero production consumers but cross-package test/bench\n  consumers\n\nEvery behavior change was mutation-verified: break the source, exactly\nthe pin fails, restore.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(agent): review deltas — identity-keyed owners, honest census (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T03:37:24+09:00",
+          "tree_id": "b5fc3d78c5931fe79e799cadd7d2332d68092e74",
+          "url": "https://github.com/INONONO66/openomni/commit/1e580f9726df982bf34ab0871353b5f3cd4dd1ac"
+        },
+        "date": 1786905519878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5858,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9279,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2516,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2817,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8000,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1037,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 739,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45831,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2300,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10792,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100112,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 506631,
             "unit": "ns/op"
           }
         ]
