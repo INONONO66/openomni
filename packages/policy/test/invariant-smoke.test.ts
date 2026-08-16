@@ -76,10 +76,12 @@ describe("engine invariants hold under the package's own suite", () => {
     const engine = PolicyEngine.create({ audit: false });
     engine.register(recorder("last", 100, calls));
     engine.register(recorder("first", 1, calls));
-    engine.register(recorder("middle", 50, calls));
+    engine.register(recorder("tie-a", 50, calls));
+    engine.register(recorder("tie-b", 50, calls));
 
     await engine.dispatchPoint(POINT, turnContext());
 
-    expect(calls).toEqual(["first", "middle", "last"]);
+    // Equal priority resolves by registration order (tie-a before tie-b).
+    expect(calls).toEqual(["first", "tie-a", "tie-b", "last"]);
   });
 });
