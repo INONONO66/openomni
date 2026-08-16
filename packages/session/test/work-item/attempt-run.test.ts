@@ -3,7 +3,6 @@ import { WorkItem } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkItemAttemptRun } from "../../src/work-item/attempt-run";
-import { WorkerRunStateStore } from "../../src/worker-run/state-store";
 import { WorkItemStore } from "../../src/work-item/index";
 
 /**
@@ -95,6 +94,10 @@ function seedLegacyRow(
     executorKind: "internal_chat_agent",
     title: "legacy run",
     prompt: "legacy prompt",
+    // Distinct on purpose: the upcast pins startedAt/endedAt to their SOURCE
+    // columns, which equal defaults could not tell apart.
+    timeCreated: 1_000,
+    timeUpdated: 2_000,
   });
 }
 
@@ -264,10 +267,10 @@ describe("WorkItemAttemptRun", () => {
       source: "worker_run_upcast",
     });
     // Terminal legacy rows derive endedAt from their persisted update time —
-    // the only timestamp the frozen archive still carries for the end.
-    const doneRow = WorkerRunStateStore.get("sess-upcast", "run-legacy-done");
-    expect(done?.endedAt).toBe(doneRow?.timeUpdated);
-    expect(done?.startedAt).toBe(doneRow?.timeCreated);
+    // the only timestamp the frozen archive still carries for the end. The
+    // seeded values are distinct so a swapped source column cannot pass.
+    expect(done?.startedAt).toBe(1_000);
+    expect(done?.endedAt).toBe(2_000);
 
     const open = WorkItemAttemptRun.find("sess-upcast", "run-legacy-open");
     expect(open?.status).toBe("interrupted");
