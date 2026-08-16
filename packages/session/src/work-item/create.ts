@@ -1,4 +1,4 @@
-import { Operational, WorkItem } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
 import { buildWorkItem } from "./builder.js";
@@ -19,14 +19,10 @@ export async function createWorkItem(
   const storage = Storage.get();
   const workItem = storage.workItem;
   if (!workItem) {
-    Bus.publish(Operational.Warn, {
-      traceId,
-      time: Date.now(),
-      sessionId: input.sessionId,
-      component: "work-item",
-      msg: "WorkItem storage not configured, skipping create",
-    });
-    return buildWorkItem(input, Date.now());
+    // Fail closed like every other WorkItem write (facts.ts): the old warn-
+    // and-fabricate path returned a phantom Info that was never persisted —
+    // a hash indistinguishable from a real create.
+    throw new Error("WorkItem storage not configured — refusing to fabricate a work item");
   }
   const ledger = requireWorkItemLedger(storage);
 

@@ -1,6 +1,8 @@
 import type { InboundWaitParams, InboundWaitResult } from "@openomni/coordinator";
 import type { DispatchRuntime } from "@openomni/openomni";
+import { Operational } from "@openomni/protocol";
 import { WorkItemAttemptRun } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import type { ServerConfig } from "../config";
 
 export type ResidentInboundWaitConfig = {
@@ -90,8 +92,24 @@ export function createResidentInboundWaitHandler(
       };
     } finally {
       // Release the wait if it is still ours; a run finished mid-wait keeps
-      // its terminal record (endWait is a no-op receipt then).
-      await WorkItemAttemptRun.endWait(sessionId, runId, traceId);
+      // its terminal record (endWait is a no-op receipt then). A failed
+      // release (e.g. a BUSY store) must not discard the answer the resident
+      // already produced — record it and let the blocker age out.
+      try {
+        await WorkItemAttemptRun.endWait(sessionId, runId, traceId);
+      } catch (releaseError) {
+        Bus.publish(Operational.Warn, {
+          traceId,
+          time: Date.now(),
+          sessionId,
+          component: "server",
+          msg: "inbound-wait release failed; answer kept, blocker ages out",
+          context: {
+            runId,
+            error: releaseError instanceof Error ? releaseError.message : String(releaseError),
+          },
+        });
+      }
     }
   };
 }

@@ -1,7 +1,7 @@
 import { WorkItem, type WorkerRun } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
 import { WorkerRunStateStore } from "../worker-run/state-store.js";
-import { WorkItemRevisionError, WorkItemUnavailableError } from "./facts.js";
+import { WorkItemRevisionError } from "./facts.js";
 import { mutate } from "./mutation.js";
 
 /**
@@ -169,12 +169,11 @@ async function mutateRun(
   } catch (error) {
     // Contention (a concurrent transition won the head) and losing the
     // acquire race both mean "not acquired/finished" — the caller retries
-    // from a fresh read or reports the run as no longer active.
-    if (
-      error instanceof AttemptRunNotActiveError ||
-      error instanceof WorkItemRevisionError ||
-      error instanceof WorkItemUnavailableError
-    ) {
+    // from a fresh read or reports the run as no longer active. A BUSY
+    // storage layer is NEITHER: swallowing WorkItemUnavailableError here
+    // silently lost terminal attempt facts (runs stuck "running" forever),
+    // so it rethrows to the caller like every other storage failure.
+    if (error instanceof AttemptRunNotActiveError || error instanceof WorkItemRevisionError) {
       return false;
     }
     throw error;
