@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786893234155,
+  "lastUpdate": 1786893592675,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -52801,6 +52801,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 507184,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f4410d31786a485e7b5cd325eee3eba2bf90fa05",
+          "message": "refactor(session): cut the unread session surface (#606) (#679)\n\n* refactor(session): cut the unread session surface (#606)\n\nFive production-dead clusters, each verified zero-reader at head:\n\n- WorkerRun facade (worker-run/index.ts, 133 LOC) — every production\n  WorkerRun reference is the protocol namespace; the facade's only\n  readers were its own tests. Its doc claimed worker.run.* events died\n  with the freeze and sit on #497's kill list — both false (the server\n  worker runner publishes them live; the ledger marks them preserve).\n  The frozen-store pins move to WorkerRunStateStore, which stays.\n- Session.resume / listMessagesPage / hydrateMessages + the listPage /\n  listByMessageIDs adapter surface. resume's writer census moves to\n  transcript.ts (the record side); TranscriptStore.replay stays as the\n  fold's read-back pinning the live record() path.\n- Session.suspend (a no-op existence check) and abandon (remove alias).\n- Artifact.list / versions (versions returned only the latest anyway)\n  + the adapter list/delete members. Artifact.get stays: it is the\n  read-back oracle for the live connector-log store path, and the\n  Artifact.Meta.version preserve-row pins survive in store/get tests.\n- SurfaceKey.register / unregister + adapter register/delete. claim is\n  the sole writer (CAS, never clobbers a concurrent owner); fixtures\n  and suites now arm through it.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* test(session): ledger pin refresh + legacy endedAt pin (#606)\n\n* test(session): distinct legacy timestamps pin upcast sources (#606)\n\n* chore(session): drop stray tsconfig from another track (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T00:18:40+09:00",
+          "tree_id": "660c2752cb9c3ed3eee57a38047535d8adc03b22",
+          "url": "https://github.com/INONONO66/openomni/commit/f4410d31786a485e7b5cd325eee3eba2bf90fa05"
+        },
+        "date": 1786893592004,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 663,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6181,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3034,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16087,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1170,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 795,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2337,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10890,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100275,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 505959,
             "unit": "ns/op"
           }
         ]
