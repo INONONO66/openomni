@@ -59,9 +59,11 @@ export function connectIpcClient(
 
     socket.on("data", (chunk) => {
       let msgs: unknown[];
+      let malformed: string[];
       try {
-        msgs = decoder.push(chunk);
+        ({ frames: msgs, malformed } = decoder.push(chunk));
       } catch (error) {
+        // Oversize line/buffer — the decoder dropped its whole buffer (DoS guard).
         connected = false;
         failAllPending(new IpcProtocolError("received invalid IPC frame", error));
         socket.destroy();
@@ -99,26 +101,24 @@ export function connectIpcClient(
             );
             continue;
           }
-          {
-            const respond = (result: unknown) => {
-              socket.write(encode(Ipc.createResponse(request.data.id, result)));
-            };
-            // A throwing handler must never escape the socket 'data' listener —
-            // that tears down the connection (and can crash the process). Turn
-            // it into a typed error response instead, mirroring the server side.
-            try {
-              opts.onRequest(request.data.method, request.data.params, respond);
-            } catch (err) {
-              socket.write(
-                encode(
-                  Ipc.createErrorResponse(
-                    request.data.id,
-                    1000,
-                    err instanceof Error ? err.message : String(err),
-                  ),
+          const respond = (result: unknown) => {
+            socket.write(encode(Ipc.createResponse(request.data.id, result)));
+          };
+          // A throwing handler must never escape the socket 'data' listener —
+          // that tears down the connection (and can crash the process). Turn
+          // it into a typed error response instead, mirroring the server side.
+          try {
+            opts.onRequest(request.data.method, request.data.params, respond);
+          } catch (err) {
+            socket.write(
+              encode(
+                Ipc.createErrorResponse(
+                  request.data.id,
+                  1000,
+                  err instanceof Error ? err.message : String(err),
                 ),
-              );
-            }
+              ),
+            );
           }
           continue;
         }
@@ -127,6 +127,15 @@ export function connectIpcClient(
         if (notification.success && opts.onNotification) {
           opts.onNotification(notification.data.method, notification.data.params);
         }
+      }
+
+      // The client stays conservative about a peer that emits garbage — but
+      // only after draining every valid frame in the chunk, so a response
+      // sharing a chunk with a bad line still resolves its call.
+      if (malformed.length > 0) {
+        connected = false;
+        failAllPending(new IpcProtocolError(`received invalid IPC frame: ${malformed[0] ?? ""}`));
+        socket.destroy();
       }
     });
 

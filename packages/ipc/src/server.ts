@@ -116,9 +116,11 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         if (!state) return;
 
         let messages: unknown[];
+        let malformed: string[];
         try {
-          messages = state.decoder.push(raw);
+          ({ frames: messages, malformed } = state.decoder.push(raw));
         } catch (error) {
+          // Oversize line/buffer — the decoder already reset its buffer (DoS guard).
           socket.write(
             encode(
               Ipc.createErrorResponse(
@@ -191,6 +193,17 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
               );
             }
           }
+        }
+
+        // A malformed line costs only itself: every parseable frame above was
+        // already processed; each bad line gets its own 4001 error frame and
+        // the connection survives.
+        for (const line of malformed) {
+          socket.write(
+            encode(
+              Ipc.createErrorResponse("unknown", 4001, `IPC frame is not valid JSON: ${line}`),
+            ),
+          );
         }
       },
       close(socket: BunSocket) {
