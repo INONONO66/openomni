@@ -1,7 +1,5 @@
 import type { Policy } from "@openomni/protocol";
 
-type Boundary = "pre" | "post";
-
 export interface OrderedDecision {
   readonly decision: Policy.PolicyDecision;
   readonly priority: number;
@@ -18,7 +16,6 @@ export interface EffectEntry {
 }
 
 export interface Conflict {
-  readonly boundary: Boundary;
   readonly message: string;
 }
 
@@ -52,8 +49,6 @@ export interface RetryAccumulator {
 
 export interface MergeResult {
   readonly effects: Policy.PolicyEffect[];
-  readonly postConflicts: Conflict[];
 }
 
 export const FAIL_CLOSED_CONFLICT = "policy.effect_conflict.fail_closed";
-export const POST_BOUNDARY_CONFLICT = "policy.effect_conflict.post_boundary";

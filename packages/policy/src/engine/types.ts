@@ -1,6 +1,5 @@
 import type { BusEvent, Message, Policy, RuntimeResource, TraceContext } from "@openomni/protocol";
 
-type AuditVisibility = "internal" | "llm_reason" | "user_audit";
 export type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
 
 export interface GenericPolicyContext {
@@ -44,8 +43,6 @@ interface PolicyAuditConfig {
   readonly actor?: Record<string, unknown>;
   readonly action?: string;
   readonly resource?: string;
-  readonly visibility?: AuditVisibility;
-  readonly parentActionId?: string;
 }
 
 export type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
@@ -70,16 +67,7 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
   readonly fn: (
     ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>,
   ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
-  readonly propagate?: boolean;
 }
-
-/**
- * Canonical-only since #530: the legacy timing-based registration shape and
- * the legacy `dispatch(timing)` entry point are gone; `register()` rejects
- * timing shapes fail-closed at the trusted boundary.
- */
-export type PolicyEngineRegistrationGeneric<TCtx extends GenericPolicyContext> =
-  CanonicalPolicyRegistrationGeneric<TCtx>;
 
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
   register(reg: CanonicalPolicyRegistrationGeneric<TCtx>): void;

@@ -23,6 +23,12 @@ export function recordDecision(
   return decision;
 }
 
+/** An empty trace id names nothing; every guard in the tree treats it as absent. */
+function nonEmptyTraceId(trace: TraceContext.Type | undefined): string | undefined {
+  const traceId = trace?.traceId;
+  return traceId !== undefined && traceId.length > 0 ? traceId : undefined;
+}
+
 /**
  * A middleware threw. Reported under the dispatch's trace, or the engine's,
  * or not at all.
@@ -38,12 +44,6 @@ export function recordDecision(
  * its trace — a wiring choice at `PolicyEngine.create`, not a runtime
  * accident.
  */
-/** An empty trace id names nothing; every guard in the tree treats it as absent. */
-function nonEmptyTraceId(trace: TraceContext.Type | undefined): string | undefined {
-  const traceId = trace?.traceId;
-  return traceId !== undefined && traceId.length > 0 ? traceId : undefined;
-}
-
 export function publishMiddlewareError(
   options: PolicyEngineConfig,
   dispatchTrace: TraceContext.Type | undefined,

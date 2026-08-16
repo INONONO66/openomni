@@ -1,11 +1,5 @@
 import type { Policy } from "@openomni/protocol";
-import {
-  FAIL_CLOSED_CONFLICT,
-  POST_BOUNDARY_CONFLICT,
-  type Conflict,
-  type EffectEntry,
-  type FieldOwner,
-} from "./types";
+import { FAIL_CLOSED_CONFLICT, type Conflict, type EffectEntry, type FieldOwner } from "./types";
 import { flattenRecord, pathsOverlap, stableHash } from "./records";
 
 export function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
@@ -50,7 +44,6 @@ function collectRecordRewriteConflicts(
       if (owner && owner.valueHash !== valueHash) {
         if (owner.priority === entry.priority) {
           conflicts.push({
-            boundary: "pre",
             message: `${effectType}.${path} rewritten by ${owner.policyId} and ${entry.policyId}`,
           });
         }
@@ -111,7 +104,6 @@ function collectSingleValueConflicts(
     if (owner && owner.policyId !== entry.policyId && owner.valueHash !== valueHash) {
       if (owner.priority === entry.priority) {
         conflicts.push({
-          boundary: "pre",
           message: `${label}.${field} rewritten by ${owner.policyId} and ${entry.policyId}`,
         });
       }
@@ -162,7 +154,6 @@ function collectWritebackSuppressConflicts(entries: EffectEntry[]): Conflict[] {
         continue;
       }
       conflicts.push({
-        boundary: "pre",
         message: `writeback.suppress conflicts with writeback.rewrite from ${rewrite.policyId} and ${suppress.policyId}`,
       });
     }
@@ -179,23 +170,15 @@ function collectFilterApprovalConflicts(entries: EffectEntry[]): Conflict[] {
 
   return [
     {
-      boundary: "pre",
       message: `tool.filter conflicts with tool.require_approval from ${firstFilter.policyId} and ${firstApproval.policyId}`,
     },
   ];
 }
 
 export function conflictDiagnostic(conflict: Conflict): Policy.PolicyEffect {
-  const prefix = conflict.boundary === "pre" ? FAIL_CLOSED_CONFLICT : POST_BOUNDARY_CONFLICT;
-  const severity = conflict.boundary === "pre" ? "error" : "warning";
-
   return {
     type: "audit.annotate",
-    annotation: `${prefix}: ${conflict.message}`,
-    severity,
+    annotation: `${FAIL_CLOSED_CONFLICT}: ${conflict.message}`,
+    severity: "error",
   };
-}
-
-export function collectPostConflicts(_entries: readonly EffectEntry[]): Conflict[] {
-  return [];
 }
