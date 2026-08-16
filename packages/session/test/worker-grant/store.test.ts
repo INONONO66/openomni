@@ -323,4 +323,40 @@ describe("WorkerGrantStore", () => {
     await new Promise((resolve) => queueMicrotask(resolve));
     expect(events).not.toContain("worker_grant.revoked");
   });
+
+  test("the expiry sweep continues past a lost race and names it at the end", async () => {
+    await createWorkerRun("run-sweep");
+    const past = Date.now() - 60_000;
+    for (const id of ["grant-sweep-ok", "grant-sweep-fail"]) {
+      WorkerGrantStore.create(
+        {
+          id,
+          workerRunId: "run-sweep",
+          allowedActions: ["worker.send"],
+          canCreateExternalTasks: false,
+          expiresAt: past,
+        },
+        "trace-grant-test",
+      );
+    }
+
+    const adapter = Storage.getAdapter();
+    const grantAdapter = adapter.workerGrant;
+    if (!grantAdapter) throw new Error("workerGrant sub-adapter missing");
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      workerGrant: {
+        ...grantAdapter,
+        set: (record) => (record.id === "grant-sweep-fail" ? false : grantAdapter.set(record)),
+      },
+    });
+
+    expect(() => WorkerGrantStore.cleanupExpired("trace-grant-test")).toThrow(
+      "1 expiry write(s) failed — grant-sweep-fail",
+    );
+    // The healthy grant was swept BEFORE the aggregate throw.
+    expect(WorkerGrantStore.get("grant-sweep-ok")?.status).toBe("expired");
+    expect(WorkerGrantStore.get("grant-sweep-fail")?.status).toBe("active");
+  });
 });
