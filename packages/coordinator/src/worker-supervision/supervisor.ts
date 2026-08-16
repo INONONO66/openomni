@@ -54,6 +54,10 @@ export class WorkerSupervisor {
   private restartCount = 0;
   private restartWindowStart = 0;
   private generation = 0;
+  // One trace per worker generation: minted at spawn (Owner-gated ring-2 mint,
+  // see #606 D11 remainder) and shared by every lifecycle event of that
+  // generation — Spawned/Ready/Exited and generation-scoped warns.
+  private generationTraceId = "";
   private running = false;
   private stopping = false;
   private readonly activeToolCalls = new Map<string, ActiveRequest>();
@@ -80,6 +84,7 @@ export class WorkerSupervisor {
 
   private doStart(): void {
     this.generation += 1;
+    this.generationTraceId = crypto.randomUUID();
     this.running = true;
     this.bootstrapped = false;
     this.proc = Bun.spawn(
@@ -92,7 +97,7 @@ export class WorkerSupervisor {
     );
     const generation = this.generation;
     this.events.publish(WorkerDriver.Spawned, {
-      traceId: crypto.randomUUID(),
+      traceId: this.generationTraceId,
       time: Date.now(),
       workerId: this.id,
       generation,
@@ -104,7 +109,7 @@ export class WorkerSupervisor {
       this.client = null;
       prev?.close();
       this.events.publish(WorkerDriver.Exited, {
-        traceId: crypto.randomUUID(),
+        traceId: this.generationTraceId,
         time: Date.now(),
         workerId: this.id,
         generation,
@@ -126,6 +131,7 @@ export class WorkerSupervisor {
         await new Promise<void>((r) => setTimeout(r, 250));
         continue;
       }
+      let attemptClient: Awaited<ReturnType<typeof connectIpcClient>> | undefined;
       try {
         const c = await connectIpcClient(this.socketPath, {
           connectTimeoutMs: 500,
@@ -149,10 +155,18 @@ export class WorkerSupervisor {
                     5_000,
                   )
                   .catch((err) => {
-                    console.warn("worker.tool_call_settled notification failed", {
-                      callId,
-                      workspaceRoot,
-                      error: err instanceof Error ? err.message : String(err),
+                    // Ledger, not console: swallowing this into stdout is the
+                    // exact failure mode the injected sink exists to prevent.
+                    this.events.publish(Operational.Warn, {
+                      traceId: this.generationTraceId,
+                      time: Date.now(),
+                      component: "coordinator",
+                      msg: "worker.tool_call_settled notification failed",
+                      context: {
+                        callId,
+                        ...(workspaceRoot ? { workspaceRoot } : {}),
+                        error: err instanceof Error ? err.message : String(err),
+                      },
                     });
                   });
               },
@@ -164,6 +178,7 @@ export class WorkerSupervisor {
             }
           },
         });
+        attemptClient = c;
         const bootstrapResult = await c.call(
           "coordinator.bootstrap",
           {
@@ -183,7 +198,7 @@ export class WorkerSupervisor {
         if (!this.stopping && this.running) {
           this.client = c;
           this.events.publish(WorkerDriver.Ready, {
-            traceId: crypto.randomUUID(),
+            traceId: this.generationTraceId,
             time: Date.now(),
             workerId: this.id,
             generation: this.generation,
@@ -193,6 +208,10 @@ export class WorkerSupervisor {
         }
         return;
       } catch (error) {
+        // A failed attempt must not leak its connected client: a stale one
+        // keeps live onRequest/onNotification handlers and can flip
+        // `bootstrapped` or answer worker requests alongside the winner.
+        attemptClient?.close();
         lastError = error instanceof Error ? error : new Error(String(error));
         await new Promise<void>((r) => setTimeout(r, 100));
       }
@@ -202,7 +221,7 @@ export class WorkerSupervisor {
       // doStart() fires this promise without awaiting it, so a throw here would
       // surface as an unhandled rejection; report and let waitReady() time out.
       this.events.publish(Operational.Warn, {
-        traceId: crypto.randomUUID(),
+        traceId: this.generationTraceId,
         time: Date.now(),
         component: "coordinator.worker",
         msg: "worker IPC connect failed within deadline",
@@ -221,7 +240,7 @@ export class WorkerSupervisor {
 
     const delayMs = resolveRestartDelay(this.restartCount);
     this.events.publish(WorkerDriver.Restarted, {
-      traceId: crypto.randomUUID(),
+      traceId: this.generationTraceId,
       time: Date.now(),
       workerId: this.id,
       restartCount: this.restartCount,
@@ -380,7 +399,7 @@ export class WorkerSupervisor {
       const graceMs = workerStopGraceMs();
       if ((await waitForWorkerExit(proc, graceMs)) === "timeout") {
         this.events.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
+          traceId: this.generationTraceId,
           time: Date.now(),
           component: "coordinator.worker",
           msg: "worker did not stop within grace period; sending SIGKILL",
