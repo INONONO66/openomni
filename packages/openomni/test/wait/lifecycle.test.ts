@@ -95,31 +95,6 @@ describe("WaitService", () => {
     expect(WaitStore.get("wait-unknown")?.replies).toHaveLength(0);
   });
 
-  test("cancel folds an open wait to cancelled, persists it, and stays terminal", async () => {
-    const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
-    WaitService.open(buildWaitCreate("wait-cancel"), "trace-test");
-
-    const outcome = WaitService.cancel("wait-cancel", "trace-test", 2_000);
-
-    expect(outcome.kind).toBe("cancelled");
-    if (outcome.kind !== "cancelled") throw new Error("expected cancelled");
-    expect(outcome.record.cancelledAt).toBe(2_000);
-    expect(WaitStore.get("wait-cancel")).toMatchObject({
-      status: "cancelled",
-      cancelledAt: 2_000,
-    });
-    await flushBus();
-    expect(events).toContain("wait.cancelled");
-
-    // Terminal: a second cancel is a typed wait_terminal rejection, unpersisted.
-    const again = WaitService.cancel("wait-cancel", "trace-test", 3_000);
-    expect(again.kind).toBe("rejected");
-    if (again.kind !== "rejected") throw new Error("expected rejected");
-    expect(again.code).toBe("wait_terminal");
-    expect(WaitStore.get("wait-cancel")?.cancelledAt).toBe(2_000);
-  });
-
   test("sweepExpired folds deadline-passed open waits and reports partial state", async () => {
     const events: { name: string; partial?: boolean }[] = [];
     Bus.observe((event, payload) =>

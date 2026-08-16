@@ -74,13 +74,13 @@ export function responderCandidates(
 /** Ingress evidence extension: resolved-actor endpoint proof with the direct-mode userId fallback. */
 export function ingressEvidence(
   event: Ingress.InboundEvent,
-  correlation: Dispatch.Correlation | undefined,
+  correlation: Dispatch.Correlation,
 ): SenderEvidence {
   const actor = event.meta?.actor;
   const actorId = typeof actor?.actorId === "string" ? actor.actorId : undefined;
   return {
-    ...(correlation?.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
-    ...(correlation === undefined ? {} : { claimedEndpointId: correlation.endpointId }),
+    ...(correlation.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
+    claimedEndpointId: correlation.endpointId,
     ...(actorId === undefined ? {} : { actorId }),
     provesEndpoint: (expected) => {
       if (actorId !== undefined) {
