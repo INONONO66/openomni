@@ -76,7 +76,13 @@ describe("worker IPC handlers", () => {
     const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", runId: "missing", message: "new" },
+      params: {
+        authToken: "token",
+        traceId: "trace-ipc-test",
+        sessionId: "session-1",
+        runId: "missing",
+        message: "new",
+      },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
@@ -96,7 +102,13 @@ describe("worker IPC handlers", () => {
     const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", runId: "run-1", message: "new" },
+      params: {
+        authToken: "token",
+        traceId: "trace-ipc-test",
+        sessionId: "session-1",
+        runId: "run-1",
+        message: "new",
+      },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
@@ -104,7 +116,7 @@ describe("worker IPC handlers", () => {
     });
 
     expect(result).toEqual({ accepted: true });
-    expect(injectionQueue.drain("run-1")).toEqual([
+    expect(injectionQueue.drain("run-1", "trace-ipc-test")).toEqual([
       {
         messageId: expect.any(String),
         output: "new",
@@ -113,13 +125,35 @@ describe("worker IPC handlers", () => {
     ]);
   });
 
+  it("refuses an untraced delivery instead of queuing it (D11)", () => {
+    const run = createRun("session-1");
+    const activeRuns = new Map([["run-1", run]]);
+    const injectionQueue = InjectionQueue.create();
+
+    const result = WorkerIpcHandlers.deliverMessage({
+      params: { authToken: "token", sessionId: "session-1", runId: "run-1", message: "new" },
+      ipcAuthToken: "token",
+      workerId: "worker-1",
+      activeRuns,
+      injectionQueue,
+    });
+
+    expect(result).toMatchObject({ accepted: false, error: "delivery missing traceId" });
+    expect(injectionQueue.hasPending("run-1")).toBe(false);
+  });
+
   it("requires a run id before queuing message injections", () => {
     const run = createRun("session-1");
     const activeRuns = new Map([["run-1", run]]);
     const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", message: "new" },
+      params: {
+        authToken: "token",
+        traceId: "trace-ipc-test",
+        sessionId: "session-1",
+        message: "new",
+      },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,

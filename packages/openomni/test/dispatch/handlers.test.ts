@@ -203,7 +203,8 @@ describe("built-in dispatch handlers", () => {
   });
 
   test("actor.reply delivers external replies to the owning worker run", async () => {
-    const deliveries: Array<{ sessionId: string; text: string; runId?: string }> = [];
+    const deliveries: Array<{ sessionId: string; text: string; traceId: string; runId?: string }> =
+      [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
       owners: {
@@ -211,8 +212,8 @@ describe("built-in dispatch handlers", () => {
           async dispatch() {
             throw new Error("actor.reply should not spawn workers");
           },
-          async deliverMessage(sessionId, text, runId) {
-            deliveries.push({ sessionId, text, ...(runId ? { runId } : {}) });
+          async deliverMessage(sessionId, text, traceId, runId) {
+            deliveries.push({ sessionId, text, traceId, ...(runId ? { runId } : {}) });
             return { status: "delivered" };
           },
         },
@@ -228,7 +229,13 @@ describe("built-in dispatch handlers", () => {
     );
 
     expect(deliveries).toEqual([
-      { sessionId: "worker-session", text: "external answer", runId: "worker-run" },
+      // Pin (D11): the reply delivery carries the dispatch command's trace.
+      {
+        sessionId: "worker-session",
+        text: "external answer",
+        traceId: "trace-1",
+        runId: "worker-run",
+      },
     ]);
     expect(output).toEqual({
       output: {

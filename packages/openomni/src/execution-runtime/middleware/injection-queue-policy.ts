@@ -26,7 +26,14 @@ export function createInjectionQueueDrainPolicy(
         return PolicyDecision.allow({ policyId: POLICY_ID });
       }
 
-      const pending = queue.drain(runId);
+      const traceId = ctx.traceContext?.traceId;
+      if (traceId === undefined || traceId.length === 0) {
+        // A run turn without its trace is a wiring bug; draining under a mint
+        // would launder the injections. Leave the queue intact — the next
+        // correctly-traced turn drains it.
+        throw new Error("injection queue drain requires the run trace context");
+      }
+      const pending = queue.drain(runId, traceId);
       const sessionId = contextString(ctx, "sessionId");
       const agentName = ctx.traceContext?.agentName;
 

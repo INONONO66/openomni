@@ -77,7 +77,7 @@ export type DeliverTask = { sessionId: string } & Record<string, unknown>;
 export type WorkerManager = {
   deliver(runId: string, task: DeliverTask): Promise<unknown>;
   cancel(runId: string): Promise<unknown>;
-  send(sessionId: string, message: string, runId?: string): Promise<unknown>;
+  send(sessionId: string, message: string, traceId: string, runId?: string): Promise<unknown>;
   stats(): WorkerManagerStats;
   waitUntilReady(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;

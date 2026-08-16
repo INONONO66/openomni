@@ -8,18 +8,25 @@ import { snapshot, type ChildAgentRuntimeOptions, type ChildRecord } from "./typ
 
 function enqueueCompletion(options: ChildAgentRuntimeOptions, record: ChildRecord): void {
   const parentRunId = options.traceContext?.runId;
-  if (!record.notifyOnComplete || !options.injectionQueue || !parentRunId) return;
+  const traceId = options.traceContext?.traceId;
+  // Same gate as the missing parent run: a completion notification that
+  // cannot name the parent's trace has nowhere coherent to file.
+  if (!record.notifyOnComplete || !options.injectionQueue || !parentRunId || !traceId) return;
   const child = snapshot(record);
   const output =
     child.status === "completed"
       ? (child.output ?? "")
       : `Child agent finished with status ${child.status}. Await or inspect the child for details.`;
-  options.injectionQueue.enqueue(parentRunId, {
-    messageId: crypto.randomUUID(),
-    output: `[child_agent ${record.id} ${child.status}]\n${output}`,
-    injectToHistory: true,
-    timestamp: Date.now(),
-  });
+  options.injectionQueue.enqueue(
+    parentRunId,
+    {
+      messageId: crypto.randomUUID(),
+      output: `[child_agent ${record.id} ${child.status}]\n${output}`,
+      injectToHistory: true,
+      timestamp: Date.now(),
+    },
+    traceId,
+  );
 }
 
 async function dispatchTerminalAudit(

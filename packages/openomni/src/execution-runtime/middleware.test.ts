@@ -47,12 +47,16 @@ describe("buildWorkerMiddleware backward compatibility", () => {
 describe("buildWorkerMiddleware injection queue persistence", () => {
   it("emits a queued response when history persistence throws a non-Error value", async () => {
     const queue = InjectionQueue.create();
-    queue.enqueue("run-storage-failure", {
-      messageId: "message-storage-failure",
-      output: "deliver despite non-Error storage failure",
-      injectToHistory: true,
-      timestamp: 1,
-    });
+    queue.enqueue(
+      "run-storage-failure",
+      {
+        messageId: "message-storage-failure",
+        output: "deliver despite non-Error storage failure",
+        injectToHistory: true,
+        timestamp: 1,
+      },
+      "trace-middleware-test",
+    );
     const registration = findRegistration(
       buildWorkerMiddleware({ injectionQueue: queue }),
       "builtin:injection-queue-drain",
@@ -69,6 +73,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
       const decision = await engine.dispatchPoint("run.turn.post", {
         sessionId: "session-storage-failure",
         runId: "run-storage-failure",
+        traceContext: { traceId: "trace-middleware-test" },
         turnIndex: 0,
         turnResult: { type: "stop" },
         steps: [],

@@ -255,12 +255,18 @@ describe("IngressHandlers", () => {
 
     const result = await IngressHandlers.handleDirect({
       sessionId,
-      traceContext: { traceId: newTraceId() },
+      traceContext: { traceId: "trace-test" },
       event,
       coordinator: { dispatch, deliverMessage },
     });
 
-    expect(deliverMessage).toHaveBeenCalledWith(sessionId, "adjust your plan", undefined);
+    // Pin (D11): the delivery carries the inbound frame's trace.
+    expect(deliverMessage).toHaveBeenCalledWith(
+      sessionId,
+      "adjust your plan",
+      "trace-test",
+      undefined,
+    );
     expect(dispatch).not.toHaveBeenCalled();
     expect(workRunItems(sessionId)).toHaveLength(0);
     if (result.kind === "dropped") throw new Error("shape");

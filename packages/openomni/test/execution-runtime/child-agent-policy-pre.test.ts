@@ -265,7 +265,7 @@ describe("child agent delegation pre-policy", () => {
     const [settled] = await runtime.await([child.id]);
 
     expect(settled).toMatchObject({ id: child.id, status: "cancelled" });
-    expect(injectionQueue.drain("parent-run")).toEqual([
+    expect(injectionQueue.drain("parent-run", "trace-child-policy")).toEqual([
       expect.objectContaining({
         output: expect.stringContaining(`[child_agent ${child.id} cancelled]`),
         injectToHistory: true,

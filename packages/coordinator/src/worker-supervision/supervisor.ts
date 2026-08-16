@@ -311,14 +311,19 @@ export class WorkerSupervisor {
     );
   }
 
-  async send(sessionId: string, message: string, runId?: string): Promise<unknown> {
+  async send(
+    sessionId: string,
+    message: string,
+    traceId: string,
+    runId?: string,
+  ): Promise<unknown> {
     const client = this.client;
     if (!client?.connected) {
       return { accepted: false, error: `worker ${this.id} not available` };
     }
     return client.call(
       "worker.deliver_message",
-      { authToken: this.authToken, sessionId, ...(runId ? { runId } : {}), message },
+      { authToken: this.authToken, traceId, sessionId, ...(runId ? { runId } : {}), message },
       5_000,
     );
   }

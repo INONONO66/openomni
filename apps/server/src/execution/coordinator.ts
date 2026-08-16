@@ -52,7 +52,12 @@ export function buildToolDispatcher(providers: ToolProvider[]): Map<string, Tool
 export type ExecutionCoordinator = {
   dispatch(sessionTreeId: string, request: Execution.Request): Promise<Execution.Result>;
   cancelRun(runId: string): Promise<unknown>;
-  deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown>;
+  deliverMessage(
+    sessionId: string,
+    message: string,
+    traceId: string,
+    runId?: string,
+  ): Promise<unknown>;
   getStats(): {
     workers: number;
     active: number;
@@ -139,8 +144,8 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
       return workerManager.cancel(runId);
     },
 
-    async deliverMessage(sessionId, message, runId) {
-      return workerManager.send(sessionId, message, runId);
+    async deliverMessage(sessionId, message, traceId, runId) {
+      return workerManager.send(sessionId, message, traceId, runId);
     },
 
     getStats() {

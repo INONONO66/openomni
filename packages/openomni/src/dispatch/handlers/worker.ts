@@ -337,6 +337,7 @@ export function createWorkerDispatchHandlers(
       const result = await coordinator.deliverMessage(
         sessionId,
         extractText(command.payload),
+        command.traceId,
         targetRunId(command),
       );
       return { output: { delivered: true, sessionId, runId: targetRunId(command), result } };
@@ -352,6 +353,7 @@ export function createWorkerDispatchHandlers(
       const result = await coordinator.deliverMessage(
         sessionId,
         extractText(command.payload),
+        command.traceId,
         targetRunId(command),
       );
       return { output: { resumed: true, sessionId, runId: targetRunId(command), result } };
@@ -379,6 +381,7 @@ export function createWorkerDispatchHandlers(
       const result = await coordinator.deliverMessage(
         sessionId,
         extractText(command.payload),
+        command.traceId,
         runId,
       );
       return { output: { delivered: true, sessionId, runId, result } };
