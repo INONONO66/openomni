@@ -123,6 +123,20 @@ describe("Provider Integration", () => {
     expect(model.api?.url).toBe("http://localhost:8317/v1");
   });
 
+  it("maps catalog limit.context through to the model (the run-window input)", () => {
+    const provider = { id: "custom", name: "Custom", env: [], models: {} };
+
+    const sized = Provider.fromModelsDevModel(provider, {
+      id: "m",
+      name: "M",
+      limit: { context: 200_000 },
+    });
+    expect(sized.limit?.context).toBe(200_000);
+
+    const unsized = Provider.fromModelsDevModel(provider, { id: "m", name: "M" });
+    expect(unsized.limit?.context).toBe(0);
+  });
+
   it("resolves custom baseURL models through the OpenAI provider", () => {
     const auth: Auth.Info = { type: "api", key: "custom-key" };
     const model: Provider.Model = {
