@@ -1,14 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { z } from "zod";
-
-const DataRow = z.object({ data: z.string() });
-const DataRows = z.array(DataRow);
+import { SqliteJsonDataRowSchema, SqliteJsonDataRowsSchema } from "./sqlite-json-data";
 
 export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.BlacklistSubAdapter {
   return {
     get(id) {
-      const row = DataRow.nullable().parse(
+      const row = SqliteJsonDataRowSchema.nullable().parse(
         db.query("SELECT data FROM blacklist WHERE id = ?").get(id),
       );
       return row ? Actor.BlacklistEntry.parse(JSON.parse(row.data)) : undefined;
@@ -36,7 +33,7 @@ export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.Blac
       );
     },
     list() {
-      const rows = DataRows.parse(
+      const rows = SqliteJsonDataRowsSchema.parse(
         db.query("SELECT data FROM blacklist ORDER BY time_created ASC, id ASC").all(),
       );
       return rows.map((row) => Actor.BlacklistEntry.parse(JSON.parse(row.data)));
