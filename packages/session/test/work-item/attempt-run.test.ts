@@ -107,6 +107,32 @@ afterEach(() => {
 });
 
 describe("WorkItemAttemptRun", () => {
+  test("finish rethrows a BUSY storage layer instead of reporting not-active (#606)", async () => {
+    await seedRun("sess-busy", "run-busy");
+    const workItem = Storage.get().workItem;
+    if (!workItem) throw new Error("workItem adapter missing");
+    const original = workItem.compareAndSet.bind(workItem);
+    // SQLITE_BUSY shape as pinned by sqlite-busy.test.ts; facts.ts maps it to
+    // WorkItemUnavailableError. The old catch swallowed it into `false`, which
+    // callers discard — a busy DB silently lost the terminal attempt fact.
+    Object.defineProperty(workItem, "compareAndSet", {
+      configurable: true,
+      value: () => {
+        const busy = new Error("database is locked") as Error & { code: string; errno: number };
+        busy.code = "SQLITE_BUSY";
+        busy.errno = 5;
+        throw busy;
+      },
+    });
+    try {
+      await expect(
+        WorkItemAttemptRun.finish("sess-busy", "run-busy", "succeeded", "trace-busy", {}),
+      ).rejects.toThrow();
+    } finally {
+      Object.defineProperty(workItem, "compareAndSet", { configurable: true, value: original });
+    }
+  });
+
   test("find returns the attempt-fact view with parent session and executor", async () => {
     const hash = await seedRun("sess-view", "run-view");
 

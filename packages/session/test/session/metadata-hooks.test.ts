@@ -225,9 +225,11 @@ describe("Session.addMessage metadata hooks", () => {
   });
 
   describe("edge cases", () => {
-    test("does not throw when session does not exist", () => {
+    test("refuses a write for a missing session — no silent drop", () => {
+      // Pin (#606 audit): ingress records its ledger fact BEFORE this call;
+      // a silent return here was record-without-act with zero telemetry.
       const msg = makeUserMessage("nonexistent-session");
-      expect(() => Session.addMessage("nonexistent-session", msg)).not.toThrow();
+      expect(() => Session.addMessage("nonexistent-session", msg)).toThrow("session not found");
     });
 
     test("preserves other session fields when updating metadata", () => {
