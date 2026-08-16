@@ -21,7 +21,7 @@ export class GitHubClient {
       this.publish(Operational.Warn, {
         traceId,
         time: Date.now(),
-        component: "channel.github",
+        component: "server",
         msg: "github token missing — reply not posted",
         context: { repo, issueNumber },
       });

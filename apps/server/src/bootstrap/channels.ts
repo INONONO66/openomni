@@ -50,6 +50,7 @@ export function createChannelAdapters(
             ? [{ type: "sender" as const, allow: config.telegram.allowedUsers }]
             : []),
         ],
+        deliveryPolicy: "final",
       },
       publish,
     );
@@ -68,6 +69,7 @@ export function createChannelAdapters(
             ? [{ type: "sender" as const, allow: config.github.allowedUsers }]
             : []),
         ],
+        deliveryPolicy: "final",
       },
       publish,
       config.github.token,
@@ -88,6 +90,7 @@ export function createChannelAdapters(
             ? [{ type: "sender" as const, allow: config.discord.allowedUsers }]
             : []),
         ],
+        deliveryPolicy: "final",
       },
       publish,
     );

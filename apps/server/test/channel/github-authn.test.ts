@@ -8,6 +8,7 @@ type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 const secret = "github-webhook-secret";
 const config = {
   triggers: [],
+  deliveryPolicy: "final",
 } satisfies Adapter.Config;
 
 describe("GitHubAdapter channel-authn", () => {
@@ -109,6 +110,7 @@ describe("GitHubAdapter channel-authn", () => {
         { type: "event", events: ["issue_comment.created"] },
         { type: "label", values: ["approved"] },
       ],
+      deliveryPolicy: "final",
     });
     const request = new Request("http://localhost/github/webhook", {
       method: "POST",
