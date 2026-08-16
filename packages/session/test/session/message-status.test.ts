@@ -56,6 +56,7 @@ describe("message status tracking", () => {
 
   test("addMessage without status defaults to 'completed'", () => {
     const session = Session.create({
+      traceId: "trace-message-status",
       title: "test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -68,6 +69,7 @@ describe("message status tracking", () => {
 
   test("addMessage with status 'received'", () => {
     const session = Session.create({
+      traceId: "trace-message-status",
       title: "test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -80,6 +82,7 @@ describe("message status tracking", () => {
 
   test("updateMessageStatus transitions through lifecycle", () => {
     const session = Session.create({
+      traceId: "trace-message-status",
       title: "test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -100,6 +103,7 @@ describe("message status tracking", () => {
     Storage.initialize({ dbPath: ":memory:" });
 
     const session = Session.create({
+      traceId: "trace-message-status",
       title: "test",
       model: { providerID: "test", modelID: "test-model" },
     });
@@ -113,6 +117,7 @@ describe("message status tracking", () => {
 
   test("setStatus on adapter level", () => {
     const session = Session.create({
+      traceId: "trace-message-status",
       title: "test",
       model: { providerID: "test", modelID: "test-model" },
     });

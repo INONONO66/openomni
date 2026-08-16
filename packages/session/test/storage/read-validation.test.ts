@@ -42,7 +42,11 @@ function corruptRow(dbPath: string, table: string, id: string, data: string): vo
 }
 
 async function seedWorkerRun(runId: string): Promise<string> {
-  const session = Session.create({ title: runId, model: { providerID: "test", modelID: "test" } });
+  const session = Session.create({
+    traceId: "trace-read-validation",
+    title: runId,
+    model: { providerID: "test", modelID: "test" },
+  });
   const adapter = Storage.getAdapter().workerRunState;
   if (!adapter) throw new Error("workerRunState sub-adapter missing");
   adapter.create(session.id, {
@@ -160,6 +164,7 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
 
   test("a corrupt message row rejects on read", () => {
     const session = Session.create({
+      traceId: "trace-read-validation",
       title: "s",
       model: { providerID: "test", modelID: "test" },
     });
@@ -173,6 +178,7 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
 
   test("a corrupt part row rejects on read", () => {
     const session = Session.create({
+      traceId: "trace-read-validation",
       title: "s",
       model: { providerID: "test", modelID: "test" },
     });

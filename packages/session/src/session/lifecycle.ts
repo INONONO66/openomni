@@ -4,12 +4,14 @@ import { Storage } from "../storage/storage";
 import { Event } from "./events";
 
 type CreateInput = {
+  traceId: string;
   title: string;
   model: { providerID: string; modelID: string };
   ttlMs?: number;
 };
 
 type CreateChildInput = {
+  traceId: string;
   parentSessionId: string;
   title: string;
   model: { providerID: string; modelID: string };
@@ -37,7 +39,7 @@ export function create(input: CreateInput): SessionInfo {
   };
 
   Storage.getAdapter().session.set(id, session);
-  Bus.publish(Event.Created, { info: session });
+  Bus.publish(Event.Created, { traceId: input.traceId, info: session });
 
   return session;
 }
@@ -64,7 +66,7 @@ export function createChild(input: CreateChildInput): SessionInfo {
   };
 
   Storage.getAdapter().session.set(id, child);
-  Bus.publish(Event.Created, { info: child });
+  Bus.publish(Event.Created, { traceId: input.traceId, info: child });
 
   return child;
 }
@@ -100,12 +102,12 @@ export function list(): SessionInfo[] {
  * WaitService.sweepExpired; there is no periodic scheduler yet, so long-lived
  * processes re-sweep only on restart.
  */
-export function sweepExpired(now = Date.now()): SessionInfo[] {
+export function sweepExpired(traceId: string, now = Date.now()): SessionInfo[] {
   const expired = Storage.getAdapter()
     .session.list()
     .filter((session) => isExpired(session, now));
   for (const session of expired) {
-    remove(session.id);
+    remove(session.id, traceId);
   }
   return expired;
 }
@@ -141,7 +143,7 @@ export function update(id: string, input: UpdateInput): SessionInfo | undefined 
   return updated;
 }
 
-export function remove(id: string): boolean {
+export function remove(id: string, traceId: string): boolean {
   const adapter = Storage.getAdapter();
   const exists = adapter.session.get(id) !== undefined;
   if (exists) {
@@ -154,7 +156,7 @@ export function remove(id: string): boolean {
       adapter.message.remove(id, msg.id);
     }
     adapter.session.remove(id);
-    Bus.publish(Event.Deleted, { id });
+    Bus.publish(Event.Deleted, { traceId, id });
   }
   return exists;
 }
@@ -163,6 +165,6 @@ export async function suspend(id: string): Promise<boolean> {
   return get(id) !== undefined;
 }
 
-export async function abandon(id: string): Promise<boolean> {
-  return remove(id);
+export async function abandon(id: string, traceId: string): Promise<boolean> {
+  return remove(id, traceId);
 }

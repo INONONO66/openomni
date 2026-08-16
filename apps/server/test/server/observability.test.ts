@@ -59,6 +59,7 @@ describe("observability routes", () => {
   test("session event journal endpoint reads BusQuery aggregates without exposing payload data", async () => {
     const app = createRouter(undefined, { observabilityToken: "test-token" });
     const session = Session.create({
+      traceId: "trace-observability",
       title: "observability",
       model: { providerID: "test", modelID: "test-model" },
     });

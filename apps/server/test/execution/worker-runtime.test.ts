@@ -144,7 +144,7 @@ describe("worker runtime input messages", () => {
   });
 
   test("uses the projected session prompt when it is already the latest user message", () => {
-    const session = Session.create({ title: "worker", model });
+    const session = Session.create({ traceId: "trace-worker-runtime", title: "worker", model });
     addTextMessage(session.id, "user", "do the work");
 
     expect(buildWorkerInputMessages(session.id, "do the work")).toEqual([
@@ -159,7 +159,7 @@ describe("worker runtime input messages", () => {
   });
 
   test("appends the request prompt after stale projected history", () => {
-    const session = Session.create({ title: "worker", model });
+    const session = Session.create({ traceId: "trace-worker-runtime", title: "worker", model });
     addTextMessage(session.id, "user", "old request");
     addTextMessage(session.id, "assistant", "old answer");
 

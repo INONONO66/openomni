@@ -38,6 +38,7 @@ async function seedFrozenPendingInteractionFixture(
   lifecycle: "open" | "follow_up" = "open",
 ): Promise<void> {
   const session = Session.create({
+    traceId: "trace-recovery",
     title: `${id}-session`,
     model: { providerID: "test", modelID: "test" },
   });
@@ -388,6 +389,7 @@ describe("server recovery", () => {
 
   it("replays interrupted inbound messages through the retry queue handler", async () => {
     const session = Session.create({
+      traceId: "trace-retry-queue",
       title: "surface:retry-queue",
       model: { providerID: "test", modelID: "test" },
     });
@@ -434,6 +436,7 @@ describe("server recovery", () => {
 
   it("swallows a throwing retry handler and finishes recovery", async () => {
     const session = Session.create({
+      traceId: "trace-retry-throw",
       title: "surface:retry-throw",
       model: { providerID: "test", modelID: "test" },
     });

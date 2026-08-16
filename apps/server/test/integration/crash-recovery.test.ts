@@ -38,6 +38,7 @@ afterEach(async () => {
 
 test("marks processing message as received when no assistant response", async () => {
   const session = Session.create({
+    traceId: "trace-test",
     title: "recovery",
     model: { providerID: "test", modelID: "test-model" },
   });
