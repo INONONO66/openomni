@@ -153,6 +153,10 @@ describe("run() streamText arguments", () => {
     // Reads the LAST step's cache-inclusive input — not a sum across steps.
     expect(windowYield({ steps: [{ usage: { inputTokens: 900 } }] })).toBe(true);
     expect(windowYield({ steps: [{ usage: { inputTokens: 799 } }] })).toBe(false);
+    // Boundary pin (#606 audit M1): the threshold itself yields — AT the
+    // window is at the window; a `>` drift here silently defers compaction
+    // by one step on every exact hit.
+    expect(windowYield({ steps: [{ usage: { inputTokens: 800 } }] })).toBe(true);
     expect(
       windowYield({ steps: [{ usage: { inputTokens: 900 } }, { usage: { inputTokens: 700 } }] }),
     ).toBe(false);

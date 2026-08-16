@@ -56,6 +56,10 @@ describe("Processor retry cap", () => {
     const unsubRetry = Bus.subscribe(LlmCall.RetryDecided, (event) => {
       retries.push(event.maxAttempts);
     });
+    const exhausted: string[] = [];
+    const unsubExhausted = Bus.subscribe(Operational.Error, (event) => {
+      if (event.msg === "retry attempts exhausted") exhausted.push(String(event.error));
+    });
 
     const processor = Processor.create({
       assistantMessage: assistantMessage(),
@@ -87,11 +91,14 @@ describe("Processor retry cap", () => {
       expect(e).toBe(retryErrors[2]);
     } finally {
       unsubRetry();
+      unsubExhausted();
     }
 
     expect(attemptCount).toBe(3);
     expect(retries).toHaveLength(2);
     expect(retries).toEqual([2, 2]);
+    // Pin (#606 audit): budget exhaustion is a decline too — it must say why.
+    expect(exhausted).toEqual(["rate_limit: attempt cap 2 exceeded"]);
   });
 });
 

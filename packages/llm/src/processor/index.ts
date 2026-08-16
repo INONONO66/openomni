@@ -43,8 +43,8 @@ export namespace Processor {
      * Where observation goes. A port, not `Bus`, so that what sits behind it
      * is the caller's choice: tests bind a collector, and P2 can split a
      * fail-closed ledger append from the lossy bus without touching this file.
-     * Today the agent hard-binds `Bus` at `turn-prepare.ts` — moving that to
-     * the composition root is the next slice, not something this file knows.
+     * The agent passes its own injected port through (turn.ts) — no telemetry
+     * import exists anywhere in agent src.
      */
     events: BusEvent.Sink;
     createStream: (input: StreamInput) => Promise<Stream>;
@@ -211,6 +211,17 @@ export namespace Processor {
                       decision.detail === undefined
                         ? decision.reason
                         : `${decision.reason}: ${decision.detail}`,
+                  });
+                } else if (decision.retry) {
+                  // Cap exhaustion is a decline too: the terminal error alone
+                  // does not say the retry budget ran out (#606 audit).
+                  events.publish(Operational.Error, {
+                    traceId: trace.traceId,
+                    time: Date.now(),
+                    sessionId: trace.sessionId,
+                    component: "llm.retry",
+                    msg: "retry attempts exhausted",
+                    error: `${decision.reason}: attempt cap ${retryAttemptLimit} exceeded`,
                   });
                 }
                 const aborted = e instanceof DOMException && e.name === "AbortError";
