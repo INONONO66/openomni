@@ -39,6 +39,48 @@ describe("GitHubAdapter channel-authn", () => {
     ]);
   });
 
+  it("an empty-STRING issue body dispatches with the title — never vanishes (#606)", async () => {
+    // Pin for the `body || title` extractor: GitHub sends "" bodies, and a
+    // `??` regression would ignore the title and the empty-normalization
+    // drop would silently swallow a label-triggered event.
+    const decisions: ChannelAuthnDecision[] = [];
+    const body = JSON.stringify({
+      action: "opened",
+      issue: {
+        number: 7,
+        title: "Fix the flaky build",
+        body: "",
+        labels: [{ name: "approved" }],
+        user: { login: "octocat", type: "User" },
+      },
+      repository: {
+        full_name: "openomni/project",
+        owner: { login: "openomni" },
+        name: "project",
+      },
+    });
+    const adapter = createAdapter(decisions, {
+      triggers: [
+        { type: "event", events: ["issues.opened"] },
+        { type: "label", values: ["approved"] },
+      ],
+      deliveryPolicy: "final",
+    });
+    const request = new Request("http://localhost/github/webhook", {
+      method: "POST",
+      headers: {
+        "x-hub-signature-256": await signGitHubBody(body),
+        "x-github-event": "issues",
+      },
+      body,
+    });
+
+    const response = await adapter.handleWebhook(request);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toBe("Filtered");
+  });
+
   it("rejects invalid HMAC signatures through channel-authn middleware", async () => {
     const decisions: ChannelAuthnDecision[] = [];
     const adapter = createAdapter(decisions);
