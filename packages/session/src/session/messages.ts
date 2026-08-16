@@ -19,7 +19,12 @@ export function addMessage(
 ): void {
   const adapter = Storage.getAdapter();
   const session = adapter.session.get(sessionID);
-  if (!session) return;
+  if (!session) {
+    // Fail closed: ingress appends its message.write ledger fact BEFORE this
+    // call — returning silently here left record-without-act with zero
+    // telemetry (unexplained message loss the ledger claims happened).
+    throw new Error(`addMessage: session not found: ${sessionID}`);
+  }
 
   const status = options?.status ?? "completed";
 

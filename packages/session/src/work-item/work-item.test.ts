@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { Operational, WorkItem } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
 import { ZodError } from "zod";
 import { Bus } from "@openomni/telemetry";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
@@ -764,9 +764,7 @@ describe("WorkItemStore", () => {
     await expect(WorkItemStore.retry("missing", "trace-test")).resolves.toBeUndefined();
   });
 
-  test("degrades gracefully when work item storage is missing", async () => {
-    const warnings: unknown[] = [];
-    Bus.subscribe(Operational.Warn, (event) => warnings.push(event));
+  test("refuses to fabricate a work item when storage is missing (#606)", async () => {
     Storage.configure({
       transaction: (operation) => operation(),
       session: {
@@ -789,13 +787,10 @@ describe("WorkItemStore", () => {
       },
     });
 
-    const item = await createItem("graceful");
-    await flushBus();
-
-    expect(item.hash).toStartWith("wi_");
-    expect(WorkItem.deriveStatus(item)).toBe("pending");
-    expect(warnings).toHaveLength(1);
-    expect(WorkItemStore.get(item.hash)).toBeUndefined();
+    // The old "graceful" path returned a phantom Info that was never
+    // persisted — a hash indistinguishable from a real create. WorkItem
+    // writes fail closed (facts.ts); creation is a write.
+    await expect(createItem("graceful")).rejects.toThrow("refusing to fabricate");
   });
 
   test("rolls back WorkItem graph removal and publishes no events when deletion fails", async () => {
