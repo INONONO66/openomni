@@ -33,10 +33,12 @@ const ReadBackBase = z.object({
 
 const ReadBackRequestBase = z.object({
   timeoutMs: z.number().int().positive().optional(),
-  // Omission is the CONSERVATIVE case: the default sits far under the 1 MB
-  // enforcement ceiling (worker-completion's MAX_READ_BACK_BODY_BYTES) — a
-  // worker that wants more must ask for it explicitly and pass the guard.
-  maxBodyBytes: z.number().int().positive().default(65_536),
+  // Omission must not be the most-permissive case (the old default EQUALLED
+  // the 1 MB enforcement ceiling), but the limit is reject-not-truncate: an
+  // over-cap body fails the whole check, so the default must still cover an
+  // ordinary article page. 256 KiB holds both — explicit requests up to the
+  // ceiling pass the worker-completion guard.
+  maxBodyBytes: z.number().int().positive().default(262_144),
 });
 
 // Deliberately NOT unified with AppConnector's CompletionReport.readBackRequests

@@ -47,11 +47,16 @@ export namespace Message {
     tokens: z.object({
       input: Token.Count,
       output: Token.Count,
-      reasoning: Token.Count,
-      cache: z.object({
-        read: Token.Count,
-        write: Token.Count,
-      }),
+      // DEFAULT-LIVE: read-side migration — parts persisted before #61
+      // (2026-03) lack the reasoning/cache lanes and the part adapter
+      // schema-parses every read; the producer states the lanes since then.
+      reasoning: Token.Count.default(0),
+      cache: z
+        .object({
+          read: Token.Count.default(0),
+          write: Token.Count.default(0),
+        })
+        .default({ read: 0, write: 0 }),
     }),
   });
   export type StepFinishPart = z.infer<typeof StepFinishPart>;
