@@ -33,7 +33,6 @@ describe("PolicyEngine canonical registration boundary", () => {
         priority: 0,
         scope: { agentType: ["resident"] },
         failPolicy: "fail-closed",
-        propagate: true,
         fn: allow,
       }),
     ).not.toThrow();
@@ -58,7 +57,6 @@ describe("PolicyEngine canonical registration boundary", () => {
       { scope: { agentType: "resident" } },
       { scope: { agentType: ["resident", 1] } },
       { failPolicy: "ignore" },
-      { propagate: "yes" },
     ];
 
     for (const override of malformed) {
@@ -79,7 +77,6 @@ test("reads each canonical boundary field once and stores the first trusted snap
     scope: 0,
     failPolicy: 0,
     fn: 0,
-    propagate: 0,
   };
   const first = <T>(field: keyof typeof reads, trusted: T, changed: T): T =>
     ++reads[field] === 1 ? trusted : changed;
@@ -117,9 +114,6 @@ test("reads each canonical boundary field once and stores the first trusted snap
         () => PolicyDecision.deny({ policyId: "changed-policy" }),
       );
     },
-    get propagate() {
-      return first("propagate", false, true);
-    },
   };
   const store = createPolicyRegistrationStore();
 
@@ -134,7 +128,6 @@ test("reads each canonical boundary field once and stores the first trusted snap
     priority: 10,
     scope: { agentType: ["resident"] },
     failPolicy: "fail-open",
-    propagate: false,
   });
   expect((await stored?.fn({ pointId: "run.lifecycle.post", timing: "run.finish" }))?.verdict).toBe(
     "allow",
@@ -148,7 +141,6 @@ test("reads each canonical boundary field once and stores the first trusted snap
     scope: 1,
     failPolicy: 1,
     fn: 1,
-    propagate: 1,
   });
 });
 
@@ -209,7 +201,7 @@ test("rejects a legacy-shaped proxy fail-closed without reclassifying its later 
   for (const field of ["kind", "name", "pointIds", "effectCapabilities"]) {
     expect(reads[field]).toBe(1);
   }
-  for (const field of ["timing", "priority", "scope", "failPolicy", "fn", "propagate"]) {
+  for (const field of ["timing", "priority", "scope", "failPolicy", "fn"]) {
     expect(reads[field]).toBeUndefined();
   }
 });
@@ -222,7 +214,6 @@ test("rejects legacy timing snapshot registrations fail-closed without storing t
     priority: 10,
     scope: { agentType: ["resident"] },
     failPolicy: "fail-open",
-    propagate: true,
     fn: () => PolicyDecision.allow({ policyId: "legacy-snapshot" }),
   };
 

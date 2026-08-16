@@ -5,7 +5,6 @@ export type {
   PolicyEngineConfig,
   GenericPolicyContext,
   CanonicalPolicyRegistrationGeneric,
-  PolicyEngineRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
   CanonicalAuditDispatchContextGeneric,

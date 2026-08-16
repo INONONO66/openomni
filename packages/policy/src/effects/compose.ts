@@ -43,7 +43,7 @@ export function composeEffects(decisions: Policy.PolicyDecision[]): Policy.Effec
 
   return {
     verdict,
-    mergedEffects: [...merged.effects, ...merged.postConflicts.map(conflictDiagnostic)],
+    mergedEffects: merged.effects,
     obligations: verdict === "pending" ? collectObligations(orderedDecisions) : [],
     contributingPolicies,
   };
