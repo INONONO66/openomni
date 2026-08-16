@@ -3,6 +3,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkItemAttemptRun } from "../../src/work-item/attempt-run";
+import { WorkerRunStateStore } from "../../src/worker-run/state-store";
 import { WorkItemStore } from "../../src/work-item/index";
 
 /**
@@ -262,6 +263,11 @@ describe("WorkItemAttemptRun", () => {
       parentSessionId: "legacy-parent",
       source: "worker_run_upcast",
     });
+    // Terminal legacy rows derive endedAt from their persisted update time —
+    // the only timestamp the frozen archive still carries for the end.
+    const doneRow = WorkerRunStateStore.get("sess-upcast", "run-legacy-done");
+    expect(done?.endedAt).toBe(doneRow?.timeUpdated);
+    expect(done?.startedAt).toBe(doneRow?.timeCreated);
 
     const open = WorkItemAttemptRun.find("sess-upcast", "run-legacy-open");
     expect(open?.status).toBe("interrupted");

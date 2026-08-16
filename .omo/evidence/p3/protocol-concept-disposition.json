@@ -458,7 +458,7 @@
         "testPins": [
           "packages/protocol/test/worker-run.test.ts:73-98 (Events)",
           "packages/session/test/worker-run/frozen.test.ts (FrozenError)",
-          "packages/session/test/worker-run/contract-alias.test.ts:14,17 (Status)"
+          "packages/session/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
@@ -477,7 +477,7 @@
           "packages/session/src/worker-run/state-store.ts:24 (thrown on every frozen write; callers branch on data.code === 'worker_run_frozen')"
         ],
         "testPins": [
-          "packages/session/test/worker-run/frozen.test.ts:73-180"
+          "packages/session/test/worker-run/frozen.test.ts:63-120 (rewritten against WorkerRunStateStore in #679)"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
@@ -498,7 +498,7 @@
           "apps/server/src/execution/worker-runner-events.ts (Events payloads embed Status)"
         ],
         "testPins": [
-          "packages/session/test/worker-run/contract-alias.test.ts:14,17"
+          "packages/session/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
