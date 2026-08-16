@@ -143,8 +143,11 @@ describe("Ingress actor resolver sanitization", () => {
 
   it("keeps ingest working with storage adapters that do not implement actorRegistry", async () => {
     // Given
-    const { actorRegistry: _actorRegistry, ...legacyAdapter } = Storage.get();
-    Storage.configure(legacyAdapter);
+    const base = Storage.get();
+    const { actorRegistry: _actorRegistry, ...legacyAdapter } = base;
+    // Spreading a class instance loses prototype methods — rebind the
+    // required transaction so only actorRegistry is absent.
+    Storage.configure({ ...legacyAdapter, transaction: base.transaction.bind(base) });
     let capturedActor: Ingress.Actor | undefined;
     const engine = getIngressEngine();
     const unobserve = observeResolvedActor("event-user-1", (actor) => {
