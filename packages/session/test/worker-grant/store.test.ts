@@ -176,7 +176,13 @@ describe("WorkerGrantStore", () => {
   test("evaluation stays read-only for past-expiry active grants; cleanup emits expiration", async () => {
     await createWorkerRun("run-expired");
     const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
+    const expired: Array<{ name: string; traceId: unknown }> = [];
+    Bus.observe((event, data) => {
+      events.push(event.name);
+      if (event.name === "worker_grant.expired") {
+        expired.push({ name: event.name, traceId: (data as { traceId?: string }).traceId });
+      }
+    });
     WorkerGrantStore.create(
       {
         id: "grant-expired",
@@ -200,10 +206,13 @@ describe("WorkerGrantStore", () => {
 
     expect(WorkerGrantStore.get("grant-expired")?.status).toBe("active");
 
-    WorkerGrantStore.cleanupExpired("trace-grant-test", "run-expired");
+    WorkerGrantStore.cleanupExpired("trace-cleanup", "run-expired");
     expect(WorkerGrantStore.get("grant-expired")?.status).toBe("expired");
     await new Promise((resolve) => queueMicrotask(resolve));
-    expect(events).toContain("worker_grant.expired");
+    // Pin (D11): (traceId, workerRunId?) is swap-prone — both are strings and
+    // the old signature was (workerRunId?). Asserting the exact trace catches
+    // a stale-style cleanupExpired(runId) call that stamps the runId as trace.
+    expect(expired).toEqual([{ name: "worker_grant.expired", traceId: "trace-cleanup" }]);
     expect(events.filter((event) => event === "worker_grant.updated")).toHaveLength(0);
   });
 

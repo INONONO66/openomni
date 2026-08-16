@@ -210,7 +210,9 @@ function isWorkerScopedEgress(action: string): boolean {
 
 // A missing trace here is a wiring bug: the runtime builds every dispatch
 // point's traceContext from the command. The policy is fail-closed, so the
-// throw surfaces as a deny plus a recorded middleware error — never a mint.
+// throw surfaces as an unconditional deny — never a mint. The middleware
+// error record is trace-gated: it files because the runtime also gives the
+// ENGINE the command trace (with neither trace, the engine denies silently).
 function requireDispatchTraceId(ctx: {
   readonly traceContext?: { readonly traceId?: string };
 }): string {
