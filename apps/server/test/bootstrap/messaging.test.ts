@@ -47,6 +47,7 @@ describe("server messaging bootstrap wiring", () => {
       operation: "fire_and_forget",
       body: "should never leave the process",
       at: now,
+      traceId: "trace-test",
     });
 
     expect(receipt.kind).toBe("denied");
@@ -81,6 +82,7 @@ describe("server messaging bootstrap wiring", () => {
       operation: "awaited",
       body: "please confirm",
       at: now,
+      traceId: "trace-test",
       waitSpec: {
         waitId: "wait:server-awaited",
         ownerRef: { kind: "session", id: "session:owner" },
@@ -124,6 +126,7 @@ describe("server messaging bootstrap wiring", () => {
         operation: "fire_and_forget",
         body: "no surface delivers this channel",
         at: now,
+        traceId: "trace-test",
       }),
     ).rejects.toThrow("no registered channel surface delivers github");
   });

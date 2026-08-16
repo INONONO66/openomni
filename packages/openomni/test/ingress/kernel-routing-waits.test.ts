@@ -1026,18 +1026,21 @@ describe("IngressEngine durable wait routing", () => {
       title: id,
       model: { providerID: "test", modelID: "test-model" },
     });
-    return WaitService.open({
-      id,
-      ownerRef: { kind: "session", id: session.id },
-      originMessageId: `out-${id}`,
-      correlation: { channelId: correlation.channelId, tokenHash: correlation.tokenHash },
-      allowedActions: ["report_result"],
-      expectedResponders: ["actor-external-worker"],
-      resolutionPolicy: "first_reply",
-      expiresAt: Number.MAX_SAFE_INTEGER,
-      followUpWindow: 60_000,
-      ...overrides,
-    });
+    return WaitService.open(
+      {
+        id,
+        ownerRef: { kind: "session", id: session.id },
+        originMessageId: `out-${id}`,
+        correlation: { channelId: correlation.channelId, tokenHash: correlation.tokenHash },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-external-worker"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Number.MAX_SAFE_INTEGER,
+        followUpWindow: 60_000,
+        ...overrides,
+      },
+      "trace-test",
+    );
   }
 
   test("attaches a matched reply to the durable wait and routes it to the owner session", async () => {
@@ -1121,11 +1124,15 @@ describe("IngressEngine durable wait routing", () => {
       expiresAt: 10_000,
     });
     // An in-deadline reply recorded partial progress before the wait ran out.
-    const early = WaitService.attachReply("wait-late-reply", {
-      replyKey: "reply-early",
-      responderCandidates: ["actor-b"],
-      at: 1_000,
-    });
+    const early = WaitService.attachReply(
+      "wait-late-reply",
+      {
+        replyKey: "reply-early",
+        responderCandidates: ["actor-b"],
+        at: 1_000,
+      },
+      "trace-test",
+    );
     expect(early.kind).toBe("attached");
 
     const error = await captureError(kernelEngine().ingest(replyEvent("inbound-wait-late")));
@@ -1314,6 +1321,7 @@ describe("IngressEngine durable wait routing", () => {
       operation: "awaited",
       body: "reply with your verdict (2-of-3)",
       at: Date.now(),
+      traceId: "trace-test",
       waitSpec: {
         waitId: "wait-wired-quorum",
         ownerRef: { kind: "session", id: session.id },

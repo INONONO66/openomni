@@ -83,6 +83,8 @@ const SendInputBase = z
   .object({
     /** Outbound message identity: doubles as the Wait's originMessageId, whose UNIQUE column pins "exactly one Wait per awaited message". */
     messageId: z.string().min(1),
+    /** The sender flow's trace: every event this send leaves files under it. */
+    traceId: z.string().min(1),
     senderId: z.string().min(1),
     target: MessageTarget,
     operation: MessageOperation,

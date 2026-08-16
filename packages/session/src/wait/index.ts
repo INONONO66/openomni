@@ -131,9 +131,10 @@ function factOf(outcome: CommittedOutcome): { type: string; data: Record<string,
   }
 }
 
-function eventBase(record: Wait.Record, time: number) {
+function eventBase(record: Wait.Record, time: number, traceId: string) {
   return {
     id: record.id,
+    traceId,
     ownerKind: record.ownerRef.kind,
     ownerId: record.ownerRef.id,
     status: record.status,
@@ -158,8 +159,8 @@ function stillCorrelatable(record: Wait.Record, now: number): boolean {
 // are lossy projections of the appended facts and fire only AFTER the
 // append+projection transaction committed — a subscriber can never write the
 // ledger or authorize an action from them.
-function publishChange(outcome: CommittedOutcome): void {
-  const base = eventBase(outcome.record, outcome.record.updatedAt);
+function publishChange(outcome: CommittedOutcome, traceId: string): void {
+  const base = eventBase(outcome.record, outcome.record.updatedAt, traceId);
   switch (outcome.kind) {
     case "attached":
       Bus.publish(Wait.Events.ReplyAttached, {
@@ -200,7 +201,7 @@ function publishChange(outcome: CommittedOutcome): void {
 export namespace WaitStore {
   export type Record = Wait.Record;
 
-  export function create(input: Wait.Create): Wait.Record {
+  export function create(input: Wait.Create, traceId: string): Wait.Record {
     const adapter = requireAdapter();
     const ledger = requireLedger();
     // Single write-shape owner: this Record.parse is the factory that
@@ -243,7 +244,7 @@ export namespace WaitStore {
       if (appended.kind === "cas_conflict") throw duplicate();
       if (!adapter.create(record)) throw duplicate();
     });
-    Bus.publish(Wait.Events.Opened, eventBase(record, record.createdAt));
+    Bus.publish(Wait.Events.Opened, eventBase(record, record.createdAt, traceId));
     return record;
   }
 
@@ -274,6 +275,7 @@ export namespace WaitStore {
   export function transition(
     id: string,
     step: (record: Wait.Record) => Wait.Outcome,
+    traceId: string,
   ): Wait.Outcome {
     const adapter = requireAdapter();
     const ledger = requireLedger();
@@ -334,16 +336,16 @@ export namespace WaitStore {
         throw revisionConflict(id, current.revision);
       }
     });
-    publishChange(outcome);
+    publishChange(outcome, traceId);
     return outcome;
   }
 
-  export function attachReply(id: string, input: Wait.ReplyInput): Wait.Outcome {
+  export function attachReply(id: string, input: Wait.ReplyInput, traceId: string): Wait.Outcome {
     const parsed = Wait.ReplyInput.parse(input);
-    const outcome = transition(id, (record) => Wait.attachReply(record, parsed));
+    const outcome = transition(id, (record) => Wait.attachReply(record, parsed), traceId);
     if (outcome.kind === "rejected") {
       Bus.publish(Wait.Events.ReplyRejected, {
-        ...eventBase(outcome.record, outcome.at),
+        ...eventBase(outcome.record, outcome.at, traceId),
         code: outcome.code,
         replyKey: parsed.replyKey,
       });
@@ -360,16 +362,17 @@ export namespace WaitStore {
   export function recordDeliveryReceipt(
     id: string,
     input: Wait.DeliveryReceiptInput,
+    traceId: string,
   ): Wait.Outcome {
     const parsed = Wait.DeliveryReceiptInput.parse(input);
-    return transition(id, (record) => Wait.recordDeliveryReceipt(record, parsed));
+    return transition(id, (record) => Wait.recordDeliveryReceipt(record, parsed), traceId);
   }
 
-  export function expire(id: string, at = Date.now()): Wait.Outcome {
-    return transition(id, (record) => Wait.expire(record, { at }));
+  export function expire(id: string, traceId: string, at = Date.now()): Wait.Outcome {
+    return transition(id, (record) => Wait.expire(record, { at }), traceId);
   }
 
-  export function cancel(id: string, at = Date.now()): Wait.Outcome {
-    return transition(id, (record) => Wait.cancel(record, { at }));
+  export function cancel(id: string, traceId: string, at = Date.now()): Wait.Outcome {
+    return transition(id, (record) => Wait.cancel(record, { at }), traceId);
   }
 }

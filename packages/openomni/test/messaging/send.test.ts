@@ -46,11 +46,11 @@ afterEach(() => {
 describe("sender-target grant (policy plane)", () => {
   test("send without any covering grant is denied ungranted and delivers nothing", async () => {
     grants = [];
-    const audits: { code: string; time: number }[] = [];
+    const audits: { code: string; time: number; traceId: string }[] = [];
     Bus.observe((event, payload) => {
       if (event.name !== "messaging.denied") return;
-      const data = payload as { code: string; time: number };
-      audits.push({ code: data.code, time: data.time });
+      const data = payload as { code: string; time: number; traceId: string };
+      audits.push({ code: data.code, time: data.time, traceId: data.traceId });
     });
 
     const receipt = await messaging().send(buildSendInput());
@@ -61,7 +61,8 @@ describe("sender-target grant (policy plane)", () => {
     expect(deliveries).toHaveLength(0);
     expect(WaitStore.list()).toHaveLength(0);
     await flushBus();
-    expect(audits).toEqual([{ code: "ungranted", time: messagingNow }]);
+    // Pin (D11): the denial audit inherits the send input's trace.
+    expect(audits).toEqual([{ code: "ungranted", time: messagingNow, traceId: "trace-messaging" }]);
   });
 
   test("a grant bounds the operation: fire_and_forget-only grant denies awaited delivery", async () => {
@@ -168,13 +169,19 @@ describe("explicit target resolution (fail closed)", () => {
 
 describe("fire-and-forget delivery", () => {
   test("records one sent audit and creates NO Wait", async () => {
-    const audits: { operation: string; waitId?: string; grantId: string }[] = [];
+    const audits: { operation: string; waitId?: string; grantId: string; traceId: string }[] = [];
     Bus.observe((event, payload) => {
       if (event.name !== "messaging.sent") return;
-      const data = payload as { operation: string; waitId?: string; grantId: string };
+      const data = payload as {
+        operation: string;
+        waitId?: string;
+        grantId: string;
+        traceId: string;
+      };
       audits.push({
         operation: data.operation,
         grantId: data.grantId,
+        traceId: data.traceId,
         ...(data.waitId === undefined ? {} : { waitId: data.waitId }),
       });
     });
@@ -201,7 +208,10 @@ describe("fire-and-forget delivery", () => {
       },
     ]);
     await flushBus();
-    expect(audits).toEqual([{ operation: "fire_and_forget", grantId: "grant:sender->target" }]);
+    expect(audits).toEqual([
+      // Pin (D11): the sent audit inherits the send input's trace.
+      { operation: "fire_and_forget", grantId: "grant:sender->target", traceId: "trace-messaging" },
+    ]);
   });
 
   test("fire_and_forget carrying a waitSpec is a schema violation, not a silent Wait", async () => {

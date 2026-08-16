@@ -19,12 +19,15 @@ afterEach(() => {
 
 describe("WaitService", () => {
   test("open records exactly one durable Wait for an awaited delivery", () => {
-    const record = WaitService.open(buildWaitCreate("wait-open"));
+    const record = WaitService.open(buildWaitCreate("wait-open"), "trace-test");
 
     expect(WaitStore.get("wait-open")).toEqual(record);
     const duplicate = (() => {
       try {
-        WaitService.open(buildWaitCreate("wait-open-2", { originMessageId: "out-wait-open" }));
+        WaitService.open(
+          buildWaitCreate("wait-open-2", { originMessageId: "out-wait-open" }),
+          "trace-test",
+        );
       } catch (error) {
         if (Wait.StoreError.isInstance(error)) return error;
         throw error;
@@ -41,18 +44,27 @@ describe("WaitService", () => {
         resolutionPolicy: "quorum",
         quorum: { expected: 2, threshold: 2 },
       }),
+      "trace-test",
     );
 
-    const attached = WaitService.attachReply("wait-reply", {
-      replyKey: "inbound-1",
-      responderCandidates: ["actor-a"],
-      at: 1_000,
-    });
-    const resolved = WaitService.attachReply("wait-reply", {
-      replyKey: "inbound-2",
-      responderCandidates: ["actor-b"],
-      at: 2_000,
-    });
+    const attached = WaitService.attachReply(
+      "wait-reply",
+      {
+        replyKey: "inbound-1",
+        responderCandidates: ["actor-a"],
+        at: 1_000,
+      },
+      "trace-test",
+    );
+    const resolved = WaitService.attachReply(
+      "wait-reply",
+      {
+        replyKey: "inbound-2",
+        responderCandidates: ["actor-b"],
+        at: 2_000,
+      },
+      "trace-test",
+    );
 
     expect(attached.kind).toBe("attached");
     expect(resolved.kind).toBe("resolved");
@@ -64,13 +76,17 @@ describe("WaitService", () => {
   });
 
   test("zero matcher candidates fold to a typed unknown_responder rejection", () => {
-    WaitService.open(buildWaitCreate("wait-unknown"));
+    WaitService.open(buildWaitCreate("wait-unknown"), "trace-test");
 
-    const outcome = WaitService.attachReply("wait-unknown", {
-      replyKey: "inbound-unknown",
-      responderCandidates: [],
-      at: 1_000,
-    });
+    const outcome = WaitService.attachReply(
+      "wait-unknown",
+      {
+        replyKey: "inbound-unknown",
+        responderCandidates: [],
+        at: 1_000,
+      },
+      "trace-test",
+    );
 
     expect(outcome.kind).toBe("rejected");
     if (outcome.kind !== "rejected") throw new Error("expected rejected");
@@ -81,9 +97,9 @@ describe("WaitService", () => {
   test("cancel folds an open wait to cancelled, persists it, and stays terminal", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
-    WaitService.open(buildWaitCreate("wait-cancel"));
+    WaitService.open(buildWaitCreate("wait-cancel"), "trace-test");
 
-    const outcome = WaitService.cancel("wait-cancel", 2_000);
+    const outcome = WaitService.cancel("wait-cancel", "trace-test", 2_000);
 
     expect(outcome.kind).toBe("cancelled");
     if (outcome.kind !== "cancelled") throw new Error("expected cancelled");
@@ -96,7 +112,7 @@ describe("WaitService", () => {
     expect(events).toContain("wait.cancelled");
 
     // Terminal: a second cancel is a typed wait_terminal rejection, unpersisted.
-    const again = WaitService.cancel("wait-cancel", 3_000);
+    const again = WaitService.cancel("wait-cancel", "trace-test", 3_000);
     expect(again.kind).toBe("rejected");
     if (again.kind !== "rejected") throw new Error("expected rejected");
     expect(again.code).toBe("wait_terminal");
@@ -120,13 +136,21 @@ describe("WaitService", () => {
         quorum: { expected: 3, threshold: 2 },
         expiresAt: 10_000,
       }),
+      "trace-test",
     );
-    WaitService.open(buildWaitCreate("wait-untouched", { originMessageId: "out-untouched" }));
-    WaitService.attachReply("wait-partial", {
-      replyKey: "inbound-1",
-      responderCandidates: ["actor-a"],
-      at: 1_000,
-    });
+    WaitService.open(
+      buildWaitCreate("wait-untouched", { originMessageId: "out-untouched" }),
+      "trace-test",
+    );
+    WaitService.attachReply(
+      "wait-partial",
+      {
+        replyKey: "inbound-1",
+        responderCandidates: ["actor-a"],
+        at: 1_000,
+      },
+      "trace-test",
+    );
 
     const expired = WaitService.sweepExpired("trace-test", 10_001);
 
@@ -147,9 +171,10 @@ describe("WaitService", () => {
           : {}),
       }),
     );
-    WaitService.open(buildWaitCreate("wait-corrupt", { expiresAt: 10_000 }));
+    WaitService.open(buildWaitCreate("wait-corrupt", { expiresAt: 10_000 }), "trace-test");
     WaitService.open(
       buildWaitCreate("wait-healthy", { originMessageId: "out-healthy", expiresAt: 10_000 }),
+      "trace-test",
     );
     // Corrupt one wait's owner stream: an extra fact advances the head past
     // the projected revision, so its expiry transition hits a permanent
