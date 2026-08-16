@@ -146,10 +146,23 @@ export namespace WorkerGrantStore {
     traceId: string,
     workerRunId?: string,
   ): Communication.WorkerGrant.Record[] {
-    return requireAdapter()
-      .list(workerRunId)
-      .filter((grant) => isPastExpiry(grant))
-      .map((grant) => expire(grant.id, traceId));
+    const expired: Communication.WorkerGrant.Record[] = [];
+    const failures: string[] = [];
+    for (const grant of requireAdapter().list(workerRunId)) {
+      if (!isPastExpiry(grant)) continue;
+      try {
+        expired.push(expire(grant.id, traceId));
+      } catch (error) {
+        // One lost race must not abandon the rest of the sweep.
+        failures.push(`${grant.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(
+        `worker grant sweep: ${failures.length} expiry write(s) failed — ${failures.join("; ")}`,
+      );
+    }
+    return expired;
   }
 
   export function evaluate(

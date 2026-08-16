@@ -19,12 +19,13 @@ export function addMessage(
 
   const status = options?.status ?? "completed";
 
-  // The counter update below is get→mutate→set without a CAS. It is safe
-  // because session rows have exactly one writer process (server ingress +
-  // dispatch); worker processes write only message/part/transcript_fact.
-  // A second session-row writer requires a revision column + CAS, per the
+  // The counter update below is get→mutate→set without a CAS, and the read
+  // above runs BEFORE the transaction — its safety rests entirely on session
+  // rows having exactly one writer process (server ingress + dispatch;
+  // worker processes write only message/part/transcript_fact). A second
+  // session-row writer requires a revision column + CAS, per the
   // wait/work-item precedent. The transaction makes the three writes one
-  // fsync unit and (BEGIN IMMEDIATE) serializes the read against them.
+  // fsync unit; it does not protect the read.
   const updated = {
     ...session,
     messageCount: (session.messageCount ?? 0) + 1,
@@ -48,6 +49,9 @@ export function addMessage(
     }
     adapter.session.set(sessionID, updated);
   });
+  // Published after the top-level commit. Do not wrap addMessage in an outer
+  // transaction: this publish would fire at savepoint release, announcing a
+  // write the outer transaction can still roll back.
   Bus.publish(Event.Updated, { info: updated });
 }
 

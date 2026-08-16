@@ -267,6 +267,9 @@ describe("DispatchRuntime", () => {
       if (!adapter.workerGrant) throw new Error("workerGrant adapter missing in test setup");
       Storage.configure({
         ...adapter,
+        // Spreading a class instance loses prototype methods — rebind the
+        // required transaction so only the grant list is broken.
+        transaction: adapter.transaction.bind(adapter),
         workerGrant: {
           ...adapter.workerGrant,
           list: () => {
