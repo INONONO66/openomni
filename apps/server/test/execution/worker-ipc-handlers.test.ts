@@ -138,7 +138,7 @@ describe("worker IPC handlers", () => {
       injectionQueue,
     });
 
-    expect(result).toMatchObject({ accepted: false });
+    expect(result).toMatchObject({ accepted: false, error: "delivery missing traceId" });
     expect(injectionQueue.hasPending("run-1")).toBe(false);
   });
 
