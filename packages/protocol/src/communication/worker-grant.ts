@@ -25,7 +25,7 @@ export const Record = z
     allowedSessionIds: z.array(z.string().min(1)).optional(),
     allowedActorIds: z.array(z.string().min(1)).optional(),
     allowedEndpointIds: z.array(z.string().min(1)).optional(),
-    canCreateExternalTasks: z.boolean().default(false),
+    canCreateExternalTasks: z.boolean(),
     managerGrant: ManagerGrant.optional(),
     createdAt: z.number(),
     updatedAt: z.number(),

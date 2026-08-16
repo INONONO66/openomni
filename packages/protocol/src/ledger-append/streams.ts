@@ -94,7 +94,7 @@ export const StreamRegistry = {
     heads: "intent at seq 1 (effectId is the idempotency key), exactly one outcome fact after",
     conflictMeans: "effect id already intended — reconciliation owns the retry (#492)",
     factTypes: ["effect.intended", "effect.confirmed", "effect.failed"],
-    status: "dormant (#492 wires the drivers)",
+    status: "shipped (#492 — writers at session effect/index.ts, callers in openomni effect/)",
   },
 } as const;
 
@@ -136,8 +136,9 @@ export const CommandDenied = CommandVerdictBase.extend({
 export type CommandDenied = z.infer<typeof CommandDenied>;
 
 /**
- * Effect intent/outcome vocabulary (C3 ruling 3) — DORMANT: schema only, no
- * writer exists yet; #492 wires the drivers/reconcilers. The normative
+ * Effect intent/outcome vocabulary (C3 ruling 3) — SHIPPED by #492: the
+ * writers live in the session EffectStore (intent at head 0, terminal fact at
+ * head 1) and the drivers/reconcilers in openomni effect/. The normative
  * sequence is `intent(pending) -> idempotent effect -> confirmed|failed` on
  * the stream `effect:<effectId>`, where `effectId` (the intent event id) is
  * the idempotency key reconciliation resolves under after a crash.

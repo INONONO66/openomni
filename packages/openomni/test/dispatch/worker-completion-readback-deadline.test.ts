@@ -326,7 +326,8 @@ describe("worker completion read-back deadline", () => {
         async readBackRecorder(_hash, request) {
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
           expect(request.timeoutMs).toBe(1);
-          expect(request.maxBodyBytes).toBe(1_000_000);
+          // Omission yields the conservative default, far under the 1 MB ceiling.
+          expect(request.maxBodyBytes).toBe(65_536);
           return WorkItem.ReadBackCheck.parse({
             kind: "citation_match",
             target: request.target,

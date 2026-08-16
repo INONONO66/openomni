@@ -290,7 +290,9 @@ describe("createConnectorEndpointProcessDriver completion stream", () => {
         target: "https://example.com/result",
         quotedText: "expected marker",
         timeoutMs: 10_000,
-        maxBodyBytes: 1_000_000,
+        // The connector omitted maxBodyBytes: omission is the conservative
+        // default, far under the 1 MB enforcement ceiling.
+        maxBodyBytes: 65_536,
       },
     ]);
     expect(result.output.reflection).toMatchObject({

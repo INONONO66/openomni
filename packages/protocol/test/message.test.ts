@@ -85,13 +85,13 @@ describe("Message.StepStartPart", () => {
 });
 
 describe("Message.StepFinishPart", () => {
-  test("parses valid step-finish part", () => {
+  test("parses a step-finish part with every token lane stated", () => {
     const part = Message.StepFinishPart.parse({
       ...base,
       type: "step-finish",
       reason: "end_turn",
       cost: 0.05,
-      tokens: { input: 100, output: 50 },
+      tokens: { input: 100, output: 50, reasoning: 7, cache: { read: 90, write: 3 } },
     });
 
     expect(part.type).toBe("step-finish");
@@ -100,9 +100,20 @@ describe("Message.StepFinishPart", () => {
     expect(part.tokens).toEqual({
       input: 100,
       output: 50,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
+      reasoning: 7,
+      cache: { read: 90, write: 3 },
     });
+    // Pin: the producer states the lanes (stream-events already coalesces
+    // provider absence once, honestly) — a dropped lane fails, not zeroes.
+    expect(
+      Message.StepFinishPart.safeParse({
+        ...base,
+        type: "step-finish",
+        reason: "end_turn",
+        cost: 0.05,
+        tokens: { input: 100, output: 50 },
+      }).success,
+    ).toBe(false);
   });
 
   test("rejects missing cost", () => {
