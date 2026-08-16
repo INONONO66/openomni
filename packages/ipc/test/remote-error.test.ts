@@ -40,4 +40,23 @@ describe("client remote-error path (#606 audit)", () => {
     expect(error).not.toBeInstanceOf(IpcConnectionError);
     expect((error as IpcRemoteError).code).toBe(1000);
   });
+
+  test("the SERVER side of the socket files remote failures the same way (#677 review)", async () => {
+    const socketPath = tmpSocketPath("server-side");
+    const srv = createIpcServer(socketPath, () => undefined);
+    servers.push(srv);
+    const client = await connectIpcClient(socketPath, {
+      onRequest: () => {
+        // A throwing client-side handler becomes the code-1000 error frame
+        // the server.call path receives.
+        throw new Error("client handler refused");
+      },
+    });
+    clients.push(client);
+
+    const error = await srv.call("do-thing", {}, 2_000).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(IpcRemoteError);
+    expect(error).not.toBeInstanceOf(IpcConnectionError);
+    expect(String((error as Error).message)).toContain("client handler refused");
+  });
 });
