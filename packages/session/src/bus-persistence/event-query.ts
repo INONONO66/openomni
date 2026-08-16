@@ -1,27 +1,6 @@
-import { EventVisibility, type EventRecord, type QueryOptions } from "./query-contracts.js";
-import { buildEventFilters, limitClause } from "./event-query-filter.js";
+import { EventVisibility, type EventRecord } from "./query-contracts.js";
 import { getDatabase } from "./database.js";
 import type { BusEventRow } from "./query-rows.js";
-
-export function listBySession(sessionId: string, options?: QueryOptions): Promise<EventRecord[]> {
-  const { where, params } = buildEventFilters("session_id", sessionId, options);
-  const rows = getDatabase()
-    .query(
-      `SELECT * FROM bus_event WHERE ${where} ORDER BY time_created DESC${limitClause(options)}`,
-    )
-    .all(...params) as BusEventRow[];
-  return Promise.resolve(rows.map(toEventRecord));
-}
-
-export function listByRun(runId: string, options?: QueryOptions): Promise<EventRecord[]> {
-  const { where, params } = buildEventFilters("run_id", runId, options);
-  const rows = getDatabase()
-    .query(
-      `SELECT * FROM bus_event WHERE ${where} ORDER BY time_created DESC${limitClause(options)}`,
-    )
-    .all(...params) as BusEventRow[];
-  return Promise.resolve(rows.map(toEventRecord));
-}
 
 export function listErrors(sessionId: string): Promise<EventRecord[]> {
   const rows = getDatabase()
@@ -34,18 +13,13 @@ export function listErrors(sessionId: string): Promise<EventRecord[]> {
   return Promise.resolve(rows.map(toEventRecord));
 }
 
-export function listForLlmReasoning(
-  sessionId: string,
-  options?: Omit<QueryOptions, "visibility" | "visibilityIn">,
-): Promise<EventRecord[]> {
-  return listBySession(sessionId, {
-    ...options,
-    visibilityIn: ["llm_reason", "user_audit"],
-  });
-}
-
 // merged from event-record-mapper.ts (#453 hygiene: sub-30-LOC single-importer)
 function toEventRecord(row: BusEventRow): EventRecord {
+  if (row.session_id === null) {
+    // Impossible for the session-scoped query above (WHERE session_id = ?);
+    // sessionless chain rows must never be mapped into a session record.
+    throw new Error(`bus_event row ${row.id} has no session_id — not a session event`);
+  }
   return {
     id: String(row.id),
     sessionId: row.session_id,

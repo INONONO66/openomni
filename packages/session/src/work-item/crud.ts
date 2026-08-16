@@ -136,7 +136,11 @@ export async function updateWorkItem(
   traceId: string,
 ): Promise<WorkItem.Info | undefined> {
   const adapter = Storage.get();
-  if (!adapter.workItem) return undefined;
+  if (!adapter.workItem) {
+    // Fail closed like create.ts: returning undefined here was
+    // indistinguishable from "work item not found".
+    throw new Error("WorkItem storage not configured — refusing to skip a work-item update");
+  }
 
   const existing = adapter.workItem.get(hash);
   if (!existing) return undefined;

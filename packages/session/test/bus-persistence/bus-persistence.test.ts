@@ -3,7 +3,6 @@ import { Database } from "bun:sqlite";
 import { z } from "zod";
 import { Bus, BusEvent } from "@openomni/telemetry";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
-import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
 import { WorkItemStore } from "../../src/work-item/index.js";
@@ -348,9 +347,6 @@ describe("BusPersistence", () => {
       expect(row.session_id).toBe(session.id);
       expect(JSON.parse(row.data)).toEqual({ sessionID: session.id, marker: "m1" });
     }
-
-    const sessionEvents = await BusQuery.listBySession(session.id);
-    expect(sessionEvents.map((event) => event.eventType)).toEqual(["legacy.session_id.recorded"]);
   });
 
   test("resolves communication events by originSessionId and workerRunId", async () => {

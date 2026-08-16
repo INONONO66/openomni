@@ -10,33 +10,6 @@ export namespace BusQuery {
    */
   export const EventRecord = QueryContracts.EventRecord;
   export type EventRecord = z.infer<typeof EventRecord>;
-  export type AuditChainRecord = z.infer<typeof AuditChainRecord>;
-
-  /**
-   * Query options for filtering bus events.
-   */
-  export const QueryOptions = QueryContracts.QueryOptions;
-  export type QueryOptions = z.infer<typeof QueryOptions>;
-
-  /**
-   * List all bus events for a session with optional filtering.
-   * @param sessionId - The session ID to query
-   * @param options - Optional query filters
-   * @returns Array of event records
-   */
-  export function listBySession(sessionId: string, options?: QueryOptions): Promise<EventRecord[]> {
-    return EventQuery.listBySession(sessionId, options);
-  }
-
-  /**
-   * List all bus events for a specific worker run.
-   * @param runId - The worker run ID to query
-   * @param options - Optional query filters
-   * @returns Array of event records
-   */
-  export function listByRun(runId: string, options?: QueryOptions): Promise<EventRecord[]> {
-    return EventQuery.listByRun(runId, options);
-  }
 
   /**
    * List all error events (operational.error) for a session.
@@ -45,13 +18,6 @@ export namespace BusQuery {
    */
   export function listErrors(sessionId: string): Promise<EventRecord[]> {
     return EventQuery.listErrors(sessionId);
-  }
-
-  export function listForLlmReasoning(
-    sessionId: string,
-    options?: Omit<QueryOptions, "visibility" | "visibilityIn">,
-  ): Promise<EventRecord[]> {
-    return EventQuery.listForLlmReasoning(sessionId, options);
   }
 
   /**
@@ -89,17 +55,6 @@ export namespace BusQuery {
    */
   export function verifyChainIntegrity(sessionId?: string): Promise<ChainIntegrityResult> {
     return ChainQuery.verifyChainIntegrity(sessionId);
-  }
-
-  /**
-   * Read the append-only audit chain for a session. This table survives
-   * CASCADE deletes on bus_event, preserving the integrity proof even
-   * after session data is purged.
-   */
-  export const AuditChainRecord = QueryContracts.AuditChainRecord;
-
-  export function listAuditChain(sessionId: string): Promise<AuditChainRecord[]> {
-    return ChainQuery.listAuditChain(sessionId);
   }
 }
 

@@ -1,6 +1,7 @@
 export interface BusEventRow {
   readonly id: number;
-  readonly session_id: string;
+  /** Nullable: sessionless chain rows (session_id IS NULL) share the table. */
+  readonly session_id: string | null;
   readonly run_id: string | null;
   readonly event_type: string;
   readonly category: string;
@@ -39,13 +40,4 @@ export interface HashChainRow {
   readonly time_created: number;
   readonly prev_hash: string | null;
   readonly event_hash: string | null;
-}
-
-export interface AuditChainRow {
-  readonly seq: number;
-  readonly session_id: string | null;
-  readonly event_type: string;
-  readonly event_hash: string;
-  readonly prev_hash: string;
-  readonly time_created: number;
 }

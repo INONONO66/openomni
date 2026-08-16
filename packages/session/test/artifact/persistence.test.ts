@@ -57,15 +57,15 @@ describe("Artifact persistence (SQLite)", () => {
     unlinkSync(dbPath);
   });
 
-  test("store persists to SQLite and survives adapter recreation", async () => {
+  test("store persists to SQLite and survives adapter recreation", () => {
     const meta = makeMeta();
-    await Artifact.store("sess-1", meta, "hello world");
+    Artifact.store("sess-1", meta, "hello world");
     adapter.close();
 
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
 
-    const result = await Artifact.get("art-1");
+    const result = Artifact.get("art-1");
     expect(result).not.toBeNull();
     expect(result?.meta.id).toBe("art-1");
     expect(result?.content).toBe("hello world");
@@ -73,29 +73,29 @@ describe("Artifact persistence (SQLite)", () => {
     adapter2.close();
   });
 
-  test("independent artifacts recover from SQLite after reset", async () => {
-    await Artifact.store("sess-1", makeMeta({ id: "art-1" }), "content-1");
-    await Artifact.store("sess-1", makeMeta({ id: "art-2" }), "content-2");
+  test("independent artifacts recover from SQLite after reset", () => {
+    Artifact.store("sess-1", makeMeta({ id: "art-1" }), "content-1");
+    Artifact.store("sess-1", makeMeta({ id: "art-2" }), "content-2");
     adapter.close();
 
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
 
-    expect((await Artifact.get("art-1"))?.content).toBe("content-1");
-    expect((await Artifact.get("art-2"))?.content).toBe("content-2");
+    expect(Artifact.get("art-1")?.content).toBe("content-1");
+    expect(Artifact.get("art-2")?.content).toBe("content-2");
 
     adapter2.close();
   });
 
-  test("latest version wins in SQLite (upsert semantics)", async () => {
-    await Artifact.store("sess-1", makeMeta({ version: 1 }), "v1");
-    await Artifact.store("sess-1", makeMeta({ version: 2, title: "updated.txt" }), "v2");
+  test("latest version wins in SQLite (upsert semantics)", () => {
+    Artifact.store("sess-1", makeMeta({ version: 1 }), "v1");
+    Artifact.store("sess-1", makeMeta({ version: 2, title: "updated.txt" }), "v2");
     adapter.close();
 
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
 
-    const result = await Artifact.get("art-1");
+    const result = Artifact.get("art-1");
     expect(result).not.toBeNull();
     expect(result?.meta.version).toBe(2);
     expect(result?.meta.title).toBe("updated.txt");

@@ -59,4 +59,20 @@ describe("BlacklistStore SQLite persistence", () => {
     expect(BlacklistStore.match({ candidates: ["discord:guild:dev"] })?.id).toBe("bl-pattern");
     expect(BlacklistStore.match({ candidates: ["discord:other:dev"] })).toBeUndefined();
   });
+
+  test("match fails closed when the blacklist sub-adapter is absent", () => {
+    const bare = Storage.get();
+    Storage.configure({
+      transaction: bare.transaction.bind(bare),
+      session: bare.session,
+      message: bare.message,
+      part: bare.part,
+    });
+
+    // Pre-fix behavior returned undefined ("not blacklisted") on an absent
+    // adapter — a fail-open read of absolute-deny-gate data.
+    expect(() => BlacklistStore.match({ actorId: "act_bad" })).toThrow(
+      "does not implement blacklist",
+    );
+  });
 });

@@ -42,7 +42,7 @@ export async function ingestConnectorLogs(
     version: 1,
     createdAt: new Date().toISOString(),
   };
-  await Artifact.store(input.sessionId, meta, content);
+  Artifact.store(input.sessionId, meta, content);
 
   const logEvents = extractLogEvents(logs, content, meta.id);
   return {

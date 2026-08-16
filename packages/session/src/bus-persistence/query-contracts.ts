@@ -24,17 +24,6 @@ export const EventRecord = z.object({
 });
 export type EventRecord = z.infer<typeof EventRecord>;
 
-export const QueryOptions = z.object({
-  type: z.string().optional().describe("Filter by event type"),
-  category: z.string().optional().describe("Filter by category"),
-  visibility: EventVisibility.optional().describe("Filter by event visibility"),
-  visibilityIn: z.array(EventVisibility).optional().describe("Filter by any event visibility"),
-  after: z.number().optional().describe("Only events after this timestamp (ms)"),
-  before: z.number().optional().describe("Only events before this timestamp (ms)"),
-  limit: z.number().int().positive().optional().describe("Maximum number of results"),
-});
-export type QueryOptions = z.infer<typeof QueryOptions>;
-
 export const ChainIntegrityResult = z.object({
   valid: z.boolean().describe("Whether the entire chain is intact"),
   totalVerified: z.number().describe("Number of events verified"),
@@ -42,13 +31,3 @@ export const ChainIntegrityResult = z.object({
   brokenAtEventType: z.string().optional().describe("Event type of the broken link"),
 });
 export type ChainIntegrityResult = z.infer<typeof ChainIntegrityResult>;
-
-export const AuditChainRecord = z.object({
-  seq: z.number(),
-  sessionId: z.string().optional(),
-  eventType: z.string(),
-  eventHash: z.string(),
-  prevHash: z.string(),
-  timeCreated: z.number(),
-});
-export type AuditChainRecord = z.infer<typeof AuditChainRecord>;

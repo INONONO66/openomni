@@ -329,7 +329,7 @@ describe("Hash Chain", () => {
     expect(chainAfter.map((r) => r.event_hash)).toEqual(chainBefore.map((r) => r.event_hash));
   });
 
-  test("listAuditChain returns ordered records", async () => {
+  test("audit chain rows persist ordered and hash-linked", async () => {
     const session = createSession();
     BusPersistence.start();
 
@@ -343,19 +343,19 @@ describe("Hash Chain", () => {
     }
 
     await waitForRows(3);
-    const audit = await BusQuery.listAuditChain(session.id);
+    const audit = chainRows(session.id);
 
     expect(audit).toHaveLength(3);
     const [audit0, audit1, audit2] = audit;
     if (audit0 === undefined || audit1 === undefined || audit2 === undefined) {
       throw new Error("shape");
     }
-    expect(audit0.prevHash).toBe(GENESIS_SEED);
-    expect(audit1.prevHash).toBe(audit0.eventHash);
-    expect(audit2.prevHash).toBe(audit1.eventHash);
+    expect(audit0.prev_hash).toBe(GENESIS_SEED);
+    expect(audit1.prev_hash).toBe(audit0.event_hash);
+    expect(audit2.prev_hash).toBe(audit1.event_hash);
     for (const record of audit) {
-      expect(record.sessionId).toBe(session.id);
-      expect(record.eventType).toBe("test.hash.event");
+      expect(record.session_id).toBe(session.id);
+      expect(record.event_type).toBe("test.hash.event");
     }
   });
 

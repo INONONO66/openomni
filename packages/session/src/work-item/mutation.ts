@@ -16,7 +16,11 @@ export async function mutate(
   build: (existing: WorkItem.Info, now: number) => WorkItemMutation,
 ): Promise<WorkItem.Info | undefined> {
   const adapter = Storage.get().workItem;
-  if (!adapter) return undefined;
+  if (!adapter) {
+    // Fail closed like create.ts: returning undefined here was
+    // indistinguishable from "work item not found".
+    throw new Error("WorkItem storage not configured — refusing to skip a work-item mutation");
+  }
 
   const existing = adapter.get(hash);
   if (!existing) return undefined;

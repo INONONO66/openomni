@@ -141,6 +141,11 @@ export function appendTransitionFactReceipt(
   // seq === revision — then the transition fact lands at revision + 1. A
   // concurrent adopter loses as the same stale-head receipt (false).
   try {
+    // Recorded divergence (#606): this adopted genesis bakes the FULL
+    // WorkItem.Info snapshot (including user content) into the immutable
+    // hash-chained ledger, while the wait family (wait/index.ts wait.adopted)
+    // deliberately carries identity fields only, for erasability. Persisted
+    // fact shapes are ledger baselines; converging them is an Owner decision.
     ledger.adoptStream(workItemStreamId(existing.hash), existing.revision, {
       type: "work_item.adopted",
       data: { snapshot: existing, revision: existing.revision },

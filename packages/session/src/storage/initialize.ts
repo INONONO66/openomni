@@ -9,6 +9,9 @@ export interface InitializeOptions {
 }
 
 export function initialize(options?: InitializeOptions): Storage.WorkItemCompletionWriter {
+  // Every production caller passes an explicit dbPath (server bootstrap and
+  // worker-entry resolve it from config/OPENOMNI_DB_PATH); the bare
+  // `:memory:` default is only reachable from tests.
   const dbPath = options?.dbPath ?? process.env.OPENOMNI_DB_PATH ?? ":memory:";
   const initializedDbPath = Storage.getInitializedDbPath();
 

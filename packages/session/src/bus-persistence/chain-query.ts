@@ -1,7 +1,7 @@
 import { GENESIS_SEED, computeEventHash } from "./hash.js";
-import type { AuditChainRecord, ChainIntegrityResult } from "./query-contracts.js";
+import type { ChainIntegrityResult } from "./query-contracts.js";
 import { getDatabase } from "./database.js";
-import type { AuditChainRow, HashChainRow } from "./query-rows.js";
+import type { HashChainRow } from "./query-rows.js";
 
 export function verifyChainIntegrity(sessionId?: string): Promise<ChainIntegrityResult> {
   const db = getDatabase();
@@ -21,26 +21,6 @@ export function verifyChainIntegrity(sessionId?: string): Promise<ChainIntegrity
           .all(sessionId) as HashChainRow[]);
 
   return Promise.resolve(walkChain(rows));
-}
-
-export function listAuditChain(sessionId: string): Promise<AuditChainRecord[]> {
-  const rows = getDatabase()
-    .query(
-      `SELECT seq, session_id, event_type, event_hash, prev_hash, time_created
-       FROM event_chain WHERE session_id = ? ORDER BY seq ASC`,
-    )
-    .all(sessionId) as AuditChainRow[];
-
-  return Promise.resolve(
-    rows.map((row) => ({
-      seq: row.seq,
-      sessionId: row.session_id ?? undefined,
-      eventType: row.event_type,
-      eventHash: row.event_hash,
-      prevHash: row.prev_hash,
-      timeCreated: row.time_created,
-    })),
-  );
 }
 
 function walkChain(rows: HashChainRow[]): ChainIntegrityResult {

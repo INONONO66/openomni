@@ -9,12 +9,8 @@ interface BlacklistMatchInput {
   readonly candidates?: readonly string[];
 }
 
-function adapter(): Storage.Adapter["blacklist"] {
-  return Storage.get().blacklist;
-}
-
 function requireAdapter(): NonNullable<Storage.Adapter["blacklist"]> {
-  return requireSubAdapter(adapter(), "Storage adapter does not implement blacklist");
+  return requireSubAdapter(Storage.get().blacklist, "Storage adapter does not implement blacklist");
 }
 
 function isActive(entry: Actor.BlacklistEntry, now: number): boolean {
@@ -60,8 +56,10 @@ export namespace BlacklistStore {
     input: BlacklistMatchInput,
     now = Date.now(),
   ): Actor.BlacklistEntry | undefined {
-    const store = adapter();
-    if (!store) return undefined;
-    return store.list().find((entry) => isActive(entry, now) && entryMatches(entry, input));
+    // Fail closed like put(): this feeds an absolute deny gate, so an absent
+    // adapter must never read as "not blacklisted".
+    return requireAdapter()
+      .list()
+      .find((entry) => isActive(entry, now) && entryMatches(entry, input));
   }
 }

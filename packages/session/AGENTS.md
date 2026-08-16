@@ -18,6 +18,7 @@ src/
 │   ├── events.ts         # Session bus event descriptors
 │   ├── lifecycle.ts      # Session CRUD, child sessions, worker meta, TTL lazy deletion
 │   ├── messages.ts       # Message/part writes and reads, message status
+│   ├── transcript.ts     # TranscriptStore (#547 C3) — append-only transcript_fact recording; message/part tables are fold projections
 │   └── info.ts           # SessionInfo schema (leaf — breaks session ↔ storage cycle)
 ├── storage/
 │   ├── index.ts          # Barrel
@@ -25,23 +26,31 @@ src/
 │   ├── sqlite-storage.ts # SqliteStorageAdapter facade (Bun SQLite persistence)
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
+│   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
-├── bus-persistence/      # Durable hash-chained bus event journal + BusQuery (stats/history/verifyChainIntegrity)
+├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType, verifyTail over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
+├── bus-persistence/      # Durable hash-chained bus event journal + BusQuery (stats/errors/history/verifyChainIntegrity)
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
 ├── blacklist/            # Blacklist entry store (absolute deny gate data)
 ├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
 ├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
 ├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
 ├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
-├── artifact/             # Artifact.store / get — latest-version-wins upsert over SQLite
+├── artifact/             # Artifact.store / get — latest-version-wins upsert over SQLite (fail-closed on absent sub-adapter)
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
+├── wait/                 # WaitStore — durable Wait contract (#215/#510 B): fact-before-projection appends on wait:<id> streams, typed Wait.StoreError fail-closed, lazy pre-cutover adoption (identity-only genesis)
+├── effect/               # EffectStore (#492) — intent→terminal-outcome effect ledger on effect:<id> streams; outstandingIntents/terminalIntents reconciliation reads
 ├── work-item/            # WorkItemStore — universal work state engine
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
 │   ├── create.ts         # Work item creation, parent linkage, Created event
 │   ├── crud.ts           # get/list/remove/update plus relation cleanup
 │   ├── lifecycle.ts      # start/fail/cancel plus typed raw-completion refusal, blockers, evidence
 │   ├── mutation.ts       # mutation persistence, transition validation, Updated/StatusChanged events
+│   ├── facts.ts          # #510 C1 decision-class fact appends on work:<hash>: head==revision CAS, lazy adoption (full-snapshot genesis — recorded #606 divergence), typed revision/duplicate/unavailable errors
+│   ├── completion-writer.ts # authorized completion-authority writer: admission fact append before the projection CAS, one transaction (#510 C1)
+│   ├── effect-link.ts    # projects effect intent/outcome records onto completionFacts.effects through the completion writer (#492 ↔ #490)
+│   ├── attempt-run.ts    # WorkItemAttemptRun — run lifecycle over attempt facts + deterministic upcast of frozen worker_run_state rows (#510 D2b)
 │   ├── dependency.ts     # dependency readiness + cycle detection
 │   ├── retry.ts / retry-policy.ts # retry defaults + kernel-enforced exhaustion blocker
 │   ├── outcome.ts        # Owner adoption outcome recording (adopted/corrected/redone/ignored)
