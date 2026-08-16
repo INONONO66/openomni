@@ -197,7 +197,8 @@ describe("WaitService", () => {
     });
 
     await flushBus();
-    // Pin (D11): both audit events inherit the dispatch command's trace.
+    // Pin (D11): the service publishes exactly the caller's trace (the
+    // handler-level passthrough is pinned in dispatch-owners.test.ts).
     expect(seen.map((event) => event.phase)).toEqual(["opened", "answered"]);
     expect(seen.every((event) => event.traceId === "trace-sync-ask")).toBe(true);
     expect(WaitStore.list()).toHaveLength(0);
