@@ -64,7 +64,7 @@ Use these ownership boundaries when adding or moving code:
 agents/             → @openomni/protocol (Model.Ref only)
 resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 policy/             → @openomni/protocol (pure label→plan resolution; consumed by dispatch)
-evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence)
+evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence), work-item/ (type-only: the admission port contract verifier-recorded-input implements)
 ledger/             → evidence/ (canonical JSON snapshot boundary only); no orchestration deps
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → dispatch/ (DEFAULT_DISPATCH_MODEL), resident/ (type-only)

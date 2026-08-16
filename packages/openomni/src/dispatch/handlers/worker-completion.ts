@@ -5,11 +5,11 @@ import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
 import { settleBeforeDeadline } from "../../evidence/read-back-http.js";
 import { canonicalJson as canonicalEvidenceJson } from "../../evidence/verifier-conformance-canonical.js";
+import { durableVerifierInput } from "../../evidence/verifier-recorded-input.js";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
 import {
   CompletionAdmissionError,
   completionBlockerDescription,
-  durableVerifierInput,
   type CompletionAdmissionService,
   type CompletionBoundaryOutcome,
   type CompletionRequestCallOptions,
