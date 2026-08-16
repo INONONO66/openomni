@@ -91,6 +91,7 @@ export namespace WaitService {
    */
   export function auditSyncAsk(input: {
     dispatchId: string;
+    traceId: string;
     sessionId: string;
     phase: "opened" | "answered" | "failed";
   }): void {

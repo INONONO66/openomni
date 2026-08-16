@@ -81,6 +81,7 @@ function auditSyncAsk(
 ): void {
   WaitService.auditSyncAsk({
     dispatchId: command.dispatchId,
+    traceId: command.traceId,
     sessionId: command.actor.sessionId ?? command.sessionId ?? fallbackSessionId,
     phase,
   });
