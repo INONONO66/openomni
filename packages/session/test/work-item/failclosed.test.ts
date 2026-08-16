@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Storage } from "../../src/storage/storage";
 import { createWorkItem } from "../../src/work-item/create";
+import { WorkItemStore } from "../../src/work-item/index";
 import { mutate } from "../../src/work-item/mutation";
 import "../../src/storage/initialize";
 
@@ -50,5 +51,14 @@ describe("work-item writes fail closed (#606 audit)", () => {
         fact: { type: "work_item.updated", data: {} },
       })),
     ).rejects.toThrow("refusing to skip a work-item mutation");
+  });
+
+  test("updateWorkItem refuses without the workItem adapter — no silent not-found", async () => {
+    Storage.initialize({ dbPath: ":memory:" });
+    Object.defineProperty(Storage.get(), "workItem", { value: undefined, configurable: true });
+
+    await expect(
+      WorkItemStore.update("hash-absent-adapter", { name: "renamed" }, "trace-failclosed"),
+    ).rejects.toThrow("refusing to skip a work-item update");
   });
 });
