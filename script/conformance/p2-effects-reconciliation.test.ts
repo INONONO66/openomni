@@ -36,13 +36,13 @@ import {
   type EffectDriver,
 } from "../../packages/openomni/src/effect/index";
 import {
-  Bus,
   EffectStore,
   EffectStoreError,
   SqliteStorageAdapter,
   Storage,
   WorkItemStore,
 } from "../../packages/session/src/index";
+import { Bus } from "../../packages/telemetry/src/index";
 import { assembleEffectRuntime } from "../../apps/server/src/bootstrap/effects";
 
 let tempDir: string;
