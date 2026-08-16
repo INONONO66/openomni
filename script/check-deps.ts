@@ -335,6 +335,8 @@ async function validateDeepImports(): Promise<string[]> {
     const source = await Bun.file(filePath).text();
     for (const match of source.matchAll(importPattern)) {
       const importPath = match[1];
+      // Unreachable: the capture group requires >=1 char; this narrows
+      // string | undefined from noUncheckedIndexedAccess, nothing more.
       if (!importPath) continue;
       const line = lineNumberForOffset(source, match.index);
       const isKnown = KNOWN_DEEP_IMPORTS.has(`${filePath}:${importPath}`);
@@ -375,6 +377,8 @@ async function validateDeepRelativeImports(): Promise<string[]> {
     const source = await Bun.file(filePath).text();
     for (const match of source.matchAll(importPattern)) {
       const importPath = match[1];
+      // Unreachable: the capture group requires >=1 char; this narrows
+      // string | undefined from noUncheckedIndexedAccess, nothing more.
       if (!importPath) continue;
       const line = lineNumberForOffset(source, match.index);
       const key = `${filePath}:${importPath}`;
