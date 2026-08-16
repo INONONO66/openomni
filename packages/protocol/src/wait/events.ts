@@ -5,6 +5,7 @@ import { OwnerKind, Status } from "./schema.js";
 
 const EventBase = z.object({
   id: z.string().min(1),
+  traceId: z.string().min(1),
   ownerKind: OwnerKind,
   ownerId: z.string().min(1),
   status: Status,

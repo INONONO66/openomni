@@ -169,12 +169,16 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     targetsOfWait(resolution.candidate.wait),
     dispatchEvidence(command),
   );
-  return WaitService.attachReply(resolution.candidate.wait.id, {
-    replyKey: input.replyKey,
-    responderCandidates: candidates,
-    messageId: `message:${input.replyKey}`,
-    at: input.at,
-  });
+  return WaitService.attachReply(
+    resolution.candidate.wait.id,
+    {
+      replyKey: input.replyKey,
+      responderCandidates: candidates,
+      messageId: `message:${input.replyKey}`,
+      at: input.at,
+    },
+    `trace:${input.replyKey}`,
+  );
 }
 
 function scenarioReceipt(
@@ -227,6 +231,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
       operation: "fire_and_forget",
       body: "heads-up: QA sweep starting",
       at: DriverNow,
+      traceId: "trace:qa:notify",
     });
     const waitCountAfterFireAndForget = WaitStore.list().length;
 
@@ -237,6 +242,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
       operation: "awaited",
       body: "reply with your QA verdict (2-of-3)",
       at: DriverNow + 1_000,
+      traceId: "trace:qa:briefing",
       waitSpec: awaitedWaitSpec(),
     });
     const firstReply = applyReply({
@@ -382,6 +388,7 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
     operation: "awaited",
     body: "reply with your QA verdict (2-of-3)",
     at: DriverNow,
+    traceId: "trace:qa:briefing",
     waitSpec: awaitedWaitSpec(),
   });
   const firstReply = applyReply({
@@ -400,11 +407,15 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
   });
   // A shared-credential sender whose evidence resolves to TWO expected
   // responders: the matcher only reports candidates, the fold never guesses.
-  const ambiguousReply = WaitService.attachReply(AwaitedWaitId, {
-    replyKey: "reply:qa:shared-credential",
-    responderCandidates: [Responders[1], Responders[2]],
-    at: DriverNow + 7_000,
-  });
+  const ambiguousReply = WaitService.attachReply(
+    AwaitedWaitId,
+    {
+      replyKey: "reply:qa:shared-credential",
+      responderCandidates: [Responders[1], Responders[2]],
+      at: DriverNow + 7_000,
+    },
+    "trace:reply:qa:shared-credential",
+  );
   // Messaging-plane ambiguity: the target actor is reachable at two
   // endpoints and the sender pinned none — resolution fails closed.
   const ambiguousTarget = await messaging.send({
@@ -414,6 +425,7 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
     operation: "fire_and_forget",
     body: "unpinned multi-endpoint target",
     at: DriverNow + 8_000,
+    traceId: "trace:qa:multi",
   });
 
   const after = quorumSnapshot(AwaitedWaitId);

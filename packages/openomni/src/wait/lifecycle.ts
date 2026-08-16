@@ -11,8 +11,8 @@ import { Bus, WaitStore } from "@openomni/session";
  */
 export namespace WaitService {
   /** Opens the one durable Wait for an awaited delivery. Fails closed on a missing adapter or duplicate origin message. */
-  export function open(input: Wait.Create): Wait.Record {
-    return WaitStore.create(input);
+  export function open(input: Wait.Create, traceId: string): Wait.Record {
+    return WaitStore.create(input, traceId);
   }
 
   /**
@@ -20,8 +20,8 @@ export namespace WaitService {
    * unknown / ambiguous / attach / resolve) and the store persists the
    * outcome under a revision compare-and-set.
    */
-  export function attachReply(id: string, input: Wait.ReplyInput): Wait.Outcome {
-    return WaitStore.attachReply(id, input);
+  export function attachReply(id: string, input: Wait.ReplyInput, traceId: string): Wait.Outcome {
+    return WaitStore.attachReply(id, input, traceId);
   }
 
   /**
@@ -33,12 +33,13 @@ export namespace WaitService {
   export function recordDeliveryReceipt(
     id: string,
     input: Wait.DeliveryReceiptInput,
+    traceId: string,
   ): Wait.Outcome {
-    return WaitStore.recordDeliveryReceipt(id, input);
+    return WaitStore.recordDeliveryReceipt(id, input, traceId);
   }
 
-  export function cancel(id: string, at = Date.now()): Wait.Outcome {
-    return WaitStore.cancel(id, at);
+  export function cancel(id: string, traceId: string, at = Date.now()): Wait.Outcome {
+    return WaitStore.cancel(id, traceId, at);
   }
 
   /**
@@ -46,8 +47,8 @@ export namespace WaitService {
    * deadline — the route folds the wait to expired (partial when replies had
    * attached) before returning the typed rejection.
    */
-  export function expire(id: string, at = Date.now()): Wait.Outcome {
-    return WaitStore.expire(id, at);
+  export function expire(id: string, traceId: string, at = Date.now()): Wait.Outcome {
+    return WaitStore.expire(id, traceId, at);
   }
 
   /**
@@ -66,7 +67,7 @@ export namespace WaitService {
     for (const record of WaitStore.list(["open"])) {
       if (now <= record.expiresAt) continue;
       try {
-        const outcome = expire(record.id, now);
+        const outcome = expire(record.id, traceId, now);
         if (outcome.kind === "expired") expired.push(outcome.record);
       } catch (error) {
         Bus.publish(Operational.Error, {

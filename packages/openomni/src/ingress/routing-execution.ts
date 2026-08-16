@@ -256,15 +256,19 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
       // (duplicate / late / unknown / ambiguous / attach / resolve) and the
       // store persists the outcome before the owner session sees the reply.
       const at = Date.now();
-      const outcome = WaitService.attachReply(wait.record.id, {
-        replyKey: resolution.event.id,
-        responderCandidates: responderCandidates(
-          targetsOfWait(wait.record),
-          ingressEvidence(resolution.event, wait.correlation),
-        ),
-        messageId: resolution.event.id,
-        at,
-      });
+      const outcome = WaitService.attachReply(
+        wait.record.id,
+        {
+          replyKey: resolution.event.id,
+          responderCandidates: responderCandidates(
+            targetsOfWait(wait.record),
+            ingressEvidence(resolution.event, wait.correlation),
+          ),
+          messageId: resolution.event.id,
+          at,
+        },
+        trace.traceId,
+      );
       if (outcome.kind === "rejected") {
         if (outcome.code === "deadline_passed") {
           // Lazy expiry: this late reply is the first observer of the passed
@@ -275,7 +279,7 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
           // the expiry is an optimization, so it must never replace the typed
           // rejection below.
           try {
-            WaitService.expire(wait.record.id, at);
+            WaitService.expire(wait.record.id, trace.traceId, at);
           } catch {
             // Already folded by a concurrent transition — the typed rejection
             // below is still the correct outcome for this reply.

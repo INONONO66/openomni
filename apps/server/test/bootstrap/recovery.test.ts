@@ -199,8 +199,8 @@ describe("server recovery", () => {
       expiresAt: Date.now() - 1,
       followUpWindow: 1_000,
     });
-    WaitService.open(buildWaitCreate("wait-boot-corrupt"));
-    WaitService.open(buildWaitCreate("wait-boot-healthy"));
+    WaitService.open(buildWaitCreate("wait-boot-corrupt"), "trace-corrupt-wait");
+    WaitService.open(buildWaitCreate("wait-boot-healthy"), "trace-corrupt-wait");
     // Corrupt one wait's owner stream: an extra fact advances the head past
     // the projected revision, so its expiry transition conflicts forever.
     const appended = Storage.getAdapter().ledger?.append(

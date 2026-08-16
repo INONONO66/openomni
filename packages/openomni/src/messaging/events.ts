@@ -4,6 +4,7 @@ import { MessageDenialCode, MessageOperation } from "./schema.js";
 
 const EventBase = z.object({
   messageId: z.string().min(1),
+  traceId: z.string().min(1),
   senderId: z.string().min(1),
   targetActorId: z.string().min(1),
   time: z.number(),

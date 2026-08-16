@@ -132,6 +132,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
   function deny(input: SendInput, code: MessageDenialCode, reason: string): SendReceipt {
     Bus.publish(Events.Denied, {
       messageId: input.messageId,
+      traceId: input.traceId,
       senderId: input.senderId,
       targetActorId: input.target.actorId,
       code,
@@ -180,24 +181,27 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       // A delivery failure then leaves an open Wait that expires on schedule;
       // the reverse order could deliver a message the ledger never awaits.
       try {
-        wait = WaitService.open({
-          id: spec.waitId,
-          ownerRef: spec.ownerRef,
-          originMessageId: input.messageId,
-          correlation: {
-            ...spec.correlation,
-            endpointId: resolution.target.endpointId,
-            replyToMessageId: input.messageId,
+        wait = WaitService.open(
+          {
+            id: spec.waitId,
+            ownerRef: spec.ownerRef,
+            originMessageId: input.messageId,
+            correlation: {
+              ...spec.correlation,
+              endpointId: resolution.target.endpointId,
+              replyToMessageId: input.messageId,
+            },
+            allowedActions: spec.allowedActions,
+            expectedResponders: spec.expectedResponders,
+            resolutionPolicy: spec.resolutionPolicy,
+            ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
+            expiresAt: spec.expiresAt,
+            followUpWindow: spec.followUpWindow,
+            createdAt: input.at,
+            updatedAt: input.at,
           },
-          allowedActions: spec.allowedActions,
-          expectedResponders: spec.expectedResponders,
-          resolutionPolicy: spec.resolutionPolicy,
-          ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
-          expiresAt: spec.expiresAt,
-          followUpWindow: spec.followUpWindow,
-          createdAt: input.at,
-          updatedAt: input.at,
-        });
+          input.traceId,
+        );
       } catch (error) {
         // Exactly-once awaited delivery surfacing as a typed denial: the
         // ledger already awaits this message (or wait id), so this send
@@ -228,14 +232,16 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       // reference the platform id, not our internal one) correlate. A wait
       // that turned terminal while the delivery was in flight rejects the
       // receipt (wait_terminal) and keeps its recorded correlation.
-      const receipt = WaitService.recordDeliveryReceipt(wait.id, {
-        externalMessageId: delivery.externalMessageId,
-        at: input.at,
-      });
+      const receipt = WaitService.recordDeliveryReceipt(
+        wait.id,
+        { externalMessageId: delivery.externalMessageId, at: input.at },
+        input.traceId,
+      );
       if (receipt.kind === "delivery_recorded") wait = receipt.record;
     }
     Bus.publish(Events.Sent, {
       messageId: input.messageId,
+      traceId: input.traceId,
       senderId: input.senderId,
       targetActorId: input.target.actorId,
       operation: input.operation,

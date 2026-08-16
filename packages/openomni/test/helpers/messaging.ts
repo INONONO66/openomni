@@ -50,6 +50,7 @@ export function buildSendInput(overrides: Partial<SendInput> = {}): SendInput {
     operation: "fire_and_forget",
     body: "test message",
     at: messagingNow,
+    traceId: "trace-messaging",
     ...overrides,
   };
 }
