@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786898511163,
+  "lastUpdate": 1786901644606,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53297,6 +53297,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 509383,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8ac1ed8c635fbf67912ea6e4f94e805ca9e1fbd",
+          "message": "fix(ipc): every failure files under its own class (#606) (#685)\n\n* fix(ipc): every failure files under its own class (#606)\n\nRe-audit residue between S and S+:\n\n- A dying connection's in-flight server calls aged out as\n  IpcTimeoutError whenever another connection survived — the pending\n  map was server-global, so only the LAST connection's death failed\n  anything. Pending entries now carry their connection id and a dead\n  connection rejects exactly its own calls as IpcConnectionError.\n- A handlerless client silently dropped incoming requests, surfacing\n  on the server as a timeout. It now answers with a code-1000 error\n  frame, so the caller gets IpcRemoteError naming the method.\n- One malformed frame discarded every complete sibling frame in the\n  same chunk mid-map. The decoder now re-queues the untouched\n  siblings (re-terminated, in order) before throwing, so a bad frame\n  costs only itself.\n- Dead 'void socket' statement deleted; IpcServer interface exported\n  to match IpcClient.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* fix(ipc): skip-and-report malformed frames so one bad line costs itself\n\nThe adversarial review of #685 falsified the \"one bad frame costs only\nitself\" invariant two ways: frames parsed BEFORE a malformed line were\ndiscarded with the throw, and re-queued trailing siblings only delivered\non the NEXT data event — so a valid response sharing a chunk with a bad\nline stalled to IpcTimeoutError.\n\nRedesign LineDecoder.push to skip-and-report: it returns\n{ frames, malformed } instead of throwing on JSON failures. Every\nparseable line delivers immediately, in order; each malformed line is\nreported (truncated to 64 chars) and never re-queued. The oversize-line\nand oversize-buffer paths stay reset+throw (DoS guard, unchanged).\n\nThe server answers each malformed line with its own 4001 error frame and\nkeeps the connection alive; the client drains all valid frames first,\nthen tears the connection down. Both mutations verified: discarding\npre-malformed frames fails 3 pins; skipping the per-line 4001 write\nfails 2 pins (new per-line 4001 pin + existing extraction pin). Also\nunwrapped the bare block artifact in client.ts and replaced the\nhardcoded \"conn-2\" with the RequestHandler's connection-id argument.\nAGENTS.md now states the malformed/oversize contract honestly.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\n\n* refactor(ipc): the barrel carries IpcServer like IpcClient (#606)\n\n---------\n\nCo-authored-by: Claude Opus 5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T02:32:48+09:00",
+          "tree_id": "8e709cb295b9c30dcf8ceea7e98bf406e7f84bac",
+          "url": "https://github.com/INONONO66/openomni/commit/c8ac1ed8c635fbf67912ea6e4f94e805ca9e1fbd"
+        },
+        "date": 1786901643264,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 477,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6247,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10279,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3099,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16148,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 631,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 802,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46284,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2426,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 100536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 509143,
             "unit": "ns/op"
           }
         ]
