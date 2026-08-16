@@ -14,7 +14,19 @@ export class GitHubClient {
     body: string,
     traceId: string,
   ): Promise<void> {
-    if (!this.token) return;
+    if (!this.token) {
+      // Loud absence (#606 audit): a deployment with a webhook secret but no
+      // token would receive events, spend a full run, then silently never
+      // reply. The run's work must not vanish without a record.
+      this.publish(Operational.Warn, {
+        traceId,
+        time: Date.now(),
+        component: "channel.github",
+        msg: "github token missing — reply not posted",
+        context: { repo, issueNumber },
+      });
+      return;
+    }
 
     const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
     const response = await fetchWithRetry(

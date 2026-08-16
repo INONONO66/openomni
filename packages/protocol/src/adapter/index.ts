@@ -29,9 +29,6 @@ export namespace Adapter {
     text: string;
   }
 
-  // TODO: implement runtime enforcement of "final" delivery policy (suppress intermediate streams)
-  export type DeliveryPolicy = "all" | "final";
-
   export interface MediaAttachment {
     kind: "image" | "file" | "audio" | "video";
     url?: string;
@@ -96,7 +93,6 @@ export namespace Adapter {
 
   export interface Config {
     triggers: TriggerRule[];
-    deliveryPolicy: DeliveryPolicy;
   }
 
   export interface Surface {

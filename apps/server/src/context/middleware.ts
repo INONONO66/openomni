@@ -1,5 +1,6 @@
 import type { CanonicalPolicyRegistration } from "@openomni/agent";
-import { PolicyDecision } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { InstructionLoader } from "./instructions";
 import { SkillLoader } from "./skills";
 
@@ -66,7 +67,18 @@ export function createContextMiddleware(
           traceId,
         );
       } catch (error) {
+        // Fail-open is the point's contract; fail-SILENT is not (#606 audit):
+        // a broken loader means the agent runs without AGENTS.md/skills and
+        // someone must be able to see why. Non-Errors stay rethrown — an
+        // exotic throw is a bug, not a degraded assembly.
         if (error instanceof Error) {
+          Bus.publish(Operational.Warn, {
+            traceId,
+            time: Date.now(),
+            component: "server.context",
+            msg: "context assembly failed — run continues without it",
+            context: { error: error.message },
+          });
           return PolicyDecision.allow({ policyId: "server.context" });
         }
         throw error;

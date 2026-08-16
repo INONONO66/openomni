@@ -28,8 +28,13 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
 
   try {
     const adapter = Storage.get();
-    const processing = adapter.message.findByStatus?.("processing") ?? [];
-    const received = adapter.message.findByStatus?.("received") ?? [];
+    if (adapter.message.findByStatus === undefined) {
+      // Fail closed like the ledger sub-adapter check in bootstrap/recovery:
+      // "no interrupted messages" and "cannot ask" are different answers.
+      throw new Error("message adapter does not implement findByStatus — recovery fails closed");
+    }
+    const processing = adapter.message.findByStatus("processing");
+    const received = adapter.message.findByStatus("received");
     const interrupted = [...processing, ...received];
 
     if (interrupted.length === 0) {
