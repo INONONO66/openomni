@@ -13,7 +13,7 @@ function tmpSocketPath(label: string): string {
 }
 
 describe("failure classes stay honest (#606 re-audit)", () => {
-  const servers: ReturnType<typeof createIpcServer>[] = [];
+  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
   const rawSockets: net.Socket[] = [];
 
@@ -27,10 +27,13 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {
     const socketPath = tmpSocketPath("per-conn");
     let survivorConnectionId: string | undefined;
-    const srv = createIpcServer(socketPath, (method, _params, respond, _notify, connectionId) => {
-      if (method === "register-survivor") survivorConnectionId = connectionId;
-      respond({ ok: true });
-    });
+    const srv = await createIpcServer(
+      socketPath,
+      (method, _params, respond, _notify, connectionId) => {
+        if (method === "register-survivor") survivorConnectionId = connectionId;
+        respond({ ok: true });
+      },
+    );
     servers.push(srv);
 
     // First connection never answers server calls; it will die mid-flight.
@@ -72,7 +75,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("a handlerless client answers server calls with a typed remote failure", async () => {
     const socketPath = tmpSocketPath("no-handler");
-    const srv = createIpcServer(socketPath, (_method, _params, respond) => {
+    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ ok: true });
     });
     servers.push(srv);
@@ -92,7 +95,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("a valid response sharing a chunk with a bad line still resolves the call", async () => {
     const socketPath = tmpSocketPath("shared-chunk");
-    const srv = createIpcServer(socketPath, (_method, _params, respond) => {
+    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ ok: true });
     });
     servers.push(srv);
@@ -122,7 +125,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("each malformed line is answered with its own 4001 error frame", async () => {
     const socketPath = tmpSocketPath("per-line-4001");
-    const srv = createIpcServer(socketPath, (_method, _params, respond) => {
+    const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ ok: true });
     });
     servers.push(srv);
@@ -155,6 +158,138 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   test("encode/decode round-trip is unaffected", () => {
     const decoder = new LineDecoder();
     expect(decoder.push(encode({ id: "rt" }))).toEqual({ frames: [{ id: "rt" }], malformed: [] });
+  });
+
+  test("an oversize frame gets a 4001 and then the server CLOSES the connection", async () => {
+    const socketPath = tmpSocketPath("oversize-close");
+    const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
+      respond({ ok: true }),
+    );
+    servers.push(srv);
+
+    const socket = net.createConnection(socketPath);
+    rawSockets.push(socket);
+    socket.on("error", () => undefined); // EPIPE from the server-side close is expected
+    const decoder = new LineDecoder();
+    const frames: unknown[] = [];
+    socket.on("data", (chunk) => frames.push(...decoder.push(chunk).frames));
+    // The FIN is the server's close: a peer mid-flood (this one) can never
+    // complete the full close from its side, so 'end' is the observable.
+    const serverClosed = new Promise<void>((resolve) => socket.once("end", () => resolve()));
+    await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
+
+    // No newline needed: the decode-buffer cap trips mid-frame, which resets
+    // the decoder MID-frame — everything after would parse as garbage, so the
+    // server must not keep the desynced connection alive (pre-fix it did).
+    socket.write("x".repeat(17 * 1024 * 1024));
+    await serverClosed;
+
+    const errorFrame = frames.at(-1) as { id?: string; error?: { code?: number } } | undefined;
+    expect(errorFrame?.error?.code).toBe(4001);
+    expect(errorFrame?.id).toBe("unknown");
+  }, 10_000);
+
+  test("a client that sent an oversize frame fails fast, not by burning its timeout", async () => {
+    const socketPath = tmpSocketPath("oversize-client");
+    const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
+      respond({ ok: true }),
+    );
+    servers.push(srv);
+    const client = await connectIpcClient(socketPath);
+    clients.push(client);
+
+    // Pre-fix the server kept the desynced connection open and the pending
+    // aged out over the full 30s timeout; now the symmetric close rejects it
+    // as a connection loss within the test's own budget.
+    const error = await client
+      .call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(IpcConnectionError);
+  }, 10_000);
+
+  test("an error frame carrying the request's id settles the requester's pending", async () => {
+    const socketPath = tmpSocketPath("correlated-4000");
+    // Raw peer: answers ANY request with a 4000 error echoing the request id —
+    // the shape the server now emits for schema-invalid frames that carry one.
+    const rawServer = net.createServer((conn) => {
+      const decoder = new LineDecoder();
+      conn.on("data", (chunk) => {
+        for (const raw of decoder.push(chunk).frames) {
+          const request = Ipc.Request.safeParse(raw);
+          if (!request.success) continue;
+          conn.write(
+            `${JSON.stringify(Ipc.createErrorResponse(request.data.id, 4000, "peer rejected the frame"))}\n`,
+          );
+        }
+      });
+    });
+    await new Promise<void>((resolve) => rawServer.listen(socketPath, () => resolve()));
+
+    try {
+      const client = await connectIpcClient(socketPath);
+      clients.push(client);
+      // A correlated 4000 must reject the pending NOW — "unknown" would let
+      // the 30s timeout burn instead.
+      const error = await client.call("anything", {}, 30_000).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(IpcRemoteError);
+      expect((error as IpcRemoteError).code).toBe(4000);
+      expect((error as Error).message).toContain("peer rejected the frame");
+    } finally {
+      rawServer.close();
+    }
+  });
+
+  test("a response arriving on a connection that does not own the request is ignored", async () => {
+    const socketPath = tmpSocketPath("cross-conn");
+    const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
+      respond({ ok: true }),
+    );
+    servers.push(srv);
+
+    // conn A receives the server's request and answers LAST.
+    const connA = net.createConnection(socketPath);
+    rawSockets.push(connA);
+    const decoderA = new LineDecoder();
+    let requestId: string | undefined;
+    const gotRequest = new Promise<void>((resolve) => {
+      connA.on("data", (chunk) => {
+        for (const raw of decoderA.push(chunk).frames) {
+          const request = Ipc.Request.safeParse(raw);
+          if (request.success) {
+            requestId = request.data.id;
+            resolve();
+          }
+        }
+      });
+    });
+    await new Promise<void>((resolve) => connA.once("connect", () => resolve()));
+
+    const connB = net.createConnection(socketPath);
+    rawSockets.push(connB);
+    await new Promise<void>((resolve) => connB.once("connect", () => resolve()));
+
+    // Unpinned: the request routes to the first connection (conn A).
+    const inFlight = srv.call("job", {}, 5_000);
+    let settled = false;
+    inFlight.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await gotRequest;
+    if (!requestId) throw new Error("request id was never captured");
+
+    // conn B echoes conn A's request id — pre-fix this settled the pending.
+    connB.write(`${JSON.stringify(Ipc.createResponse(requestId, { from: "B" }))}\n`);
+    await Bun.sleep(50);
+    expect(settled).toBe(false);
+
+    // Only the owning connection's answer resolves it.
+    connA.write(`${JSON.stringify(Ipc.createResponse(requestId, { from: "A" }))}\n`);
+    expect(await inFlight).toEqual({ from: "A" });
   });
 });
 

@@ -67,63 +67,66 @@ async function shutdownWorker(exitCode: number): Promise<never> {
   process.exit(exitCode);
 }
 
-const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
-  if (method === "coordinator.bootstrap") {
-    WorkerBootstrapHandler.handleBootstrap({
-      params,
-      ipcAuthToken,
-      workerId,
-      server,
-      connectionId,
-      respond,
-      state: workerBootstrapState,
-    });
-  } else if (method === "coordinator.spawn_run") {
-    WorkerRunner.spawnRun({
-      params,
-      ipcAuthToken,
-      workerId,
-      server,
-      activeRuns,
-      bootstrapReady: workerBootstrapState.ready,
-      injectionQueue,
-      defaultWorkspaceRoot: config.workspace?.root,
-      getBootstrap: workerBootstrapState.getBootstrap,
-      resolveAuth: workerBootstrapState.resolveAuth,
-      respond,
-    });
-  } else if (method === "coordinator.cancel_run") {
-    respond(WorkerIpcHandlers.cancelRun({ params, ipcAuthToken, activeRuns }));
-  } else if (method === "worker.deliver_message") {
-    respond(
-      WorkerIpcHandlers.deliverMessage({
+const server = await createIpcServer(
+  socketPath,
+  (method, params, respond, _notify, connectionId) => {
+    if (method === "coordinator.bootstrap") {
+      WorkerBootstrapHandler.handleBootstrap({
         params,
         ipcAuthToken,
         workerId,
-        activeRuns,
-        injectionQueue,
-      }),
-    );
-  } else if (method === "worker.shutdown_idle") {
-    const result = WorkerIpcHandlers.canShutdownIdle({ params, ipcAuthToken, activeRuns });
-    respond(result);
-    if (result.acknowledged) {
-      setTimeout(() => {
-        void shutdownWorker(0);
-      }, 0);
-    }
-  } else if (method === "worker.tool_call_settled") {
-    respond(
-      WorkerIpcHandlers.toolCallSettled({
+        server,
+        connectionId,
+        respond,
+        state: workerBootstrapState,
+      });
+    } else if (method === "coordinator.spawn_run") {
+      WorkerRunner.spawnRun({
         params,
         ipcAuthToken,
-        clearUnsafe: WorkspaceLock.clearUnsafe,
-      }),
-    );
-  } else {
-    respond({ ok: true });
-  }
-});
+        workerId,
+        server,
+        activeRuns,
+        bootstrapReady: workerBootstrapState.ready,
+        injectionQueue,
+        defaultWorkspaceRoot: config.workspace?.root,
+        getBootstrap: workerBootstrapState.getBootstrap,
+        resolveAuth: workerBootstrapState.resolveAuth,
+        respond,
+      });
+    } else if (method === "coordinator.cancel_run") {
+      respond(WorkerIpcHandlers.cancelRun({ params, ipcAuthToken, activeRuns }));
+    } else if (method === "worker.deliver_message") {
+      respond(
+        WorkerIpcHandlers.deliverMessage({
+          params,
+          ipcAuthToken,
+          workerId,
+          activeRuns,
+          injectionQueue,
+        }),
+      );
+    } else if (method === "worker.shutdown_idle") {
+      const result = WorkerIpcHandlers.canShutdownIdle({ params, ipcAuthToken, activeRuns });
+      respond(result);
+      if (result.acknowledged) {
+        setTimeout(() => {
+          void shutdownWorker(0);
+        }, 0);
+      }
+    } else if (method === "worker.tool_call_settled") {
+      respond(
+        WorkerIpcHandlers.toolCallSettled({
+          params,
+          ipcAuthToken,
+          clearUnsafe: WorkspaceLock.clearUnsafe,
+        }),
+      );
+    } else {
+      respond({ ok: true });
+    }
+  },
+);
 
 process.on("SIGTERM", async () => {
   await shutdownWorker(0);

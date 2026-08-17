@@ -23,6 +23,7 @@ function createServer() {
       },
       notify(method: string, params?: Record<string, unknown>) {
         notifications.push({ method, params });
+        return true;
       },
     } satisfies BootstrapServer,
   };

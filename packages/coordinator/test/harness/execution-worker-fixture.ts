@@ -12,7 +12,7 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-const server = createIpcServer(socketPath, (method, params, respond) => {
+const server = await createIpcServer(socketPath, (method, params, respond) => {
   if (method !== "coordinator.spawn_run") {
     respond({ ok: true });
     return;
