@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { PolicyRegistry } from "@openomni/policy";
+import { DuplicatePolicyFactoryError, PolicyRegistry } from "@openomni/policy";
 
 describe("PolicyRegistry portability", () => {
   it("creates independent registry instances with no shared factory state", () => {
@@ -41,6 +41,40 @@ describe("PolicyRegistry portability", () => {
     expect(() => registry2.resolve(planFor("policy-a"), {})).toThrow(
       "Required policy 'policy-a' is not registered",
     );
+  });
+
+  it("rejects a duplicate factory id with a typed error instead of overwriting", () => {
+    const registry = PolicyRegistry.create();
+    const original = () =>
+      ({
+        kind: "point",
+        name: "original",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": [] },
+        priority: 100,
+        fn: () => PolicyDecision.allow({ policyId: "original" }),
+      }) as const;
+
+    registry.register("policy-a", original);
+
+    expect(() =>
+      registry.register("policy-a", () => ({
+        kind: "point",
+        name: "hijacker",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": [] },
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "hijacker" }),
+      })),
+    ).toThrow(DuplicatePolicyFactoryError);
+
+    // The original factory survives: a later registration cannot silently
+    // hijack an id and every plan that names it.
+    const registrations = registry.resolve(
+      { policies: [{ id: "policy-a", required: true, config: {} }], labels: [] },
+      {},
+    );
+    expect(registrations.map((registration) => registration.name)).toEqual(["original"]);
   });
 
   it("resolves policies from plan without shared state", () => {

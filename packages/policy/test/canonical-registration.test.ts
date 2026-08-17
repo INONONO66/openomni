@@ -175,6 +175,24 @@ describe("PolicyEngine canonical registration", () => {
     });
   });
 
+  test("rejects an empty scope agentType array with a typed error", () => {
+    // scope: { agentType: [] } is the config-filter footgun: it used to mean
+    // "unscoped" and silently applied the policy to every agent. Fail-closed
+    // at the boundary — unscoped is spelled by omitting agentType.
+    const engine = PolicyEngine.create();
+
+    const error = expectRegistrationError(engine, {
+      ...registrationDefaults,
+      name: "empty-scope",
+      pointIds: ["run.lifecycle.post"],
+      effectCapabilities: { "run.lifecycle.post": ["audit.annotate"] },
+      scope: { agentType: [] },
+    });
+
+    expect(error.code).toBe("empty_scope_agent_type");
+    expect(error.registrationName).toBe("empty-scope");
+  });
+
   test("rejects empty and duplicate point bindings with typed errors", () => {
     const engine = PolicyEngine.create();
     const base = {

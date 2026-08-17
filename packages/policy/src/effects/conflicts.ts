@@ -162,17 +162,33 @@ function collectWritebackSuppressConflicts(entries: EffectEntry[]): Conflict[] {
   return conflicts;
 }
 
+/**
+ * `tool.filter` (hide the tool) and `tool.require_approval` (surface it behind
+ * a gate) express irreconcilable intents for the same call. Like every other
+ * conflict family, a single policy emitting both is exempt: one author wrote
+ * both effects, so there is no divergent intent to arbitrate. Cross-policy
+ * pairs stay fail-closed WITHOUT a priority comparison, unlike the rewrite
+ * families: those conflict only on divergent *values* where a higher priority
+ * can legitimately own the field, whereas filter-vs-approval is a
+ * contradiction of enforcement mode itself — letting priority pick one would
+ * silently discard the other policy's guard.
+ */
 function collectFilterApprovalConflicts(entries: EffectEntry[]): Conflict[] {
-  const firstFilter = entries.find((entry) => entry.effect.type === "tool.filter");
-  const firstApproval = entries.find((entry) => entry.effect.type === "tool.require_approval");
+  const filters = entries.filter((entry) => entry.effect.type === "tool.filter");
+  const approvals = entries.filter((entry) => entry.effect.type === "tool.require_approval");
 
-  if (!firstFilter || !firstApproval) return [];
+  for (const filter of filters) {
+    for (const approval of approvals) {
+      if (filter.policyId === approval.policyId) continue;
+      return [
+        {
+          message: `tool.filter conflicts with tool.require_approval from ${filter.policyId} and ${approval.policyId}`,
+        },
+      ];
+    }
+  }
 
-  return [
-    {
-      message: `tool.filter conflicts with tool.require_approval from ${firstFilter.policyId} and ${firstApproval.policyId}`,
-    },
-  ];
+  return [];
 }
 
 export function conflictDiagnostic(conflict: Conflict): Policy.PolicyEffect {

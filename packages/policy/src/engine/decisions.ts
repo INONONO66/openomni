@@ -36,6 +36,18 @@ function validationFailure(
   });
 }
 
+/**
+ * A deny at a side-effect boundary auto-escalates: `run.abort` is injected so
+ * a denial cannot be quietly downgraded to a diagnostic. Consumer honesty
+ * note: the main production consumer (packages/agent
+ * src/core/execution/tools.ts) honors the injected abort only at POST
+ * boundaries (`tool.*.post`: blocking + run.abort → blocked result) and in
+ * lifecycle dispatch; for `tool.*.pre` denials it blocks the single tool call
+ * on the verdict alone and the run continues — the injected run.abort effect
+ * is decorative there. The escalation semantics are a deliberate design
+ * (deny-at-boundary must carry its strongest effect); whether run.abort ends
+ * the run is the consumer's choice per point.
+ */
 function enforceDenyAbort(
   decision: Policy.PolicyDecision,
   allowed: EffectMembership,

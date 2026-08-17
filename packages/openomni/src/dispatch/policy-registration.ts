@@ -1,3 +1,13 @@
+/**
+ * NOTE: this file is an intentional duplicate of the generic registration
+ * boundary in `packages/policy/src/engine/registration-validation.ts`,
+ * specialized for the single `dispatch.action.pre` point and surfacing its
+ * own error taxonomy (`DispatchPolicyRegistrationError`) at the dispatch
+ * trust boundary. `registerDispatchPolicy` still delegates final acceptance
+ * to `engine.register()`, so the generic boundary's validation (including
+ * `empty_scope_agent_type`) applies here too — but keep the two files in
+ * sync deliberately; they must not drift apart silently.
+ */
 import { Policy } from "@openomni/protocol";
 import type {
   CanonicalPolicyRegistrationGeneric,

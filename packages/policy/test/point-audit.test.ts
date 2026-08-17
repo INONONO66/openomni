@@ -54,6 +54,55 @@ describe("PolicyEngine canonical point audit", () => {
     expect(evaluated).toMatchObject({ ...traceContext, pointId, pointVersion });
     expect(composed).toMatchObject({ ...traceContext, pointId, pointVersion });
   });
+  test("warns under the trace instead of silently dropping audit records without a sessionId", async () => {
+    const events: Array<{ readonly name: string; readonly data: unknown }> = [];
+    const engine = PolicyEngine.create({
+      // A trace but no session: the audit record cannot be filed (an audit
+      // row without its session names nothing queryable), but the drop must
+      // be visible as an Operational.Warn under the real trace.
+      traceContext: { traceId: "trace-audit-drop" },
+      auditEmit: (event, data) => events.push({ name: event.name, data }),
+    });
+    engine.register({
+      kind: "point",
+      name: "drop-witness",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: () => PolicyDecision.allow({ policyId: "drop-witness" }),
+    });
+
+    await engine.dispatchPoint("dispatch.action.pre", {
+      actor: { kind: "system", actorId: "system:test" },
+      dispatchId: "dispatch-audit-drop",
+      action: "resident.ask",
+      target: { kind: "resident" },
+      sessionId: "session-audit-drop",
+      runId: "run-audit-drop",
+    });
+
+    const auditRecords = events.filter(({ name }) =>
+      [PolicyEvent.Evaluated.name, PolicyEvent.DecisionComposed.name].includes(name),
+    );
+    expect(auditRecords).toHaveLength(0);
+
+    const dropWarnings = events.filter(
+      ({ name, data }) =>
+        name === "operational.warn" &&
+        (data as { msg?: string }).msg === "audit record dropped: missing sessionId",
+    );
+    // One warn per dropped record: the evaluated event and the composed event.
+    expect(dropWarnings).toHaveLength(2);
+    expect(dropWarnings[0]?.data).toMatchObject({
+      traceId: "trace-audit-drop",
+      component: "agent.policy",
+      context: { verdict: "allow" },
+    });
+    expect(
+      dropWarnings.map(({ data }) => (data as { context: { event: string } }).context.event).sort(),
+    ).toEqual([PolicyEvent.DecisionComposed.name, PolicyEvent.Evaluated.name].sort());
+  });
+
   test("preserves safe correlation when canonical context snapshot fails", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({

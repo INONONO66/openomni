@@ -1,3 +1,12 @@
+/**
+ * NOTE: `packages/openomni/src/dispatch/policy-registration.ts` maintains an
+ * intentional duplicate of this registration boundary, pinned to the single
+ * `dispatch.action.pre` point and surfacing its own error taxonomy
+ * (`DispatchPolicyRegistrationError`). It delegates final acceptance to
+ * `engine.register()` (this file), so validation added here also guards that
+ * path — but keep the two boundaries in sync deliberately; they must not
+ * drift apart silently.
+ */
 import { Policy } from "@openomni/protocol";
 import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "./types";
 import { captureFrozenArray } from "./array-snapshot";
@@ -14,7 +23,8 @@ type PolicyRegistrationErrorCode =
   | "missing_effect_capabilities"
   | "unbound_effect_capabilities"
   | "duplicate_effect_capability"
-  | "disallowed_effect_capability";
+  | "disallowed_effect_capability"
+  | "empty_scope_agent_type";
 
 interface PolicyRegistrationErrorOptions {
   readonly code: PolicyRegistrationErrorCode;
@@ -150,6 +160,14 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     },
   );
   const scope = frozenScope(metadata.data.scope);
+  // An empty agentType array is rejected fail-closed: it is the classic
+  // config-filter-yielded-[] footgun, and both plausible readings are wrong —
+  // "matches everyone" silently widens the policy, "matches no one" silently
+  // disables it. Scope to everything by omitting `agentType`, never by
+  // emptying it.
+  if (scope?.agentType !== undefined && scope.agentType.length === 0) {
+    throw registrationError(name, "empty_scope_agent_type");
+  }
   const trusted = Object.freeze({
     kind: "point",
     name: metadata.data.name,
