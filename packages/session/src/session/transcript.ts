@@ -113,8 +113,13 @@ function maintainProjection(
     }
     case "part.advanced": {
       const part = state.parts.find((candidate) => candidate.id === fact.partId);
-      // The fold applied this fact, so the advanced part exists by construction.
-      if (part !== undefined) adapter.part.set(fact.messageId, part);
+      if (part === undefined) {
+        // The fold applied this fact, so the advanced part exists by
+        // construction — its absence is fold-state corruption. Skipping it
+        // silently would desync the projection from the recorded stream.
+        throw new TranscriptRecordingError("unknown_part", fact.type);
+      }
+      adapter.part.set(fact.messageId, part);
       return;
     }
     case "message.finished":
