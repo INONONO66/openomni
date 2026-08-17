@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786983763635,
+  "lastUpdate": 1786989502056,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54467,6 +54467,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 523875,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7aede43e63b7d6b5419490cd38872524de6e403c",
+          "message": "feat(llm): fail fast on instant transport-failure streaks (#699)\n\nBackoff exists to relieve an overloaded endpoint; it cannot help one\nrefusing connections outright. A retryable failure that carries no HTTP\nstatus, no response headers, and dies under 2s is the signature of the\nlatter — yet the retry loop paid the full exponential ladder for it,\nobserved upstream as 13 retries and 250s of user-visible silence\nagainst a dead endpoint.\n\nThe processor now tracks consecutive instant transport failures per\nprocess() call: the first two retry on a 250ms probe delay instead of\nthe backoff ladder, the third declines through the existing\nretry-declined path with a detail naming the streak. Any attempt that\nreaches the endpoint (status or headers arrived) or fails slowly\nresets the streak, so slow timeouts keep the full backoff budget.\n\nSource: hermes-agent production-fork finding (instant vs slow failure\nclassification), adapted to the typed Retry.Decision vocabulary.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T02:57:12+09:00",
+          "tree_id": "64f8e2387650eac4634adea7da6556b7e36fbe69",
+          "url": "https://github.com/INONONO66/openomni/commit/7aede43e63b7d6b5419490cd38872524de6e403c"
+        },
+        "date": 1786989501643,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 353,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4861,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 978,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1201,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 36780,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1798,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 399793,
             "unit": "ns/op"
           }
         ]
