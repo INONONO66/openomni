@@ -12,13 +12,15 @@ const socketDir = `/tmp/omo-dp-${process.pid}`;
 
 let manager: WorkerManager;
 
-beforeAll(async () => {
+beforeAll(() => {
   fs.mkdirSync(socketDir, { recursive: true });
   manager = createWorkerManager(
     { maxActiveWorkers: 4, workerScript: WORKER_ENTRY, socketDir },
     collectorPorts(),
   );
-  await manager.waitUntilReady(15_000);
+  // No waitUntilReady here (#audit L1): workers spawn on demand, so on a
+  // fresh manager it is a documented no-op — calling it implied a warm-up
+  // that never happened.
 }, 20_000);
 
 afterAll(async () => {
@@ -120,26 +122,11 @@ describe("worker manager dispatch", () => {
     expect(mode).toBe(0o700);
   });
 
-  test("dispatch with budget.maxWallTimeMs=120_000 passes timeout=150_000 to IPC", async () => {
-    const result = await manager.deliver("run-budget-1", {
-      traceId: TEST_TRACE_ID,
-      sessionId: "session-budget-1",
-      delayMs: 10,
-      prompt: "test",
-      budget: { maxWallTimeMs: 120_000 },
-    });
-    expect((result as Record<string, unknown>).accepted).toBe(true);
-  });
-
-  test("dispatch without budget defaults to timeout=330_000", async () => {
-    const result = await manager.deliver("run-budget-2", {
-      traceId: TEST_TRACE_ID,
-      sessionId: "session-budget-2",
-      delayMs: 10,
-      prompt: "test",
-    });
-    expect((result as Record<string, unknown>).accepted).toBe(true);
-  });
+  // The two former "timeout passed to IPC" tests here were theater: their
+  // bodies only checked accepted===true and one asserted a 330_000 default
+  // that does not exist. The real assertions (budget 120_000 → 150_000 to
+  // client.call, no budget → 600_000 backstop) live in
+  // src/worker-supervision/supervisor.test.ts against the IPC-call spy.
 
   test("workers inherit runtime environment updates", async () => {
     const previousDiscordToken = process.env.DISCORD_BOT_TOKEN;
@@ -163,7 +150,6 @@ describe("worker manager dispatch", () => {
       collectorPorts(),
     );
     try {
-      await envManager.waitUntilReady(15_000);
       const result = await envManager.deliver("run-env", {
         traceId: TEST_TRACE_ID,
         sessionId: "session-env",

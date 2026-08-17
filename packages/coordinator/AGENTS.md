@@ -37,12 +37,12 @@ deliver(runId, task)
   → slot.load++, clear idle timer
   → ensureSupervisor() (created on demand; generation check across restarts)
   → publish WorkerDriver.RunDelivered
-  → supervisor.deliver → result, publish WorkerDriver.RunSettled (completed | interrupted | error)
+  → supervisor.deliver → result, publish WorkerDriver.RunSettled (completed | interrupted | error | cancelled)
   → slot.load--; if 0: release one waiter, scheduleIdleShutdown()
        idleShutdownMs elapsed with load 0 → kill worker, forget slot
 ```
 
-Observability is ledger events, not push maps (#462 §4): the supervisor publishes `WorkerDriver.Spawned/Ready/Exited/Restarted` and the pool publishes `RunDelivered/RunSettled/QueueSaturated` through the injected `BusEvent.Sink` — worker lifecycle is reconstructable from these events alone. Wall-time is enforced in the driver: a delivery whose RPC exceeds `budget.maxWallTimeMs` plus a margin (`OPENOMNI_DELIVER_MARGIN_MS`, default 30s) gets the worker SIGKILLed and rejects with `wall_time_exceeded`; the run settles as `interrupted`. The worker-manager barrel also exports the type-only `DeliverTask` shape (`{ sessionId } & Record<string, unknown>`) for composition-root adapters.
+Observability is ledger events, not push maps (#462 §4): the supervisor publishes `WorkerDriver.Spawned/Ready/Exited/Restarted` and the pool publishes `RunDelivered/RunSettled/QueueSaturated` through the injected `BusEvent.Sink` — worker lifecycle is reconstructable from these events alone, including cancellation: a cancelled run settles with outcome `cancelled` whether the cancel landed before delivery (no `RunDelivered` row, `durationMs` 0) or mid-flight. Wall-time is enforced in the driver: a delivery whose RPC exceeds `budget.maxWallTimeMs` plus a margin (`OPENOMNI_DELIVER_MARGIN_MS`, default 30s) gets the worker SIGKILLed and rejects with `wall_time_exceeded`; the run settles as `interrupted`. A worker that spawns but never serves IPC is killed at the connect deadline, and consecutive fast crashes trip a circuit breaker that suspends restarts (terminal `Operational.Warn`; the next delivery replaces the supervisor). The `DeliverTask` shape (`{ sessionId } & Record<string, unknown>`) is package-internal — no external importer exists.
 
 ## CONSUMER
 
