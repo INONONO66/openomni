@@ -70,6 +70,7 @@ export function initializeTelemetryConnection(db: Database): void {
   applyConnectionPragmas(db, "NORMAL");
 }
 
+/** @internal Test-only fixture reset (Adapter.clear) — no production caller. */
 export function clearSqliteStorage(db: Database): void {
   for (const table of CLEAR_ORDER) {
     db.query(`DELETE FROM ${table}`).run();

@@ -14,8 +14,6 @@ export namespace Session {
   export const get = Lifecycle.get;
   export const list = Lifecycle.list;
   export const listChildren = Lifecycle.listChildren;
-  export const getWorkerMeta = Lifecycle.getWorkerMeta;
-  export const updateWorkerMeta = Lifecycle.updateWorkerMeta;
   export const update = Lifecycle.update;
   export const remove = Lifecycle.remove;
   export const sweepExpired = Lifecycle.sweepExpired;

@@ -116,14 +116,6 @@ export function listChildren(parentSessionId: string): SessionInfo[] {
   return list().filter((session) => session.parentSessionId === parentSessionId);
 }
 
-export function getWorkerMeta(sessionId: string): Record<string, unknown> | undefined {
-  return get(sessionId)?.workerMeta;
-}
-
-export function updateWorkerMeta(sessionId: string, meta: Record<string, unknown>): void {
-  update(sessionId, { workerMeta: meta });
-}
-
 export function update(id: string, input: UpdateInput): SessionInfo | undefined {
   const session = Storage.getAdapter().session.get(id);
   if (!session) return undefined;
