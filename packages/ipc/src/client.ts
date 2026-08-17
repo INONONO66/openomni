@@ -22,7 +22,10 @@ export type ConnectIpcClientOptions = {
     params: Record<string, unknown> | undefined,
     respond: (result: unknown) => void,
   ) => void | Promise<void>;
-  onNotification?: (method: string, params: Record<string, unknown> | undefined) => void;
+  onNotification?: (
+    method: string,
+    params: Record<string, unknown> | undefined,
+  ) => void | Promise<void>;
 };
 
 export function connectIpcClient(
@@ -130,7 +133,26 @@ export function connectIpcClient(
 
         const notification = Ipc.Notification.safeParse(raw);
         if (notification.success) {
-          opts.onNotification?.(notification.data.method, notification.data.params);
+          // Notifications get no error frame per the protocol spec, but a
+          // throwing handler must not escape the 'data' listener either —
+          // that is an uncaughtException in whatever process hosts this
+          // client (e.g. the coordinator supervisor). Mirror the server:
+          // log and keep draining, for sync throws AND async rejections.
+          const warnFailure = (error: unknown) => {
+            console.warn(
+              "IPC notification handler failed:",
+              error instanceof Error ? error.message : String(error),
+            );
+          };
+          try {
+            const result = opts.onNotification?.(
+              notification.data.method,
+              notification.data.params,
+            );
+            if (result instanceof Promise) result.catch(warnFailure);
+          } catch (error) {
+            warnFailure(error);
+          }
           continue;
         }
 
