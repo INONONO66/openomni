@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786973312590,
+  "lastUpdate": 1786973579153,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53897,6 +53897,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 522887,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ae2207111c23a56f6896ee77cd68a7a82b5d1a9c",
+          "message": "fix(llm): abort classification, providerOptions nesting, fail-open proxy fallback + dead surface removal (#689)\n\n* fix(llm): abort by signal, nest providerOptions, loud proxy failure\n\nAudit fixes, behavioral batch:\n\n- H1 processor: classify aborts by the AbortSignal, not the error shape.\n  Production aborts carry a custom reason (controller.abort(new\n  Error(...))), so throwIfAborted() throws a plain Error the DOMException\n  check misclassified as \"error\" — hiding the turn from replay and\n  settling in-flight tools as failed instead of interrupted.\n- M1 run: pass RunInput.providerOptions as the nested streamText\n  `providerOptions` key instead of spreading it top-level. Operator\n  config like {anthropic:{thinking:...}} was silently ignored, and\n  config keys could clobber wired args (abortSignal, maxRetries, tools).\n- M2 provider: proxy model-listing failures now throw a typed\n  ProxyModelsError instead of returning [] and falling through to the\n  full models.dev catalog (fail-open). An empty successful listing\n  returns [] honestly instead of presenting the full catalog.\n- M3 processor/run: LlmCall.Completed reports usage summed across every\n  attempt (processor.usageTotals); message.tokens only carried the\n  final attempt's fold, dropping retried attempts' billed usage.\n- Wire Decision.retryAfterOverCap (produced, consumed by nobody) into\n  an Operational.Warn when an over-cap reset demotes to backoff.\n\nEach fix carries a regression test; the proxy 401 test was updated with\nthe behavior (it pinned the silent []).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): harden auth storage, honor openai baseURL, Map loaders\n\nAudit fixes, hardening batch:\n\n- L4 auth/storage: a malformed auth.json now throws a typed\n  Auth.InvalidFileError instead of silently reading as {} — the next\n  set() would have overwritten the file and destroyed every stored\n  credential. Writes are atomic with mode 0600 from the first byte\n  (temp file + rename), closing the chmod-after-write window where the\n  file sat world-readable. Auth.remove (own test only, zero callers)\n  removed with its test.\n- L5 provider/sdk: honor model.api.url for openai models too. The\n  `providerID !== \"openai\"` gate silently ignored a configured catalog\n  URL and was carried in without a recorded reason (#450); `name` is\n  the SDK default for openai, so setting it is identity.\n- L3 provider/sdk: CUSTOM_LOADERS converted from a plain Record to a\n  Map — same Object.prototype-key hazard the file already documents\n  for BUNDLED_PROVIDERS.\n- transform: drop the pretend user/system arm of buildMessageWithContent\n  (it returned the original message, discarding the filtered content);\n  array content only ever arrives on assistant/tool messages, stated\n  honestly at the guard.\n- stream-events: annotate the hardcoded step-finish cost: 0 — the\n  protocol part schema requires the field and llm has no pricing\n  source wired, so the explicit 0 is the honest value.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(llm): drop dead barrel exports and ModelsDev.refresh\n\nAudit dead-surface batch (grep-verified zero non-test callers across\npackages/ and apps/):\n\n- Root barrel: unexport ProviderError, NamedError, APIError — no\n  production consumer imported them from @openomni/llm (internals still\n  use them via deep paths). TokenTracker was already unexported on main\n  by the #606 re-audit (#687); the public-surface test pins the\n  narrowed contract.\n- ModelsDev.refresh: only consumer was a tautology test\n  (typeof refresh === \"function\"); both removed. The on-disk catalog\n  cache is write-once by design — noted at get().\n- Provider.getProviderInfo / Provider.listProviders from the audit\n  list were already gone on main (wave2 protocol diet), nothing to do.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T22:31:44+09:00",
+          "tree_id": "d7f0743cfcff60c67b72fe26d44e9208733de346",
+          "url": "https://github.com/INONONO66/openomni/commit/ae2207111c23a56f6896ee77cd68a7a82b5d1a9c"
+        },
+        "date": 1786973578758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5892,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11025,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2528,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3185,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15808,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8251,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1184,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1637,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 52307,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2364,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 523126,
             "unit": "ns/op"
           }
         ]
