@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786993185094,
+  "lastUpdate": 1786994467212,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54809,6 +54809,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518039,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ee8d6386b4c5efe7c9288d52aa1aa5fbb7a0038",
+          "message": "feat(protocol,openomni,server): effect intents carry a replay tag (#703)\n\nA replay or recovery consumer deciding whether an effect may be\nre-executed had nothing recorded to decide FROM — the judgment would\nhave to be re-derived at read time, by a party that does not own the\neffect's nature. The driver does: EffectDriver now declares\nreplay: \"never\" | \"safe\" (required by type — every driver decides,\nnone defaults), and the effect service stamps it into the intent fact\nat record time, beside the identity.\n\nThe ledger schema takes the field as optional strictly as a\npersisted-data boundary: rows recorded before this vocabulary existed\ncarry no tag, and every consumer must treat absence as \"never\" — the\nconservative reading is documented on the schema, not defaulted in\nsilently. A replayed idempotency hit never rewrites the recorded tag\n(CAS conflict path returns the original row; pinned by test).\n\nNamed consumers: the #493 replay engine (zero-live read-back — the tag\nmarks what a recovery mode may ever re-issue), the effect reconciler\n(a \"safe\" pending intent could re-execute instead of probing), and\ndurable Wait resume (#215). All read the ledger, none re-derive.\n\nSource: senpi ToolStartedRecord.replay (per-record replayability\nwritten at record time) via #698 leaf 5.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T04:19:58+09:00",
+          "tree_id": "d88ea644112e69384311139bfb52cb409235e194",
+          "url": "https://github.com/INONONO66/openomni/commit/4ee8d6386b4c5efe7c9288d52aa1aa5fbb7a0038"
+        },
+        "date": 1786994465957,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 653,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6185,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9801,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2609,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2482,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16838,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8307,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 856,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2319,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 515215,
             "unit": "ns/op"
           }
         ]
