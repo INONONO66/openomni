@@ -58,7 +58,7 @@ export function undeclaredEffectDecision(
 }
 
 /** Reason-code prefix for a fail-open middleware crash; suffixed with the registration name. */
-export const MIDDLEWARE_FAIL_OPEN_REASON = "policy.middleware_failed.fail_open";
+const MIDDLEWARE_FAIL_OPEN_REASON = "policy.middleware_failed.fail_open";
 
 /**
  * A fail-open middleware threw. Fail-open semantics stand — the policy

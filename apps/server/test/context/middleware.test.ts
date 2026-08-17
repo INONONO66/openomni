@@ -161,18 +161,19 @@ describe("createContextMiddleware", () => {
 
   it("refuses to assemble without the run trace context (no fallback mint)", async () => {
     // Pin (D11): a missing traceContext is a wiring bug — the middleware
-    // throws (fail-open swallows it into a bare allow) instead of minting a
-    // fallback trace, so AGENTS.md content is deliberately NOT appended.
+    // throws (fail-open keeps the allow) instead of minting a fallback
+    // trace, so AGENTS.md content is deliberately NOT appended.
     const ws = makeWorkspace("no-trace-context");
     writeFileSync(join(ws, "AGENTS.md"), "# Should not be appended");
 
     const middleware = createContextMiddleware({ workspaceRoot: ws });
     const mockCtx = { ...contextPolicyInput(), traceContext: undefined };
 
-    // A bare allow is shape-identical to "middleware never selected", so the
-    // pin also asserts the LOUD half: the engine records the middleware error
-    // under its own trace (#656 review) — the drop is refuse-and-report, not
-    // silence.
+    // The allow is no longer bare: the crash leaves an audit annotation in
+    // the composed effects, so it stays distinguishable from "middleware
+    // never selected" even without auditEmit. The pin also asserts the LOUD
+    // half: the engine records the middleware error under its own trace
+    // (#656 review) — the drop is refuse-and-report, not silence.
     const warns: Array<Record<string, unknown>> = [];
     const engine = PolicyEngine.create<PolicyContext>({
       traceContext: { traceId: "trace-engine", sessionId: "session-context", runId: "run-1" },
@@ -188,7 +189,12 @@ describe("createContextMiddleware", () => {
       turnIndex: 0,
     });
 
-    expect(result).toMatchObject({ verdict: "allow", effects: [] });
+    expect(result.verdict).toBe("allow");
+    expect(result.effects).toHaveLength(1);
+    expect(result.effects[0]).toMatchObject({ type: "audit.annotate", severity: "warning" });
+    expect((result.effects[0] as { annotation: string }).annotation).toContain(
+      "policy.middleware_failed.fail_open:server:context",
+    );
     const warn = warns.find((entry) => entry.msg === "middleware error");
     if (warn === undefined) throw new Error("no middleware error was recorded");
     // Attribution: the dispatch has no trace, so the record files under the
