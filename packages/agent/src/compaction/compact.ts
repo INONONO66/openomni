@@ -1,5 +1,5 @@
 import type { BusEvent } from "@openomni/protocol";
-import { Operational, type Message } from "@openomni/protocol";
+import { AgentExecution, type Message } from "@openomni/protocol";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 
 export interface CompactionOptions {
@@ -53,25 +53,89 @@ export namespace Compaction {
   }
 
   /**
-   * @param trace The run whose history is being rewritten. A separate required
-   * parameter rather than a field on `options`: the trace is a per-call fact,
-   * not configuration, and an optional field validated by a runtime throw
-   * gives the compiler nothing — which is how the caller that supplied none
-   * reached production.
+   * @param identity The run whose history is being rewritten. A separate
+   * required parameter rather than a field on `options`: identity is a
+   * per-call fact, not configuration, and an optional field validated by a
+   * runtime throw gives the compiler nothing — which is how the caller that
+   * supplied none reached production.
    * @param events Where the record of the rewrite goes. Beside the identity,
    * not inside it: a destination is not something the trace says.
+   * @param dispatch What fired the seam and what was measured — per-dispatch
+   * facts the bracket records.
+   *
+   * The lock bracket: exactly one `agent.compaction.started` before any work
+   * and exactly one `agent.compaction.completed` as the last record on every
+   * exit path, a summarizer throw included. A started without a completed
+   * diagnoses a run that died inside compaction.
    */
   export async function compact(
     messages: Message.WithParts[],
     options: ResolvedCompactionOptions,
-    trace: { readonly traceId: string },
+    identity: { readonly traceId: string; readonly sessionId: string; readonly runId?: string },
     events: BusEvent.Sink,
-    measuredContextTokens?: number,
+    dispatch: { readonly trigger: "threshold" | "yield"; readonly measuredTokens?: number },
+  ): Promise<CompactionResult> {
+    const messagesBefore = messages.length;
+    events.publish(AgentExecution.CompactionStarted, {
+      ...identity,
+      time: Date.now(),
+      messagesBefore,
+      ...(dispatch.measuredTokens === undefined ? {} : { contextTokens: dispatch.measuredTokens }),
+      trigger: dispatch.trigger,
+      summarizer: options.onSummarize !== undefined,
+    });
+
+    const finish = (
+      result: CompactionResult,
+      outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
+      elidedChars: number,
+    ): CompactionResult => {
+      events.publish(AgentExecution.CompactionCompleted, {
+        ...identity,
+        time: Date.now(),
+        outcome,
+        messagesBefore,
+        messagesAfter: result.messages.length,
+        removedCount: result.removedCount,
+        elidedChars,
+      });
+      return result;
+    };
+
+    try {
+      return await compactUnbracketed(messages, options, dispatch.measuredTokens, finish);
+    } catch (error) {
+      // The one exit finish() cannot serve: the summarizer threw. The
+      // bracket still closes — `failed` is this operation's terminal — and
+      // the throw propagates unchanged into the seam's fail-closed contract.
+      events.publish(AgentExecution.CompactionCompleted, {
+        ...identity,
+        time: Date.now(),
+        outcome: "failed",
+        messagesBefore,
+        messagesAfter: messagesBefore,
+        removedCount: 0,
+        elidedChars: 0,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  async function compactUnbracketed(
+    messages: Message.WithParts[],
+    options: ResolvedCompactionOptions,
+    measuredContextTokens: number | undefined,
+    finish: (
+      result: CompactionResult,
+      outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
+      elidedChars: number,
+    ) => CompactionResult,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
     if (messages.length <= protectRecent) {
-      return { messages, compacted: false, removedCount: 0 };
+      return finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
     }
 
     // Reduction before the cut: eliding old tool outputs reclaims window
@@ -91,24 +155,17 @@ export namespace Compaction {
       if (reduction.elidedChars > 0) {
         working = reduction.messages;
         elidedChars = reduction.elidedChars;
-        events.publish(Operational.Info, {
-          traceId: trace.traceId,
-          time: Date.now(),
-          component: "agent.compaction",
-          msg: "compaction reduced tool outputs",
-          context: {
-            elidedChars: reduction.elidedChars,
-            messageCount: messages.length,
-            reason: "context window threshold exceeded",
-          },
-        });
         const overageTokens =
           measuredContextTokens === undefined
             ? undefined
             : measuredContextTokens - resolveThresholdTokens(options);
         const estimatedReclaimTokens = elidedChars / ESTIMATED_CHARS_PER_TOKEN;
         if (overageTokens === undefined || estimatedReclaimTokens >= overageTokens) {
-          return { messages: working, compacted: true, removedCount: 0 };
+          return finish(
+            { messages: working, compacted: true, removedCount: 0 },
+            "reduced",
+            elidedChars,
+          );
         }
       }
     }
@@ -142,13 +199,17 @@ export namespace Compaction {
       // reachable from resumed worker hydration — a throw here would turn a
       // fail-closed run.completion.pre into a mid-conversation kill.
       return elidedChars > 0
-        ? { messages: working, compacted: true, removedCount: 0 }
-        : { messages: working, compacted: false, removedCount: 0, blocked: "no_user_boundary" };
+        ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+        : finish(
+            { messages: working, compacted: false, removedCount: 0, blocked: "no_user_boundary" },
+            "no_user_boundary",
+            0,
+          );
     }
     if (cutoff === 0) {
       return elidedChars > 0
-        ? { messages: working, compacted: true, removedCount: 0 }
-        : { messages: working, compacted: false, removedCount: 0 };
+        ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+        : finish({ messages: working, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
     }
 
     const toRemove = working.slice(0, cutoff);
@@ -165,24 +226,15 @@ export namespace Compaction {
 
     const compacted = [...summaryMessages, ...toKeep];
 
-    events.publish(Operational.Info, {
-      traceId: trace.traceId,
-      time: Date.now(),
-      component: "agent.compaction",
-      msg: "compaction triggered",
-      context: {
-        messagesBefore: working.length,
-        messagesAfter: compacted.length,
+    return finish(
+      {
+        messages: compacted,
+        compacted: true,
         removedCount: toRemove.length,
-        reason: "context window threshold exceeded",
       },
-    });
-
-    return {
-      messages: compacted,
-      compacted: true,
-      removedCount: toRemove.length,
-    };
+      "cut",
+      elidedChars,
+    );
   }
 }
 

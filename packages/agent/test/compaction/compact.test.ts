@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, type Message } from "@openomni/protocol";
+import { AgentExecution, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Compaction } from "../../src/compaction/compact";
 
@@ -88,7 +88,10 @@ describe("Compaction", () => {
    */
   it("files the compaction record under the run's trace", async () => {
     const seen: Array<{ traceId: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Info, (event) => {
+    const unsubStarted = Bus.subscribe(AgentExecution.CompactionStarted, (event) => {
+      seen.push(event as unknown as { traceId: string });
+    });
+    const unsubCompleted = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
       seen.push(event as unknown as { traceId: string });
     });
 
@@ -96,15 +99,18 @@ describe("Compaction", () => {
       await Compaction.compact(
         Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
         { contextWindowTokens: 1000, protectRecentMessages: 2 },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       await Bun.sleep(0);
     } finally {
-      unsubscribe();
+      unsubStarted();
+      unsubCompleted();
     }
 
-    expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(1);
+    // The bracket: started + completed, both filed under the run's trace.
+    expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(2);
   });
 
   describe("shouldCompact", () => {
@@ -208,8 +214,9 @@ describe("Compaction", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 6,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(false);
       expect(result.removedCount).toBe(0);
@@ -226,8 +233,9 @@ describe("Compaction", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 4,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(6);
@@ -251,8 +259,9 @@ describe("Compaction", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 6,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(true);
       expect(result.messages).toHaveLength(6);
@@ -274,8 +283,9 @@ describe("Compaction", () => {
           protectRecentMessages: 4,
           onSummarize: async () => "Summary of removed messages",
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(true);
       const allTexts = result.messages.flatMap((m) =>
@@ -292,8 +302,9 @@ describe("Compaction", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 6,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(false);
     });
@@ -321,8 +332,9 @@ describe("Compaction", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 3,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(true);
       expect(result.messages[0]?.info.role).toBe("user");
@@ -350,8 +362,9 @@ describe("Compaction", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 3,
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(false);
       expect(result.blocked).toBe("no_user_boundary");
@@ -378,8 +391,9 @@ describe("Compaction", () => {
           protectRecentMessages: 3,
           onSummarize: async () => "anchored",
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       expect(result.compacted).toBe(true);
       expect(result.removedCount).toBe(5);
@@ -398,8 +412,9 @@ describe("Compaction", () => {
           protectRecentMessages: 4,
           onSummarize: async () => "summary",
         },
-        { traceId: TEST_TRACE_ID },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
         Bus,
+        { trigger: "threshold" },
       );
       const summary = result.messages[0];
       expect(summary?.info.role).toBe("user");

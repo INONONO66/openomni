@@ -51,9 +51,9 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
 
       // `run.completion.pre` is fail-closed, so throwing here would end the
       // run — the failure mode this guard was added to prevent. The lifecycle
-      // always supplies the trace (`buildLifecyclePolicyContext`); if some
-      // future dispatcher does not, skipping compaction degrades the turn
-      // rather than killing the run, and the skip is itself recorded.
+      // always supplies the trace and session (`buildLifecyclePolicyContext`);
+      // if some future dispatcher does not, skipping compaction degrades the
+      // turn rather than killing the run, and the skip is itself recorded.
       const traceId = ctx.traceContext?.traceId;
       if (traceId === undefined || traceId.length === 0) {
         return PolicyDecision.allow({
@@ -61,12 +61,22 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_trace"],
         });
       }
+      const sessionId = ctx.sessionId;
+      if (sessionId === undefined || sessionId.length === 0) {
+        return PolicyDecision.allow({
+          policyId: "builtin.compaction",
+          reasonCodes: ["compaction_skipped_no_session"],
+        });
+      }
       const result = await Compaction.compact(
         ctx.messages,
         resolved,
-        { traceId },
+        { traceId, sessionId },
         events,
-        ctx.contextTokens,
+        {
+          trigger: ctx.contextYielded ? "yield" : "threshold",
+          ...(ctx.contextTokens === undefined ? {} : { measuredTokens: ctx.contextTokens }),
+        },
       );
       if (!result.compacted) {
         // The trigger fired and nothing was reclaimed — the one silent path

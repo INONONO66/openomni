@@ -96,6 +96,7 @@ describe("registerCompaction", () => {
       timing: "turn.finish",
       pointId: "run.completion.pre",
       traceContext: { traceId: "trace-registry-inject" },
+      sessionId: "session-registry-inject",
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
