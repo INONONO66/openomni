@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786973579153,
+  "lastUpdate": 1786973992372,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54011,6 +54011,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 523126,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3cea9f51c8e4c9874301f38ca4e370a4b3121408",
+          "message": "fix(coordinator): kill zombie supervisors, real circuit breaker, cancelled runs in ledger (#690)\n\n* feat(protocol): cancelled RunSettled outcome, supervisor error codes\n\nThe driver's run ledger could not record cancellation: RunSettled's outcome\nenum lacked cancelled, so cancelled runs either vanished (pre-delivery) or\nwere mislabeled completed (mid-flight). WorkerDeliveryError also lacked\ncodes for the supervisor's own rejections (worker unavailable, readiness\ntimeout/abort, lost IPC connection), forcing untyped Errors.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(coordinator): kill zombie supervisors, real crash-loop breaker\n\nH1: a worker that spawned but never served IPC within the connect deadline\n(or had its bootstrap rejected every attempt) left the supervisor\nrunning=true/isReady()=false forever — ensureSupervisor kept re-arming the\nzombie and every delivery reset the slot's idle timer, wedging the slot.\nconnectWithRetry now warns AND forceKills at deadline exhaustion so the\nexited -> restart path (or replacement) fires.\n\nM2: the restart circuit breaker was arithmetically unreachable — backoff\ndelays (1+2+4+8+16+30s) exceeded the 60s window, so the count reset before\never crossing MAX_RESTARTS_PER_WINDOW and an instantly-crashing worker\nrespawned ~6x/min forever. Replaced with consecutive fast-crash counting:\na generation that becomes ready and survives 5s starts a fresh burst; 5\nfast crashes in a row suspend restarts with a terminal Operational.Warn\n(the next delivery replaces the supervisor via ensureSupervisor).\n\nM6: untyped rejections wrapped into the WorkerDeliveryError taxonomy —\nworker_unavailable (deliver without a client), worker_not_ready /\nworker_stopped (waitReady), ipc_connection_lost (raw IpcConnectionError\nleaking from deliver). crash.test now asserts the typed worker_restarted\ncode instead of message text.\n\nL8: OPENOMNI_WORKER_ENV_FIXTURE / OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS are\nforwarded to workers only under NODE_ENV=test.\n\nRegression tests: never-listening and instantly-crashing worker fixtures\ndrive the zombie-kill and breaker-trip paths against real subprocesses;\nunit tests pin the typed rejections, env gating, and backoff table.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(coordinator): cancelled runs settle, pool timer and slot hygiene\n\nM4: cancellation is now visible in the ledger — a pre-delivery cancel\npublishes RunSettled{cancelled} (both the pre-slot and post-waitReady\npaths), and activeRun.cancelled is re-checked after spawn_run resolves so\na mid-flight cancel settles as cancelled instead of completed.\n\nM3: scheduleIdleShutdown checks stopping BEFORE arming — an in-flight\ndelivery settling during shutdown() could re-arm an idle timer after the\nclearIdleTimer sweep and keep the process alive; shutdown also sweeps\ntimers again after supervisors settle. The idle path's silent .catch now\npublishes the swallowed error as Operational.Warn while keeping recovery.\n\nM1: stale socket-dir staleness is owner-liveness, not socket probing — the\nold sweep rm -rf'd a live manager's dir whenever its workers were all in\nrestart backoff (no .sock answered a 1s probe) and never cleaned empty\ndirs. The creating manager writes owner.pid; dirs are removed when the\nowner pid is dead (ESRCH), unmarked dirs by age; the sweep is synchronous.\n\nL3: reassignSlot recovers reserved=false and wakes a waiter when stop()\nthrows, mirroring the idle path. L5: killWorker on an idle slot releases\none waiter after freeing capacity. L7: clamping maxActiveWorkers publishes\na warn instead of silently capping. L6: generation-guard timing invariant\ndocumented. M5 (skipped by design): TODO recorded at the relay pass-through\nreferencing reject-on-mismatch as the safer contract. Also removed the\nunreachable load!==0 guard in releaseReservedSlot (reservation is\nexclusive) and documented waitUntilReady as a no-op on slotless managers.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(coordinator): drop dead surface, make theater tests honest\n\nDead surface: test/harness/execution-worker-fixture.ts had no importer;\nDeliverTask/ToolCallParams/ToolCallResult/WorkerManagerStats leave the\npackage barrel (zero external importers — apps/server uses only\ncreateWorkerManager, WorkerManager, ToolCallContext and the inbound-wait\ntypes); internal barrel re-exports trimmed to match the dead-export\nratchet. contract-alias.test now pins the alias against the internal\nmodule. (test/harness/ipc.ts was already gone.)\n\nTheater: the two dispatch tests claiming IPC-timeout assertions only\nchecked accepted===true (and asserted a 330_000 default that does not\nexist) — replaced by real client.call spy assertions in supervisor.test\n(budget 120_000 -> 150_000; no budget -> 600_000 was already pinned).\nsmoke.test compared [process.pid] to [process.pid], a tautology — it now\ncensuses live child pids via pgrep before/after. Misleading\nwaitUntilReady warm-up calls removed from crash/dispatch beforeAll (L1:\ndocumented no-op on a fresh on-demand manager).\n\nAGENTS.md: RunSettled outcome list gains cancelled, the events-alone\nreconstruction claim now covers cancellation honestly, and the stale\n'barrel exports DeliverTask for composition-root adapters' claim is gone.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(coordinator): a refused or failed cancel must not mislabel the run\n\ncancel() set activeRun.cancelled unconditionally before asking the\nworker and never reset it when the worker refused ({cancelled:false},\nrun already finishing) or the RPC failed — so the run's real\ncompletion settled as 'cancelled' on the ledger, contradicting\nRunSettled's own contract that 'completed' means the worker returned\na response. The worker is the authority: reset the flag unless it\nconfirms, and keep the queued/starting optimistic paths (deliver\nsettles those as cancelled itself). Pinned with refused/failed/\nconfirmed regression cases.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T22:38:12+09:00",
+          "tree_id": "d05bae3e827ecf1b722c2240aaa9b9b27c81b01a",
+          "url": "https://github.com/INONONO66/openomni/commit/3cea9f51c8e4c9874301f38ca4e370a4b3121408"
+        },
+        "date": 1786973991602,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9255,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2492,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2706,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2336,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15124,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7930,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 579,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 964,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2422,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517319,
             "unit": "ns/op"
           }
         ]
