@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786973038734,
+  "lastUpdate": 1786973312590,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53783,6 +53783,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524928,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4396e1602c2152c78a5784956913c915830cf30c",
+          "message": "fix(ipc): backpressure-safe writes, sibling-frame preservation, correlatable errors (#691)\n\n* fix(ipc): backpressure-safe writes, desync close, error correlation\n\nBun sockets do not buffer partial writes: every server write now goes\nthrough a per-connection queue flushed on drain, so multi-megabyte\nframes (worker.tool_call payloads) survive a slow reader intact instead\nof silently truncating and desyncing the NDJSON stream.\n\nAlso on the server:\n- an oversize frame (decoder reset mid-frame) now answers 4001 and\n  CLOSES the desynced connection instead of keeping it alive\n- 4000 protocol errors echo the offending frame's id when it parsed as\n  JSON with one, so the requester's pending settles instead of burning\n  its 30s timeout (\"unknown\" only for unparseable lines)\n- response matching is scoped to the connection that owns the request\n- async handler rejections become code-1000 error frames, matching the\n  documented \"never escape\" guarantee (sync-only before)\n- createIpcServer (now async) probes an existing socket file and only\n  unlinks it when provably dead - never steals a live server's socket\n- notify() returns false when dropped for lack of a connection\n- decodeMessage error truncates the echoed payload to 200 chars\n- close/error callbacks guard socket.data (may error before open)\n\nOn the client:\n- tear down on FIN and fail pendings immediately (a half-open\n  write-only socket never completes closing behind a send backlog)\n- async onRequest rejections become code-1000 error frames\n- schema-mismatch frames are logged instead of silently dropped\n- dead `return client` inside the Promise executor removed\n\nConsumers updated for the async factory; worker-bootstrap-handler's\nServerPort now derives from the exported IpcServer interface instead of\nstructurally re-declaring it.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(ipc): pin backpressure, desync close, correlation, socket probe\n\nNew test/backpressure.test.ts: an 8 MiB response to a paused reader\narrives byte-exact, and a frame written while earlier bytes are queued\nlands after them intact (deterministic slow-reader over a real unix\nsocketpair).\n\nExtended suites:\n- oversize frame -> 4001 then server-side close; a real client's\n  oversize call fails fast as IpcConnectionError, not a 30s timeout\n- a 4000 error echoing the request id settles the requester's pending;\n  schema-invalid frames carrying an id get it echoed, idless ones stay\n  \"unknown\"; the 4000 message truncates the offending payload\n- a response arriving on a connection that does not own the request is\n  ignored\n- async-rejecting handlers on both sides become typed error frames\n- schema-mismatch frames are logged and non-fatal\n- createIpcServer refuses a live socket, reclaims a dead one; notify()\n  signals drop vs delivery\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(ipc): honest 4000/4001 + handler-failure contract in AGENTS.md\n\nThe 4000/4001 contract was overselling: correlation is best-effort\n(4001 non-JSON lines have no recoverable id), and the handler-exception\nguarantee now truthfully covers async rejections because the code does.\nDocuments the write queue, desync close, async createIpcServer probe,\nand notify() drop signal.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(ipc): contain client notification-handler failures like the server\n\nThe client invoked onNotification bare inside the socket 'data'\nlistener, so a throwing (or rejecting) handler escaped as an\nuncaughtException in the hosting process — exactly the failure class\nthe AGENTS.md contract claims closed, and the coordinator supervisor\nruns this handler in-process. Mirror the server's warn-and-drain wrap\nfor sync throws and async rejections; pinned with a regression test\nthat delivers a frame after both failure modes.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T22:27:16+09:00",
+          "tree_id": "ad3b361915ee6de0238f6321894cbc89477ab11c",
+          "url": "https://github.com/INONONO66/openomni/commit/4396e1602c2152c78a5784956913c915830cf30c"
+        },
+        "date": 1786973312127,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 639,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5880,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10046,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2424,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15428,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8088,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1077,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 753,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45179,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2358,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522887,
             "unit": "ns/op"
           }
         ]
