@@ -103,6 +103,31 @@ describe("Auth Storage", () => {
     });
   });
 
+  it("fails loudly on a malformed auth file instead of reading it as empty", async () => {
+    // Regression (#audit L4): a parse failure used to become `{}`, and the
+    // next set() would overwrite the file — destroying every credential.
+    await withTestAuthFile(async (filepath) => {
+      await Bun.write(filepath, "{ this is not json");
+
+      await expect(Auth.all()).rejects.toThrow("auth file is not valid JSON");
+      await expect(Auth.get("anthropic")).rejects.toThrow("auth file is not valid JSON");
+      // set() must refuse too — writing would destroy the stored credentials.
+      await expect(Auth.set("anthropic", { type: "api", key: "sk-new" })).rejects.toThrow(
+        "auth file is not valid JSON",
+      );
+
+      // The malformed file survives untouched for manual recovery.
+      expect(await Bun.file(filepath).text()).toBe("{ this is not json");
+    });
+  });
+
+  it("fails loudly when the auth file is valid JSON but not an object", async () => {
+    await withTestAuthFile(async (filepath) => {
+      await Bun.write(filepath, "null");
+      await expect(Auth.all()).rejects.toThrow("auth file is not a JSON object");
+    });
+  });
+
   it("should silently skip legacy token auth data", async () => {
     await withTestAuthFile(async (filepath) => {
       await Bun.write(

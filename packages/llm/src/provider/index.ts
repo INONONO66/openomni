@@ -78,10 +78,12 @@ export namespace Provider {
     if (authType === "proxy") {
       const auth = await Auth.get(providerID);
       if (auth?.type === "proxy") {
+        // fetchProxyModels throws ProxyModelsError on any listing failure —
+        // never falls back to the full models.dev catalog, which would
+        // present every model as "available on this proxy". An empty
+        // (successful) listing is likewise honest: the proxy hosts nothing.
         const proxyModelIds = await fetchProxyModels(auth.baseURL, auth.apiKey);
-        if (proxyModelIds.length > 0) {
-          return enrichWithCatalog(proxyModelIds, models, providerID);
-        }
+        return enrichWithCatalog(proxyModelIds, models, providerID);
       }
     }
 

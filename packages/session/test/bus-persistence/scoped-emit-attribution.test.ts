@@ -106,6 +106,15 @@ describe("scoped emit attribution", () => {
     expect(() => log.emit(Operational.Warn, { component: "test", msg: "orphan" })).not.toThrow();
     await settle();
 
-    expect(rows().filter((row) => row.trace_id === orphanTraceId)).toHaveLength(0);
+    // The orphan write itself is gone, but the drop is not silent: the
+    // drop-warning persists on the sessionless chain under the same trace.
+    expect(rows().filter((row) => row.trace_id === orphanTraceId)).toEqual([
+      {
+        session_id: null,
+        run_id: null,
+        trace_id: orphanTraceId,
+        event_type: "operational.warn",
+      },
+    ]);
   });
 });

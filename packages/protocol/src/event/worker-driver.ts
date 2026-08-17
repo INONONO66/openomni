@@ -55,12 +55,14 @@ export namespace WorkerDriver {
    * The delivery concluded at the driver level. `outcome` records process
    * physics only — `completed` means the worker returned a response (the
    * driver never judges run content), `interrupted` means the wall-time
-   * ceiling killed the worker, `error` is any other delivery failure.
+   * ceiling killed the worker, `cancelled` means the caller cancelled the
+   * run (before or during delivery; `durationMs` is 0 when the run never
+   * reached a worker), `error` is any other delivery failure.
    */
   export const RunSettled = BusEvent.define(
     "run.settled",
     RunBase.extend({
-      outcome: z.enum(["completed", "interrupted", "error"]),
+      outcome: z.enum(["completed", "interrupted", "error", "cancelled"]),
       durationMs: z.number(),
     }),
     { visibility: "internal" },

@@ -13,6 +13,7 @@ let manager: WorkerManager | undefined;
 
 afterEach(async () => {
   delete process.env.OPENOMNI_DELIVER_MARGIN_MS;
+  delete process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS;
   await manager?.shutdown();
   manager = undefined;
 });
@@ -202,5 +203,137 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     await Promise.allSettled([occupying]);
     await stopping;
     manager = undefined;
+  });
+
+  test("a run cancelled while queued settles as cancelled on the ledger (#audit M4a)", async () => {
+    const ports = collectorPorts();
+    manager = createWorkerManager(
+      { workerScript: WORKER_ENTRY, socketDir: makeSocketDir("cancel-q"), maxActiveWorkers: 1 },
+      ports,
+    );
+
+    const occupying = manager.deliver("run-cq-1", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-cq-1",
+      delayMs: 300,
+      prompt: "t",
+    });
+    await waitFor(() => manager?.stats().activeRuns === 1);
+    const queued = manager.deliver("run-cq-2", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-cq-2",
+      prompt: "t",
+    });
+    await waitFor(() => manager?.stats().activeRuns === 2);
+
+    await expect(manager.cancel("run-cq-2")).resolves.toMatchObject({ cancelled: true });
+    await expect(queued).resolves.toMatchObject({ status: "cancelled", runId: "run-cq-2" });
+
+    const settled = ports.collected.find(
+      (entry) =>
+        entry.event.name === WorkerDriver.RunSettled.name &&
+        (entry.data as { runId: string }).runId === "run-cq-2",
+    )?.data;
+    expect(settled).toMatchObject({
+      runId: "run-cq-2",
+      sessionId: "session-cq-2",
+      outcome: "cancelled",
+    });
+
+    await occupying;
+  });
+
+  test("a run cancelled while its worker starts settles as cancelled (#audit M4a)", async () => {
+    process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
+    const ports = collectorPorts();
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("cancel-s"),
+        maxActiveWorkers: 1,
+        // The bootstrap-delay knob is off the production allowlist; forward it.
+        extraWorkerEnvKeys: ["OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS"],
+      },
+      ports,
+    );
+
+    const dispatch = manager.deliver("run-cs-1", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-cs-1",
+      prompt: "t",
+    });
+    await waitFor(() => manager?.stats().activeRuns === 1);
+    await expect(manager.cancel("run-cs-1")).resolves.toMatchObject({ cancelled: true });
+    await expect(dispatch).resolves.toMatchObject({ status: "cancelled", runId: "run-cs-1" });
+
+    const settled = ports.collected.find(
+      (entry) => entry.event.name === WorkerDriver.RunSettled.name,
+    )?.data;
+    expect(settled).toMatchObject({ runId: "run-cs-1", outcome: "cancelled" });
+  });
+
+  test("a mid-flight cancel settles as cancelled, not completed (#audit M4b/M4c)", async () => {
+    const ports = collectorPorts();
+    manager = createWorkerManager(
+      { workerScript: WORKER_ENTRY, socketDir: makeSocketDir("cancel-m"), maxActiveWorkers: 1 },
+      ports,
+    );
+
+    const dispatch = manager.deliver("run-cm-1", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-cm-1",
+      delayMs: 300,
+      prompt: "t",
+    });
+    // Cancel only after the run is actually in flight on a worker.
+    await waitFor(() =>
+      ports.collected.some((entry) => entry.event.name === WorkerDriver.RunDelivered.name),
+    );
+    await expect(manager.cancel("run-cm-1")).resolves.toMatchObject({ cancelled: true });
+    await dispatch;
+
+    const settled = ports.collected.find(
+      (entry) => entry.event.name === WorkerDriver.RunSettled.name,
+    )?.data;
+    expect(settled).toMatchObject({ runId: "run-cm-1", outcome: "cancelled" });
+  });
+
+  test("shutdown with an in-flight delivery leaves no armed idle timers (#audit M3)", async () => {
+    const ports = collectorPorts();
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("shutdown-timer"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 60_000,
+      },
+      ports,
+    );
+
+    const inflight = manager.deliver("run-st-1", {
+      traceId: TEST_TRACE_ID,
+      sessionId: "session-st-1",
+      delayMs: 500,
+      prompt: "t",
+    });
+    await waitFor(() =>
+      ports.collected.some((entry) => entry.event.name === WorkerDriver.RunDelivered.name),
+    );
+
+    // White-box: capture the slot objects before shutdown clears the map, so
+    // a timer re-armed by the in-flight rejection is observable afterwards.
+    const slots = [
+      ...(manager as unknown as { slots: Map<number, { idleTimer: unknown }> }).slots.values(),
+    ];
+    expect(slots.length).toBeGreaterThan(0);
+
+    const stopping = manager.shutdown();
+    await Promise.allSettled([inflight]);
+    await stopping;
+    manager = undefined;
+
+    for (const slot of slots) {
+      expect(slot.idleTimer).toBeNull();
+    }
   });
 });

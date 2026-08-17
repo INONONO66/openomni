@@ -37,6 +37,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
    * across connections), so the split degrades to the single connection.
    */
   private readonly telemetryDb: Database;
+  private closed = false;
 
   readonly session: Storage.Adapter["session"];
   readonly message: Storage.Adapter["message"];
@@ -135,6 +136,10 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   }
 
   close(): void {
+    // Idempotent: Storage.reset() closes too, and explicit close followed by
+    // reset is a supported teardown order (test fixtures do both).
+    if (this.closed) return;
+    this.closed = true;
     if (this.telemetryDb !== this.db) {
       this.telemetryDb.close();
     }

@@ -7,22 +7,27 @@ import {
   WorkerDriver,
   type WorkerBootstrap,
 } from "@openomni/protocol";
-import { connectIpcClient, type IpcClient, IpcTimeoutError } from "@openomni/ipc";
+import {
+  connectIpcClient,
+  IpcConnectionError,
+  type IpcClient,
+  IpcTimeoutError,
+} from "@openomni/ipc";
 import {
   buildWorkerEnv,
+  FAST_CRASH_THRESHOLD_MS,
   isBootstrapAccepted,
   isShutdownAcknowledged,
+  MAX_CONSECUTIVE_FAST_CRASHES,
   resolveDeliverTimeoutMs,
   resolveRestartDelay,
   waitForSupervisorReady,
   waitForWorkerExit,
+  workerConnectTimeoutMs,
   workerStopGraceMs,
 } from "./supervisor-process.js";
 import { handleWorkerRequest } from "./supervisor-requests.js";
 import type { ActiveRequest, InboundWaitHandler, ToolCallHandler } from "./supervisor-types.js";
-
-const RESTART_WINDOW_MS = 60_000;
-const WORKER_CONNECT_TIMEOUT_MS = 10_000;
 
 export type {
   InboundWaitParams,
@@ -57,8 +62,9 @@ export class WorkerSupervisor {
   private client: IpcClient | null = null;
   private bootstrapped = false;
   private readonly authToken = crypto.randomUUID();
-  private restartCount = 0;
-  private restartWindowStart = 0;
+  private consecutiveFastCrashes = 0;
+  private lastSpawnAt = 0;
+  private generationBecameReady = false;
   private generation = 0;
   // One trace per worker generation: minted at spawn (Owner-gated ring-2 mint,
   // see #606 D11 remainder) and shared by every lifecycle event of that
@@ -95,6 +101,8 @@ export class WorkerSupervisor {
     this.generationTraceId = crypto.randomUUID();
     this.running = true;
     this.bootstrapped = false;
+    this.lastSpawnAt = Date.now();
+    this.generationBecameReady = false;
     this.proc = Bun.spawn(
       ["bun", this.script, "--", "--worker-id", String(this.id), "--socket", this.socketPath],
       {
@@ -141,7 +149,7 @@ export class WorkerSupervisor {
     // `running = true`, bootstrap the new generation's socket a second time,
     // and overwrite `this.client` alongside the real gen-N+1 loop.
     const generation = this.generation;
-    const deadline = Date.now() + WORKER_CONNECT_TIMEOUT_MS;
+    const deadline = Date.now() + workerConnectTimeoutMs();
     let lastError: Error | null = null;
     const bootstrap = this.bootstrap;
     const authToken = this.authToken;
@@ -222,6 +230,7 @@ export class WorkerSupervisor {
         }
         if (!this.stopping && this.running && this.generation === generation) {
           this.client = c;
+          this.generationBecameReady = true;
           this.events.publish(WorkerDriver.Ready, {
             traceId: generationTraceId,
             time: Date.now(),
@@ -245,33 +254,63 @@ export class WorkerSupervisor {
       }
     }
 
-    if (!this.stopping && this.running && this.generation === generation && lastError) {
+    if (!this.stopping && this.running && this.generation === generation) {
       // doStart() fires this promise without awaiting it, so a throw here would
-      // surface as an unhandled rejection; report and let waitReady() time out.
+      // surface as an unhandled rejection; report on the ledger instead.
       this.events.publish(Operational.Warn, {
         traceId: generationTraceId,
         time: Date.now(),
         component: "coordinator.worker",
-        msg: "worker IPC connect failed within deadline",
-        context: { workerId: this.id, error: lastError.message },
+        msg: "worker IPC connect failed within deadline; killing worker",
+        context: {
+          workerId: this.id,
+          error: lastError?.message ?? "worker never served its IPC socket",
+        },
       });
+      // Zombie prevention (#audit H1): a process that spawned but never served
+      // IPC (or rejected bootstrap every attempt) used to linger with
+      // running=true and isReady()=false — ensureSupervisor kept re-arming it
+      // and every delivery re-reset the slot's idle timer, wedging the slot
+      // forever. Kill it so the exited → scheduleRestart path (and, once the
+      // crash-loop breaker trips, ensureSupervisor replacement) takes over.
+      this.forceKill();
     }
   }
 
   private scheduleRestart(): void {
-    const now = Date.now();
-    if (now - this.restartWindowStart > RESTART_WINDOW_MS) {
-      this.restartCount = 0;
-      this.restartWindowStart = now;
+    // Real circuit breaker (#audit M2): the old 60s window was arithmetically
+    // unreachable — the backoff delays alone (1+2+4+8+16+30s) exceeded it, so
+    // the count reset before ever crossing the threshold and an
+    // instantly-crashing worker respawned forever. Count consecutive fast
+    // crashes instead: a generation that became ready AND survived
+    // FAST_CRASH_THRESHOLD_MS proves the script can run and starts a fresh
+    // burst; MAX_CONSECUTIVE_FAST_CRASHES fast crashes in a row trip the
+    // breaker and restarts stop (terminal warn below — the next delivery
+    // replaces this supervisor explicitly through ensureSupervisor).
+    const uptimeMs = Date.now() - this.lastSpawnAt;
+    const provedHealthy = this.generationBecameReady && uptimeMs >= FAST_CRASH_THRESHOLD_MS;
+    this.consecutiveFastCrashes = provedHealthy ? 1 : this.consecutiveFastCrashes + 1;
+    if (this.consecutiveFastCrashes > MAX_CONSECUTIVE_FAST_CRASHES) {
+      this.events.publish(Operational.Warn, {
+        traceId: this.generationTraceId,
+        time: Date.now(),
+        component: "coordinator.worker",
+        msg: "worker is crash-looping; restarts suspended",
+        context: {
+          workerId: this.id,
+          consecutiveFastCrashes: this.consecutiveFastCrashes,
+          fastCrashThresholdMs: FAST_CRASH_THRESHOLD_MS,
+        },
+      });
+      return;
     }
-    this.restartCount++;
 
-    const delayMs = resolveRestartDelay(this.restartCount);
+    const delayMs = resolveRestartDelay(this.consecutiveFastCrashes);
     this.events.publish(WorkerDriver.Restarted, {
       traceId: this.generationTraceId,
       time: Date.now(),
       workerId: this.id,
-      restartCount: this.restartCount,
+      restartCount: this.consecutiveFastCrashes,
       delayMs,
     });
     setTimeout(() => {
@@ -307,8 +346,14 @@ export class WorkerSupervisor {
     task: Record<string, unknown> & { readonly traceId: string },
   ): Promise<unknown> {
     const client = this.client;
+    const sessionId = typeof task.sessionId === "string" ? task.sessionId : undefined;
     if (!client?.connected) {
-      throw new Error(`worker ${this.id} not available`);
+      throw new WorkerDeliveryError({
+        message: `worker ${this.id} not available`,
+        code: "worker_unavailable",
+        runId,
+        sessionId,
+      });
     }
     const timeoutMs = resolveDeliverTimeoutMs(task);
     try {
@@ -339,8 +384,21 @@ export class WorkerSupervisor {
           message: `run ${runId} exceeded wall-time ceiling of ${timeoutMs}ms`,
           code: "wall_time_exceeded",
           runId,
-          sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
+          sessionId,
         });
+      }
+      if (error instanceof IpcConnectionError) {
+        // Typed-rejection contract (#audit M6): the transport error must not
+        // leak raw across the driver surface — callers branch on data.code.
+        throw new WorkerDeliveryError(
+          {
+            message: `worker ${this.id} IPC connection lost during run ${runId}: ${error.message}`,
+            code: "ipc_connection_lost",
+            runId,
+            sessionId,
+          },
+          { cause: error },
+        );
       }
       throw error;
     }

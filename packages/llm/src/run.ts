@@ -176,7 +176,11 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         });
       },
       abortSignal: abortSignal,
-      ...(input.providerOptions ?? {}),
+      // A nested streamText key, never a top-level spread: the AI SDK reads
+      // provider namespaces ({anthropic: {thinking: ...}}) from
+      // `providerOptions`, so spreading dropped them silently — and let
+      // config keys clobber wired args (abortSignal, maxRetries, tools).
+      ...(input.providerOptions !== undefined && { providerOptions: input.providerOptions }),
     };
     const streamResult = ai.streamText(streamArgs as Parameters<typeof ai.streamText>[0]);
 
@@ -240,7 +244,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     await processor.process({ system });
 
     const durationMs = Date.now() - startMs;
-    const finalTokens = processor.message.tokens;
+    // Billed usage across every attempt: retried attempts' tokens were billed
+    // too; message.tokens holds only the final attempt's fold.
+    const finalTokens = processor.usageTotals;
     const finishReason = processor.message.finish ?? "unknown";
 
     input.events.publish(LlmCall.Completed, {

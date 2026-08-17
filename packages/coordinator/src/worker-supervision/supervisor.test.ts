@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { type BusEvent, Operational } from "@openomni/protocol";
-import type { IpcClient } from "@openomni/ipc";
+import { type BusEvent, Operational, WorkerDeliveryError } from "@openomni/protocol";
+import { IpcConnectionError, type IpcClient } from "@openomni/ipc";
 import { WorkerSupervisor } from "./supervisor";
 
 const originalStopGraceMs = process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
@@ -141,6 +141,81 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     // No budget declared → nothing in the loop bounds the run → the driver
     // backstop is the only wall-time bound.
     expect(capturedTimeoutMs).toBe(600_000);
+  });
+
+  test("budget.maxWallTimeMs=120_000 passes timeout=150_000 to the IPC call", async () => {
+    // Replaces the dispatch.test theater that claimed this assertion while
+    // only checking accepted===true: the spy IS the IPC edge here.
+    let capturedTimeoutMs: number | undefined;
+    const mockClient: IpcClient = {
+      connected: true,
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
+        capturedTimeoutMs = timeoutMs;
+        return { success: true };
+      }),
+      close: () => undefined,
+    };
+
+    const supervisor = createTestSupervisor(mockClient);
+
+    await supervisor.deliver("test-run-id", {
+      traceId: "trace-test",
+      budget: { maxWallTimeMs: 120_000 },
+    });
+
+    expect(capturedTimeoutMs).toBe(150_000);
+  });
+});
+
+describe("WorkerSupervisor typed rejections (#audit M6)", () => {
+  function createTestSupervisor(client: IpcClient | null): WorkerSupervisor {
+    const supervisor = Object.create(WorkerSupervisor.prototype) as WorkerSupervisor;
+    Reflect.set(supervisor, "id", 7);
+    Reflect.set(supervisor, "client", client);
+    return supervisor;
+  }
+
+  test("deliver without a connected client rejects with worker_unavailable", async () => {
+    const supervisor = createTestSupervisor(null);
+
+    try {
+      await supervisor.deliver("run-x", { traceId: "trace-test", sessionId: "session-x" });
+      throw new Error("expected deliver to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorkerDeliveryError);
+      const typed = error as InstanceType<typeof WorkerDeliveryError>;
+      expect(typed.data).toMatchObject({
+        code: "worker_unavailable",
+        runId: "run-x",
+        sessionId: "session-x",
+      });
+    }
+  });
+
+  test("a raw IpcConnectionError from the transport rejects as ipc_connection_lost", async () => {
+    const cause = new IpcConnectionError("socket closed");
+    const mockClient: IpcClient = {
+      connected: true,
+      call: mock(async () => {
+        throw cause;
+      }),
+      close: () => undefined,
+    };
+    const supervisor = createTestSupervisor(mockClient);
+
+    try {
+      await supervisor.deliver("run-y", { traceId: "trace-test", sessionId: "session-y" });
+      throw new Error("expected deliver to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorkerDeliveryError);
+      const typed = error as InstanceType<typeof WorkerDeliveryError>;
+      expect(typed.data).toMatchObject({
+        code: "ipc_connection_lost",
+        runId: "run-y",
+        sessionId: "session-y",
+      });
+      expect((typed as Error & { cause?: unknown }).cause).toBe(cause);
+    }
   });
 });
 

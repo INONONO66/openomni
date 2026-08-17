@@ -34,6 +34,11 @@ export function bindToolRelayTrace(
   return (params, context) => {
     const activeRun = activeRuns.get(params.runId);
     if (activeRun?.slot !== slot) {
+      // TODO(#audit M5): a worker can relay a runId that is not its own slot's
+      // run; today the call passes through WITHOUT a trace context (the relay
+      // trust test pins this) instead of being rejected. Rejecting on slot
+      // mismatch would be the safer contract — revisit when the relay policy
+      // is owned end to end.
       return toolRelay(params, context);
     }
     return toolRelay(params, {
