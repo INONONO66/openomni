@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786973992372,
+  "lastUpdate": 1786974652547,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54125,6 +54125,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 517319,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63c7c267b4fff512944d9f84c02b2af422f7543b",
+          "message": "fix(policy): normalize policyId at trust boundary, visible fail-open degradation, dead surface removal (#688)\n\n* fix(policy): normalize policyId and surface fail-open crashes\n\nM1: normalizePointDecision kept the middleware's self-reported policyId\nverbatim while already overriding priority/durationMs on the same distrust\nrationale. Conflict detection exempts same-policyId writes and audit\nattributes PolicyEvent.Evaluated by policyId, so a decision returning\nanother policy's id could evade fail-closed conflict detection and spoof\nattribution. The engine now stamps the invoked registration's name.\n\nM4: a fail-open middleware crash contributed nothing to the composed\ndecision -- an allow past a crashed guard was indistinguishable from a\nclean one unless auditEmit happened to be bound. The crash now composes an\nallow carrying reason code policy.middleware_failed.fail_open:<policyId>\nplus an audit.annotate effect; fail-open semantics (no verdict\ncontribution) are unchanged. Also documents the post-boundary\nfail-open-by-omission contract (M2) on pointContractDecision.\n\nRegression tests: spoofed policyId re-attribution, same-priority divergent\nwrites stay fail-closed under a spoofed id, fail-open crash evidence with\nand without auditEmit. Consumer tests updated to the re-attributed ids and\nthe now-visible injection-queue drain refusal.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(policy): fail-closed boundaries and visible degradation\n\nL1: scope: { agentType: [] } used to mean unscoped -- a config filter\nyielding [] silently widened a policy to every agent. Registration now\nrejects it fail-closed with typed code empty_scope_agent_type, and\nmatchesScope treats a (now unreachable) empty list as matching no one.\nAlso documents the agentType-missing skip (M3) as deliberate\nfail-open-by-omission.\n\nL2: tool.filter + tool.require_approval hard-conflicted even when one\npolicy emitted both, unlike every other conflict family. Same-policyId\npairs are now exempt (one author, no divergent intent); cross-policy pairs\nstay fail-closed without a priority comparison, documented inline.\n\nL4: audit records were silently dropped when sessionId or traceId was\nmissing. With a trace but no session the drop now files an Operational.Warn\nunder the real trace; without a trace it stays silent by documented design\n(a minted id correlates to nothing).\n\nL6: PolicyRegistry.register silently overwrote an existing factory id,\nletting a later registration hijack every plan naming that id. Duplicates\nnow throw typed DuplicatePolicyFactoryError. No production caller relied\non overwrite (all builtin ids are distinct, one fresh registry per\nresolve); with the #606 re-audit's removal of has()/list() there is\ndeliberately no probe/replace lane -- a duplicate is always a wiring bug.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(policy): document deny-abort consumer contract and dup boundary\n\nL3 (comment-only, semantics unchanged): enforceDenyAbort's injected\nrun.abort is honored by the main production consumer only at post\nboundaries and lifecycle dispatch; for tool.*.pre denials the consumer\nblocks the single call on the verdict alone and the run continues. The\nescalation stays -- a deny at a side-effect boundary must carry its\nstrongest effect -- but the consumer behavior is now stated at the source.\n\nDuplication: packages/openomni/src/dispatch/policy-registration.ts and\npackages/policy/src/engine/registration-validation.ts are intentional\nduplicates of the registration boundary with different error taxonomies;\nboth now carry header comments cross-referencing each other so they cannot\ndrift apart silently. Unification is deferred (cross-package risk); the\nopenomni boundary already delegates final acceptance to engine.register(),\nso generic validation (incl. empty_scope_agent_type) covers both paths.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(policy): align downstream fail-open pin, unexport reason prefix\n\nThe server context-middleware pin still asserted the pre-#688 bare\nallow; the fail-open crash now rides the composed effects as an\naudit.annotate, so the pin asserts that evidence instead. The reason\nprefix constant is only consumed inside point-decisions.ts — unexport\nit to satisfy the dead-export ratchet.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T22:42:37+09:00",
+          "tree_id": "dad253743f6696c884f4e17ac3131c5fb005a9f5",
+          "url": "https://github.com/INONONO66/openomni/commit/63c7c267b4fff512944d9f84c02b2af422f7543b"
+        },
+        "date": 1786974651292,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5844,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2761,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2385,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15265,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8010,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 991,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 756,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44814,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2418,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514623,
             "unit": "ns/op"
           }
         ]
