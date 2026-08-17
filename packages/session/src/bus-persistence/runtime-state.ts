@@ -106,11 +106,26 @@ export function stopBusPersistence(): void {
   state = undefined;
 }
 
+/**
+ * Bound on quiescence turns, not a target: each turn advances one microtask
+ * hop of subscriber cascade (publish → observer → enqueue), so the bound
+ * supports cascades several levels deeper than anything in the tree while
+ * guaranteeing a pathological self-publishing subscriber cannot wedge the
+ * exit path this barrier protects.
+ */
+const MAX_FLUSH_TURNS = 16;
+
 export async function flushBusPersistence(): Promise<void> {
-  await new Promise((resolve) => queueMicrotask(resolve));
-  // Drain synchronously (shutdown path): commits every queued row now
-  // instead of waiting for the scheduled microtask.
-  flushPersistQueue();
-  const pending = state ? [...state.pending] : [];
-  await Promise.allSettled(pending);
+  // Pre-exit barrier: when this resolves, every row implied by publishes
+  // that happened before the call — including rows published by subscribers
+  // reacting to those publishes — is committed. One turn per iteration lets
+  // already-queued subscriber microtasks enqueue; the drain commits; a turn
+  // that commits nothing with no writes in flight proves quiescence.
+  for (let turn = 0; turn < MAX_FLUSH_TURNS; turn += 1) {
+    await new Promise((resolve) => queueMicrotask(resolve));
+    const committed = flushPersistQueue();
+    const pending = state ? [...state.pending] : [];
+    if (committed === 0 && pending.length === 0) return;
+    await Promise.allSettled(pending);
+  }
 }

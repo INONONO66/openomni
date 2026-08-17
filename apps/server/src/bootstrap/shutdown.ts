@@ -85,6 +85,15 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
         msg: "server error during shutdown",
         context: { err: String(err) },
       });
+      // The publish above lands after the try-body's flush (or before any
+      // flush ran, when the throw came earlier) — without its own barrier the
+      // exit below discards the queued row. After stop() there is no
+      // subscriber and this is a no-op.
+      try {
+        await BusPersistence.flush();
+      } catch {
+        // Never let the telemetry barrier block shutdown.
+      }
     }
 
     process.exit(0);
