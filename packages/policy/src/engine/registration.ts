@@ -2,6 +2,7 @@ import { prepareRegistrationBoundary } from "./registration-validation";
 import type {
   CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
+  PolicyEngineMiddlewareGeneric,
   PolicyPointId,
 } from "./types";
 
@@ -36,7 +37,7 @@ function isAgentTypeScoped<TCtx extends GenericPolicyContext>(
 }
 
 export interface PolicyRegistrationStore<TCtx extends GenericPolicyContext> {
-  register(registration: CanonicalPolicyRegistrationGeneric<TCtx>): void;
+  register(registration: PolicyEngineMiddlewareGeneric<TCtx>): void;
   selectPoint(
     pointId: PolicyPointId,
     agentType?: string,

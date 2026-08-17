@@ -25,11 +25,20 @@ describe("buildWorkerMiddleware policy plan path", () => {
       "builtin:tool-permission",
       "builtin:idle-nudge",
     ]);
+    // Stateless registrations stay canonical points; the stateful builtins
+    // (budget nudges, idle-nudge) are per-run factories since the audit-H1
+    // fix, so their closure state is minted per policy engine (= per run).
     expect(
       registrations.every(
-        (registration) => "kind" in registration && registration.kind === "point",
+        (registration) => registration.kind === "point" || registration.kind === "factory",
       ),
     ).toBe(true);
+    expect(
+      registrations
+        .filter((registration) => registration.kind === "factory")
+        .map((registration) => registration.name)
+        .sort(),
+    ).toEqual(["builtin:budget-reassurance", "builtin:budget-warning", "builtin:idle-nudge"]);
   });
 
   it("resolves builtin policies from policyPlan via registry", () => {

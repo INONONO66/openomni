@@ -109,7 +109,7 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
     registerCompaction(registry, Bus);
     const registrations = registry.resolve(plan, {});
     const registration = registrations[0];
-    if (registration === undefined || !("kind" in registration)) {
+    if (registration === undefined || registration.kind !== "point") {
       throw new Error("expected canonical builtin:compaction registration");
     }
 

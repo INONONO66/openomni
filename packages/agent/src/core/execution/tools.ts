@@ -9,7 +9,6 @@ import { nonEmptyString, requireTrace } from "./state";
 type BlockedResultMetadata = {
   verdict: Policy.PolicyDecision["verdict"];
   reason: string;
-  retryAfterMs?: number;
   policyId?: string;
 };
 
@@ -165,12 +164,19 @@ export function createToolExecutor(
 
     if (PolicyDecision.isBlocking(preDecision)) {
       const reason = PolicyDecision.reason(preDecision, "middleware");
+      // RESERVED OBLIGATION SURFACE (#audit M5): `tool.require_approval` is
+      // protocol vocabulary for an approval flow that is not wired anywhere —
+      // no wait/resume exists in this runtime. Until one does, the only safe
+      // honoring of the verdict is a fail-closed denial, and the result must
+      // say that instead of implying an approval was requested and refused.
+      const approvalRequired = effectOf(preDecision, "tool.require_approval") !== undefined;
+      const output = approvalRequired
+        ? `[Denied: ${reason} — approval required, but no approval flow is wired; denied fail-closed]`
+        : `[Denied: ${reason}]`;
       publishBlocked(eventBase, call, policyToolName, reason);
-      const retry = effectOf(preDecision, "run.retry_after");
-      return blockedResult(call, `[Denied: ${reason}]`, {
+      return blockedResult(call, output, {
         verdict: preDecision.verdict,
         reason,
-        ...(retry !== undefined && { retryAfterMs: retry.delayMs }),
         policyId: preDecision.policyId,
       });
     }
@@ -234,11 +240,9 @@ export function createToolExecutor(
     if (PolicyDecision.isBlocking(postDecision) && postAbort) {
       const reason = postAbort.reason ?? PolicyDecision.reason(postDecision, "middleware");
       publishBlocked(eventBase, call, policyToolName, reason);
-      const retry = effectOf(postDecision, "run.retry_after");
       return blockedResult(call, `[Denied: ${reason}]`, {
         verdict: postDecision.verdict,
         reason,
-        ...(retry !== undefined && { retryAfterMs: retry.delayMs }),
         policyId: postDecision.policyId,
       });
     }

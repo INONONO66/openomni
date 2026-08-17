@@ -17,6 +17,7 @@ export type {
   PolicyEngineRegistration,
   PolicyFn,
   PolicyEngineInstance,
+  PolicyRegistrationFactory,
   PolicyRegistryInstance,
 } from "./core/policy";
 export { McpClient } from "./runtime/mcp/index";

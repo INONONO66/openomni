@@ -52,6 +52,10 @@ export class McpClient {
   }
 
   async connect(): Promise<void> {
+    // Idempotent (#audit L5): a second connect() on a live client created a
+    // second transport the first one never closed — the SDK client rebinds
+    // and the old transport leaks its process/socket.
+    if (this.connected) return;
     let transport: Transport | undefined;
     let closeTracker: TransportCloseTracker | undefined;
     const transportType = this.config.transport;

@@ -3,7 +3,12 @@ import { effectOf, PolicyEffectApplier } from "./effects";
 import { publishBudgetTelemetry } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentResult, ChatAgentConfig } from "../types";
-import { guardAbortedResult, runResult, publishDenyDiagnostic } from "./run-events";
+import {
+  applyEffectOrDeny,
+  guardAbortedResult,
+  runResult,
+  publishDenyDiagnostic,
+} from "./run-events";
 import { buildLifecyclePolicyContext, type AgentRunBase, type RunState } from "./state";
 
 export async function dispatchPreRun(
@@ -57,6 +62,12 @@ export async function dispatchBudgetCheck(
   if (PolicyDecision.isBlocking(postRunDecision)) {
     publishDenyDiagnostic(config.events, "run.finish", postRunDecision, state, agentBase);
   }
+  // "max-steps" is the union's only budget-exhaustion member (#audit L4):
+  // wall-time and tool-runtime exhaustion end here too, and the AgentResult
+  // finishReason type does not distinguish them. The REAL limit is on the
+  // record: `publishBudgetTelemetry` above emitted the budget-exceeded Warn
+  // naming it ("budget exceeded: wall time" / "turns" / "tool calls" /
+  // "tool wall time") on the same trace, in the same turn.
   return runResult(state, { finishReason: "max-steps" });
 }
 
@@ -99,23 +110,10 @@ export async function dispatchModelResponse(
   );
 
   if (!PolicyDecision.isBlocking(decision)) {
-    try {
-      PolicyEffectApplier.applyMessageReplacementEffect(state, decision);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      publishDenyDiagnostic(
-        config.events,
-        "model.response",
-        PolicyDecision.deny({
-          policyId: "agent.policy.composed",
-          reasonCodes: [reason],
-          effects: [{ type: "run.abort", reason }],
-        }),
-        state,
-        agentBase,
-      );
-      return guardAbortedResult(state);
-    }
+    const applied = applyEffectOrDeny(config.events, "model.response", state, agentBase, () =>
+      PolicyEffectApplier.applyMessageReplacementEffect(state, decision),
+    );
+    if (!applied.ok) return applied.result;
     PolicyEffectApplier.applyPromptMessageEffects(state, decision);
     return null;
   }

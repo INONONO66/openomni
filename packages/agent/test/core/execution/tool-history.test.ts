@@ -109,6 +109,16 @@ function emitTextTurn(sink: Sink, messageId: string, sessionID: string, parentID
   });
 }
 
+/** A finished assistant snapshot with NO text part: a real text-less turn. */
+function emitEmptyTurn(sink: Sink, messageId: string, sessionID: string, parentID: string): void {
+  const info = assistantInfo(messageId, sessionID, parentID);
+  sink.onMessage({ info, parts: [] });
+  sink.onMessage({
+    info: { ...info, time: { ...info.time, completed: Date.now() }, finish: "stop" },
+    parts: [],
+  });
+}
+
 function sessionAndParent(messages: Message.WithParts[]): { sessionID: string; parentID: string } {
   return {
     sessionID: messages[0]?.info.sessionID ?? "test",
@@ -485,5 +495,65 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
         .map((part) => part.text)
         .join(""),
     ).toBe("");
+    // Audit M3: the resurrection reached past history — the stale text also
+    // came back as the final result.text and as a duplicate step, while
+    // history correctly recorded empty. The turn's own (absent) text is the
+    // only honest value for all three.
+    expect(result.text).toBe("");
+    expect(result.steps.map((step) => step.content)).toEqual(["done", ""]);
+  });
+
+  /**
+   * Audit M3, the non-stub shape: a real continuation turn whose finished
+   * snapshot has NO text part. Its step, its run.turn.post text, and the
+   * final result.text are this turn's (empty) text — never the previous
+   * turn's, which `state.lastAssistantText` still holds.
+   */
+  it("an empty-text continuation turn does not resurrect the previous turn's text", async () => {
+    let call = 0;
+    const postTurnTexts: unknown[] = [];
+    const run: MockLlmFn = async (input, sink) => {
+      call += 1;
+      const messages = input.messages as Message.WithParts[];
+      const { sessionID, parentID } = sessionAndParent(messages);
+      if (call === 1) {
+        emitTextTurn(sink, "msg-turn-1", sessionID, parentID);
+      } else {
+        emitEmptyTurn(sink, "msg-turn-2", sessionID, parentID);
+      }
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      events: Bus,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: { run, resolveProviderModel: async () => providerModel },
+      middleware: [
+        injectOnceMiddleware(),
+        {
+          kind: "point",
+          name: "test:capture-turn-result-text",
+          pointIds: ["run.turn.post"],
+          effectCapabilities: { "run.turn.post": [] },
+          priority: 100,
+          fn: (ctx) => {
+            postTurnTexts.push(
+              (ctx as unknown as { turnResult?: { text?: string } }).turnResult?.text,
+            );
+            return allow();
+          },
+        },
+      ],
+    });
+
+    const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
+
+    expect(result.finishReason).toBe("stop");
+    expect(call).toBe(2);
+    // The emitted run.turn.post events carry each turn's OWN text: "done"
+    // for turn 1, empty for the text-less turn 2 — not "done" twice.
+    expect(postTurnTexts).toEqual(["done", ""]);
+    expect(result.text).toBe("");
+    expect(result.steps.map((step) => step.content)).toEqual(["done", ""]);
   });
 });

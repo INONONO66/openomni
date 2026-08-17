@@ -5,67 +5,87 @@ import {
   describeBudgetRemaining,
   type CanonicalPolicyRegistration,
   type PolicyContext,
+  type PolicyRegistrationFactory,
   type PolicyRegistryInstance,
 } from "@openomni/agent";
 
-export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
-  let issued = false;
+/**
+ * Both nudges carry per-run state (`issued`), so both are per-run factories:
+ * the agent's policy engine calls `create()` once per run it is built for.
+ * Returning a plain registration here shared one `issued` flag across every
+ * run and every parent/child agent that reused the middleware array — the
+ * warning fired once per middleware ASSEMBLY instead of once per run.
+ */
+export function createBudgetReassurancePolicy(): PolicyRegistrationFactory {
   return {
+    kind: "factory",
     name: "builtin:budget-reassurance",
-    kind: "point",
-    pointIds: ["run.turn.pre"],
-    effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
-    priority: 10,
-    fn: (ctx) => {
-      if (issued || !ctx.budgetState)
-        return PolicyDecision.allow({ policyId: "builtin.budget.reassurance" });
-      const status = checkBudget(ctx.budgetState, ctx.budget);
-      if (status === "reassurance") {
-        issued = true;
-        const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
-        return PolicyDecision.allow({
-          policyId: "builtin.budget.reassurance",
-          reasonCodes: [RunReasonCode.BudgetReassurance],
-          effects: [
-            {
-              type: "prompt.inject_message",
-              message: `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
-            },
-          ],
-        });
-      }
-      return PolicyDecision.allow({ policyId: "builtin.budget.reassurance" });
+    create: (): CanonicalPolicyRegistration => {
+      let issued = false;
+      return {
+        name: "builtin:budget-reassurance",
+        kind: "point",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
+        priority: 10,
+        fn: (ctx) => {
+          if (issued || !ctx.budgetState)
+            return PolicyDecision.allow({ policyId: "builtin.budget.reassurance" });
+          const status = checkBudget(ctx.budgetState, ctx.budget);
+          if (status === "reassurance") {
+            issued = true;
+            const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
+            return PolicyDecision.allow({
+              policyId: "builtin.budget.reassurance",
+              reasonCodes: [RunReasonCode.BudgetReassurance],
+              effects: [
+                {
+                  type: "prompt.inject_message",
+                  message: `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
+                },
+              ],
+            });
+          }
+          return PolicyDecision.allow({ policyId: "builtin.budget.reassurance" });
+        },
+      };
     },
   };
 }
 
-export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
-  let issued = false;
+export function createBudgetWarningPolicy(): PolicyRegistrationFactory {
   return {
+    kind: "factory",
     name: "builtin:budget-warning",
-    kind: "point",
-    pointIds: ["run.turn.pre"],
-    effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
-    priority: 20,
-    fn: (ctx) => {
-      if (issued || !ctx.budgetState)
-        return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
-      const status = checkBudget(ctx.budgetState, ctx.budget);
-      if (status === "warning") {
-        issued = true;
-        const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
-        return PolicyDecision.allow({
-          policyId: "builtin.budget.warning",
-          reasonCodes: [RunReasonCode.BudgetWarning],
-          effects: [
-            {
-              type: "prompt.inject_message",
-              message: `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
-            },
-          ],
-        });
-      }
-      return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
+    create: (): CanonicalPolicyRegistration => {
+      let issued = false;
+      return {
+        name: "builtin:budget-warning",
+        kind: "point",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
+        priority: 20,
+        fn: (ctx) => {
+          if (issued || !ctx.budgetState)
+            return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
+          const status = checkBudget(ctx.budgetState, ctx.budget);
+          if (status === "warning") {
+            issued = true;
+            const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
+            return PolicyDecision.allow({
+              policyId: "builtin.budget.warning",
+              reasonCodes: [RunReasonCode.BudgetWarning],
+              effects: [
+                {
+                  type: "prompt.inject_message",
+                  message: `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
+                },
+              ],
+            });
+          }
+          return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
+        },
+      };
     },
   };
 }

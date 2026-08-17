@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import type { Run } from "@openomni/protocol";
-import { calculateBackoffMs, classifyRetryReason, shouldRetry, sleep } from "../../src/core/retry";
+import {
+  abortError,
+  calculateBackoffMs,
+  classifyRetryReason,
+  isAbort,
+  shouldRetry,
+  sleep,
+} from "../../src/core/retry";
 
 describe("Retry.sleep", () => {
   it("rejects immediately when the signal is already aborted", async () => {
@@ -56,8 +63,12 @@ describe("Retry.sleep", () => {
 describe("classifyRetryReason", () => {
   it.each([
     ["connection timeout", "timeout"],
-    ["run aborted by guard", "timeout"],
-    ["budget exceeded: turns", "timeout"],
+    // Audit M4 (pinned-wrong-behavior rows changed with the fix): "aborted"
+    // and "budget exceeded" substrings used to classify as the retryable
+    // "timeout". Aborts are decided by identity via `isAbort`, never by
+    // message; budget exhaustion never throws. Both fall through here.
+    ["run aborted by guard", "transient_error"],
+    ["budget exceeded: turns", "transient_error"],
     ["tool execution failed", "tool_error"],
     ["schema validation failed", "validation_error"],
     // "tool" is checked before "validation", so a message carrying both is a
@@ -67,6 +78,24 @@ describe("classifyRetryReason", () => {
     ["TIMEOUT IN CAPS", "timeout"],
   ] as const)("classifies %j as %s", (message, expected) => {
     expect(classifyRetryReason(message)).toBe(expected);
+  });
+});
+
+describe("isAbort (audit M4)", () => {
+  it("recognizes an aborted signal regardless of the error message", () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(isAbort(new Error("connection timeout"), controller.signal)).toBe(true);
+  });
+
+  it("recognizes the typed abort error without a signal", () => {
+    expect(isAbort(abortError(), undefined)).toBe(true);
+    expect(abortError().name).toBe("AbortError");
+  });
+
+  it("does NOT classify by message substring: a tool error mentioning 'aborted' is not an abort", () => {
+    const controller = new AbortController();
+    expect(isAbort(new Error("tool run aborted by remote host"), controller.signal)).toBe(false);
   });
 });
 

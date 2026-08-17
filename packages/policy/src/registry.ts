@@ -1,8 +1,8 @@
 import { Operational, type Policy } from "@openomni/protocol";
 import type {
   AuditEmit,
-  CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
+  PolicyEngineMiddlewareGeneric,
 } from "./engine/types";
 
 interface RuntimeContext {
@@ -17,7 +17,7 @@ interface RuntimeContext {
 type PolicyFactory<TCtx extends GenericPolicyContext = GenericPolicyContext> = (
   config: unknown,
   runtime: RuntimeContext,
-) => CanonicalPolicyRegistrationGeneric<TCtx>;
+) => PolicyEngineMiddlewareGeneric<TCtx>;
 
 /**
  * A second `register()` under an id that already holds a factory. Silent
@@ -40,10 +40,7 @@ export class DuplicatePolicyFactoryError extends Error {
 
 export interface PolicyRegistryInstance<TCtx extends GenericPolicyContext = GenericPolicyContext> {
   register(id: string, factory: PolicyFactory<TCtx>): void;
-  resolve(
-    plan: Policy.PolicyPlan,
-    runtime: RuntimeContext,
-  ): CanonicalPolicyRegistrationGeneric<TCtx>[];
+  resolve(plan: Policy.PolicyPlan, runtime: RuntimeContext): PolicyEngineMiddlewareGeneric<TCtx>[];
 }
 
 function publishOptionalPolicyMissing(id: string, runtime: RuntimeContext): void {
@@ -77,7 +74,7 @@ function create<
     },
 
     resolve(plan, runtime) {
-      const registrations: CanonicalPolicyRegistrationGeneric<TCtx>[] = [];
+      const registrations: PolicyEngineMiddlewareGeneric<TCtx>[] = [];
 
       for (const policy of plan.policies) {
         const factory = factories.get(policy.id);

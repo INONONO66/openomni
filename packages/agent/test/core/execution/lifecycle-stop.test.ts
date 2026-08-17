@@ -3,6 +3,7 @@ import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
 import { abortRun, allow, inject, replaceMessages } from "../../helpers/policy-decision";
+import { createAssistantMessage } from "../../../src/core/message-factory";
 import { handleStop } from "../../../src/core/execution/turn";
 import {
   makeAgentBase,
@@ -154,9 +155,13 @@ describe("handleStop (turn.finish + run.finish)", () => {
     });
 
     const state = makeState();
-    state.lastAssistantText = "original";
     const config = makeConfig();
-    const turn = makeTurnArtifacts();
+    // Audit M3 changed this fixture: the final text is the turn's OWN
+    // snapshot text, not `state.lastAssistantText` (which may hold a previous
+    // turn's text). This test pins that run.finish does not modify it.
+    const turn = makeTurnArtifacts({
+      turnAssistant: { message: createAssistantMessage("original", "", state.sessionId) },
+    });
 
     const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
     if (outcome === "continue") throw new Error("expected the run to end");

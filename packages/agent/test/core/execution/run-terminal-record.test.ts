@@ -213,40 +213,85 @@ describe("a started run always records a terminal", () => {
 
   it("when the run is aborted while sleeping out a retry backoff", async () => {
     const controller = new AbortController();
-    // The ceiling is narrowed so the decided facts and what could be
-    // re-derived from the abort differ: decided says 2, re-derived would say
-    // the configured 3.
-    const { seen, thrown, failures } = await runThrowing(
-      async () => {
-        controller.abort();
-        throw new Error("connection timeout");
-      },
-      controller.signal,
-      [
-        {
-          kind: "point",
-          name: "test:narrow-retries",
-          pointIds: ["run.error.error"],
-          effectCapabilities: { "run.error.error": ["run.retry_after"] },
-          priority: 100,
-          fn: () =>
-            PolicyDecision.allow({
-              policyId: "test.narrow-retries",
-              effects: [{ type: "run.retry_after", delayMs: 50, maxRetries: 2 }],
-            }),
-        } as PolicyEngineRegistration,
-      ],
-    );
+    // The abort lands DURING the backoff sleep: it fires deterministically
+    // the moment the retry is promised (`agent.error.retry` observed), after
+    // the retry was honestly decided for a transient timeout. The ceiling is
+    // narrowed so the decided facts and what could be re-derived from the
+    // abort differ: decided says 2, re-derived would say the configured 3.
+    const stopAbortTrigger = Bus.observe((event) => {
+      if (event.name === "agent.error.retry") controller.abort();
+    });
+    let result: Awaited<ReturnType<typeof runThrowing>>;
+    try {
+      result = await runThrowing(
+        async () => {
+          throw new Error("connection timeout");
+        },
+        controller.signal,
+        [
+          {
+            kind: "point",
+            name: "test:narrow-retries",
+            pointIds: ["run.error.error"],
+            effectCapabilities: { "run.error.error": ["run.retry_after"] },
+            priority: 100,
+            fn: () =>
+              PolicyDecision.allow({
+                policyId: "test.narrow-retries",
+                effects: [{ type: "run.retry_after", delayMs: 5_000, maxRetries: 2 }],
+              }),
+          } as PolicyEngineRegistration,
+        ],
+      );
+    } finally {
+      stopAbortTrigger();
+    }
+    const { seen, thrown, failures } = result;
 
     expect(thrown).toBeInstanceOf(Error);
     expect(seen).toEqual(["agent.run.started", "agent.run.failed"]);
     // The reason and ceiling decided before the wait, not ones re-derived
     // from the abort — otherwise the terminal contradicts this run's own
-    // `agent.error.retry`, which reported `timeout` at attempt 1 of 3.
+    // `agent.error.retry`, which reported `timeout` at attempt 1 of 2.
     expect(failures[0]?.context).toMatchObject({
       reason: "timeout",
       attempt: 1,
       maxAttempts: 2,
+    });
+  });
+
+  /**
+   * Audit M4: an abort that is already in force when the error is handled is
+   * non-retryable BY IDENTITY. It must not emit `agent.error.retry` (a retry
+   * promise the run cannot keep — it used to, then died in `Retry.sleep`),
+   * and the terminal reports "aborted", not the old substring-derived
+   * "timeout".
+   */
+  it("when the run is aborted before the retry decision: no retry promised, honest reason", async () => {
+    const controller = new AbortController();
+    const retryEvents: unknown[] = [];
+    const stopRetryObserver = Bus.observe((event, payload) => {
+      if (event.name === "agent.error.retry") retryEvents.push(payload);
+    });
+    let thrown: unknown;
+    let seen: string[] = [];
+    let failures: Array<{ context?: Record<string, unknown> }> = [];
+    try {
+      ({ seen, thrown, failures } = await runThrowing(async () => {
+        controller.abort();
+        throw new Error("connection timeout");
+      }, controller.signal));
+    } finally {
+      stopRetryObserver();
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(seen).toEqual(["agent.run.started", "agent.run.failed"]);
+    expect(retryEvents).toHaveLength(0);
+    expect(failures[0]?.context).toMatchObject({
+      reason: "aborted",
+      attempt: 1,
+      maxAttempts: 3,
     });
   });
 

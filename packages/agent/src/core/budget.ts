@@ -196,7 +196,7 @@ export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget
     parts.push(`${remaining} turn${remaining !== 1 ? "s" : ""} remaining`);
   }
 
-  const maxToolCalls = budget?.maxToolCalls ?? BUDGET_DEFAULTS.maxToolCalls;
+  const maxToolCalls = effectiveMaxToolCalls(budget);
   if (maxToolCalls !== -1) {
     const remaining = maxToolCalls - state.toolCalls;
     parts.push(`${remaining} tool call${remaining !== 1 ? "s" : ""} remaining`);

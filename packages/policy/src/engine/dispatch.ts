@@ -172,6 +172,10 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
 
   return {
     register(reg) {
+      // Factories are unwrapped inside the registration boundary
+      // (`prepareRegistrationBoundary`), once per engine: the engine is built
+      // per run, so the instantiation is what scopes a stateful policy's
+      // closure state to the run (see PolicyRegistrationFactoryGeneric).
       registrations.register(reg);
     },
     dispatchPoint,

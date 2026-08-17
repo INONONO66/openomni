@@ -8,7 +8,11 @@
  * drift apart silently.
  */
 import { Policy } from "@openomni/protocol";
-import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "./types";
+import type {
+  CanonicalPolicyRegistrationGeneric,
+  GenericPolicyContext,
+  PolicyEngineMiddlewareGeneric,
+} from "./types";
 import { captureFrozenArray } from "./array-snapshot";
 import { snapshotCanonicalBindings } from "./registration-snapshot";
 
@@ -182,12 +186,36 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
 }
 
 export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
-  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
+  registration: PolicyEngineMiddlewareGeneric<TCtx>,
 ): CanonicalPolicyRegistrationGeneric<TCtx> {
   if (!isObject(registration)) {
     throw registrationError("<unknown>", "invalid_canonical_registration");
   }
   const classification = readClassificationFields(registration);
+  // A per-engine factory is instantiated HERE, once per engine — the engine
+  // is built per run, so this is what scopes a stateful policy's closure
+  // state to the run. The created registration then passes the same
+  // validation boundary as a directly registered one.
+  if (classification.kind === "factory") {
+    const create = Reflect.get(registration, "create");
+    if (typeof create !== "function") {
+      throw registrationError(
+        registrationName(classification.name),
+        "invalid_canonical_registration",
+      );
+    }
+    const created: unknown = Reflect.apply(create, registration, []);
+    // No factory-of-factory: the created value must be a canonical point
+    // registration, validated through the same boundary. `isObject` and the
+    // classification reads below reject anything else fail-closed.
+    if (!isObject(created)) {
+      throw registrationError(
+        registrationName(classification.name),
+        "invalid_canonical_registration",
+      );
+    }
+    return prepareCanonicalRegistration<TCtx>(created, readClassificationFields(created));
+  }
   const hasCanonicalFields =
     classification.kind !== undefined ||
     classification.pointIds !== undefined ||

@@ -41,7 +41,7 @@ function createBudgetState(overrides?: Partial<BudgetState>): BudgetState {
 
 describe("createBudgetReassurancePolicy", () => {
   it("fires at 0.6 threshold with exact message text", async () => {
-    const middleware = createBudgetReassurancePolicy();
+    const middleware = createBudgetReassurancePolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 15 }),
       budget: { maxTurns: 24 },
@@ -59,8 +59,8 @@ describe("createBudgetReassurancePolicy", () => {
     expect(message).toContain("Complete your work thoroughly");
   });
 
-  it("fires exactly once (closure state)", async () => {
-    const middleware = createBudgetReassurancePolicy();
+  it("fires exactly once per run (closure state)", async () => {
+    const middleware = createBudgetReassurancePolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 15 }),
       budget: { maxTurns: 24 },
@@ -74,7 +74,7 @@ describe("createBudgetReassurancePolicy", () => {
   });
 
   it("continues below threshold", async () => {
-    const middleware = createBudgetReassurancePolicy();
+    const middleware = createBudgetReassurancePolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 5 }),
       budget: { maxTurns: 24 },
@@ -86,7 +86,7 @@ describe("createBudgetReassurancePolicy", () => {
   });
 
   it("respects custom reassuranceThreshold", async () => {
-    const middleware = createBudgetReassurancePolicy();
+    const middleware = createBudgetReassurancePolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 13 }),
       budget: { maxTurns: 24, reassuranceThreshold: 0.5 },
@@ -98,19 +98,20 @@ describe("createBudgetReassurancePolicy", () => {
   });
 
   it("has priority 10", () => {
-    const middleware = createBudgetReassurancePolicy();
+    const middleware = createBudgetReassurancePolicy().create();
     expect(middleware.priority).toBe(10);
   });
 
-  it("has name builtin:budget-reassurance", () => {
-    const middleware = createBudgetReassurancePolicy();
-    expect(middleware.name).toBe("builtin:budget-reassurance");
+  it("has name builtin:budget-reassurance on the factory and the instance", () => {
+    const factory = createBudgetReassurancePolicy();
+    expect(factory.name).toBe("builtin:budget-reassurance");
+    expect(factory.create().name).toBe("builtin:budget-reassurance");
   });
 });
 
 describe("createBudgetWarningPolicy", () => {
   it("fires at 0.8 threshold with exact message text", async () => {
-    const middleware = createBudgetWarningPolicy();
+    const middleware = createBudgetWarningPolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 20 }),
       budget: { maxTurns: 24 },
@@ -127,8 +128,8 @@ describe("createBudgetWarningPolicy", () => {
     expect(message).toContain("provide a summary");
   });
 
-  it("fires exactly once (closure state)", async () => {
-    const middleware = createBudgetWarningPolicy();
+  it("fires exactly once per run (closure state)", async () => {
+    const middleware = createBudgetWarningPolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 20 }),
       budget: { maxTurns: 24 },
@@ -142,7 +143,7 @@ describe("createBudgetWarningPolicy", () => {
   });
 
   it("continues below threshold", async () => {
-    const middleware = createBudgetWarningPolicy();
+    const middleware = createBudgetWarningPolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 10 }),
       budget: { maxTurns: 24 },
@@ -154,7 +155,7 @@ describe("createBudgetWarningPolicy", () => {
   });
 
   it("respects custom warningThreshold", async () => {
-    const middleware = createBudgetWarningPolicy();
+    const middleware = createBudgetWarningPolicy().create();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 17 }),
       budget: { maxTurns: 24, warningThreshold: 0.7 },
@@ -166,13 +167,53 @@ describe("createBudgetWarningPolicy", () => {
   });
 
   it("has priority 20", () => {
-    const middleware = createBudgetWarningPolicy();
+    const middleware = createBudgetWarningPolicy().create();
     expect(middleware.priority).toBe(20);
   });
 
-  it("has name builtin:budget-warning", () => {
-    const middleware = createBudgetWarningPolicy();
-    expect(middleware.name).toBe("builtin:budget-warning");
+  it("has name builtin:budget-warning on the factory and the instance", () => {
+    const factory = createBudgetWarningPolicy();
+    expect(factory.name).toBe("builtin:budget-warning");
+    expect(factory.create().name).toBe("builtin:budget-warning");
+  });
+});
+
+/**
+ * Audit H1 regression: `issued` is RUN state. One factory shared through a
+ * middleware array (worker-runner shares the same array with the parent agent
+ * and every child) must mint independent state per `create()` — one engine is
+ * built per run, and each run gets its own warning.
+ */
+describe("per-run state isolation (audit H1)", () => {
+  it("two runs from one shared factory each get their own warning", async () => {
+    const shared = createBudgetWarningPolicy();
+    const runOne = shared.create();
+    const runTwo = shared.create();
+    const ctx = baseCtx({
+      budgetState: createBudgetState({ turns: 20 }),
+      budget: { maxTurns: 24 },
+    });
+
+    expect(injectedMessage(await runOne.fn(ctx))).toBeDefined();
+    // Run one has issued; run two (a fresh engine, e.g. a child agent or the
+    // next sequential run) still gets its own warning.
+    expect(injectedMessage(await runTwo.fn(ctx))).toBeDefined();
+    // And the once-per-run latch still holds within each run.
+    expect(injectedMessage(await runOne.fn(ctx))).toBeUndefined();
+    expect(injectedMessage(await runTwo.fn(ctx))).toBeUndefined();
+  });
+
+  it("two runs from one shared factory each get their own reassurance", async () => {
+    const shared = createBudgetReassurancePolicy();
+    const runOne = shared.create();
+    const runTwo = shared.create();
+    const ctx = baseCtx({
+      budgetState: createBudgetState({ turns: 15 }),
+      budget: { maxTurns: 24 },
+    });
+
+    expect(injectedMessage(await runOne.fn(ctx))).toBeDefined();
+    expect(injectedMessage(await runTwo.fn(ctx))).toBeDefined();
   });
 });
 
@@ -185,7 +226,7 @@ describe("createBudgetWarningPolicy", () => {
  */
 describe("canonical registration metadata", () => {
   it("budget-reassurance: name, point, capabilities, priority", () => {
-    const mw = createBudgetReassurancePolicy();
+    const mw = createBudgetReassurancePolicy().create();
     expect(mw.name).toBe("builtin:budget-reassurance");
     expect(mw.pointIds).toEqual(["run.turn.pre"]);
     expect(mw.effectCapabilities).toEqual({ "run.turn.pre": ["prompt.inject_message"] });
@@ -193,7 +234,7 @@ describe("canonical registration metadata", () => {
   });
 
   it("budget-warning: name, point, capabilities, priority", () => {
-    const mw = createBudgetWarningPolicy();
+    const mw = createBudgetWarningPolicy().create();
     expect(mw.name).toBe("builtin:budget-warning");
     expect(mw.pointIds).toEqual(["run.turn.pre"]);
     expect(mw.effectCapabilities).toEqual({ "run.turn.pre": ["prompt.inject_message"] });

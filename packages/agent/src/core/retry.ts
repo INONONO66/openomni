@@ -2,6 +2,13 @@ import type { Run } from "@openomni/protocol";
 
 export type RetryReason = "timeout" | "tool_error" | "transient_error" | "validation_error";
 
+/**
+ * What a terminal record may report. `aborted` is not a {@link RetryReason}:
+ * an abort is an instruction to stop, never a fault to classify as retryable,
+ * so it can appear on `agent.run.failed` but never on `agent.error.retry`.
+ */
+export type TerminalReason = RetryReason | "aborted";
+
 export const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
   maxAttempts: 3,
   backoffMs: { initial: 1000, multiplier: 2, max: 30_000 },
@@ -18,6 +25,15 @@ export function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): nu
  * Classifies an error for the retry policy. Pure: it reads a string and
  * returns a reason.
  *
+ * Aborts are NOT classified here (#audit M4): "aborted" as a message
+ * substring used to map to the retryable "timeout", so an abort mid-run
+ * emitted a retry promise and then died in `Retry.sleep` — and a tool error
+ * that merely mentioned "aborted" triggered a bogus retry. Abort is decided
+ * by identity ({@link isAbort}: signal state or the typed error), before any
+ * message classification runs. Likewise "budget exceeded" matched here for a
+ * condition that never throws — budget exhaustion ends the run with a
+ * result, not an error.
+ *
  * It used to narrate every branch through the Bus under a freshly minted
  * trace — eight events describing a decision the caller already reports, on
  * the run's own trace, two statements later (`emitErrorRetry` /
@@ -26,11 +42,7 @@ export function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): nu
  */
 export function classifyRetryReason(errorMessage: string): RetryReason {
   const normalized = errorMessage.toLowerCase();
-  if (
-    normalized.includes("timeout") ||
-    normalized.includes("aborted") ||
-    normalized.includes("budget exceeded")
-  ) {
+  if (normalized.includes("timeout")) {
     return "timeout";
   }
   if (normalized.includes("tool")) {
@@ -40,6 +52,27 @@ export function classifyRetryReason(errorMessage: string): RetryReason {
     return "validation_error";
   }
   return "transient_error";
+}
+
+/**
+ * The typed abort the loop throws when it observes its own signal. The name
+ * is the identity {@link isAbort} checks — never the message, which tool and
+ * provider errors are free to collide with.
+ */
+export function abortError(message = "aborted"): Error {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+/**
+ * Whether this failure is the run being told to stop. Decided by the
+ * config's signal state or the typed error identity — never by message
+ * substrings. An abort is non-retryable and must not emit retry-promising
+ * telemetry (#audit M4).
+ */
+export function isAbort(error: Error, signal?: AbortSignal): boolean {
+  return signal?.aborted === true || error.name === "AbortError";
 }
 
 /**
@@ -58,7 +91,7 @@ export function shouldRetry(
 
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
-    return Promise.reject(new Error("aborted"));
+    return Promise.reject(abortError());
   }
 
   return new Promise((resolve, reject) => {
@@ -73,7 +106,7 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     function onAbort(): void {
       clearTimeout(timeout);
       signal?.removeEventListener("abort", onAbort);
-      reject(new Error("aborted"));
+      reject(abortError());
     }
 
     signal?.addEventListener("abort", onAbort, { once: true });

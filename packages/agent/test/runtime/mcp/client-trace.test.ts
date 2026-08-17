@@ -99,6 +99,49 @@ describe("McpClient call audit trace", () => {
     expect((await disconnected).traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
   });
 
+  /**
+   * Audit L5: connect() is idempotent. A second connect on a live client used
+   * to mint a second transport the first never closed — leaking the old
+   * transport's process/socket when the SDK client rebound.
+   */
+  test("a second connect() on a live client creates no second transport", async () => {
+    Bus.reset();
+    let transportsCreated = 0;
+    let connects = 0;
+    const client = new McpClient(config, {
+      events: Bus,
+      traceId: TEST_LIFECYCLE_TRACE_ID,
+      createTransport: () => {
+        transportsCreated += 1;
+        return {
+          start: async () => undefined,
+          send: async () => undefined,
+          close: async () => undefined,
+        };
+      },
+      client: {
+        connect: async () => {
+          connects += 1;
+        },
+        close: async () => undefined,
+        listTools: async () => ({ tools: [] }),
+        callTool: async () => ({ content: [] }),
+      },
+    });
+
+    await client.connect();
+    await client.connect();
+
+    expect(transportsCreated).toBe(1);
+    expect(connects).toBe(1);
+
+    // After a disconnect, a reconnect is a genuine new connection.
+    await client.disconnect();
+    await client.connect();
+    expect(transportsCreated).toBe(2);
+    expect(connects).toBe(2);
+  });
+
   test.each([undefined, ""])("publishes no lifecycle record for traceId %j", async (traceId) => {
     Bus.reset();
     const seen: string[] = [];

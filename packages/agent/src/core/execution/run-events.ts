@@ -1,6 +1,6 @@
 import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
-import type { RetryReason } from "../retry";
+import type { RetryReason, TerminalReason } from "../retry";
 import type { AgentResult, AgentStep, TokenUsage } from "../types";
 import { getCompactionCount, type AgentRunBase, type RunState } from "./state";
 
@@ -139,7 +139,7 @@ export function emitRunFailed(
   agentBase: AgentRunBase,
   error: string,
   decision: {
-    readonly reason: RetryReason;
+    readonly reason: TerminalReason;
     readonly attempt: number;
     readonly maxAttempts: number;
   },
@@ -199,6 +199,40 @@ export function guardAbortedResult(
   options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },
 ): AgentResult {
   return runResult(state, { ...options, guardAborted: true });
+}
+
+/**
+ * Runs an effect application whose failure must end the run as a RECORDED
+ * deny rather than an unhandled throw (`policy.invalid_replacement_messages`
+ * is the known thrower). The catch below used to exist verbatim at three
+ * seams — model response, turn finish, completion prepare — so the record
+ * shape is kept identical by keeping it in one place.
+ */
+export function applyEffectOrDeny<T>(
+  events: BusEvent.Sink,
+  timing: Policy.Timing,
+  state: RunState,
+  agentBase: AgentRunBase,
+  apply: () => T,
+  options?: { finishReason?: "stop" | "stalled" },
+): { ok: true; value: T } | { ok: false; result: AgentResult } {
+  try {
+    return { ok: true, value: apply() };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    publishDenyDiagnostic(
+      events,
+      timing,
+      PolicyDecision.deny({
+        policyId: "agent.policy.composed",
+        reasonCodes: [reason],
+        effects: [{ type: "run.abort", reason }],
+      }),
+      state,
+      agentBase,
+    );
+    return { ok: false, result: guardAbortedResult(state, options) };
+  }
 }
 
 export function runResult(
