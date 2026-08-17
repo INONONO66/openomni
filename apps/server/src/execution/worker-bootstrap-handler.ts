@@ -1,13 +1,13 @@
 import { newTraceId } from "@openomni/telemetry";
+import type { IpcServer } from "@openomni/ipc";
 import type { Auth } from "@openomni/llm";
 import { Operational, WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 
 export namespace WorkerBootstrapHandler {
-  interface ServerPort {
-    useConnection(id: string): void;
-    notify(method: string, params?: Record<string, unknown>): void;
-  }
+  // The transport's own interface, narrowed — not a structural re-declaration
+  // that silently drifts when @openomni/ipc changes a signature.
+  type ServerPort = Pick<IpcServer, "useConnection" | "notify">;
 
   interface State {
     readonly ready: Promise<void>;
