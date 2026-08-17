@@ -9,7 +9,7 @@ function tmpSocketPath(label: string): string {
 }
 
 describe("IPC bidirectional", () => {
-  const servers: ReturnType<typeof createIpcServer>[] = [];
+  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
 
   afterEach(async () => {
@@ -20,7 +20,7 @@ describe("IPC bidirectional", () => {
 
   test("client receives incoming Request → onRequest fires → response sent back", async () => {
     const socketPath = tmpSocketPath("req");
-    const srv = createIpcServer(socketPath, () => undefined);
+    const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
     const received = { method: "", params: undefined as Record<string, unknown> | undefined };
@@ -42,7 +42,7 @@ describe("IPC bidirectional", () => {
 
   test("client receives Notification → onNotification fires", async () => {
     const socketPath = tmpSocketPath("notif");
-    const srv = createIpcServer(socketPath, () => undefined);
+    const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
     let notifMethod = "";
@@ -68,7 +68,7 @@ describe("IPC bidirectional", () => {
 
   test("server.call() → client receives → responds → server gets result", async () => {
     const socketPath = tmpSocketPath("srvCall");
-    const srv = createIpcServer(socketPath, () => undefined);
+    const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
     const client = await connectIpcClient(socketPath, {
@@ -84,7 +84,7 @@ describe("IPC bidirectional", () => {
 
   test("existing client.call() flow unchanged", async () => {
     const socketPath = tmpSocketPath("clientCall");
-    const srv = createIpcServer(socketPath, (method, params, respond) => {
+    const srv = await createIpcServer(socketPath, (method, params, respond) => {
       if (method === "echo") respond({ got: params?.v });
     });
     servers.push(srv);
