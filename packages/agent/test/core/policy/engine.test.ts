@@ -533,9 +533,11 @@ describe("PolicyEngine", () => {
       expect(first.verdict).toBe("deny");
       expect(second.verdict).toBe("deny");
       expect(decisions).toHaveLength(2);
-      expect(decisions[0]?.policyId).toBe("unknown");
+      // policyId is re-attributed to the invoked registration at the trust
+      // boundary; a middleware's self-reported id is not trusted.
+      expect(decisions[0]?.policyId).toBe("prod-metadata");
       expect(decisions[0]?.reasonCodes).toEqual([]);
-      expect(decisions[1]?.policyId).toBe("unknown");
+      expect(decisions[1]?.policyId).toBe("prod-metadata");
       expect(decisions[1]?.reasonCodes).toEqual([]);
       // Bus.publish is async (queueMicrotask), so warning count is verified via decisions
     } finally {
@@ -703,7 +705,9 @@ describe("PolicyEngine", () => {
         traceId: "trace-policy",
         sessionId: "sess-policy",
         runId: "run-policy",
-        policyId: "test.policy",
+        // Attributed to the invoked registration, not the middleware's
+        // self-reported "test.policy" id.
+        policyId: "policy-check",
         actor: { kind: "agent", name: "policy-agent", runId: "run-policy" },
         action: "tool.call",
         resource: "shell",

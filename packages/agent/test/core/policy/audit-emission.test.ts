@@ -86,7 +86,9 @@ describe("PolicyEngine audit emission", () => {
         traceId: "trace-request",
         sessionId: "sess-request",
         runId: "run-request",
-        policyId: "policy.deny-shell",
+        // Attributed to the invoked registration, not the middleware's
+        // self-reported "policy.deny-shell" id.
+        policyId: "deny-shell",
         actor: { kind: "agent", name: "request-agent", runId: "run-request" },
         action: "tool.call",
         resource: "shell",

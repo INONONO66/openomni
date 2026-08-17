@@ -314,11 +314,25 @@ describe("createInjectionQueueDrainPolicy", () => {
       sessionId: "session-untraced",
     };
 
-    // The point is fail-open: the refusal surfaces as a bare allow with no
-    // effects, and the injections stay queued for the next traced turn.
+    // The point is fail-open: the refusal surfaces as an allow, but no longer
+    // a bare one — the composed decision carries the crashed policy's
+    // fail-open marker, so the wiring bug (a turn without its trace) is
+    // visible evidence rather than indistinguishable from a clean turn. The
+    // injections stay queued for the next traced turn.
     const decision = await engine.dispatchPoint("run.turn.post", context);
 
-    expect(decision.effects).toEqual([]);
+    expect(decision.verdict).toBe("allow");
+    expect(decision.reasonCodes).toContain(
+      "policy.middleware_failed.fail_open:builtin:injection-queue-drain",
+    );
+    expect(decision.effects).toEqual([
+      {
+        type: "audit.annotate",
+        annotation:
+          "run.turn.post: policy.middleware_failed.fail_open:builtin:injection-queue-drain",
+        severity: "warning",
+      },
+    ]);
     expect(queue.hasPending("untraced-run")).toBe(true);
   });
 

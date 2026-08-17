@@ -166,7 +166,13 @@ describe("PolicyEngine dispatchPoint", () => {
   test("obeys fail-closed defaults and fail-open registration overrides", async () => {
     for (const testCase of [
       { failPolicy: undefined, verdict: "deny", reason: "middleware-error" },
-      { failPolicy: "fail-open", verdict: "allow", reason: undefined },
+      {
+        failPolicy: "fail-open",
+        verdict: "allow",
+        // Fail-open keeps the allow, but the crash may not vanish: the
+        // composed decision itself must carry the skipped policy's name.
+        reason: "policy.middleware_failed.fail_open:throwing-policy",
+      },
     ] as const) {
       const engine = PolicyEngine.create();
       let invocationCount = 0;
@@ -187,8 +193,115 @@ describe("PolicyEngine dispatchPoint", () => {
 
       expect(invocationCount).toBe(1);
       expect(decision.verdict).toBe(testCase.verdict);
-      expect(decision.reasonCodes).toEqual(testCase.reason === undefined ? [] : [testCase.reason]);
+      expect(decision.reasonCodes).toEqual([testCase.reason]);
     }
+  });
+
+  test("records a fail-open middleware crash in the composed allow without auditEmit", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "crashing-guard",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      failPolicy: "fail-open",
+      fn: () => {
+        throw new Error("guard exploded");
+      },
+    });
+    engine.register({
+      kind: "point",
+      name: "surviving-policy",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 1,
+      fn: () => PolicyDecision.allow({ policyId: "surviving-policy" }),
+    });
+
+    const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
+
+    expect(decision.verdict).toBe("allow");
+    expect(decision.reasonCodes).toContain("policy.middleware_failed.fail_open:crashing-guard");
+    const annotations = decision.effects.filter(
+      (effect): effect is Extract<Policy.PolicyEffect, { type: "audit.annotate" }> =>
+        effect.type === "audit.annotate",
+    );
+    expect(
+      annotations.some((effect) =>
+        effect.annotation.includes("policy.middleware_failed.fail_open:crashing-guard"),
+      ),
+    ).toBe(true);
+  });
+
+  test("re-attributes a spoofed middleware policyId to the invoked registration", async () => {
+    const recorded: Policy.PolicyDecision[] = [];
+    const engine = PolicyEngine.create({
+      onDecision: (decision) => {
+        recorded.push(decision);
+      },
+    });
+    engine.register({
+      kind: "point",
+      name: "honest-name",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: () => PolicyDecision.allow({ policyId: "some-other-policy" }),
+    });
+
+    const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
+
+    expect(decision.verdict).toBe("allow");
+    // The engine knows which registration it invoked; a middleware cannot
+    // claim another policy's identity for audit attribution.
+    expect(recorded.map((entry) => entry.policyId)).toEqual(["honest-name"]);
+  });
+
+  test("keeps same-priority divergent writes fail-closed when one policy spoofs the other's id", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "spoofer",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.allow({
+          // Conflict rules exempt same-policyId writes; claiming the other
+          // policy's id must not buy that exemption.
+          policyId: "victim",
+          effects: [{ type: "tool.rewrite_input", input: { path: "/spoofed" } }],
+        }),
+    });
+    engine.register({
+      kind: "point",
+      name: "victim",
+      pointIds: ["tool.native.pre"],
+      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
+      priority: 0,
+      fn: () =>
+        PolicyDecision.allow({
+          policyId: "victim",
+          effects: [{ type: "tool.rewrite_input", input: { path: "/legit" } }],
+        }),
+    });
+
+    const decision = await engine.dispatchPoint("tool.native.pre", {
+      sessionId: "session-spoof",
+      runId: "run-spoof",
+      toolId: "tool-spoof",
+      toolInput: {},
+    });
+
+    expect(decision.verdict).toBe("deny");
+    expect(
+      decision.effects.some(
+        (effect) =>
+          effect.type === "audit.annotate" &&
+          effect.annotation.includes("policy.effect_conflict.fail_closed"),
+      ),
+    ).toBe(true);
   });
 
   test("keeps a WorkItem completion denial authoritative over asserted-result allowance", async () => {
