@@ -36,6 +36,30 @@ export namespace Retry {
   export const RETRY_HEADER_DELAY_CAP = 60_000;
 
   /**
+   * Backoff exists to relieve an overloaded endpoint; it cannot help one
+   * refusing connections outright. A retryable failure that carries no HTTP
+   * status and dies under this window is the signature of the latter, so a
+   * streak of them retries on the short probe delay and then declines,
+   * instead of burning the exponential ladder in silence. A failure at or
+   * above the window (a slow timeout) keeps the full backoff budget.
+   */
+  export const INSTANT_FAILURE_WINDOW_MS = 2000;
+  export const INSTANT_FAILURE_PROBE_DELAY_MS = 250;
+  export const INSTANT_FAILURE_STREAK_LIMIT = 3;
+
+  export function isInstantTransportFailure(error: unknown, elapsedMs: number): boolean {
+    if (elapsedMs >= INSTANT_FAILURE_WINDOW_MS) return false;
+    if (!APIError.isInstance(error)) return false;
+    // A status code or response headers prove the endpoint answered — that is
+    // an HTTP failure, not a transport one, whatever the timing.
+    return (
+      error.data.isRetryable &&
+      error.data.statusCode === undefined &&
+      error.data.responseHeaders === undefined
+    );
+  }
+
+  /**
    * The retry vocabulary (#532 candidate 3). Every member has a producing
    * branch in classify() and a consuming case in the processor's typed
    * switch — reasons are branched on as literals, never as prose. Human
@@ -58,10 +82,20 @@ export namespace Retry {
    * Typed retry decision (#532 candidate 3): classification + delay in one
    * call, failing fast when the server asks for a wait above the cap.
    */
-  export function decide(attempt: number, error: unknown): Decision {
+  export function decide(attempt: number, error: unknown, instantFailureStreak = 0): Decision {
     const reason = classify(error);
     if (reason === "non_retryable") {
       return { retry: false, reason };
+    }
+    if (instantFailureStreak >= INSTANT_FAILURE_STREAK_LIMIT) {
+      return {
+        retry: false,
+        reason,
+        detail: `${instantFailureStreak} consecutive transport failures under ${INSTANT_FAILURE_WINDOW_MS}ms — the endpoint is refusing connections, retrying cannot help`,
+      };
+    }
+    if (instantFailureStreak > 0) {
+      return { retry: true, reason, delayMs: INSTANT_FAILURE_PROBE_DELAY_MS };
     }
     const apiError = APIError.isInstance(error) ? error : undefined;
     const header = headerDelay(apiError);
