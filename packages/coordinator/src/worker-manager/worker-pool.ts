@@ -252,7 +252,23 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     if (!supervisor.isReady()) {
       return { cancelled: true, starting: true, runId, sessionId: activeRun.sessionId };
     }
-    return supervisor.cancel(runId, activeRun.sessionId);
+    // The live worker is the authority on whether the cancel landed: a run
+    // that already finished inside the worker reports cancelled:false, and
+    // its (real) completion must settle as "completed" — leaving the flag
+    // set would inverse-mislabel it "cancelled" on the ledger. Same for a
+    // failed cancel RPC: the run's own outcome stays truthful.
+    try {
+      const result = await supervisor.cancel(runId, activeRun.sessionId);
+      const confirmed =
+        typeof result === "object" &&
+        result !== null &&
+        (result as { cancelled?: unknown }).cancelled === true;
+      if (!confirmed) activeRun.cancelled = false;
+      return result;
+    } catch (error) {
+      activeRun.cancelled = false;
+      throw error;
+    }
   }
 
   async send(

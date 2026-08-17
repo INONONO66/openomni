@@ -96,6 +96,67 @@ describe("worker pool internals", () => {
     expect(manager.stats().workers).toBe(0);
   });
 
+  test("a cancel the worker refuses resets the flag — the run must not settle 'cancelled'", async () => {
+    manager = createWorkerManager(
+      { workerScript: WORKER_ENTRY, socketDir: makeSocketDir("cancel-refused") },
+      collectorPorts(),
+    );
+    const pool = manager as unknown as {
+      activeRuns: Map<string, { cancelled: boolean; sessionId: string; slot: unknown }>;
+    };
+
+    const refusedRun = {
+      sessionId: "session-refused",
+      traceId: TEST_TRACE_ID,
+      cancelled: false,
+      slot: {
+        supervisor: {
+          isReady: () => true,
+          cancel: async () => ({ cancelled: false, error: "run already finishing" }),
+        },
+      },
+    };
+    pool.activeRuns.set("run-refused", refusedRun as never);
+    await expect(manager.cancel("run-refused")).resolves.toMatchObject({ cancelled: false });
+    // RunSettled reads this flag after deliver resolves; a stale true would
+    // inverse-mislabel the completed run as "cancelled" on the ledger.
+    expect(refusedRun.cancelled).toBe(false);
+
+    const failedRun = {
+      sessionId: "session-failed",
+      traceId: TEST_TRACE_ID,
+      cancelled: false,
+      slot: {
+        supervisor: {
+          isReady: () => true,
+          cancel: async () => {
+            throw new Error("cancel rpc timeout");
+          },
+        },
+      },
+    };
+    pool.activeRuns.set("run-failed", failedRun as never);
+    await expect(manager.cancel("run-failed")).rejects.toThrow("cancel rpc timeout");
+    expect(failedRun.cancelled).toBe(false);
+
+    const confirmedRun = {
+      sessionId: "session-confirmed",
+      traceId: TEST_TRACE_ID,
+      cancelled: false,
+      slot: {
+        supervisor: {
+          isReady: () => true,
+          cancel: async () => ({ cancelled: true }),
+        },
+      },
+    };
+    pool.activeRuns.set("run-confirmed", confirmedRun as never);
+    await expect(manager.cancel("run-confirmed")).resolves.toMatchObject({ cancelled: true });
+    expect(confirmedRun.cancelled).toBe(true);
+
+    pool.activeRuns.clear();
+  });
+
   test("a throwing stop() during reassignment does not leak reserved=true (#audit L3)", async () => {
     manager = createWorkerManager(
       { workerScript: WORKER_ENTRY, socketDir: makeSocketDir("reassign-throw") },
