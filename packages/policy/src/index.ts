@@ -9,7 +9,7 @@ export type {
   CanonicalAuditDispatchContextGeneric,
   PolicyPointId,
 } from "./engine";
-export { PolicyRegistry } from "./registry";
+export { DuplicatePolicyFactoryError, PolicyRegistry } from "./registry";
 export type { PolicyRegistryInstance } from "./registry";
 // composeEffects has no production consumer outside this package's engine,
 // but it is a deliberate conformance seam: packages/agent's composition

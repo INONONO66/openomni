@@ -89,6 +89,12 @@ export function publishComposedDecision(
  * same 10-field record, hand-copied). Gating stays sessionId AND traceId —
  * stricter than the middleware-error publishers, which file under a trace
  * alone; an audit row without its session names nothing queryable.
+ *
+ * The drop is no longer silent: with a trace but no session, an
+ * `Operational.Warn` files the degradation under that trace so a reader can
+ * see audit rows are missing. Without even a trace id there is nothing real
+ * to file under — a minted id correlates to nothing, worse than silence —
+ * so that residual case stays quiet by design.
  */
 function publishAuditRecord(
   options: PolicyEngineConfig,
@@ -106,7 +112,23 @@ function publishAuditRecord(
   const traceContext = ctx.traceContext ?? options.traceContext;
   const traceId = traceContext?.traceId;
   const sessionId = traceContext?.sessionId;
-  if (!sessionId || !traceId) return;
+  if (!sessionId || !traceId) {
+    if (traceId) {
+      options.auditEmit?.(Operational.Warn, {
+        traceId,
+        time: Date.now(),
+        component: "agent.policy",
+        msg: "audit record dropped: missing sessionId",
+        context: {
+          event: record.descriptor.name,
+          action: record.action,
+          resource: record.resource,
+          verdict: decision.verdict,
+        },
+      });
+    }
+    return;
+  }
 
   options.auditEmit?.(record.descriptor, {
     traceId,

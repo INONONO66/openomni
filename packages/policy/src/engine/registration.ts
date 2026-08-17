@@ -9,12 +9,22 @@ export { PolicyRegistrationError } from "./registration-validation";
 
 const NO_REGISTRATIONS: readonly never[] = Object.freeze([]);
 
+/**
+ * Scoping is fail-open by omission, and that is a documented decision: a
+ * scoped registration simply does not run for a dispatch whose context lacks
+ * `agentType` (or names another type), so a caller that forgets to thread the
+ * agent type silently loses every scoped policy. Scope only policies whose
+ * absence is acceptable; unconditional guards must register unscoped.
+ */
 function matchesScope<TCtx extends GenericPolicyContext>(
   registration: CanonicalPolicyRegistrationGeneric<TCtx>,
   agentType: string | undefined,
 ): boolean {
   const allowed = registration.scope?.agentType;
-  if (allowed === undefined || allowed.length === 0) return true;
+  if (allowed === undefined) return true;
+  // Unreachable via register() — `empty_scope_agent_type` rejects [] at the
+  // boundary — kept fail-closed so an empty list can never mean "everyone".
+  if (allowed.length === 0) return false;
   if (!agentType) return false;
   return allowed.includes(agentType);
 }

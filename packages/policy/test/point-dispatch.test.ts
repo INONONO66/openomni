@@ -229,6 +229,52 @@ describe("PolicyEngine dispatchPoint selection", () => {
   });
 });
 
+describe("tool.filter / tool.require_approval conflict rule", () => {
+  test("does not self-conflict when a single policy emits both", () => {
+    const composed = composeEffects([
+      PolicyDecision.allow({
+        policyId: "gatekeeper",
+        priority: 0,
+        effects: [
+          { type: "tool.filter", toolPattern: "fs.*" },
+          { type: "tool.require_approval", reason: "workspace write" },
+        ],
+      }),
+    ]);
+
+    expect(composed.verdict).toBe("allow");
+    const types = composed.mergedEffects.map((effect) => effect.type);
+    expect(types).toContain("tool.filter");
+    expect(types).toContain("tool.require_approval");
+  });
+
+  test("stays fail-closed across policies regardless of priority", () => {
+    const composed = composeEffects([
+      PolicyDecision.allow({
+        policyId: "filterer",
+        priority: 10,
+        effects: [{ type: "tool.filter", toolPattern: "fs.*" }],
+      }),
+      PolicyDecision.allow({
+        policyId: "approver",
+        priority: 0,
+        effects: [{ type: "tool.require_approval", reason: "human gate" }],
+      }),
+    ]);
+
+    expect(composed.verdict).toBe("deny");
+    expect(
+      composed.mergedEffects.some(
+        (effect) =>
+          effect.type === "audit.annotate" &&
+          effect.annotation.includes("policy.effect_conflict.fail_closed") &&
+          effect.annotation.includes("filterer") &&
+          effect.annotation.includes("approver"),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("WorkItem policy effect composition", () => {
   test("retains the minimum source order when merging asserted-result allowances", () => {
     const merged = mergeEntries([
