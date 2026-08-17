@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786989502056,
+  "lastUpdate": 1786991188450,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54581,6 +54581,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 399793,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97c74014464112f78e49beefccdf590353a265d3",
+          "message": "fix(session,server): flush-barrier before terminal exits (#700)\n\n* fix(session,server): flush-barrier before terminal exits\n\nprocess.exit() discards queued microtasks, and the telemetry writer\ncommits on a scheduled microtask — so any publish not followed by an\nawaited flush before an exit path never reaches bus_event. Three holes:\n\n- the server fatal handler published \"fatal error\" and exited\n  synchronously, guaranteeing the most important terminal row was lost\n  (extracted to bootstrap/fatal.ts, which flushes between report and\n  exit; the barrier is guarded so it can never block the exit);\n- the shutdown catch published \"server error during shutdown\" after the\n  drain had already run, so that row rode the same discarded microtask;\n- BusPersistence.flush() drained exactly one microtask turn, so rows\n  published by subscribers reacting to pre-flush events (cascades)\n  escaped the barrier — demonstrated red with a 4-deep cascade. The\n  drain now loops to quiescence (a turn that commits nothing with no\n  writes in flight), bounded at 16 turns so a pathological\n  self-publishing subscriber cannot wedge shutdown.\n\nAuthoritative stores are synchronous transactions and never had this\nwindow; this is observation-row honesty, not a kernel defect.\n\nSource: codex-rs (rollout flushed before TurnAborted because readers\nre-read immediately) via #698 leaf 2.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(session,server): discriminating cascade depth, fatal guard width\n\nThe Fable gate refuted the cascade test's red claim: the old one-turn\nflush committed exactly the first 5 rows at ANY depth (its internal\nawait hops granted ~5 ambient turns), so a depth-4 chain expecting 5\nrows passed vacuously and the quiescence loop was pinned by nothing.\nDepth is now 8 — red-on-revert re-verified (Expected: 9, Received: 5,\nthe exact old-code loss shape).\n\nAlso lands the review's two MINORs: the quiescence comment names the\nephemeral-hop hole instead of overclaiming proof, and reportFatalAndExit\nwraps all reporting (stderr, publish, flush) so a throw there can never\nturn the fatal exit into an unhandled rejection.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T03:25:15+09:00",
+          "tree_id": "82d16f626210a4f4ac7d0e87e6583766a10aafed",
+          "url": "https://github.com/INONONO66/openomni/commit/97c74014464112f78e49beefccdf590353a265d3"
+        },
+        "date": 1786991187644,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5872,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9847,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3111,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15438,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8159,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1072,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 50127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2361,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 520717,
             "unit": "ns/op"
           }
         ]
