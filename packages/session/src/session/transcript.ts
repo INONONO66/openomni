@@ -149,6 +149,9 @@ function maintainProjection(
  *     attempts that never finish.
  */
 type FoldCacheEntry = { state: Message.WithParts; factCount: number };
+// Module-global, so it crosses Storage.withIsolation scopes — a pure
+// test-harness concern (production runs one Storage per process); the stored
+// COUNT continuity check catches any cross-scope staleness.
 const foldStateCache = new Map<string, FoldCacheEntry>();
 const FOLD_CACHE_LIMIT = 256;
 
