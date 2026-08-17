@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786905520261,
+  "lastUpdate": 1786973038734,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -53669,6 +53669,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 506631,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fe420b4dbb5e4021e95934433a42c2cdc9521d4b",
+          "message": "fix(session): close the bus-event audit hole, fail-closed periphery, dead surface removal (#693)\n\n* fix(session): dropped bus events warn loudly and count (#606)\n\nA persist failure was a console-only whisper: the row vanished from\nbus_event/event_chain with no operational trace. Every drop now\npublishes one Operational.Warn (itself a persisted bus event, with a\nrecursion guard for failures of the warn itself) and increments a\ncounter surfaced via BusPersistence.stats().\n\nRegression tests: worker_grant.* events persist attributed through the\nseeded run's session, and a poison row (FK-violating attribution) drops\nalone — its batch-mates survive the per-row retry and the drop is\ncounted and warned.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(session): fail-closed periphery, no leaked handles (#606)\n\n- AppConnectorInstallationStore.set: the installation row and its actor\n  identity/endpoint now commit as ONE transaction, and a missing\n  actorRegistry sub-adapter throws instead of half-registering a\n  connector that exists for consent but not for routing.\n- Storage.reset() closes the adapter first (shutdown WAL checkpoint\n  included) instead of dropping the open connection; adapter close() is\n  idempotent so explicit close + reset stays a supported order.\n- surface-key claim: raw BEGIN IMMEDIATE via db.exec converted to the\n  composable db.transaction().immediate() pattern used everywhere else.\n- transcript maintainProjection: a part.advanced fact whose part is\n  missing from fold state now throws TranscriptRecordingError\n  (fold-defect = corruption) instead of silently desyncing the\n  projection.\n- session-id.ts: corrected the false \"table can never gain a new row\"\n  claim — adapter-layer writers still seed worker_run_state in tests.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(session): index run attribution, drop 7 dead tables (#606)\n\nTwo NEW migrations (existing migrations untouched):\n\n- 0016_work_item_worker_run_index: expression index on\n  work_item(json_extract(data, '$.workerRunId')). The telemetry session\n  resolver runs that exact lookup for every persisted run-scoped bus\n  event; it was an unindexed full scan per event. EXPLAIN QUERY PLAN\n  confirms SEARCH ... USING INDEX idx_work_item_worker_run_id.\n- 0017_drop_dead_tables: drops event_log, task, task_run,\n  task_idempotency, plan, todo, background_task — zero readers and zero\n  writers across packages/ and apps/ (verified by grep); children drop\n  before parents for FK enforcement. CLEAR_ORDER and the schema\n  assertions in tests updated to match.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(conformance): archive manifest schema head is now 0017 (#606)\n\nsourceSchemaVersion pins the LAST applied migration name; migrations\n0016/0017 advance it from 0015_transcript_fact.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(session): drop the dead store surface (#606)\n\nDeleted (zero production callers, verified across packages/ and apps/):\n- Session.getWorkerMeta / Session.updateWorkerMeta — workerMeta lives on\n  SessionInfo; Session.update/get cover the round-trip.\n- WorkItemStore.update — the freeform field rewrite existed only to be\n  guarded by a managed-fields deny-list; every live mutation has a\n  dedicated lifecycle helper. Cross-package tests that used it as a\n  neutral head advance now append a marker evidence row instead (same +1\n  revision bump, observable survival).\n- WorkItemStore.remove + the graph-unlink machinery in crud.ts.\n- WorkItemStore.complete — the tombstone that only threw\n  admission_required; bypass refusal is now the ABSENCE of any raw\n  completion surface (pinned by reflection in the admission driver\n  scenario and boundary tests).\n- WorkItemStore.recordOutcome (outcome.ts) and areDependenciesMet —\n  no consumer; the dependency graph round-trip stays pinned.\n\nDeliberately KEPT, against the audit's initial list:\n- WorkItemStore.retry / resolveBlocker — packages/openomni admission\n  tests drive multi-attempt and unblock flows through them; deleting\n  would weaken that coverage. retry is documented as production-unwired.\n- worker_run_state adapter writers — test-only seeding of pre-freeze\n  archive rows across three packages; marked @internal instead of moved.\n- Bus.stats / Adapter.clear — live test infrastructure.\n\nThe 4 test files stranded in src/work-item/ moved to test/work-item/\nwith dead-member coverage pruned and live coverage preserved.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(session): sync AGENTS.md and status with the removed surface (#606)\n\n- AGENTS.md: WorkItemStore/Session API lists match the live surface;\n  the legacy-tables note records the 0017 drop instead of the stale\n  data-preservation claim.\n- implementation-status.md: recordOutcome row downgraded honestly —\n  the schema stays, the unreached writer is gone.\n- transcript.ts: one-line note that the fold cache is module-global\n  across Storage.withIsolation scopes (test-harness-only concern,\n  guarded by the stored-count continuity check).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(session): drop-warning must not re-stamp the FK-dead sessionId\n\nThe dominant drop class is a payload sessionId whose session row is\ngone at persist time; re-stamping it at the warn's payload root made\nthe default resolver attribute the warn to the same dead session, so\nthe warn's own insert FK-failed and the recursion guard degraded the\n'audit trail records its own gap' guarantee to a console whisper\n(plus a double-counted drop). The dropped sessionId now rides in\ncontext and the warn persists on the sessionless chain; pinned with a\ndefault-resolver regression test.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(session): pin that the drop-warning outlives the orphan write\n\nThe scoped-emit orphan pin asserted zero rows under the orphan trace,\nwhich was the OLD failure mode — the drop-warning FK-dying alongside\nits subject. It now persists sessionless under the same trace.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T22:22:47+09:00",
+          "tree_id": "59ce210a44ee8a09c5d00a1970bd125f75faddab",
+          "url": "https://github.com/INONONO66/openomni/commit/fe420b4dbb5e4021e95934433a42c2cdc9521d4b"
+        },
+        "date": 1786973038322,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6278,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10222,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2621,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16394,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8471,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 636,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1215,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 801,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2419,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524928,
             "unit": "ns/op"
           }
         ]
