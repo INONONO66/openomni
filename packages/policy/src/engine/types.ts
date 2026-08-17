@@ -38,19 +38,18 @@ export type DispatchPointContextGeneric<
 
 export type PolicyDecision = Policy.PolicyDecision;
 
-interface PolicyAuditConfig {
-  readonly sessionId?: string;
-  readonly actor?: Record<string, unknown>;
-  readonly action?: string;
-  readonly resource?: string;
-}
-
 export type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
 
 export interface PolicyEngineConfig {
   readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   readonly traceContext?: TraceContext.Type;
-  readonly audit?: PolicyAuditConfig | false;
+  /**
+   * `false` disables audit emission entirely. The former object form
+   * (sessionId/actor/action/resource override lanes) was dead config: no
+   * production or test caller ever constructed it, so every audit record was
+   * already derived from the trace context (#606 re-audit).
+   */
+  readonly audit?: false;
   readonly auditEmit?: AuditEmit;
 }
 

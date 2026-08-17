@@ -70,14 +70,4 @@ export namespace Auth {
     await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2));
     chmodSync(filepath, 0o600);
   }
-
-  export async function remove(key: string) {
-    ensureAuthDir();
-    const filepath = getAuthFilePath();
-    const file = Bun.file(filepath);
-    const data = await all();
-    delete data[key];
-    await Bun.write(file, JSON.stringify(data, null, 2));
-    chmodSync(filepath, 0o600);
-  }
 }

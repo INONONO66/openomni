@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import {
+  BUDGET_DEFAULTS,
   checkBudget,
   describeBudgetRemaining,
   createBudgetState,
@@ -222,5 +223,41 @@ describe("describeBudgetRemaining", () => {
     const desc = describeBudgetRemaining(s, { maxTurns: 24 });
     expect(desc).toContain("1 turn remaining");
     expect(desc).not.toContain("turns");
+  });
+});
+
+describe("defaults are written once — narration agrees with enforcement", () => {
+  // The 24/40/5min/2min defaults used to be duplicated between
+  // evaluateBudget and describeBudgetRemaining; a change to one side made
+  // the narration contradict the verdict. Both sites now read
+  // BUDGET_DEFAULTS, and this pin drives each pair from the shared constant:
+  // reintroduce a drifting literal on either side and the pair splits.
+  it("at the default turn ceiling: enforcement says exceeded, narration says 0 remaining", () => {
+    const s = { ...createBudgetState(), turns: BUDGET_DEFAULTS.maxTurns };
+    expect(checkBudget(s)).toBe("exceeded");
+    expect(describeBudgetRemaining(s)).toContain("0 turns remaining");
+
+    const oneBelow = { ...createBudgetState(), turns: BUDGET_DEFAULTS.maxTurns - 1 };
+    expect(checkBudget(oneBelow)).not.toBe("exceeded");
+    expect(describeBudgetRemaining(oneBelow)).toContain("1 turn remaining");
+  });
+
+  it("at the default tool-call ceiling: enforcement says exceeded, narration says 0 remaining", () => {
+    const s = { ...createBudgetState(), toolCalls: BUDGET_DEFAULTS.maxToolCalls };
+    expect(checkBudget(s)).toBe("exceeded");
+    expect(describeBudgetRemaining(s)).toContain("0 tool calls remaining");
+
+    const oneBelow = { ...createBudgetState(), toolCalls: BUDGET_DEFAULTS.maxToolCalls - 1 };
+    expect(checkBudget(oneBelow)).not.toBe("exceeded");
+    expect(describeBudgetRemaining(oneBelow)).toContain("1 tool call remaining");
+  });
+
+  it("the default wall-time ceilings narrate from the same constants", () => {
+    const s = createBudgetState();
+    const desc = describeBudgetRemaining(s);
+    expect(desc).toContain(`${Math.round(BUDGET_DEFAULTS.maxWallTimeMs / 1000)}s wall time`);
+    expect(desc).toContain(
+      `${Math.round(BUDGET_DEFAULTS.maxToolRuntimeMs / 1000)}s tool wall time`,
+    );
   });
 });

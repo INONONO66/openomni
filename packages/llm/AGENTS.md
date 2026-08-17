@@ -6,7 +6,7 @@ LLM provider abstraction. Handles auth (API key + proxy), provider SDK wiring, s
 
 ```
 src/
-├── index.ts          # Narrow public API: Auth, Provider, ModelsDev, errors, run, RunInput, TokenTracker
+├── index.ts          # Narrow public API: Auth, Provider, ModelsDev, errors, run, RunInput
 ├── run.ts            # run() — model-required top-level entry: messages+tools → Run.Outcome via Sink
 ├── error.ts          # ProviderError + NamedError/APIError re-exports + coerceApiError (AI SDK error → APIError)
 ├── message/
@@ -17,7 +17,7 @@ src/
 ├── retry/
 │   └── index.ts      # Retry.delay / sleep / isRetryable — exponential backoff + retry-after
 ├── auth/
-│   ├── storage.ts    # Auth namespace: get / set / remove / all (credential storage)
+│   ├── storage.ts    # Auth namespace: get / set / all (credential storage)
 ├── provider/
 │   ├── index.ts      # Provider + ModelsDev public namespaces; internal provider helpers stay deep
 │   ├── sdk.ts        # getSDK() + getLanguage() — maps Provider.Model to @ai-sdk/* instance
@@ -26,13 +26,13 @@ src/
 ├── token/
 │   └── index.ts      # TokenTracker.extractUsage
 └── model/
-    ├── index.ts      # ModelsDev.get / refresh — fetches models.dev catalog (lazy helper inlined here)
+    ├── index.ts      # ModelsDev.get — fetches models.dev catalog (lazy helper inlined here)
     └── models-snapshot.json # Bundled trusted catalog snapshot — the weekly workflow regenerates THIS file (#471)
 ```
 
 ## KEY PATTERNS
 
-- **Narrow root public API**: `src/index.ts` intentionally exports only `Auth`, `Provider`, `ModelsDev`, LLM error classes, `run`, `RunInput`, and `TokenTracker`. Do not add session/protocol helpers, `ProviderTransform`, `fetchProxyModels`, `enrichWithCatalog`, `Processor`, `Retry`, `Message`, `Tool`, or `toModelMessages` back to the root barrel. Use deep imports inside `packages/llm` tests/internal code when those helpers are needed.
+- **Narrow root public API**: `src/index.ts` intentionally exports only `Auth`, `Provider`, `ModelsDev`, LLM error classes, `run`, and `RunInput`. Do not add session/protocol helpers, `ProviderTransform`, `fetchProxyModels`, `enrichWithCatalog`, `Processor`, `Retry`, `Message`, `Tool`, `toModelMessages`, or `TokenTracker` back to the root barrel (`TokenTracker`'s only consumers are llm-internal — `processor/stream-events.ts` deep-imports it). Use deep imports inside `packages/llm` tests/internal code when those helpers are needed.
 - **`run()` entry point**: Takes `RunInput` (messages, tools, required model, required `trace` and `events`, optional auth, system, toolExecutor, toolChoice, maxSteps, providerOptions), drives a Processor loop, and returns `Run.Outcome` via the injected `Sink`. `RunInput.model` is required; do not reintroduce model-less/noop fallback behavior in `run()`.
 - **Provider.Model**: Zod schema carrying only consumed catalog metadata — identity (`id`/`providerID`/`name`/`family`), SDK routing (`api.npm`/`api.url`/`api.id`), resolution keys (`status`/`release_date`), and `limit.context`. Built from `models.dev` data via `Provider.fromModelsDevModel()`; `Provider.listModels()` is the catalog lookup. Fields models.dev publishes but nothing here reads (capabilities, cost, options, headers, modalities) are deliberately absent — re-add one only together with its reader.
 - **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "proxy", baseURL, apiKey? }`. Stored via `Auth.set(providerId, info)` and read by `getSDK()` before each call.

@@ -137,12 +137,6 @@ describe("ModelsDev", () => {
     });
   });
 
-  describe("refresh", () => {
-    it("should be an async function", () => {
-      expect(typeof ModelsDev.refresh).toBe("function");
-    });
-  });
-
   describe("env flags", () => {
     it("should use OPENOMNI_MODELS_PATH for cache location", async () => {
       const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");

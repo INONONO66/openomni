@@ -16,7 +16,6 @@ describe("@openomni/llm root public surface", () => {
       "NamedError",
       "Provider",
       "ProviderError",
-      "TokenTracker",
       "run",
     ]);
   });
@@ -35,6 +34,9 @@ describe("@openomni/llm root public surface", () => {
       "Processor",
       "Tool",
       "toModelMessages",
+      // #606 re-audit: only llm-internal consumers (processor/stream-events)
+      // remained; the stream fold reaches it by deep import.
+      "TokenTracker",
     ] as const;
 
     // Then: internal helpers remain available only through deep imports.

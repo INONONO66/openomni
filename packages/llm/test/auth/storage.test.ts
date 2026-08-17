@@ -59,22 +59,6 @@ describe("Auth Storage", () => {
     });
   });
 
-  it("should remove entry from auth.json", async () => {
-    await withTestAuthFile(async () => {
-      await Auth.set("anthropic", {
-        type: "api",
-        key: "sk-ant",
-      });
-
-      let stored = await Auth.get("anthropic");
-      expect(stored).toBeDefined();
-
-      await Auth.remove("anthropic");
-      stored = await Auth.get("anthropic");
-      expect(stored).toBeUndefined();
-    });
-  });
-
   it("should return all entries", async () => {
     await withTestAuthFile(async () => {
       await Auth.set("anthropic", {

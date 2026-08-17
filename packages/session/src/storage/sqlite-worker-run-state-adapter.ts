@@ -1,6 +1,13 @@
 import type { Database } from "bun:sqlite";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 
+/**
+ * @internal The write surface (create/updateStatus/updateStatusIfCurrent) is
+ * TEST-ONLY seeding of historical rows: the store is frozen (#510 D2b — its
+ * writers throw `worker_run_frozen`) and no production path reaches these.
+ * Tests across session/openomni/server seed pre-freeze archive rows here,
+ * exactly as such rows persist on disk. Do not wire new production callers.
+ */
 export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateStore.Adapter {
   return {
     create: (sessionId: string, record: WorkerRunStateStore.CreateRecord): void => {

@@ -25,8 +25,6 @@ export interface PolicyRegistryInstance<TCtx extends GenericPolicyContext = Gene
     plan: Policy.PolicyPlan,
     runtime: RuntimeContext,
   ): CanonicalPolicyRegistrationGeneric<TCtx>[];
-  has(id: string): boolean;
-  list(): string[];
 }
 
 function publishOptionalPolicyMissing(id: string, runtime: RuntimeContext): void {
@@ -75,14 +73,6 @@ function create<
       }
 
       return registrations;
-    },
-
-    has(id) {
-      return factories.has(id);
-    },
-
-    list() {
-      return Array.from(factories.keys());
     },
   };
 }

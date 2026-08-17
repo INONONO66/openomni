@@ -35,6 +35,12 @@ export type WorkerManagerConfig = {
   slotWaitTimeoutMs?: number;
   maxQueuedDeliveries?: number;
   bootstrap?: WorkerBootstrap.Bootstrap;
+  /**
+   * Extra env keys forwarded to spawned workers on top of the production
+   * allowlist (see `buildWorkerEnv`). A test seam — fixtures pass their
+   * OPENOMNI_WORKER_* knobs here explicitly.
+   */
+  extraWorkerEnvKeys?: readonly string[];
 };
 
 /**

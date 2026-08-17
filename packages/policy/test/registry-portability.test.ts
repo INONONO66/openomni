@@ -4,6 +4,9 @@ import { PolicyRegistry } from "@openomni/policy";
 
 describe("PolicyRegistry portability", () => {
   it("creates independent registry instances with no shared factory state", () => {
+    // Isolation is observed through resolve() — the registry's one production
+    // read path. The former has()/list() probes were deleted in the #606
+    // re-audit: they had no reader outside this test.
     const registry1 = PolicyRegistry.create();
     const registry2 = PolicyRegistry.create();
 
@@ -25,12 +28,19 @@ describe("PolicyRegistry portability", () => {
       fn: () => PolicyDecision.allow({ policyId: "b" }),
     }));
 
-    expect(registry1.has("policy-a")).toBe(true);
-    expect(registry1.has("policy-b")).toBe(false);
-    expect(registry2.has("policy-a")).toBe(false);
-    expect(registry2.has("policy-b")).toBe(true);
-    expect(registry1.list()).toEqual(["policy-a"]);
-    expect(registry2.list()).toEqual(["policy-b"]);
+    const planFor = (id: string) => ({
+      policies: [{ id, required: true, config: {} }],
+      labels: [],
+    });
+
+    expect(registry1.resolve(planFor("policy-a"), {}).map((r) => r.name)).toEqual(["policy-a"]);
+    expect(registry2.resolve(planFor("policy-b"), {}).map((r) => r.name)).toEqual(["policy-b"]);
+    expect(() => registry1.resolve(planFor("policy-b"), {})).toThrow(
+      "Required policy 'policy-b' is not registered",
+    );
+    expect(() => registry2.resolve(planFor("policy-a"), {})).toThrow(
+      "Required policy 'policy-a' is not registered",
+    );
   });
 
   it("resolves policies from plan without shared state", () => {
