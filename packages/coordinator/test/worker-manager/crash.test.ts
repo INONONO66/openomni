@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { WorkerDeliveryError } from "@openomni/protocol";
 import {
   createWorkerManager,
   killWorkerForTest,
@@ -16,13 +17,14 @@ const socketDir = `/tmp/omo-cr-${process.pid}`;
 
 let manager: WorkerManager;
 
-beforeAll(async () => {
+beforeAll(() => {
   fs.mkdirSync(socketDir, { recursive: true });
   manager = createWorkerManager(
     { maxActiveWorkers: 1, workerScript: WORKER_ENTRY, socketDir },
     collectorPorts(),
   );
-  await manager.waitUntilReady(15_000);
+  // No waitUntilReady here (#audit L1): it is a documented no-op on a fresh
+  // on-demand manager — no slots exist until the first delivery.
 }, 20_000);
 
 afterAll(async () => {
@@ -41,14 +43,19 @@ describe("worker manager crash recovery", () => {
     await new Promise<void>((r) => setTimeout(r, 50));
     killWorkerForTest(manager, 0);
 
-    let errorMessage: string | undefined;
+    // Typed-rejection contract (#audit M6): branch on data.code, not message
+    // text — the crash surfaces as the worker_restarted generation guard.
+    let caught: unknown;
     try {
       await dispatchPromise;
     } catch (error) {
-      if (!(error instanceof Error)) throw error;
-      errorMessage = error.message;
+      caught = error;
     }
-    expect(errorMessage).toContain("restarted before run crash-run-1 was delivered");
+    expect(caught).toBeInstanceOf(WorkerDeliveryError);
+    expect((caught as InstanceType<typeof WorkerDeliveryError>).data).toMatchObject({
+      code: "worker_restarted",
+      runId: "crash-run-1",
+    });
   }, 10_000);
 
   test("manager recovers after worker crash and resumes dispatching", async () => {

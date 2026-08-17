@@ -1,9 +1,11 @@
 import { describe, test } from "bun:test";
-import { assertCleanExit, assertNoOrphanProcesses } from "./assertions";
+import { assertCleanExit, assertNoOrphanProcesses, listChildPids } from "./assertions";
 
 describe("harness", () => {
-  test("spawn and exit cleanly", async () => {
-    const beforePids = [process.pid];
+  test("spawn and exit cleanly without orphaning children", async () => {
+    // A real pre/post comparison of this process's child tree — the old
+    // version compared [process.pid] to [process.pid], which could never fail.
+    const beforePids = listChildPids();
 
     const proc = Bun.spawn(["bun", "-e", "process.exit(0)"], {
       stdout: "pipe",
@@ -12,7 +14,7 @@ describe("harness", () => {
 
     await assertCleanExit(proc);
 
-    const afterPids = [process.pid];
+    const afterPids = listChildPids();
     assertNoOrphanProcesses(beforePids, afterPids);
   });
 });
