@@ -51,6 +51,11 @@ export namespace ProviderTransform {
         }
         if (!Array.isArray(msg.content)) return msg;
 
+        // toModelMessages emits user/system content as strings (handled
+        // above), so array content only ever arrives on assistant/tool
+        // messages — the roles the empty-part filter and rebuild handle.
+        if (msg.role !== "assistant" && msg.role !== "tool") return msg;
+
         const filtered = msg.content.filter((part) => {
           if (part.type === "text" || part.type === "reasoning") {
             return part.text !== "";
@@ -143,24 +148,19 @@ export namespace ProviderTransform {
   }
 
   function buildMessageWithContent(
-    msg: SDKMessage,
+    msg: Extract<SDKMessage, { role: "assistant" | "tool" }>,
     content: NormalizableContentPart[],
-  ): SDKMessage | undefined {
-    switch (msg.role) {
-      case "assistant":
-        return {
-          ...msg,
-          content: content.filter(isAssistantContentPart),
-        };
-      case "tool":
-        return {
-          ...msg,
-          content: content.filter(isToolContentPart),
-        };
-      case "system":
-      case "user":
-        return msg;
+  ): SDKMessage {
+    if (msg.role === "assistant") {
+      return {
+        ...msg,
+        content: content.filter(isAssistantContentPart),
+      };
     }
+    return {
+      ...msg,
+      content: content.filter(isToolContentPart),
+    };
   }
 
   function isAssistantContentPart(part: NormalizableContentPart): part is AssistantContentPart {

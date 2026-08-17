@@ -40,24 +40,34 @@ interface CustomLoaderResult {
   options?: Record<string, unknown>;
 }
 
-const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
-  anthropic: () => ({
-    options: {
-      headers: {
-        "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+// A Map for the same reason as BUNDLED_PROVIDERS above: a plain Record
+// resolves Object.prototype keys ("toString", "constructor", …) on index
+// access and would invoke them as loaders.
+const CUSTOM_LOADERS = new Map<string, () => CustomLoaderResult>([
+  [
+    "anthropic",
+    () => ({
+      options: {
+        headers: {
+          "anthropic-beta":
+            "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+        },
       },
-    },
-  }),
-  openai: () => ({
-    getModel(sdk: ProviderSDK, modelID: string) {
-      if (!isOpenAIProvider(sdk)) {
-        throw new Error("OpenAI responses model loader requires responses support");
-      }
-      return sdk.responses(modelID);
-    },
-    options: {},
-  }),
-};
+    }),
+  ],
+  [
+    "openai",
+    () => ({
+      getModel(sdk: ProviderSDK, modelID: string) {
+        if (!isOpenAIProvider(sdk)) {
+          throw new Error("OpenAI responses model loader requires responses support");
+        }
+        return sdk.responses(modelID);
+      },
+      options: {},
+    }),
+  ],
+]);
 
 // Auth material is hashed into cache keys so credentials never sit in Map
 // keys (visible in heap dumps, debugger key listings, or accidental logs).
@@ -76,13 +86,17 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   const factory = BUNDLED_PROVIDERS.get(npm);
 
   const providerID = model.providerID;
-  const customLoader = CUSTOM_LOADERS[providerID];
+  const customLoader = CUSTOM_LOADERS.get(providerID);
   const custom = customLoader ? customLoader() : undefined;
 
   const sdkOptions: SdkOptions = {
     ...(custom?.options ?? {}),
   };
-  if (model.api?.url && providerID !== "openai") {
+  // Honored for every provider, openai included: the old `!== "openai"` gate
+  // silently ignored model.api.url for openai models and was carried in
+  // without a recorded reason (#450). `name: "openai"` is the SDK default
+  // there, so setting it is identity. Proxy auth still overrides below.
+  if (model.api?.url) {
     sdkOptions.baseURL = model.api.url;
     sdkOptions.name = providerID;
   }
@@ -122,7 +136,7 @@ export function getLanguage(model: Provider.Model, auth: Auth.Info): ResolvedLan
 
   const sdk = getSDK(model, auth);
   const providerID = model.providerID;
-  const customLoader = CUSTOM_LOADERS[providerID];
+  const customLoader = CUSTOM_LOADERS.get(providerID);
   const custom = customLoader ? customLoader() : undefined;
 
   const languageModel = resolveLanguageModel(sdk, modelID, providerID, auth, custom);
