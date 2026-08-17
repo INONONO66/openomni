@@ -18,6 +18,23 @@ import {
 import * as WorkItemPublic from "../../src/work-item/index.js";
 
 const NOW = 1_000;
+
+// #606: WorkItemStore.update (the freeform field rewrite) is deleted. Tests
+// that need a competing head advance append a marker evidence row instead —
+// a real fact-backed mutation that bumps the row revision by exactly 1 and
+// leaves status/blockers untouched. Survival of the competing write is
+// asserted through the marker in stored.evidence.
+function advanceHead(hash: string, marker: string): Promise<WorkItem.Info | undefined> {
+  return WorkItemStore.addEvidence(
+    hash,
+    { kind: "verification", description: marker, passed: true },
+    "trace-test",
+  );
+}
+
+function evidenceDescriptions(item: WorkItem.Info | undefined): string[] {
+  return item?.evidence.map(({ description }) => description) ?? [];
+}
 const adapters: SqliteStorageAdapter[] = [];
 const databasePaths: string[] = [];
 let completionWriter: Storage.WorkItemCompletionWriter;
@@ -1780,11 +1797,7 @@ describe("WorkItem completion admission service", () => {
     await blockingService.requestCompletion(request, report);
     const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing blocking admission");
-    await WorkItemStore.update(
-      item.hash,
-      { name: "mutated before recovery re-evaluation" },
-      "trace-test",
-    );
+    await advanceHead(item.hash, "mutated before recovery re-evaluation");
     const unavailableService = guardedService({
       resolve() {
         throw new Error("authority backend unavailable");
@@ -2110,7 +2123,7 @@ describe("WorkItem completion admission service", () => {
     adapter.workItem.compareAndSet = compareAndSet;
     const originalAdmissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
     if (!originalAdmissionId) throw new Error("missing Owner admission");
-    await WorkItemStore.update(item.hash, { name: "advanced before Owner resume" }, "trace-test");
+    await advanceHead(item.hash, "advanced before Owner resume");
     const resumedService = guardedService(ownerAuthority);
     if (!resumedService) return;
 
@@ -2141,11 +2154,7 @@ describe("WorkItem completion admission service", () => {
     await service.requestCompletion(first.request, first.report);
     const firstRecorded = WorkItemStore.get(first.item.hash);
     if (!firstRecorded) throw new Error("missing first recorded admission");
-    await WorkItemStore.update(
-      first.item.hash,
-      { name: "head advanced after blocked admission" },
-      "trace-test",
-    );
+    await advanceHead(first.item.hash, "head advanced after blocked admission");
     const advanced = WorkItemStore.get(first.item.hash);
     if (!advanced) throw new Error("missing advanced WorkItem");
 
@@ -2504,14 +2513,14 @@ describe("WorkItem completion admission service", () => {
 
     const pending = service.requestCompletion(request, report);
     await entered.promise;
-    await WorkItemStore.update(item.hash, { name: "mutated during authority" }, "trace-test");
+    await advanceHead(item.hash, "mutated during authority");
     release.resolve();
     const outcome = await pending;
     const stored = WorkItemStore.get(item.hash);
 
     expect(field(outcome, "completed")).toBe(true);
     expect(authorityCalls).toBe(2);
-    expect(stored?.name).toBe("mutated during authority");
+    expect(evidenceDescriptions(stored)).toContain("mutated during authority");
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.blockers).toEqual([]);
   });
@@ -2649,7 +2658,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     let mutation: Promise<WorkItem.Info | undefined> | undefined;
     const events = completionEvents(item.hash, () => {
-      mutation = WorkItemStore.update(item.hash, { name: "mutated after admission" }, "trace-test");
+      mutation = advanceHead(item.hash, "mutated after admission");
     });
 
     await service.requestCompletion(request, report);
@@ -2668,7 +2677,7 @@ describe("WorkItem completion admission service", () => {
     expect(stored?.completionTerminalReceipt?.admissionId).toBe(
       stored?.completionFacts.admissions[1]?.id,
     );
-    expect(stored?.name).toBe("mutated after admission");
+    expect(evidenceDescriptions(stored)).toContain("mutated after admission");
   });
 
   test.each([
@@ -2703,11 +2712,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     let mutation: Promise<WorkItem.Info | undefined> | undefined;
     const events = completionEvents(item.hash, () => {
-      mutation = WorkItemStore.update(
-        item.hash,
-        { name: "force completion re-evaluation" },
-        "trace-test",
-      );
+      mutation = advanceHead(item.hash, "force completion re-evaluation");
     });
 
     const code = await errorCode(service.requestCompletion(request, report));

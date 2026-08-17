@@ -142,12 +142,12 @@ describe("Observability Pipeline Integration", () => {
       expect(history[0]?.runId).toBe(runId);
       expect(history[0]?.status).toBe("succeeded");
 
-      const eventLogCount = db().query("SELECT COUNT(*) as count FROM event_log").get() as {
-        count: number;
-      } | null;
-      if (eventLogCount) {
-        expect(eventLogCount.count).toBe(0);
-      }
+      // #606: the legacy event_log table is dropped (migration 0017) — the
+      // worker-run history projection reads bus_event/worker_run_state only.
+      const eventLogTable = db()
+        .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'event_log'")
+        .get();
+      expect(eventLogTable).toBeNull();
     });
   });
 

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
-import { Storage } from "../storage/storage.js";
-import { WorkItemStore } from "./index.js";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
+import { Storage } from "../../src/storage/storage.js";
+import { WorkItemStore } from "../../src/work-item/index.js";
 
 const adapters: SqliteStorageAdapter[] = [];
 const completionWriters = new WeakMap<SqliteStorageAdapter, Storage.WorkItemCompletionWriter>();
@@ -98,27 +98,6 @@ function admissionCandidate(
   });
 }
 
-function completionReport(): WorkItem.CompletionReport {
-  return {
-    summary: "A raw Session caller must not close this WorkItem.",
-    claims: [{ statement: "criterion one", evidenceIds: ["evidence:unreachable"] }],
-    caveats: [],
-    followUps: [],
-  };
-}
-
-async function directCompletionCode(hash: string): Promise<unknown> {
-  try {
-    const result = await WorkItemStore.complete(hash, completionReport());
-    if (typeof result !== "object" || result === null) return undefined;
-    return Reflect.get(result, "code");
-  } catch (error) {
-    expect(error).toBeInstanceOf(Error);
-    if (typeof error !== "object" || error === null) throw error;
-    return Reflect.get(error, "code");
-  }
-}
-
 afterEach(() => {
   Storage.reset();
   for (const adapter of adapters.splice(0)) adapter.close();
@@ -204,29 +183,12 @@ describe("WorkItemStore completion admission storage boundary", () => {
     expect(adapter.workItem.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
   });
 
-  test.each([
-    "pending",
-    "admitted",
-    "blocked",
-    "escalated",
-  ] as const)("returns typed admission_required with zero mutation for raw completion of a %s item", async (state) => {
-    const adapter = configure();
-    const item = await createItem();
-    if (state !== "pending") {
-      const decision = state === "admitted" ? "admit" : state === "blocked" ? "block" : "escalate";
-      const candidate = admissionCandidate(item, decision);
-      expect(authorizedCompareAndSet(adapter, item.hash, item.revision, candidate)).toBe(true);
-    }
-    const before = adapter.workItem.get(item.hash);
-
-    const code = await directCompletionCode(item.hash);
-
-    expect(code).toBe("admission_required");
-    expect(adapter.workItem.get(item.hash)).toEqual(before);
-  });
-
-  test("does not expose product admission mutation methods from WorkItemStore", () => {
+  test("does not expose completion mutation methods from WorkItemStore", () => {
     expect(Reflect.get(WorkItemStore, "appendCompletionAdmission")).toBeUndefined();
     expect(Reflect.get(WorkItemStore, "completeWithAdmission")).toBeUndefined();
+    // #606: the raw complete() tombstone (it only threw admission_required)
+    // is deleted outright — completion is reachable ONLY through the
+    // admission writer returned by Storage.configure.
+    expect(Reflect.get(WorkItemStore, "complete")).toBeUndefined();
   });
 });

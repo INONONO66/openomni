@@ -4,11 +4,6 @@ import type { WorkItemFact } from "./facts.js";
 
 export type WorkItemAdapter = NonNullable<Storage.Adapter["workItem"]>;
 
-export type DependencyReadiness = {
-  met: boolean;
-  reason: "all_complete" | "pending" | "failed" | "blocked";
-};
-
 export type CreateWorkItemInput = {
   name: string;
   sourceMessageId: string;
