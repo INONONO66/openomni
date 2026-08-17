@@ -45,14 +45,20 @@ function reportDroppedEvent(
     return;
   }
   const traceId = toRecord(payload)?.traceId;
+  // The dropped event's sessionId rides in `context`, never at the payload
+  // root: the dominant drop class IS an FK-dead sessionId, and a root-level
+  // stamp would make the resolver attribute this warn to the same dead
+  // session — FK-failing the warn's own insert and degrading the "audit
+  // trail records its own gap" guarantee to a console whisper. Sessionless,
+  // the warn always persists.
   Bus.publish(Operational.Warn, {
     traceId: typeof traceId === "string" ? traceId : "untraced",
     time: Date.now(),
-    ...(sessionId === undefined ? {} : { sessionId }),
     component: SELF_COMPONENT,
     msg: `bus event dropped from persistence: ${event.name}`,
     context: {
       event: event.name,
+      ...(sessionId === undefined ? {} : { droppedSessionId: sessionId }),
       droppedEventCount,
       error: String(err),
     },

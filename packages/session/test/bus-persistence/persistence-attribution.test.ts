@@ -191,4 +191,42 @@ describe("persistence failure is loud and contained", () => {
     });
     expect(rows("operational.warn")).toHaveLength(1);
   });
+
+  test("the drop-warning survives the FK-dead sessionId that caused the drop (default resolver)", async () => {
+    // The dominant production drop class: a payload sessionId whose session
+    // row is gone at persist time. The DEFAULT resolver reads payload
+    // sessionId first, so if the drop-warning re-stamped the same poison id
+    // at its root, the warn itself would FK-fail and the recursion guard
+    // would degrade the "audit trail records its own gap" claim to a console
+    // whisper. Pin: the warn rides the sessionless chain and persists.
+    BusPersistence.start();
+    const warns: Array<Record<string, unknown>> = [];
+    Bus.subscribe(Operational.Warn, (payload) => {
+      warns.push(payload as unknown as Record<string, unknown>);
+    });
+    const dropsBefore = BusPersistence.stats().droppedEventCount;
+
+    Bus.publish(Operational.Warn, {
+      traceId: "trace-fk-dead",
+      time: Date.now(),
+      sessionId: "session-that-does-not-exist",
+      component: "test-producer",
+      msg: "poison warn",
+    });
+    await flushPersistence();
+    await flushPersistence();
+
+    // Exactly ONE logical drop: the poison warn. The self-warn persisted, so
+    // it must not have re-entered the drop path (no double count).
+    expect(BusPersistence.stats().droppedEventCount).toBe(dropsBefore + 1);
+    const selfWarn = warns.find((w) => w.component === "bus-persistence");
+    if (selfWarn === undefined) throw new Error("no drop-warning published");
+    expect(selfWarn.sessionId).toBeUndefined();
+    expect((selfWarn.context as { droppedSessionId?: string }).droppedSessionId).toBe(
+      "session-that-does-not-exist",
+    );
+    expect(rows("operational.warn")).toEqual([
+      { session_id: null, event_type: "operational.warn", trace_id: "trace-fk-dead" },
+    ]);
+  });
 });
