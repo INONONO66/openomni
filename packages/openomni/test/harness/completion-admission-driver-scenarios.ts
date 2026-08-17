@@ -721,16 +721,17 @@ async function runBypassRefusalCompletionAdmissionScenario() {
     ]);
     insertCompletionAdmissionDriverItem(adapter, item);
     const before = requiredCompletionAdmissionDriverItem(item.hash);
-    const errorCode = await captureCompletionAdmissionDriverCode(
-      WorkItemStore.complete(item.hash, completionAdmissionDriverReport(item)),
-      Error,
-    );
+    // #606: the raw complete() tombstone (it only threw admission_required)
+    // is deleted from WorkItemStore. Bypass is refused at the surface — no
+    // completion entry point exists outside the admission writer returned by
+    // Storage.configure. The scenario pins that absence plus zero mutation.
+    const completeSurfaceAbsent = Reflect.get(WorkItemStore, "complete") === undefined;
     const after = requiredCompletionAdmissionDriverItem(item.hash);
     const status = WorkItem.deriveStatus(after);
     const terminalMutation =
       after.completionTerminalReceipt !== undefined || after.timestamps.completed !== undefined;
     const ok =
-      errorCode === "admission_required" &&
+      completeSurfaceAbsent &&
       JSON.stringify(before) === JSON.stringify(after) &&
       !terminalMutation &&
       after.completionFacts.admissions.length === 0;
@@ -741,7 +742,7 @@ async function runBypassRefusalCompletionAdmissionScenario() {
       "bypass_refused",
       "bypass_was_not_refused",
       {
-        errorCode,
+        completeSurfaceAbsent,
         terminalMutation,
         admissionCount: after.completionFacts.admissions.length,
         status,

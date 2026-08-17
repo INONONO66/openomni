@@ -21,8 +21,11 @@ export type ConnectIpcClientOptions = {
     method: string,
     params: Record<string, unknown> | undefined,
     respond: (result: unknown) => void,
-  ) => void;
-  onNotification?: (method: string, params: Record<string, unknown> | undefined) => void;
+  ) => void | Promise<void>;
+  onNotification?: (
+    method: string,
+    params: Record<string, unknown> | undefined,
+  ) => void | Promise<void>;
 };
 
 export function connectIpcClient(
@@ -104,12 +107,11 @@ export function connectIpcClient(
           const respond = (result: unknown) => {
             socket.write(encode(Ipc.createResponse(request.data.id, result)));
           };
-          // A throwing handler must never escape the socket 'data' listener —
-          // that tears down the connection (and can crash the process). Turn
-          // it into a typed error response instead, mirroring the server side.
-          try {
-            opts.onRequest(request.data.method, request.data.params, respond);
-          } catch (err) {
+          // A failing handler must never escape the socket 'data' listener —
+          // that tears down the connection (and can crash the process). Both
+          // sync throws AND async rejections become the typed code-1000 error
+          // frame instead, mirroring the server side.
+          const failRequest = (err: unknown) => {
             socket.write(
               encode(
                 Ipc.createErrorResponse(
@@ -119,14 +121,47 @@ export function connectIpcClient(
                 ),
               ),
             );
+          };
+          try {
+            const result = opts.onRequest(request.data.method, request.data.params, respond);
+            if (result instanceof Promise) result.catch(failRequest);
+          } catch (err) {
+            failRequest(err);
           }
           continue;
         }
 
         const notification = Ipc.Notification.safeParse(raw);
-        if (notification.success && opts.onNotification) {
-          opts.onNotification(notification.data.method, notification.data.params);
+        if (notification.success) {
+          // Notifications get no error frame per the protocol spec, but a
+          // throwing handler must not escape the 'data' listener either —
+          // that is an uncaughtException in whatever process hosts this
+          // client (e.g. the coordinator supervisor). Mirror the server:
+          // log and keep draining, for sync throws AND async rejections.
+          const warnFailure = (error: unknown) => {
+            console.warn(
+              "IPC notification handler failed:",
+              error instanceof Error ? error.message : String(error),
+            );
+          };
+          try {
+            const result = opts.onNotification?.(
+              notification.data.method,
+              notification.data.params,
+            );
+            if (result instanceof Promise) result.catch(warnFailure);
+          } catch (error) {
+            warnFailure(error);
+          }
+          continue;
         }
+
+        // Valid JSON that matches no message schema: surface it instead of a
+        // silent drop, so a schema-drifted peer is visible in logs rather
+        // than as an unexplained stall.
+        console.warn(
+          `IPC frame matched no message schema: ${String(JSON.stringify(raw)).slice(0, 200)}`,
+        );
       }
 
       // The client stays conservative about a peer that emits garbage — but
@@ -154,6 +189,16 @@ export function connectIpcClient(
       failAllPending(new IpcConnectionError("socket closed"));
     });
 
+    socket.on("end", () => {
+      // The server half-closed (FIN). A write-only half-open socket is
+      // useless to a request/response transport — and node would otherwise
+      // wait to flush any send backlog before closing, which never completes
+      // once the peer stopped reading. Tear down and fail pendings NOW.
+      connected = false;
+      failAllPending(new IpcConnectionError("socket closed by peer"));
+      socket.destroy();
+    });
+
     const client: IpcClient = {
       get connected() {
         return connected;
@@ -178,7 +223,5 @@ export function connectIpcClient(
         socket.destroy();
       },
     };
-
-    return client;
   });
 }

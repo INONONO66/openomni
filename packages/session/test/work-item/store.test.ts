@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { ZodError } from "zod";
 import { Bus } from "@openomni/telemetry";
-import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
-import { Storage } from "../storage/storage.js";
-import { persistCompletedWorkItemFixture } from "../../test/work-item/completed-fixture.js";
-import { WorkItemStore } from "./index.js";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
+import { Storage } from "../../src/storage/storage.js";
+import { WorkItemStore } from "../../src/work-item/index.js";
+import { persistCompletedWorkItemFixture } from "./completed-fixture.js";
 
 const baseInput = {
   sourceMessageId: "msg_1",
@@ -59,7 +59,7 @@ async function addPassingEvidence(hash: string): Promise<string> {
       kind: "test_result",
       description: "targeted lifecycle test passed",
       passed: true,
-      detail: "bun test packages/session/src/work-item/",
+      detail: "bun test packages/session/test/work-item/",
     },
     "trace-test",
   );
@@ -82,20 +82,6 @@ function persistCompletedFixture(
   report: WorkItem.CompletionReport,
 ): WorkItem.Info | undefined {
   return persistCompletedWorkItemFixture({ hash, report, completionWriter });
-}
-
-async function rawCompletionCode(
-  hash: string,
-  report: WorkItem.CompletionReport,
-): Promise<unknown> {
-  try {
-    await WorkItemStore.complete(hash, report);
-  } catch (error) {
-    expect(error).toBeInstanceOf(Error);
-    if (typeof error !== "object" || error === null) throw error;
-    return Reflect.get(error, "code");
-  }
-  return undefined;
 }
 
 afterEach(() => {
@@ -168,7 +154,7 @@ describe("WorkItemStore", () => {
     ]);
   });
 
-  test("D11 pin: create's parent link and remove's relation unlinks share the call's traceId", async () => {
+  test("D11 pin: create's parent link shares the call's traceId", async () => {
     configureSqlite();
     const traces: Array<{ event: string; traceId: string }> = [];
     Bus.subscribe(WorkItem.Events.Created, (event) =>
@@ -177,16 +163,12 @@ describe("WorkItemStore", () => {
     Bus.subscribe(WorkItem.Events.Updated, (event) =>
       traces.push({ event: `updated:${event.payload.hash}`, traceId: event.traceId }),
     );
-    Bus.subscribe(WorkItem.Events.Removed, (event) =>
-      traces.push({ event: `removed:${event.payload.hash}`, traceId: event.traceId }),
-    );
 
     const parent = await WorkItemStore.create({ ...baseInput, name: "trace-parent" }, "trace-p");
     const child = await WorkItemStore.create(
       { ...baseInput, name: "trace-child", parentHash: parent.hash },
       "trace-c",
     );
-    expect(WorkItemStore.remove(child.hash, "trace-r")).toBe(true);
     await flushBus();
 
     expect(traces).toEqual([
@@ -194,78 +176,7 @@ describe("WorkItemStore", () => {
       // ONE create = ONE id: the parent-link Updated rides the child create.
       { event: `updated:${parent.hash}`, traceId: "trace-c" },
       { event: `created:${child.hash}`, traceId: "trace-c" },
-      // ONE removal = ONE id: the parent unlink Updated rides the removal.
-      { event: `updated:${parent.hash}`, traceId: "trace-r" },
-      { event: `removed:${child.hash}`, traceId: "trace-r" },
     ]);
-  });
-
-  test("D11 pin: recordOutcome's afterPublish event inherits the caller's traceId", async () => {
-    configureSqlite();
-    const traces: Array<{ event: string; traceId: string }> = [];
-    Bus.subscribe(WorkItem.Events.OutcomeRecorded, (event) =>
-      traces.push({ event: "outcome", traceId: event.traceId }),
-    );
-    Bus.subscribe(WorkItem.Events.Updated, (event) =>
-      traces.push({ event: "updated", traceId: event.traceId }),
-    );
-
-    const item = await createItem("trace-outcome");
-    const evidenceId = await addPassingEvidence(item.hash);
-    persistCompletedFixture(item.hash, completionReport(evidenceId));
-    await flushBus();
-    traces.length = 0;
-
-    await WorkItemStore.recordOutcome(item.hash, "corrected", "trace-outcome");
-    await flushBus();
-
-    expect(traces).toEqual([
-      { event: "outcome", traceId: "trace-outcome" },
-      { event: "updated", traceId: "trace-outcome" },
-    ]);
-  });
-
-  test("records Owner outcome feedback for completed work items", async () => {
-    configureSqlite();
-    const events: string[] = [];
-    Bus.subscribe(WorkItem.Events.OutcomeRecorded, (event) =>
-      events.push(`${event.payload.hash}:${event.payload.outcome}`),
-    );
-    Bus.subscribe(WorkItem.Events.Updated, (event) =>
-      events.push(`updated:${event.payload.fields.join(",")}`),
-    );
-
-    const item = await createItem("owner-outcome");
-    const evidenceId = await addPassingEvidence(item.hash);
-    persistCompletedFixture(item.hash, completionReport(evidenceId));
-
-    const recorded = await WorkItemStore.recordOutcome(item.hash, "corrected", "trace-test");
-    await flushBus();
-
-    expect(recorded?.outcome).toBe("corrected");
-    expect(WorkItemStore.get(item.hash)?.outcome).toBe("corrected");
-    expect(events).toContain(`${item.hash}:corrected`);
-    expect(events).toContain("updated:outcome");
-  });
-
-  test("rejects Owner outcome feedback before completion", async () => {
-    configureSqlite();
-    const item = await createItem("premature-outcome");
-
-    await expectRejectsWithMessage(
-      WorkItemStore.recordOutcome(item.hash, "adopted", "trace-test"),
-      "Cannot record outcome for a pending work item",
-    );
-  });
-
-  test("requires the outcome lifecycle helper instead of direct updates", async () => {
-    configureSqlite();
-    const item = await createItem("direct-outcome-update");
-
-    await expectRejectsWithMessage(
-      WorkItemStore.update(item.hash, { outcome: "adopted" }, "trace-test"),
-      'Use lifecycle helpers instead of update() for "outcome"',
-    );
   });
 
   test("requires nonempty acceptance criteria when creating a WorkItem", async () => {
@@ -293,99 +204,19 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("shared-row-revision");
 
-    const updated = await WorkItemStore.update(
+    const updated = await WorkItemStore.addEvidence(
       item.hash,
-      { name: "shared-row-revision-updated" },
+      {
+        kind: "verification",
+        description: "ordinary mutation for the shared-row revision pin",
+        passed: true,
+      },
       "trace-test",
     );
 
     expect(item).toMatchObject({ revision: 1 });
     expect(updated).toMatchObject({ revision: 2 });
     expect(updated?.completionFacts.revision).toBe(item.completionFacts.revision);
-  });
-
-  const immutableUpdates: ReadonlyArray<
-    readonly [string, (item: WorkItem.Info) => Partial<Omit<WorkItem.Info, "hash">>]
-  > = [
-    ["acceptance criteria", () => ({ acceptanceCriteria: ["replacement"] })],
-    [
-      "completion contract",
-      () => ({
-        completionContract: {
-          version: 1,
-          revision: "contract:replacement",
-          basisRef: "basis:replacement",
-        },
-      }),
-    ],
-    [
-      "completion facts",
-      (item) => ({
-        completionFacts: { ...item.completionFacts, revision: item.completionFacts.revision + 1 },
-      }),
-    ],
-    [
-      "legacy completion report archive",
-      () => ({
-        completionReport: {
-          summary: "Replacement archive.",
-          claims: [{ statement: "replacement", evidenceIds: ["evidence:replacement"] }],
-          caveats: [],
-          followUps: [],
-        },
-      }),
-    ],
-    [
-      "legacy verification gate archive",
-      () => ({ verificationGate: { acceptance: { passed: true, criteria: [] } } }),
-    ],
-    [
-      "terminal receipt",
-      (item) => ({
-        name: item.name,
-        completionTerminalReceipt: {
-          version: 1,
-          hash: item.hash,
-          requestId: "completion-request:replacement",
-          admissionId: "admission:replacement",
-          contractRevision: item.completionContract.revision,
-          basisRef: item.completionContract.basisRef,
-          recordedHead: 1,
-        },
-      }),
-    ],
-    ["retry limit", () => ({ maxAttempts: 99 })],
-    ["Worker run identity", () => ({ workerRunId: "run_reassigned" })],
-    ["Worker session identity", () => ({ workSessionId: "session_reassigned" })],
-    ["Executor kind", () => ({ executorKind: "external_api" })],
-  ];
-
-  test.each(
-    immutableUpdates,
-  )("rejects update rewrites of immutable %s", async (_field, replacement) => {
-    configureSqlite();
-    const item = await createItem(`immutable-${_field}`);
-
-    await expect(
-      WorkItemStore.update(item.hash, replacement(item), "trace-test"),
-    ).rejects.toThrow();
-  });
-
-  test("records the latest Owner outcome when feedback changes", async () => {
-    configureSqlite();
-    const outcomes: WorkItem.Outcome[] = [];
-    Bus.subscribe(WorkItem.Events.OutcomeRecorded, (event) => outcomes.push(event.payload.outcome));
-
-    const item = await createItem("owner-outcome-update");
-    const evidenceId = await addPassingEvidence(item.hash);
-    persistCompletedFixture(item.hash, completionReport(evidenceId));
-    await WorkItemStore.recordOutcome(item.hash, "adopted", "trace-test");
-    const updated = await WorkItemStore.recordOutcome(item.hash, "corrected", "trace-test");
-    await flushBus();
-
-    expect(updated?.outcome).toBe("corrected");
-    expect(WorkItemStore.get(item.hash)?.outcome).toBe("corrected");
-    expect(outcomes).toEqual(["adopted", "corrected"]);
   });
 
   test("blocks and resumes when blockers are resolved", async () => {
@@ -418,62 +249,6 @@ describe("WorkItemStore", () => {
     expect(statuses).toEqual(["pending->running", "running->blocked", "blocked->running"]);
   });
 
-  test("derives dependency readiness across failure, retry, and completion", async () => {
-    configureSqlite();
-    const dependency = await createItem("dependency");
-    const dependent = await createItem("dependent", { dependsOn: [dependency.hash] });
-
-    expect(WorkItemStore.areDependenciesMet(dependent.hash)).toEqual({
-      met: false,
-      reason: "pending",
-    });
-
-    await WorkItemStore.fail(dependency.hash, "trace-test", "build failed");
-    expect(WorkItemStore.areDependenciesMet(dependent.hash)).toEqual({
-      met: false,
-      reason: "failed",
-    });
-
-    await WorkItemStore.retry(dependency.hash, "trace-test");
-    const evidenceId = await addPassingEvidence(dependency.hash);
-    persistCompletedFixture(dependency.hash, completionReport(evidenceId));
-
-    expect(WorkItemStore.areDependenciesMet(dependent.hash)).toEqual({
-      met: true,
-      reason: "all_complete",
-    });
-  });
-
-  test("rejects circular dependency updates", async () => {
-    configureSqlite();
-    const first = await createItem("cycle-a");
-    const second = await createItem("cycle-b", { dependsOn: [first.hash] });
-
-    await expectRejectsWithMessage(
-      WorkItemStore.update(
-        first.hash,
-        {
-          relations: { ...first.relations, dependsOn: [second.hash] },
-        },
-        "trace-test",
-      ),
-      "Circular dependency detected",
-    );
-  });
-
-  test("rejects raw completion of a failed item without mutation", async () => {
-    configureSqlite();
-    const item = await createItem("fail-then-complete");
-    const evidenceId = await addPassingEvidence(item.hash);
-    await WorkItemStore.fail(item.hash, "trace-test", "broken");
-    const before = WorkItemStore.get(item.hash);
-
-    const code = await rawCompletionCode(item.hash, completionReport(evidenceId));
-
-    expect(code).toBe("admission_required");
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
-  });
-
   test("rejects failing a completed item", async () => {
     configureSqlite();
     const item = await createItem("complete-then-fail");
@@ -484,23 +259,6 @@ describe("WorkItemStore", () => {
     await expectRejectsWithMessage(
       WorkItemStore.fail(item.hash, "trace-test"),
       "Cannot fail a completed work item",
-    );
-  });
-
-  test("rejects changing parentHash after creation", async () => {
-    configureSqlite();
-    const parent = await createItem("actual-parent");
-    const item = await createItem("parent-immutable", { parentHash: parent.hash });
-
-    await expectRejectsWithMessage(
-      WorkItemStore.update(
-        item.hash,
-        {
-          relations: { ...item.relations, parentHash: "wi_000000000002" },
-        },
-        "trace-test",
-      ),
-      "Cannot change parentHash after creation",
     );
   });
 
@@ -793,54 +551,6 @@ describe("WorkItemStore", () => {
     await expect(createItem("graceful")).rejects.toThrow("refusing to fabricate");
   });
 
-  test("rolls back WorkItem graph removal and publishes no events when deletion fails", async () => {
-    const adapter = configureSqlite();
-    const parent = await createItem("remove-parent");
-    const child = await createItem("remove-child", { parentHash: parent.hash });
-    const dependent = await createItem("remove-dependent", { dependsOn: [child.hash] });
-    const beforeParent = WorkItemStore.get(parent.hash);
-    const beforeDependent = WorkItemStore.get(dependent.hash);
-    const events: string[] = [];
-    Bus.subscribe(WorkItem.Events.Updated, (event) => events.push(`updated:${event.payload.hash}`));
-    Bus.subscribe(WorkItem.Events.Removed, (event) => events.push(`removed:${event.payload.hash}`));
-    const remove = adapter.workItem.remove;
-    adapter.workItem.remove = () => false;
-
-    expect(WorkItemStore.remove(child.hash, "trace-test")).toBe(false);
-    await flushBus();
-
-    expect(WorkItemStore.get(parent.hash)).toEqual(beforeParent);
-    expect(WorkItemStore.get(child.hash)).toEqual(child);
-    expect(WorkItemStore.get(dependent.hash)).toEqual(beforeDependent);
-    expect(events).toEqual([]);
-    adapter.workItem.remove = remove;
-  });
-
-  test("removes a work item", async () => {
-    configureSqlite();
-    const events: string[] = [];
-    Bus.subscribe(WorkItem.Events.Removed, (event) => events.push(event.payload.hash));
-    const item = await createItem("to-remove");
-    expect(WorkItemStore.get(item.hash)).toBeDefined();
-    expect(WorkItemStore.remove(item.hash, "trace-test")).toBe(true);
-    await flushBus();
-    expect(WorkItemStore.get(item.hash)).toBeUndefined();
-    expect(WorkItemStore.remove(item.hash, "trace-test")).toBe(false);
-    expect(events).toEqual([item.hash]);
-  });
-
-  test("rejects removing a WorkItem after durable completion history exists", async () => {
-    configureSqlite();
-    const item = await createItem("completed-history");
-    const evidenceId = await addPassingEvidence(item.hash);
-    const completed = persistCompletedFixture(item.hash, completionReport(evidenceId));
-
-    expect(() => WorkItemStore.remove(item.hash, "trace-test")).toThrow(
-      "Cannot remove WorkItem after durable history exists",
-    );
-    expect(WorkItemStore.get(item.hash)).toEqual(completed);
-  });
-
   test("rejects starting a failed item without retry", async () => {
     configureSqlite();
     const item = await createItem("start-failed");
@@ -858,45 +568,6 @@ describe("WorkItemStore", () => {
       WorkItemStore.retry(item.hash, "trace-test"),
       "retry() can only be called on failed work items",
     );
-  });
-
-  test("requires admission before inspecting unresolved report evidence", async () => {
-    configureSqlite();
-    const item = await createItem("missing-evidence");
-    await WorkItemStore.start(item.hash, "trace-test");
-
-    const code = await rawCompletionCode(item.hash, completionReport("ev_missing"));
-
-    const stored = WorkItemStore.get(item.hash);
-    expect(code).toBe("admission_required");
-    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
-    expect(stored?.completionReport).toBeUndefined();
-  });
-
-  test("requires admission before inspecting failed report evidence", async () => {
-    configureSqlite();
-    const item = await createItem("failed-evidence");
-    await WorkItemStore.start(item.hash, "trace-test");
-    const updated = await WorkItemStore.addReadBackEvidence(
-      item.hash,
-      {
-        kind: "url_fetch",
-        target: "https://example.com/post",
-        passed: false,
-        observedAt: 2,
-        statusCode: 404,
-      },
-      "trace-test",
-    );
-    const evidenceId = updated?.evidence.at(-1)?.id;
-    if (!evidenceId) throw new Error("expected evidence id");
-
-    const code = await rawCompletionCode(item.hash, completionReport(evidenceId));
-
-    const stored = WorkItemStore.get(item.hash);
-    expect(code).toBe("admission_required");
-    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
-    expect(stored?.completionReport).toBeUndefined();
   });
 
   test("rejects inconsistent read-back evidence", async () => {
@@ -953,12 +624,13 @@ describe("WorkItemStore", () => {
     });
   });
 
-  test("returns unmet for missing work item in areDependenciesMet", () => {
-    configureSqlite();
-    expect(WorkItemStore.areDependenciesMet("wi_nonexistent0")).toEqual({
-      met: false,
-      reason: "pending",
-    });
+  test("dead surface stays dead: removed store members are not exposed", () => {
+    // #606 dead-surface removal — update/remove/complete/recordOutcome/
+    // areDependenciesMet had zero production callers; completion goes ONLY
+    // through the admission writer (Storage.configure receipt).
+    for (const member of ["update", "remove", "complete", "recordOutcome", "areDependenciesMet"]) {
+      expect(Reflect.get(WorkItemStore, member)).toBeUndefined();
+    }
   });
 
   test("publishes bus events after adapter writes", async () => {

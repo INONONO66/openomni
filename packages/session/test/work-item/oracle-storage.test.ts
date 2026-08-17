@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
-import { Storage } from "../storage/storage.js";
-import { persistCompletedWorkItemFixture } from "../../test/work-item/completed-fixture.js";
-import { WorkItemStore } from "./index.js";
-import { persistMutation } from "./mutation.js";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
+import { Storage } from "../../src/storage/storage.js";
+import { WorkItemStore } from "../../src/work-item/index.js";
+import { persistMutation } from "../../src/work-item/mutation.js";
+import { persistCompletedWorkItemFixture } from "./completed-fixture.js";
 
 const baseInput = {
   sourceMessageId: "msg_oracle_storage",
@@ -103,9 +103,9 @@ describe("WorkItem oracle storage concurrency", () => {
     expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
   });
 
-  test("records Owner outcome through one shared row CAS", async () => {
+  test("records a mutation through one shared row CAS", async () => {
     const storage = configureSqlite();
-    const item = await createItem("CAS outcome");
+    const item = await createItem("CAS mutation");
     const completed = persistCompletedFixture(item);
     const originalCompareAndSet = storage.workItem.compareAndSet.bind(storage.workItem);
     const attemptedHeads: Array<readonly [number, number]> = [];
@@ -114,19 +114,24 @@ describe("WorkItem oracle storage concurrency", () => {
       return originalCompareAndSet(hash, expectedHead, candidate);
     };
 
-    const recorded = await WorkItemStore.recordOutcome(item.hash, "adopted", "trace-test");
+    const recorded = await WorkItemStore.addBlocker(
+      item.hash,
+      { kind: "waiting_input", description: "owner follow-up" },
+      "trace-test",
+    );
 
     expect(attemptedHeads).toEqual([[completed.revision, completed.revision + 1]]);
-    expect(recorded).toMatchObject({ revision: completed.revision + 1, outcome: "adopted" });
+    expect(recorded).toMatchObject({ revision: completed.revision + 1 });
+    expect(recorded?.blockers).toHaveLength(1);
     expect(recorded?.completionTerminalReceipt).toEqual(completed.completionTerminalReceipt);
   });
 
-  test("rejects a stale Owner outcome without rewinding the competing row", async () => {
+  test("rejects a stale mutation without rewinding the competing row", async () => {
     const storage = configureSqlite();
-    const item = await createItem("Stale outcome");
+    const item = await createItem("Stale mutation");
     const completed = persistCompletedFixture(item);
     // The competing writer commits its own full append+CAS write between the
-    // outcome's read and its transaction (#510 C1: a raw projection write
+    // mutation's read and its transaction (#510 C1: a raw projection write
     // inside the loser's transaction would roll back with it).
     const originalGet = storage.workItem.get.bind(storage.workItem);
     let injectedCompetingWrite = false;
@@ -152,7 +157,11 @@ describe("WorkItem oracle storage concurrency", () => {
     };
 
     await expectRejectsWithMessage(
-      WorkItemStore.recordOutcome(item.hash, "corrected", "trace-test"),
+      WorkItemStore.addBlocker(
+        item.hash,
+        { kind: "waiting_input", description: "loses the race" },
+        "trace-test",
+      ),
       `stale WorkItem revision: ${item.hash}`,
     );
 
@@ -161,7 +170,7 @@ describe("WorkItem oracle storage concurrency", () => {
       revision: completed.revision + 1,
       name: "competing winner",
     });
-    expect(WorkItemStore.get(item.hash)?.outcome).toBeUndefined();
+    expect(WorkItemStore.get(item.hash)?.blockers).toEqual([]);
   });
 
   test("removes the inserted child when parent relation CAS loses", async () => {

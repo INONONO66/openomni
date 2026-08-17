@@ -53,12 +53,14 @@ describe("work-item writes fail closed (#606 audit)", () => {
     ).rejects.toThrow("refusing to skip a work-item mutation");
   });
 
-  test("updateWorkItem refuses without the workItem adapter — no silent not-found", async () => {
+  test("store lifecycle writers refuse without the workItem adapter", async () => {
+    // Every public lifecycle writer rides mutate(); the fail-closed throw
+    // above must surface through the store surface too.
     Storage.initialize({ dbPath: ":memory:" });
     Object.defineProperty(Storage.get(), "workItem", { value: undefined, configurable: true });
 
-    await expect(
-      WorkItemStore.update("hash-absent-adapter", { name: "renamed" }, "trace-failclosed"),
-    ).rejects.toThrow("refusing to skip a work-item update");
+    await expect(WorkItemStore.start("hash-absent-adapter", "trace-failclosed")).rejects.toThrow(
+      "refusing to skip a work-item mutation",
+    );
   });
 });

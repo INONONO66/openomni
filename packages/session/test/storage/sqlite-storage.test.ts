@@ -194,10 +194,21 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).toContain("part");
       expect(tables).toContain("surface_key");
       expect(tables).toContain("artifact");
-      expect(tables).toContain("event_log");
       expect(tables).toContain("bus_event");
       expect(tables).toContain("worker_run_state");
       expect(tables).toContain("_migrations");
+      // #606: dead tables (zero readers/writers) dropped by migration 0017.
+      for (const dead of [
+        "event_log",
+        "task",
+        "task_run",
+        "task_idempotency",
+        "plan",
+        "todo",
+        "background_task",
+      ]) {
+        expect(tables).not.toContain(dead);
+      }
     });
 
     test("observability tables expose the expected columns", () => {

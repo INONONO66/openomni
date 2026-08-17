@@ -10,7 +10,7 @@ function tmpSocketPath(label: string): string {
 }
 
 describe("client remote-error path (#606 audit)", () => {
-  const servers: ReturnType<typeof createIpcServer>[] = [];
+  const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
 
   afterEach(async () => {
@@ -21,7 +21,7 @@ describe("client remote-error path (#606 audit)", () => {
 
   test("an error frame REJECTS the call as IpcRemoteError — never resolves undefined", async () => {
     const socketPath = tmpSocketPath("reject");
-    const srv = createIpcServer(socketPath, (method, _params, _respond) => {
+    const srv = await createIpcServer(socketPath, (method, _params, _respond) => {
       // A throwing handler produces the server's typed error frame (code 1000).
       throw new Error(`remote refused ${method}`);
     });
@@ -43,7 +43,7 @@ describe("client remote-error path (#606 audit)", () => {
 
   test("the SERVER side of the socket files remote failures the same way (#677 review)", async () => {
     const socketPath = tmpSocketPath("server-side");
-    const srv = createIpcServer(socketPath, () => undefined);
+    const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
     const client = await connectIpcClient(socketPath, {
       onRequest: () => {
