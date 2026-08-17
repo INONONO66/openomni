@@ -1,4 +1,9 @@
-import { flushBusPersistence, startBusPersistence, stopBusPersistence } from "./runtime-state.js";
+import {
+  busPersistenceStats,
+  flushBusPersistence,
+  startBusPersistence,
+  stopBusPersistence,
+} from "./runtime-state.js";
 import type { BusPersistenceOptions } from "./types.js";
 
 export namespace BusPersistence {
@@ -12,5 +17,10 @@ export namespace BusPersistence {
 
   export async function flush(): Promise<void> {
     await flushBusPersistence();
+  }
+
+  /** Writer drop counter — every row lost to a persist failure counts here. */
+  export function stats(): { readonly droppedEventCount: number } {
+    return busPersistenceStats();
   }
 }

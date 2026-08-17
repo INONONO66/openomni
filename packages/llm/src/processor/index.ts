@@ -58,6 +58,12 @@ export namespace Processor {
 
   interface ProcessorInfo {
     message: Message.AssistantMessage;
+    /**
+     * Usage summed across every attempt, retries included — the billed
+     * total. `message.tokens` reflects only the final attempt's fold, so
+     * telemetry that reads it drops the usage retried attempts consumed.
+     */
+    usageTotals: Transcript.Usage;
     process(streamInput: StreamInput): Promise<void>;
   }
 
@@ -90,6 +96,16 @@ export namespace Processor {
 
     let folded: Message.WithParts | undefined;
 
+    // Billed usage across attempts. Each attempt folds from scratch, so the
+    // final fold's tokens omit what retried attempts consumed; this counter
+    // survives the attempt boundary.
+    const usageTotals: Transcript.Usage = {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    };
+
     function record(fact: Transcript.Fact): void {
       const outcome = Transcript.fold(folded, fact);
       if ("rejected" in outcome) {
@@ -113,6 +129,10 @@ export namespace Processor {
     return {
       get message() {
         return (folded?.info ?? assistantMessage) as Message.AssistantMessage;
+      },
+
+      get usageTotals(): Transcript.Usage {
+        return { ...usageTotals, cache: { ...usageTotals.cache } };
       },
 
       async process(streamInput: StreamInput): Promise<void> {
@@ -141,6 +161,11 @@ export namespace Processor {
             };
 
             function finishAttempt(finish: Transcript.FinishReason): void {
+              usageTotals.input += eventState.usage.input;
+              usageTotals.output += eventState.usage.output;
+              usageTotals.reasoning += eventState.usage.reasoning;
+              usageTotals.cache.read += eventState.usage.cache.read;
+              usageTotals.cache.write += eventState.usage.cache.write;
               record({
                 type: "message.finished",
                 attemptId,
@@ -224,12 +249,34 @@ export namespace Processor {
                     error: `${decision.reason}: attempt cap ${retryAttemptLimit} exceeded`,
                   });
                 }
-                const aborted = e instanceof DOMException && e.name === "AbortError";
+                // Abort classification reads the signal, not the error shape:
+                // production callers abort with a custom reason
+                // (controller.abort(new Error("cancelled by coordinator"))),
+                // so throwIfAborted() throws a plain Error that the
+                // DOMException check alone misclassifies as "error" — hiding
+                // the turn from replay and marking in-flight tools as failed
+                // instead of interrupted.
+                const aborted =
+                  abort.aborted || (e instanceof DOMException && e.name === "AbortError");
                 settleAttempt(eventState, eventContext, { aborted });
                 finishAttempt(aborted ? "aborted" : "error");
                 throw e;
               }
               const retryReason = decision.reason;
+
+              if (decision.retryAfterOverCap === true) {
+                // An inferred ratelimit reset exceeded the header-delay cap
+                // and was demoted to backoff — say so instead of silently
+                // shortening the server's ask (#audit: flag had no consumer).
+                events.publish(Operational.Warn, {
+                  traceId: trace.traceId,
+                  time: Date.now(),
+                  sessionId: trace.sessionId,
+                  component: "llm.retry",
+                  msg: "ratelimit reset above cap; demoted to backoff",
+                  context: { backoffMs: decision.delayMs },
+                });
+              }
 
               // The failed attempt closes before the next one starts: tool
               // calls from it will never receive a result from the next

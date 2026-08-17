@@ -1,8 +1,9 @@
 import z from "zod";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { join, dirname } from "node:path";
-import { mkdirSync, existsSync, chmodSync } from "node:fs";
+import { mkdirSync, existsSync, writeFileSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
+import { NamedError } from "../error";
 
 const ApiAuth = z.object({
   type: z.literal("api"),
@@ -35,8 +36,33 @@ const ensureAuthDir = () => {
   }
 };
 
+/**
+ * 0600 from the first byte, atomically: the old Bun.write + chmod-after-write
+ * left a window where the default-mode file was group/world-readable, and a
+ * crash mid-write could leave a truncated file. Write a temp file with the
+ * final mode, then rename over the target.
+ */
+const writeAuthFile = (filepath: string, contents: string): void => {
+  const tmpPath = `${filepath}.${crypto.randomUUID()}.tmp`;
+  writeFileSync(tmpPath, contents, { mode: 0o600 });
+  renameSync(tmpPath, filepath);
+};
+
 export namespace Auth {
   export type Info = z.infer<typeof Info>;
+
+  /**
+   * A malformed auth file must never read as empty: set() writes
+   * `{...all(), [key]: info}` back, so a silent `{}` would destroy every
+   * stored credential on the next write.
+   */
+  export const InvalidFileError = NamedError.create(
+    "AuthInvalidFileError",
+    z.object({
+      message: z.string(),
+      path: z.string(),
+    }),
+  );
 
   export async function withFile<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
     return authFilePathContext.run(filepath, fn);
@@ -50,7 +76,24 @@ export namespace Auth {
   export async function all(): Promise<Record<string, Info>> {
     const filepath = getAuthFilePath();
     const file = Bun.file(filepath);
-    const data = await file.json().catch(() => ({}) as Record<string, unknown>);
+    if (!(await file.exists())) return {};
+
+    let data: unknown;
+    try {
+      data = await file.json();
+    } catch (cause) {
+      throw new InvalidFileError(
+        { message: `auth file is not valid JSON: ${filepath}`, path: filepath },
+        { cause },
+      );
+    }
+    if (typeof data !== "object" || data === null || Array.isArray(data)) {
+      throw new InvalidFileError({
+        message: `auth file is not a JSON object: ${filepath}`,
+        path: filepath,
+      });
+    }
+
     return Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value);
@@ -65,9 +108,7 @@ export namespace Auth {
   export async function set(key: string, info: Info) {
     ensureAuthDir();
     const filepath = getAuthFilePath();
-    const file = Bun.file(filepath);
     const data = await all();
-    await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2));
-    chmodSync(filepath, 0o600);
+    writeAuthFile(filepath, JSON.stringify({ ...data, [key]: info }, null, 2));
   }
 }

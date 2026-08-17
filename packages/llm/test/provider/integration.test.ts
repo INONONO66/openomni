@@ -137,6 +137,27 @@ describe("Provider Integration", () => {
     expect(unsized.limit?.context).toBe(0);
   });
 
+  it("honors model.api.url for openai models (#audit L5)", () => {
+    // Regression: the old `providerID !== "openai"` gate silently ignored a
+    // configured catalog URL for openai models.
+    const auth: Auth.Info = { type: "api", key: "test-openai-key" };
+    const model: Provider.Model = {
+      id: "gpt-4o-custom-endpoint",
+      providerID: "openai",
+      name: "GPT-4o (custom endpoint)",
+      api: { npm: "@ai-sdk/openai", url: "http://localhost:9317/v1" },
+    };
+
+    const lm = getLanguage(model, auth) as unknown as {
+      config: { url: (options: { path: string; modelId: string }) => string };
+      provider: string;
+    };
+    expect(lm.provider).toBe("openai.responses");
+    expect(lm.config.url({ path: "/responses", modelId: model.id })).toBe(
+      "http://localhost:9317/v1/responses",
+    );
+  });
+
   it("resolves custom baseURL models through the OpenAI provider", () => {
     const auth: Auth.Info = { type: "api", key: "custom-key" };
     const model: Provider.Model = {

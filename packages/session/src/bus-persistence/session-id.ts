@@ -47,8 +47,10 @@ function sessionIdFromRecord(record: Record<string, unknown> | undefined): strin
  * the WorkItem projection row (`workSessionId`/`workerRunId` — head ==
  * revision, every input carried by `work:` facts), so that is the canonical
  * read. Pre-freeze runs exist only as immutable `worker_run_state` rows; the
- * fallback is a read-only frozen-archive lookup (the store's writers throw
- * `worker_run_frozen`, so the table can never gain a new row).
+ * fallback is a read-only frozen-archive lookup. The STORE's writers throw
+ * `worker_run_frozen`, so no production path adds rows — but the table is
+ * not immutable in the absolute: the adapter-layer writers still exist for
+ * test seeding of historical rows (see WorkerRunStateStore doc).
  */
 function sessionIdFromWorkerRun(record: Record<string, unknown> | undefined): string | undefined {
   const workerRunId = stringFromRecord(record, "workerRunId");

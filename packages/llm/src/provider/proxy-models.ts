@@ -1,4 +1,20 @@
+import { z } from "zod";
+import { NamedError } from "../error";
 import type { Provider } from "./index";
+
+/**
+ * A proxy that cannot list its models must fail loudly: swallowing the
+ * failure into an empty list made listModels() fall through to the full
+ * models.dev catalog, presenting every model as "available on this proxy".
+ */
+export const ProxyModelsError = NamedError.create(
+  "ProxyModelsError",
+  z.object({
+    message: z.string(),
+    url: z.string(),
+    status: z.number().optional(),
+  }),
+);
 
 type CacheEntry = {
   readonly expiresAt: number;
@@ -31,19 +47,41 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
   const cached = modelCache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.ids;
 
-  try {
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-    }
-    const response = await fetch(url, { headers });
-    if (!response.ok) return [];
-    const ids = readModelIds(await response.json());
-    modelCache.set(url, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
-    return ids;
-  } catch {
-    return [];
+  const headers: Record<string, string> = {};
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
   }
+
+  let response: Response;
+  try {
+    response = await fetch(url, { headers });
+  } catch (cause) {
+    throw new ProxyModelsError(
+      { message: `proxy model listing unreachable: ${String(cause)}`, url },
+      { cause },
+    );
+  }
+  if (!response.ok) {
+    throw new ProxyModelsError({
+      message: `proxy model listing returned HTTP ${response.status}`,
+      url,
+      status: response.status,
+    });
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (cause) {
+    throw new ProxyModelsError(
+      { message: "proxy model listing returned invalid JSON", url },
+      { cause },
+    );
+  }
+
+  const ids = readModelIds(body);
+  modelCache.set(url, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
+  return ids;
 }
 
 export function enrichWithCatalog(

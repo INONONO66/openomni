@@ -6,6 +6,7 @@ import {
   normalizePointDecision,
   pointContractDecision,
   pointMiddlewareErrorDecision,
+  pointMiddlewareFailOpenDecision,
   undeclaredEffectDecision,
 } from "./point-decisions";
 import { timingForPolicyPoint } from "./points";
@@ -143,8 +144,13 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
         failPolicy,
         durationMs,
       );
-      if (failPolicy === "fail-open") return undefined;
-      engineDecision = pointMiddlewareErrorDecision(reg, pointId, durationMs);
+      // Fail-open keeps its semantics (no verdict contribution), but the
+      // crash is recorded IN the composed output — an allow reason code plus
+      // an audit annotation — instead of vanishing when no auditEmit is bound.
+      engineDecision =
+        failPolicy === "fail-open"
+          ? pointMiddlewareFailOpenDecision(reg, pointId, durationMs)
+          : pointMiddlewareErrorDecision(reg, pointId, durationMs);
     }
 
     const durationMs = Date.now() - startTime;

@@ -96,15 +96,10 @@ describe("Session lineage APIs", () => {
       workerMeta: { lane: "worker-1", retries: 0 },
     });
 
-    expect(Session.getWorkerMeta(child.id)).toEqual({ lane: "worker-1", retries: 0 });
+    expect(Session.get(child.id)?.workerMeta).toEqual({ lane: "worker-1", retries: 0 });
 
-    Session.updateWorkerMeta(child.id, { lane: "worker-2", retries: 1, state: "busy" });
+    Session.update(child.id, { workerMeta: { lane: "worker-2", retries: 1, state: "busy" } });
 
-    expect(Session.getWorkerMeta(child.id)).toEqual({
-      lane: "worker-2",
-      retries: 1,
-      state: "busy",
-    });
     expect(Session.get(child.id)?.workerMeta).toEqual({
       lane: "worker-2",
       retries: 1,
@@ -124,11 +119,5 @@ describe("Session lineage APIs", () => {
 
     expect(Session.list()).toEqual([]);
     expect(Session.listChildren("missing-parent")).toEqual([]);
-  });
-
-  test("updateWorkerMeta on a missing session is a no-op", () => {
-    expect(() => Session.updateWorkerMeta("missing-session", { lane: "worker-1" })).not.toThrow();
-    expect(Session.getWorkerMeta("missing-session")).toBeUndefined();
-    expect(Session.list()).toEqual([]);
   });
 });

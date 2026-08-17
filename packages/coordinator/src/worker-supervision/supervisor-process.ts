@@ -1,9 +1,19 @@
+import { WorkerDeliveryError } from "@openomni/protocol";
 import type { Subprocess } from "bun";
 
 const DEFAULT_WORKER_STOP_GRACE_MS = 5_000;
-const MAX_RESTARTS_PER_WINDOW = 10;
+const DEFAULT_WORKER_CONNECT_TIMEOUT_MS = 10_000;
+const DEFAULT_RESTART_BASE_DELAY_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 const MAX_DISPATCH_TIMEOUT_MS = 600_000;
+
+/**
+ * Crash-loop breaker (#audit M2): a generation that dies (or never becomes
+ * ready) within this many ms of its spawn counts as a fast crash; this many
+ * consecutive fast crashes trip the breaker and restarts stop.
+ */
+export const FAST_CRASH_THRESHOLD_MS = 5_000;
+export const MAX_CONSECUTIVE_FAST_CRASHES = 5;
 
 // Production allowlist only. Test fixtures that need extra keys (e.g.
 // OPENOMNI_WORKER_ENV_FIXTURE, OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS) pass them
@@ -35,11 +45,19 @@ export function buildWorkerEnv(
   return env;
 }
 
-export function workerStopGraceMs(): number {
-  const raw = process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
-  if (!raw) return DEFAULT_WORKER_STOP_GRACE_MS;
+function nonNegativeEnvMs(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WORKER_STOP_GRACE_MS;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+export function workerStopGraceMs(): number {
+  return nonNegativeEnvMs("OPENOMNI_WORKER_STOP_GRACE_MS", DEFAULT_WORKER_STOP_GRACE_MS);
+}
+
+export function workerConnectTimeoutMs(): number {
+  return nonNegativeEnvMs("OPENOMNI_WORKER_CONNECT_TIMEOUT_MS", DEFAULT_WORKER_CONNECT_TIMEOUT_MS);
 }
 
 export async function waitForWorkerExit(
@@ -59,10 +77,18 @@ export async function waitForWorkerExit(
   }
 }
 
+/**
+ * Exponential restart backoff from the consecutive fast-crash count. The old
+ * MAX_RESTARTS_PER_WINDOW plateau is gone with the 60s window it belonged to
+ * (#audit M2): the breaker now trips at MAX_CONSECUTIVE_FAST_CRASHES, so
+ * counts never grow past it.
+ */
 export function resolveRestartDelay(restartCount: number): number {
-  return restartCount > MAX_RESTARTS_PER_WINDOW
-    ? MAX_BACKOFF_MS
-    : Math.min(1000 * 2 ** (restartCount - 1), MAX_BACKOFF_MS);
+  const base = nonNegativeEnvMs(
+    "OPENOMNI_WORKER_RESTART_BASE_DELAY_MS",
+    DEFAULT_RESTART_BASE_DELAY_MS,
+  );
+  return Math.min(base * 2 ** (Math.max(restartCount, 1) - 1), MAX_BACKOFF_MS);
 }
 
 /**
@@ -106,12 +132,18 @@ export async function waitForSupervisorReady(
     if (isAborted?.() === true) {
       // A stopping supervisor can never become ready — fail the waiting
       // delivery immediately instead of polling out the full timeout.
-      throw new Error(`worker ${workerId} stopped while waiting for readiness`);
+      throw new WorkerDeliveryError({
+        message: `worker ${workerId} stopped while waiting for readiness`,
+        code: "worker_stopped",
+      });
     }
     if (isReady()) return;
     await new Promise<void>((r) => setTimeout(r, 200));
   }
-  throw new Error(`worker ${workerId} not ready after ${timeoutMs}ms`);
+  throw new WorkerDeliveryError({
+    message: `worker ${workerId} not ready after ${timeoutMs}ms`,
+    code: "worker_not_ready",
+  });
 }
 
 export function isBootstrapAccepted(value: unknown): boolean {

@@ -83,7 +83,7 @@ describe("framing round trips", () => {
 describe("timeout and protocol errors over a real socket", () => {
   test("unanswered call rejects with IpcTimeoutError", async () => {
     const socketPath = tmpSocketPath("timeout");
-    const server = createIpcServer(socketPath, () => {
+    const server = await createIpcServer(socketPath, () => {
       // never respond
     });
     try {
@@ -99,7 +99,7 @@ describe("timeout and protocol errors over a real socket", () => {
 
   test("server.call without a connected client rejects with IpcConnectionError", async () => {
     const socketPath = tmpSocketPath("noclient");
-    const server = createIpcServer(socketPath, () => undefined);
+    const server = await createIpcServer(socketPath, () => undefined);
     try {
       await expect(server.call("worker.deliver_message", {})).rejects.toBeInstanceOf(
         IpcConnectionError,
@@ -111,7 +111,7 @@ describe("timeout and protocol errors over a real socket", () => {
 
   test("non-JSON frame gets a 4001 error response and the connection survives", async () => {
     const socketPath = tmpSocketPath("malformed");
-    const server = createIpcServer(socketPath, (_m, _p, respond) => respond({ ok: true }));
+    const server = await createIpcServer(socketPath, (_m, _p, respond) => respond({ ok: true }));
     try {
       const response = (await rawExchange(socketPath, "this is not json\n")) as {
         type: string;
@@ -126,14 +126,52 @@ describe("timeout and protocol errors over a real socket", () => {
 
   test("valid JSON with an unknown message shape gets a 4000 protocol error", async () => {
     const socketPath = tmpSocketPath("unknown-shape");
-    const server = createIpcServer(socketPath, (_m, _p, respond) => respond({ ok: true }));
+    const server = await createIpcServer(socketPath, (_m, _p, respond) => respond({ ok: true }));
     try {
       const response = (await rawExchange(socketPath, '{"neither":"request-nor-response"}\n')) as {
         type: string;
+        id?: string;
         error?: { code: number };
       };
       expect(response.type).toBe("response");
       expect(response.error?.code).toBe(4000);
+      // No id on the offending frame → "unknown" is all the server can say.
+      expect(response.id).toBe("unknown");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("a schema-invalid frame carrying an id gets its 4000 echoed under THAT id", async () => {
+    const socketPath = tmpSocketPath("correlated-shape");
+    const server = await createIpcServer(socketPath, (_m, _p, respond) => respond({ ok: true }));
+    try {
+      // A request missing its required `method`: schema-invalid, but the id
+      // is recoverable — the error response must echo it so the requester's
+      // pending settles instead of burning its timeout.
+      const response = (await rawExchange(
+        socketPath,
+        '{"v":2,"type":"request","id":"req-correlate-1"}\n',
+      )) as { type: string; id?: string; error?: { code: number } };
+      expect(response.type).toBe("response");
+      expect(response.error?.code).toBe(4000);
+      expect(response.id).toBe("req-correlate-1");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("the 4000 error message truncates the offending payload", async () => {
+    const socketPath = tmpSocketPath("truncated-echo");
+    const server = await createIpcServer(socketPath, (_m, _p, respond) => respond({ ok: true }));
+    try {
+      const oversharing = JSON.stringify({ neither: "z".repeat(5_000) });
+      const response = (await rawExchange(socketPath, `${oversharing}\n`)) as {
+        error?: { code: number; message: string };
+      };
+      expect(response.error?.code).toBe(4000);
+      // The full raw payload must not be echoed back — ~200 chars plus prefix.
+      expect((response.error?.message ?? "").length).toBeLessThanOrEqual(250);
     } finally {
       server.close();
     }
@@ -143,7 +181,7 @@ describe("timeout and protocol errors over a real socket", () => {
 describe("bidirectional transport (server → client reverse direction)", () => {
   test("reverse request over one socket — the owner-device pattern", async () => {
     const socketPath = tmpSocketPath("reverse");
-    const server = createIpcServer(socketPath, () => undefined);
+    const server = await createIpcServer(socketPath, () => undefined);
     try {
       const client = await connectIpcClient(socketPath, {
         onRequest(method, params, respond) {

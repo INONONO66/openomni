@@ -81,6 +81,12 @@ export const WorkerDeliveryError = NamedError.create(
       "worker_restarted",
       "session_mismatch",
       "wall_time_exceeded",
+      // Supervisor-level rejections (#audit M6): the worker RPCs reject with
+      // these instead of untyped Error/raw IpcConnectionError.
+      "worker_unavailable",
+      "worker_not_ready",
+      "worker_stopped",
+      "ipc_connection_lost",
     ]),
     runId: z.string().optional(),
     sessionId: z.string().optional(),

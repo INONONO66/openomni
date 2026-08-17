@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { Tool } from "@openomni/protocol";
-import type { ToolCallResult } from "../../src/index";
+// Internal module import on purpose: ToolCallResult left the package barrel in
+// the #audit dead-surface pass (zero external importers), but the alias
+// contract against protocol Tool.Result still holds inside the package.
+import type { ToolCallResult } from "../../src/worker-supervision/supervisor-types";
 
 type IsExact<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2

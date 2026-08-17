@@ -19,6 +19,25 @@ type PolicyFactory<TCtx extends GenericPolicyContext = GenericPolicyContext> = (
   runtime: RuntimeContext,
 ) => PolicyEngineMiddlewareGeneric<TCtx>;
 
+/**
+ * A second `register()` under an id that already holds a factory. Silent
+ * overwrite let a later registration hijack an id and every plan that named
+ * it; duplicates now fail loudly at composition time. There is deliberately
+ * no probe/replace lane (`has()`/`list()` died as dead surface in the #606
+ * re-audit): every production registry is built fresh per resolve with
+ * statically distinct ids, so a duplicate is always a wiring bug.
+ */
+export class DuplicatePolicyFactoryError extends Error {
+  readonly code = "duplicate_policy_factory_id" as const;
+  readonly policyId: string;
+
+  constructor(policyId: string) {
+    super(`Policy factory '${policyId}' is already registered`);
+    this.name = "DuplicatePolicyFactoryError";
+    this.policyId = policyId;
+  }
+}
+
 export interface PolicyRegistryInstance<TCtx extends GenericPolicyContext = GenericPolicyContext> {
   register(id: string, factory: PolicyFactory<TCtx>): void;
   resolve(plan: Policy.PolicyPlan, runtime: RuntimeContext): PolicyEngineMiddlewareGeneric<TCtx>[];
@@ -50,6 +69,7 @@ function create<
 
   return {
     register(id, factory) {
+      if (factories.has(id)) throw new DuplicatePolicyFactoryError(id);
       factories.set(id, factory);
     },
 

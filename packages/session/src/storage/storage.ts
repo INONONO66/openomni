@@ -23,6 +23,13 @@ export namespace Storage {
   export interface Adapter {
     transaction<T>(operation: () => T): T;
     /**
+     * Releases the adapter's resources (SQLite: shutdown WAL checkpoint +
+     * connection close). Storage.reset() calls it so a reset can never leak
+     * an open connection with an unfolded WAL. Must be idempotent — explicit
+     * close followed by reset is a supported teardown order.
+     */
+    close?(): void;
+    /**
      * #510 D1: the telemetry connection (NORMAL/group-commit) that
      * bus-persistence reads and writes ride — the sanctioned accessor for the
      * underlying SQLite handle so consumers never cast past `private` fields
@@ -167,10 +174,14 @@ export namespace Storage {
   export function reset(): void {
     const scope = storageScope.getStore();
     if (scope) {
+      // Close BEFORE nulling: dropping the reference without close() leaked
+      // the SQLite connection and skipped the shutdown WAL checkpoint.
+      scope.adapter?.close?.();
       scope.adapter = null;
       scope.initializedDbPath = null;
       return;
     }
+    adapter?.close?.();
     adapter = null;
     initializedDbPathValue = null;
   }

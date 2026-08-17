@@ -14,7 +14,7 @@ export const DEFAULT_IDLE_SHUTDOWN_MS = 600_000;
 export const DEFAULT_SLOT_WAIT_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_QUEUED_DELIVERIES = 100;
 
-export type { ToolCallParams, ToolCallResult };
+export type { ToolCallParams };
 export type { InboundWaitParams, InboundWaitResult };
 
 export type ToolCallContext = SupervisorToolCallContext & {
@@ -85,6 +85,10 @@ export type WorkerManager = {
   cancel(runId: string): Promise<unknown>;
   send(sessionId: string, message: string, traceId: string, runId?: string): Promise<unknown>;
   stats(): WorkerManagerStats;
+  /**
+   * Resolves when every EXISTING slot's supervisor is ready. Workers spawn on
+   * demand, so this is a no-op on a fresh manager — it never pre-spawns.
+   */
   waitUntilReady(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;
 };

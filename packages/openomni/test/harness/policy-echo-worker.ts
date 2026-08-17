@@ -27,44 +27,47 @@ if (!socketPath || !ipcAuthToken) {
   process.exit(1);
 }
 
-const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
-  if (method === "coordinator.bootstrap") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({ ok: false, error: "unauthorized" });
+const server = await createIpcServer(
+  socketPath,
+  (method, params, respond, _notify, connectionId) => {
+    if (method === "coordinator.bootstrap") {
+      if (params?.authToken !== ipcAuthToken) {
+        respond({ ok: false, error: "unauthorized" });
+        return;
+      }
+      server.useConnection(connectionId);
+      server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
+      respond({ ok: true });
       return;
     }
-    server.useConnection(connectionId);
-    server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
+
+    if (method === "coordinator.spawn_run") {
+      if (params?.authToken !== ipcAuthToken) {
+        respond({ status: "failed", error: "unauthorized coordinator request" });
+        return;
+      }
+      const runId = typeof params?.runId === "string" ? params.runId : "unknown";
+      const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "unknown";
+      const policyPlan = Policy.PolicyPlan.safeParse(params?.policyPlan);
+      const registrations = buildWorkerMiddleware({
+        ...(policyPlan.success ? { policyPlan: policyPlan.data } : {}),
+      });
+      respond({
+        runId,
+        sessionId,
+        status: "succeeded",
+        output: JSON.stringify({
+          receivedPolicyPlan: policyPlan.success,
+          activePolicies: registrations.map((registration) => registration.name),
+        }),
+        finishReason: "stop",
+      });
+      return;
+    }
+
     respond({ ok: true });
-    return;
-  }
-
-  if (method === "coordinator.spawn_run") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({ status: "failed", error: "unauthorized coordinator request" });
-      return;
-    }
-    const runId = typeof params?.runId === "string" ? params.runId : "unknown";
-    const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "unknown";
-    const policyPlan = Policy.PolicyPlan.safeParse(params?.policyPlan);
-    const registrations = buildWorkerMiddleware({
-      ...(policyPlan.success ? { policyPlan: policyPlan.data } : {}),
-    });
-    respond({
-      runId,
-      sessionId,
-      status: "succeeded",
-      output: JSON.stringify({
-        receivedPolicyPlan: policyPlan.success,
-        activePolicies: registrations.map((registration) => registration.name),
-      }),
-      finishReason: "stop",
-    });
-    return;
-  }
-
-  respond({ ok: true });
-});
+  },
+);
 
 process.on("SIGTERM", () => {
   server.close();

@@ -153,19 +153,21 @@ describe("WorkItem integration", () => {
 
     expect(storedParent?.relations.childHashes).toContain(child1.hash);
     expect(storedParent?.relations.childHashes).toContain(child2.hash);
-    expect(WorkItemStore.areDependenciesMet(child2.hash)).toEqual({
-      met: false,
-      reason: "pending",
-    });
+    // #606: areDependenciesMet was removed (no consumer); the dependency
+    // GRAPH round-trip is the pin — readiness derivation belongs to a future
+    // scheduler.
+    expect(WorkItemStore.get(child2.hash)?.relations.dependsOn).toEqual([child1.hash]);
+    const dependency = WorkItemStore.get(child1.hash);
+    expect(dependency ? WorkItem.deriveStatus(dependency) : undefined).toBe("pending");
 
     persistCompletedFixture(child1.hash, await addEvidenceBackedReport(child1.hash), {
       publishTerminalEvents: false,
     });
 
-    expect(WorkItemStore.areDependenciesMet(child2.hash)).toEqual({
-      met: true,
-      reason: "all_complete",
-    });
+    const completedDependency = WorkItemStore.get(child1.hash);
+    expect(completedDependency ? WorkItem.deriveStatus(completedDependency) : undefined).toBe(
+      "completed",
+    );
   });
 
   test("round-trips WorkItemStore data through SqliteStorageAdapter", async () => {
