@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786974652547,
+  "lastUpdate": 1786974942902,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54239,6 +54239,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514623,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a0610b7c4756d3adb0b8268bb3cc37827aaa195",
+          "message": "fix(agent): per-run policy state, honest idle guard, abort retry classification + dead surface removal (#692)\n\n* fix(agent): per-run policy state, honest idle-progress guard\n\nAudit H1: buildWorkerMiddleware assembles registrations once per worker\nhost and shares the same array with the parent agent and every child, so\nthe budget nudges' issued flags and the idle nudge's counters were one\nclosure across all runs: warnings fired once per assembly instead of\nonce per run, and idle tracking raced across parent/children.\n\nThe policy engine now accepts kind \"factory\" registrations,\ninstantiated at the registration boundary once per engine; the agent\nbuilds one engine per run, so factory-minted closure state is run-scoped\nby construction. The stateful builtins (budget-reassurance,\nbudget-warning, idle-nudge) become factories; callers keep passing the\nsame middleware arrays.\n\nAudit H2: only tool completion counted as progress, so multi-turn\ntext-only runs with slow turns were nudged three times and aborted as\nstalled. A turn advance (the previous turn completed) now resets the\nidle clock and the nudge budget; only a run re-entering the same turn\nwithout advancing accrues idleness. The nudge text now states the real\nsemantics (theater L1): observable progress resets the check, and\nrepeated no-progress ends the run.\n\nRegression tests: per-engine factory isolation (policy + agent), per-run\nbudget warnings from a shared factory, text-only multi-turn never\nnudged or aborted, turn advance resets the nudge budget.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): abort never retryable, per-turn text, honest denials\n\nAudit M4: classifyRetryReason matched aborted/budget-exceeded substrings\nto the retryable timeout reason. An abort mid-run emitted\nagent.error.retry (a promise the run cannot keep) and then died in\nRetry.sleep, and a tool error merely mentioning aborted triggered a\nbogus retry. Aborts are now decided by identity (Retry.isAbort: signal\nstate or the typed AbortError the loop itself throws), before message\nclassification; they take the non-retryable throw path with terminal\nreason aborted and emit no retry telemetry. Budget exhaustion never\nthrows, so that substring is gone too. retry.test.ts rows that pinned\nthe substring mapping are changed with the fix, and the\nabort-during-backoff terminal test now aborts during the actual sleep.\n\nAudit M3: handleStop read state.lastAssistantText as this turn's text,\nso a continuation turn with no text part re-emitted the PREVIOUS turn's\ntext as a fresh step, run.turn.post text, and result.text while history\ncorrectly recorded empty. The turn's own boundary snapshot is now the\nonly source of its text (empty when the turn produced none);\nlastAssistantText remains the run's last produced text for guard/abort\nresults. The lifecycle-stop fixture that pinned the resurrection is\nchanged with the fix; tool-history pins result.text, steps, and the\nemitted run.turn.post texts for both the stub and real empty-turn shape.\n\nAudit M5: a tool.require_approval verdict produced a bare denial - an\napproval costume over a deny. No approval flow exists; the denial now\nsays so (approval required, but no approval flow is wired; denied\nfail-closed) and the executor marks the effect as a reserved obligation\nsurface. Protocol vocabulary untouched.\n\nAudit L2: Provider.listModels failures were swallowed into Model not\nfound; the proxy-listing failure is now surfaced in the thrown message.\nAudit L4: wall-time/tool-runtime exhaustion keeps finishReason\nmax-steps (the union's only budget member); the real limit is already\nnamed by the budget-exceeded Warn in the same dispatch - now pinned by\ntest and documented at the seam.\nAudit L5: McpClient.connect() is idempotent - a second connect no\nlonger mints a transport the first never closes. Regression test counts\ntransports across connect/connect/disconnect/connect.\n\nAlso dedupes the verbatim deny-wrap try/catch (model response, turn\nfinish, completion prepare) into run-events.applyEffectOrDeny, and\nremoves the never-read BlockedResultMetadata.retryAfterMs and the\nresolveToolChoice passthrough (both re-verified by repo-wide grep) -\nthese live in the same seams the fixes rewrote.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(agent): narration reads enforcement pool, M1 re-compaction pin\n\nMain (#687) already single-sourced the budget defaults as\nBUDGET_DEFAULTS; this keeps one residual coupling fix on top:\ndescribeBudgetRemaining reads the tool-call pool through\neffectiveMaxToolCalls, the same function the step cap and enforcement\nuse, instead of restating the fallback.\n\nAdds the audit M1 regression pin: after a compaction, the next\ncompletion with no newly measured call skips (recorded) instead of\nre-compacting - the trigger reads the last call's provider-measured\ncontext and compaction clears it. The M1 finding itself was already\nfixed at this head; the end-to-end pin was missing.\n\nDead-surface items re-verified already gone at this head (audit\nsnapshot drift), no action: InMemoryCompactor, AgentStep tool-call\nvariant with toolCalls/toolResults, AgentResult tool-calls/handoff\nmembers and handoffTarget, the MCP http cast arm, and\nCompactionBoundaryError (compaction now returns blocked facts rather\nthan throwing).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T22:48:37+09:00",
+          "tree_id": "e28073c6f8b962921e74be340d18b2d0246973c1",
+          "url": "https://github.com/INONONO66/openomni/commit/5a0610b7c4756d3adb0b8268bb3cc37827aaa195"
+        },
+        "date": 1786974941559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 630,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15298,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8073,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 50591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2706,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 521218,
             "unit": "ns/op"
           }
         ]
