@@ -9,7 +9,7 @@ import {
 } from "../budget";
 import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import type { DispatchContext } from "../policy";
-import type { RetryReason } from "../retry";
+import type { TerminalReason } from "../retry";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
 function toMessagesWithParts(
@@ -146,7 +146,7 @@ export type BuildTurnResult =
 
 /** What the terminal record needs. Emitted by the runner, which owns it. */
 export interface RunFailureFacts {
-  readonly reason: RetryReason;
+  readonly reason: TerminalReason;
   readonly attempt: number;
   readonly maxAttempts: number;
 }

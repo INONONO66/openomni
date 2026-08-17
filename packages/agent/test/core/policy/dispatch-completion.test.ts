@@ -155,7 +155,11 @@ describe("tool.native.pre middleware dispatch", () => {
     const result = await executor(call);
 
     expect(baseExecutor).toHaveBeenCalledTimes(0);
-    expect(result.output).toBe("[Denied: approval-required]");
+    // Audit M5: no approval flow is wired; the denial says so honestly
+    // instead of wearing an approval costume.
+    expect(result.output).toBe(
+      "[Denied: approval-required — approval required, but no approval flow is wired; denied fail-closed]",
+    );
     expect(result.isError).toBe(true);
   });
 

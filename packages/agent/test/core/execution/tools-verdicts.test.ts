@@ -104,10 +104,15 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
 
     expect(calls).toBe(0);
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("[Denied: wrong_boundary]");
+    // Audit M5: no approval flow is wired anywhere, so a require_approval
+    // verdict is a fail-closed denial and the output must say so instead of
+    // implying an approval was requested.
+    expect(result.output).toBe(
+      "[Denied: wrong_boundary — approval required, but no approval flow is wired; denied fail-closed]",
+    );
   });
 
-  it("blocks execution with retry-after metadata when policy returns retry", async () => {
+  it("blocks execution with verdict metadata when policy returns pending", async () => {
     let calls = 0;
     const engine = engineWith(
       PolicyDecision.pending({
@@ -130,7 +135,9 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
 
     expect(calls).toBe(0);
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("[Denied: rate_limited]");
+    expect(result.output).toBe(
+      "[Denied: rate_limited — approval required, but no approval flow is wired; denied fail-closed]",
+    );
     expect(result.metadata).toEqual({
       verdict: "pending",
       reason: "rate_limited",

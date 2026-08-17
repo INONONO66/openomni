@@ -15,6 +15,7 @@ import * as Retry from "../retry";
 import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
 import { effectOf, PolicyEffectApplier } from "./effects";
 import {
+  applyEffectOrDeny,
   emitBudgetReassurance,
   emitBudgetWarning,
   emitCompaction,
@@ -45,12 +46,6 @@ import {
   type TurnArtifacts,
 } from "./state";
 import { createToolExecutor } from "./tools";
-
-export function resolveToolChoice(
-  config: ChatAgentConfig,
-): "auto" | "required" | "none" | undefined {
-  return config.toolChoice;
-}
 
 export function buildSystemPrompt(
   basePrompt: string | undefined,
@@ -189,7 +184,7 @@ export async function buildTurn(
   }
 
   recordRunTurn(state);
-  if (config.signal?.aborted) throw new Error("aborted");
+  if (config.signal?.aborted) throw Retry.abortError();
 
   const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
   const toolMetadata = buildToolMetadataMap(config.tools);
@@ -273,6 +268,12 @@ export async function buildTurn(
       runInput: {
         // llm reports through the same port the agent was handed.
         events: config.events,
+        // ALIASING INVARIANT: this is `state.messages` itself, not a copy.
+        // Effects that append to run history between here and the llm call
+        // (prompt injections, continuation messages) are visible to this
+        // turn's model input by design; effects that REPLACE history
+        // (`replaceRunMessages`) swap the array and are deliberately NOT
+        // visible to an already-built turn. Do not "fix" either direction.
         messages: state.messages,
         tools: selectedTools,
         system,
@@ -420,11 +421,18 @@ export async function handleStop(
     (entry) => PolicyDecision.isBlocking(entry.decision) && effectOf(entry.decision, "run.abort"),
   );
 
-  const step = { type: "text" as const, content: state.lastAssistantText };
+  // THIS turn's text, read off the turn's own boundary snapshot — never
+  // `state.lastAssistantText`, which may still hold the PREVIOUS turn's text
+  // when this turn produced none. Reusing it re-emitted the old text as a
+  // fresh step, turn result, and result.text while history correctly
+  // recorded empty (#audit M3).
+  const turnText = assistantTextOf(turn.turnAssistant.message);
+  const step = { type: "text" as const, content: turnText };
   appendRunStep(state, step);
   if (config.onStepFinish) await config.onStepFinish(step);
 
-  if (toolAbort) return runResult(state, { finishReason: "stop", guardAborted: true });
+  if (toolAbort)
+    return runResult(state, { finishReason: "stop", text: turnText, guardAborted: true });
 
   // #546: the turn's assistant output always enters history — tool and
   // reasoning parts included, regardless of continuation — and it enters
@@ -441,30 +449,17 @@ export async function handleStop(
       turnIndex: state.turnIndex,
       turnResult: {
         type: "stop",
-        text: state.lastAssistantText,
+        text: turnText,
         usage: turn.turnUsage,
       },
     }),
   );
 
   if (!PolicyDecision.isBlocking(postTurnDecision)) {
-    try {
-      PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      publishDenyDiagnostic(
-        config.events,
-        "turn.finish",
-        PolicyDecision.deny({
-          policyId: "agent.policy.composed",
-          reasonCodes: [reason],
-          effects: [{ type: "run.abort", reason }],
-        }),
-        state,
-        agentBase,
-      );
-      return guardAbortedResult(state);
-    }
+    const applied = applyEffectOrDeny(config.events, "turn.finish", state, agentBase, () =>
+      PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision),
+    );
+    if (!applied.ok) return applied.result;
   }
 
   const continuationMessages = PolicyEffectApplier.continuationMessages(
@@ -513,11 +508,27 @@ export async function handleStop(
   if (yielded === "steps") {
     // The step budget ran out while the model still wanted tools. Ending as
     // a plain stop pretended completion; the cap is the honest reason.
-    return runResult(state, { finishReason: "max-steps" });
+    return runResult(state, { finishReason: "max-steps", text: turnText });
   }
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
-  return runResult(state, { finishReason: "stop" });
+  return runResult(state, { finishReason: "stop", text: turnText });
+}
+
+/**
+ * The text a turn actually produced: the text parts of its boundary snapshot,
+ * empty when the turn produced none (or, on the TEST-STUB-ONLY missing-
+ * snapshot path, when there is no snapshot at all — see
+ * {@link resolveTurnAssistant}). Never falls back to `state.lastAssistantText`;
+ * that field is the run's last produced text, kept for guard/abort results,
+ * and reusing it as a turn's own output forges history (#audit M3).
+ */
+function assistantTextOf(message: Message.WithParts | undefined): string {
+  if (message === undefined) return "";
+  return message.parts
+    .filter((part): part is Message.TextPart => part.type === "text")
+    .map((part) => part.text)
+    .join("");
 }
 
 export function handleContinue(
@@ -575,7 +586,6 @@ export async function handleError(
   }
 
   const lastError = normalizedError.message;
-  const retryReason = Retry.classifyRetryReason(lastError);
   const retryEffect = effectOf(onErrorDecision, "run.retry_after");
   const effectiveRetryPolicy =
     retryEffect?.maxRetries === undefined
@@ -585,6 +595,18 @@ export async function handleError(
           maxAttempts: Math.min(retryPolicy.maxAttempts, retryEffect.maxRetries),
         };
 
+  // An abort is decided by identity (signal state / typed error), BEFORE any
+  // message classification: it is the run being told to stop, never a fault
+  // to retry, and it must not emit retry-promising telemetry (#audit M4).
+  if (Retry.isAbort(normalizedError, config.signal)) {
+    return {
+      action: "throw",
+      error: normalizedError,
+      failure: { reason: "aborted", attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
+    };
+  }
+
+  const retryReason = Retry.classifyRetryReason(lastError);
   if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
     const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
     emitErrorRetry(config.events, agentBase, {
@@ -684,24 +706,16 @@ async function applyPostCompaction(
     return guardAbortedResult(state, { finishReason: "stop" });
   }
 
-  let messages: Message.WithParts[] | undefined;
-  try {
-    messages = PolicyEffectApplier.replacementMessages(compactionDecision);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    publishDenyDiagnostic(
-      config.events,
-      "completion.prepare",
-      PolicyDecision.deny({
-        policyId: "agent.policy.composed",
-        reasonCodes: [reason],
-        effects: [{ type: "run.abort", reason }],
-      }),
-      state,
-      agentBase,
-    );
-    return guardAbortedResult(state, { finishReason: "stop" });
-  }
+  const applied = applyEffectOrDeny(
+    config.events,
+    "completion.prepare",
+    state,
+    agentBase,
+    () => PolicyEffectApplier.replacementMessages(compactionDecision),
+    { finishReason: "stop" },
+  );
+  if (!applied.ok) return applied.result;
+  const messages = applied.value;
   if (messages !== undefined) {
     const messagesBefore = applyCompactionMessages(state, messages);
     emitCompaction(config.events, agentBase, messagesBefore, state.messages.length);

@@ -6,7 +6,6 @@ import {
   handleContinue,
   handleError,
   handleStop,
-  resolveToolChoice,
 } from "./turn";
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/protocol";
@@ -86,9 +85,13 @@ export async function runAgent(
    * A throw that never reached a retry decision — nothing decided a reason or
    * a ceiling for it, so the record says what the throw itself can support.
    * Every path that *did* reach one carries the decided facts instead.
+   * Aborts are recognized by identity, never by message substrings (M4).
    */
   const undecidedFacts = (error: unknown): RunFailureFacts => ({
-    reason: Retry.classifyRetryReason(error instanceof Error ? error.message : String(error)),
+    reason:
+      error instanceof Error && Retry.isAbort(error, config.signal)
+        ? "aborted"
+        : Retry.classifyRetryReason(error instanceof Error ? error.message : String(error)),
     attempt,
     maxAttempts: retryPolicy.maxAttempts,
   });
@@ -103,7 +106,7 @@ export async function runAgent(
           config.model,
         );
         recordRunWindow(state, providerModel.limit?.context ?? 0);
-        const configuredToolChoice = resolveToolChoice(config);
+        const configuredToolChoice = config.toolChoice;
 
         for (;;) {
           const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
@@ -155,7 +158,7 @@ export async function runAgent(
             continue;
           }
 
-          if (outcome.type === "aborted") throw new Error("aborted");
+          if (outcome.type === "aborted") throw Retry.abortError();
           if (outcome.type === "error") throw new Error(outcome.error.message);
           const _exhaustive: never = outcome;
           throw new Error(`Unknown outcome type: ${unknownOutcomeType(_exhaustive)}`);
@@ -223,7 +226,19 @@ async function resolveProviderModel(model: {
     return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
   }
 
-  const proxyModels = await Provider.listModels(model.provider, "proxy").catch(() => []);
+  // A failed proxy listing is NOT "model not found": swallowing it here
+  // reported an auth/network failure as a missing model (#audit L2). The
+  // listing failure is surfaced in the thrown message so the operator sees
+  // the real fault.
+  let proxyModels: Awaited<ReturnType<typeof Provider.listModels>>;
+  try {
+    proxyModels = await Provider.listModels(model.provider, "proxy");
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Model lookup failed for ${model.id} (provider ${model.provider}): proxy model listing failed: ${cause}`,
+    );
+  }
   const match = proxyModels.find((m) => m.id === model.id);
   if (match) return match;
 
