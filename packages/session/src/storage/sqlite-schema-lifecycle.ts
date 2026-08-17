@@ -20,6 +20,8 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0013_ledger/migration.sql" },
   { name: "0014_work_item_revision/migration.sql" },
   { name: "0015_transcript_fact/migration.sql" },
+  { name: "0016_work_item_worker_run_index/migration.sql" },
+  { name: "0017_drop_dead_tables/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -38,11 +40,7 @@ const CLEAR_ORDER = [
   "pending_ask",
   "worker_run_state",
   "bus_event",
-  "background_task",
   "work_item",
-  "todo",
-  "plan",
-  "task",
   "artifact",
   "surface_key",
   "transcript_fact",
