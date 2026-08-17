@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786991188450,
+  "lastUpdate": 1786993185094,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54695,6 +54695,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 520717,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b5da0c1a3680c4be303aaddbb1deeee22a1acd17",
+          "message": "feat(agent,protocol): compaction lock bracket — started/completed (#701)\n\n* feat(agent,protocol): compaction lock bracket — started/completed\n\nCompaction's only persisted trace was the apply-phase agent.compaction\nevent; the compute phase — where the summarizer, an LLM call, can hang\nor throw — recorded nothing durable (its two Operational.Info publishes\nare ephemeral by visibility). A run that died inside compaction was\nindistinguishable from an unexplained fail-closed deny.\n\nTwo new events bracket every compact() call: agent.compaction.started\nbefore any work (messagesBefore, measured tokens, trigger, whether a\nsummarizer is configured) and agent.compaction.completed as the last\nrecord on every exit path with a closed outcome vocabulary (cut,\nreduced, nothing_reclaimed, no_user_boundary, failed). A summarizer\nthrow closes the bracket as failed and propagates unchanged into the\nseam's fail-closed contract. A started row without a completed row now\ndiagnoses exactly one thing: the run died inside compaction.\n\nThe two ephemeral Infos are absorbed into the bracket (elidedChars and\nremovedCount ride the terminal). compact() takes the run identity\n(traceId + sessionId, required by type) and the dispatch facts (trigger,\nmeasured tokens); the policy guards a missing sessionId the same way it\nguards a missing trace — skip and record, never kill the run.\n\nSource: deepseek-harness compaction lock bracket (crash mid-compaction\nis a detectable orphaned lock, never an end that falsely claims\ncompletion) via #698 leaf 3.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(openomni): supply sessionId to compaction policy contexts\n\nThe bracket's identity requirement (traceId + sessionId) surfaced two\nopenomni-side dispatch contexts built without a sessionId — the new\nskip guard correctly declined to compact, which is exactly what the\nguard is for; the tests now model the lifecycle contract that always\nsupplies one. Caught by CI running the consumer package the local\ngate under-scoped.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T03:58:22+09:00",
+          "tree_id": "e985e8390431dce29f2e4117dfe504a43412e871",
+          "url": "https://github.com/INONONO66/openomni/commit/b5da0c1a3680c4be303aaddbb1deeee22a1acd17"
+        },
+        "date": 1786993183578,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 664,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5973,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10692,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3188,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2462,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15644,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8247,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1041,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1627,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 738,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 51479,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518039,
             "unit": "ns/op"
           }
         ]
