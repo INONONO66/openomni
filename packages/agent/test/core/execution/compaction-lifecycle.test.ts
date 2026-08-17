@@ -97,4 +97,38 @@ describe("compaction through the lifecycle", () => {
     expect(decision).toBe("continue");
     expect(state.compactionCount).toBe(1);
   });
+
+  /**
+   * Audit M1 regression: compaction must not re-trigger off its own past. The
+   * trigger reads the provider-measured context of the LAST call, and the
+   * compaction clears that measurement — so the next completion, with no new
+   * call measured, skips (recorded) instead of paying another compaction per
+   * continuation forever.
+   */
+  it("after a compaction, the next completion does not immediately re-compact", async () => {
+    const engine = PolicyEngine.create();
+    engine.register(
+      createCompactionPolicy({
+        contextWindowTokens: 100,
+        protectRecentMessages: 2,
+        events: Bus,
+        priority: 900,
+      }),
+    );
+
+    const state = makeState();
+    state.messages = Array.from({ length: 12 }, (_unused, index) =>
+      createUserMessage(`message ${index}`, state.sessionId),
+    );
+    state.lastCallContextTokens = 900;
+
+    expect(await handleCompact(state, engine, makeConfig(), makeAgentBase())).toBe("continue");
+    expect(state.compactionCount).toBe(1);
+    expect(state.lastCallContextTokens).toBeUndefined();
+
+    // No model call happened since the rewrite — nothing measured, so the
+    // seam must skip rather than re-fire on the stale number.
+    expect(await handleCompact(state, engine, makeConfig(), makeAgentBase())).toBe("continue");
+    expect(state.compactionCount).toBe(1);
+  });
 });
