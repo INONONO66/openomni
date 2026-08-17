@@ -13,21 +13,24 @@ export async function reportFatalAndExit(
   error: unknown,
   exit: (code: number) => void = process.exit,
 ): Promise<void> {
-  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  // A boot that dies before BusPersistence.start() publishes into a
-  // subscriber-less Bus — stderr is the only outlet that always exists.
-  process.stderr.write(`openomni fatal: ${message}\n`);
-  Bus.publish(Operational.Error, {
-    traceId: newTraceId(),
-    time: Date.now(),
-    component: "server",
-    msg: "fatal error",
-    context: { err: error instanceof Error ? error.message : String(error) },
-  });
+  // Everything before exit is best-effort: a throw from reporting must never
+  // turn the fatal exit into an unhandled rejection that changes how the
+  // process dies.
   try {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    // A boot that dies before BusPersistence.start() publishes into a
+    // subscriber-less Bus — stderr is the only outlet that always exists.
+    process.stderr.write(`openomni fatal: ${message}\n`);
+    Bus.publish(Operational.Error, {
+      traceId: newTraceId(),
+      time: Date.now(),
+      component: "server",
+      msg: "fatal error",
+      context: { err: error instanceof Error ? error.message : String(error) },
+    });
     await BusPersistence.flush();
   } catch {
-    // The observation row is best-effort on this path; stderr already spoke.
+    // The observation row is best-effort on this path.
   }
   exit(1);
 }

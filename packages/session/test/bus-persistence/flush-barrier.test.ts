@@ -77,14 +77,18 @@ describe("BusPersistence.flush as a pre-exit barrier", () => {
 
   test("a multi-level cascade is committed when flush resolves", async () => {
     BusPersistence.start();
-    const chain = [0, 1, 2, 3, 4].map((depth) =>
+    // Depth 8 discriminates the barrier: the old one-turn flush committed
+    // exactly the first 5 rows at ANY depth (its internal await hops granted
+    // ~5 ambient microtask turns), so a shallower chain passes vacuously.
+    const DEPTH = 8;
+    const chain = Array.from({ length: DEPTH + 1 }, (_, depth) =>
       BusEvent.define(
         `test.flush.deep.${depth}`,
         z.object({ traceId: z.string(), time: z.number() }),
       ),
     );
-    const unsubscribes = [0, 1, 2, 3].map((depth) =>
-      Bus.subscribe(chain[depth] as BusEvent.Descriptor<{ traceId: string; time: number }>, () => {
+    const unsubscribes = chain.slice(0, DEPTH).map((event, depth) =>
+      Bus.subscribe(event as BusEvent.Descriptor<{ traceId: string; time: number }>, () => {
         Bus.publish(chain[depth + 1] as BusEvent.Descriptor<{ traceId: string; time: number }>, {
           traceId: `trace-deep-${depth + 1}`,
           time: Date.now(),
@@ -100,7 +104,7 @@ describe("BusPersistence.flush as a pre-exit barrier", () => {
 
       await BusPersistence.flush();
 
-      expect(rowCount()).toBe(5);
+      expect(rowCount()).toBe(DEPTH + 1);
     } finally {
       for (const unsubscribe of unsubscribes) unsubscribe();
     }

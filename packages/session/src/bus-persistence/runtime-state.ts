@@ -120,7 +120,11 @@ export async function flushBusPersistence(): Promise<void> {
   // that happened before the call — including rows published by subscribers
   // reacting to those publishes — is committed. One turn per iteration lets
   // already-queued subscriber microtasks enqueue; the drain commits; a turn
-  // that commits nothing with no writes in flight proves quiescence.
+  // that commits nothing with no writes in flight is treated as quiescent.
+  // Known hole: a cascade whose next hop is carried only by an ephemeral
+  // event (observed, never enqueued) yields such a turn while a subscriber
+  // delivery is still queued — no ephemeral-headed publishing cascade exists
+  // in the tree, and this writer is lossy-tolerant by contract.
   for (let turn = 0; turn < MAX_FLUSH_TURNS; turn += 1) {
     await new Promise((resolve) => queueMicrotask(resolve));
     const committed = flushPersistQueue();
