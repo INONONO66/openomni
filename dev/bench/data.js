@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786994467212,
+  "lastUpdate": 1786995041707,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -54923,6 +54923,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 515215,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7bbf8a618869510bb6ac9a19cc23228bc3cdf3ec",
+          "message": "test(conformance): seeded chaos bench over the effect substrate (#704)\n\nExample-based pins cover the interleavings someone thought of; the\nbench covers the rest. A deterministic PRNG (seed printed on failure,\nCHAOS_SEED overrides) drives 200 iterations of randomized fresh runs,\nidempotency replays, and crash-window intents against EffectService,\nasserting four named invariants after every iteration: one-terminal,\nno-lost-intent, no-silent-rerun, tag-stability. Every failure message\ncarries the seed and the recent op log, so a red replays exactly.\n\nFalsifiability verified by mutation: disabling the idempotency guard\nin lifecycle.ts fails I3 within one iteration (count 3, seed and op\nlog printed). #494's terminal C1 proof extends this scaffold with\nprocess-kill and reconcile-sweep operations.\n\nSource: oh-my-openagent's seeded 200-iteration chaos bench with named\ninvariants, via #698 leaf 6.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T04:29:22+09:00",
+          "tree_id": "72fd48b9179fc9ec0a4035bdd678f17964903a3f",
+          "url": "https://github.com/INONONO66/openomni/commit/7bbf8a618869510bb6ac9a19cc23228bc3cdf3ec"
+        },
+        "date": 1786995041144,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 333,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 435,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6295,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1861,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 1963,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13647,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7301,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 37,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1265,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 522,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 30541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1663,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 421750,
             "unit": "ns/op"
           }
         ]
