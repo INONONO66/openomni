@@ -130,7 +130,7 @@ describe("builtin middleware — tool permission", () => {
     const toolPermission = registrations.find((r) => r.name === "builtin:tool-permission");
 
     expect(toolPermission).toBeDefined();
-    if (!toolPermission) throw new Error("tool permission middleware not found");
+    if (toolPermission?.kind !== "point") throw new Error("tool permission middleware not found");
 
     const verdict = await toolPermission.fn(makeToolCtx("bash"));
     expect(verdict.verdict).toBe("deny");
@@ -142,7 +142,7 @@ describe("builtin middleware — tool permission", () => {
     });
     const toolPermission = registrations.find((r) => r.name === "builtin:tool-permission");
 
-    if (!toolPermission) throw new Error("tool permission middleware not found");
+    if (toolPermission?.kind !== "point") throw new Error("tool permission middleware not found");
 
     const verdict = await toolPermission.fn(makeToolCtx("read"));
     expect(verdict.verdict).toBe("allow");

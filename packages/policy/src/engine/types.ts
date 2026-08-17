@@ -68,8 +68,29 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
   ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
 }
 
+/**
+ * A per-engine registration factory: `create()` is invoked by the engine at
+ * `register()` time, once per engine. Engines are built once per agent run,
+ * so any mutable state the returned registration closes over is run-scoped.
+ *
+ * This is the only sound home for stateful policies (budget nudges, idle
+ * tracking): dispatch contexts are structured-clone frozen, so state cannot
+ * ride on them, and a plain registration instance shared through a middleware
+ * array leaks its closures across runs and across parent/child agents.
+ */
+export interface PolicyRegistrationFactoryGeneric<TCtx extends GenericPolicyContext> {
+  readonly kind: "factory";
+  readonly name: string;
+  readonly create: () => CanonicalPolicyRegistrationGeneric<TCtx>;
+}
+
+/** What an engine accepts: a stateless registration, or a per-engine factory. */
+export type PolicyEngineMiddlewareGeneric<TCtx extends GenericPolicyContext> =
+  | CanonicalPolicyRegistrationGeneric<TCtx>
+  | PolicyRegistrationFactoryGeneric<TCtx>;
+
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
-  register(reg: CanonicalPolicyRegistrationGeneric<TCtx>): void;
+  register(reg: PolicyEngineMiddlewareGeneric<TCtx>): void;
   dispatchPoint<TPointId extends PolicyPointId>(
     pointId: TPointId,
     ctx: DispatchPointContextGeneric<TCtx, TPointId>,

@@ -4,6 +4,8 @@ export type {
   PolicyEngineConfig,
   GenericPolicyContext,
   CanonicalPolicyRegistrationGeneric,
+  PolicyRegistrationFactoryGeneric,
+  PolicyEngineMiddlewareGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
   CanonicalAuditDispatchContextGeneric,

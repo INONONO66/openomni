@@ -90,7 +90,7 @@ describe("registerCompaction", () => {
     );
 
     const compaction = registrations.find((r) => r.name === "builtin:compaction");
-    if (!compaction || !("kind" in compaction)) throw new Error("expected builtin:compaction");
+    if (compaction?.kind !== "point") throw new Error("expected builtin:compaction");
 
     await compaction.fn({
       timing: "turn.finish",

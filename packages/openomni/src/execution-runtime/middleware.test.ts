@@ -20,7 +20,8 @@ describe("buildWorkerMiddleware backward compatibility", () => {
   it("tool permission registration is fail-closed", () => {
     const registrations = buildWorkerMiddleware({});
     const toolPermission = findRegistration(registrations, "builtin:tool-permission");
-    if (toolPermission == null) throw new Error("expected tool permission registration");
+    if (toolPermission == null || toolPermission.kind !== "point")
+      throw new Error("expected tool permission registration");
     expect(toolPermission.name).toBe("builtin:tool-permission");
     expect(toolPermission.failPolicy).toBe("fail-closed");
   });

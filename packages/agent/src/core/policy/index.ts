@@ -4,6 +4,7 @@ export type {
   PolicyEngineRegistration,
   PolicyFn,
   PolicyRegistration,
+  PolicyRegistrationFactory,
 } from "./types";
 export { PolicyRegistry } from "@openomni/policy";
 export type { PolicyRegistryInstance } from "@openomni/policy";
