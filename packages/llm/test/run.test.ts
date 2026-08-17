@@ -281,6 +281,73 @@ describe("run", () => {
     expect(textParts.some((part) => part.text === "")).toBe(false);
   });
 
+  test("LlmCall.Completed reports usage summed across retried attempts", async () => {
+    // Regression (#audit M3): Completed read processor.message.tokens — the
+    // final attempt's fold — so a retried attempt's billed usage vanished
+    // from telemetry.
+    let call = 0;
+    mock.module("ai", () => ({
+      streamText: () => {
+        call++;
+        const chunks: StreamChunk[] =
+          call === 1
+            ? [
+                {
+                  type: "finish-step",
+                  finishReason: "stop",
+                  usage: { inputTokens: 100, outputTokens: 40 },
+                },
+                {
+                  type: "error",
+                  error: Object.assign(new Error("overloaded"), {
+                    isRetryable: true,
+                    statusCode: 529,
+                    responseHeaders: { "retry-after-ms": "1" },
+                  }),
+                },
+              ]
+            : [
+                {
+                  type: "finish-step",
+                  finishReason: "stop",
+                  usage: { inputTokens: 200, outputTokens: 60 },
+                },
+                { type: "finish" },
+              ];
+        return {
+          fullStream: (async function* () {
+            yield* chunks;
+          })(),
+        };
+      },
+      jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+      stepCountIs: () => () => false,
+    }));
+
+    const collected = collector();
+    const outcome = await run(
+      {
+        trace: TEST_TRACE,
+        events: collected,
+        messages: [],
+        tools: [],
+        model: testModel,
+        auth: testAuth,
+      },
+      mockSink,
+    );
+
+    expect(outcome.type).toBe("stop");
+    expect(call).toBe(2);
+    const completed = collected.named(LlmCall.Completed.name) as Array<{
+      inputTokens: number;
+      outputTokens: number;
+    }>;
+    expect(completed).toHaveLength(1);
+    expect(completed[0]?.inputTokens).toBe(300);
+    expect(completed[0]?.outputTokens).toBe(100);
+  });
+
   /**
    * The point of the port. `llm` reports what it did to whatever the caller
    * hands it — no process-wide `Bus`, nothing to reset between tests, and P2

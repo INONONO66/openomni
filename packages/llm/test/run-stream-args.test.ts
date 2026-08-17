@@ -164,6 +164,76 @@ describe("run() streamText arguments", () => {
     expect(windowYield({ steps: [] })).toBe(false);
   });
 
+  test("passes providerOptions as the nested streamText key, never a top-level spread", async () => {
+    // Regression (#audit M1): providerOptions used to be spread into the
+    // top-level streamText args. The AI SDK reads provider namespaces from
+    // the nested `providerOptions` key, so operator config like
+    // {anthropic:{thinking:...}} was silently ignored — and config keys
+    // could clobber wired args (abortSignal, maxRetries, tools).
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [{ name: "lookup", description: "look", inputSchema: { type: "object" } }],
+        providerOptions: {
+          anthropic: { thinking: { type: "enabled", budgetTokens: 1024 } },
+          // Keys that would clobber wired args under the old top-level spread:
+          abortSignal: "clobbered",
+          maxRetries: 99,
+          tools: "clobbered",
+        },
+        auth: { type: "api", key: "test-key-run" },
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs as {
+      providerOptions?: Record<string, unknown>;
+      abortSignal?: unknown;
+      maxRetries?: unknown;
+      tools?: Record<string, unknown>;
+    };
+    expect(streamArgs.providerOptions).toEqual({
+      anthropic: { thinking: { type: "enabled", budgetTokens: 1024 } },
+      abortSignal: "clobbered",
+      maxRetries: 99,
+      tools: "clobbered",
+    });
+    // Wired args survive untouched.
+    expect(streamArgs.maxRetries).toBe(0);
+    expect(streamArgs.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(Object.keys(streamArgs.tools ?? {})).toEqual(["lookup"]);
+  });
+
+  test("omits the providerOptions key entirely when none are configured", async () => {
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [],
+        auth: { type: "api", key: "test-key-run" },
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs as Record<string, unknown>;
+    expect("providerOptions" in streamArgs).toBe(false);
+  });
+
   /**
    * `streamText`'s `onError` is the one publish site the happy and failure
    * paths both miss, so it was free to route back to a global bus.
