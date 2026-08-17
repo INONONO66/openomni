@@ -1,4 +1,5 @@
 import {
+  Operational,
   WorkerDeliveryError,
   WorkerDriver,
   type Execution,
@@ -82,6 +83,20 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     this.ports = ports;
     this.socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp", ports.events);
     this.maxActiveWorkers = normalizeMaxActiveWorkers(config.maxActiveWorkers);
+    if (
+      config.maxActiveWorkers !== undefined &&
+      this.maxActiveWorkers !== config.maxActiveWorkers
+    ) {
+      // Not silent (#audit L7): a clamped capacity changes throughput physics;
+      // the operator finds out from the ledger, not from a surprise ceiling.
+      ports.events.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "coordinator.worker-manager",
+        msg: "maxActiveWorkers clamped",
+        context: { requested: config.maxActiveWorkers, effective: this.maxActiveWorkers },
+      });
+    }
     this.idleShutdownMs = config.idleShutdownMs ?? DEFAULT_IDLE_SHUTDOWN_MS;
     this.slotWaitTimeoutMs = config.slotWaitTimeoutMs ?? DEFAULT_SLOT_WAIT_TIMEOUT_MS;
     this.maxQueuedDeliveries = config.maxQueuedDeliveries ?? DEFAULT_MAX_QUEUED_DELIVERIES;
@@ -120,6 +135,9 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     if (activeRun.cancelled) {
       this.activeRuns.delete(runId);
       this.releaseReservedSlot(slot);
+      // A cancelled run still settles on the ledger (#audit M4a): without
+      // this row the run simply vanished — no RunDelivered, no RunSettled.
+      this.publishRunSettled(slot.id, runId, sessionId, activeRun.traceId, "cancelled", Date.now());
       return {
         runId,
         sessionId,
@@ -131,6 +149,10 @@ class WorkerPool implements WorkerManager, Execution.Driver {
 
     try {
       const supervisor = this.ensureSupervisor(slot);
+      // Generation guard timing invariant (#audit L6): the snapshot is taken
+      // BEFORE waitReady — a worker that crashes and restarts while we wait
+      // flips the generation, so the check below rejects instead of silently
+      // delivering to a different process than the one the slot was armed for.
       const generation = supervisor.getGeneration();
       await supervisor.waitReady();
       if (supervisor.getGeneration() !== generation) {
@@ -142,6 +164,14 @@ class WorkerPool implements WorkerManager, Execution.Driver {
         });
       }
       if (activeRun.cancelled) {
+        this.publishRunSettled(
+          slot.id,
+          runId,
+          sessionId,
+          activeRun.traceId,
+          "cancelled",
+          Date.now(),
+        );
         return {
           runId,
           sessionId,
@@ -159,12 +189,14 @@ class WorkerPool implements WorkerManager, Execution.Driver {
       const deliveredAt = Date.now();
       try {
         const result = await supervisor.deliver(runId, deliveryTask);
+        // Re-check after spawn_run resolves (#audit M4c): a cancel that landed
+        // mid-flight must settle as "cancelled", not masquerade as "completed".
         this.publishRunSettled(
           slot.id,
           runId,
           sessionId,
           activeRun.traceId,
-          "completed",
+          activeRun.cancelled ? "cancelled" : "completed",
           deliveredAt,
         );
         return result;
@@ -192,7 +224,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     runId: string,
     sessionId: string,
     traceId: string,
-    outcome: "completed" | "interrupted" | "error",
+    outcome: "completed" | "interrupted" | "error" | "cancelled",
     deliveredAt: number,
   ): void {
     this.ports.events.publish(WorkerDriver.RunSettled, {
@@ -260,6 +292,12 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     };
   }
 
+  /**
+   * Resolves when every EXISTING slot's supervisor reports ready (#audit L1).
+   * Workers spawn on demand, so a fresh manager has no slots and this is a
+   * no-op — it does NOT pre-spawn anything. Useful only after deliveries have
+   * created workers (e.g. draining a warm pool before a config swap).
+   */
   async waitUntilReady(timeoutMs = 15_000): Promise<void> {
     await Promise.all(
       [...this.slots.values()]
@@ -280,6 +318,9 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     slot.supervisor = null;
     this.forgetSlot(slot);
     supervisor?.dispose();
+    // The removed slot freed capacity (#audit L5): a queued delivery can now
+    // create a fresh slot — wake it instead of letting it wait out its timer.
+    this.releaseOneWaiter();
   }
 
   async shutdown(): Promise<void> {
@@ -292,6 +333,14 @@ class WorkerPool implements WorkerManager, Execution.Driver {
         await supervisor?.stop();
       }),
     );
+    // Second sweep (#audit M3): an in-flight delivery that settled while the
+    // supervisors were stopping went through releaseLoadedSlot — the arming
+    // guard in scheduleIdleShutdown makes that a no-op now, but clearing here
+    // keeps shutdown correct even if a timer slipped in before stopping=true
+    // was observable.
+    for (const slot of this.slots.values()) {
+      this.clearIdleTimer(slot);
+    }
     this.slots.clear();
     this.sessionAffinity.clear();
     for (const waiter of this.waiters.splice(0)) {
@@ -331,8 +380,10 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   }
 
   private releaseReservedSlot(slot: WorkerSlot): void {
+    // The reservation is exclusive: while `reserved` is true no other delivery
+    // can acquire (and load) this slot, so load is always 0 here — the old
+    // `if (slot.load !== 0) return` guard was unreachable and is gone.
     slot.reserved = false;
-    if (slot.load !== 0) return;
     this.releaseOneWaiter();
     this.scheduleIdleShutdown(slot);
   }
@@ -451,7 +502,15 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     this.forgetSlotAffinity(slot.id);
     const supervisor = slot.supervisor;
     slot.supervisor = null;
-    await supervisor?.stop();
+    try {
+      await supervisor?.stop();
+    } catch (error) {
+      // Mirror the idle path's recovery (#audit L3): a throwing stop() must
+      // not leak reserved=true — the slot would be unacquirable forever.
+      slot.reserved = false;
+      this.releaseOneWaiter();
+      throw error;
+    }
     slot.ownerSessionId = sessionId;
     this.sessionAffinity.set(sessionId, slot.id);
     return slot;
@@ -473,18 +532,30 @@ class WorkerPool implements WorkerManager, Execution.Driver {
 
   private scheduleIdleShutdown(slot: WorkerSlot): void {
     this.clearIdleTimer(slot);
-    // A delivery can settle after shutdown() already swept the timers; arming
-    // a fresh timer here would leave a live handle on a slot the pool has
-    // forgotten (shutdown clears `this.slots`), keeping the process alive.
+    // Arming guard (#audit M3): a delivery can settle after shutdown() already
+    // swept the timers; arming a fresh timer here would leave a live handle on
+    // a slot the pool has forgotten (shutdown clears `this.slots`), keeping
+    // the process alive.
     if (this.stopping || this.idleShutdownMs < 0) return;
 
     slot.idleTimer = setTimeout(() => {
       slot.idleTimer = null;
       if (this.stopping || slot.load > 0) return;
       slot.reserved = true;
-      this.shutdownIdleSlot(slot).catch(() => {
+      this.shutdownIdleSlot(slot).catch((error) => {
         slot.reserved = false;
         this.releaseOneWaiter();
+        // State recovery stays, but the failure is ledgered, not swallowed.
+        this.ports.events.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "coordinator.worker-manager",
+          msg: "idle worker shutdown failed; slot recovered",
+          context: {
+            workerId: slot.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
       });
     }, this.idleShutdownMs);
   }
