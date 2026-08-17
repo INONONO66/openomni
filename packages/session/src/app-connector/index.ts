@@ -109,18 +109,29 @@ function connectorActorEndpoint(installation: AppConnector.Installation): Actor.
 }
 
 function upsertActorEndpoint(installation: AppConnector.Installation): void {
-  const actorRegistry = Storage.get().actorRegistry;
-  if (actorRegistry === undefined) return;
+  // Fail closed: an installation row without its actor identity/endpoint is a
+  // half-registered connector (routing would silently miss it). A missing
+  // actorRegistry sub-adapter is a wiring defect, never a skip.
+  const actorRegistry = requireSubAdapter(
+    Storage.get().actorRegistry,
+    "Storage adapter does not implement actorRegistry — app connector installs fail closed",
+  );
   actorRegistry.setIdentity(connectorActorIdentity(installation));
   actorRegistry.setEndpoint(connectorActorEndpoint(installation));
 }
 
 export namespace AppConnectorInstallationStore {
   export function set(input: InstallationInput): AppConnector.Installation {
+    const storage = Storage.get();
     const adapter = requireAdapter();
     const installation = withTimestamps(input, adapter.get(input.id));
-    adapter.set(installation);
-    upsertActorEndpoint(installation);
+    // One unit: the installation row and its actor identity/endpoint commit
+    // or roll back together — a crash between them must not leave a
+    // connector that exists for consent but not for routing.
+    storage.transaction(() => {
+      adapter.set(installation);
+      upsertActorEndpoint(installation);
+    });
     return installation;
   }
 

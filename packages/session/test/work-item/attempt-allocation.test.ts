@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WorkItem } from "@openomni/protocol";
-import { initialize } from "../storage/initialize.js";
-import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
-import { Storage } from "../storage/storage.js";
-import { attemptAllocatedFact } from "./facts.js";
-import { WorkItemStore } from "./index.js";
+import { initialize } from "../../src/storage/initialize.js";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
+import { Storage } from "../../src/storage/storage.js";
+import { attemptAllocatedFact } from "../../src/work-item/facts.js";
+import { WorkItemStore } from "../../src/work-item/index.js";
 
 let tempDir: string;
 // Second connection on the same WAL file: fact assertions must not ride the

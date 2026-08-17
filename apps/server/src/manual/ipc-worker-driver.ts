@@ -43,7 +43,7 @@ function readCliArg(name: string): string | undefined {
 // ---------------------------------------------------------------------------
 // Worker mode: real IPC server + bootstrap/auth handshake, LLM-free echo run.
 // ---------------------------------------------------------------------------
-function runScenarioWorker(socketPath: string): void {
+async function runScenarioWorker(socketPath: string): Promise<void> {
   const workerId = readCliArg("--worker-id") ?? "ipc-driver-worker";
   const ipcAuthToken = process.env.OPENOMNI_WORKER_IPC_TOKEN;
   delete process.env.OPENOMNI_WORKER_IPC_TOKEN;
@@ -52,47 +52,50 @@ function runScenarioWorker(socketPath: string): void {
     process.exit(1);
   }
 
-  const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
-    if (params?.authToken !== ipcAuthToken) {
+  const server = await createIpcServer(
+    socketPath,
+    (method, params, respond, _notify, connectionId) => {
+      if (params?.authToken !== ipcAuthToken) {
+        if (method === "coordinator.spawn_run") {
+          respond({
+            runId: typeof params?.runId === "string" ? params.runId : "unknown",
+            sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
+            status: "failed",
+            error: "unauthorized coordinator request",
+          });
+          return;
+        }
+        respond({ ok: false, error: "unauthorized" });
+        return;
+      }
+
+      if (method === "coordinator.bootstrap") {
+        server.useConnection(connectionId);
+        server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
+        respond({ ok: true });
+        return;
+      }
+
       if (method === "coordinator.spawn_run") {
         respond({
           runId: typeof params?.runId === "string" ? params.runId : "unknown",
           sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
-          status: "failed",
-          error: "unauthorized coordinator request",
+          status: "succeeded",
+          output: JSON.stringify({ echoedPrompt: params?.prompt ?? null }),
+          finishReason: "stop",
         });
         return;
       }
-      respond({ ok: false, error: "unauthorized" });
-      return;
-    }
 
-    if (method === "coordinator.bootstrap") {
-      server.useConnection(connectionId);
-      server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
+      if (method === "worker.shutdown_idle") {
+        respond({ acknowledged: true });
+        setTimeout(() => process.exit(0), 0);
+        return;
+      }
+
       respond({ ok: true });
-      return;
-    }
-
-    if (method === "coordinator.spawn_run") {
-      respond({
-        runId: typeof params?.runId === "string" ? params.runId : "unknown",
-        sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
-        status: "succeeded",
-        output: JSON.stringify({ echoedPrompt: params?.prompt ?? null }),
-        finishReason: "stop",
-      });
-      return;
-    }
-
-    if (method === "worker.shutdown_idle") {
-      respond({ acknowledged: true });
-      setTimeout(() => process.exit(0), 0);
-      return;
-    }
-
-    respond({ ok: true });
-  });
+    },
+  );
 
   process.on("SIGTERM", () => {
     server.close();
@@ -296,7 +299,7 @@ function emit(receipt: Record<string, unknown>, json: boolean): void {
 if (import.meta.main) {
   const socketArg = readCliArg("--socket");
   if (socketArg) {
-    runScenarioWorker(socketArg);
+    await runScenarioWorker(socketArg);
   } else {
     const { values } = parseArgs({
       args: process.argv.slice(2),

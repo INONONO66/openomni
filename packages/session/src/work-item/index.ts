@@ -1,24 +1,21 @@
 import type { WorkItem } from "@openomni/protocol";
 import { createWorkItem } from "./create.js";
 import { recordWorkItemEffect, type RecordEffectInput } from "./effect-link.js";
-import { getWorkItem, listWorkItems, removeWorkItem, updateWorkItem } from "./crud.js";
+import { getWorkItem, listWorkItems } from "./crud.js";
 import {
   addWorkItemBlocker,
   addWorkItemEvidence,
   addWorkItemReadBackEvidence,
   allocateWorkItemAttempt,
   assignWorkItemExecution,
-  areDependenciesMet as areStoredDependenciesMet,
   cancelWorkItem,
-  completeWorkItem,
   failWorkItem,
-  recordOutcome as recordWorkItemOutcome,
   resolveWorkItemBlocker,
   retryStoredWorkItem,
   startWorkItem,
   type AttemptAllocationInput,
 } from "./lifecycle.js";
-import type { CreateWorkItemInput, DependencyReadiness, WorkItemListFilter } from "./types.js";
+import type { CreateWorkItemInput, WorkItemListFilter } from "./types.js";
 
 export namespace WorkItemStore {
   export async function create(
@@ -36,18 +33,6 @@ export namespace WorkItemStore {
     return listWorkItems(filter);
   }
 
-  export function remove(hash: string, traceId: string): boolean {
-    return removeWorkItem(hash, traceId);
-  }
-
-  export async function update(
-    hash: string,
-    fields: Partial<Omit<WorkItem.Info, "hash">>,
-    traceId: string,
-  ): Promise<WorkItem.Info | undefined> {
-    return updateWorkItem(hash, fields, traceId);
-  }
-
   export async function start(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
     return startWorkItem(hash, traceId);
   }
@@ -62,13 +47,6 @@ export namespace WorkItemStore {
     traceId: string,
   ): Promise<WorkItem.Info | undefined> {
     return assignWorkItemExecution(hash, assignment, traceId);
-  }
-
-  export async function complete(
-    hash: string,
-    completionReport: WorkItem.CompletionReport,
-  ): Promise<WorkItem.Info | undefined> {
-    return completeWorkItem(hash, completionReport);
   }
 
   export async function fail(
@@ -122,8 +100,6 @@ export namespace WorkItemStore {
     return addWorkItemReadBackEvidence(hash, check, traceId, expectedScope);
   }
 
-  export const recordOutcome = recordWorkItemOutcome;
-
   /**
    * #492 ↔ #490 — projects one effect intent's state onto the WorkItem's
    * completion facts so admission blocks until the effect reaches a terminal
@@ -134,10 +110,12 @@ export namespace WorkItemStore {
     return recordWorkItemEffect(hash, input);
   }
 
-  export function areDependenciesMet(hash: string): DependencyReadiness {
-    return areStoredDependenciesMet(hash);
-  }
-
+  /**
+   * No production caller reaches retry today (dispatch does not re-drive
+   * failed items yet); it stays because multi-attempt admission flows are
+   * pinned through it (packages/openomni completion-admission tests) and it
+   * is the only writer of the attempt/basisRef advance on a failed item.
+   */
   export async function retry(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
     return retryStoredWorkItem(hash, traceId);
   }

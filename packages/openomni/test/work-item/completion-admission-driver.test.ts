@@ -268,10 +268,12 @@ describe("WorkItem completion admission driver", () => {
     });
   });
 
-  test("proves the public store bypass refuses completion", async () => {
+  test("proves the public store exposes no completion bypass", async () => {
     expect(await scenarioReceipt("bypass-refusal")).toMatchObject({
       resultCode: "bypass_refused",
-      errorCode: "admission_required",
+      // #606: WorkItemStore.complete is deleted — bypass refusal is now the
+      // ABSENCE of any raw completion surface, not a thrown error code.
+      completeSurfaceAbsent: true,
       terminalMutation: false,
       admissionCount: 0,
       status: expect.not.stringMatching(/^completed$/),

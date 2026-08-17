@@ -1,10 +1,8 @@
 import { WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
-import { areWorkItemDependenciesMet } from "./dependency.js";
 import { attemptAllocatedFact } from "./facts.js";
 import { mutate, persistMutation } from "./mutation.js";
-import { recordWorkItemOutcome } from "./outcome.js";
 import { retryWorkItem } from "./retry.js";
 
 export async function startWorkItem(
@@ -20,22 +18,6 @@ export async function startWorkItem(
       timestamps: { ...existing.timestamps, started: now, updated: now },
     },
   }));
-}
-
-class CompletionAdmissionRequiredError extends Error {
-  readonly name = "CompletionAdmissionRequiredError";
-  readonly code = "admission_required";
-
-  constructor() {
-    super("completion admission is required before closing a WorkItem");
-  }
-}
-
-export async function completeWorkItem(
-  _hash: string,
-  _completionReport: WorkItem.CompletionReport,
-): Promise<WorkItem.Info | undefined> {
-  throw new CompletionAdmissionRequiredError();
 }
 
 export async function failWorkItem(
@@ -262,6 +244,13 @@ export async function addWorkItemEvidence(
   });
 }
 
+export async function retryStoredWorkItem(
+  hash: string,
+  traceId: string,
+): Promise<WorkItem.Info | undefined> {
+  return retryWorkItem(hash, Storage.get().workItem, persistMutation, traceId);
+}
+
 function assertEvidenceScope(
   existing: WorkItem.Info | undefined,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }> | undefined,
@@ -302,14 +291,4 @@ export async function addWorkItemReadBackEvidence(
     traceId,
     expectedScope,
   );
-}
-
-export const recordOutcome = recordWorkItemOutcome;
-export const areDependenciesMet = areWorkItemDependenciesMet;
-
-export async function retryStoredWorkItem(
-  hash: string,
-  traceId: string,
-): Promise<WorkItem.Info | undefined> {
-  return retryWorkItem(hash, Storage.get().workItem, persistMutation, traceId);
 }
