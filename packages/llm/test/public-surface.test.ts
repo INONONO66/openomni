@@ -9,15 +9,7 @@ describe("@openomni/llm root public surface", () => {
     const publicKeys = Object.keys(root).sort();
 
     // Then: only package-level namespaces and entry points are exposed.
-    expect(publicKeys).toEqual([
-      "APIError",
-      "Auth",
-      "ModelsDev",
-      "NamedError",
-      "Provider",
-      "ProviderError",
-      "run",
-    ]);
+    expect(publicKeys).toEqual(["Auth", "ModelsDev", "Provider", "run"]);
   });
 
   test("does not expose lower-level implementation helpers", async () => {
@@ -34,8 +26,13 @@ describe("@openomni/llm root public surface", () => {
       "Processor",
       "Tool",
       "toModelMessages",
-      // #606 re-audit: only llm-internal consumers (processor/stream-events)
-      // remained; the stream fold reaches it by deep import.
+      // Unexported by the #audit dead-surface pass: no production consumer
+      // imported these from the root barrel (internals still use them —
+      // e.g. the stream fold reaches TokenTracker by deep import, per the
+      // #606 re-audit).
+      "APIError",
+      "NamedError",
+      "ProviderError",
       "TokenTracker",
     ] as const;
 

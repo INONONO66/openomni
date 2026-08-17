@@ -124,6 +124,10 @@ export namespace ModelsDev {
     return {};
   });
 
+  // The on-disk catalog cache is write-once by design: it is populated on the
+  // first fetch and never refreshed afterwards (delete the file to refetch).
+  // A refresh() existed but had zero production callers, so it was removed
+  // rather than kept as unwired surface.
   export async function get(): Promise<Record<string, Provider>> {
     return Data() as Promise<Record<string, Provider>>;
   }

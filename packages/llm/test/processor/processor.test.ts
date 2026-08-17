@@ -496,6 +496,106 @@ describe("Processor", () => {
       }
     });
 
+    test("classifies a custom-reason abort as aborted, not error", async () => {
+      // Regression (#audit H1): production callers abort with
+      // controller.abort(new Error("cancelled by coordinator")), so
+      // throwIfAborted() throws a plain Error — not a DOMException named
+      // AbortError. Classifying by error shape alone closed the attempt as
+      // finish:"error" (which toModelMessages hides from replay) and marked
+      // in-flight tools as failed instead of interrupted.
+      const capture = capturingSink();
+      const facts: Array<{ type: string; transition?: { to: string }; finish?: string }> = [];
+      const sink: Sink = {
+        ...capture.sink,
+        onFact: (fact) => facts.push(fact as never),
+      };
+      const reason = new Error("cancelled by coordinator");
+      const processor = createProcessor({
+        sink,
+        createStream: async () => ({
+          fullStream: (async function* () {
+            yield {
+              type: "tool-call",
+              toolCallId: "call-abort",
+              toolName: "lookup",
+              input: {},
+            };
+            abortController.abort(reason);
+            yield { type: "text-start", providerMetadata: {} };
+          })(),
+        }),
+      });
+
+      try {
+        await processor.process({ system: "" });
+        expect.unreachable("Should have thrown the abort reason");
+      } catch (e) {
+        expect(e).toBe(reason);
+      }
+
+      // finish:"aborted", not "error" — toModelMessages hides error-finished
+      // turns from replay.
+      expect(processor.message.finish).toBe("aborted");
+      // The pending tool settles as interrupted (the fold projects it onto
+      // Tool.StateError with error:"interrupted" — Tool.State has no
+      // interrupted status), not as a plain processing error.
+      expect(
+        facts.some(
+          (fact) => fact.type === "part.advanced" && fact.transition?.to === "interrupted",
+        ),
+      ).toBe(true);
+      const toolPart = capture
+        .finalParts()
+        .find((part): part is Message.ToolPart => part.type === "tool");
+      expect(toolPart?.state.status).toBe("error");
+      if (toolPart?.state.status === "error") {
+        expect(toolPart.state.error).toBe("interrupted");
+      }
+    });
+
+    test("warns when an inferred ratelimit reset above the cap demotes to backoff", async () => {
+      // #audit: Decision.retryAfterOverCap was produced and unit-tested but
+      // consumed by nobody — the demotion now surfaces as Operational.Warn.
+      const processor = createProcessor({
+        createStream: async () => ({
+          fullStream: (async function* () {
+            yield* [];
+            throw new APIError({
+              message: "slow down",
+              isRetryable: true,
+              statusCode: 429,
+              responseHeaders: { "anthropic-ratelimit-requests-reset": "120s" },
+            });
+          })(),
+        }),
+      });
+
+      const settled = processor.process({ system: "" }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      // The warn publishes before the backoff sleep; abort so the test does
+      // not wait the multi-second backoff out.
+      const warns = () =>
+        events
+          .named(Operational.Warn.name)
+          .map((event) => event as OperationalInfoPayload)
+          .filter((data) => data.component === "llm.retry");
+      const deadline = Date.now() + 2000;
+      while (warns().length === 0 && Date.now() < deadline) {
+        await Bun.sleep(5);
+      }
+      abortController.abort();
+      await settled;
+
+      expect(warns()).toHaveLength(1);
+      expect(warns()[0]).toMatchObject({
+        component: "llm.retry",
+        msg: "ratelimit reset above cap; demoted to backoff",
+      });
+      expect((warns()[0]?.context as { backoffMs?: number })?.backoffMs).toBeGreaterThan(0);
+    });
+
     test("retries raw AI SDK provider errors (AI_APICallError shape)", async () => {
       // Regression: production errors come from the AI SDK, whose name is
       // AI_APICallError and whose retry fields live on the error object, not
@@ -772,6 +872,54 @@ describe("Processor", () => {
       expect(processor.message.cost).toBe(0);
       expect(processor.message.tokens.input).toBe(10000);
       expect(processor.message.tokens.output).toBe(5000);
+    });
+
+    test("usageTotals accumulates billed usage across retried attempts", async () => {
+      // Regression (#audit M3): LlmCall.Completed read message.tokens — the
+      // final attempt's fold — so a retried attempt's billed tokens vanished
+      // from telemetry. usageTotals must carry every attempt.
+      let attemptCount = 0;
+      const processor = createProcessor({
+        createStream: async () => ({
+          fullStream: (async function* () {
+            attemptCount++;
+            if (attemptCount === 1) {
+              yield {
+                type: "step-finish",
+                finishReason: "stop",
+                usage: { inputTokens: 100, outputTokens: 40 },
+                providerMetadata: {},
+              };
+              throw new APIError({
+                message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
+                isRetryable: true,
+                responseHeaders: { "retry-after-ms": "1" },
+              });
+            }
+            yield {
+              type: "step-finish",
+              finishReason: "end_turn",
+              usage: { inputTokens: 200, outputTokens: 60 },
+              providerMetadata: {},
+            };
+            yield { type: "finish" };
+          })(),
+        }),
+      });
+
+      await processor.process({ system: "" });
+
+      expect(attemptCount).toBe(2);
+      // message.tokens reflects only the final attempt's fold...
+      expect(processor.message.tokens.input).toBe(200);
+      expect(processor.message.tokens.output).toBe(60);
+      // ...while the billed total includes the retried attempt.
+      expect(processor.usageTotals).toEqual({
+        input: 300,
+        output: 100,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      });
     });
 
     test("accumulates tokens across multiple step-finish events", async () => {
