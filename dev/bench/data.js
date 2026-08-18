@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787028726102,
+  "lastUpdate": 1787061174610,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55151,6 +55151,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512986,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2937fdc1786e7fe842e5e7622abc13340f6922d7",
+          "message": "docs: compaction & context window design — anchored speculative compaction (#710)\n\n* docs: compaction & context window design — anchored speculative compaction (ledger-issued views)\n\nDesign target for finishing the compaction implementation: ledger as record with the window as an issued projection, user-verbatim preservation through every compression, anchored iterative summarization (senpi UPDATE contract, Factory-validated shape), pss-style prepare/promote speculation with freshness guard, overlay CompactionRecords dissolving #702, deterministic ledger-derived artifact rendering, and probe-based evaluation. Leaf map L1-L7 with package boundaries.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: apply adversarial review corrections (citation fidelity, seam-locked overflow)\n\nReview round 1 (PASS WITH CHANGES): fix arXiv:2601.00821 numbers (19.0%/93.0% v1, moved to the verbatim principle it actually supports), de-universalize the Factory artifact-tracking range, scope the prompt-invariance claim to volume, make anchor quotations deterministic render-time injection under the byte guard, lock overflow recovery to the existing seam (explicit divergence from pss mid-loop apply), correct the Codex exclusion claim, mark pss promote fallback conditional, drop the unverifiable session-memory citation.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T22:51:41+09:00",
+          "tree_id": "98265dc157acd060f8c35523d029c3b51f857867",
+          "url": "https://github.com/INONONO66/openomni/commit/2937fdc1786e7fe842e5e7622abc13340f6922d7"
+        },
+        "date": 1787061173630,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 414,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 629,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5310,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3145,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16816,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 923,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 817,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1548,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 43,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 669,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 39589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2033,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 510014,
             "unit": "ns/op"
           }
         ]
