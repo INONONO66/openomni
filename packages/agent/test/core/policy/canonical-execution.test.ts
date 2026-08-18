@@ -274,12 +274,13 @@ describe("canonical tool policy execution", () => {
 
 describe("canonical builtin registrations", () => {
   it("declare their policy points and effect capabilities", () => {
-    // Given / When
+    // Given / When — factory form since L4 (per-run speculator state); the
+    // created registration carries the canonical shape.
     const registrations = [
-      createCompactionPolicy({ priority: 900, events: Bus, contextWindowTokens: 100 }),
+      createCompactionPolicy({ priority: 900, events: Bus, contextWindowTokens: 100 }).create(),
     ];
 
-    // Then
+    // Then — without a summarizer there is no speculation, so no turn.post.
     expect(registrations[0]?.pointIds).toEqual(["run.completion.pre"]);
   });
 });

@@ -26,22 +26,101 @@ function createAssistantMessage(sessionId: string, model: Model.Ref): Message.As
   };
 }
 
-export namespace SessionBridge {
-  export function buildDirectMessages(
-    sessionId: string,
-  ): Array<{ role: "user" | "assistant"; content: string }> {
-    const messages = Session.getMessages(sessionId);
-    const result: Array<{ role: "user" | "assistant"; content: string }> = [];
+interface StoredMessage {
+  readonly info: Message.Info;
+  readonly parts: Message.Part[];
+}
 
-    for (const message of messages) {
-      const parts = Session.getParts(message.id);
-      for (const part of parts) {
-        if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
-          result.push({ role: message.role, content: part.text });
-        }
-      }
+interface DirectMessage {
+  readonly role: "user" | "assistant";
+  readonly content: string;
+  /**
+   * Text-part metadata carried through hydration verbatim. Structural
+   * identity must survive the seam (#722 re-review finding 1): a compaction
+   * anchor whose metadata is stripped on resume breaks the L2 merge chain
+   * and stacks stale renders as pseudo-user messages, one per
+   * compact-resume cycle.
+   */
+  readonly partMetadata?: Record<string, unknown>;
+}
+
+function isKeptEntry(value: unknown): value is DirectMessage {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as { role?: unknown; text?: unknown };
+  return (
+    (entry.role === "user" || entry.role === "assistant") &&
+    typeof (entry as { text?: unknown }).text === "string"
+  );
+}
+
+function anchorKeptWindow(entry: StoredMessage): DirectMessage[] | undefined {
+  if (entry.info.role !== "user") return undefined;
+  for (const part of entry.parts) {
+    if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
+    const kept = part.metadata?.keptWindow;
+    if (!Array.isArray(kept)) continue;
+    return kept
+      .filter(isKeptEntry)
+      .map((item) => ({ role: item.role, content: (item as unknown as { text: string }).text }));
+  }
+  return undefined;
+}
+
+function pushTextParts(target: DirectMessage[], message: StoredMessage): void {
+  for (const part of message.parts) {
+    if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
+      target.push({
+        role: message.info.role,
+        content: part.text,
+        ...(part.metadata === undefined ? {} : { partMetadata: part.metadata }),
+      });
     }
+  }
+}
 
+/**
+ * #702: consume the latest replacement record. Compaction persists its
+ * anchor message — whose part metadata carries the ordered kept CONTENT
+ * (role/content, not ids: hydration flattens to strings and the run
+ * re-mints ids, so an id record resolves to nothing; #722 review) — and
+ * every hydration path funnels through here. The window resumes as
+ * [anchor render, kept content in recorded order, everything stored after
+ * the anchor] instead of re-inflating the full pre-compaction history.
+ * Absent a record, behavior is unchanged.
+ */
+function buildFromRecord(stored: StoredMessage[]): DirectMessage[] | undefined {
+  for (let index = stored.length - 1; index >= 0; index -= 1) {
+    const entry = stored[index];
+    if (entry === undefined) continue;
+    const kept = anchorKeptWindow(entry);
+    if (kept === undefined) continue;
+    const result: DirectMessage[] = [];
+    pushTextParts(result, entry);
+    for (const item of kept) {
+      if (!item.content.startsWith(LEGACY_PLAN_MARKER)) result.push(item);
+    }
+    for (const later of stored.slice(index + 1)) {
+      pushTextParts(result, later);
+    }
+    return result;
+  }
+  return undefined;
+}
+
+export namespace SessionBridge {
+  export function buildDirectMessages(sessionId: string): DirectMessage[] {
+    const stored: StoredMessage[] = Session.getMessages(sessionId).map((info) => ({
+      info,
+      parts: Session.getParts(info.id),
+    }));
+
+    const fromRecord = buildFromRecord(stored);
+    if (fromRecord !== undefined) return fromRecord;
+
+    const result: DirectMessage[] = [];
+    for (const message of stored) {
+      pushTextParts(result, message);
+    }
     return result;
   }
 

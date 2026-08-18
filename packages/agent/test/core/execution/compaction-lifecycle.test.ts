@@ -3,7 +3,7 @@ import { AgentExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createCompactionPolicy } from "../../../src/compaction";
-import { createUserMessage } from "../../../src/core/message-factory";
+import { createAssistantMessage, createUserMessage } from "../../../src/core/message-factory";
 import { handleCompact } from "../../../src/core/execution/turn";
 import { buildLifecyclePolicyContext } from "../../../src/core/execution/state";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
@@ -130,5 +130,44 @@ describe("compaction through the lifecycle", () => {
     // seam must skip rather than re-fire on the stale number.
     expect(await handleCompact(state, engine, makeConfig(), makeAgentBase())).toBe("continue");
     expect(state.compactionCount).toBe(1);
+  });
+
+  it("prepare fires through the real engine at run.turn.post (L4, #724 review M3)", async () => {
+    // The whole speculation feature hangs on the lifecycle context carrying
+    // contextTokens at run.turn.post. This drives the REAL path: a factory
+    // registered into a real engine, a context built by the same builder the
+    // loop uses — if a future lifecycle change drops the field, this fails.
+    let calls = 0;
+    const engine = PolicyEngine.create();
+    engine.register(
+      createCompactionPolicy({
+        contextWindowTokens: 100,
+        protectRecentMessages: 2,
+        onSummarize: async () => {
+          calls += 1;
+          return "prepared";
+        },
+        events: Bus,
+        priority: 900,
+      }),
+    );
+    const state = makeState();
+    for (let index = 0; index < 5; index += 1) {
+      state.messages.push(
+        index % 2 === 0
+          ? createAssistantMessage(`m${index} ${"filler ".repeat(40)}`, "", "sess-1")
+          : createUserMessage(`m${index} ${"filler ".repeat(40)}`, "sess-1"),
+      );
+    }
+    state.lastCallContextTokens = 70; // ≥ 0.65 × 100
+    state.contextWindowTokens = 100;
+
+    const ctx = buildLifecyclePolicyContext(state, makeConfig(), makeAgentBase(), {
+      turnIndex: 0,
+      turnResult: { type: "stop" },
+    });
+    await engine.dispatchPoint("run.turn.post", ctx as never);
+    await Bun.sleep(0);
+    expect(calls).toBe(1);
   });
 });

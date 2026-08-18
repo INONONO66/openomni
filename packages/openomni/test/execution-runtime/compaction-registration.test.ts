@@ -89,8 +89,10 @@ describe("registerCompaction", () => {
       {},
     );
 
-    const compaction = registrations.find((r) => r.name === "builtin:compaction");
-    if (compaction?.kind !== "point") throw new Error("expected builtin:compaction");
+    const found = registrations.find((r) => r.name === "builtin:compaction");
+    // Factory form since L4 (per-run speculator state).
+    if (found?.kind !== "factory") throw new Error("expected builtin:compaction factory");
+    const compaction = found.create();
 
     await compaction.fn({
       timing: "turn.finish",

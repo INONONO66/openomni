@@ -15,6 +15,7 @@ import { Compaction } from "../../src/compaction/compact";
 const IDENTITY = {
   traceId: "trace-bracket-test",
   sessionId: "session-bracket-test",
+  runId: "run-bracket-test",
 } as const;
 
 let idCounter = 0;
@@ -73,6 +74,7 @@ function makeAssistantMessage(text: string): Message.WithParts {
 interface StartedEvent {
   traceId: string;
   sessionId: string;
+  runId?: string;
   messagesBefore: number;
   trigger: string;
   summarizer: boolean;
@@ -81,6 +83,7 @@ interface StartedEvent {
 interface CompletedEvent {
   traceId: string;
   sessionId: string;
+  runId?: string;
   outcome: string;
   messagesBefore: number;
   messagesAfter: number;
@@ -150,6 +153,9 @@ describe("Compaction bracket", () => {
         sessionId: IDENTITY.sessionId,
         outcome: "cut",
       });
+      // #702 rider: when the caller supplies a runId, the bracket records it.
+      expect(capture.started[0]?.runId).toBe(IDENTITY.runId);
+      expect(capture.completed[0]?.runId).toBe(IDENTITY.runId);
       expect(capture.completed[0]?.removedCount).toBeGreaterThan(0);
     } finally {
       capture.unsubscribe();
@@ -160,7 +166,11 @@ describe("Compaction bracket", () => {
     const capture = captureBracket();
     try {
       const attempt = Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
+        // Mixed roles: user messages never reach the summarizer (L2), so an
+        // all-user span would skip the summarize call this test needs to throw.
+        Array.from({ length: 12 }, (_unused, index) =>
+          index % 2 === 0 ? makeUserMessage(`message ${index}`) : makeAssistantMessage(`a${index}`),
+        ),
         {
           contextWindowTokens: 1000,
           protectRecentMessages: 2,

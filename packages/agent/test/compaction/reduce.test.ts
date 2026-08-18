@@ -70,13 +70,14 @@ describe("elideToolOutputs", () => {
 
     const result = elideToolOutputs(messages, 2, options);
 
-    // net shrink: 500 original − (41-char marker+newline + 20-char head) = 439
-    expect(result.elidedChars).toBe(439);
     const oldTool = result.messages[0]?.parts[0];
     if (oldTool?.type !== "tool" || oldTool.state.status !== "completed") throw new Error("shape");
-    expect(oldTool.state.output).toBe(
-      `[output elided by compaction: 500 chars]\n${"x".repeat(20)}`,
-    );
+    // The marker is a recall pointer (compaction-design L1): it carries the
+    // part's callID so the elided output stays addressable in the transcript.
+    const expectedMarker = `[output elided by compaction: 500 chars; recall: ${oldTool.callID}]\n${"x".repeat(20)}`;
+    expect(oldTool.state.output).toBe(expectedMarker);
+    // net shrink: original length minus the full replacement
+    expect(result.elidedChars).toBe(500 - expectedMarker.length);
     const originalPart = messages[0]?.parts[0];
     if (originalPart === undefined) throw new Error("shape");
     expect(oldTool.id).toBe(originalPart.id);
@@ -97,7 +98,9 @@ describe("elideToolOutputs", () => {
     const once = elideToolOutputs(messages, 1, options);
     const twice = elideToolOutputs(once.messages, 1, options);
 
-    expect(once.elidedChars).toBe(439);
+    const elided = once.messages[0]?.parts[0];
+    if (elided?.type !== "tool" || elided.state.status !== "completed") throw new Error("shape");
+    expect(once.elidedChars).toBe(500 - elided.state.output.length);
     expect(twice.elidedChars).toBe(0);
     expect(twice.messages).toEqual(once.messages);
   });

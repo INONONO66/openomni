@@ -1,6 +1,10 @@
 import type { Message } from "@openomni/protocol";
 
-export function createUserMessage(content: string, sessionID: string): Message.WithParts {
+export function createUserMessage(
+  content: string,
+  sessionID: string,
+  partMetadata?: Record<string, unknown>,
+): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
   const info: Message.UserMessage = {
@@ -18,6 +22,7 @@ export function createUserMessage(content: string, sessionID: string): Message.W
     messageID: id,
     type: "text",
     text: content,
+    ...(partMetadata === undefined ? {} : { metadata: partMetadata }),
   };
 
   return { info, parts: [textPart] };
@@ -27,6 +32,7 @@ export function createAssistantMessage(
   content: string,
   parentID: string,
   sessionID: string,
+  partMetadata?: Record<string, unknown>,
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -50,6 +56,7 @@ export function createAssistantMessage(
     messageID: id,
     type: "text",
     text: content,
+    ...(partMetadata === undefined ? {} : { metadata: partMetadata }),
   };
 
   return { info, parts: [textPart] };

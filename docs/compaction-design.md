@@ -42,8 +42,8 @@ Run memory (volatile):
 
 ## Lifecycle
 
-**Turn settlement (`run.turn.post` timing, loop mechanism — not a policy):**
-- measured ≥ prepare ratio (default 0.65 of window) → fire `prepare()` in the background: single-flight per run, linked to the run's AbortSignal, failure = no candidate (recorded skip, never a run error).
+**Turn settlement (`run.turn.post` timing, per-run policy-factory state):**
+- measured ≥ prepare ratio (default 0.65 of window) → fire `prepare()` in the background: single-flight per run, failure = no candidate reported via `operational.warn` with a consecutive-failure cap that disables speculation for the run (never a run error). No AbortSignal linkage — dispatch contexts are structured-clone frozen, so per-run candidate state simply dies with the run's engine.
 - `prepare()` input = the would-be cut span **minus user messages minus prior summary renders**; the summarizer merges it into the previous anchor (senpi UPDATE contract). Output candidate carries a prefix fingerprint of the history it summarized.
 
 **Apply seam (`run.completion.pre`, threshold ≥ 0.8 or window yield — existing wiring unchanged):**
@@ -60,10 +60,10 @@ Run memory (volatile):
 
 | Leaf | Scope | Packages | Depends on |
 | --- | --- | --- | --- |
-| L1 | Elision marker gains recall pointer (`reduce.ts`); `recall_tool_output` tool reads the original from the session store | agent, openomni | — |
+| L1 | Elision marker gains recall pointer (`reduce.ts`); the `recall.output` tool reads the original from the session store (scoped to fact-recorded turns — resident-direct and child streams persist no tool parts and refuse loudly) | agent, openomni | — |
 | L2 | `onSummarize(cutSpan, previousAnchor?)` contract; prior-summary and user-message exclusion from summarizer input; `[anchor, verbatim users, tail]` rebuild; senpi-template summarizer injected as openomni config (domain strings stay out of core) | agent, openomni | — |
-| L3 | CompactionRecord in protocol + session persistence; resume rehydration = projection recomputation (#702). Protocol schema growth — `lint:tools` snapshot diff is the Owner sign-off surface | protocol, session, openomni | L2 (anchor version) |
-| L4 | `compaction/speculate.ts`: prepare/promote, single-flight, abort-linked, freshness guard, discard-rate skip events | agent | L2 |
+| L3 | Replacement record rides on the anchor message's part metadata as ordered kept CONTENT (role/text — ids do not survive the hydration seam, which flattens to strings and re-mints ids); the openomni seam wrapper persists the anchor record-before-act with visible fail-open, and `SessionBridge.buildDirectMessages` (the single seam both hydration readers share) consumes it (#702). Shipped WITHOUT protocol schema growth — the anticipated snapshot surface was routed around by the metadata disposition, noted here explicitly as the sign-off record | agent, session, openomni | L2 (anchor) |
+| L4 | `compaction/speculate.ts`: prepare/promote as per-run policy state (factory registration at `run.turn.post` + the existing seam) — single-flight fire-and-forget prepare at the prepare ratio (default 0.65); freshness = the candidate's message-id span is still a live prefix (tolerates later turns and elision, invalidated by any replacement); promoted/discarded reported as reasonCodes at the seam. No AbortSignal linkage — dispatch contexts are structured-clone frozen, so per-run candidate state simply dies with the run's engine and the prepare's duration is bounded by the host completion fn | agent | L2 |
 | L5 | Context-overflow error classification + blocking compact + one retry | llm, agent | — |
 | L6 | Anchor render: ledger-derived artifact table + goal recitation | openomni | L2 |
 | L7 | Byte guard as enforced check + probe evaluation (4 probe types, blind judge, tokens-per-task) on the chaos bench substrate (#704), including the user-verbatim vs uniform A/B no published benchmark has run | agent, conformance/bench | L2–L6 |

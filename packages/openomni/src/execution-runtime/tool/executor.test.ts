@@ -421,6 +421,25 @@ describe("createToolExecutor", () => {
     expect(capturedInput.sessionId).toBeUndefined();
   });
 
+  it("strips a model-supplied value from an implicit slot when runtime is absent", async () => {
+    let capturedInput: Record<string, unknown> = {};
+    const tool = makeTool("todo_write", {
+      implicitInputs: { sessionId: "sessionId" },
+      execute: async (call) => {
+        capturedInput = call.input as Record<string, unknown>;
+        return { id: "r1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    // Implicit slots are executor-owned: without runtime the field must be
+    // ABSENT, not whatever the model wrote — a session-scoped tool reading a
+    // forged sessionId here would cross a read boundary (PR #719 review M2).
+    const executor = createToolExecutor({ tools: [tool] });
+    await executor(makeCall("todo_write", { todos: [], sessionId: "forged-session" }), RUN_TRACE);
+    expect(capturedInput.sessionId).toBeUndefined();
+    expect(capturedInput.todos).toEqual([]);
+  });
+
   it("runtime injection overrides LLM-provided value", async () => {
     let capturedInput: Record<string, unknown> = {};
     const tool = makeTool("todo_write", {

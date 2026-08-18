@@ -36,7 +36,17 @@ export interface ChatAgentConfig {
 }
 
 export interface ChatAgentInput {
-  messages: Array<{ role: "user"; content: string } | { role: "assistant"; content: string }>;
+  /**
+   * Hydrated history. `partMetadata`, when present, rides onto the rebuilt
+   * text part verbatim — hydration must not strip structural identity
+   * (compaction anchors carry theirs here; #702/#722 review: an anchor that
+   * loses its metadata across resume breaks the merge chain and stacks
+   * stale renders as pseudo-user messages).
+   */
+  messages: Array<
+    | { role: "user"; content: string; partMetadata?: Record<string, unknown> }
+    | { role: "assistant"; content: string; partMetadata?: Record<string, unknown> }
+  >;
   traceContext?: import("@openomni/protocol").TraceContext.Type;
 }
 
