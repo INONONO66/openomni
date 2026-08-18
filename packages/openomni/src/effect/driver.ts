@@ -29,6 +29,14 @@ export type EffectExecution =
 
 export interface EffectDriver {
   readonly kind: string;
+  /**
+   * The driver's replay declaration, stamped into the intent fact at record
+   * time (senpi's per-record replay tag, adopted via #698): "safe" means a
+   * replay/recovery consumer may re-execute this effect under its
+   * idempotency key; "never" means recorded outcomes are read back only.
+   * Required by type — every driver decides, none defaults.
+   */
+  readonly replay: "never" | "safe";
   execute(intent: EffectIntent, input: unknown): Promise<EffectExecution> | EffectExecution;
   reconcile(intent: EffectIntent): Promise<EffectExecution> | EffectExecution;
 }

@@ -49,12 +49,16 @@ export function persist(input: PersistInput): Promise<void> {
  * Drains the queued batch synchronously (group commit per connection, FIFO —
  * the per-session hash chain reads its tip inside the same transaction).
  * Exported for the shutdown drain; normally runs as the scheduled microtask.
+ * Returns the number of entries drained so the shutdown barrier can detect
+ * quiescence (a turn that drained nothing).
  */
-export function flushPersistQueue(): void {
+export function flushPersistQueue(): number {
   flushScheduled = false;
+  let drained = 0;
   while (queue.length > 0) {
     const batch = queue;
     queue = [];
+    drained += batch.length;
     let start = 0;
     while (start < batch.length) {
       let end = start;
@@ -63,6 +67,7 @@ export function flushPersistQueue(): void {
       start = end;
     }
   }
+  return drained;
 }
 
 function flushGroup(entries: QueueEntry[]): void {

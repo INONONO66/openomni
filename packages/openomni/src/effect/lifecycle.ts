@@ -51,6 +51,9 @@ export class EffectService {
     const intended = EffectStore.intend({
       effectId: request.effectId,
       kind: request.kind,
+      // The driver's replay declaration rides the intent fact so replay and
+      // recovery read the judgment from the ledger, never re-derive it.
+      replay: driver.replay,
       ...(request.target === undefined ? {} : { target: request.target }),
       ...(request.workItemHash === undefined ? {} : { workItemHash: request.workItemHash }),
       ...(request.attemptId === undefined ? {} : { attemptId: request.attemptId }),

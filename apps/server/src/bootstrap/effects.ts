@@ -27,6 +27,8 @@ import { Bus } from "@openomni/telemetry";
  */
 const crashAfterIntent: EffectDriver = {
   kind: "crash-after-intent",
+  // Models the crash window itself — re-execution would falsify the scenario.
+  replay: "never",
   execute: () => ({ kind: "unknown", reason: "simulated crash between intent and outcome" }),
   reconcile: () => ({
     kind: "confirmed",
@@ -37,6 +39,7 @@ const crashAfterIntent: EffectDriver = {
 /** Definite failure — observably distinct from `unknown`: a terminal fact IS recorded. */
 const definiteFailure: EffectDriver = {
   kind: "definite-failure",
+  replay: "never",
   execute: () => ({ kind: "failed", reason: "definite failure (scenario)" }),
   reconcile: () => ({ kind: "failed", reason: "definite failure (scenario)" }),
 };
@@ -44,6 +47,7 @@ const definiteFailure: EffectDriver = {
 /** Unprovable outcome — stays outcome-less and reconcilable across sweeps, never terminalized. */
 const unknownResult: EffectDriver = {
   kind: "unknown-result",
+  replay: "never",
   execute: () => ({ kind: "unknown", reason: "outcome unprovable (scenario)" }),
   reconcile: () => ({ kind: "unknown", reason: "outcome unprovable (scenario)" }),
 };
@@ -51,6 +55,8 @@ const unknownResult: EffectDriver = {
 /** Owner-driven manual effect: confirms immediately; input is boundary-checked below. */
 const manualDriver: EffectDriver = {
   kind: "manual",
+  // In-process idempotent confirm — the one live "safe" row for Manual QA.
+  replay: "safe",
   execute: () => ({ kind: "confirmed", receipt: "manual effect confirmed" }),
   reconcile: () => ({ kind: "confirmed", receipt: "manual effect confirmed (reconciled)" }),
 };
@@ -63,6 +69,7 @@ const manualDriver: EffectDriver = {
  */
 const exhaustingProbe: EffectDriver = {
   kind: "exhausting-probe",
+  replay: "never",
   execute: () => ({ kind: "unknown", reason: "outcome unprovable (scenario)" }),
   reconcile: () => ({
     kind: "unknown",
