@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787080985014,
+  "lastUpdate": 1787086589293,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56747,6 +56747,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514287,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "31440e3a838bbc422912ef9cc1c32ee2cfd0a334",
+          "message": "refactor: converge wire families, validate ipc, move to owners (#731)\n\n* refactor(protocol): ingress hygiene — activation, typed homes (#500)\n\nSlice A of the #500 ingress convergence. In-process vocabulary only:\nno wire or persisted VALUE changes; the two descriptor edits (A4/A5)\nare write-side, new-rows-only, with zero re-parse paths (bus rows are\nnever folded back through these schemas; verified by rg).\n\nA1 InboundEvent.runtime -> activation. The field is ActivationMetadata\n   and never persisted (event-projector writes messages/audit without\n   it; routing facts carry only ids). All ~15 constructor/reader sites\n   and tests renamed; schema-snapshot surgically edited for exactly\n   the four Ingress event entries.\n\nA2 Typed homes for the catchall smuggling in ingress/handlers.ts:\n   - `background` is now a declared z.boolean().optional() on\n     ActivationMetadata (serializable, legitimate).\n   - The live AbortSignal moves OFF the event onto the call path:\n     ingestInternal options gain `signal`, threaded through\n     ingestResolved into HandlerContext.signal, consumed by\n     handleResident. Sole producer (dispatch resident.ask) now passes\n     it as an option instead of writing it into event.runtime.\n   Zero behavior change.\n\nA3 ActivationMetadata.lifecycle narrowed to the worker axis\n   (starting/ready/busy/stopping/exited), exported as\n   Ingress.WorkerLifecycle. Zero-writer proof for the resident axis:\n   no production code writes lifecycle onto an inbound event at all;\n   the only production reader checks the worker value \"stopping\"\n   (worker cancel), and tests write worker values only. The resident\n   axis (sleeping/hydrating/active/idle/releasing) lives solely as the\n   in-process ResidentLifecycle in openomni resident/runtime.ts and\n   never rides the event.\n\nA4 \"plan\" removed from the four ingress observation descriptor enums\n   (Received/ModeDetected/Completed/Failed). Zero writers: every\n   publisher passes event.mode, typed \"direct\" | \"internal\";\n   RoutingDecisionPayload and the route.decided fact are untouched.\n   New-rows-only: descriptors are write-side definitions; rows are\n   never re-parsed through them.\n\nA5 cron BaseEvent `taskId` (banned noun) removed rather than renamed:\n   every cron descriptor already extends with a required `jobId` and\n   every publisher (cron-job-registry, cron-job-runner) publishes\n   `jobId` only — `taskId` had zero writers and zero readers, so the\n   rename degenerates to deleting the dead optional. New-rows-only.\n\nA6 ActorSchema: production catchall-key census (actor-resolver,\n   server ingress bridge, cron-adapter, dispatch resident seam,\n   ingress-authority) found exactly two undeclared production-written\n   keys — `runId` and `agentName` (dispatch resident seam) — now\n   declared as typed optional fields. No field renamed. The catchall\n   stays as the historical inbound-tolerance seam; no production\n   producer writes undeclared keys today.\n\nA7 Deferral receipts:\n   - \"one InboundEvent\" + actor/endpoint reference reshape ->\n     deferred to #707 (Gateway.Deliver is the one inbound; doing it\n     here would mint a second inbound vocabulary — #500's own\n     non-goal).\n   - messaging/schema.ts Gateway re-export: sanctioned bridge until\n     #707 (dies at stage 2).\n   - Tool.State deletion: deferred (persisted ToolPart.state rows\n     need a migration leaf).\n   - Spec.retryPolicy/fingerprint: deferred (no current consumer;\n     earned-abstraction rule).\n   - Storage namespace homonym (protocol interfaces vs session\n     runtime): noted; session-side rename belongs to #502 (vocab gate\n     is protocol-only — lint-tools passes at this head).\n\nVerified: build, check-types, lint-tools, lint-guards, check-deps,\nimport-cycles, dead-exports, full turbo test (16/16 tasks, 0 fail),\np2-ledger-baseline (46 pass), packages/channels standalone (40 pass).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol): one spawn config, validated ipc methods (#500)\n\nSlice B of the #500 convergence: spawn-config dedup + IPC hardening.\n\nB1 — spawn-config quadruplication -> ONE canonical shape (Execution.Request):\n- Ipc.Methods[\"coordinator.spawn_run\"].params is now the canonical\n  Execution.Request + authToken instead of an inline clone.\n- WorkerBootstrap.RuntimeAgentDefinition -> WorkerBootstrap.AgentDefinition,\n  RuntimeToolCatalogEntry -> ToolCatalogEntry (banned-noun prefix dropped);\n  AgentDefinition picks systemPrompt/permissions/policyPlan/budget from the\n  canonical and extends with bootstrap-only name/description/model?/tools.\n- Ingress.AgentDefSchema's zod half is picked from the canonical\n  (model/systemPrompt/tools/budget/permissions/policyPlan/toolConfig) +\n  passthrough; the in-process callback half is unchanged.\n- #504 dual lane (permissions + policyPlan) survives verbatim in all shapes.\n\nB2 — Tool.Config finding: KEEP. Producers write it (ingress bridge\nbuildAgentDefFromEntries, openomni handlers buildExecutionRequest,\nworker-runner workspaceRoot merge); readers consume workspaceRoot\n(worker-runner, worker-runtime, resident runtime, routing-execution).\nNote: the systemTools/agentTools/mcpTools sub-fields have ZERO production\nwriters and readers (test-only) — left in place, flagged as a follow-up\nnarrowing candidate rather than deleted beyond the ruling's scope.\n\nB3 — Methods table wired as real fail-closed validation at receiving ends:\n- worker side: coordinator.cancel_run, worker.deliver_message,\n  worker.shutdown_idle, worker.tool_call_settled (worker-ipc-handlers) and\n  coordinator.bootstrap (worker-bootstrap-handler) now parse params via\n  Ipc.Methods, responding each method's existing result-shaped error frame;\n  coordinator.spawn_run keeps its canonical Execution.Request.parse.\n- coordinator side: worker.tool_call_cancel, worker.inbound_wait,\n  worker.inbound_wait_cancel (supervisor-requests) replace hand-rolled\n  typeof mirrors with Methods safeParse; worker.bootstrap_ready notification\n  validated before flipping readiness.\n- result paths: coordinator.bootstrap / worker.shutdown_idle guards and the\n  worker-pool cancel confirmation now safeParse via Methods result schemas;\n  supervisor.send fails closed on invalid worker.deliver_message results\n  (raw frame passes through when valid — validation, not normalization);\n  spawn_run results were already validated at consumption\n  (apps/server execution coordinator Execution.Result.parse) and\n  worker.inbound_wait responses now parse via the Methods result schema\n  in worker-runner-ipc.\n\nWire-compat notes (entry-only fixes; wire values, method strings and the\nv:2 frame version untouched; protocol+coordinator+apps/server land\natomically in this commit):\n- coordinator.spawn_run params had drifted: senders spread the full\n  Execution.Request (mode/traceId required, tools/toolConfig/budget/... on\n  the wire) and NOTHING ever sent or read softTimeoutMs/hardTimeoutMs (the\n  delivery ceiling derives from budget.maxWallTimeMs) — phantom fields\n  dropped.\n- coordinator.spawn_run result had drifted: the worker has always responded\n  Execution.Result frames, never { accepted } — entry now says so.\n- worker.tool_call_settled authToken was .optional() but the receiving\n  worker has always required it and the supervisor always sends it — now\n  required.\n- coordinator.cancel_run result documents the worker's echoed\n  runId/sessionId (additive optional fields).\n\nB4 — ipc AGENTS.md versioning drift fixed (v: 1 -> v: 2, matching\nz.literal(2)); renamed-type reference synced in docs/agent-core-rewrite.md.\n\nHousekeeping: schema-snapshot.json surgically edited for the two renamed\nWorkerBootstrap keys (field lists unchanged); the two Runtime* naming\ngrandfather entries removed from lint-tools-baseline.json (ratchet shrink).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol): move run/sink/error to owners, tool residue (#500)\n\nSlice C — in-process owner moves + Tool residue.\n\nC1 run/: Run.Outcome moved to @openomni/llm (producer llm/src/run.ts;\nconsumers agent core already depend on llm). llm hosts the namespace as\n`Run` — no collision with the `run` entry point, name kept as\n`Run.Outcome`. Run.RetryPolicy moved to @openomni/agent core/retry.ts\n(agent-only consumer). Run.Events descriptors moved to agent\ncore/execution/events.ts as `RunEvents` (publishers run-events.ts +\ncompaction; precedent: openomni messaging defines its own descriptors).\nBus name strings stay the frozen `agent.*` bytes — descriptor-definition\nmotion only. protocol/src/run/ and event/agent-execution.ts deleted.\nCross-package test fallout: telemetry scope.test and session\nobservability.test cannot import agent (ring boundaries), so they define\nlocal test descriptors (session mirrors the frozen `agent.*` names +\nvisibility, which its persistence pipeline keys on). The Run.Outcome\npolicy parity/isolation pins moved to llm/test/run-outcome.test.ts —\nprotocol cannot import llm to keep pinning the canonical from its old\nhome.\n\nC2 sink/: the Sink streaming-callback interface moved to llm/src/sink.ts\n(producer side of the contract; consumers llm processor + agent\nexecution). Kills the name pun with the unrelated BusEvent.Sink\nobservation port, which stays in protocol.\n\nC3 error/: APIError moved to llm/src/error.ts — llm was already alias\nre-exporting it and is the only caller domain; the alias is deleted and\nllm is the home. WorkerDeliveryError moved to coordinator/src/error.ts,\nexported from the coordinator barrel; apps/server (composition root,\ndepends on coordinator) imports it from there. NamedError STAYS in\nprotocol — caller proof: protocol's own schemas consume it\n(ledger/schema.ts AdoptError, wait/schema.ts StoreError,\ncommunication/pending-ask + pending-interaction FrozenError).\n\nC4 Tool residue: Tool.Result gains additive-optional `toolName`\n(denormalization); Ipc.Methods[\"worker.tool_call\"].result now references\nTool.Result instead of its inline drift-prone clone. Wire note: the\nfield crosses the worker UDS boundary inside that result frame — an\nadded optional field is a safe evolution (both ends parse Tool.Result;\nreaders tolerate absence). The policy tool.native.post input duplicate\nmirrors the field to preserve schema parity. Producers wired where the\nname is in hand at construction: agent executor (blocked/skip results),\nagent mcp client, openomni define.ts success/error helpers + executor\nerror results + provider unknown-tool fallbacks + child-agent/dispatch\ntools, apps/server tool relay (unknown-tool + passthrough),\nworker-runner-ipc fallbacks, custom/mcp/opensearch providers,\ncoordinator supervisor typed rejection frames (when the source frame\nnamed the tool). Not wired: llm stream-events interruption/truncation\nsettlements (only the call id survives there).\nToolSelection folded into the Tool namespace as\nTool.Category/Tool.Selection; tool-selection/ deleted; consumers\n(openomni execution-runtime, WorkerBootstrap.AgentDefinition.tools,\napps/server tests) renamed. Field names unchanged.\nMcpServerConfig top-level type alias deleted (gate-banned alias);\nconsumers use the qualified McpConfig.ServerConfig. User config field\nnames frozen — schema untouched.\n\nC5 receipts: Transcript SnapshotPart/CompactionPart — zero references\nrepo-wide at head (rg over packages/apps/script/docs), so the \"remove\nwith proof\" bullet was already true; no code motion. Execution.Driver:\nadded the missing normative contract row to docs/implementation-status.md\n(deliver required; cancel/send capability-optional; interface in\nprotocol execution/index.ts, implemented by coordinator WorkerPool,\nconsumed via apps/server execution/coordinator.ts). Storage stays in\nprotocol per the explicit AGENTS boundary (interfaces-only).\n\nDep direction: llm gains nothing (still protocol-only in src); agent\nimports Run/Sink from llm (already a dependency, srcAllowedDeps allows\nit); agent's RunEvents need no llm types. zod becomes a runtime dep of\nagent and coordinator (descriptor/error schemas moved in); openomni\ngains @openomni/llm as devDependency (test mock types only).\n\nBaselines: vocab unmappedNamespaces shrinks by run/sink/tool-selection;\nschema-snapshot surgically edited (Run.* rows out, ToolSelection.Selection\n-> Tool.Selection, Tool.Result + toolName); coordinator barrel surface\ntest now pins createWorkerManager + WorkerDeliveryError.\n\nVerified: build, check-types, lint-tools, lint-guards,\nlint-side-effects, ultracite, check-deps, import-cycles, dead-exports,\nfull turbo test (16/16), p2-ledger-baseline (46 pass), channels\nstandalone build+test.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T20:55:07Z",
+          "tree_id": "ae37102fce6493278dbc5db9cd511fad94fae326",
+          "url": "https://github.com/INONONO66/openomni/commit/31440e3a838bbc422912ef9cc1c32ee2cfd0a334"
+        },
+        "date": 1787086588508,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 624,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10287,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2940,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2396,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8078,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 999,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 905,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48630,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518554,
             "unit": "ns/op"
           }
         ]
