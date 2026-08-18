@@ -1,16 +1,21 @@
 # packages/channels
 
-Gateway band, stage 1 (`@openomni/channels`, extracted from `apps/server/src/channel` in #551 — a pure move, zero behavior change). Platform drivers that convert raw transport payloads to/from protocol `Channel` contracts: Discord (gateway + REST), Telegram (polling), GitHub (webhook), WebSocket, plus the channel authn/trigger judgment middleware. The target role is the perimeter gateway of [docs/gateway-design.md](../../docs/gateway-design.md) — router, delivery, and perimeter store semantics arrive at stage 2 (#707); today this package is drivers + authn only. Registration and composition stay in `apps/server` (`bootstrap/channels.ts`): adding a platform = one driver folder here + one registration line there.
+Gateway band, stage 2 (`@openomni/channels` — drivers extracted from `apps/server/src/channel` in #551; the perimeter router, wait service, and send kernel promoted from `packages/openomni` in #707). This package IS the perimeter gateway of [docs/gateway-design.md](../../docs/gateway-design.md): platform drivers convert raw transport payloads to/from protocol `Channel` contracts, and the router band owns every perimeter judgment — external route resolution (`route.decided` recording), wait correlation and the sole wait-store writes, channel/blacklist/actor admission, routed pre-run authority, the surface↔session map claim, and the #215 existing-agent send kernel. The brain (`packages/openomni`) is reached only through the injected `deliver` port (protocol `Gateway.Deliver`); registration and composition stay in `apps/server` (`bootstrap/index.ts` + `bootstrap/channels.ts`): adding a platform = one driver folder here + one registration line there, zero security review of the router.
 
 ## STRUCTURE
 
 ```
 src/
-├── index.ts          # Package barrel — adapters, WebSocketHandler, ChannelAuthnMiddleware, PublishPort
+├── index.ts          # Package barrel — adapters, WebSocketHandler, ChannelAuthnMiddleware, router surface
 ├── types.ts          # PublishPort (injected observation port), ChannelClient, InboundNormalizer
 ├── channel-authn.ts  # ChannelAuthnMiddleware facade over authn/
 ├── websocket.ts      # In-process WebSocket surface (token-gated)
 ├── authn/            # Perimeter judgment: policy-engine decisions, trigger/webhook/upgrade authn
+├── router/           # Gateway router (#707): createGatewayRouter, resolve-route (external arms),
+│   │                 #   routing-resolution (route.decided record + replay gate), routing-execution
+│   │                 #   (wait/pending_ask resumption arms), authority (routed pre-run), actor-resolver
+│   ├── wait/         # findWaitCandidates, matcher wrapper, WaitService (sole wait-store writer)
+│   └── messaging/    # #215 send kernel: createExistingAgentMessaging, grant evaluation, audit events
 ├── discord/          # Discord gateway client + surface (mention-trigger by default)
 ├── telegram/         # Telegram polling surface
 ├── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
@@ -19,24 +24,24 @@ src/
 
 ## DEPENDENCIES (the band import contract)
 
-Whitelist at stage 1: **{`@openomni/protocol`, `@openomni/ipc`, `@openomni/policy`}** — ledger joins at stage 2 when the perimeter store surfaces move in. The manifest declares only what the band actually imports today (protocol, policy); `ipc` is whitelisted as the driver-band transport contract and joins the manifest when a driver first consumes it (the dead-export ratchet refuses undeclared-use manifest entries). Enforced twice:
+Whitelist at stage 2: **{`@openomni/protocol`, `@openomni/ipc`, `@openomni/policy`, `@openomni/ledger`}** for `src/` (the manifest may additionally carry `@openomni/telemetry` for tests only — the llm/agent precedent). Enforced twice:
 
-- `script/check-deps.ts` — package-level whitelist (manifest **and** source imports), plus the **S8 intra-package banding check**: only `src/authn/` (perimeter judgment) may import `@openomni/policy`; the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`) stays on the dumb-driver contract {protocol, ipc}. Drivers legitimately invoke the authn middleware today — that edge IS the stage-2 seam, cut when authn is promoted to the router band.
-- `test/channel-band-boundary.test.ts` — the AST-level scan that traveled with the band move: every import in `src/**` must be a whitelisted package, a node builtin, or relative; policy only under `src/authn/`. Telemetry is NOT allowed — the pre-move allowance was dropped at extraction (trace-id minting lives in protocol; observation goes through the injected `PublishPort`).
+- `script/check-deps.ts` — package-level whitelist (manifest **and** source imports), plus the **S8 intra-package banding check**: only the judgment band (`src/router/`, `src/authn/`) may import `@openomni/policy` or `@openomni/ledger`; the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`, `channel-authn.ts`) stays on the dumb-driver contract {protocol, ipc} and may not relative-import into `src/router/`. Router files importing the ledger may name ONLY the perimeter store surfaces (ActorRegistry, BlacklistStore, ChannelGrantStore, WaitStore, SurfaceKey, PendingAskStore, PendingInteractionStore, Storage) — never brain surfaces (Session, WorkItem*, transcripts, artifacts).
+- `test/channel-band-boundary.test.ts` — the AST-level scan: every import in `src/**` must be a whitelisted package, a node builtin, or relative; policy/ledger only under the judgment band. Telemetry is NOT allowed anywhere in `src/**` — observation goes through the injected sink (`PublishPort` for drivers, the router's `sink` port).
 
-No kernel (`@openomni/openomni`), no ledger, no telemetry, no brain imports — both sides meet only in protocol contracts, wired by `apps/server` through injected ports.
+No kernel (`@openomni/openomni`) either way — both sides meet only in protocol contracts (`Gateway.Deliver`, `Gateway.Send*`) plus the ports `apps/server` injects.
 
 ## CONTRACT
 
-- Adapters are ingress-agnostic: inbound flows through the injected `onMessage(routingHandler)`; observation flows through the injected `PublishPort` (bound to `Bus.publish` by the composition root, to collectors/noops by tests).
-- Normalizers are pure (`InboundNormalizer`): raw payload → `Channel.InboundMessage`, no side effects, no trigger authorization (that is `ChannelAuthnMiddleware`'s job — enforced by `script/lint-guards.ts`).
-- Trace ids mint at genuine trace origins only (D11 — gateway events, inbound frames) via protocol's `newTraceId`.
-- Surface identity speaks the protocol `Channel.SurfaceKey` codec; this package never routes sessions.
+- Adapters are ingress-agnostic: inbound flows through the injected `onMessage(routingHandler)` (bound to the router's `ingest` by the composition root); observation flows through injected sinks.
+- The router is constructed ONCE (`createGatewayRouter({ sink, deliver, onPolicyDecision?, messaging? })`) — no post-construction mutation. It records `route.decided` before anything acts (record-before-act, #510 C3), mints/claims the resident surface-session label before deliver (S1: the sessionId is an opaque label; session ROWS are brain domain), and never reads session content.
+- Wire/persisted vocabulary is byte-frozen: `route.decided` stream ids and decision payloads, `messaging.sent`/`messaging.denied`, wait rows, surface-key rows.
+- Normalizers are pure (`InboundNormalizer`); trace ids mint at genuine trace origins only (D11) via protocol's `newTraceId`; surface identity speaks the protocol `Channel.SurfaceKey` codec.
 
 ## CONSUMERS
 
-`apps/server/src/bootstrap/channels.ts` (registration/composition root), `apps/server/test/handler/conversation-routing.test.ts` (DiscordNormalizer as a fixture).
+`apps/server/src/bootstrap/index.ts` (router construction + brain wiring), `bootstrap/channels.ts` (driver registration), `bootstrap/recovery.ts` (WaitService.sweepExpired), `handler/conversation.ts` (router ingest).
 
 ## TESTS
 
-`bun test` in this package. `test/channel-band-boundary.test.ts` is the import-contract gate; the rest cover the Discord gateway state machine, GitHub authn/client/normalizer, Telegram/Discord normalizers, trigger authn middleware, and the WebSocket surface. Standalone proof (#551): `cd packages/channels && bun install && bun test && bun run build`.
+`bun test` in this package. `test/channel-band-boundary.test.ts` is the import-contract gate; `test/router/` carries the promoted kernel-routing, wait, authority, and messaging suites (the brain is a deliver-port stub — see `test/router/_router-fixture.ts`); the rest cover the Discord gateway state machine, GitHub authn/client/normalizer, Telegram/Discord normalizers, trigger authn middleware, and the WebSocket surface. Standalone proof: `cd packages/channels && bun install && bun test && bun run build`.

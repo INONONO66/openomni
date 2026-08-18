@@ -11,10 +11,12 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@openomni/ledger": "workspace:*",
     "@openomni/policy": "workspace:*",
     "@openomni/protocol": "workspace:*"
   },
   "devDependencies": {
+    "@openomni/telemetry": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5"
   }

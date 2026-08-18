@@ -18,8 +18,12 @@ import {
 import { DispatchRegistry } from "../../packages/openomni/src/dispatch/registry";
 import { CommandRecordError, DispatchRuntime } from "../../packages/openomni/src/dispatch/runtime";
 import { registerBuiltInDispatchHandlers } from "../../packages/openomni/src/dispatch/setup";
-import { createIngressEngine } from "../../packages/openomni/src/ingress/engine";
-import { IngressRoutingError } from "../../packages/openomni/src/ingress/routing-resolution";
+import {
+  createBrainEngine,
+  type BrainEngineDeps,
+} from "../../packages/openomni/src/ingress/engine";
+import { createGatewayRouter } from "../../packages/channels/src/router/index";
+import { IngressRoutingError } from "../../packages/channels/src/router/routing-resolution";
 import {
   ChannelGrantStore,
   PendingAskStore,
@@ -950,8 +954,20 @@ function routedIngressEvent(id: string, workerSessionId: string) {
     payload: "prove append-before-act for the route class",
     target: { kind: "worker", sessionId: workerSessionId },
     meta: { actor: { role: "user" } },
-    agent: { model: { provider: "test", id: "test-model" } },
   };
+}
+
+// #707 stage 2: the external pipeline is the gateway router composed over the
+// brain's Deliver consumer — the old engine.ingest(event-with-agent) is now
+// router.ingest(agent-less event) → brain.deliver, with the resident AgentDef
+// resolved brain-side by the injected externalAgentResolver (the same model
+// the old fixtures embedded on the event).
+function createExternalIngress(deps: BrainEngineDeps = {}) {
+  const brain = createBrainEngine({
+    externalAgentResolver: async () => ({ model: { provider: "test", id: "test-model" } }),
+    ...deps,
+  });
+  return createGatewayRouter({ sink: Bus.publish, deliver: brain.deliver });
 }
 
 // Review fix F1: the route owner stream is channel-scoped — normalizer ids
@@ -1009,7 +1025,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     const observed: { factTypes: string[]; parsedOutcome?: string }[] = [];
-    const engine = createIngressEngine({
+    const engine = createExternalIngress({
       coordinator: {
         dispatch: async (sessionId, request) => {
           const facts = factsOfStream(routeStreamOf("inbound-route-1"));
@@ -1056,7 +1072,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // ceiling. The block is a decision — it must be recorded like a route.
     let thrown: unknown;
     try {
-      await createIngressEngine().ingest({
+      await createExternalIngress().ingest({
         id: "inbound-route-blocked-1",
         traceId: "trace-test",
         surface: "conformance",
@@ -1065,7 +1081,6 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
         mode: "direct",
         payload: "blocked inbound",
         meta: { actor: { role: "user" } },
-        agent: { model: { provider: "test", id: "test-model" } },
       });
     } catch (error) {
       thrown = error;
@@ -1089,7 +1104,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     });
     let dispatches = 0;
     const dispatchedSessions: string[] = [];
-    const engine = createIngressEngine({
+    const engine = createExternalIngress({
       coordinator: {
         dispatch: async (sessionId, request) => {
           dispatches += 1;
@@ -1130,7 +1145,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // First delivery: no channel grant — the block is decided and recorded.
     let firstThrown: unknown;
     try {
-      await createIngressEngine().ingest({
+      await createExternalIngress().ingest({
         id: "inbound-route-replay-divergent-1",
         traceId: "trace-test",
         surface: "conformance",
@@ -1139,7 +1154,6 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
         mode: "direct",
         payload: "blocked inbound",
         meta: { actor: { role: "user" } },
-        agent: { model: { provider: "test", id: "test-model" } },
       });
     } catch (error) {
       firstThrown = error;
@@ -1159,7 +1173,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     let dispatches = 0;
-    const engine = createIngressEngine({
+    const engine = createExternalIngress({
       coordinator: {
         dispatch: async (sessionId, request) => {
           dispatches += 1;
@@ -1206,9 +1220,8 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       mode: "direct",
       payload: "blocked inbound",
       meta: { actor: { role: "user" } },
-      agent: { model: { provider: "test", id: "test-model" } },
     });
-    const engine = createIngressEngine();
+    const engine = createExternalIngress();
     let firstThrown: unknown;
     try {
       await engine.ingest(blockedEvent());
@@ -1241,7 +1254,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     let dispatches = 0;
-    const engine = createIngressEngine({
+    const engine = createExternalIngress({
       coordinator: {
         dispatch: async (sessionId, request) => {
           dispatches += 1;
@@ -1528,7 +1541,7 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
     if (!entry) throw new Error("manifest misses the frozen pending_ask table");
     expect(entry).toMatchObject({
       table: "pending_ask",
-      sourceSchemaVersion: "0018_drop_actor_relationship/migration.sql",
+      sourceSchemaVersion: "0019_surface_key_perimeter/migration.sql",
       rowCount: 3,
       idRange: { first: "ask-a", last: "ask-c" },
     });
@@ -2006,7 +2019,7 @@ describe("p2 ledger baseline — telemetry and Bus.publish cannot authorize", ()
       );
 
     const dispatchedSessions: string[] = [];
-    const engine = createIngressEngine({
+    const engine = createExternalIngress({
       coordinator: {
         dispatch: async (sessionId, request) => {
           dispatchedSessions.push(sessionId);
@@ -2140,7 +2153,10 @@ describe("p2 ledger baseline — exact producer manifest", () => {
     // producer still exists (a vanished producer is drift too).
     expect(LEDGER_PRODUCER_MANIFEST.appendCore).toContain(adapterBinding);
     expect([...scan.appendCallSites].sort()).toEqual(
-      [...LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.producer), adapterBinding].sort(),
+      [
+        ...LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers),
+        adapterBinding,
+      ].sort(),
     );
 
     // Raw ledger_event/ledger_head write SQL lives only in the append core.
@@ -2196,15 +2212,20 @@ describe("p2 ledger baseline — exact producer manifest", () => {
     );
   });
 
-  test("manifest stream classes equal the protocol StreamRegistry; one producer per class", () => {
+  test("manifest stream classes equal the protocol StreamRegistry; enumerated producers per class", () => {
     // Widened to string[]: Object.keys erases the registry's literal key
     // union, and set equality of the two name lists is what's being pinned.
     const manifestClasses: string[] = LEDGER_PRODUCER_MANIFEST.streams.map(
       (entry) => entry.streamClass,
     );
     expect(manifestClasses.sort()).toEqual(Object.keys(LedgerTypes.StreamRegistry).sort());
-    const producers = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.producer);
+    const producers = LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers);
     expect(new Set(producers).size).toBe(producers.length);
+    // Only `route` split at the #707 seam flip (external router arm +
+    // internal brain arm); every other class keeps exactly one producer.
+    for (const entry of LEDGER_PRODUCER_MANIFEST.streams) {
+      expect(entry.producers.length).toBe(entry.streamClass === "route" ? 2 : 1);
+    }
   });
 
   test("the producer manifest and the archive manifest agree on the frozen-table set", () => {

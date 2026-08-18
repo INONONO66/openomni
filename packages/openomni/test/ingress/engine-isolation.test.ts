@@ -1,25 +1,51 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { Ingress } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
+import type { Gateway } from "@openomni/protocol";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import { createIngressEngine } from "../../src/ingress/engine";
+import { createBrainEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
 
-// #549 completion proof: two engines in one process share no state. Every
-// collaborator is construction-injected, so nothing an engine is configured
-// with (observers, runtimes) can leak into a sibling instance.
+// #549 completion proof, restated at the #707 brain seam: two engines in one
+// process share no state. Every collaborator is construction-injected, so
+// nothing an engine is configured with (runtimes, resolvers) can leak into a
+// sibling instance. The pre-flip onPolicyDecision observer assertion moved
+// with the authority middleware to the gateway router (@openomni/channels) —
+// observer isolation is a router-construction concern now, not a brain one.
 
-function directEvent(id: string): Ingress.DirectEvent {
+function residentDeliver(id: string, sessionId: string): Gateway.Deliver {
   return {
-    id,
-    traceId: "trace-test",
-    surface: "tui",
-    workspace: "/repo",
-    channel: "resident",
-    mode: "direct",
-    payload: "hello",
-    meta: { actor: { role: "user" } },
-    agent: { model: { provider: "test", id: "test-model" } },
+    sessionId,
+    message: {
+      messageId: id,
+      traceId: "trace-test",
+      surfaceKey: "tui:/repo:resident",
+      text: "hello",
+    },
+    event: {
+      id,
+      traceId: "trace-test",
+      surface: "tui",
+      workspace: "/repo",
+      channel: "resident",
+      mode: "direct",
+      payload: "hello",
+      meta: { actor: { role: "user" } },
+    },
+    decision: {
+      traceId: "trace-test",
+      time: Date.now(),
+      inboundId: id,
+      surface: "tui",
+      mode: "direct",
+      stage: "surface_default",
+      outcome: "route",
+      target: "resident",
+      sessionId,
+      trustTier: "owner",
+      inboundTreatment: "full_access",
+      reason: "Inbound message routed to the surface session",
+      factsUsed: ["wait:none"],
+    },
   };
 }
 
@@ -36,42 +62,32 @@ beforeEach(() => {
   Storage.reset();
   Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  ChannelGrantStore.put({
-    id: "grant-tui",
-    surface: "tui",
-    kind: "trusted_channel",
-    defaultTier: "owner",
-    createdBy: "act_owner",
-  });
 });
 
-describe("ingress engine instance isolation", () => {
-  it("keeps runtimes and decision observers per instance", async () => {
+describe("brain engine instance isolation", () => {
+  it("keeps resident runtimes per instance", async () => {
     const runsA: string[] = [];
     const runsB: string[] = [];
-    const decisionsA: string[] = [];
-    const engineA = createIngressEngine({
+    const externalAgentResolver = async () => ({
+      model: { provider: "test", id: "test-model" },
+    });
+    const engineA = createBrainEngine({
       residentRuntime: recordingResidentRuntime(runsA, "engine-a"),
-      onPolicyDecision: (decision) => {
-        decisionsA.push(decision.policyId);
-      },
+      externalAgentResolver,
     });
-    const engineB = createIngressEngine({
+    const engineB = createBrainEngine({
       residentRuntime: recordingResidentRuntime(runsB, "engine-b"),
+      externalAgentResolver,
     });
 
-    const first = await engineA.ingest(directEvent("evt-observer-a"));
-    const observedAfterA = decisionsA.length;
-    const second = await engineB.ingest(directEvent("evt-observer-b"));
+    const first = await engineA.deliver(residentDeliver("evt-observer-a", crypto.randomUUID()));
+    const second = await engineB.deliver(residentDeliver("evt-observer-b", crypto.randomUUID()));
 
-    // Each engine executed through its own resident runtime...
+    // Each engine executed through its own resident runtime — and only its own.
     if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
     expect(first.result.output).toBe("engine-a");
     expect(second.result.output).toBe("engine-b");
     expect(runsA).toEqual(["engine-a"]);
     expect(runsB).toEqual(["engine-b"]);
-    // ...and engine B's ingest never reached engine A's decision observer.
-    expect(observedAfterA).toBeGreaterThan(0);
-    expect(decisionsA).toHaveLength(observedAfterA);
   });
 });

@@ -7,7 +7,7 @@ import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { DispatchRegistry, registerBuiltInDispatchHandlers } from "../../src/dispatch";
 import { CronJobRegistry, CronJobRunner } from "../../src/execution-runtime";
-import { CronAdapter, createIngressEngine, ResidentRuntime } from "../../src";
+import { CronAdapter, createBrainEngine, ResidentRuntime } from "../../src";
 
 function tempDbPath(): { readonly dir: string; readonly dbPath: string } {
   const dir = mkdtempSync(join(tmpdir(), "openomni-cron-runner-"));
@@ -343,7 +343,7 @@ describe("CronJobRunner", () => {
     const unsubscribe = Bus.subscribe(Ingress.Events.Received, (event) => {
       received.push(event);
     });
-    const engine = createIngressEngine({
+    const engine = createBrainEngine({
       agentResolver: {
         resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
       },

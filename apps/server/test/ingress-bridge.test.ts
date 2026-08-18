@@ -3,7 +3,7 @@ import type { Channel, Tool } from "@openomni/protocol";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
 import { registerAgent } from "../src/agents";
 import { agentMetadata, getAgentDefinition } from "../src/agents/registry";
-import { buildAgentDef, buildInboundEvent } from "../src/ingress/bridge";
+import { buildAgentDef, buildInboundEvent, buildResidentAgentDef } from "../src/ingress/bridge";
 
 function makeTool(name: string): NativeTool {
   return {
@@ -61,7 +61,7 @@ const deps = {
 describe("ingress bridge transport boundary", () => {
   it("preserves normalized transport facts without assigning a route", () => {
     const message = makeMessage();
-    const event = buildInboundEvent(message, deps);
+    const event = buildInboundEvent(message);
 
     expect(event).toMatchObject({
       id: "message-1",
@@ -105,7 +105,7 @@ describe("ingress bridge transport boundary", () => {
     message.surfaceKey = "discord:guild:channel:dev:thread:descriptor-thread";
     message.threadId = undefined;
 
-    const event = buildInboundEvent(message, deps);
+    const event = buildInboundEvent(message);
 
     expect(event.meta?.threadId).toBe("descriptor-thread");
     const correlation = event.meta?.correlation;
@@ -120,7 +120,7 @@ describe("ingress bridge transport boundary", () => {
     message.surfaceKey = "discord:guild:channel:dev:thread:descriptor-thread";
     message.threadId = "explicit-thread";
 
-    const event = buildInboundEvent(message, deps);
+    const event = buildInboundEvent(message);
 
     expect(event.meta?.threadId).toBe("explicit-thread");
     const correlation = event.meta?.correlation;
@@ -130,12 +130,18 @@ describe("ingress bridge transport boundary", () => {
     expect(correlation.threadId).toBe(event.meta?.threadId);
   });
 
-  it("constructs the Resident agent from normalized transport facts", () => {
-    const event = buildInboundEvent(makeMessage(), deps);
+  it("constructs the Resident agent brain-side from the same bridge deps (#707: never on the event)", () => {
+    const event = buildInboundEvent(makeMessage());
 
+    // The perimeter event carries only the agent NAME; the AgentDef itself is
+    // brain material, resolved via buildResidentAgentDef behind the injected
+    // external agent resolver.
     expect(event.meta?.agentName).toBe("resident");
-    expect(event.agent.systemPrompt).toContain("Resident");
-    expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
+    expect("agent" in event).toBe(false);
+
+    const agent = buildResidentAgentDef(deps);
+    expect(agent.systemPrompt).toContain("Resident");
+    expect(agent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
       "custom_probe",
       "dispatch",

@@ -11,6 +11,7 @@ export namespace Session {
   export const Event = SessionEvent;
   export const create = Lifecycle.create;
   export const createChild = Lifecycle.createChild;
+  export const materialize = Lifecycle.materialize;
   export const get = Lifecycle.get;
   export const list = Lifecycle.list;
   export const listChildren = Lifecycle.listChildren;

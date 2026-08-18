@@ -1,6 +1,7 @@
 import {
   Ingress,
   Operational,
+  extractText,
   resolveTarget,
   type Execution,
   type TraceContext as TraceContextProtocol,
@@ -13,25 +14,11 @@ import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
 
 /**
- * THE canonical inbound payload-text parser: a string payload is the text, a
- * `{ text: string }` envelope unwraps, anything else round-trips through
- * JSON (nullish and non-serializable payloads fail safe to ""). Ingress owns
- * it — the payload shape is minted at the ingress boundary — and dispatch
- * imports it rather than keeping a drifted copy.
+ * THE canonical inbound payload-text parser, hoisted to protocol at #707
+ * stage 2 (the gateway router projects the same text into the Deliver
+ * message) and re-exported here for the brain's existing consumers.
  */
-export function extractText(payload: unknown): string {
-  if (typeof payload === "string") return payload;
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "text" in payload &&
-    typeof (payload as { text?: unknown }).text === "string"
-  ) {
-    return (payload as { text: string }).text;
-  }
-  if (payload === null || payload === undefined) return "";
-  return JSON.stringify(payload) ?? "";
-}
+export { extractText } from "@openomni/protocol";
 
 /**
  * The single ingress dispatch lifecycle: payload extraction, mode events,

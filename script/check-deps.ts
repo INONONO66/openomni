@@ -125,13 +125,28 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "channels",
     packageJsonPath: "packages/channels/package.json",
     packageName: "@openomni/channels",
-    // Gateway band at stage 1 (#551, docs/gateway-design.md §1/§9): protocol
-    // for the Channel contract, ipc as the driver-band transport contract,
-    // policy for the authn judgment sites (S8 confines it to src/authn/ —
-    // see validateChannelsIntraPackageBanding). ledger joins at stage 2 when
-    // the perimeter store surfaces move in (#707). No kernel, no telemetry —
-    // observation goes through the injected publish port.
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc", "@openomni/policy"]),
+    // Gateway band at stage 2 (#707, docs/gateway-design.md §1/§9): protocol
+    // for the contracts, ipc as the driver-band transport contract, policy +
+    // ledger for the judgment band (S8 confines them to src/router/ +
+    // src/authn/ — see validateChannelsIntraPackageBanding, which also pins
+    // the router to the PERIMETER ledger surfaces only). The manifest may
+    // carry `telemetry` — the tests observe the real Bus (the llm/agent
+    // precedent), and `check-deps` counts devDependencies.
+    allowedDeps: new Set([
+      "@openomni/protocol",
+      "@openomni/ipc",
+      "@openomni/policy",
+      "@openomni/ledger",
+      "@openomni/telemetry",
+    ]),
+    // `src/` may not touch telemetry: the band observes through an injected
+    // `BusEvent.Sink` port only. No kernel either way (openomni↔channels = 0).
+    srcAllowedDeps: new Set([
+      "@openomni/protocol",
+      "@openomni/ipc",
+      "@openomni/policy",
+      "@openomni/ledger",
+    ]),
   },
   server: {
     displayName: "server",
@@ -329,34 +344,128 @@ async function validateSourceImportDirection(): Promise<string[]> {
 }
 
 const CHANNELS_SRC_PREFIX = "packages/channels/src/";
-const CHANNELS_JUDGMENT_PREFIX = "packages/channels/src/authn/";
-const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy"]);
+const CHANNELS_ROUTER_PREFIX = "packages/channels/src/router/";
+const CHANNELS_JUDGMENT_PREFIXES = [
+  CHANNELS_ROUTER_PREFIX,
+  "packages/channels/src/authn/",
+] as const;
+const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledger"]);
+
+/**
+ * The perimeter store surfaces the gateway router may name from
+ * @openomni/ledger (docs/gateway-design.md §4/§6): actors, blacklist,
+ * channel grants, waits, the surface↔session map, the frozen pending-*
+ * stores, and the Storage entry whose scoped ledger append records
+ * route.decided. Brain surfaces (Session, WorkItem*, transcript, artifact,
+ * worker-run/grant, effect, …) are NOT reachable from the router — the
+ * gateway selects sessions but never reads or writes session content (S1),
+ * and domain isolation inside the one DB is by store surface (S2).
+ */
+const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
+  "ActorRegistry",
+  "BlacklistStore",
+  "ChannelGrantStore",
+  "WaitStore",
+  "SurfaceKey",
+  "PendingAskStore",
+  "PendingInteractionStore",
+  "Storage",
+]);
+
+function isChannelsJudgmentPath(filePath: string): boolean {
+  return CHANNELS_JUDGMENT_PREFIXES.some((prefix) => filePath.startsWith(prefix));
+}
 
 /**
  * S8 intra-package banding for the channels gateway (docs/gateway-design.md
- * §7 S8, stage-1 deliverable of #551). The package-level whitelist admits
- * @openomni/policy, but only the perimeter JUDGMENT sites under `src/authn/`
- * may use it — the driver sub-band (discord/, github/, telegram/, support/,
- * websocket.ts) stays on the dumb-driver contract {protocol, ipc}.
- *
- * S8's full text ("drivers/ may not import router/ or store surfaces") names
- * bands that do not exist at stage 1: there is no `router/` and no store
- * surface in the package yet, and drivers legitimately invoke the authn
- * middleware today (surface.ts → ../channel-authn → authn/) — that edge IS
- * the stage-2 seam, cut when authn is promoted to the router band (#707).
- * TODO(stage 2): when `router/` and the gateway store surfaces move in,
- * extend this check to forbid driver→router and driver→store relative edges.
+ * §7 S8; stage-2 shape, #707). The package-level whitelist admits
+ * @openomni/policy and @openomni/ledger, but only the perimeter JUDGMENT
+ * band — `src/router/` (routing, wait service, send kernel) and `src/authn/`
+ * (channel authn) — may use them. The driver sub-band (discord/, github/,
+ * telegram/, support/, websocket.ts, channel-authn.ts) stays on the
+ * dumb-driver contract {protocol, ipc}: adding a platform = one driver file
+ * + one server registration line, zero security review of the router.
  */
 function isChannelsBandingViolation(filePath: string, dep: string): boolean {
   if (!filePath.startsWith(CHANNELS_SRC_PREFIX)) return false;
   if (!CHANNELS_JUDGMENT_ONLY_DEPS.has(dep)) return false;
-  return !filePath.startsWith(CHANNELS_JUDGMENT_PREFIX);
+  return !isChannelsJudgmentPath(filePath);
+}
+
+/**
+ * S8 driver→router edge ban (#707): a file outside the judgment band may not
+ * relative-import anything under `src/router/` — the router is reached only
+ * through the composition root's injected ports, never laterally from a
+ * driver. (`src/authn/` stays importable: channel-authn.ts is the drivers'
+ * authn entry and predates the router band.)
+ */
+function isChannelsDriverRouterEdge(filePath: string, importPath: string): boolean {
+  if (!filePath.startsWith(CHANNELS_SRC_PREFIX)) return false;
+  if (isChannelsJudgmentPath(filePath)) return false;
+  // The package barrel is the composition root's export surface, not a
+  // driver — it is how apps/server reaches createGatewayRouter at all.
+  if (filePath === "packages/channels/src/index.ts") return false;
+  if (!importPath.startsWith(".")) return false;
+  const baseDir = filePath.split("/").slice(0, -1);
+  const segments = [...baseDir];
+  for (const segment of importPath.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.join("/").startsWith(CHANNELS_ROUTER_PREFIX);
+}
+
+/**
+ * S8 router↔ledger surface pin (#707): a judgment-band file importing
+ * @openomni/ledger may name ONLY the perimeter surfaces. Namespace/default
+ * imports are refused outright — they would reach every brain surface the
+ * named-import scan pins out.
+ */
+function channelsRouterLedgerViolations(filePath: string, source: string): string[] {
+  if (!isChannelsJudgmentPath(filePath)) return [];
+  const violations: string[] = [];
+  const namedPattern = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@openomni\/ledger["']/g;
+  const broadPattern =
+    /import\s+(?:type\s+)?(?:\*\s+as\s+\w+|\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']@openomni\/ledger["']/g;
+  for (const match of source.matchAll(namedPattern)) {
+    const names = (match[1] ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .map(
+        (entry) =>
+          entry
+            .replace(/^type\s+/, "")
+            .split(/\s+as\s+/)[0]
+            ?.trim() ?? "",
+      );
+    for (const name of names) {
+      if (name.length > 0 && !CHANNELS_ROUTER_LEDGER_SURFACES.has(name)) {
+        const line = lineNumberForOffset(source, match.index);
+        violations.push(
+          `VIOLATION: ${filePath}:${line} imports ledger surface ${name} — S8: the gateway router may name only the perimeter store surfaces (${[...CHANNELS_ROUTER_LEDGER_SURFACES].join(", ")}), never brain surfaces`,
+        );
+      }
+    }
+  }
+  for (const match of source.matchAll(broadPattern)) {
+    const line = lineNumberForOffset(source, match.index);
+    violations.push(
+      `VIOLATION: ${filePath}:${line} uses a namespace/default import of @openomni/ledger — S8: the gateway router must name the perimeter surfaces explicitly`,
+    );
+  }
+  return violations;
 }
 
 async function validateChannelsIntraPackageBanding(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern =
     /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
+  const relativeImportPattern = /(?:from\s+|import\s+|import\s*\(\s*)["'](\.{1,2}\/[^"']*)["']/g;
   const sourceGlob = new Glob(`${CHANNELS_SRC_PREFIX}**/*.ts`);
 
   for await (const filePath of sourceGlob.scan({
@@ -376,10 +485,20 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
       if (dep && isChannelsBandingViolation(filePath, dep)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
-          `VIOLATION: ${filePath}:${line} imports ${dep} — S8 banding: only channels src/authn/ (perimeter judgment) may import the policy engine; drivers stay on {protocol, ipc}`,
+          `VIOLATION: ${filePath}:${line} imports ${dep} — S8 banding: only the channels judgment band (src/router/, src/authn/) may import the policy engine or the ledger; drivers stay on {protocol, ipc}`,
         );
       }
     }
+    for (const match of source.matchAll(relativeImportPattern)) {
+      const importPath = match[1];
+      if (importPath && isChannelsDriverRouterEdge(filePath, importPath)) {
+        const line = lineNumberForOffset(source, match.index);
+        violations.push(
+          `VIOLATION: ${filePath}:${line} imports ${importPath} — S8 banding: drivers may not reach into src/router/; the router is wired only through the composition root's injected ports`,
+        );
+      }
+    }
+    violations.push(...channelsRouterLedgerViolations(filePath, source));
   }
 
   return violations;
@@ -684,6 +803,82 @@ function selfTest(): void {
     [
       "S8: the banding rule scopes to the channels package only",
       !isChannelsBandingViolation("packages/openomni/src/ingress/engine.ts", "@openomni/policy"),
+    ],
+    [
+      "S8: a channels driver may not import the ledger",
+      isChannelsBandingViolation("packages/channels/src/telegram/surface.ts", "@openomni/ledger"),
+    ],
+    [
+      "S8: the gateway router may import the ledger",
+      !isChannelsBandingViolation(
+        "packages/channels/src/router/routing-resolution.ts",
+        "@openomni/ledger",
+      ),
+    ],
+    [
+      "S8: the gateway router may import the policy engine",
+      !isChannelsBandingViolation("packages/channels/src/router/authority.ts", "@openomni/policy"),
+    ],
+    [
+      "S8: a driver may not relative-import into src/router/",
+      isChannelsDriverRouterEdge("packages/channels/src/discord/surface.ts", "../router/index.js"),
+    ],
+    [
+      "S8: channel-authn (driver band) may not reach the router",
+      isChannelsDriverRouterEdge(
+        "packages/channels/src/channel-authn.ts",
+        "./router/routing-resolution.js",
+      ),
+    ],
+    [
+      "S8: the package barrel may export the router (composition surface)",
+      !isChannelsDriverRouterEdge("packages/channels/src/index.ts", "./router/index.js"),
+    ],
+    [
+      "S8: router-internal relative imports stay legal",
+      !isChannelsDriverRouterEdge(
+        "packages/channels/src/router/routing-execution.ts",
+        "./wait/index.js",
+      ),
+    ],
+    [
+      "S8: drivers may still import the authn judgment entry",
+      !isChannelsDriverRouterEdge("packages/channels/src/channel-authn.ts", "./authn/github.js"),
+    ],
+    [
+      "S8: the router may name a perimeter ledger surface",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/wait/lifecycle.ts",
+        'import { WaitStore } from "@openomni/ledger";',
+      ).length === 0,
+    ],
+    [
+      "S8: the router may not name a brain ledger surface",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/routing-resolution.ts",
+        'import { Session, SurfaceKey } from "@openomni/ledger";',
+      ).length === 1,
+    ],
+    [
+      "S8: a type-only brain-surface import is still pinned",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/authority.ts",
+        'import type { WorkItemStore } from "@openomni/ledger";',
+      ).length === 1,
+    ],
+    [
+      "S8: a namespace ledger import cannot bypass the surface pin",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/actor-resolver.ts",
+        'import * as Ledger from "@openomni/ledger";',
+      ).length === 1,
+    ],
+    [
+      "S8: the ledger surface pin scopes to the judgment band",
+      channelsRouterLedgerViolations(
+        "packages/openomni/src/ingress/engine.ts",
+        'import { Session } from "@openomni/ledger";',
+      ).length === 0,
     ],
   ];
 

@@ -32,9 +32,11 @@ export interface ChannelSetup {
 export function createChannelAdapters(
   config: ServerConfig,
   routingHandler: Channel.MessageHandler | undefined,
+  // #707: the gateway router closes over this map at construction (send-time
+  // lookup), so the composition root creates it and the adapters fill it.
+  deliveryRoutes: Map<string, ChannelDeliveryRoute> = new Map(),
 ): ChannelSetup {
   const channels: Surface[] = [];
-  const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
   let wsHandler: WebSocketHandler | undefined;
   let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
   // Composition-root binding: channel adapters observe through an injected

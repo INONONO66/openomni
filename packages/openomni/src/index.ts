@@ -1,15 +1,11 @@
-// Ingress
-export {
-  CronAdapter,
-  createIngressEngine,
-  IngressAuthorityMiddleware,
-  SessionBridge,
-} from "./ingress";
+// Ingress (brain plane after #707: Deliver consumer + internal path; the
+// perimeter router lives in @openomni/channels)
+export { CronAdapter, createBrainEngine, SessionBridge } from "./ingress";
 export type {
   AgentResolver,
+  BrainEngine,
+  BrainEngineDeps,
   CoordinatorLike,
-  IngressEngine,
-  IngressEngineDeps,
 } from "./ingress";
 
 // Resident activation/runtime
@@ -29,10 +25,6 @@ export type {
   ResidentPromptSections,
   ResidentPromptVariant,
 } from "./agents";
-
-// Kernel wait service (#215): the durable Wait entry (open / attach / sweep)
-// plus the sync-ask audit. Correlation and matching stay kernel-internal.
-export { WaitService } from "./wait";
 
 // Kernel effect service (#492): the effect driver port, manifest boundary,
 // record-before-act service, and finish reconciler over the `effect:<id>`

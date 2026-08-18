@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createIngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
+import { createBrainEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
+import { createGatewayRouter } from "@openomni/channels";
 import { ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import type { Execution, Ingress, Tool } from "@openomni/protocol";
+import type { Execution, Gateway, Tool } from "@openomni/protocol";
 import {
   createExecutionCoordinator,
   type WorkerManagerFactory,
@@ -57,7 +58,7 @@ beforeEach(() => {
   });
 });
 
-function makeDirectEvent(): Ingress.DirectEvent {
+function makeDirectEvent(): Gateway.DeliveredEvent {
   return {
     id: crypto.randomUUID(),
     traceId: "trace-test",
@@ -66,10 +67,6 @@ function makeDirectEvent(): Ingress.DirectEvent {
     payload: "hello",
     target: { kind: "worker" },
     meta: { actor: { role: "user" }, target: { kind: "worker" } },
-    agent: {
-      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-      tools: [],
-    },
   };
 }
 
@@ -237,7 +234,16 @@ describe("concurrent sessions with tools", () => {
       },
     };
 
-    const engine = createIngressEngine({ coordinator: mockCoordinator });
+    // #707 stage 2: router + brain composed over the Deliver seam; the
+    // AgentDef the old fixture embedded now comes from the injected resolver.
+    const brain = createBrainEngine({
+      coordinator: mockCoordinator,
+      externalAgentResolver: async () => ({
+        model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+        tools: [],
+      }),
+    });
+    const engine = createGatewayRouter({ sink: Bus.publish, deliver: brain.deliver });
 
     const results = await Promise.all([
       engine.ingest(makeDirectEvent()),

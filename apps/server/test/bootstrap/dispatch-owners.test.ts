@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command, Wait, type AppConnector, type Execution } from "@openomni/protocol";
-import { createIngressEngine, type DispatchOwners } from "@openomni/openomni";
+import { createBrainEngine, type DispatchOwners } from "@openomni/openomni";
 import { PendingAskStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
@@ -199,7 +199,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: residentRuntime(),
-      ingress: createIngressEngine(),
+      ingress: createBrainEngine(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
 
@@ -231,7 +231,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: residentRuntime(),
-      ingress: createIngressEngine(),
+      ingress: createBrainEngine(),
       credentials: {
         FAKE_API_KEY: "server-secret",
         UNGRANTED_API_KEY: "must-not-leak",
@@ -295,7 +295,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: residentRuntime(residentCalls),
-      ingress: createIngressEngine(),
+      ingress: createBrainEngine(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
     const runtime = owners.connectorEndpointDriver;
@@ -379,7 +379,7 @@ describe("createServerDispatchOwners", () => {
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
       residentRuntime: failingResidentRuntime(),
-      ingress: createIngressEngine(),
+      ingress: createBrainEngine(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
     const runtime = owners.connectorEndpointDriver;

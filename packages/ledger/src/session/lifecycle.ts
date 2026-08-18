@@ -71,6 +71,36 @@ export function createChild(input: CreateChildInput): SessionInfo {
   return child;
 }
 
+/**
+ * Lazy materialization for a gateway-minted session id (#707 stage 2): the
+ * router mints the sessionId and claims the surface↔session map BEFORE
+ * deliver (record-before-act, perimeter domain); the brain materializes the
+ * session row on first Deliver. Idempotent create-if-absent — a re-delivery
+ * after a crash between claim and deliver converges here.
+ */
+export function materialize(input: CreateInput & { id: string }): {
+  session: SessionInfo;
+  created: boolean;
+} {
+  const existing = get(input.id);
+  if (existing !== undefined) return { session: existing, created: false };
+  const now = Date.now();
+  const session: SessionInfo = {
+    id: input.id,
+    title: input.title,
+    model: input.model,
+    time: {
+      created: now,
+      updated: now,
+    },
+    spawnDepth: 0,
+    ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
+  };
+  Storage.getAdapter().session.set(input.id, session);
+  Bus.publish(Event.Created, { traceId: input.traceId, info: session });
+  return { session, created: true };
+}
+
 function isExpired(session: SessionInfo, now: number): boolean {
   return session.expiresAt !== undefined && now > session.expiresAt;
 }

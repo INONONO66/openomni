@@ -1,25 +1,27 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Channel, Ingress } from "@openomni/protocol";
+import type { Gateway, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { initialize, BusPersistence } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import {
   AgentToolProvider,
+  createBrainEngine,
   createDefaultDispatchRuntime,
-  createIngressEngine,
   CronAdapter,
   CronJobRunner,
   ResidentRuntime,
   SystemToolProvider,
+  type BrainEngine,
   type DispatchRuntime,
-  type IngressEngine,
 } from "@openomni/openomni";
+import { createGatewayRouter, type ChannelDeliveryRoute } from "@openomni/channels";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/mcp-config";
 import { createMessageHandler } from "../handler/conversation";
-import { buildAgentDef } from "../ingress/bridge";
+import { resolveRuntimeModel } from "../agents/model-resolution";
+import { buildAgentDef, buildResidentAgentDef } from "../ingress/bridge";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
@@ -35,26 +37,6 @@ import { installShutdownHandlers } from "./shutdown";
 import { registerAgent } from "../agents";
 import { createResidentProfile } from "../profile/resident";
 import { assembleBootstrap } from "./worker-bootstrap";
-
-function createRoutingHandler(
-  systemProvider: SystemToolProvider,
-  agentProvider: AgentToolProvider,
-  mcpProvider: McpToolProvider,
-  ingress: Pick<IngressEngine, "ingest">,
-  workspaceRoot: string,
-  defaultModel?: { provider: string; id: string },
-  customProvider?: CustomToolProvider,
-): Channel.MessageHandler {
-  return createMessageHandler({
-    systemProvider,
-    agentProvider,
-    mcpProvider,
-    customProvider,
-    defaultModel,
-    workspaceRoot,
-    ingress,
-  });
-}
 
 export interface MainOptions {
   /**
@@ -165,12 +147,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
         workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
       }),
   };
-  // The ingress engine and the dispatch runtime reference each other at
+  // The brain engine and the dispatch runtime reference each other at
   // command time (resident.ask executes through the engine; the engine
-  // executes wait routes through the runtime), so the dispatch side receives
-  // the engine through the same fail-closed ref seam as the runtime above.
-  const ingressEngineRef: { current?: IngressEngine } = {};
-  const requireIngressEngine = (): IngressEngine => {
+  // executes pending-interaction deliveries through the runtime), so the
+  // dispatch side receives the engine through the same fail-closed ref seam
+  // as the runtime above.
+  const ingressEngineRef: { current?: BrainEngine } = {};
+  const requireIngressEngine = (): BrainEngine => {
     if (!ingressEngineRef.current) throw new Error("ingress engine is not configured");
     return ingressEngineRef.current;
   };
@@ -192,25 +175,51 @@ export async function main(options: MainOptions = {}): Promise<void> {
     dispatchRuntime: sharedDispatchRuntime,
   });
   dispatchRuntimeRef.current = sharedDispatchRuntime;
-  const ingressEngine = createIngressEngine({
+  // #707: the brain's Deliver consumer resolves the resident AgentDef itself —
+  // the SAME construction the channel bridge used to embed per message
+  // (buildResidentAgentDef + per-message runtime model resolution), relocated
+  // behind the injected resolver.
+  const externalAgentResolver = model
+    ? async (event: Gateway.DeliveredEvent): Promise<Ingress.AgentDef> => {
+        const defaultModel = { provider: model.providerID, id: model.id };
+        const agentDef = buildResidentAgentDef({
+          systemProvider,
+          agentProvider: requireAgentProvider(),
+          mcpProvider,
+          customProvider,
+          defaultModel,
+          providerOptions: config.model?.providerOptions,
+          workspaceRoot: config.workspace?.root ?? process.cwd(),
+        });
+        agentDef.model = await resolveRuntimeModel(agentDef.model, event.traceId, defaultModel);
+        return agentDef;
+      }
+    : undefined;
+  const ingressEngine = createBrainEngine({
     coordinator,
     residentRuntime,
     agentResolver: residentAgentResolver,
     dispatchRuntime: sharedDispatchRuntime,
+    ...(externalAgentResolver === undefined ? {} : { externalAgentResolver }),
   });
   ingressEngineRef.current = ingressEngine;
 
-  const routingHandler = model
-    ? createRoutingHandler(
-        systemProvider,
-        requireAgentProvider(),
-        mcpProvider,
-        ingressEngine,
-        config.workspace?.root ?? process.cwd(),
-        { provider: model.providerID, id: model.id },
-        customProvider,
-      )
-    : undefined;
+  // Gateway router (#707 stage 2): perimeter routing + wait service + the
+  // #215 send kernel live in @openomni/channels; apps/server only composes.
+  // The delivery-route map is created here and populated by the channel
+  // adapters below — the router reads it at send time, so sends before any
+  // adapter registers keep the same fail-closed missing-surface error.
+  const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
+  const gatewayRouter = createGatewayRouter({
+    sink: Bus.publish,
+    deliver: ingressEngine.deliver,
+    messaging: {
+      deliveryRoutes,
+      grants: () => config.messaging.grants,
+    },
+  });
+
+  const routingHandler = model ? createMessageHandler({ ingress: gatewayRouter }) : undefined;
 
   if (model) {
     Bus.publish(Operational.Events.Info, {
@@ -228,17 +237,20 @@ export async function main(options: MainOptions = {}): Promise<void> {
     });
   }
 
-  const { channels, wsHandler, githubWebhookHandler, deliveryRoutes } = createChannelAdapters(
+  const { channels, wsHandler, githubWebhookHandler } = createChannelAdapters(
     config,
     routingHandler,
-  );
-  // Existing-agent messaging (#215): the concrete channel delivery owner is
-  // composed here, behind the kernel's injected-owner fail-closed seam.
-  // Grants default to the empty list — granting requires explicit
-  // `messaging.grants` configuration.
-  registerServerMessaging({
     deliveryRoutes,
-    grants: config.messaging.grants,
+  );
+  // Existing-agent messaging (#215, kernel in the gateway router since #707):
+  // the router composed the send kernel over the delivery-route map above;
+  // this registers it as the server's fail-closed send seam. Grants default
+  // to the empty list — granting requires explicit `messaging.grants`
+  // configuration.
+  registerServerMessaging({
+    messaging: gatewayRouter.messaging,
+    channels: [...deliveryRoutes.keys()],
+    grantsConfigured: config.messaging.grants.length,
     traceId: bootTraceId,
   });
 

@@ -79,7 +79,10 @@ export function responderCandidates(
 
 /** Ingress evidence extension: resolved-actor endpoint proof with the direct-mode userId fallback. */
 export function ingressEvidence(
-  event: Ingress.InboundEvent,
+  // Structural pick (#707 stage 2): the gateway router matches evidence on
+  // the routed event BEFORE the brain-owned AgentDef exists, so the full
+  // DirectEvent (which requires `agent`) is deliberately not demanded here.
+  event: Pick<Ingress.InboundEvent, "mode" | "surface" | "userId" | "meta">,
   correlation: Correlation,
 ): SenderEvidence {
   const actor = event.meta?.actor;

@@ -283,6 +283,39 @@ inventory above:
   surface) — zero production writers exist today for
   actor/blacklist/channel-grant rows (vacuous sole-writer, recorded).
 
+Landed at #707 slice 2 (the seam flip) — measured deltas against the
+inventory above:
+
+- **`Gateway.Deliver` evolved to its measured shape**: `sessionId` and
+  `actorContext` became optional (worker-target deliveries are label-less —
+  work placement is brain judgment §8.5; wait/pending resumptions carry no
+  tier verdict — admission is the correlation itself), and the contract
+  gained `event` (the routed driver event minus the brain-owned AgentDef)
+  plus `decision` (the recorded route.decided fact this delivery executes).
+  The brain parses all three at the seam and resolves the resident AgentDef
+  itself through an injected resolver — brain material no longer rides the
+  perimeter event.
+- **surface_key lost its FK into session(id)** (migration 0019): the FK was
+  a §4-forbidden cross-domain invariant that made claim-before-deliver
+  physically impossible. Row values unchanged; a map entry whose session row
+  expired now converges by re-materialization instead of cascade deletion.
+- **Internal-mode residue**: the brain keeps the resident surface-session
+  claim loop for internal events (cron stickiness) — a recorded brain-side
+  write on a perimeter surface, scoped to a mode that never crosses the
+  perimeter. Internal wait correlation is retired (structurally dead:
+  fresh UUIDs cannot match frozen externalMessageIds; no production internal
+  event carries a correlation envelope) — the `wait:none` fact is now a
+  structural truth on that path.
+- **Dispatch keeps a frozen-correlation slice**: pending-interaction reply
+  routing in `dispatch/` re-reads the frozen stores via ledger with the
+  wait-tier shadow preserved (recorded residue; the canonical lookup is the
+  router's).
+- **channels test tier carries telemetry** (manifest devDependency, the
+  llm/agent precedent): ledger internals publish to the real Bus and the
+  moved suites observe it; `src/**` stays sink-injected and machine-checked.
+- **messaging.sent/denied descriptors are protocol vocabulary** (the router
+  band defines no zod schemas); names byte-frozen.
+
 Perimeter stores do NOT move to channels (§4 SSOT): `actor/`, `blacklist/`,
 `channel-grant/`, `wait/` store, `surface-key/`, `pending-ask/`,
 `pending-interaction/` stay hosted in `@openomni/ledger` (#502). What changes:

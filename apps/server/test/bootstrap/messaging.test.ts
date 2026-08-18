@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createGatewayRouter, type ChannelDeliveryRoute } from "@openomni/channels";
+import type { Gateway } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { registerServerMessaging, serverMessaging } from "../../src/bootstrap/messaging";
-import type { ChannelDeliveryRoute } from "../../src/bootstrap/messaging";
 
 const now = 5_000_000_000_000;
 
@@ -24,6 +25,28 @@ function registerTarget(channel: string): void {
   });
 }
 
+// #707: the send kernel lives in the gateway router — apps/server composes it
+// over the channel delivery routes + configured grants and registers the
+// router's messaging surface as its fail-closed send seam.
+function composeAndRegister(
+  deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>,
+  grants: readonly Gateway.SenderTargetGrant[],
+): void {
+  const router = createGatewayRouter({
+    sink: Bus.publish,
+    deliver: async () => {
+      throw new Error("unused");
+    },
+    messaging: { deliveryRoutes, grants: () => grants },
+  });
+  registerServerMessaging({
+    messaging: router.messaging,
+    channels: [...deliveryRoutes.keys()],
+    grantsConfigured: grants.length,
+    traceId: "trace-test",
+  });
+}
+
 beforeEach(() => {
   Bus.reset();
   Storage.reset();
@@ -38,7 +61,7 @@ afterEach(() => {
 describe("server messaging bootstrap wiring", () => {
   test("grants default empty: a send through the registered seam is denied ungranted", async () => {
     registerTarget("telegram");
-    registerServerMessaging({ deliveryRoutes: new Map(), grants: [], traceId: "trace-test" });
+    composeAndRegister(new Map(), []);
 
     const receipt = await serverMessaging().send({
       messageId: "message:unconfigured",
@@ -62,18 +85,14 @@ describe("server messaging bootstrap wiring", () => {
       delivered.push({ externalId, body });
       return { externalMessageId: "tg:9001" };
     };
-    registerServerMessaging({
-      traceId: "trace-test",
-      deliveryRoutes: new Map([["telegram", telegramRoute]]),
-      grants: [
-        {
-          id: "grant:sender->target",
-          senderId: "actor:sender",
-          targetActorId: "actor:target",
-          operations: ["awaited"],
-        },
-      ],
-    });
+    composeAndRegister(new Map([["telegram", telegramRoute]]), [
+      {
+        id: "grant:sender->target",
+        senderId: "actor:sender",
+        targetActorId: "actor:target",
+        operations: ["awaited"],
+      },
+    ]);
 
     const receipt = await serverMessaging().send({
       messageId: "message:awaited",
@@ -105,18 +124,14 @@ describe("server messaging bootstrap wiring", () => {
 
   test("a resolved endpoint on a channel without a registered route fails closed", async () => {
     registerTarget("github");
-    registerServerMessaging({
-      traceId: "trace-test",
-      deliveryRoutes: new Map(),
-      grants: [
-        {
-          id: "grant:sender->target",
-          senderId: "actor:sender",
-          targetActorId: "actor:target",
-          operations: ["fire_and_forget"],
-        },
-      ],
-    });
+    composeAndRegister(new Map(), [
+      {
+        id: "grant:sender->target",
+        senderId: "actor:sender",
+        targetActorId: "actor:target",
+        operations: ["fire_and_forget"],
+      },
+    ]);
 
     await expect(
       serverMessaging().send({
@@ -129,5 +144,23 @@ describe("server messaging bootstrap wiring", () => {
         traceId: "trace-test",
       }),
     ).rejects.toThrow("no registered channel surface delivers github");
+  });
+
+  test("registration publishes the delivery-owner receipt with channels and grant count", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    Bus.observe((event, payload) => {
+      if (event.name === "operational.info") {
+        payloads.push(payload as Record<string, unknown>);
+      }
+    });
+
+    composeAndRegister(new Map([["telegram", async () => ({ externalMessageId: "tg:1" })]]), []);
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+    const receipt = payloads.find(
+      (payload) => payload.msg === "existing-agent messaging delivery owner registered",
+    );
+    expect(receipt).toBeDefined();
+    expect(receipt?.context).toEqual({ channels: ["telegram"], grantsConfigured: 0 });
   });
 });

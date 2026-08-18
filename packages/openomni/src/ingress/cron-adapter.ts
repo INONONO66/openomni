@@ -1,5 +1,5 @@
 import type { Ingress } from "@openomni/protocol";
-import type { IngressEngine } from "./engine.js";
+import type { BrainEngine } from "./engine.js";
 
 export namespace CronAdapter {
   export interface CronJob {
@@ -12,7 +12,7 @@ export namespace CronAdapter {
 
   export function fire(
     job: CronJob,
-    engine: Pick<IngressEngine, "ingestInternal">,
+    engine: Pick<BrainEngine, "ingestInternal">,
     traceId: string,
   ): Promise<Ingress.IngressResult> {
     return engine.ingestInternal({

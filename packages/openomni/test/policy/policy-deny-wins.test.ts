@@ -4,9 +4,13 @@ import {
   type CanonicalPolicyRegistration,
   type PolicyContext,
 } from "@openomni/agent";
-import { PolicyDecision, type Ingress, type Policy } from "@openomni/protocol";
+import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
-import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
+
+// #707 seam flip: the ingress arm of this suite (IngressAuthorityMiddleware
+// deny aborting the pipeline) moved with the middleware to
+// packages/channels/test/router/policy-deny-wins.test.ts. The brain-side
+// arms (policy engine composition, worker middleware) stay here.
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
@@ -25,29 +29,6 @@ function baseCtx(overrides?: Partial<PreDispatchContext>): PreDispatchContext {
     ...overrides,
   };
 }
-
-function makeInboundEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
-  return {
-    id: "evt-1",
-    traceId: "trace-test",
-    surface: "test",
-    mode: "direct",
-    agent: {
-      model: { provider: "test", id: "test-model" },
-    },
-    ...overrides,
-  } as Ingress.InboundEvent;
-}
-
-const stubCoordinator = {
-  dispatch: async () => ({
-    runId: "run-stub",
-    sessionId: "session-stub",
-    status: "succeeded" as const,
-    output: "ok",
-    finishReason: "stop",
-  }),
-};
 
 describe("cross-middleware deny-wins", () => {
   test("deny-wins across policy engine boundaries with mixed verdicts", async () => {
@@ -114,18 +95,5 @@ describe("cross-middleware deny-wins", () => {
 
     expect(verdict.verdict).toBe("deny");
     expect(PolicyDecision.reason(verdict)).toBe("allowlist_miss");
-  });
-
-  test("ingress deny blocks entire pipeline regardless of downstream allowances", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "sub_persona" } },
-    });
-
-    await expect(
-      IngressAuthorityMiddleware.runRoutedPreRun({
-        event,
-        coordinator: stubCoordinator,
-      }),
-    ).rejects.toThrow("actor is not authorized to create top-level inbound work");
   });
 });

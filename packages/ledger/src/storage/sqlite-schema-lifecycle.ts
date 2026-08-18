@@ -23,6 +23,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0016_work_item_worker_run_index/migration.sql" },
   { name: "0017_drop_dead_tables/migration.sql" },
   { name: "0018_drop_actor_relationship/migration.sql" },
+  { name: "0019_surface_key_perimeter/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

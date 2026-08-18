@@ -3,7 +3,7 @@ import type { ChatAgentConfig, ChatAgentInput } from "@openomni/agent";
 import { Wait } from "@openomni/protocol";
 import { PendingAskStore, Session, Storage, SurfaceKey, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import { createIngressEngine } from "../../src/ingress/engine";
+import { createBrainEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
@@ -108,7 +108,7 @@ describe("built-in dispatch handlers", () => {
         return { text: "answer", finishReason: "stop" };
       },
     });
-    const ingressEngine = createIngressEngine({
+    const ingressEngine = createBrainEngine({
       residentRuntime,
       agentResolver: {
         async resolve(_agentName, event) {

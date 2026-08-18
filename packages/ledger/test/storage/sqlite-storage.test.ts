@@ -668,13 +668,17 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.part.list("m1")).toEqual([]);
     });
 
-    test("deleting session cascades to surface_key", () => {
+    test("deleting session does NOT cascade to surface_key (perimeter domain, #707)", () => {
+      // Migration 0019 dropped the surface_key→session FK: the map is a
+      // gateway-domain surface (docs/gateway-design.md §4) and a session-row
+      // removal may not mutate it behind the gateway's back. The surviving
+      // entry converges by brain-side re-materialization on the next Deliver.
       adapter.session.set("s1", makeSession("s1"));
       adapter.surfaceKey?.claim("channel:123", "s1");
 
       adapter.session.remove("s1");
 
-      expect(adapter.surfaceKey?.lookup("channel:123")).toBeUndefined();
+      expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s1");
     });
 
     test("deleting session cascades to artifact", () => {
