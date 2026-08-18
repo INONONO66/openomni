@@ -1,0 +1,78 @@
+# Compaction & Context Window Design
+
+Last verified against `origin/main`: 2026-08-18. Design target document; [`docs/implementation-status.md`](implementation-status.md) alone says what is wired. Supersedes the two open Phase 3 rows in [`docs/agent-core-rewrite.md`](agent-core-rewrite.md) ("cut planning, incremental summarization" and "speculative overlap (D8)") — those rows now resolve here.
+
+## Outcome
+
+The context window stops being managed state and becomes an **issued view over the ledger**: compaction never destroys information (everything elided or cut remains addressable in the ledger), user messages survive every compression byte-identical, summarization maintains one persistent structured anchor instead of regenerating prose, and the expensive summary work runs speculatively in the background so the apply seam almost never waits on a model call. Resume becomes projection recomputation, dissolving the class of defects behind [#702](https://github.com/INONONO66/openomni/issues/702).
+
+## Principles
+
+1. **The ledger is the record; the window is a consumable projection.** Nothing is deleted by compaction — the window drops content only by replacing it with something addressable (a recall pointer, a compaction record, an anchor version). Every shipping-at-scale runtime surveyed (opencode, pi, Amp, Letta, Zep, Mem0) has converged on this split; none treats the context window as the system of record.
+2. **Asymmetric lossiness: user tokens are lossless, model tokens are compressible.** Assistant narration and tool output are regenerable derivatives; user utterances are irreplaceable intent. The summarizer never receives user messages as input. User text survives compaction verbatim (recent, budgeted) or as verbatim quotation inside the anchor — never paraphrased. A guard checks byte-identity after every apply.
+3. **Structure forces preservation.** Freeform summaries silently drop constraints (measured: 14% vs 91% exact-match on constraint questions, summary vs verbatim — arXiv:2601.00821), and summarizer output is largely prompt-invariant, so instructions cannot control what survives (arXiv:2605.23296). The anchor is a sectioned checklist the summarizer must populate or explicitly leave empty, and it is **updated by incremental merge, never regenerated** — regeneration is the recursive-summary drift that OpenAI measured degrading Codex accuracy and that Factory's evaluation (3.70 vs 3.44/3.35 vs Anthropic/OpenAI regenerating approaches) beat with exactly this anchored-merge shape.
+4. **One deterministic apply seam** (D8, unchanged): background work only *computes*; history is rewritten only at `run.completion.pre` via `run.replace_messages`, recorded as an effect. The freshness guard (below) is what makes speculation safe under this rule.
+5. **Deterministic facts are not the summarizer's job.** File/artifact state derives mechanically from the ledger (record-before-act already captures tool effects). Every published compaction evaluation scores artifact tracking 2.19–2.45/5 when delegated to summarization — including Factory's own; senpi routes around it the same way (deterministic `extractFileOpsFromMessage`, carried across compaction generations).
+
+## Prior art adopted
+
+| Source | What we take | Where it lands |
+| --- | --- | --- |
+| pss-runtime `speculative-compaction.ts` | Two-phase prepare (65%) / promote (80%) with **no model call at promote**; freshness guard = prefix snapshot equality; fire-and-forget single-flight scheduling at turn settlement; blocking path only on overflow | L4 |
+| pss-runtime `snapshot.ts` / `loop-overflow.ts` | Immutable history + overlay `ThreadCompactionRecord {startSeq, endSeqExclusive, summary}`; window as projection; provider context-overflow classification → blocking compact → one retry | L3, L5 |
+| senpi `harness/compaction/compaction.ts` | Anchored iterative summarization: `UPDATE` prompt receives `<previous-summary>` and merges only the newly cut span (PRESERVE + ADD + move In-Progress→Done); sectioned template (Goal / Constraints & Preferences / Progress / Key Decisions / Next Steps / Critical Context); cut-point discipline (never split tool pairs; split-turn prefix summarized separately); summary calls cache-isolated (`cacheRetention: "none"`, fresh session) | L2 (template as openomni config) |
+| senpi `CompactionDetails` | Deterministic file-ops extraction carried across compaction generations — but ours derives from the ledger, not from message scans | L6 |
+| Codex CLI (production) | User messages preserved verbatim through compaction (budgeted, most recent first); stale summary messages excluded from re-summarization | L2 |
+| Factory.ai evaluation | Probe-based measurement (recall / artifact / continuation / decision probes, blind judge), **tokens-per-task** as the target metric rather than compression ratio | L7 |
+
+Research corpus and verdicts (hypothesis grades, quantified results, contradicting signals) are recorded in the 2026-08-18 session memory `context-philosophy-research-2026-08`; headline numbers: curated context 91.6% vs full-history 71.0% task completion at 37% of tokens (arXiv:2606.10209); mid-context task collapse up to 88pp with tail re-assertion restoring to ±4pp (arXiv:2605.23170); append-only ID-addressable logs 99.40% vs 88.12% best lossy baseline (arXiv:2607.25066).
+
+## Data model
+
+```
+Ledger (durable, append-only — session store + bus records):
+  messages[]              full history, user text byte-exact
+  compactionRecords[]     { cut range boundaries (message ids), anchorVersion }
+  anchor                  versioned structured summary document
+
+Run memory (volatile):
+  window[]                the projection the model sees
+  candidate               { range, nextAnchor, prefixFingerprint } | none
+```
+
+## Lifecycle
+
+**Turn settlement (`run.turn.post` timing, loop mechanism — not a policy):**
+- measured ≥ prepare ratio (default 0.65 of window) → fire `prepare()` in the background: single-flight per run, linked to the run's AbortSignal, failure = no candidate (recorded skip, never a run error).
+- `prepare()` input = the would-be cut span **minus user messages minus prior summary renders**; the summarizer merges it into the previous anchor (senpi UPDATE contract). Output candidate carries a prefix fingerprint of the history it summarized.
+
+**Apply seam (`run.completion.pre`, threshold ≥ 0.8 or window yield — existing wiring unchanged):**
+1. Elision first (existing `reduce.ts`), markers now carrying recall pointers: `[output elided: N chars — recall: <callID>]`. Enough reclaim → done.
+2. Promote: candidate present and prefix fingerprint still matches → adopt `nextAnchor` with **zero model calls**; stale/absent candidate → synchronous merge (the only blocking summary path left).
+3. Rebuild window = `[anchor render (anchor body + ledger-derived artifact table + current-goal recitation), recent user messages verbatim within budget, protected tail]`.
+4. Record: `run.replace_messages` effect (existing) + CompactionRecord appended to the ledger (new). Guard: every user message in the rebuilt window is byte-identical to its ledger original — violation is a hard finding, not a warning.
+
+**Provider overflow (new):** classify context-length errors (llm package), run the seam blocking (promote if possible), retry the call once; a second overflow ends the run honestly.
+
+**Resume:** load messages + compactionRecords + anchor from the ledger, recompute the projection with the same rebuild function. No window state is carried; #702's class disappears.
+
+## Delta map
+
+| Leaf | Scope | Packages | Depends on |
+| --- | --- | --- | --- |
+| L1 | Elision marker gains recall pointer (`reduce.ts`); `recall_tool_output` tool reads the original from the session store | agent, openomni | — |
+| L2 | `onSummarize(cutSpan, previousAnchor?)` contract; prior-summary and user-message exclusion from summarizer input; `[anchor, verbatim users, tail]` rebuild; senpi-template summarizer injected as openomni config (domain strings stay out of core) | agent, openomni | — |
+| L3 | CompactionRecord in protocol + session persistence; resume rehydration = projection recomputation (#702). Protocol schema growth — `lint:tools` snapshot diff is the Owner sign-off surface | protocol, session, openomni | L2 (anchor version) |
+| L4 | `compaction/speculate.ts`: prepare/promote, single-flight, abort-linked, freshness guard, discard-rate skip events | agent | L2 |
+| L5 | Context-overflow error classification + blocking compact + one retry | llm, agent | — |
+| L6 | Anchor render: ledger-derived artifact table + goal recitation | openomni | L2 |
+| L7 | Byte guard as enforced check + probe evaluation (4 probe types, blind judge, tokens-per-task) on the chaos bench substrate (#704), including the user-verbatim vs uniform A/B no published benchmark has run | agent, conformance/bench | L2–L6 |
+
+What already exists stays: trigger measurement (#644), elision mechanics (#645), default-on registration with honest skips (#649), window yield (#651), the bracket (#701), the seam adapter (`compaction/policy.ts`), and the boundary invariant. The freeform one-shot `onSummarize` path is replaced by L2 **before it acquires production users** — it is opt-in and default-off today, so no migration exists.
+
+## Risks and their guards
+
+- **Speculation waste**: a prepared candidate discarded by the freshness guard is a paid model call. Bounded by: anchor-merge inputs are small (only the new span), cache-isolated calls, and a recorded discard rate — if live data shows waste dominating, the prepare ratio is config.
+- **Anchor poisoning**: a bad merge persists across generations. Countered by the structural template (sections can be wrong but not silently absent), the byte-guarded user quotes, and L7 probes run at merge points in the bench (Slipstream-style validation is a candidate follow-up, not in scope).
+- **Background work in the core loop** (first async side-work in `turn.ts`): pss's shape is the defense — the runtime owns state and commits, the policy/candidate only returns data, application stays at the one seam, and the AbortSignal linkage is run-scoped per the #692 lesson.
+- **Cache economics**: append-only within a phase; history rewrites happen only at the seam (already true) and the anchor render is a stable prefix block. Summary calls never write cache (senpi rule).
