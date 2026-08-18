@@ -6,6 +6,8 @@ Last verified against `origin/main`: 2026-08-18. Design target document; [`docs/
 
 The context window stops being managed state and becomes an **issued view over the ledger**: compaction never destroys information (everything elided or cut remains addressable in the ledger), user messages survive every compression byte-identical, summarization maintains one persistent structured anchor instead of regenerating prose, and the expensive summary work runs speculatively in the background so the apply seam almost never waits on a model call. Resume becomes projection recomputation, dissolving the class of defects behind [#702](https://github.com/INONONO66/openomni/issues/702).
 
+**Supersession note (2026-08-19 Owner ruling):** summarization is enabled by default in production — both hosts wire `createAnchorCompletion` (one-shot, tool-less, run's own model/auth/providerOptions/signal). Supersedes #649's elision-only default; a seam-merge summarizer failure degrades to a recorded skip, never a run kill.
+
 ## Principles
 
 1. **The ledger is the record; the window is a consumable projection.** Nothing is deleted by compaction — the window drops content only by replacing it with something addressable (a recall pointer, a compaction record, an anchor version). Every shipping-at-scale runtime surveyed (opencode, pi, Amp, Letta, Zep, Mem0) has converged on this split; none treats the context window as the system of record.

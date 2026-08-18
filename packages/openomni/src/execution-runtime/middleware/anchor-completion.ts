@@ -16,6 +16,15 @@ export interface AnchorCompletionDeps {
   readonly model: Model.Ref;
   readonly auth?: RunInput["auth"];
   readonly allowAuthFallback?: boolean;
+  /**
+   * The run's own providerOptions (#734 review F2): a model config whose
+   * calls need proxy routing or beta headers must not fail deterministically
+   * on summaries alone — the summary IS the run's call, D7 all the way down.
+   */
+  readonly providerOptions?: Record<string, unknown>;
+  /** The run's abort signal (#734 review F3): a cancelled run cancels its
+   * summary; an in-flight background prepare stops billing at abort. */
+  readonly signal?: AbortSignal;
   readonly trace: { readonly traceId: string; readonly sessionId: string; readonly runId: string };
   readonly events: BusEvent.Sink;
   readonly resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
@@ -42,7 +51,15 @@ export function createAnchorCompletion(
   let resolved: Promise<Provider.Model> | undefined;
   return async (prompt: string): Promise<string> => {
     resolved ??= (deps.resolveProviderModel ?? defaultResolveProviderModel)(deps.model);
-    const providerModel = await resolved;
+    let providerModel: Provider.Model;
+    try {
+      providerModel = await resolved;
+    } catch (error) {
+      // #734 review F5: never cache a rejection — one transient catalog
+      // failure must not poison every later summary in the run.
+      resolved = undefined;
+      throw error;
+    }
 
     const messageId = crypto.randomUUID();
     const message: Message.WithParts = {
@@ -76,6 +93,8 @@ export function createAnchorCompletion(
           ? {}
           : { allowAuthFallback: deps.allowAuthFallback }),
         maxSteps: 1,
+        ...(deps.providerOptions === undefined ? {} : { providerOptions: deps.providerOptions }),
+        ...(deps.signal === undefined ? {} : { signal: deps.signal }),
         trace: { ...deps.trace, runId: `${deps.trace.runId}:anchor-summary` },
         events: deps.events,
       },

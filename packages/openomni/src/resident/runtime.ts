@@ -136,6 +136,10 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
       compaction: {
         summarizeWith: createAnchorCompletion({
           model: ctx.event.agent.model,
+          ...(agent.providerOptions === undefined
+            ? {}
+            : { providerOptions: agent.providerOptions }),
+          ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
           trace: {
             traceId: ctx.traceContext?.traceId ?? "",
             sessionId: ctx.sessionId,

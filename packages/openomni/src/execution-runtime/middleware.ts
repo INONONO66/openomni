@@ -105,7 +105,10 @@ function buildAgentLifecycleMiddleware(
 ): PolicyEngineRegistration[] {
   // Partial configs MERGE over the defaults: a host that only wires a
   // summarizer must not silently lose the elision knobs (and vice versa).
-  const { summarizeWith, ...rest } = { ...DEFAULT_WORKER_COMPACTION, ...(compaction ?? {}) };
+  const provided = Object.fromEntries(
+    Object.entries(compaction ?? {}).filter(([, value]) => value !== undefined),
+  ) as NonNullable<WorkerMiddlewareConfig["compaction"]>;
+  const { summarizeWith, ...rest } = { ...DEFAULT_WORKER_COMPACTION, ...provided };
   const summarizer =
     rest.onSummarize ?? (summarizeWith === undefined ? undefined : anchorSummarizer(summarizeWith));
   return [

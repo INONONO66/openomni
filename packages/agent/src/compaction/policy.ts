@@ -164,6 +164,8 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
       if (result.candidate !== undefined) speculator?.consume();
       const candidateReason =
         result.candidate === undefined ? [] : [`compaction_candidate_${result.candidate}`];
+      const summarizerReason =
+        result.summarizerFailed === true ? ["compaction_summarizer_failed"] : [];
       if (!result.compacted) {
         // The trigger fired and nothing was reclaimed — the one silent path
         // the wiring review found. A full window with no visible reason is
@@ -175,13 +177,14 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
               ? "compaction_skipped_no_boundary"
               : "compaction_skipped_nothing_reclaimed",
             ...candidateReason,
+            ...summarizerReason,
           ],
         });
       }
 
       return PolicyDecision.allow({
         policyId: "builtin.compaction",
-        reasonCodes: ["compaction_threshold_exceeded", ...candidateReason],
+        reasonCodes: ["compaction_threshold_exceeded", ...candidateReason, ...summarizerReason],
         effects: [{ type: "run.replace_messages", messages: result.messages }],
       });
     },

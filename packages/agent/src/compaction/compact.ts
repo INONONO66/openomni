@@ -55,6 +55,8 @@ interface CompactionResult {
   removedCount: number;
   /** L4: what happened to the speculative candidate, when one was offered. */
   candidate?: "promoted" | "discarded";
+  /** #734 F1: the synchronous merge failed; the cut degraded, the run lives. */
+  summarizerFailed?: boolean;
   /** Set when the trigger fired but no provider-valid cut exists: no summary
    * anchor and no user boundary at or before the cutoff. The caller records
    * it; killing the run over housekeeping would be worse than a full window. */
@@ -126,6 +128,7 @@ export namespace Compaction {
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
       elidedChars: number,
       anchored?: boolean,
+      summarizerError?: Error,
     ): CompactionResult => {
       events.publish(RunEvents.CompactionCompleted, {
         ...identity,
@@ -136,6 +139,7 @@ export namespace Compaction {
         removedCount: result.removedCount,
         elidedChars,
         ...(anchored === undefined ? {} : { anchored }),
+        ...(summarizerError === undefined ? {} : { error: summarizerError.message }),
       });
       return result;
     };
@@ -176,6 +180,7 @@ export namespace Compaction {
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
       elidedChars: number,
       anchored?: boolean,
+      summarizerError?: Error,
     ) => CompactionResult,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
@@ -291,8 +296,21 @@ export namespace Compaction {
         );
         let anchorText = precomputed ?? previousAnchor;
         if (precomputed === undefined && summarizerInput.length > 0) {
-          const merged = await onSummarize(summarizerInput, previousAnchor);
-          anchorText = merged.trim().length > 0 ? merged : previousAnchor;
+          // A summarizer failure is HOUSEKEEPING failing, not the run
+          // failing (#734 review F1): before summarization was on by
+          // default this throw had no production reachers; letting it
+          // propagate turns a fail-closed seam deny into a dead run that
+          // the worker boundary reports as success. Degrade to "no anchor
+          // from this merge": the previous anchor carries if present,
+          // otherwise the attempt refuses and the seam records the skip —
+          // the run keeps its headroom and a later overflow ends honestly.
+          try {
+            const merged = await onSummarize(summarizerInput, previousAnchor);
+            anchorText = merged.trim().length > 0 ? merged : previousAnchor;
+          } catch (error) {
+            summarizerError = error instanceof Error ? error : new Error(String(error));
+            anchorText = previousAnchor;
+          }
         }
         const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
         if (anchorText === undefined && preservedUsers.length === 0) return undefined;
@@ -348,6 +366,7 @@ export namespace Compaction {
       // back to the synchronous merge over the natural span, exactly what a
       // speculation-free seam would have done. Speculation may only ever add
       // a fast path, never take a cut away.
+      let summarizerError: Error | undefined;
       let candidateOutcome: "promoted" | "discarded" | undefined;
       let cut: CompactionResult | undefined;
       if (candidate !== undefined) {
@@ -371,25 +390,34 @@ export namespace Compaction {
         candidateOutcome === undefined ? result : { ...result, candidate: candidateOutcome };
       if (cut === undefined) {
         // Neither span can commit: nothing user-roled can head the kept
-        // window, or no rebuild is strictly smaller. Same refusal values as
-        // the no-summarizer path; the elision result (if any) is kept.
+        // window, no rebuild is strictly smaller, or the summarizer failed
+        // with no previous anchor to carry. Same refusal values as the
+        // no-summarizer path; the elision result (if any) is kept, and a
+        // summarizer failure is named on the record.
+        const mark = (result: CompactionResult): CompactionResult =>
+          summarizerError === undefined ? result : { ...result, summarizerFailed: true };
         return elidedChars > 0
           ? finish(
-              withOutcome({ messages: working, compacted: true, removedCount: 0 }),
+              withOutcome(mark({ messages: working, compacted: true, removedCount: 0 })),
               "reduced",
               elidedChars,
+              undefined,
+              summarizerError,
             )
           : finish(
-              withOutcome({ messages, compacted: false, removedCount: 0 }),
+              withOutcome(mark({ messages, compacted: false, removedCount: 0 })),
               "nothing_reclaimed",
               0,
+              undefined,
+              summarizerError,
             );
       }
       return finish(
-        withOutcome(cut),
+        withOutcome(summarizerError === undefined ? cut : { ...cut, summarizerFailed: true }),
         "cut",
         elidedChars,
         cut.messages[0] !== undefined && isAnchorMessage(cut.messages[0]),
+        summarizerError,
       );
     }
 

@@ -163,12 +163,12 @@ describe("Compaction bracket", () => {
     }
   });
 
-  it("a summarizer throw still closes the bracket as failed, then propagates", async () => {
+  it("a summarizer throw degrades to a recorded skip — the run lives (#734 F1)", async () => {
     const capture = captureBracket();
     try {
-      const attempt = Compaction.compact(
-        // Mixed roles: user messages never reach the summarizer (L2), so an
-        // all-user span would skip the summarize call this test needs to throw.
+      // Mixed roles: user messages never reach the summarizer (L2), so an
+      // all-user span would skip the summarize call this test needs to fail.
+      const result = await Compaction.compact(
         Array.from({ length: 12 }, (_unused, index) =>
           index % 2 === 0 ? makeUserMessage(`message ${index}`) : makeAssistantMessage(`a${index}`),
         ),
@@ -181,12 +181,13 @@ describe("Compaction bracket", () => {
         Bus,
         { trigger: "threshold" },
       );
-      await expect(attempt).rejects.toThrow("summarizer exploded");
       await Bun.sleep(0);
 
+      // Housekeeping failed; the run did not: no throw, the cut degraded
+      // (users still head the window, no anchor), and the record names it.
+      expect(result.summarizerFailed).toBe(true);
       expect(capture.started).toHaveLength(1);
       expect(capture.completed).toHaveLength(1);
-      expect(capture.completed[0]?.outcome).toBe("failed");
       expect(String(capture.completed[0]?.error)).toContain("summarizer exploded");
       expect(capture.order).toEqual(["started", "completed"]);
     } finally {

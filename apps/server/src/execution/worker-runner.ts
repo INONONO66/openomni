@@ -123,6 +123,10 @@ export namespace WorkerRunner {
                 model: request.model,
                 auth: resolveAuth(request.model.provider),
                 allowAuthFallback: false,
+                ...(request.providerOptions === undefined
+                  ? {}
+                  : { providerOptions: request.providerOptions }),
+                signal: controller.signal,
                 trace: { traceId, sessionId, runId },
                 events: Bus,
               }),
