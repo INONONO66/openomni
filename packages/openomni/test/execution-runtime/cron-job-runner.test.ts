@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IngressEvent, type CronJob, type Dispatch } from "@openomni/protocol";
+import { IngressEvent, type CronJob, type Command } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { DispatchRegistry, registerBuiltInDispatchHandlers } from "../../src/dispatch";
@@ -40,9 +40,9 @@ function leapDayJob(id = "job-leap-day"): CronJob.Info {
 
 function command(
   action: string,
-  target: Dispatch.Target,
+  target: Command.Target,
   payload: unknown = "hello",
-): Dispatch.Command {
+): Command.Request {
   return {
     dispatchId: `dispatch-${action}`,
     action,

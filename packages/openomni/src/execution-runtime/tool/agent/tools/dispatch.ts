@@ -1,19 +1,19 @@
-import { Dispatch, type Tool } from "@openomni/protocol";
+import { Command, type Tool } from "@openomni/protocol";
 import type { DispatchSubmitOptions } from "../../../../dispatch/runtime.js";
 import { defineTool } from "../../define.js";
 import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
 export type DispatchToolRuntime = {
-  submit(input: Dispatch.Input, options: DispatchSubmitOptions): Promise<Dispatch.Result>;
+  submit(input: Command.Input, options: DispatchSubmitOptions): Promise<Command.Result>;
 };
 
 export interface DispatchToolOptions {
   readonly description?: string;
   readonly inputSchema?: Tool.Spec["inputSchema"];
-  readonly normalizeInput?: (input: RuntimeInput) => Dispatch.Input;
+  readonly normalizeInput?: (input: RuntimeInput) => Command.Input;
 }
 
-type RuntimeInput = Dispatch.Input & {
+type RuntimeInput = Command.Input & {
   readonly sessionId?: string;
   readonly runId?: string;
   readonly agentName?: string;
@@ -80,7 +80,7 @@ const defaultInputSchema = {
   additionalProperties: false,
 };
 
-function stripRuntimeInput(input: RuntimeInput): Dispatch.Input {
+function stripRuntimeInput(input: RuntimeInput): Command.Input {
   const {
     sessionId: _sessionId,
     runId: _runId,
@@ -88,10 +88,10 @@ function stripRuntimeInput(input: RuntimeInput): Dispatch.Input {
     workspaceRoot: _workspaceRoot,
     ...publicInput
   } = input;
-  return Dispatch.Input.parse(publicInput);
+  return Command.Input.parse(publicInput);
 }
 
-function result(call: Tool.Call, output: Dispatch.Result, isError?: boolean): Tool.Result {
+function result(call: Tool.Call, output: Command.Result, isError?: boolean): Tool.Result {
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
@@ -121,7 +121,7 @@ export function createDispatchTool(
     name: "dispatch",
     description:
       options.description ??
-      "Submit a cross-session OpenOmni action through the Dispatch policy/audit gate.",
+      "Submit a cross-session OpenOmni action through the Command policy/audit gate.",
     inputSchema: options.inputSchema ?? defaultInputSchema,
     source: "agent",
     riskTier: 1,
@@ -134,7 +134,7 @@ export function createDispatchTool(
       workspaceRoot: "workspaceRoot",
     },
     async execute(call, context?: ToolExecutionContext) {
-      let input: Dispatch.Input;
+      let input: Command.Input;
       try {
         input = normalizeInput(call.input);
       } catch (error) {
@@ -189,9 +189,9 @@ const workerResidentAskInputSchema = {
   additionalProperties: false,
 };
 
-function stripWorkerResidentAskInput(input: RuntimeInput): Dispatch.Input {
+function stripWorkerResidentAskInput(input: RuntimeInput): Command.Input {
   const publicInput = stripRuntimeInput(input);
-  if (publicInput.action !== Dispatch.Actions.ResidentAsk) {
+  if (publicInput.action !== Command.Actions.ResidentAsk) {
     throw new Error("worker dispatch only supports resident.ask");
   }
   if (publicInput.target.kind !== "resident") {

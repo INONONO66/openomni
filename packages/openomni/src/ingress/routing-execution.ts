@@ -1,4 +1,4 @@
-import { Dispatch, type Ingress, type RoutingDecisionPayload } from "@openomni/protocol";
+import { Command, type Ingress, type RoutingDecisionPayload } from "@openomni/protocol";
 import type { TraceContext } from "@openomni/protocol";
 import { submitPinnedPendingInteraction, type DispatchRuntime } from "../dispatch/runtime.js";
 import {
@@ -77,7 +77,7 @@ function projectDispatchOutput(output: unknown, decision: RoutedDecision): strin
   const outputType = output === null ? "null" : typeof output;
   throw new IngressRoutingError(
     "dispatch_output_unsupported",
-    `unsupported Dispatch output for channel projection: type=${outputType}, value=${String(output)}`,
+    `unsupported Command output for channel projection: type=${outputType}, value=${String(output)}`,
     decision,
   );
 }
@@ -181,8 +181,8 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
   const workspaceRoot = event.mode === "direct" ? event.agent.toolConfig?.workspaceRoot : undefined;
   const result = await submitPinnedPendingInteraction(
     runtime,
-    Dispatch.Input.parse({
-      action: Dispatch.Actions.ActorMessage,
+    Command.Input.parse({
+      action: Command.Actions.ActorMessage,
       target: { kind: "surface", id: wait.correlation.channelId },
       payload: event.payload,
       correlation: wait.correlation,

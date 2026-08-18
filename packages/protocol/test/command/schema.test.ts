@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Dispatch, Policy } from "../../src/index.js";
+import { Command, Policy } from "../../src/index.js";
 
-const actor: Dispatch.ActorContext = {
+const actor: Command.ActorContext = {
   kind: "worker",
   actorId: "worker-1",
   agentName: "agent",
@@ -9,7 +9,7 @@ const actor: Dispatch.ActorContext = {
   runId: "run-1",
 };
 
-const target: Dispatch.Target = {
+const target: Command.Target = {
   kind: "resident",
   id: "resident-main",
   sessionId: "resident-session",
@@ -28,9 +28,9 @@ const eventBase = {
   time: Date.now(),
 };
 
-describe("Dispatch protocol schemas", () => {
+describe("Command protocol schemas", () => {
   test("Input accepts the public dispatch envelope", () => {
-    const parsed = Dispatch.Input.parse({
+    const parsed = Command.Input.parse({
       action: "resident.ask",
       target,
       payload: { message: "hello" },
@@ -47,7 +47,7 @@ describe("Dispatch protocol schemas", () => {
   });
 
   test("Target accepts connector endpoint selectors for worker admission", () => {
-    const parsed = Dispatch.Target.parse({
+    const parsed = Command.Target.parse({
       kind: "worker",
       name: "coder",
       endpointId: "endpoint:install-app-codex",
@@ -59,7 +59,7 @@ describe("Dispatch protocol schemas", () => {
   });
 
   test("Target rejects executorKind as a public dispatch selector", () => {
-    const parsed = Dispatch.Target.safeParse({
+    const parsed = Command.Target.safeParse({
       kind: "worker",
       name: "coder",
       executorKind: "connector_endpoint",
@@ -86,7 +86,7 @@ describe("Dispatch protocol schemas", () => {
       "resolveOwner",
     ]) {
       expect(
-        Dispatch.Input.safeParse({
+        Command.Input.safeParse({
           action: "worker.spawn",
           target: { kind: "worker" },
           [field]: field === "actor" ? { actorId: "fake" } : "fake",
@@ -96,20 +96,20 @@ describe("Dispatch protocol schemas", () => {
   });
 
   test("ActorContext accepts runtime-derived actor shapes", () => {
-    expect(Dispatch.ActorContext.parse(actor).kind).toBe("worker");
-    expect(Dispatch.ActorContext.parse({ kind: "resident", actorId: "resident-main" }).kind).toBe(
+    expect(Command.ActorContext.parse(actor).kind).toBe("worker");
+    expect(Command.ActorContext.parse({ kind: "resident", actorId: "resident-main" }).kind).toBe(
       "resident",
     );
-    expect(Dispatch.ActorContext.parse({ kind: "system", actorId: "scheduler" }).kind).toBe(
+    expect(Command.ActorContext.parse({ kind: "system", actorId: "scheduler" }).kind).toBe(
       "system",
     );
     expect(
-      Dispatch.ActorContext.parse({ kind: "unknown", actorId: "unknown", reason: "missing" }).kind,
+      Command.ActorContext.parse({ kind: "unknown", actorId: "unknown", reason: "missing" }).kind,
     ).toBe("unknown");
   });
 
-  test("Command and Result carry canonical runtime metadata", () => {
-    const command = Dispatch.Command.parse({
+  test("Request and Result carry canonical runtime metadata", () => {
+    const command = Command.Request.parse({
       action: "resident.ask",
       target,
       payload: { message: "hello" },
@@ -124,7 +124,7 @@ describe("Dispatch protocol schemas", () => {
 
     expect(command.actor.actorId).toBe("worker-1");
 
-    const result = Dispatch.Result.parse({
+    const result = Command.Result.parse({
       dispatchId: command.dispatchId,
       status: "completed",
       output: { delivered: true },
@@ -136,9 +136,9 @@ describe("Dispatch protocol schemas", () => {
   });
 
   test("Events parse dispatch lifecycle payloads", () => {
-    expect(Dispatch.Events.Submitted.schema.parse({ ...eventBase }).dispatchId).toBe("dispatch-1");
+    expect(Command.Events.Submitted.schema.parse({ ...eventBase }).dispatchId).toBe("dispatch-1");
     expect(
-      Dispatch.Events.Authorized.schema.parse({
+      Command.Events.Authorized.schema.parse({
         ...eventBase,
         verdict: "allow",
         policyId: "dispatch.default",
@@ -146,7 +146,7 @@ describe("Dispatch protocol schemas", () => {
       }).verdict,
     ).toBe("allow");
     expect(
-      Dispatch.Events.Denied.schema.parse({
+      Command.Events.Denied.schema.parse({
         ...eventBase,
         verdict: "deny",
         reason: "not authorized",
@@ -154,17 +154,17 @@ describe("Dispatch protocol schemas", () => {
       }).reason,
     ).toBe("not authorized");
     expect(
-      Dispatch.Events.Routed.schema.parse({ ...eventBase, handler: "resident.ask" }).handler,
+      Command.Events.Routed.schema.parse({ ...eventBase, handler: "resident.ask" }).handler,
     ).toBe("resident.ask");
     expect(
-      Dispatch.Events.Completed.schema.parse({
+      Command.Events.Completed.schema.parse({
         ...eventBase,
         handler: "resident.ask",
         durationMs: 2,
       }).durationMs,
     ).toBe(2);
     expect(
-      Dispatch.Events.Failed.schema.parse({ ...eventBase, reason: "handler failed" }).reason,
+      Command.Events.Failed.schema.parse({ ...eventBase, reason: "handler failed" }).reason,
     ).toBe("handler failed");
   });
 
@@ -176,19 +176,19 @@ describe("Dispatch protocol schemas", () => {
     // future strict consumer refuses. Two events suffice: all six extend the
     // one EventBase and none re-declares traceId.
     const { traceId: _traceId, ...untraced } = eventBase;
-    expect(Dispatch.Events.Submitted.schema.safeParse(untraced).success).toBe(false);
+    expect(Command.Events.Submitted.schema.safeParse(untraced).success).toBe(false);
     expect(
-      Dispatch.Events.Failed.schema.safeParse({ ...untraced, reason: "handler failed" }).success,
+      Command.Events.Failed.schema.safeParse({ ...untraced, reason: "handler failed" }).success,
     ).toBe(false);
   });
 
   test("Events use canonical descriptor names", () => {
-    expect(Dispatch.Events.Submitted.name).toBe("dispatch.submitted");
-    expect(Dispatch.Events.Authorized.name).toBe("dispatch.authorized");
-    expect(Dispatch.Events.Denied.name).toBe("dispatch.denied");
-    expect(Dispatch.Events.Routed.name).toBe("dispatch.routed");
-    expect(Dispatch.Events.Completed.name).toBe("dispatch.completed");
-    expect(Dispatch.Events.Failed.name).toBe("dispatch.failed");
+    expect(Command.Events.Submitted.name).toBe("dispatch.submitted");
+    expect(Command.Events.Authorized.name).toBe("dispatch.authorized");
+    expect(Command.Events.Denied.name).toBe("dispatch.denied");
+    expect(Command.Events.Routed.name).toBe("dispatch.routed");
+    expect(Command.Events.Completed.name).toBe("dispatch.completed");
+    expect(Command.Events.Failed.name).toBe("dispatch.failed");
   });
 
   test("Policy.Resource accepts dispatch descriptors for policy audit", () => {

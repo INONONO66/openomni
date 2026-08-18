@@ -1,4 +1,4 @@
-import type { Dispatch, Model } from "@openomni/protocol";
+import type { Command, Model } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 
 // Inbound payload-text parsing is owned by ingress (the boundary that mints
@@ -17,7 +17,7 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
  * worker-spawn-payload and connector-endpoint-worker and were one edit away
  * from drifting.
  */
-export function resolveWorkerSessionId(command: Dispatch.Command, model: Model.Ref): string {
+export function resolveWorkerSessionId(command: Command.Request, model: Model.Ref): string {
   if (command.target.sessionId) return command.target.sessionId;
   const title = `Dispatch worker ${command.action}`;
   const modelInfo = { providerID: model.provider, modelID: model.id };

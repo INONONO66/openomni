@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
 
-export namespace DispatchSchemas {
+export namespace CommandSchemas {
   export const ActorKind = z.enum(["worker", "resident", "system", "user", "unknown"]);
   export type ActorKind = z.infer<typeof ActorKind>;
 

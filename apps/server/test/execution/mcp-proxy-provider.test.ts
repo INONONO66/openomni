@@ -156,7 +156,7 @@ describe("createMcpProxyProvider", () => {
     const agentEntry = makeEntry({
       source: "agent",
       canonicalName: "dispatch",
-      spec: { name: "dispatch", description: "Dispatch", inputSchema: {} },
+      spec: { name: "dispatch", description: "Command", inputSchema: {} },
     });
     const mcpEntry = makeEntry({
       source: "mcp",

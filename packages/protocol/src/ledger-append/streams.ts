@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DispatchSchemas } from "../dispatch/schemas.js";
+import { CommandSchemas } from "../command/schemas.js";
 import { IngressEvent, type RoutingDecisionPayload } from "../event/ingress.js";
 
 /**
@@ -111,9 +111,9 @@ export type RouteDecided = RoutingDecisionPayload;
 const CommandVerdictBase = z.object({
   policyId: z.string().min(1),
   reason: z.string().min(1),
-  actorKind: DispatchSchemas.ActorKind,
+  actorKind: CommandSchemas.ActorKind,
   action: z.string().min(1),
-  targetKind: DispatchSchemas.TargetKind,
+  targetKind: CommandSchemas.TargetKind,
 });
 
 /**

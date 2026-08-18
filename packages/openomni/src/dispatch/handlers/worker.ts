@@ -1,4 +1,4 @@
-import { Dispatch, Execution, type Model, type WorkItem } from "@openomni/protocol";
+import { Command, Execution, type Model, type WorkItem } from "@openomni/protocol";
 import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
@@ -53,7 +53,7 @@ function requireCoordinator(coordinator: CoordinatorLike | undefined): Coordinat
   return coordinator;
 }
 
-function targetRunId(command: Dispatch.Command): string | undefined {
+function targetRunId(command: Command.Request): string | undefined {
   return command.target.runId ?? command.target.id;
 }
 
@@ -61,7 +61,7 @@ function targetRunId(command: Dispatch.Command): string | undefined {
 // different result vocabulary — the coordinator call is identical.
 async function deliverViaCoordinator(
   coordinatorOwner: CoordinatorLike | undefined,
-  command: Dispatch.Command,
+  command: Command.Request,
   action: "worker.send" | "worker.resume" | "actor.reply",
   outputFlag: "delivered" | "resumed",
 ) {
@@ -90,7 +90,7 @@ function parseWorkerCompletePayload(payload: unknown): WorkerCompletePayload {
 }
 
 function resolveCompletedWorkItem(
-  command: Dispatch.Command,
+  command: Command.Request,
   payload: WorkerCompletePayload,
 ): WorkItem.Info {
   const targetRunId = command.target.runId;
@@ -124,7 +124,7 @@ function resolveCompletedWorkItem(
 }
 
 function assertWorkerCompletionActorAuthority(
-  command: Dispatch.Command,
+  command: Command.Request,
   payload: WorkerCompletePayload,
 ): void {
   const actor = command.actor;
@@ -179,11 +179,11 @@ function assertWorkerCompletionWorkItemAuthority(
 export function createWorkerDispatchHandlers(
   options: WorkerDispatchHandlerOptions = {},
 ): Record<
-  | typeof Dispatch.Actions.WorkerSpawn
-  | typeof Dispatch.Actions.WorkerComplete
-  | typeof Dispatch.Actions.WorkerSend
-  | typeof Dispatch.Actions.WorkerResume
-  | typeof Dispatch.Actions.WorkerCancel
+  | typeof Command.Actions.WorkerSpawn
+  | typeof Command.Actions.WorkerComplete
+  | typeof Command.Actions.WorkerSend
+  | typeof Command.Actions.WorkerResume
+  | typeof Command.Actions.WorkerCancel
   | "actor.reply",
   DispatchHandler
 > {
@@ -191,7 +191,7 @@ export function createWorkerDispatchHandlers(
   const policyResolver = options.policyResolver ?? PolicyResolver.create();
   const verifierRegistry = options.verifierRegistry ?? VerifierRegistry.create();
   return {
-    async [Dispatch.Actions.WorkerSpawn](command) {
+    async [Command.Actions.WorkerSpawn](command) {
       const payload = parseWorkerSpawnPayload(command.payload);
       if (isConnectorEndpointTarget(command.target)) {
         return handleConnectorEndpointWorkerSpawn(command, model, payload, {
@@ -289,7 +289,7 @@ export function createWorkerDispatchHandlers(
       };
     },
 
-    async [Dispatch.Actions.WorkerComplete](command) {
+    async [Command.Actions.WorkerComplete](command) {
       const payload = parseWorkerCompletePayload(command.payload);
       assertWorkerCompletionActorAuthority(command, payload);
       const workItem = resolveCompletedWorkItem(command, payload);
@@ -351,15 +351,15 @@ export function createWorkerDispatchHandlers(
       };
     },
 
-    async [Dispatch.Actions.WorkerSend](command) {
+    async [Command.Actions.WorkerSend](command) {
       return deliverViaCoordinator(options.coordinator, command, "worker.send", "delivered");
     },
 
-    async [Dispatch.Actions.WorkerResume](command) {
+    async [Command.Actions.WorkerResume](command) {
       return deliverViaCoordinator(options.coordinator, command, "worker.resume", "resumed");
     },
 
-    async [Dispatch.Actions.WorkerCancel](command) {
+    async [Command.Actions.WorkerCancel](command) {
       const coordinator = requireCoordinator(options.coordinator);
       if (!coordinator.cancelRun) {
         throw new Error("dispatch worker.cancel requires coordinator.cancelRun owner");

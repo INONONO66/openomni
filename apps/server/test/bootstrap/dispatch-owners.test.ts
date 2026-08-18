@@ -1,13 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  Dispatch as DispatchProtocol,
-  Wait,
-  type AppConnector,
-  type Dispatch,
-  type Execution,
-} from "@openomni/protocol";
+import { Command, Wait, type AppConnector, type Execution } from "@openomni/protocol";
 import { createIngressEngine, type DispatchOwners } from "@openomni/openomni";
 import { PendingAskStore, Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
@@ -110,7 +104,7 @@ function installation(
   };
 }
 
-function command(): Dispatch.Command {
+function command(): Command.Request {
   return {
     traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint",
@@ -338,10 +332,10 @@ describe("createServerDispatchOwners", () => {
           actorRunId: "run_fake",
         },
       ]);
-      expect(eventNames).toContain(DispatchProtocol.Events.Submitted.name);
-      expect(eventNames).toContain(DispatchProtocol.Events.Authorized.name);
-      expect(eventNames).toContain(DispatchProtocol.Events.Routed.name);
-      expect(eventNames).toContain(DispatchProtocol.Events.Completed.name);
+      expect(eventNames).toContain(Command.Events.Submitted.name);
+      expect(eventNames).toContain(Command.Events.Authorized.name);
+      expect(eventNames).toContain(Command.Events.Routed.name);
+      expect(eventNames).toContain(Command.Events.Completed.name);
       // The synchronous resident.ask path records wait.sync_ask audit events
       // only and writes no PendingAsk row (#215 owner decision 2).
       // Pin (D11): the nested resident.ask inherits the worker run's trace —

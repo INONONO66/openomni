@@ -35,5 +35,5 @@ export * from "./ledger-append/index.js";
 export * from "./cron/index.js";
 export * from "./storage/index.js";
 export * from "./trace/index.js";
-export * from "./dispatch/index.js";
+export * from "./command/index.js";
 export * from "./app-connector/index.js";

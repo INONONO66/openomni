@@ -1,4 +1,4 @@
-import type { Dispatch } from "@openomni/protocol";
+import type { Command } from "@openomni/protocol";
 
 export interface DispatchHandlerContext {
   readonly signal?: AbortSignal;
@@ -16,7 +16,7 @@ export interface DispatchHandlerResult {
 }
 
 export type DispatchHandler = (
-  command: Dispatch.Command,
+  command: Command.Request,
   context?: DispatchHandlerContext,
 ) => Promise<DispatchHandlerResult | unknown> | DispatchHandlerResult | unknown;
 

@@ -1,4 +1,4 @@
-import { type Actor, Dispatch } from "@openomni/protocol";
+import { type Actor, Command } from "@openomni/protocol";
 import { WorkItemAttemptRun } from "@openomni/session";
 
 export interface DispatchRuntimeContext {
@@ -7,13 +7,13 @@ export interface DispatchRuntimeContext {
   readonly agentName?: string;
   readonly workspaceRoot?: string;
   readonly traceId?: string;
-  readonly actorKind?: Dispatch.ActorKind;
+  readonly actorKind?: Command.ActorKind;
   readonly actorId?: string;
   readonly trustTier?: Actor.TrustTier;
   readonly labels?: readonly string[];
 }
 
-function actorKindFromAgent(agentName: string | undefined): Dispatch.ActorKind {
+function actorKindFromAgent(agentName: string | undefined): Command.ActorKind {
   if (!agentName) return "unknown";
   const normalized = agentName.trim().toLowerCase();
   if (normalized === "resident") return "resident";
@@ -40,7 +40,7 @@ function deriveTrustTier(
   return hasWorkerRun ? "assigned_worker" : undefined;
 }
 
-export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispatch.ActorContext {
+export function deriveActorContext(context: DispatchRuntimeContext = {}): Command.ActorContext {
   const workerRun = lookupWorkerRun(context.sessionId, context.runId);
   const kind = context.actorKind ?? (workerRun ? "worker" : actorKindFromAgent(context.agentName));
   const trustTier = deriveTrustTier(context, Boolean(workerRun));
@@ -52,7 +52,7 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispat
         ? `agent:${context.agentName}`
         : "unknown");
 
-  return Dispatch.ActorContext.parse({
+  return Command.ActorContext.parse({
     kind,
     actorId,
     ...(context.agentName ? { agentName: context.agentName } : {}),

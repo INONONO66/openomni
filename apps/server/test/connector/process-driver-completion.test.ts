@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type AppConnector, type Dispatch, WorkItem } from "@openomni/protocol";
+import { type AppConnector, type Command, WorkItem } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
@@ -127,7 +127,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
   };
 }
 
-function command(): Dispatch.Command {
+function command(): Command.Request {
   return {
     traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint",

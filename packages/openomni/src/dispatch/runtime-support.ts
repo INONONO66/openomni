@@ -1,4 +1,4 @@
-import type { Dispatch as DispatchProtocol, Policy } from "@openomni/protocol";
+import type { Command, Policy } from "@openomni/protocol";
 import type { DispatchHandler } from "./registry.js";
 
 export type DispatchEventPayload = {
@@ -6,14 +6,14 @@ export type DispatchEventPayload = {
   readonly traceId: string;
   readonly sessionId?: string;
   readonly runId?: string;
-  readonly actor: DispatchProtocol.ActorContext;
+  readonly actor: Command.ActorContext;
   readonly action: string;
-  readonly target: DispatchProtocol.Target;
-  readonly correlation?: DispatchProtocol.Command["correlation"];
+  readonly target: Command.Target;
+  readonly correlation?: Command.Request["correlation"];
   readonly time: number;
 };
 
-export function eventBase(command: DispatchProtocol.Command): DispatchEventPayload {
+export function eventBase(command: Command.Request): DispatchEventPayload {
   return {
     dispatchId: command.dispatchId,
     traceId: command.traceId,
@@ -38,7 +38,7 @@ export function resourceDescriptor(action: string): Policy.Resource.Descriptor {
   };
 }
 
-export function policyTraceContext(command: DispatchProtocol.Command) {
+export function policyTraceContext(command: Command.Request) {
   return {
     traceId: command.traceId,
     ...(command.sessionId ? { sessionId: command.sessionId } : {}),

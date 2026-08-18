@@ -312,7 +312,7 @@ async function checkEarned(baseline: Baseline): Promise<Violation[]> {
   const sources = await collectProductionSources();
   const violations: Violation[] = [];
 
-  const dispatchIndexPath = `${PROTOCOL_SRC}/dispatch/index.ts`;
+  const dispatchIndexPath = `${PROTOCOL_SRC}/command/index.ts`;
   const actions = parseDispatchActions(readFileSync(dispatchIndexPath, "utf8"));
   const dormantActions = new Set(baseline.earned.dormantActions);
   for (const [key, value] of actions) {

@@ -1,7 +1,7 @@
 import {
   policyKernelVersion,
   WorkItem,
-  type Dispatch,
+  type Command,
   type Model,
   type Policy,
 } from "@openomni/protocol";
@@ -99,7 +99,7 @@ export type WorkerSpawnLedgerPayload = {
 };
 
 export async function createWorkerSpawnWorkItem(
-  command: Dispatch.Command,
+  command: Command.Request,
   request: WorkerWorkItemRequest,
   payload: WorkerSpawnLedgerPayload,
   executorKind: WorkItem.ExecutorKind,

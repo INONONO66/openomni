@@ -1,4 +1,4 @@
-import { Dispatch, Execution } from "@openomni/protocol";
+import { Command, Execution, type Wait } from "@openomni/protocol";
 import type { PendingInteractionStore } from "@openomni/session";
 import {
   dispatchEvidence,
@@ -17,7 +17,7 @@ import {
 // fail-closed (dispatch.pending_interaction.required /
 // dispatch.actor.required).
 function findPendingInteractionMatch(
-  correlation: Dispatch.Correlation,
+  correlation: Wait.Correlation,
 ): PendingInteractionStore.Record | undefined {
   const resolution = findWaitCandidates({ correlation });
   return resolution.kind === "match" && resolution.candidate.source === "pending_interaction"
@@ -79,7 +79,7 @@ function canonicalWorkerCompletePayload(
 // precedence level, never a credential — a wrong token still reaches the
 // scoped level, and only the sender matcher admits or refuses the command.
 function pendingInteractionSenderMatches(
-  command: Dispatch.Command,
+  command: Command.Request,
   match: PendingInteractionStore.Record,
 ): boolean {
   return (
@@ -88,10 +88,10 @@ function pendingInteractionSenderMatches(
 }
 
 export function routePendingInteraction(
-  command: Dispatch.Command,
+  command: Command.Request,
   pinned?: PendingInteractionStore.Record,
-): Dispatch.Command {
-  if (command.action !== Dispatch.Actions.ActorMessage) return command;
+): Command.Request {
+  if (command.action !== Command.Actions.ActorMessage) return command;
   const match =
     pinned ??
     (command.correlation && typeof command.correlation !== "string"
@@ -105,9 +105,9 @@ export function routePendingInteraction(
   const action = requestedWaitAction(command.payload);
   if (action === "invalid" || !match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
-    return Dispatch.Command.parse({
+    return Command.Request.parse({
       ...command,
-      action: Dispatch.Actions.ResidentAsk,
+      action: Command.Actions.ResidentAsk,
       target: {
         kind: "resident",
         sessionId: match.sessionId,
@@ -135,10 +135,10 @@ export function routePendingInteraction(
   if (action !== "report_result") return command;
   const payload = canonicalWorkerCompletePayload(command.payload, match);
   if (payload === undefined) return command;
-  return Dispatch.Command.parse({
+  return Command.Request.parse({
     ...command,
     payload,
-    action: Dispatch.Actions.WorkerComplete,
+    action: Command.Actions.WorkerComplete,
     target: {
       kind: "worker",
       id: match.workerRunId,

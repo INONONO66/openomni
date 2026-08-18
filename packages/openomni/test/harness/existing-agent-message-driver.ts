@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Dispatch, WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
+import { Command, WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import {
   ActorRegistry,
   Session,
@@ -156,8 +156,8 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
   if (resolution.kind !== "match") {
     throw new Error(`reply correlation resolved to ${resolution.kind}`);
   }
-  const command = Dispatch.Command.parse({
-    action: Dispatch.Actions.ActorReply,
+  const command = Command.Request.parse({
+    action: Command.Actions.ActorReply,
     target: { kind: "session", id: OwnerRef.id },
     correlation,
     dispatchId: `dispatch:${input.replyKey}`,

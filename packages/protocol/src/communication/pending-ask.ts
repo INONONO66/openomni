@@ -1,12 +1,17 @@
 import { z } from "zod";
-import { BusEvent } from "../bus/index.js";
 import { NamedError } from "../error/index.js";
 
 export const Status = z.enum(["open", "answered", "expired", "cancelled", "ambiguous"]);
 export type Status = z.infer<typeof Status>;
 
-export const TargetKind = z.enum(["resident", "worker", "external_actor", "scheduler", "service"]);
-export type TargetKind = z.infer<typeof TargetKind>;
+/**
+ * FROZEN-store read vocabulary (#498 C2): persisted rows carry these exact
+ * values (including `scheduler`/`service`, which drifted from the live
+ * Command.Target `schedule`/`system` kinds before the freeze). Never merge
+ * into the live enum and never rename persisted values — this type exists
+ * only so Record keeps parsing historical rows.
+ */
+const TargetKind = z.enum(["resident", "worker", "external_actor", "scheduler", "service"]);
 
 export const Record = z
   .object({
@@ -37,20 +42,7 @@ export const Record = z
   .strict();
 export type Record = z.infer<typeof Record>;
 
-export const Create = Record.omit({
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-  answeredAt: true,
-}).extend({
-  status: Status.optional(),
-  createdAt: z.number().optional(),
-  updatedAt: z.number().optional(),
-});
-export type Create = z.infer<typeof Create>;
-
-export const WriteMethod = z.enum(["create", "answer", "markAmbiguous", "cancel", "expire"]);
-export type WriteMethod = z.infer<typeof WriteMethod>;
+const WriteMethod = z.enum(["create", "answer", "markAmbiguous", "cancel", "expire"]);
 
 /**
  * #510 D2a — PendingAsk is a frozen legacy writer. Its final accepted append
@@ -85,23 +77,3 @@ export const CorrelationQuery = z
     message: "At least one correlation field is required",
   });
 export type CorrelationQuery = z.infer<typeof CorrelationQuery>;
-
-const EventBase = z.object({
-  id: z.string().min(1),
-  traceId: z.string().min(1),
-  status: Status,
-  originSessionId: z.string().min(1),
-  originRunId: z.string().min(1).optional(),
-  targetKind: TargetKind,
-  time: z.number(),
-});
-
-export const Events = {
-  Opened: BusEvent.define("pending_ask.opened", EventBase, { visibility: "internal" }),
-  Answered: BusEvent.define("pending_ask.answered", EventBase.extend({ answeredAt: z.number() }), {
-    visibility: "internal",
-  }),
-  Ambiguous: BusEvent.define("pending_ask.ambiguous", EventBase, { visibility: "internal" }),
-  Cancelled: BusEvent.define("pending_ask.cancelled", EventBase, { visibility: "internal" }),
-  Expired: BusEvent.define("pending_ask.expired", EventBase, { visibility: "internal" }),
-} as const;

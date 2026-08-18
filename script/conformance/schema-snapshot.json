@@ -181,17 +181,7 @@
     "title",
     "version"
   ],
-  "CronJob.Info": [
-    "agentName",
-    "createdAt",
-    "id",
-    "nextFireAt",
-    "payload",
-    "schedule",
-    "target"
-  ],
-  "CronJob.Target": ["kind", "sessionId"],
-  "Dispatch.ActorContext": [
+  "Command.ActorContext": [
     "actorId",
     "agentName",
     "kind",
@@ -203,7 +193,16 @@
     "workerRunId",
     "workspaceRoot"
   ],
-  "Dispatch.Command": [
+  "Command.Input": [
+    "action",
+    "correlation",
+    "idempotencyKey",
+    "payload",
+    "target",
+    "timeoutMs",
+    "wait"
+  ],
+  "Command.Request": [
     "action",
     "actor",
     "correlation",
@@ -219,24 +218,7 @@
     "wait",
     "workspaceRoot"
   ],
-  "Dispatch.Correlation": [
-    "channelId",
-    "endpointId",
-    "externalConversationId",
-    "replyToMessageId",
-    "threadId",
-    "tokenHash"
-  ],
-  "Dispatch.Input": [
-    "action",
-    "correlation",
-    "idempotencyKey",
-    "payload",
-    "target",
-    "timeoutMs",
-    "wait"
-  ],
-  "Dispatch.Result": [
+  "Command.Result": [
     "dispatchId",
     "durationMs",
     "error",
@@ -245,7 +227,7 @@
     "reason",
     "status"
   ],
-  "Dispatch.Target": [
+  "Command.Target": [
     "connectorInstallationId",
     "endpointId",
     "id",
@@ -256,6 +238,16 @@
     "runId",
     "sessionId"
   ],
+  "CronJob.Info": [
+    "agentName",
+    "createdAt",
+    "id",
+    "nextFireAt",
+    "payload",
+    "schedule",
+    "target"
+  ],
+  "CronJob.Target": ["kind", "sessionId"],
   "Execution.LogEvent": [
     "artifactId",
     "data",

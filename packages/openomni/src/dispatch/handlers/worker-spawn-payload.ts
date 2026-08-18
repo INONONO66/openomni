@@ -1,4 +1,4 @@
-import type { Dispatch, Model, Policy } from "@openomni/protocol";
+import type { Command, Model, Policy } from "@openomni/protocol";
 import { z } from "zod";
 import { resolveWorkerSessionId } from "./shared.js";
 
@@ -26,7 +26,7 @@ const WorkerSpawnPayload = z
 type WorkerSpawnPayloadInput = z.input<typeof WorkerSpawnPayload>;
 export type ParsedWorkerSpawnPayload = z.infer<typeof WorkerSpawnPayload>;
 
-function resolveWorkerAgentName(target: Dispatch.Target): string | undefined {
+function resolveWorkerAgentName(target: Command.Target): string | undefined {
   return target.id ?? target.name;
 }
 
@@ -63,7 +63,7 @@ export function parseWorkerSpawnPayload(payload: unknown): ParsedWorkerSpawnPayl
 }
 
 export function buildWorkerSpawnRequest(
-  command: Dispatch.Command,
+  command: Command.Request,
   model: Model.Ref,
   payload: ParsedWorkerSpawnPayload,
   policyPlan?: Policy.PolicyPlan,

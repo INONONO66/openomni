@@ -9,7 +9,6 @@
       "bus",
       "communication",
       "cron",
-      "dispatch",
       "error",
       "execution",
       "ingress",

@@ -1,4 +1,4 @@
-import { Dispatch } from "@openomni/protocol";
+import { Command } from "@openomni/protocol";
 import type { OutboundDispatchOwner } from "../owners.js";
 import type { DispatchHandler, DispatchHandlerContext } from "../registry.js";
 
@@ -7,16 +7,16 @@ export interface OutboundDispatchHandlerOptions {
 }
 
 type OutboundAction =
-  | typeof Dispatch.Actions.ExternalAsk
-  | typeof Dispatch.Actions.A2aAsk
-  | typeof Dispatch.Actions.ApiAsk;
+  | typeof Command.Actions.ExternalAsk
+  | typeof Command.Actions.A2aAsk
+  | typeof Command.Actions.ApiAsk;
 
 function requireOutbound(outbound: OutboundDispatchOwner | undefined): OutboundDispatchOwner {
   if (!outbound) throw new Error("dispatch outbound handler requires outbound owner");
   return outbound;
 }
 
-function requireExternalEndpoint(command: Dispatch.Command, action: string): string {
+function requireExternalEndpoint(command: Command.Request, action: string): string {
   if (command.target.kind !== "external_actor") {
     throw new Error(`${action} requires external_actor target`);
   }
@@ -27,7 +27,7 @@ function requireExternalEndpoint(command: Dispatch.Command, action: string): str
 
 async function dispatchOutbound(
   outbound: OutboundDispatchOwner,
-  command: Dispatch.Command,
+  command: Command.Request,
   context: DispatchHandlerContext | undefined,
 ): Promise<{ readonly output: unknown }> {
   const output = await outbound.dispatch({
@@ -48,8 +48,8 @@ export function createOutboundDispatchHandlers(
   const handler: DispatchHandler = (command, context) =>
     dispatchOutbound(requireOutbound(options.outbound), command, context);
   return {
-    [Dispatch.Actions.ExternalAsk]: handler,
-    [Dispatch.Actions.A2aAsk]: handler,
-    [Dispatch.Actions.ApiAsk]: handler,
+    [Command.Actions.ExternalAsk]: handler,
+    [Command.Actions.A2aAsk]: handler,
+    [Command.Actions.ApiAsk]: handler,
   };
 }

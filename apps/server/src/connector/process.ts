@@ -30,7 +30,7 @@ const DEFAULT_TIMEOUT_MS = 600_000;
 const MIN_LOG_POLL_MS = 25;
 const MAX_LOG_POLL_MS = 1_000;
 // #517 termination contract: group SIGTERM → bounded graceful window → group
-// SIGKILL → bounded reap. Dispatch settles when the group is gone or the reap
+// SIGKILL → bounded reap. Command settles when the group is gone or the reap
 // window closes — never "whenever a TERM-resistant descendant releases the
 // inherited pipes".
 const GRACEFUL_TERMINATION_WINDOW_MS = 2_000;

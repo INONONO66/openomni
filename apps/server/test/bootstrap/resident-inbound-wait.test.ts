@@ -6,7 +6,7 @@ import {
   SystemToolProvider,
 } from "@openomni/openomni";
 import { IngressEventProjector, IngressHandlers } from "../../../../packages/openomni/src/ingress";
-import { WorkItem, type Dispatch } from "@openomni/protocol";
+import { WorkItem, type Command } from "@openomni/protocol";
 import {
   PendingAskStore,
   Session,
@@ -190,7 +190,7 @@ describe("resident inbound wait kernel dispatch", () => {
     // Given
     const run = await createActiveRun("run-success");
     const calls: SubmitArgs[] = [];
-    const submit = mock(async (...args: SubmitArgs): Promise<Dispatch.Result> => {
+    const submit = mock(async (...args: SubmitArgs): Promise<Command.Result> => {
       calls.push(args);
       // The run holds the wait while the Resident answers.
       expect(currentStatus(run)).toBe("waiting_input");
@@ -253,7 +253,7 @@ describe("resident inbound wait kernel dispatch", () => {
     // Given
     const run = await createActiveRun("run-failure");
     const submit = mock(
-      async (): Promise<Dispatch.Result> => ({
+      async (): Promise<Command.Result> => ({
         dispatchId: "resident-ask-failed",
         status: "failed",
         error: "Resident unavailable",
@@ -277,7 +277,7 @@ describe("resident inbound wait kernel dispatch", () => {
       endedAt: Date.now(),
     });
     const submit = mock(
-      async (): Promise<Dispatch.Result> => ({
+      async (): Promise<Command.Result> => ({
         dispatchId: "resident-ask-after-cancel",
         status: "completed",
         output: { output: "Already cancelled." },
@@ -297,7 +297,7 @@ describe("resident inbound wait kernel dispatch", () => {
   it("does not enter the wait when cancellation wins the acquire race", async () => {
     const run = await createActiveRun("run-cancelled-entering-wait");
     const submit = mock(
-      async (): Promise<Dispatch.Result> => ({
+      async (): Promise<Command.Result> => ({
         dispatchId: "resident-ask-after-entry-cancel",
         status: "completed",
         output: { output: "Already cancelled." },
@@ -324,7 +324,7 @@ describe("resident inbound wait kernel dispatch", () => {
   it("keeps the terminal record when cancellation wins the release race", async () => {
     const run = await createActiveRun("run-cancelled-restoring-wait");
     const submit = mock(
-      async (): Promise<Dispatch.Result> => ({
+      async (): Promise<Command.Result> => ({
         dispatchId: "resident-ask-before-restoration-cancel",
         status: "completed",
         output: { output: "Answer delivered." },
@@ -366,7 +366,7 @@ describe("resident inbound wait kernel dispatch", () => {
     );
     await WorkItemStore.start(orphan.hash, "trace-test");
     const submit = mock(
-      async (): Promise<Dispatch.Result> => ({ dispatchId: "never", status: "completed" }),
+      async (): Promise<Command.Result> => ({ dispatchId: "never", status: "completed" }),
     );
     const handler = createHandler(submit);
 
@@ -392,7 +392,7 @@ describe("resident inbound wait kernel dispatch", () => {
     const nestedRun = await createActiveRun("run-nested-output");
     const nested = await createHandler(
       mock(
-        async (): Promise<Dispatch.Result> => ({
+        async (): Promise<Command.Result> => ({
           dispatchId: "resident-ask-nested",
           status: "completed",
           output: { output: "nested answer" },
@@ -407,7 +407,7 @@ describe("resident inbound wait kernel dispatch", () => {
     const numericRun = await createActiveRun("run-numeric-output");
     const numeric = await createHandler(
       mock(
-        async (): Promise<Dispatch.Result> => ({
+        async (): Promise<Command.Result> => ({
           dispatchId: "resident-ask-numeric",
           status: "completed",
           output: 42 as unknown as string,
@@ -426,7 +426,7 @@ describe("resident inbound wait kernel dispatch", () => {
     const controller = new AbortController();
     controller.abort();
     const submit = mock(
-      async (): Promise<Dispatch.Result> => ({
+      async (): Promise<Command.Result> => ({
         dispatchId: "must-not-dispatch",
         status: "completed",
       }),

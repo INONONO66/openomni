@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
 import { Actor } from "../actor/index.js";
+import { CommandSchemas } from "../command/schemas.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
@@ -23,12 +24,19 @@ const ActorSchemaImpl = z
   })
   .catchall(z.unknown());
 
-const RawTargetSchema = z
-  .object({
-    kind: z.enum(["resident", "worker"]),
+/**
+ * #498 C2: the ingress seam narrows THE one Command.Target vocabulary to its
+ * two executable kinds. `workerId` is the string-form ("worker:<id>") wire
+ * artifact this seam owns; every shared field is picked from Command.Target,
+ * and the catchall keeps the historical tolerance for extra inbound keys.
+ */
+const RawTargetSchema = CommandSchemas.Target.pick({
+  sessionId: true,
+  parentSessionId: true,
+})
+  .extend({
+    kind: CommandSchemas.TargetKind.extract(["resident", "worker"]),
     workerId: z.string().optional(),
-    sessionId: z.string().optional(),
-    parentSessionId: z.string().optional(),
   })
   .catchall(z.unknown());
 

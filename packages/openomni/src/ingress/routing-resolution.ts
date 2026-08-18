@@ -1,11 +1,10 @@
 import {
   Actor,
-  Dispatch,
   IngressEvent,
+  Wait,
   type Communication,
   type Ingress,
   type RoutingDecisionPayload,
-  type Wait,
 } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
@@ -32,6 +31,19 @@ export type IngressRoutingErrorCode =
   | "dispatch_output_unsupported"
   | "wait_reply_rejected";
 
+/**
+ * #498 C3: ingress correlation claims reuse THE one Wait.Correlation shape.
+ * A claim envelope must carry its endpoint+channel scope pins — the same
+ * requirement Command.Input enforces — kept as a local type-narrowing refine
+ * at this call site so no second correlation shape is exported.
+ */
+type ScopedCorrelation = Wait.Correlation & Readonly<{ endpointId: string; channelId: string }>;
+const ScopedCorrelationClaim = Wait.Correlation.refine(
+  (value): value is ScopedCorrelation =>
+    value.endpointId !== undefined && value.channelId !== undefined,
+  { message: "correlation claims require endpointId and channelId" },
+);
+
 export class IngressRoutingError extends Error {
   readonly code: IngressRoutingErrorCode;
   readonly decision: RoutingDecisionPayload;
@@ -52,13 +64,13 @@ type KernelWaitExecution =
       // refuses without a correlation envelope (externalMessageId re-keying
       // feeds pendingAsk queries, never this tier) — the old optionality
       // weakened the sender-match evidence below its real invariant.
-      correlation: Dispatch.Correlation;
+      correlation: ScopedCorrelation;
       requestedAction: RequestedWaitAction;
       record: Wait.Record;
     }>
   | Readonly<{
       kind: "pending_interaction";
-      correlation: Dispatch.Correlation;
+      correlation: ScopedCorrelation;
       requestedAction: RequestedWaitAction;
       record: Communication.PendingInteraction.Record;
     }>
@@ -76,9 +88,9 @@ export type KernelRouteResolution<Event extends Ingress.InboundEvent = Ingress.I
     selectedTarget: Ingress.Target;
   }>;
 
-function parseCorrelation(event: Ingress.InboundEvent): Dispatch.Correlation | undefined {
+function parseCorrelation(event: Ingress.InboundEvent): ScopedCorrelation | undefined {
   const value = event.meta?.correlation;
-  return value === undefined ? undefined : Dispatch.Correlation.parse(value);
+  return value === undefined ? undefined : ScopedCorrelationClaim.parse(value);
 }
 
 function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
@@ -133,7 +145,7 @@ function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
 
 function kernelWaitExecution(
   resolution: WaitResolution,
-  correlation: Dispatch.Correlation | undefined,
+  correlation: ScopedCorrelation | undefined,
   requestedAction: RequestedWaitAction,
 ): KernelWaitExecution {
   switch (resolution.kind) {
@@ -247,7 +259,7 @@ function routedEvent<Event extends Ingress.InboundEvent>(
 
 function blacklistState(
   event: Ingress.InboundEvent,
-  correlation: Dispatch.Correlation | undefined,
+  correlation: ScopedCorrelation | undefined,
 ): RouteState["blacklist"] {
   const actor = event.meta?.actor;
   const entry = BlacklistStore.match({
