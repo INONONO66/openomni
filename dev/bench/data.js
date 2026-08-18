@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787074181309,
+  "lastUpdate": 1787075554632,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56177,6 +56177,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 528535,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f77d97d802d4a16876ab4364bdcbe574c5e70e80",
+          "message": "feat(agent,protocol): context-overflow recovery through the seam (#715) (#726)\n\n* feat(agent,protocol): context-overflow recovery through the seam (#715)\n\nCompaction-design L5. A provider context-overflow (classified by message\ntext, pss-runtime's pattern list; context_overflow joins the retry\nvocabulary in agent and both protocol enums) re-enters the existing\ncompaction seam blocking — contextYielded semantics, because the provider\nrefusing IS the trigger, the same argument as #651's yield — then retries\nthe call immediately with zero backoff. Exactly once per run\n(state.overflowCompactionAttempted); a second overflow, a seam that\nreclaims nothing, or an unmeasured first call ends the run honestly with\nreason context_overflow. The overflow branch bypasses the generic retry\nclassification entirely: a blind retry of the same prompt fails the same\nway, so it never happens. History rewrites stay locked to\nrun.completion.pre (deliberate divergence from pss's mid-loop apply, per\nthe design doc).\n\nAbort still outranks overflow (identity check runs first), and the seam's\nskip reasons (no_measurement included) stay recorded on the decision.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): overflow recovery honesty (review round 1)\n\nReview round 1 (PASS WITH CHANGES) fixes:\n\nF2 — a yield-borne seam dispatch now bypasses the measurement gate too: a\nloop yield or a provider overflow IS a measurement, and the first-call\noverflow of a fat hydrated history (no step-finish to read) is exactly the\npopulation that needs recovery. The unknown-window skip remains and is now\ndisclosed (compaction_skipped_no_window). turn.post prepare explicitly\nrequires a measurement.\n\nF7 — end-to-end pin: a real runAgent whose first llm call returns the\nRun.Outcome error shape (AI_APICallError, provider text verbatim) recovers\nthrough the seam and the RETRIED call sees the rewritten, anchor-headed,\nstrictly smaller history — the wrap-the-message regression now fails a test\ninstead of silently killing the feature (the L4 lesson).\n\nF3 — Gemini ('exceeds the maximum number of tokens') and Bedrock ('input is\ntoo long') phrasings added to the classifier; the doc claim is scoped to\nthe recognized pattern list. Collision table extended (context deadline,\ntoken rate limit, max_tokens output cap — all correctly false).\n\nF5/F6 — the beyond-policy-ceiling retry record shape and the deny-swallow\ndisposition are now stated in code where they happen.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T17:51:16Z",
+          "tree_id": "e00134fb6066316d715b81ec29c03894911046a0",
+          "url": "https://github.com/INONONO66/openomni/commit/f77d97d802d4a16876ab4364bdcbe574c5e70e80"
+        },
+        "date": 1787075553847,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 651,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5876,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2521,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3062,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15474,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8117,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1021,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 925,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48048,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2347,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 515025,
             "unit": "ns/op"
           }
         ]
