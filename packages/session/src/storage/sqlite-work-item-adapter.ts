@@ -6,7 +6,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
   const adapter: ProtocolStorage.WorkItemSubAdapter = {
     create: (hash: string, item: WorkItem.Info): boolean => {
       const parsed = WorkItem.Info.parse(item);
-      assertMatchingHash(hash, parsed.hash);
+      assertMatchingHash(hash, parsed.workItemId);
       assertPendingCompletionBaseline(parsed);
       const result = db
         .query(
@@ -21,7 +21,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
           WorkItem.deriveStatus(parsed),
           parsed.assigneeId ?? null,
           parsed.sessionId ?? null,
-          parsed.relations.parentHash ?? null,
+          parsed.relations.parentId ?? null,
           parsed.sourceChannel,
           parsed.timestamps.created,
           parsed.timestamps.updated,
@@ -38,7 +38,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
 
     compareAndSet: (hash: string, expectedHead: number, item: WorkItem.Info): boolean => {
       const parsed = WorkItem.Info.parse(item);
-      assertMatchingHash(hash, parsed.hash);
+      assertMatchingHash(hash, parsed.workItemId);
       if (parsed.revision !== expectedHead + 1) {
         throw new Error(
           `WorkItem revision must advance once: expected=${expectedHead} payload=${parsed.revision}`,
@@ -79,7 +79,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
           WorkItem.deriveStatus(parsed),
           parsed.assigneeId ?? null,
           parsed.sessionId ?? null,
-          parsed.relations.parentHash ?? null,
+          parsed.relations.parentId ?? null,
           parsed.sourceChannel,
           Date.now(),
           hash,
@@ -94,7 +94,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
 
       addNullableCondition(conditions, params, "assignee_id", filter?.assigneeId);
       addNullableCondition(conditions, params, "session_id", filter?.sessionId);
-      addNullableCondition(conditions, params, "parent_hash", filter?.parentHash);
+      addNullableCondition(conditions, params, "parent_hash", filter?.parentId);
 
       if (filter?.status && filter.status.length > 0) {
         const placeholders = filter.status.map(() => "?").join(", ");
@@ -209,7 +209,7 @@ type WorkItemRow = Readonly<{ hash: string; data: string }>;
 
 function decodeWorkItemRow(row: WorkItemRow): WorkItem.Info {
   const item = decodeWorkItem(row.data);
-  assertMatchingHash(row.hash, item.hash);
+  assertMatchingHash(row.hash, item.workItemId);
   return item;
 }
 

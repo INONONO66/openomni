@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
+import { PolicyDecision, type Command } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { DispatchPolicyRegistrationError } from "../../src/dispatch";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
 function submitUntrustedPolicy(policy: unknown): {
-  readonly submission: Promise<DispatchProtocol.Result>;
+  readonly submission: Promise<Command.Result>;
   readonly handlerWasCalled: () => boolean;
 } {
   let handlerCalled = false;
@@ -14,7 +14,7 @@ function submitUntrustedPolicy(policy: unknown): {
     handlerCalled = true;
     return { output: "must not run" };
   });
-  const submission: Promise<DispatchProtocol.Result> = Reflect.apply(runtime.submit, runtime, [
+  const submission: Promise<Command.Result> = Reflect.apply(runtime.submit, runtime, [
     { action: "resident.ask", target: { kind: "resident" }, payload: "hello" },
     {
       traceId: "trace-untrusted-policy",
@@ -26,7 +26,7 @@ function submitUntrustedPolicy(policy: unknown): {
   return { submission, handlerWasCalled: () => handlerCalled };
 }
 
-async function rejectionOf(submission: Promise<DispatchProtocol.Result>): Promise<Error> {
+async function rejectionOf(submission: Promise<Command.Result>): Promise<Error> {
   try {
     await submission;
   } catch (error) {

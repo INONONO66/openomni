@@ -1,4 +1,4 @@
-import { Adapter, type Dispatch, type Ingress } from "@openomni/protocol";
+import { Adapter, type Ingress, type Wait } from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
@@ -111,7 +111,7 @@ function actorMessageCorrelation(
   message: Adapter.InboundMessage,
   descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
   threadId: string | undefined,
-): Dispatch.Correlation {
+): Wait.Correlation {
   const token = rawCorrelationToken(message.raw);
   return {
     ...scopedCorrelation(message, descriptor),

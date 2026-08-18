@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { Dispatch, Ingress } from "@openomni/protocol";
+import type { Command, Ingress, Wait } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "@openomni/session";
 import {
   dispatchEvidence,
@@ -14,7 +14,7 @@ const correlation = Object.freeze({
   endpointId: correlationFixture.endpointId,
   channelId: correlationFixture.channelId,
   tokenHash: correlationFixture.tokenHash,
-}) satisfies Dispatch.Correlation;
+}) satisfies Wait.Correlation;
 
 function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.DirectEvent {
   return {
@@ -29,7 +29,7 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
   };
 }
 
-function command(overrides: Partial<Dispatch.Command> = {}): Dispatch.Command {
+function command(overrides: Partial<Command.Request> = {}): Command.Request {
   return {
     dispatchId: "dispatch-1",
     traceId: "trace-matcher-test",
@@ -76,7 +76,7 @@ describe("wait matcher — ingress evidence", () => {
     const claim = {
       endpointId: "telegram:seller-1",
       channelId: correlation.channelId,
-    } satisfies Dispatch.Correlation;
+    } satisfies Wait.Correlation;
 
     const suffixMatch = ingressEvidence(directEvent({ userId: "seller-1" }), claim);
     const mismatch = ingressEvidence(directEvent({ userId: "intruder-2" }), claim);
@@ -95,7 +95,7 @@ describe("wait matcher — ingress evidence", () => {
     const claim = {
       endpointId: "telegram:seller-1",
       channelId: correlation.channelId,
-    } satisfies Dispatch.Correlation;
+    } satisfies Wait.Correlation;
     const withProof = directEvent({
       meta: {
         correlation: claim,
@@ -161,7 +161,6 @@ describe("wait matcher — ingress evidence", () => {
       id: "actor-target",
       kind: "ai_agent",
       trustTier: "collaborator",
-      relationship: "collaborator",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-target",
@@ -173,7 +172,6 @@ describe("wait matcher — ingress evidence", () => {
       id: "actor-r2",
       kind: "ai_agent",
       trustTier: "collaborator",
-      relationship: "collaborator",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-r2",
@@ -233,7 +231,7 @@ describe("wait matcher — ingress evidence", () => {
       endpointId: "telegram:seller-1",
       channelId: correlation.channelId,
       threadId: "thread-1",
-    } satisfies Dispatch.Correlation;
+    } satisfies Wait.Correlation;
     const replyFromB = directEvent({
       meta: { correlation: claim, actor: { actorId: "actor-b" } },
     });
@@ -292,11 +290,11 @@ describe("wait matcher — dispatch evidence", () => {
     });
     const fromPinned = command({
       correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "worker", actorId: "actor-a" },
+      actor: { kind: "internal_worker", actorId: "actor-a" },
     });
     const fromOther = command({
       correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "worker", actorId: "actor-b" },
+      actor: { kind: "internal_worker", actorId: "actor-b" },
     });
 
     expect(

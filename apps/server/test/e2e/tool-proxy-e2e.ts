@@ -37,7 +37,7 @@ function sendAndWait(text: string): Promise<string> {
 }
 
 async function main() {
-  console.log("=== OpenOmni E2E Test: Custom Tool + Dispatch ===\n");
+  console.log("=== OpenOmni E2E Test: Custom Tool + Command ===\n");
   console.log(`Target: ${WS_URL}`);
 
   // #521 removed the mock `weather_lookup` tool from the production catalog.

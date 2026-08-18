@@ -1,5 +1,5 @@
 import type { InjectionQueue } from "@openomni/openomni";
-import type { WorkerRunState } from "./worker-runner-types";
+import type { ActiveRunHandle } from "./worker-runner-types";
 
 export namespace WorkerIpcHandlers {
   interface SharedOptions {
@@ -9,18 +9,18 @@ export namespace WorkerIpcHandlers {
 
   interface CancelRunOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "get">;
+    readonly activeRuns: Pick<ActiveRunHandle.ReadableActiveRuns, "get">;
   }
 
   interface DeliverMessageOptions extends SharedOptions {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "get">;
+    readonly activeRuns: Pick<ActiveRunHandle.ReadableActiveRuns, "get">;
     readonly injectionQueue: InjectionQueue.Instance;
   }
 
   interface ShutdownIdleOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "size">;
+    readonly activeRuns: Pick<ActiveRunHandle.ReadableActiveRuns, "size">;
   }
 
   interface ToolCallSettledOptions extends Pick<SharedOptions, "ipcAuthToken"> {

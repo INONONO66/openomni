@@ -72,7 +72,7 @@ function isObject(value: unknown): value is object {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const canonicalMetadataSchema = Policy.Definition.omit({ timing: true });
+const canonicalMetadataSchema = Policy.Definition;
 
 function registrationName(name: unknown): string {
   return typeof name === "string" ? name : "<unknown>";

@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { InjectionQueue } from "@openomni/openomni";
 import { WorkerIpcHandlers } from "../../src/execution/worker-ipc-handlers";
-import type { WorkerRunState } from "../../src/execution/worker-runner-types";
+import type { ActiveRunHandle } from "../../src/execution/worker-runner-types";
 
-type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
+type ActiveRun = NonNullable<ReturnType<ActiveRunHandle.ActiveRunRegistry["get"]>>;
 
 function createRun(sessionId: string): ActiveRun {
   return { sessionId, controller: new AbortController() };

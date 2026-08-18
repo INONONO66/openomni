@@ -94,7 +94,7 @@ function buildHistory(messageCount: number, sessionID: string): Message.WithPart
 }
 
 /**
- * A policy that reads nothing from the context. Dispatch overhead measured with
+ * A policy that reads nothing from the context. Command overhead measured with
  * these registered is pure engine cost, not policy cost.
  */
 function inertPolicy(index: number): CanonicalPolicyRegistrationGeneric<GenericPolicyContext> {

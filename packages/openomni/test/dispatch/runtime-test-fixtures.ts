@@ -1,4 +1,4 @@
-import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
+import { PolicyDecision, type Command } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import type { DispatchPolicyRegistration } from "../../src/dispatch/policy-registration";
@@ -33,7 +33,7 @@ export async function createWorkerRunFixture(runId = "run-1", sessionTitle = `${
   return session;
 }
 
-export function input(action = "resident.ask"): DispatchProtocol.Input {
+export function input(action = "resident.ask"): Command.Input {
   return { action, target: { kind: "resident" }, payload: "hello" };
 }
 

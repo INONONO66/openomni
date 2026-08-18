@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { RuntimeResource, Tool, WorkerBootstrap } from "@openomni/protocol";
+import type { Policy, Tool, WorkerBootstrap } from "@openomni/protocol";
 import {
   createMcpProxyProvider,
   type WorkerRunIpcServer,
@@ -156,7 +156,7 @@ describe("createMcpProxyProvider", () => {
     const agentEntry = makeEntry({
       source: "agent",
       canonicalName: "dispatch",
-      spec: { name: "dispatch", description: "Dispatch", inputSchema: {} },
+      spec: { name: "dispatch", description: "Command", inputSchema: {} },
     });
     const mcpEntry = makeEntry({
       source: "mcp",
@@ -257,7 +257,7 @@ describe("createMcpProxyProvider", () => {
   });
 
   it("preserves descriptors when proxying worker tools", () => {
-    const descriptor: RuntimeResource.Descriptor = {
+    const descriptor: Policy.Resource.Descriptor = {
       id: "tool:server:remote.echo",
       kind: "tool",
       source: { type: "server" },

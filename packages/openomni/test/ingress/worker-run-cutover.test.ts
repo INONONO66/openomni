@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Execution, Ingress } from "@openomni/protocol";
-import { Session, Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Session, Storage, WorkItemStore } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
 import { newTraceId } from "@openomni/telemetry";
@@ -14,7 +14,7 @@ import { newTraceId } from "@openomni/telemetry";
  *
  *   (b) a new worker execution produces NO worker_run_state row — its run
  *       lifecycle is WorkItem attempt facts (`work_item.attempt_allocated`
- *       + `work_item.attempt_finished` on the `work:<hash>` owner stream);
+ *       + `work_item.attempt_finished` on the `work:<workItemId>` owner stream);
  *   (c) the run's terminal extras (endedAt, error) survive a process
  *       restart — before the cutover they lived in the worker-run store's
  *       in-memory `runExtras` Map and were lost with the process.
@@ -105,7 +105,7 @@ describe("worker-run cutover (#510 D2b)", () => {
           (candidate) => candidate.workerRunId === request.runId,
         );
         if (!item) throw new Error("attempt-run WorkItem not found at dispatch time");
-        expect(factTypesOfWorkStream(item.hash)).toContain("work_item.attempt_allocated");
+        expect(factTypesOfWorkStream(item.workItemId)).toContain("work_item.attempt_allocated");
         return {
           runId: request.runId,
           sessionId: request.sessionId,
@@ -125,8 +125,8 @@ describe("worker-run cutover (#510 D2b)", () => {
 
     if (!dispatchedRunId) throw new Error("coordinator dispatch did not run");
     // NO worker_run_state row exists for the new execution.
-    expect(WorkerRunStateStore.get(sessionId, dispatchedRunId)).toBeUndefined();
-    expect(WorkerRunStateStore.listBySession(sessionId)).toHaveLength(0);
+    expect(Storage.getAdapter().workerRunState?.get(sessionId, dispatchedRunId)).toBeUndefined();
+    expect(Storage.getAdapter().workerRunState?.listBySession(sessionId)).toHaveLength(0);
 
     // The run lifecycle is attempt facts on the work stream.
     const item = WorkItemStore.list().find(
@@ -140,7 +140,7 @@ describe("worker-run cutover (#510 D2b)", () => {
       attemptId: item.currentAttemptId,
       outcome: "succeeded",
     });
-    expect(factTypesOfWorkStream(item.hash)).toEqual([
+    expect(factTypesOfWorkStream(item.workItemId)).toEqual([
       "work_item.attempt_allocated",
       "work_item.attempt_finished",
     ]);
@@ -186,6 +186,6 @@ describe("worker-run cutover (#510 D2b)", () => {
     expect(item.attemptTerminal?.error).toContain("executor exploded");
     expect(item.attemptTerminal?.endedAt).toBeGreaterThanOrEqual(before);
     // And still no worker_run_state row after the restart.
-    expect(WorkerRunStateStore.listBySession(sessionId)).toHaveLength(0);
+    expect(Storage.getAdapter().workerRunState?.listBySession(sessionId)).toHaveLength(0);
   });
 });

@@ -1,4 +1,4 @@
-import type { Communication, Dispatch, Wait } from "@openomni/protocol";
+import type { Communication, Wait } from "@openomni/protocol";
 import type { PendingInteractionStore } from "@openomni/session";
 
 /** Shared Wait-domain fixture builders for openomni tests (#215). */
@@ -10,7 +10,7 @@ export const correlationFixture = Object.freeze({
   threadId: "thread-1",
   tokenHash: "token-1",
   externalConversationId: "conversation-1",
-}) satisfies Dispatch.Correlation;
+}) satisfies Wait.Correlation;
 
 export function buildInteraction(
   id: string,

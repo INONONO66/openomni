@@ -13,7 +13,7 @@ import {
 } from "./completion-admission.js";
 
 type TerminalLinkageItem = Readonly<{
-  hash: string;
+  workItemId: string;
   revision: number;
   attempt: number;
   timestamps: Readonly<{ completed?: number }>;
@@ -49,7 +49,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     evidenceIds.add(evidence.id);
   }
   const foreignAdmissionIndex = item.completionFacts.admissions.findIndex(
-    ({ workItemHash }) => workItemHash !== item.hash,
+    ({ workItemHash }) => workItemHash !== item.workItemId,
   );
   if (foreignAdmissionIndex !== -1) {
     addIssue(ctx, ["completionFacts", "admissions", foreignAdmissionIndex, "workItemHash"]);
@@ -64,7 +64,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   if (completedAt === undefined) {
     addIssue(ctx, ["timestamps", "completed"], "receipt requires completed timestamp");
   }
-  if (receipt.hash !== item.hash) addIssue(ctx, ["completionTerminalReceipt", "hash"]);
+  if (receipt.hash !== item.workItemId) addIssue(ctx, ["completionTerminalReceipt", "hash"]);
   if (receipt.contractRevision !== item.completionContract.revision) {
     addIssue(ctx, ["completionTerminalReceipt", "contractRevision"]);
   }
@@ -150,7 +150,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
         ]);
         continue;
       }
-      if (resolved.observation.subjectRef !== item.hash) {
+      if (resolved.observation.subjectRef !== item.workItemId) {
         addIssue(ctx, ["completionFacts", "observations", resolved.index, "subjectRef"]);
       }
       if (resolved.observation.basisRef !== result.basisRef) {
@@ -357,7 +357,7 @@ function validateCompletionReportEvidence(
             return [];
           }
           const { index, observation } = resolved;
-          if (observation.subjectRef !== item.hash) {
+          if (observation.subjectRef !== item.workItemId) {
             addIssue(ctx, ["completionFacts", "observations", index, "subjectRef"]);
             return [];
           }

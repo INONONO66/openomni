@@ -46,7 +46,6 @@ export function resolveIngressActor(event: Ingress.InboundEvent): Ingress.Inboun
         actorId: resolved.identity.id,
         kind: resolved.identity.kind,
         trustTier: resolved.identity.trustTier,
-        relationship: resolved.identity.relationship,
         endpointId: resolved.endpoint.id,
         endpoint: resolved.endpoint,
       },

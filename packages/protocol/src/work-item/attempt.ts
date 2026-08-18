@@ -11,7 +11,7 @@ import { z } from "zod";
  *     identity. Consumers never parse it — no format contract beyond
  *     non-emptiness is exposed.
  *   - `attemptSeq` is monotonically allocated per WorkItem by the owner
- *     stream's serialized append (`work:<hash>`) and is never reused.
+ *     stream's serialized append (`work:<workItemId>`) and is never reused.
  *   - `retryOf` is nullable prior-`attemptId` lineage — lineage, never
  *     equivalence: a retry is a NEW attempt that points at its predecessor.
  *   - `contentFingerprint` / `environmentFingerprint` are structured input

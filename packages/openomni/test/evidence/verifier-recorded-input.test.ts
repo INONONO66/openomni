@@ -31,7 +31,7 @@ async function storedItem(): Promise<WorkItem.Info> {
     },
     "trace-test",
   );
-  const item = await WorkItemStore.start(created.hash, "trace-test");
+  const item = await WorkItemStore.start(created.workItemId, "trace-test");
   if (!item) throw new Error("missing started fixture item");
   return item;
 }
@@ -86,7 +86,7 @@ function persistedDetail(item: WorkItem.Info, criterion: WorkItem.Criterion): st
   return JSON.stringify({
     type: "verifier_recorded_inputs",
     version: 1,
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     basisRef: item.completionContract.basisRef,
     criterionId: criterion.id,
     verifierKind: "archived_quote_match",

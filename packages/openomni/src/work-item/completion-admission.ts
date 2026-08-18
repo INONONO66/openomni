@@ -239,7 +239,7 @@ function reserveCompletionRequestWithLimit(
       },
       timestamps: { ...current.timestamps, updated: input.now },
     });
-    if (input.completionWriter(current.hash, current.revision, updated)) {
+    if (input.completionWriter(current.workItemId, current.revision, updated)) {
       return { state: "reserved", reservation: nextReservation };
     }
   }
@@ -315,7 +315,7 @@ function releaseCompletionReservation(
     },
     timestamps: { ...item.timestamps, updated: Math.max(item.timestamps.updated, releasedAt) },
   });
-  return completionWriter(item.hash, item.revision, candidate);
+  return completionWriter(item.workItemId, item.revision, candidate);
 }
 
 type CompletionAuthoritySubject = Readonly<{
@@ -450,7 +450,7 @@ export function createCompletionDecision(
         .filter((blocker) => blocker.resolvedAt === undefined)
         .map((blocker) => blocker.id),
       resourceDescriptor: {
-        id: `work:${item.hash}`,
+        id: `work:${item.workItemId}`,
         kind: "work",
         labels: [],
         capabilities: [],
@@ -545,12 +545,12 @@ function assertProposedFacts(item: WorkItem.Info, request: WorkItem.CompletionRe
     );
   }
   const foreignObservation = request.observations.find(
-    (observation) => observation.subjectRef !== item.hash,
+    (observation) => observation.subjectRef !== item.workItemId,
   );
   if (foreignObservation) {
     throw new CompletionAdmissionError(
       "invalid_subject",
-      `observation ${foreignObservation.id} does not target ${item.hash}`,
+      `observation ${foreignObservation.id} does not target ${item.workItemId}`,
     );
   }
   const foreignEffect = request.effects.find((effect) => effect.attempt !== item.attempt);
@@ -592,7 +592,7 @@ async function assertResultAuthority(
       observations.length !== result.observationIds.length ||
       observations.some(
         (observation) =>
-          observation.basisRef !== result.basisRef || observation.subjectRef !== item.hash,
+          observation.basisRef !== result.basisRef || observation.subjectRef !== item.workItemId,
       )
     ) {
       throw new CompletionAdmissionError(
@@ -626,7 +626,7 @@ async function assertResultAuthority(
       );
     }
     const validation = await port.validate({
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
       requestId: request.id,
       contractRevision: request.contractRevision,
       basisRef: request.basisRef,
@@ -664,7 +664,8 @@ function assertProposedClaimAuthority(
         ? [...item.completionFacts.observations, ...request.observations]
             .filter(
               (observation) =>
-                observation.subjectRef === item.hash && observation.basisRef === request.basisRef,
+                observation.subjectRef === item.workItemId &&
+                observation.basisRef === request.basisRef,
             )
             .map(({ id }) => id)
         : results
@@ -1028,7 +1029,7 @@ export function createCompletionAdmissionService(
                 continue;
               }
               throw staleHead(
-                `WorkItem changed while reserving completion authority: ${reserved.hash}`,
+                `WorkItem changed while reserving completion authority: ${reserved.workItemId}`,
               );
             }
           }
@@ -1070,7 +1071,7 @@ export function createCompletionAdmissionService(
           ) {
             throw new CompletionAdmissionError(
               "stale_basis",
-              `completion request basis is stale for ${latest.hash}`,
+              `completion request basis is stale for ${latest.workItemId}`,
             );
           }
           request = rebaseRequestAtHead(request, latest.revision, { dropFacts: false });
@@ -1213,7 +1214,7 @@ function reserveCompletionLease(
   const acquired = reserveCompletionRequestWithLimit(
     {
       completionWriter: ctx.completionWriter,
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
       requestId: identity.id,
       requestRoot: identity.requestRoot,
       envelopeDigest: identity.envelopeDigest,
@@ -1233,7 +1234,7 @@ function reserveCompletionLease(
   if (acquired.state === "admitted") throw requestConflict(identity.id);
   const assertReservation = () =>
     assertCompletionReservationLease({
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
       requestId: identity.id,
       reservationId: acquired.reservation.id,
       ownerId: reservation.ownerId,
@@ -1389,7 +1390,7 @@ async function replayRequest(
       throw requestConflict(request.id);
     }
     const admission = admissions.find(({ id }) => id === receipt?.admissionId);
-    if (!admission) throw admissionRequired(item.hash, receipt?.admissionId ?? "missing");
+    if (!admission) throw admissionRequired(item.workItemId, receipt?.admissionId ?? "missing");
     return { admission, workItem: item, completed: true };
   }
   const admission = admissions.at(-1);
@@ -1412,7 +1413,7 @@ async function replayRequest(
       return { admission, workItem: item, completed: false };
     }
     return completeOrReevaluate(
-      authorizedCompletionAdapter(requiredAdapter(item.hash), ctx.completionWriter),
+      authorizedCompletionAdapter(requiredAdapter(item.workItemId), ctx.completionWriter),
       item,
       request,
       completionReport,
@@ -1423,7 +1424,7 @@ async function replayRequest(
   }
   if (item.revision === admission.recordedHead) {
     const completed = commitTerminal(
-      authorizedCompletionAdapter(requiredAdapter(item.hash), ctx.completionWriter),
+      authorizedCompletionAdapter(requiredAdapter(item.workItemId), ctx.completionWriter),
       item,
       admission,
       completionReport,
@@ -1443,7 +1444,7 @@ async function replayRequest(
     )
   ) {
     const completed = commitTerminal(
-      authorizedCompletionAdapter(requiredAdapter(item.hash), ctx.completionWriter),
+      authorizedCompletionAdapter(requiredAdapter(item.workItemId), ctx.completionWriter),
       item,
       admission,
       completionReport,
@@ -1455,7 +1456,7 @@ async function replayRequest(
     return { admission, workItem: completed, completed: true };
   }
   return completeOrReevaluate(
-    authorizedCompletionAdapter(requiredAdapter(item.hash), ctx.completionWriter),
+    authorizedCompletionAdapter(requiredAdapter(item.workItemId), ctx.completionWriter),
     item,
     request,
     completionReport,
@@ -1475,7 +1476,7 @@ async function completeOrReevaluate(
   assertReservation: (() => void) | undefined,
 ): Promise<CompletionBoundaryOutcome> {
   assertReservation?.();
-  const latest = requiredItem(adapter.get(recorded.hash), recorded.hash);
+  const latest = requiredItem(adapter.get(recorded.workItemId), recorded.workItemId);
   assertNotFailedOrCancelled(latest);
   if (WorkItem.deriveStatus(latest) === "completed") {
     if (
@@ -1489,7 +1490,7 @@ async function completeOrReevaluate(
       ({ id }) => id === latest.completionTerminalReceipt?.admissionId,
     );
     if (!terminalAdmission) {
-      throw admissionRequired(latest.hash, latest.completionTerminalReceipt.admissionId);
+      throw admissionRequired(latest.workItemId, latest.completionTerminalReceipt.admissionId);
     }
     return { admission: terminalAdmission, workItem: latest, completed: true };
   }
@@ -1520,9 +1521,9 @@ async function completeOrReevaluate(
   if (!isAdmitted(nextAdmission)) {
     return { admission: nextAdmission, workItem: nextRecorded, completed: false };
   }
-  const beforeTerminal = requiredItem(adapter.get(latest.hash), latest.hash);
+  const beforeTerminal = requiredItem(adapter.get(latest.workItemId), latest.workItemId);
   if (beforeTerminal.revision !== nextAdmission.recordedHead) {
-    throw staleHead(`WorkItem changed again while completing: ${latest.hash}`);
+    throw staleHead(`WorkItem changed again while completing: ${latest.workItemId}`);
   }
   const completed = commitTerminal(
     adapter,
@@ -1600,15 +1601,17 @@ async function appendAdmission(
     },
     timestamps: { ...existing.timestamps, updated: admission.createdAt },
   });
-  if (!adapter.compareAndSet(existing.hash, existing.revision, updated)) {
-    throw staleHead(`WorkItem changed while recording completion admission: ${existing.hash}`);
+  if (!adapter.compareAndSet(existing.workItemId, existing.revision, updated)) {
+    throw staleHead(
+      `WorkItem changed while recording completion admission: ${existing.workItemId}`,
+    );
   }
   Bus.publish(WorkItem.Events.CompletionAdmissionRecorded, {
     traceId,
     time: admission.createdAt,
     sessionId: updated.sessionId,
     payload: {
-      hash: updated.hash,
+      workItemId: updated.workItemId,
       admissionId: admission.id,
       decision: admission.decision,
       recordedHead: admission.recordedHead,
@@ -1627,19 +1630,19 @@ function commitTerminal(
   traceId: string,
   reservationBridged = false,
 ): WorkItem.Info {
-  const current = requiredItem(adapter.get(existing.hash), existing.hash);
+  const current = requiredItem(adapter.get(existing.workItemId), existing.workItemId);
   assertNotFailedOrCancelled(current);
   if (
     current.revision !== existing.revision ||
     (!reservationBridged && current.revision !== admission.recordedHead)
   ) {
-    throw staleHead(`WorkItem changed before terminal completion: ${existing.hash}`);
+    throw staleHead(`WorkItem changed before terminal completion: ${existing.workItemId}`);
   }
   assertSameBasis(current, admission);
   const report = verifyCompletionReport(current, admission, completionReport);
   const receipt: WorkItem.CompletionTerminalReceipt = {
     version: 1,
-    hash: current.hash,
+    hash: current.workItemId,
     requestId: admission.requestId,
     admissionId: admission.id,
     contractRevision: admission.contractRevision,
@@ -1655,8 +1658,8 @@ function commitTerminal(
     timestamps: { ...current.timestamps, completed: time, updated: time },
   });
   assertReservation?.();
-  if (!adapter.compareAndSet(current.hash, current.revision, completed)) {
-    throw staleHead(`WorkItem changed during terminal completion: ${current.hash}`);
+  if (!adapter.compareAndSet(current.workItemId, current.revision, completed)) {
+    throw staleHead(`WorkItem changed during terminal completion: ${current.workItemId}`);
   }
   // The three publishes below project ONE atomic terminal commit, so they
   // share ONE traceId (D11) — the requesting caller's — instead of the three
@@ -1668,7 +1671,7 @@ function commitTerminal(
       traceId,
       time,
       sessionId: completed.sessionId,
-      payload: { hash: completed.hash, from: previousStatus, to: completedStatus },
+      payload: { workItemId: completed.workItemId, from: previousStatus, to: completedStatus },
     });
   }
   Bus.publish(WorkItem.Events.Updated, {
@@ -1676,7 +1679,7 @@ function commitTerminal(
     time,
     sessionId: completed.sessionId,
     payload: {
-      hash: completed.hash,
+      workItemId: completed.workItemId,
       fields: ["timestamps", "completionReport", "completionTerminalReceipt"],
     },
   });
@@ -1690,10 +1693,10 @@ function commitTerminal(
 }
 
 function assertRequestAtHead(item: WorkItem.Info, request: WorkItem.CompletionRequest): void {
-  if (request.workItemHash !== item.hash) {
+  if (request.workItemHash !== item.workItemId) {
     throw new CompletionAdmissionError(
       "invalid_subject",
-      `completion request subject ${request.workItemHash} does not match ${item.hash}`,
+      `completion request subject ${request.workItemHash} does not match ${item.workItemId}`,
     );
   }
   if (request.expectedHead !== item.revision) {
@@ -1707,7 +1710,7 @@ function assertRequestAtHead(item: WorkItem.Info, request: WorkItem.CompletionRe
   ) {
     throw new CompletionAdmissionError(
       "stale_basis",
-      `completion request basis is stale for ${item.hash}`,
+      `completion request basis is stale for ${item.workItemId}`,
     );
   }
 }
@@ -1735,7 +1738,7 @@ function assertAppendableAdmission(
 ): void {
   if (
     admission.requestId !== request.id ||
-    admission.workItemHash !== item.hash ||
+    admission.workItemHash !== item.workItemId ||
     admission.requestRoot !== completionRequestRoot(request) ||
     admission.origin !== request.origin ||
     !sameSourceIdentity(admission.sourceIdentity, request.sourceIdentity) ||
@@ -1960,7 +1963,7 @@ function requestFromAdmission(
     id: admission.requestId,
     origin: admission.origin,
     sourceIdentity: admission.sourceIdentity,
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
@@ -1974,10 +1977,12 @@ function requestFromAdmission(
 }
 
 function assertUnchangedAfterAuthority(adapter: WorkItemAdapter, expected: WorkItem.Info): void {
-  const current = requiredItem(adapter.get(expected.hash), expected.hash);
+  const current = requiredItem(adapter.get(expected.workItemId), expected.workItemId);
   assertNotFailedOrCancelled(current);
   if (current.revision !== expected.revision) {
-    throw staleHead(`WorkItem changed while resolving completion authority: ${expected.hash}`);
+    throw staleHead(
+      `WorkItem changed while resolving completion authority: ${expected.workItemId}`,
+    );
   }
 }
 
@@ -1986,7 +1991,7 @@ function assertNotFailedOrCancelled(item: WorkItem.Info): void {
   if (status !== "failed" && status !== "cancelled") return;
   throw new CompletionAdmissionError(
     "terminal_state",
-    `Cannot complete a ${status} WorkItem: ${item.hash}`,
+    `Cannot complete a ${status} WorkItem: ${item.workItemId}`,
   );
 }
 
@@ -1994,7 +1999,7 @@ function assertNotCompleted(item: WorkItem.Info): void {
   if (WorkItem.deriveStatus(item) !== "completed") return;
   throw new CompletionAdmissionError(
     "terminal_state",
-    `Cannot start a new completion request for completed WorkItem: ${item.hash}`,
+    `Cannot start a new completion request for completed WorkItem: ${item.workItemId}`,
   );
 }
 
@@ -2005,7 +2010,7 @@ function assertSameBasis(item: WorkItem.Info, admission: WorkItem.CompletionAdmi
   ) {
     throw new CompletionAdmissionError(
       "stale_basis",
-      `completion admission basis is stale for ${item.hash}`,
+      `completion admission basis is stale for ${item.workItemId}`,
     );
   }
 }
@@ -2197,7 +2202,7 @@ export function createWorkItemCompletionGateway(
             );
             if (!released) {
               failures.push({
-                workItemHash: item.hash,
+                workItemHash: item.workItemId,
                 admissionId: staleReservation.id,
                 error: "completion reservation release lost row CAS",
               });
@@ -2237,7 +2242,7 @@ export function createWorkItemCompletionGateway(
               if (
                 !(await resumeAndSettle(
                   service,
-                  item.hash,
+                  item.workItemId,
                   admission,
                   admission.completionReportSnapshot,
                   traceId,
@@ -2250,7 +2255,7 @@ export function createWorkItemCompletionGateway(
             }
             if (
               await materializeBlocker(
-                item.hash,
+                item.workItemId,
                 `${admission.id}:blocker`,
                 blockerDescription,
                 traceId,
@@ -2269,7 +2274,7 @@ export function createWorkItemCompletionGateway(
           if (
             await resumeAndSettle(
               service,
-              item.hash,
+              item.workItemId,
               admission,
               admission.completionReportSnapshot,
               traceId,
@@ -2278,7 +2283,7 @@ export function createWorkItemCompletionGateway(
             recovered += 1;
           } else {
             failures.push({
-              workItemHash: item.hash,
+              workItemHash: item.workItemId,
               admissionId: admission.id,
               error: "completion recovery remained incomplete",
             });
@@ -2291,7 +2296,7 @@ export function createWorkItemCompletionGateway(
           ) {
             if (
               await materializeBlocker(
-                item.hash,
+                item.workItemId,
                 `${admission.id}:recovery-blocker`,
                 `completion recovery blocked: ${message}`,
                 traceId,
@@ -2304,7 +2309,7 @@ export function createWorkItemCompletionGateway(
             continue;
           }
           failures.push({
-            workItemHash: item.hash,
+            workItemHash: item.workItemId,
             admissionId: admission.id,
             error: message,
           });

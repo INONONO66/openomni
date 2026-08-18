@@ -115,7 +115,7 @@ function retryableItem(existing: WorkItem.Info, now: number): WorkItem.Info {
     attempt: nextAttempt,
     completionContract: {
       ...existing.completionContract,
-      basisRef: `${existing.hash}:attempt:${nextAttempt}`,
+      basisRef: `${existing.workItemId}:attempt:${nextAttempt}`,
     },
     workerRunId: undefined,
     workSessionId: undefined,

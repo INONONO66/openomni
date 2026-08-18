@@ -173,7 +173,7 @@ const CompletionSourceShape = z
 type FixedCompletionSourceValue = z.infer<typeof FixedCompletionSource>;
 type QualifiedCompletionSource = Exclude<CompletionSource, FixedCompletionSourceValue>;
 
-/** Dispatch-surface input: fixed worker/replay/recovery sources arrive without
+/** Command-surface input: fixed worker/replay/recovery sources arrive without
  *  identity (it is synthesized from the execution result, so a caller-supplied
  *  identity is rejected as forgery); qualified sources must carry
  *  caller-authenticated identity. The type-predicate refinement narrows the

@@ -26,7 +26,7 @@ describe("ReadBackExecutor.execute", () => {
       },
       "trace-test",
     );
-    const before = structuredClone(WorkItemStore.get(item.hash));
+    const before = structuredClone(WorkItemStore.get(item.workItemId));
     const origin = await startFixtureServer();
 
     const readBack = await ReadBackExecutor.execute(
@@ -45,6 +45,6 @@ describe("ReadBackExecutor.execute", () => {
     });
     if (readBack?.kind !== "url_fetch") throw new Error("expected url_fetch evidence");
     expect(readBack.contentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
   });
 });

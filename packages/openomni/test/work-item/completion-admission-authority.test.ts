@@ -19,14 +19,14 @@ const criterion = {
 
 function item(overrides: Readonly<Record<string, unknown>> = {}): WorkItem.Info {
   const parsed = WorkItem.Info.safeParse({
-    hash: "wi_authority",
+    workItemId: "wi_authority",
     revision: 2,
     name: "Authority test",
     sourceMessageId: "msg_authority",
     sourceChannel: "test",
     attempt: 1,
     timestamps: { created: 1, updated: 1 },
-    relations: { childHashes: [], dependsOn: [] },
+    relations: { childIds: [], dependsOn: [] },
     intent: "complete",
     goal: "lock admission authority",
     constraints: [],

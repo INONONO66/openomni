@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Dispatch, Policy, Run, Tool } from "../../src/index.js";
+import { Command, Policy, Run, Tool } from "../../src/index.js";
 
 interface Validator {
   readonly safeParse: (input: unknown) => { readonly success: boolean };
@@ -24,8 +24,8 @@ const dispatchInput = {
 
 const parityCases: readonly ParityCase[] = [
   {
-    name: "Dispatch.ActorContext",
-    canonical: Dispatch.ActorContext,
+    name: "Command.ActorContext",
+    canonical: Command.ActorContext,
     policy: Policy.PolicyPoint.InputSchemas["dispatch.action.pre"],
     embed: (actor) => ({ ...dispatchInput, actor }),
     candidates: [
@@ -38,7 +38,6 @@ const parityCases: readonly ParityCase[] = [
         runId: "run-2",
         workerRunId: "worker-1",
         workspaceRoot: "/workspace",
-        permissions: ["tool.read"],
         labels: ["trusted"],
         trustTier: "assigned_worker",
         reason: "delegated",
@@ -51,8 +50,8 @@ const parityCases: readonly ParityCase[] = [
     ],
   },
   {
-    name: "Dispatch.Target",
-    canonical: Dispatch.Target,
+    name: "Command.Target",
+    canonical: Command.Target,
     policy: Policy.PolicyPoint.InputSchemas["dispatch.action.pre"],
     embed: (target) => ({ ...dispatchInput, target }),
     candidates: [

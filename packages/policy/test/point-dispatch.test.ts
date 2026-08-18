@@ -70,45 +70,9 @@ describe("PolicyEngine dispatchPoint selection", () => {
       unresolvedBlockerIds: [],
     });
 
-    expect(Policy.PolicyPoint.MigrationMapping[timing]).toEqual(["run.completion.pre"]);
-    expect(Object.values(Policy.PolicyPoint.MigrationMapping).flat()).not.toContain(
-      "work.complete.pre",
-    );
     expect(decision.verdict).toBe("allow");
     expect(observedPointId).toBe("work.complete.pre");
     expect(observedTiming).toBe(timing);
-  });
-
-  test("resolves canonical timing after rejecting compatibility map mutation", async () => {
-    const script = `
-      import { Policy } from "@openomni/protocol";
-      let mutationRejected = false;
-      try {
-        Policy.PolicyPoint.MigrationMapping[Policy.Timing.DISPATCH_AUTHORIZE] = ["run.lifecycle.pre"];
-      } catch {
-        mutationRejected = true;
-      }
-      if (!mutationRejected) process.exit(1);
-      const { PolicyEngine } = await import("./src/index.ts");
-      const decision = await PolicyEngine.create().dispatchPoint("dispatch.action.pre", {
-        actor: { kind: "system", actorId: "system:test" },
-        dispatchId: "dispatch-1",
-        action: "resident.ask",
-        target: { kind: "resident" },
-        sessionId: "session-1",
-        runId: "run-1",
-      });
-      if (decision.verdict !== "allow") process.exit(1);
-    `;
-    const child = Bun.spawn(["bun", "-e", script], {
-      cwd: new URL("../", import.meta.url).pathname,
-      stdout: "ignore",
-      stderr: "pipe",
-    });
-
-    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-
-    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
   });
 
   test("selects only the requested point and preserves stable priority order", async () => {

@@ -21,7 +21,11 @@ function requireAdapter() {
   );
 }
 
-function frozenWrite(method: Communication.PendingAsk.WriteMethod): never {
+// The retired write-method vocabulary lives only inside the FrozenError data
+// (#498 C4 export diet) — derive it from there instead of a second export.
+type FrozenWriteMethod = Communication.PendingAsk.FrozenError["data"]["method"];
+
+function frozenWrite(method: FrozenWriteMethod): never {
   throw new Communication.PendingAsk.FrozenError({
     message: `PendingAskStore is frozen (#510 D2a): ${method} is retired — historical pending_ask rows are read-only archive`,
     code: "pending_ask_frozen",
@@ -30,7 +34,9 @@ function frozenWrite(method: Communication.PendingAsk.WriteMethod): never {
 }
 
 export namespace PendingAskStore {
-  export function create(_input: Communication.PendingAsk.Create): never {
+  // Frozen writer: the Create input vocabulary is retired with the write
+  // path (#498 C4), so the refused input is deliberately untyped.
+  export function create(_input: unknown): never {
     frozenWrite("create");
   }
 

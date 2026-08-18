@@ -93,7 +93,11 @@ describe("WorkItemStore.allocateAttempt", () => {
   test("appends the full attempt identity as a fact at seq === projected revision", async () => {
     const item = await createItem("attempt-append");
 
-    const allocation = await WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test");
+    const allocation = await WorkItemStore.allocateAttempt(
+      item.workItemId,
+      identity(),
+      "trace-test",
+    );
     if (!allocation) throw new Error("expected an allocation");
 
     expect(allocation.attempt.attemptSeq).toBe(1);
@@ -103,7 +107,7 @@ describe("WorkItemStore.allocateAttempt", () => {
     expect(allocation.item.lastAttemptSeq).toBe(1);
     expect(allocation.item.currentAttemptId).toBe(allocation.attempt.attemptId);
 
-    const fact = workFactsOf(item.hash).at(-1);
+    const fact = workFactsOf(item.workItemId).at(-1);
     expect(fact?.type).toBe("work_item.attempt_allocated");
     expect(fact?.seq).toBe(allocation.item.revision);
     const payload = JSON.parse(fact?.data ?? "{}") as Record<string, unknown>;
@@ -124,16 +128,16 @@ describe("WorkItemStore.allocateAttempt", () => {
   test("attemptSeq is monotonic and never reused; retryOf records the prior attempt lineage", async () => {
     const item = await createItem("attempt-monotonic");
 
-    const first = await WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test");
+    const first = await WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test");
     if (!first) throw new Error("expected the first allocation");
 
     // A failed run retried through the existing retry path keeps the
     // attempt-identity watermark: the next allocation advances the seq and
     // points its lineage at the recorded prior attempt.
-    await WorkItemStore.fail(item.hash, "trace-test", "first attempt failed");
-    await WorkItemStore.retry(item.hash, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "first attempt failed");
+    await WorkItemStore.retry(item.workItemId, "trace-test");
     const second = await WorkItemStore.allocateAttempt(
-      item.hash,
+      item.workItemId,
       identity("retry the goal"),
       "trace-test",
     );
@@ -150,7 +154,11 @@ describe("WorkItemStore.allocateAttempt", () => {
 
   test("a non-monotonic seq is an explosive backstop, not a silent skip", async () => {
     const item = await createItem("attempt-backstop");
-    const allocation = await WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test");
+    const allocation = await WorkItemStore.allocateAttempt(
+      item.workItemId,
+      identity(),
+      "trace-test",
+    );
     if (!allocation) throw new Error("expected an allocation");
 
     expect(() =>
@@ -163,10 +171,10 @@ describe("WorkItemStore.allocateAttempt", () => {
 
   test("terminal work items allocate nothing", async () => {
     const item = await createItem("attempt-terminal");
-    await WorkItemStore.cancel(item.hash, "trace-test");
+    await WorkItemStore.cancel(item.workItemId, "trace-test");
 
     await expect(
-      WorkItemStore.allocateAttempt(item.hash, identity(), "trace-test"),
+      WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test"),
     ).rejects.toThrow("Cannot allocate an attempt on a cancelled work item");
   });
 });

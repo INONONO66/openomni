@@ -1,4 +1,4 @@
-import { CronJob, Dispatch } from "@openomni/protocol";
+import { CronJob, Command } from "@openomni/protocol";
 import type { DispatchSchedulerOwner } from "../owners.js";
 import type { DispatchHandler } from "../registry.js";
 import { extractText } from "../../ingress/handlers.js";
@@ -13,18 +13,18 @@ function requireScheduler(scheduler: DispatchSchedulerOwner | undefined): Dispat
   return scheduler;
 }
 
-function scheduleFromPayload(command: Dispatch.Command): string | undefined {
+function scheduleFromPayload(command: Command.Request): string | undefined {
   const payload = asRecord(command.payload);
   return typeof payload?.schedule === "string" ? payload.schedule : undefined;
 }
 
-function payloadText(command: Dispatch.Command): string {
+function payloadText(command: Command.Request): string {
   const payload = asRecord(command.payload);
   if (payload && "payload" in payload) return extractText(payload.payload);
   return extractText(command.payload);
 }
 
-function scheduleTarget(command: Dispatch.Command): CronJob.Target {
+function scheduleTarget(command: Command.Request): CronJob.Target {
   if (command.target.kind === "worker") {
     return {
       kind: "worker",
@@ -43,11 +43,11 @@ function scheduleTarget(command: Dispatch.Command): CronJob.Target {
 export function createScheduleDispatchHandlers(
   options: ScheduleDispatchHandlerOptions = {},
 ): Record<
-  typeof Dispatch.Actions.ScheduleCreate | typeof Dispatch.Actions.ScheduleCancel,
+  typeof Command.Actions.ScheduleCreate | typeof Command.Actions.ScheduleCancel,
   DispatchHandler
 > {
   return {
-    [Dispatch.Actions.ScheduleCreate](command) {
+    [Command.Actions.ScheduleCreate](command) {
       const scheduler = requireScheduler(options.scheduler);
       const schedule = scheduleFromPayload(command);
       if (!schedule) throw new Error("schedule.create requires payload.schedule");
@@ -70,7 +70,7 @@ export function createScheduleDispatchHandlers(
       return { output: { scheduled: true, jobId, messageId: jobId } };
     },
 
-    [Dispatch.Actions.ScheduleCancel](command) {
+    [Command.Actions.ScheduleCancel](command) {
       const scheduler = requireScheduler(options.scheduler);
       const jobId = command.target.id ?? command.target.name;
       if (!jobId) throw new Error("schedule.cancel requires target.id");

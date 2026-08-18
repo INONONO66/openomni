@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { PolicyEvent, type RuntimeResource } from "@openomni/protocol";
+import { PolicyEvent, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
@@ -18,7 +18,7 @@ function baseCtx(): Omit<PolicyContext, "timing"> & { sessionId: string; runId: 
   };
 }
 
-function systemToolDescriptor(name: string): RuntimeResource.Descriptor {
+function systemToolDescriptor(name: string): Policy.Resource.Descriptor {
   return {
     id: `tool:${name}`,
     kind: "tool",

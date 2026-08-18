@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { PolicyDecision, Dispatch as DispatchProtocol } from "@openomni/protocol";
+import type { PolicyDecision, Command } from "@openomni/protocol";
 import { PendingInteractionStore, Storage } from "@openomni/session";
 import { DispatchRuntime, submitPinnedPendingInteraction } from "../../src/dispatch/runtime";
 import { seedPendingInteraction } from "../helpers/pending-interaction";
@@ -18,7 +18,7 @@ describe("DispatchRuntime", () => {
         decisions.push(decision);
       },
     });
-    let routedCommand: DispatchProtocol.Command | undefined;
+    let routedCommand: Command.Request | undefined;
     runtime.register("worker.complete", (command) => {
       routedCommand = command;
       return { output: { routed: true, sessionId: command.sessionId, runId: command.runId } };
@@ -98,7 +98,7 @@ describe("DispatchRuntime", () => {
     // legacy PendingInteraction rows is carried by the sender matcher
     // (endpoint proof / pinned actor identity), which this sender satisfies.
     const runtime = new DispatchRuntime();
-    let routedCommand: DispatchProtocol.Command | undefined;
+    let routedCommand: Command.Request | undefined;
     runtime.register("worker.complete", (command) => {
       routedCommand = command;
       return { output: "accepted" };
@@ -191,7 +191,7 @@ describe("DispatchRuntime", () => {
 
   test("routes PendingInteraction clarification messages to resident.ask", async () => {
     const runtime = new DispatchRuntime();
-    let routedCommand: DispatchProtocol.Command | undefined;
+    let routedCommand: Command.Request | undefined;
     runtime.register("resident.ask", (command) => {
       routedCommand = command;
       return { output: "resident answer" };
@@ -421,7 +421,7 @@ describe("DispatchRuntime", () => {
       pinned,
       {
         traceId: TEST_DISPATCH_TRACE_ID,
-        actorKind: "user",
+        actorKind: "human",
         actorId: "worker:original",
       },
     );

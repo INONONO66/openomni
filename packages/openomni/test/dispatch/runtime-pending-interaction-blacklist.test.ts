@@ -138,7 +138,7 @@ describe("DispatchRuntime", () => {
       },
       {
         traceId: TEST_DISPATCH_TRACE_ID,
-        actorKind: "worker",
+        actorKind: "internal_worker",
         actorId: "telegram:seller-forged",
         sessionId: session.id,
         runId: "run-pi-forged",

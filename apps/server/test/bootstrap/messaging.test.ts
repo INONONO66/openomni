@@ -11,7 +11,6 @@ function registerTarget(channel: string): void {
     id: "actor:target",
     kind: "ai_agent",
     trustTier: "collaborator",
-    relationship: "collaborator",
     createdAt: now,
     updatedAt: now,
   });

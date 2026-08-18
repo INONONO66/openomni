@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Dispatch, type Execution } from "@openomni/protocol";
+import { Command, type Execution } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
@@ -44,8 +44,8 @@ describe("worker.spawn executor kind admission", () => {
     });
   });
 
-  test("Dispatch.Input rejects executorKind as a worker spawn selector", () => {
-    const result = Dispatch.Input.safeParse({
+  test("Command.Input rejects executorKind as a worker spawn selector", () => {
+    const result = Command.Input.safeParse({
       action: "worker.spawn",
       target: { kind: "worker", name: "api-coder", executorKind: "external_api" },
       payload: workerSpawnPayload("build"),

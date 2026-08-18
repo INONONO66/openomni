@@ -1,12 +1,12 @@
 import { expect } from "bun:test";
-import { WorkItem, type Dispatch } from "@openomni/protocol";
+import { WorkItem, type Command } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 
 export function command(
   action: string,
-  target: Dispatch.Target,
+  target: Command.Target,
   payload: unknown = "hello",
-): Dispatch.Command {
+): Command.Request {
   return {
     dispatchId: `dispatch-${action}`,
     action,

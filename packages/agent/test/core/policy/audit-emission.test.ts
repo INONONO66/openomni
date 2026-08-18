@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyEvent, type RuntimeResource } from "@openomni/protocol";
+import { PolicyEvent, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
@@ -20,7 +20,7 @@ function baseCtx(): Omit<PolicyContext, "timing"> {
   };
 }
 
-function nativeToolDescriptor(name: string): RuntimeResource.Descriptor {
+function nativeToolDescriptor(name: string): Policy.Resource.Descriptor {
   return {
     id: `tool:${name}`,
     kind: "tool",

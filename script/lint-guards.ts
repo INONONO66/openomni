@@ -27,11 +27,13 @@ const scanRoots = ["packages", "apps"];
 const excludedPathParts = ["/dist/", "/node_modules/", "/coverage/", "/generated/"];
 const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 
-// Only the private policy permission leaf may implement raw allowlist/denylist membership;
-// every public caller still routes through Policy.evaluate.
-const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/permission.ts"]);
+// Only the canonical permission evaluator leaf may implement raw allowlist/denylist
+// membership; every public caller still routes through evaluatePermission
+// (@openomni/policy, the engine's owner since #498 W1).
+const canonicalPolicyEvaluator = new Set(["packages/policy/src/permission-evaluate.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
-  "packages/openomni/src/ingress/middleware/ingress-authority-evaluation.ts",
+  "packages/openomni/src/ingress/middleware/ingress-authority.ts",
+  "packages/openomni/src/execution-runtime/middleware/tool-permission-policy.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "apps/server/src/channel/authn/decision.ts",
 ]);
@@ -167,7 +169,7 @@ function shouldSkip(filePath: string): boolean {
 }
 
 function validateCanonicalPolicyUsage(filePath: string, source: string): GuardViolation[] {
-  if (!canonicalPolicyRequiredFiles.has(filePath) || source.includes("Policy.evaluate(")) {
+  if (!canonicalPolicyRequiredFiles.has(filePath) || source.includes("evaluatePermission(")) {
     return [];
   }
 
@@ -176,7 +178,8 @@ function validateCanonicalPolicyUsage(filePath: string, source: string): GuardVi
       ruleId: "missing-canonical-policy-evaluator",
       filePath,
       line: 1,
-      message: "migrated policy middleware must route permission verdicts through Policy.evaluate",
+      message:
+        "migrated policy middleware must route permission verdicts through evaluatePermission",
     },
   ];
 }
@@ -204,7 +207,7 @@ function validateListMembership(filePath: string, source: string): GuardViolatio
     filePath,
     line: lineNumberForOffset(source, match.index),
     message:
-      "denylist/allowlist membership must go through Policy.evaluate instead of inline includes",
+      "denylist/allowlist membership must go through evaluatePermission instead of inline includes",
   }));
 }
 

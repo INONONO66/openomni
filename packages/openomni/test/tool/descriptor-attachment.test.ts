@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { RuntimeResource, type Tool } from "@openomni/protocol";
+import { Policy, type Tool } from "@openomni/protocol";
 import { defineTool } from "../../src/execution-runtime/tool/define.js";
 import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/middleware/tool-runtime-policy.js";
 
@@ -14,7 +14,7 @@ function makeResult(call: Tool.Call): Tool.Result {
 }
 
 describe("native tool runtime descriptors", () => {
-  it("attaches a system RuntimeResource.Descriptor from tool metadata", () => {
+  it("attaches a system Policy.Resource.Descriptor from tool metadata", () => {
     const tool = defineTool<{ path: string }>({
       name: "read",
       inputSchema,
@@ -38,10 +38,10 @@ describe("native tool runtime descriptors", () => {
       effects: [],
       risk: 0,
     });
-    expect(RuntimeResource.Descriptor.parse(descriptor)).toEqual(descriptor);
+    expect(Policy.Resource.Descriptor.parse(descriptor)).toEqual(descriptor);
   });
 
-  it("attaches a server RuntimeResource.Descriptor for server-origin tools", () => {
+  it("attaches a server Policy.Resource.Descriptor for server-origin tools", () => {
     const tool = defineTool<{ path: string }>({
       name: "custom.write",
       source: "server",
@@ -67,7 +67,7 @@ describe("native tool runtime descriptors", () => {
       effects: ["destructive"],
       risk: 2,
     });
-    expect(RuntimeResource.Descriptor.safeParse(descriptor).success).toBe(true);
+    expect(Policy.Resource.Descriptor.safeParse(descriptor).success).toBe(true);
   });
 
   it("resolves runtime policy risk from descriptor before legacy riskTier", async () => {

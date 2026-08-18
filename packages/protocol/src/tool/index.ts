@@ -5,7 +5,7 @@ export namespace Tool {
   /**
    * Compact runtime tool-catalog source discriminator.
    *
-   * This intentionally does not replace RuntimeResource.Source policy provenance:
+   * This intentionally does not replace Policy.Resource.Source policy provenance:
    * richer source metadata stays on catalog-specific fields such as `mcpServer`
    * or resource descriptors.
    */

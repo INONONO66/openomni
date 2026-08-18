@@ -1,4 +1,5 @@
 export { PolicyEngine, PolicyRegistrationError } from "./engine";
+export { evaluatePermission, decisionFromEvaluation } from "./permission-evaluate";
 export type {
   PolicyDecision,
   PolicyEngineConfig,

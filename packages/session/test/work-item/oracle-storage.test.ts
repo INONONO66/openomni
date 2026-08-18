@@ -39,14 +39,14 @@ function persistCompletedFixture(item: WorkItem.Info): WorkItem.Info {
       {
         statement:
           item.completionFacts.criteria[0]?.statement ?? "Oracle storage fixture completed.",
-        evidenceIds: [`evidence:${item.hash}:oracle-storage-fixture`],
+        evidenceIds: [`evidence:${item.workItemId}:oracle-storage-fixture`],
       },
     ],
     caveats: [],
     followUps: [],
   });
   const completed = persistCompletedWorkItemFixture({
-    hash: item.hash,
+    hash: item.workItemId,
     report: completionReport,
     completionWriter,
   });
@@ -85,7 +85,7 @@ describe("WorkItem oracle storage concurrency", () => {
 
     expect(() =>
       persistCompletedWorkItemFixture({
-        hash: item.hash,
+        hash: item.workItemId,
         report: {
           summary: "Only the first criterion was claimed.",
           claims: [
@@ -100,7 +100,7 @@ describe("WorkItem oracle storage concurrency", () => {
         completionWriter,
       }),
     ).toThrow("completed fixture report omits required criterion");
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test("records a mutation through one shared row CAS", async () => {
@@ -110,12 +110,12 @@ describe("WorkItem oracle storage concurrency", () => {
     const originalCompareAndSet = storage.workItem.compareAndSet.bind(storage.workItem);
     const attemptedHeads: Array<readonly [number, number]> = [];
     storage.workItem.compareAndSet = (hash, expectedHead, candidate) => {
-      if (hash === item.hash) attemptedHeads.push([expectedHead, candidate.revision]);
+      if (hash === item.workItemId) attemptedHeads.push([expectedHead, candidate.revision]);
       return originalCompareAndSet(hash, expectedHead, candidate);
     };
 
     const recorded = await WorkItemStore.addBlocker(
-      item.hash,
+      item.workItemId,
       { kind: "waiting_input", description: "owner follow-up" },
       "trace-test",
     );
@@ -137,7 +137,7 @@ describe("WorkItem oracle storage concurrency", () => {
     let injectedCompetingWrite = false;
     storage.workItem.get = (hash) => {
       const current = originalGet(hash);
-      if (hash === item.hash && current && !injectedCompetingWrite) {
+      if (hash === item.workItemId && current && !injectedCompetingWrite) {
         injectedCompetingWrite = true;
         persistMutation(
           storage.workItem,
@@ -158,19 +158,19 @@ describe("WorkItem oracle storage concurrency", () => {
 
     await expectRejectsWithMessage(
       WorkItemStore.addBlocker(
-        item.hash,
+        item.workItemId,
         { kind: "waiting_input", description: "loses the race" },
         "trace-test",
       ),
-      `stale WorkItem revision: ${item.hash}`,
+      `stale WorkItem revision: ${item.workItemId}`,
     );
 
     expect(injectedCompetingWrite).toBe(true);
-    expect(WorkItemStore.get(item.hash)).toMatchObject({
+    expect(WorkItemStore.get(item.workItemId)).toMatchObject({
       revision: completed.revision + 1,
       name: "competing winner",
     });
-    expect(WorkItemStore.get(item.hash)?.blockers).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.blockers).toEqual([]);
   });
 
   test("removes the inserted child when parent relation CAS loses", async () => {
@@ -183,7 +183,7 @@ describe("WorkItem oracle storage concurrency", () => {
     let injectedCompetingWrite = false;
     storage.workItem.get = (hash) => {
       const current = originalGet(hash);
-      if (hash === parent.hash && current && !injectedCompetingWrite) {
+      if (hash === parent.workItemId && current && !injectedCompetingWrite) {
         injectedCompetingWrite = true;
         persistMutation(
           storage.workItem,
@@ -203,17 +203,17 @@ describe("WorkItem oracle storage concurrency", () => {
     };
 
     await expectRejectsWithMessage(
-      createItem("Orphan candidate", { parentHash: parent.hash }),
-      `stale WorkItem revision: ${parent.hash}`,
+      createItem("Orphan candidate", { parentId: parent.workItemId }),
+      `stale WorkItem revision: ${parent.workItemId}`,
     );
 
     expect(injectedCompetingWrite).toBe(true);
-    expect(WorkItemStore.list({ parentHash: parent.hash })).toEqual([]);
+    expect(WorkItemStore.list({ parentId: parent.workItemId })).toEqual([]);
     expect(WorkItemStore.list()).toHaveLength(1);
-    expect(WorkItemStore.get(parent.hash)).toMatchObject({
+    expect(WorkItemStore.get(parent.workItemId)).toMatchObject({
       revision: parent.revision + 1,
       name: "parent race winner",
-      relations: { childHashes: [] },
+      relations: { childIds: [] },
     });
   });
 });

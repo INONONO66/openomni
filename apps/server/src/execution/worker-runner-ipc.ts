@@ -86,7 +86,7 @@ export function createWorkerDispatchRuntime(options: {
         sessionId: context.sessionId ?? options.sessionId,
         runId: context.runId ?? options.runId,
         workspaceRoot: context.workspaceRoot ?? options.workspaceRoot,
-        actorKind: context.actorKind ?? "worker",
+        actorKind: context.actorKind ?? "internal_worker",
         actorId: context.actorId ?? `${options.sessionId}:${options.runId}`,
         trustTier: context.trustTier ?? "assigned_worker",
         labels: [...(context.labels ?? []), "worker-runner"],

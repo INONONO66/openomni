@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Dispatch, Policy, Run } from "../../src/index.js";
+import { Command, Policy, Run } from "../../src/index.js";
 
 const pointIds = [
   "dispatch.action.pre",
@@ -266,12 +266,12 @@ describe("PolicyPoint executable input schemas", () => {
     }
   });
 
-  test("uses the canonical Dispatch actor and target validation", () => {
+  test("uses the canonical Command actor and target validation", () => {
     const schema = Policy.PolicyPoint.InputSchemas["dispatch.action.pre"];
     const parityCases = [
       [
         "actor",
-        Dispatch.ActorContext,
+        Command.ActorContext,
         [
           validDispatchInput.actor,
           { actorId: "actor-1" },
@@ -280,7 +280,7 @@ describe("PolicyPoint executable input schemas", () => {
       ],
       [
         "target",
-        Dispatch.Target,
+        Command.Target,
         [
           validDispatchInput.target,
           { kind: "unknown" },

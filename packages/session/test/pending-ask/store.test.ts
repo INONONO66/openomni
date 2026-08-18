@@ -55,24 +55,25 @@ describe("PendingAskStore (frozen legacy writer, #510 D2a)", () => {
     Bus.observe((event) => events.push(event.name));
     seedFrozenRow(frozenRecord("ask-frozen", { correlation: { threadId: "thread-1" } }));
 
-    const attempts: ReadonlyArray<readonly [Communication.PendingAsk.WriteMethod, () => unknown]> =
+    const attempts: ReadonlyArray<
+      readonly [Communication.PendingAsk.FrozenError["data"]["method"], () => unknown]
+    > = [
       [
-        [
-          "create",
-          () =>
-            PendingAskStore.create({
-              id: "ask-new",
-              originSessionId: "session-1",
-              originActorKind: "worker",
-              targetKind: "resident",
-              correlation: { externalMessageId: "m-new" },
-            }),
-        ],
-        ["answer", () => PendingAskStore.answer("ask-frozen", { answeredAt: 10 })],
-        ["markAmbiguous", () => PendingAskStore.markAmbiguous("ask-frozen")],
-        ["cancel", () => PendingAskStore.cancel("ask-frozen")],
-        ["expire", () => PendingAskStore.expire("ask-frozen")],
-      ];
+        "create",
+        () =>
+          PendingAskStore.create({
+            id: "ask-new",
+            originSessionId: "session-1",
+            originActorKind: "worker",
+            targetKind: "resident",
+            correlation: { externalMessageId: "m-new" },
+          }),
+      ],
+      ["answer", () => PendingAskStore.answer("ask-frozen", { answeredAt: 10 })],
+      ["markAmbiguous", () => PendingAskStore.markAmbiguous("ask-frozen")],
+      ["cancel", () => PendingAskStore.cancel("ask-frozen")],
+      ["expire", () => PendingAskStore.expire("ask-frozen")],
+    ];
 
     for (const [method, attempt] of attempts) {
       let thrown: unknown;

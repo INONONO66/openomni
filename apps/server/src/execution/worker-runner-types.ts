@@ -4,8 +4,10 @@ import type { InjectionQueue } from "@openomni/openomni";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import type { WorkerRunIpcServer } from "./worker-runner-ipc";
 
-// merged from worker-run-state.ts (fragment sweep)
-export namespace WorkerRunState {
+// In-process registry of live run handles (sessionId + AbortController),
+// keyed by runId. Renamed from a misleading worker-run-family name (#498 K1): this
+// is volatile process state, not the retired worker-run store.
+export namespace ActiveRunHandle {
   interface ActiveRun {
     readonly sessionId: string;
     readonly controller: AbortController;
@@ -22,7 +24,7 @@ interface WorkerRunnerEnvironment {
   readonly ipcAuthToken: string;
   readonly workerId: string;
   readonly server: WorkerRunIpcServer;
-  readonly activeRuns: WorkerRunState.ActiveRunRegistry;
+  readonly activeRuns: ActiveRunHandle.ActiveRunRegistry;
   readonly bootstrapReady: Promise<void>;
   readonly injectionQueue: InjectionQueue.Instance;
   readonly defaultWorkspaceRoot: string | undefined;

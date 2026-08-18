@@ -187,7 +187,7 @@ async function fixture(origin: WorkItem.CompletionOrigin = "worker", evidencePas
     "trace-test",
   );
   const withEvidence = await WorkItemStore.addEvidence(
-    item.hash,
+    item.workItemId,
     {
       kind: "verification",
       description: "boundary fixture",
@@ -195,7 +195,7 @@ async function fixture(origin: WorkItem.CompletionOrigin = "worker", evidencePas
     },
     "trace-test",
   );
-  const current = WorkItemStore.get(item.hash);
+  const current = WorkItemStore.get(item.workItemId);
   const criterion = current?.completionFacts.criteria[0];
   const evidenceId = withEvidence?.evidence.at(-1)?.id;
   if (!current || !criterion || !evidenceId) throw new Error("missing boundary fixture");
@@ -216,18 +216,18 @@ function completionRequest(
   const criterion = item.completionFacts.criteria[0];
   const evidenceId = item.evidence[0]?.id;
   if (!criterion || !evidenceId) throw new Error("missing completion criterion evidence");
-  const observationId = `observation:${item.hash}:${item.revision}`;
+  const observationId = `observation:${item.workItemId}:${item.revision}`;
   return WorkItem.CompletionRequest.parse({
     version: 1,
-    id: `completion-request:${item.hash}:${item.revision}:${origin}`,
+    id: `completion-request:${item.workItemId}:${item.revision}:${origin}`,
     origin,
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
     claims: [
       {
-        id: `claim:${item.hash}:${item.revision}`,
+        id: `claim:${item.workItemId}:${item.revision}`,
         criterionId: criterion.id,
         statement: criterion.statement,
         observationIds: [observationId],
@@ -239,7 +239,7 @@ function completionRequest(
       {
         id: observationId,
         producer: "test:boundary",
-        subjectRef: item.hash,
+        subjectRef: item.workItemId,
         basisRef: item.completionContract.basisRef,
         artifactRefs: [evidenceId],
         provenanceRef: evidenceId,
@@ -249,7 +249,7 @@ function completionRequest(
     ],
     results: [
       {
-        id: `result:${item.hash}:${item.revision}`,
+        id: `result:${item.workItemId}:${item.revision}`,
         criterionId: criterion.id,
         value: "verified",
         checkedPredicate: criterion.statement,
@@ -293,7 +293,7 @@ function completionEvents(
       if (event.payload.workItemHash === hash) order.push("CompletionRequested");
     }),
     Bus.subscribe(WorkItem.Events.CompletionAdmissionRecorded, (event) => {
-      if (event.payload.hash !== hash) return;
+      if (event.payload.workItemId !== hash) return;
       order.push("CompletionAdmissionRecorded");
       const stored = WorkItemStore.get(hash);
       if (stored) admissionStates.push(stored);
@@ -397,17 +397,17 @@ describe("WorkItem completion admission service", () => {
     const first = await fixture("worker");
     const traces: Array<{ event: string; traceId: string }> = [];
     Bus.subscribe(WorkItem.Events.CompletionRequested, (event) => {
-      if (event.payload.workItemHash === first.item.hash) {
+      if (event.payload.workItemHash === first.item.workItemId) {
         traces.push({ event: "requested", traceId: event.traceId });
       }
     });
     Bus.subscribe(WorkItem.Events.CompletionAdmissionRecorded, (event) => {
-      if (event.payload.hash === first.item.hash) {
+      if (event.payload.workItemId === first.item.workItemId) {
         traces.push({ event: "admission", traceId: event.traceId });
       }
     });
     Bus.subscribe(WorkItem.Events.StatusChanged, (event) => {
-      if (event.payload.hash === first.item.hash) {
+      if (event.payload.workItemId === first.item.workItemId) {
         traces.push({
           event: `status:${event.payload.from}->${event.payload.to}`,
           traceId: event.traceId,
@@ -415,12 +415,12 @@ describe("WorkItem completion admission service", () => {
       }
     });
     Bus.subscribe(WorkItem.Events.Updated, (event) => {
-      if (event.payload.hash === first.item.hash) {
+      if (event.payload.workItemId === first.item.workItemId) {
         traces.push({ event: "updated", traceId: event.traceId });
       }
     });
     Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
-      if (event.payload.hash === first.item.hash) {
+      if (event.payload.hash === first.item.workItemId) {
         traces.push({ event: "completed", traceId: event.traceId });
       }
     });
@@ -473,8 +473,8 @@ describe("WorkItem completion admission service", () => {
     });
 
     expect(Reflect.get(outcome, "completed")).toBe(true);
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
-      WorkItemStore.get(first.item.hash)?.completionFacts.admissions[0]?.id,
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt?.admissionId).toBe(
+      WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions[0]?.id,
     );
   });
 
@@ -510,7 +510,7 @@ describe("WorkItem completion admission service", () => {
       skipped: 0,
       failures: [],
     });
-    const recovered = WorkItemStore.get(first.item.hash);
+    const recovered = WorkItemStore.get(first.item.workItemId);
     if (!recovered) throw new Error("missing recovered WorkItem");
     expect(WorkItem.deriveStatus(recovered)).toBe("completed");
   });
@@ -521,12 +521,16 @@ describe("WorkItem completion admission service", () => {
     const blockingService = guardedService(blockingAuthority());
     if (!blockingService) return;
     await blockingService.requestCompletion(first.request, first.report);
-    await WorkItemStore.fail(first.item.hash, "trace-test", "retry after historical admission");
-    const retried = await WorkItemStore.retry(first.item.hash, "trace-test");
+    await WorkItemStore.fail(
+      first.item.workItemId,
+      "trace-test",
+      "retry after historical admission",
+    );
+    const retried = await WorkItemStore.retry(first.item.workItemId, "trace-test");
     if (!retried) throw new Error("missing retried WorkItem");
     const reservationInput = {
       completionWriter,
-      workItemHash: retried.hash,
+      workItemHash: retried.workItemId,
       requestId: "completion-request:pre-admission-recovery:retry",
       requestRoot: "request-root:pre-admission-recovery",
       envelopeDigest: "digest:pre-admission-recovery",
@@ -545,7 +549,7 @@ describe("WorkItem completion admission service", () => {
     });
 
     const receipt = await gateway.recoverRecordedCompletions("trace-test");
-    const afterRecovery = WorkItemStore.get(retried.hash);
+    const afterRecovery = WorkItemStore.get(retried.workItemId);
     const staleHolder = reserveCompletionRequest({
       ...reservationInput,
       ownerId: "process:before-restart",
@@ -598,13 +602,13 @@ describe("WorkItem completion admission service", () => {
       gateway.requestCompletion(first.request, first.report, { traceId: "trace-test" }),
     ).rejects.toBeInstanceOf(SimulatedBootCrash);
     adapter.workItem.compareAndSet = compareAndSet;
-    await WorkItemStore.fail(first.item.hash, "trace-test", "retry after crashed completion");
-    await WorkItemStore.retry(first.item.hash, "trace-test");
+    await WorkItemStore.fail(first.item.workItemId, "trace-test", "retry after crashed completion");
+    await WorkItemStore.retry(first.item.workItemId, "trace-test");
 
     const receipt = await gateway.recoverRecordedCompletions("trace-test");
 
     expect(receipt).toEqual({ recovered: 0, skipped: 1, failures: [] });
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("recovers a recorded block admission into one deterministic blocker", async () => {
@@ -635,9 +639,9 @@ describe("WorkItem completion admission service", () => {
     });
     expect(outcome.completed).toBe(false);
     expect(outcome.admission.decision).toBe("block");
-    expect(WorkItemStore.get(first.item.hash)?.blockers).toEqual([]);
+    expect(WorkItemStore.get(first.item.workItemId)?.blockers).toEqual([]);
     await WorkItemStore.addEvidence(
-      first.item.hash,
+      first.item.workItemId,
       {
         kind: "verification",
         description: "head changed after recorded block",
@@ -647,7 +651,7 @@ describe("WorkItem completion admission service", () => {
     );
 
     const receipt = await gateway.recoverRecordedCompletions("trace-test");
-    const recovered = WorkItemStore.get(first.item.hash);
+    const recovered = WorkItemStore.get(first.item.workItemId);
     const reevaluatedAdmission = recovered?.completionFacts.admissions.at(-1);
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
     expect(recovered?.completionFacts.admissions).toHaveLength(2);
@@ -658,7 +662,7 @@ describe("WorkItem completion admission service", () => {
 
     const replay = await gateway.recoverRecordedCompletions("trace-test");
     expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
-    expect(WorkItemStore.get(first.item.hash)?.blockers).toHaveLength(1);
+    expect(WorkItemStore.get(first.item.workItemId)?.blockers).toHaveLength(1);
   });
 
   test("materializes a blocker when stale-admission recovery re-evaluates to block", async () => {
@@ -683,10 +687,10 @@ describe("WorkItem completion admission service", () => {
       gateway.requestCompletion(first.request, first.report, { traceId: "trace-test" }),
     ).rejects.toBeInstanceOf(SimulatedBootCrash);
     adapter.workItem.compareAndSet = compareAndSet;
-    const admitted = WorkItemStore.get(first.item.hash)?.completionFacts.admissions.at(-1);
+    const admitted = WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions.at(-1);
     if (!admitted) throw new Error("missing crashed completion admission");
     await WorkItemStore.addBlocker(
-      first.item.hash,
+      first.item.workItemId,
       {
         kind: "external",
         description: "external state changed before restart",
@@ -697,7 +701,7 @@ describe("WorkItem completion admission service", () => {
     const receipt = await gateway.recoverRecordedCompletions("trace-test");
 
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
-    const recovered = WorkItemStore.get(first.item.hash);
+    const recovered = WorkItemStore.get(first.item.workItemId);
     if (!recovered) throw new Error("missing blocked recovery WorkItem");
     expect(WorkItem.deriveStatus(recovered)).toBe("blocked");
     expect(recovered.blockers).toHaveLength(2);
@@ -709,7 +713,7 @@ describe("WorkItem completion admission service", () => {
     const { item, request } = await fixture("worker");
     const base = {
       completionWriter,
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
       requestId: request.id,
       requestRoot: "request-root:reservation-lease",
       envelopeDigest: "digest:reservation-lease",
@@ -760,7 +764,7 @@ describe("WorkItem completion admission service", () => {
     const { item, request } = await fixture("worker");
     const input = {
       completionWriter,
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
       requestId: request.id,
       ownerId: "process:one",
       leaseDurationMs: 10,
@@ -822,7 +826,7 @@ describe("WorkItem completion admission service", () => {
     expect(await errorCode(service.requestCompletion(changedSource, report))).toBe(
       "request_conflict",
     );
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test("preserves an Owner receipt across the reservation's own head advance", async () => {
@@ -878,7 +882,7 @@ describe("WorkItem completion admission service", () => {
       ownerOverrideValidator: (candidate: unknown) => {
         expect(candidate).toMatchObject({
           receiptRef: ownerOverrideReceiptRef,
-          workItemHash: item.hash,
+          workItemHash: item.workItemId,
           requestId: ownerRequest.id,
           requestRoot: completionRequestRoot(ownerRequest),
         });
@@ -895,7 +899,7 @@ describe("WorkItem completion admission service", () => {
         unresolvedCriterionIds: [item.completionFacts.criteria[0]?.id],
       },
     });
-    const completed = WorkItemStore.get(item.hash);
+    const completed = WorkItemStore.get(item.workItemId);
     expect(completed?.completionFacts.results).toEqual([]);
     expect(completed?.completionFacts.claims).toHaveLength(1);
     expect(completed?.completionFacts.observations).toHaveLength(1);
@@ -980,7 +984,7 @@ describe("WorkItem completion admission service", () => {
     expect(await errorCode(service.requestCompletion(ownerRequest, report))).toBe(
       "request_conflict",
     );
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test("recovery reuses a durable custom reservation identity", async () => {
@@ -1002,7 +1006,7 @@ describe("WorkItem completion admission service", () => {
     await expect(workerService.requestCompletion(request, report)).rejects.toThrow(
       "crash before terminal CAS",
     );
-    const interrupted = WorkItemStore.get(item.hash);
+    const interrupted = WorkItemStore.get(item.workItemId);
     const originalAdmission = interrupted?.completionFacts.admissions.find(
       ({ requestId }) => requestId === request.id,
     );
@@ -1032,7 +1036,7 @@ describe("WorkItem completion admission service", () => {
       skipped: 0,
       failures: [{ admissionId: originalAdmission?.id }],
     });
-    const afterInterruptedRecovery = WorkItemStore.get(item.hash);
+    const afterInterruptedRecovery = WorkItemStore.get(item.workItemId);
     expect(afterInterruptedRecovery?.completionFacts.admissions.map(({ id }) => id)).toEqual([
       originalAdmission?.id,
     ]);
@@ -1044,9 +1048,9 @@ describe("WorkItem completion admission service", () => {
         failures: [{ admissionId: originalAdmission?.id }],
       },
     );
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions.map(({ id }) => id)).toEqual([
-      originalAdmission?.id,
-    ]);
+    expect(
+      WorkItemStore.get(item.workItemId)?.completionFacts.admissions.map(({ id }) => id),
+    ).toEqual([originalAdmission?.id]);
 
     const recoveryGateway = createWorkItemCompletionGateway({
       completionWriter,
@@ -1063,7 +1067,7 @@ describe("WorkItem completion admission service", () => {
       skipped: 0,
       failures: [],
     });
-    const recovered = WorkItemStore.get(item.hash);
+    const recovered = WorkItemStore.get(item.workItemId);
     expect(recovered?.completionFacts.admissions.map(({ id }) => id)).toEqual([
       originalAdmission?.id,
     ]);
@@ -1092,7 +1096,7 @@ describe("WorkItem completion admission service", () => {
     await expect(firstService.requestCompletion(request, report)).rejects.toThrow(
       "crash before replay terminal",
     );
-    const originalAdmission = WorkItemStore.get(item.hash)?.completionFacts.admissions[0];
+    const originalAdmission = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0];
     expect(originalAdmission).toBeDefined();
     if (!originalAdmission) throw new Error("shape");
 
@@ -1127,7 +1131,7 @@ describe("WorkItem completion admission service", () => {
     const first = await fixture("worker");
     const reservationInput = {
       completionWriter,
-      workItemHash: first.item.hash,
+      workItemHash: first.item.workItemId,
       requestId: first.request.id,
       requestRoot: "request-root:admitted-takeover",
       envelopeDigest: "digest:admitted-takeover",
@@ -1138,7 +1142,7 @@ describe("WorkItem completion admission service", () => {
       ownerId: "process:one",
       now: 100,
     });
-    const reservedItem = WorkItemStore.get(first.item.hash);
+    const reservedItem = WorkItemStore.get(first.item.workItemId);
     if (!reservedItem) throw new Error("missing reserved WorkItem");
     const requestSnapshot = WorkItem.CompletionRequest.parse({
       ...first.request,
@@ -1162,9 +1166,9 @@ describe("WorkItem completion admission service", () => {
       },
       timestamps: { ...reservedItem.timestamps, updated: admission.createdAt },
     });
-    expect(completionWriter(first.item.hash, reservedItem.revision, admittedItem)).toBe(true);
+    expect(completionWriter(first.item.workItemId, reservedItem.revision, admittedItem)).toBe(true);
     await WorkItemStore.addEvidence(
-      first.item.hash,
+      first.item.workItemId,
       {
         kind: "verification",
         description: "head drift after admission",
@@ -1184,7 +1188,7 @@ describe("WorkItem completion admission service", () => {
     expect(takeover.reservation.fence).toBe(initial.reservation.fence + 1);
     expect(() =>
       assertCompletionReservationLease({
-        workItemHash: first.item.hash,
+        workItemHash: first.item.workItemId,
         requestId: first.request.id,
         reservationId: takeover.reservation.id,
         ownerId: "process:two",
@@ -1201,7 +1205,7 @@ describe("WorkItem completion admission service", () => {
     expect(() =>
       reserveCompletionRequest({
         completionWriter: () => false,
-        workItemHash: first.item.hash,
+        workItemHash: first.item.workItemId,
         requestId: first.request.id,
         requestRoot: "request-root:persistent-contention",
         envelopeDigest: "digest:persistent-contention",
@@ -1210,13 +1214,15 @@ describe("WorkItem completion admission service", () => {
         now: 100,
       }),
     ).toThrow("completion reservation contention did not converge");
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.requestReservations).toEqual([]);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.requestReservations).toEqual(
+      [],
+    );
   });
 
   test("rejects a reservation id colliding with a completion fact", async () => {
     configure();
     const first = await fixture("worker");
-    const current = WorkItemStore.get(first.item.hash);
+    const current = WorkItemStore.get(first.item.workItemId);
     if (!current) throw new Error("missing collision fixture WorkItem");
     const reservationId = `completion-reservation:${first.request.id}:1`;
     const candidate = WorkItem.Info.parse({
@@ -1238,12 +1244,12 @@ describe("WorkItem completion admission service", () => {
         ],
       },
     });
-    expect(completionWriter(current.hash, current.revision, candidate)).toBe(true);
+    expect(completionWriter(current.workItemId, current.revision, candidate)).toBe(true);
 
     expect(() =>
       reserveCompletionRequest({
         completionWriter,
-        workItemHash: first.item.hash,
+        workItemHash: first.item.workItemId,
         requestId: first.request.id,
         requestRoot: "request-root:collision",
         envelopeDigest: "digest:collision",
@@ -1252,7 +1258,9 @@ describe("WorkItem completion admission service", () => {
         now: 100,
       }),
     ).toThrow(`completion reservation id collides with completion fact: ${reservationId}`);
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.requestReservations).toEqual([]);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.requestReservations).toEqual(
+      [],
+    );
   });
 
   test("keeps the terminal service factory off public package barrels", () => {
@@ -1269,13 +1277,13 @@ describe("WorkItem completion admission service", () => {
       const admissionAuthority = authority();
       const service = guardedService(admissionAuthority.resolver);
       if (!service) return;
-      const events = completionEvents(item.hash);
+      const events = completionEvents(item.workItemId);
 
       await service.requestCompletion(request, report);
       await events.completed;
       events.stop();
 
-      const stored = WorkItemStore.get(item.hash);
+      const stored = WorkItemStore.get(item.workItemId);
       expect(stored?.completionFacts.admissions[0]?.origin).toBe(origin);
       expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("completed");
       expect(events.order).toEqual([
@@ -1300,9 +1308,9 @@ describe("WorkItem completion admission service", () => {
     });
 
     expect(() =>
-      adapter.workItem.compareAndSet(first.item.hash, first.item.revision, forged),
+      adapter.workItem.compareAndSet(first.item.workItemId, first.item.revision, forged),
     ).toThrow("WorkItem completion fact writes are restricted to the OpenOmni boundary");
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(0);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions).toHaveLength(0);
   });
 
   test("refuses raw storage callers that inject trusted completion facts", async () => {
@@ -1321,9 +1329,9 @@ describe("WorkItem completion admission service", () => {
     });
 
     expect(() =>
-      adapter.workItem.compareAndSet(first.item.hash, first.item.revision, forged),
+      adapter.workItem.compareAndSet(first.item.workItemId, first.item.revision, forged),
     ).toThrow("WorkItem completion fact writes are restricted to the OpenOmni boundary");
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.results).toEqual([]);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.results).toEqual([]);
   });
 
   test("persists admission before terminal state and links the terminal receipt", async () => {
@@ -1338,12 +1346,12 @@ describe("WorkItem completion admission service", () => {
     const admissionAuthority = authority();
     const service = guardedService(admissionAuthority.resolver);
     if (!service) return;
-    const events = completionEvents(item.hash);
+    const events = completionEvents(item.workItemId);
 
     await service.requestCompletion(request, report);
     await events.completed;
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     const admission = stored?.completionFacts.admissions[0];
     if (!stored || !admission) throw new Error("shape");
     expect(candidates).toHaveLength(2);
@@ -1361,7 +1369,7 @@ describe("WorkItem completion admission service", () => {
     ).not.toBe("completed");
     expect(stored?.completionTerminalReceipt).toEqual({
       version: 1,
-      hash: item.hash,
+      hash: item.workItemId,
       requestId: request.id,
       admissionId: admission?.id,
       contractRevision: item.completionContract.revision,
@@ -1380,12 +1388,12 @@ describe("WorkItem completion admission service", () => {
     const admissionAuthority = authority([decision]);
     const service = guardedService(admissionAuthority.resolver);
     if (!service) return;
-    const events = completionEvents(item.hash);
+    const events = completionEvents(item.workItemId);
 
     await service.requestCompletion(request, report);
     await events.admissionRecorded;
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(stored?.completionFacts.admissions[0]?.decision).toBe(decision);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
     expect(stored?.completionTerminalReceipt).toBeUndefined();
@@ -1406,7 +1414,7 @@ describe("WorkItem completion admission service", () => {
       "completion report references missing evidence",
     );
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
     expect(stored?.completionReport).toBeUndefined();
@@ -1432,11 +1440,11 @@ describe("WorkItem completion admission service", () => {
     await expect(
       gateway.requestCompletion(request, invalidReport, { traceId: "trace-test" }),
     ).rejects.toThrow("completion report references missing evidence");
-    const admission = WorkItemStore.get(item.hash)?.completionFacts.admissions.at(-1);
+    const admission = WorkItemStore.get(item.workItemId)?.completionFacts.admissions.at(-1);
     if (!admission) throw new Error("missing invalid-report admission");
 
     const receipt = await gateway.recoverRecordedCompletions("trace-test");
-    const recovered = WorkItemStore.get(item.hash);
+    const recovered = WorkItemStore.get(item.workItemId);
     expect(receipt).toEqual({ recovered: 1, skipped: 0, failures: [] });
     expect(recovered?.blockers).toHaveLength(1);
     expect(recovered?.blockers[0]?.id).toBe(`${admission.id}:recovery-blocker`);
@@ -1446,7 +1454,7 @@ describe("WorkItem completion admission service", () => {
 
     const replay = await gateway.recoverRecordedCompletions("trace-test");
     expect(replay).toEqual({ recovered: 0, skipped: 1, failures: [] });
-    expect(WorkItemStore.get(item.hash)?.blockers).toHaveLength(1);
+    expect(WorkItemStore.get(item.workItemId)?.blockers).toHaveLength(1);
   });
 
   test("rejects a terminal report that cites failed evidence after recording admission", async () => {
@@ -1459,7 +1467,7 @@ describe("WorkItem completion admission service", () => {
       "completion report references failed evidence",
     );
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
     expect(stored?.completionReport).toBeUndefined();
@@ -1484,7 +1492,7 @@ describe("WorkItem completion admission service", () => {
       "completion report claim is not admitted",
     );
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
     expect(stored?.completionReport).toBeUndefined();
@@ -1494,7 +1502,7 @@ describe("WorkItem completion admission service", () => {
     configure();
     const first = await fixture();
     const withEvidence = await WorkItemStore.addEvidence(
-      first.item.hash,
+      first.item.workItemId,
       {
         kind: "verification",
         description: "passing artifact attached to a refuted result",
@@ -1524,7 +1532,7 @@ describe("WorkItem completion admission service", () => {
         {
           id: refutedObservationId,
           producer: "builtin:refuted",
-          subjectRef: withEvidence.hash,
+          subjectRef: withEvidence.workItemId,
           basisRef: withEvidence.completionContract.basisRef,
           artifactRefs: [refutedEvidenceId],
           provenanceRef: refutedEvidenceId,
@@ -1568,14 +1576,14 @@ describe("WorkItem completion admission service", () => {
     await expect(service.requestCompletion(candidate, report)).rejects.toThrow(
       "completion report evidence is not admitted",
     );
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("canonicalizes report evidence order before admission and terminal linkage", async () => {
     configure();
     const first = await fixture();
     const withSecondEvidence = await WorkItemStore.addEvidence(
-      first.item.hash,
+      first.item.workItemId,
       {
         kind: "verification",
         description: "second terminal artifact",
@@ -1607,7 +1615,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
 
     const outcome = await service.requestCompletion(request, report);
-    const stored = WorkItemStore.get(first.item.hash);
+    const stored = WorkItemStore.get(first.item.workItemId);
     const expectedEvidenceIds = [firstEvidenceId, secondEvidenceId].sort();
 
     expect(field(outcome, "completed")).toBe(true);
@@ -1637,7 +1645,7 @@ describe("WorkItem completion admission service", () => {
     await expect(service.requestCompletion(first.request, first.report)).rejects.toThrow(
       "completion request conflicts with durable facts",
     );
-    const stored = WorkItemStore.get(first.item.hash);
+    const stored = WorkItemStore.get(first.item.workItemId);
     expect(stored?.completionFacts.admissions).toEqual([]);
     expect(stored?.completionTerminalReceipt).toBeUndefined();
   });
@@ -1671,16 +1679,16 @@ describe("WorkItem completion admission service", () => {
     };
     const service = guardedService(hostileResolver);
     if (!service) return;
-    const events = completionEvents(item.hash);
+    const events = completionEvents(item.workItemId);
 
     await expect(service.requestCompletion(request, report)).rejects.toMatchObject({
       name: "ZodError",
     });
     events.stop();
 
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
-    expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionReport).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
     expect(events.order).not.toContain("CompletedV2");
   });
 
@@ -1704,7 +1712,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
 
     expect(await errorCode(service.requestCompletion(request, report))).toBe("request_conflict");
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test("rejects a nonterminal admission with a missing effective result", async () => {
@@ -1727,7 +1735,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
 
     expect(await errorCode(service.requestCompletion(request, report))).toBe("request_conflict");
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test("rejects a hostile admit that selects a refuted result", async () => {
@@ -1752,8 +1760,8 @@ describe("WorkItem completion admission service", () => {
     expect(await errorCode(service.requestCompletion(refutedRequest, report))).toBe(
       "request_conflict",
     );
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("rejects a hostile admission that mutates the authenticated sourceIdentity", async () => {
@@ -1785,8 +1793,8 @@ describe("WorkItem completion admission service", () => {
     expect(await errorCode(service.requestCompletion(request, first.report))).toBe(
       "request_conflict",
     );
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toEqual([]);
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("normalizes authority failure while resume re-evaluates a newer head", async () => {
@@ -1795,9 +1803,9 @@ describe("WorkItem completion admission service", () => {
     const blockingService = guardedService(blockingAuthority());
     if (!blockingService) return;
     await blockingService.requestCompletion(request, report);
-    const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    const admissionId = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing blocking admission");
-    await advanceHead(item.hash, "mutated before recovery re-evaluation");
+    await advanceHead(item.workItemId, "mutated before recovery re-evaluation");
     const unavailableService = guardedService({
       resolve() {
         throw new Error("authority backend unavailable");
@@ -1806,12 +1814,12 @@ describe("WorkItem completion admission service", () => {
     if (!unavailableService) return;
 
     const code = await errorCode(
-      unavailableService.resumeCompletion(item.hash, admissionId, report),
+      unavailableService.resumeCompletion(item.workItemId, admissionId, report),
     );
 
     expect(code).toBe("authority_unavailable");
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("preserves deterministic fold errors as unsupported completion facts", async () => {
@@ -1838,7 +1846,7 @@ describe("WorkItem completion admission service", () => {
     );
 
     expect(code).toBe("unsupported_fact");
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test.each([
@@ -1888,14 +1896,14 @@ describe("WorkItem completion admission service", () => {
           }
         : {}),
     });
-    const before = WorkItemStore.get(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
 
     const code = await errorCode(service.requestCompletion(hostileRequest, report));
 
     expect(code).toBe("unsupported_fact");
     expect(admissionAuthority.calls).toEqual([]);
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test.each([
@@ -1905,25 +1913,25 @@ describe("WorkItem completion admission service", () => {
     configure();
     const { item, request, report } = await fixture();
     if (terminalStatus === "failed") {
-      await WorkItemStore.fail(item.hash, "trace-test", "terminal before completion request");
+      await WorkItemStore.fail(item.workItemId, "trace-test", "terminal before completion request");
     } else {
-      await WorkItemStore.cancel(item.hash, "trace-test");
+      await WorkItemStore.cancel(item.workItemId, "trace-test");
     }
-    const before = WorkItemStore.get(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
     const admissionAuthority = authority();
     const service = guardedService(admissionAuthority.resolver);
     if (!service) return;
-    const events = completionEvents(item.hash);
+    const events = completionEvents(item.workItemId);
 
     const code = await errorCode(service.requestCompletion(request, report));
     events.stop();
 
     expect(code).toBe("terminal_state");
     expect(admissionAuthority.calls).toEqual([]);
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
-    expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionReport).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
     expect(events.order).not.toContain("CompletedV2");
   });
 
@@ -1933,7 +1941,7 @@ describe("WorkItem completion admission service", () => {
     const admissionAuthority = authority();
     const service = guardedService(admissionAuthority.resolver);
     if (!service) return;
-    const before = WorkItemStore.get(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
 
     const code = await errorCode(
       service.requestCompletion(
@@ -1943,8 +1951,8 @@ describe("WorkItem completion admission service", () => {
     );
 
     expect(code).toBe("stale_basis");
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
   });
 
   test("re-evaluates an initial stale_head against the current row", async () => {
@@ -1958,7 +1966,7 @@ describe("WorkItem completion admission service", () => {
       WorkItem.CompletionRequest.parse({ ...request, expectedHead: 0 }),
       report,
     );
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
 
     expect(field(outcome, "completed")).toBe(true);
     expect(admissionAuthority.calls).toEqual([
@@ -1988,13 +1996,14 @@ describe("WorkItem completion admission service", () => {
       if (writeCount === 2) throw new SimulatedCrashError("crash after admission");
       return compareAndSet(hash, expectedHead, candidate);
     };
-    const admissionEvent = completionEvents(item.hash);
+    const admissionEvent = completionEvents(item.workItemId);
 
     await expect(service.requestCompletion(request, report)).rejects.toBeInstanceOf(
       SimulatedCrashError,
     );
     await admissionEvent.admissionRecorded;
-    const originalAdmissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    const originalAdmissionId = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0]
+      ?.id;
     expect(originalAdmissionId).toBeString();
     closeAdapter(firstAdapter);
     Storage.reset();
@@ -2002,11 +2011,11 @@ describe("WorkItem completion admission service", () => {
     configure(dbPath);
     const resumedService = guardedService(authority().resolver);
     if (!resumedService || !originalAdmissionId) return;
-    const completionEvent = completionEvents(item.hash);
-    await resumedService.resumeCompletion(item.hash, originalAdmissionId, report);
+    const completionEvent = completionEvents(item.workItemId);
+    await resumedService.resumeCompletion(item.workItemId, originalAdmissionId, report);
     await completionEvent.completed;
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("completed");
     expect(stored?.completionFacts.admissions).toHaveLength(1);
     expect(stored?.completionFacts.admissions[0]?.id).toBe(originalAdmissionId);
@@ -2026,15 +2035,15 @@ describe("WorkItem completion admission service", () => {
     await expect(service.requestCompletion(request, reportWithMissingEvidence)).rejects.toThrow(
       "completion report references missing evidence",
     );
-    const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    const admissionId = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing admitted completion");
-    const beforeResume = WorkItemStore.get(item.hash);
+    const beforeResume = WorkItemStore.get(item.workItemId);
 
-    const code = await errorCode(service.resumeCompletion(item.hash, admissionId, report));
+    const code = await errorCode(service.resumeCompletion(item.workItemId, admissionId, report));
 
     expect(code).toBe("request_conflict");
-    expect(WorkItemStore.get(item.hash)).toEqual(beforeResume);
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)).toEqual(beforeResume);
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test.each([
@@ -2052,24 +2061,24 @@ describe("WorkItem completion admission service", () => {
     await expect(service.requestCompletion(request, invalidReport)).rejects.toThrow(
       "completion report references missing evidence",
     );
-    const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    const admissionId = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing admitted completion");
     if (terminalStatus === "failed") {
-      await WorkItemStore.fail(item.hash, "trace-test", "terminal before completion resume");
+      await WorkItemStore.fail(item.workItemId, "trace-test", "terminal before completion resume");
     } else {
-      await WorkItemStore.cancel(item.hash, "trace-test");
+      await WorkItemStore.cancel(item.workItemId, "trace-test");
     }
-    const before = WorkItemStore.get(item.hash);
-    const events = completionEvents(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
+    const events = completionEvents(item.workItemId);
 
-    const code = await errorCode(service.resumeCompletion(item.hash, admissionId, report));
+    const code = await errorCode(service.resumeCompletion(item.workItemId, admissionId, report));
     events.stop();
 
     expect(code).toBe("terminal_state");
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(item.workItemId)?.completionReport).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
     expect(events.order).not.toContain("CompletedV2");
   });
 
@@ -2121,15 +2130,16 @@ describe("WorkItem completion admission service", () => {
       SimulatedCrashError,
     );
     adapter.workItem.compareAndSet = compareAndSet;
-    const originalAdmissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    const originalAdmissionId = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0]
+      ?.id;
     if (!originalAdmissionId) throw new Error("missing Owner admission");
-    await advanceHead(item.hash, "advanced before Owner resume");
+    await advanceHead(item.workItemId, "advanced before Owner resume");
     const resumedService = guardedService(ownerAuthority);
     if (!resumedService) return;
 
-    await resumedService.resumeCompletion(item.hash, originalAdmissionId, report);
+    await resumedService.resumeCompletion(item.workItemId, originalAdmissionId, report);
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(observedReceiptRefs).toEqual([ownerOverrideReceiptRef, undefined]);
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("pending");
     expect(stored?.completionFacts.admissions).toHaveLength(2);
@@ -2152,10 +2162,10 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
 
     await service.requestCompletion(first.request, first.report);
-    const firstRecorded = WorkItemStore.get(first.item.hash);
+    const firstRecorded = WorkItemStore.get(first.item.workItemId);
     if (!firstRecorded) throw new Error("missing first recorded admission");
-    await advanceHead(first.item.hash, "head advanced after blocked admission");
-    const advanced = WorkItemStore.get(first.item.hash);
+    await advanceHead(first.item.workItemId, "head advanced after blocked admission");
+    const advanced = WorkItemStore.get(first.item.workItemId);
     if (!advanced) throw new Error("missing advanced WorkItem");
 
     const replay = await service.requestCompletion(first.request, first.report);
@@ -2173,9 +2183,9 @@ describe("WorkItem completion admission service", () => {
       },
     ]);
     expect(Reflect.get(replay as object, "completed")).toBe(true);
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(2);
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
-      WorkItemStore.get(first.item.hash)?.completionFacts.admissions[1]?.id,
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions).toHaveLength(2);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt?.admissionId).toBe(
+      WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions[1]?.id,
     );
   });
 
@@ -2185,7 +2195,7 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     const first = await fixture("replay");
     await service.requestCompletion(first.request, first.report);
-    const recorded = WorkItemStore.get(first.item.hash);
+    const recorded = WorkItemStore.get(first.item.workItemId);
     if (!recorded) throw new Error("missing recorded admission");
     const originalResult = first.request.results[0];
     if (!originalResult) throw new Error("missing original proposed result");
@@ -2200,19 +2210,19 @@ describe("WorkItem completion admission service", () => {
         },
       ],
     });
-    const beforeReplay = WorkItemStore.get(first.item.hash);
+    const beforeReplay = WorkItemStore.get(first.item.workItemId);
 
     const code = await errorCode(service.requestCompletion(changedRequest, first.report));
 
     expect(code).toBeString();
     expect(code).not.toBe("stale_head");
-    expect(WorkItemStore.get(first.item.hash)).toEqual(beforeReplay);
+    expect(WorkItemStore.get(first.item.workItemId)).toEqual(beforeReplay);
     expect(
-      WorkItemStore.get(first.item.hash)?.completionFacts.results.some(
+      WorkItemStore.get(first.item.workItemId)?.completionFacts.results.some(
         ({ id }) => id === changedResultId,
       ),
     ).toBe(false);
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions).toHaveLength(1);
   });
 
   test.each([
@@ -2228,9 +2238,9 @@ describe("WorkItem completion admission service", () => {
       ownerOverrideReceiptRef: "owner-receipt:replay",
       observations: [
         {
-          id: `observation:${first.item.hash}:replay`,
+          id: `observation:${first.item.workItemId}:replay`,
           producer: "verifier:replay",
-          subjectRef: first.item.hash,
+          subjectRef: first.item.workItemId,
           basisRef: first.item.completionContract.basisRef,
           artifactRefs: [],
           ancestryRefs: [],
@@ -2247,7 +2257,7 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(blockingAuthority());
     if (!service) return;
     await service.requestCompletion(fullRequest, first.report);
-    const beforeReplay = WorkItemStore.get(first.item.hash);
+    const beforeReplay = WorkItemStore.get(first.item.workItemId);
     const partialRequest = WorkItem.CompletionRequest.parse({
       ...fullRequest,
       [removedField]: [],
@@ -2256,8 +2266,8 @@ describe("WorkItem completion admission service", () => {
     const code = await errorCode(service.requestCompletion(partialRequest, first.report));
 
     expect(code).toBe("request_conflict");
-    expect(WorkItemStore.get(first.item.hash)).toEqual(beforeReplay);
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(first.item.workItemId)).toEqual(beforeReplay);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions).toHaveLength(1);
   });
 
   test("rejects replay when the Owner override receipt candidate changes", async () => {
@@ -2270,7 +2280,7 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(blockingAuthority());
     if (!service) return;
     await service.requestCompletion(originalRequest, first.report);
-    const beforeReplay = WorkItemStore.get(first.item.hash);
+    const beforeReplay = WorkItemStore.get(first.item.workItemId);
     const changedRequest = WorkItem.CompletionRequest.parse({
       ...originalRequest,
       ownerOverrideReceiptRef: "owner-receipt:changed",
@@ -2279,7 +2289,7 @@ describe("WorkItem completion admission service", () => {
     const code = await errorCode(service.requestCompletion(changedRequest, first.report));
 
     expect(code).toBe("request_conflict");
-    expect(WorkItemStore.get(first.item.hash)).toEqual(beforeReplay);
+    expect(WorkItemStore.get(first.item.workItemId)).toEqual(beforeReplay);
   });
 
   test("canonicalizes top-level facts and nested set-like references for replay identity", async () => {
@@ -2288,9 +2298,9 @@ describe("WorkItem completion admission service", () => {
     const originalResult = first.request.results[0];
     if (!originalResult) throw new Error("missing canonical replay result");
     const observations: WorkItem.Observation[] = ["a", "b"].map((suffix) => ({
-      id: `observation:${first.item.hash}:${suffix}`,
+      id: `observation:${first.item.workItemId}:${suffix}`,
       producer: "verifier:replay",
-      subjectRef: first.item.hash,
+      subjectRef: first.item.workItemId,
       basisRef: first.item.completionContract.basisRef,
       artifactRefs: [`artifact:${suffix}:b`, `artifact:${suffix}:a`],
       ancestryRefs: [`ancestor:${suffix}:b`, `ancestor:${suffix}:a`],
@@ -2299,7 +2309,7 @@ describe("WorkItem completion admission service", () => {
     const observationIds = observations.map(({ id }) => id);
     const claims: WorkItem.Claim[] = [
       {
-        id: `claim:${first.item.hash}:nested-replay`,
+        id: `claim:${first.item.workItemId}:nested-replay`,
         criterionId: originalResult.criterionId,
         statement: "nested replay references are set-like",
         observationIds: [...observationIds].reverse(),
@@ -2323,7 +2333,7 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(blockingAuthority());
     if (!service) return;
     await service.requestCompletion(originalRequest, first.report);
-    const beforeReplay = WorkItemStore.get(first.item.hash);
+    const beforeReplay = WorkItemStore.get(first.item.workItemId);
     const reorderedRequest = Object.fromEntries(
       Object.entries({
         ...originalRequest,
@@ -2372,9 +2382,9 @@ describe("WorkItem completion admission service", () => {
 
     expect(replay).toMatchObject({ completed: false });
     expect(changedMembershipCode).toBe("request_conflict");
-    expect(WorkItemStore.get(first.item.hash)).toEqual(beforeReplay);
+    expect(WorkItemStore.get(first.item.workItemId)).toEqual(beforeReplay);
     expect(
-      WorkItemStore.get(first.item.hash)?.completionFacts.admissions[0]?.proposedFactIds
+      WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions[0]?.proposedFactIds
         .observations,
     ).toEqual(observations.map(({ id }) => id).sort());
   });
@@ -2385,10 +2395,10 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(authority().resolver);
     if (!service) return;
     await service.requestCompletion(first.request, first.report);
-    const completed = WorkItemStore.get(first.item.hash);
+    const completed = WorkItemStore.get(first.item.workItemId);
 
     await service.requestCompletion(first.request, first.report);
-    const afterExactReplay = WorkItemStore.get(first.item.hash);
+    const afterExactReplay = WorkItemStore.get(first.item.workItemId);
     const changedReport: WorkItem.CompletionReport = {
       ...first.report,
       summary: "Changed replay summary.",
@@ -2399,7 +2409,7 @@ describe("WorkItem completion admission service", () => {
 
     expect(afterExactReplay).toEqual(completed);
     expect(changedReportCode).toBe("request_conflict");
-    expect(WorkItemStore.get(first.item.hash)).toEqual(completed);
+    expect(WorkItemStore.get(first.item.workItemId)).toEqual(completed);
   });
 
   test("keeps exact completed replay idempotent but rejects a new completion request id", async () => {
@@ -2409,7 +2419,7 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(admissionAuthority.resolver);
     if (!service) return;
     await service.requestCompletion(first.request, first.report);
-    const completed = WorkItemStore.get(first.item.hash);
+    const completed = WorkItemStore.get(first.item.workItemId);
     if (!completed) throw new Error("missing completed WorkItem");
     const authorityCallsAfterCompletion = admissionAuthority.calls.length;
 
@@ -2420,9 +2430,9 @@ describe("WorkItem completion admission service", () => {
     expect(exactReplay).toMatchObject({ completed: true });
     expect(newRequestCode).toBe("terminal_state");
     expect(admissionAuthority.calls).toHaveLength(authorityCallsAfterCompletion);
-    expect(WorkItemStore.get(first.item.hash)).toEqual(completed);
-    expect(WorkItemStore.get(first.item.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt).toEqual(
+    expect(WorkItemStore.get(first.item.workItemId)).toEqual(completed);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt).toEqual(
       completed.completionTerminalReceipt,
     );
   });
@@ -2435,19 +2445,19 @@ describe("WorkItem completion admission service", () => {
     let replay: ReturnType<typeof service.requestCompletion> | undefined;
     let completedEvents = 0;
     const stopAdmission = Bus.subscribe(WorkItem.Events.CompletionAdmissionRecorded, (event) => {
-      if (event.payload.hash === first.item.hash && replay === undefined) {
+      if (event.payload.workItemId === first.item.workItemId && replay === undefined) {
         replay = service.requestCompletion(first.request, first.report);
       }
     });
     const stopCompleted = Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
-      if (event.payload.hash === first.item.hash) completedEvents += 1;
+      if (event.payload.hash === first.item.workItemId) completedEvents += 1;
     });
 
     const firstOutcome = await service.requestCompletion(first.request, first.report);
     const replayOutcome = await replay;
     stopAdmission();
     stopCompleted();
-    const stored = WorkItemStore.get(first.item.hash);
+    const stored = WorkItemStore.get(first.item.workItemId);
 
     expect(field(firstOutcome, "completed")).toBe(true);
     if (replayOutcome === undefined) throw new Error("shape");
@@ -2466,27 +2476,27 @@ describe("WorkItem completion admission service", () => {
     if (!service) return;
     const first = await fixture("replay");
     await service.requestCompletion(first.request, first.report);
-    const blocked = WorkItemStore.get(first.item.hash);
+    const blocked = WorkItemStore.get(first.item.workItemId);
     if (!blocked) throw new Error("missing blocked WorkItem");
     const secondRequest = completionRequest(blocked, "replay");
-    const events = completionEvents(first.item.hash);
+    const events = completionEvents(first.item.workItemId);
 
     await service.requestCompletion(secondRequest, first.report);
     await events.completed;
-    const completed = WorkItemStore.get(first.item.hash);
+    const completed = WorkItemStore.get(first.item.workItemId);
     const blockedAdmissionId = completed?.completionFacts.admissions[0]?.id;
     const admittedId = completed?.completionFacts.admissions[1]?.id;
     if (!blockedAdmissionId || !admittedId) throw new Error("missing replay admissions");
 
-    await service.resumeCompletion(first.item.hash, admittedId, first.report);
-    const afterLinkedReplay = WorkItemStore.get(first.item.hash);
+    await service.resumeCompletion(first.item.workItemId, admittedId, first.report);
+    const afterLinkedReplay = WorkItemStore.get(first.item.workItemId);
     const historicalAdmissionCode = await errorCode(
-      service.resumeCompletion(first.item.hash, blockedAdmissionId, first.report),
+      service.resumeCompletion(first.item.workItemId, blockedAdmissionId, first.report),
     );
 
     expect(afterLinkedReplay).toEqual(completed);
     expect(events.order.filter((name) => name === "CompletedV2")).toHaveLength(1);
-    expect(WorkItemStore.get(first.item.hash)?.completionTerminalReceipt?.admissionId).toBe(
+    expect(WorkItemStore.get(first.item.workItemId)?.completionTerminalReceipt?.admissionId).toBe(
       admittedId,
     );
     expect(historicalAdmissionCode).toBe("admission_required");
@@ -2513,10 +2523,10 @@ describe("WorkItem completion admission service", () => {
 
     const pending = service.requestCompletion(request, report);
     await entered.promise;
-    await advanceHead(item.hash, "mutated during authority");
+    await advanceHead(item.workItemId, "mutated during authority");
     release.resolve();
     const outcome = await pending;
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
 
     expect(field(outcome, "completed")).toBe(true);
     expect(authorityCalls).toBe(2);
@@ -2551,12 +2561,12 @@ describe("WorkItem completion admission service", () => {
       return compareAndSet(hash, expectedHead, candidate);
     };
     const stopCompleted = Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
-      if (event.payload.hash === item.hash) completedEvents += 1;
+      if (event.payload.hash === item.workItemId) completedEvents += 1;
     });
 
     const outcome = await service.requestCompletion(request, report);
     stopCompleted();
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
 
     expect(field(outcome, "completed")).toBe(true);
     expect(terminalContended).toBe(true);
@@ -2580,8 +2590,8 @@ describe("WorkItem completion admission service", () => {
 
     expect(code).toBe("stale_head");
     expect(admissionAuthority.calls).toHaveLength(8);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toEqual([]);
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
   });
 
   test("shares one retry budget with persistent reservation CAS contention", async () => {
@@ -2600,7 +2610,7 @@ describe("WorkItem completion admission service", () => {
 
     expect(await errorCode(service.requestCompletion(request, report))).toBe("stale_head");
     expect(reservationWrites).toBe(8);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.requestReservations).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.requestReservations).toEqual([]);
   });
 
   test("retries resume only after transient terminal stale-head contention", async () => {
@@ -2618,7 +2628,7 @@ describe("WorkItem completion admission service", () => {
     await expect(service.requestCompletion(request, report)).rejects.toThrow(
       "crash after admission before terminal completion",
     );
-    const admissionId = WorkItemStore.get(item.hash)?.completionFacts.admissions[0]?.id;
+    const admissionId = WorkItemStore.get(item.workItemId)?.completionFacts.admissions[0]?.id;
     if (!admissionId) throw new Error("missing recorded admission");
     let terminalContended = false;
     adapter.workItem.compareAndSet = (hash, expectedHead, candidate) => {
@@ -2638,15 +2648,15 @@ describe("WorkItem completion admission service", () => {
       return compareAndSet(hash, expectedHead, candidate);
     };
 
-    const resumed = await service.resumeCompletion(item.hash, admissionId, report);
+    const resumed = await service.resumeCompletion(item.workItemId, admissionId, report);
 
     expect(terminalContended).toBe(true);
     expect(
       WorkItem.deriveStatus(WorkItem.Info.parse(Reflect.get(resumed as object, "workItem"))),
     ).toBe("completed");
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(2);
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt?.admissionId).toBe(
-      WorkItemStore.get(item.hash)?.completionFacts.admissions.at(-1)?.id,
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toHaveLength(2);
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt?.admissionId).toBe(
+      WorkItemStore.get(item.workItemId)?.completionFacts.admissions.at(-1)?.id,
     );
   });
 
@@ -2657,15 +2667,15 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(admissionAuthority.resolver);
     if (!service) return;
     let mutation: Promise<WorkItem.Info | undefined> | undefined;
-    const events = completionEvents(item.hash, () => {
-      mutation = advanceHead(item.hash, "mutated after admission");
+    const events = completionEvents(item.workItemId, () => {
+      mutation = advanceHead(item.workItemId, "mutated after admission");
     });
 
     await service.requestCompletion(request, report);
     await events.completed;
     await mutation;
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     expect(admissionAuthority.calls.map(({ itemHead }) => itemHead)).toEqual([
       item.revision,
       item.revision + 2,
@@ -2697,12 +2707,12 @@ describe("WorkItem completion admission service", () => {
         if (callCount === 2) {
           if (terminalStatus === "failed") {
             await WorkItemStore.fail(
-              item.hash,
+              item.workItemId,
               "trace-test",
               "terminal during completion re-evaluation",
             );
           } else {
-            await WorkItemStore.cancel(item.hash, "trace-test");
+            await WorkItemStore.cancel(item.workItemId, "trace-test");
           }
         }
         return recheckAuthority.resolver.resolve(itemInput, requestInput);
@@ -2711,8 +2721,8 @@ describe("WorkItem completion admission service", () => {
     const service = guardedService(resolver);
     if (!service) return;
     let mutation: Promise<WorkItem.Info | undefined> | undefined;
-    const events = completionEvents(item.hash, () => {
-      mutation = advanceHead(item.hash, "force completion re-evaluation");
+    const events = completionEvents(item.workItemId, () => {
+      mutation = advanceHead(item.workItemId, "force completion re-evaluation");
     });
 
     const code = await errorCode(service.requestCompletion(request, report));
@@ -2721,9 +2731,9 @@ describe("WorkItem completion admission service", () => {
 
     expect(code).toBe("terminal_state");
     expect(callCount).toBe(2);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(item.workItemId)?.completionReport).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
     expect(events.order).not.toContain("CompletedV2");
   });
 
@@ -2766,7 +2776,7 @@ describe("WorkItem completion admission service", () => {
     };
     let completedEvents = 0;
     const stop = Bus.subscribe(WorkItem.Events.CompletedV2, (event) => {
-      if (event.payload.hash === item.hash) completedEvents += 1;
+      if (event.payload.hash === item.workItemId) completedEvents += 1;
     });
 
     const code = await errorCode(service.requestCompletion(request, report));
@@ -2774,9 +2784,9 @@ describe("WorkItem completion admission service", () => {
 
     expect(code).toBe("terminal_state");
     expect(postAdmissionReads).toBe(2);
-    expect(WorkItemStore.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(WorkItemStore.get(item.hash)?.completionReport).toBeUndefined();
-    expect(WorkItemStore.get(item.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(item.workItemId)?.completionReport).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
     expect(completedEvents).toBe(0);
   });
 
@@ -2785,11 +2795,13 @@ describe("WorkItem completion admission service", () => {
     const { item, report } = await fixture("recovery");
     const service = guardedService(authority().resolver);
     if (!service) return;
-    const before = WorkItemStore.get(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
 
-    const code = await errorCode(service.resumeCompletion(item.hash, "admission:missing", report));
+    const code = await errorCode(
+      service.resumeCompletion(item.workItemId, "admission:missing", report),
+    );
 
     expect(code).toBe("admission_required");
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
   });
 });

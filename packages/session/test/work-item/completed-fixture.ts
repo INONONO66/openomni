@@ -10,7 +10,7 @@ export function completedFixtureResults(
     .filter(({ required }) => required)
     .map((criterion, index) =>
       WorkItem.CriterionResult.parse({
-        id: `result:${item.hash}:${source}:${index}`,
+        id: `result:${item.workItemId}:${source}:${index}`,
         criterionId: criterion.id,
         observationIds: [],
         value: "asserted",
@@ -61,9 +61,9 @@ export function persistCompletedWorkItemFixture(input: {
         });
       }
       const observation = WorkItem.Observation.parse({
-        id: `observation:${current.hash}:session-fixture:${claimIndex}:${evidenceIndex}`,
+        id: `observation:${current.workItemId}:session-fixture:${claimIndex}:${evidenceIndex}`,
         producer: "session-completed-fixture",
-        subjectRef: current.hash,
+        subjectRef: current.workItemId,
         basisRef: current.completionContract.basisRef,
         artifactRefs: [evidenceId],
         provenanceRef: evidenceId,
@@ -74,7 +74,7 @@ export function persistCompletedWorkItemFixture(input: {
       return observation.id;
     });
     const claim = WorkItem.Claim.parse({
-      id: `claim:${current.hash}:session-fixture:${claimIndex}`,
+      id: `claim:${current.workItemId}:session-fixture:${claimIndex}`,
       criterionId: criterion.id,
       statement: reportClaim.statement,
       observationIds: claimObservationIds,
@@ -84,7 +84,7 @@ export function persistCompletedWorkItemFixture(input: {
     claims.push(claim);
     results.push(
       WorkItem.CriterionResult.parse({
-        id: `result:${current.hash}:session-fixture:${claimIndex}`,
+        id: `result:${current.workItemId}:session-fixture:${claimIndex}`,
         criterionId: criterion.id,
         observationIds: claimObservationIds,
         value: "asserted",
@@ -176,13 +176,13 @@ export function persistCompletedWorkItemFixture(input: {
       traceId: "trace-session-completed-fixture",
       time: completedAt,
       sessionId: completed.sessionId,
-      payload: { hash: input.hash, from: WorkItem.deriveStatus(admitted), to: "completed" },
+      payload: { workItemId: input.hash, from: WorkItem.deriveStatus(admitted), to: "completed" },
     });
     Bus.publish(WorkItem.Events.Updated, {
       traceId: "trace-session-completed-fixture",
       time: completedAt,
       sessionId: completed.sessionId,
-      payload: { hash: input.hash, fields: ["completionTerminalReceipt"] },
+      payload: { workItemId: input.hash, fields: ["completionTerminalReceipt"] },
     });
     Bus.publish(WorkItem.Events.CompletedV2, {
       traceId: "trace-session-completed-fixture",

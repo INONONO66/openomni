@@ -3,7 +3,7 @@ import { isSqliteBusyError } from "../storage/sqlite-busy.js";
 
 /**
  * #510 C1 — every WorkItem lifecycle write is a decision-class fact on the
- * owner stream `work:<hash>` and awaits its durable append before the
+ * owner stream `work:<workItemId>` and awaits its durable append before the
  * projection write (no record, no action). Head↔revision binding mirrors the
  * Wait class (packages/session/src/wait/index.ts):
  *
@@ -107,13 +107,13 @@ export function appendCreatedFact(
 ): void {
   const appended = ledger.append(
     {
-      streamId: workItemStreamId(item.hash),
+      streamId: workItemStreamId(item.workItemId),
       type: "work_item.created",
       data: { ...data, revision: item.revision },
     },
     0,
   );
-  if (appended.kind === "cas_conflict") throw new WorkItemDuplicateError(item.hash);
+  if (appended.kind === "cas_conflict") throw new WorkItemDuplicateError(item.workItemId);
 }
 
 /**
@@ -128,7 +128,7 @@ export function appendTransitionFactReceipt(
   fact: WorkItemFact,
 ): boolean {
   const event = {
-    streamId: workItemStreamId(existing.hash),
+    streamId: workItemStreamId(existing.workItemId),
     type: fact.type,
     data: { ...fact.data, revision: existing.revision + 1 },
   };
@@ -146,7 +146,7 @@ export function appendTransitionFactReceipt(
     // hash-chained ledger, while the wait family (wait/index.ts wait.adopted)
     // deliberately carries identity fields only, for erasability. Persisted
     // fact shapes are ledger baselines; converging them is an Owner decision.
-    ledger.adoptStream(workItemStreamId(existing.hash), existing.revision, {
+    ledger.adoptStream(workItemStreamId(existing.workItemId), existing.revision, {
       type: "work_item.adopted",
       data: { snapshot: existing, revision: existing.revision },
     });
@@ -183,6 +183,6 @@ export function appendTransitionFact(
   fact: WorkItemFact,
 ): void {
   if (!appendTransitionFactReceipt(ledger, existing, fact)) {
-    throw new WorkItemRevisionError(existing.hash);
+    throw new WorkItemRevisionError(existing.workItemId);
   }
 }

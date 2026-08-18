@@ -1,4 +1,4 @@
-import type { Communication, Dispatch, Wait } from "@openomni/protocol";
+import type { Communication, Wait } from "@openomni/protocol";
 import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/session";
 import { waitViewOfPendingAsk, waitViewOfPendingInteraction } from "./upcast.js";
 
@@ -32,9 +32,25 @@ type WaitCandidate =
     }>;
 
 type WaitCorrelationInput = Readonly<{
-  correlation?: Dispatch.Correlation;
+  correlation?: Wait.Correlation;
   externalMessageId?: string;
 }>;
+
+/**
+ * #498 C3: correlation input reuses THE one Wait.Correlation shape (all
+ * fields optional). The endpoint+channel scope pins are required by every
+ * producing seam (Command.Input / the ingress claim parse), so this explicit
+ * presence check only narrows the type for the scoped queries below — it
+ * never fires for a parsed envelope.
+ */
+function scopedPins(
+  correlation: Wait.Correlation | undefined,
+): Readonly<{ endpointId: string; channelId: string }> | undefined {
+  if (correlation?.endpointId === undefined || correlation.channelId === undefined) {
+    return undefined;
+  }
+  return { endpointId: correlation.endpointId, channelId: correlation.channelId };
+}
 
 export type WaitResolution =
   | Readonly<{ kind: "none" }>
@@ -59,7 +75,7 @@ function resolveLevel(rawCandidates: readonly WaitCandidate[]): WaitResolution |
  * their OWN endpoints, so an endpoint mismatch must not exclude the row at
  * lookup. The matcher + fold remain the identity gate either way.
  */
-function waitPinsAllowClaim(record: Wait.Record, correlation: Dispatch.Correlation): boolean {
+function waitPinsAllowClaim(record: Wait.Record, correlation: Wait.Correlation): boolean {
   if (
     record.correlation.channelId !== undefined &&
     record.correlation.channelId !== correlation.channelId
@@ -73,7 +89,7 @@ function waitPinsAllowClaim(record: Wait.Record, correlation: Dispatch.Correlati
   );
 }
 
-function waitTierLevels(correlation: Dispatch.Correlation): Wait.CorrelationQuery[] {
+function waitTierLevels(correlation: Wait.Correlation): Wait.CorrelationQuery[] {
   const levels: Wait.CorrelationQuery[] = [];
   if (correlation.replyToMessageId) levels.push({ replyToMessageId: correlation.replyToMessageId });
   if (correlation.threadId) levels.push({ threadId: correlation.threadId });
@@ -81,7 +97,8 @@ function waitTierLevels(correlation: Dispatch.Correlation): Wait.CorrelationQuer
   if (correlation.externalConversationId) {
     levels.push({ externalConversationId: correlation.externalConversationId });
   } else {
-    levels.push({ endpointId: correlation.endpointId, channelId: correlation.channelId });
+    const scoped = scopedPins(correlation);
+    if (scoped !== undefined) levels.push(scoped);
   }
   return levels;
 }
@@ -101,51 +118,34 @@ function resolveWaitTier(input: WaitCorrelationInput): WaitResolution | undefine
 }
 
 type LegacyLevel = Readonly<{
-  pendingInteraction: readonly Dispatch.Correlation[];
+  pendingInteraction: readonly Communication.PendingInteraction.CorrelationQuery[];
   pendingAsk: readonly Communication.PendingAsk.CorrelationQuery[];
 }>;
 
 function legacyTierLevels(input: WaitCorrelationInput): LegacyLevel[] {
   const levels: LegacyLevel[] = [];
   const correlation = input.correlation;
-  const scoped =
-    correlation === undefined
-      ? undefined
-      : { endpointId: correlation.endpointId, channelId: correlation.channelId };
+  // Legacy queries are always endpoint+channel scoped; a correlation without
+  // both pins (impossible for a parsed envelope) reaches no legacy level.
+  const scoped = scopedPins(correlation);
 
-  if (correlation?.replyToMessageId) {
-    const query = {
-      endpointId: correlation.endpointId,
-      channelId: correlation.channelId,
-      replyToMessageId: correlation.replyToMessageId,
-    };
+  if (scoped !== undefined && correlation?.replyToMessageId) {
+    const query = { ...scoped, replyToMessageId: correlation.replyToMessageId };
     levels.push({ pendingInteraction: [query], pendingAsk: [query] });
   }
-  if (correlation?.threadId) {
-    const query = {
-      endpointId: correlation.endpointId,
-      channelId: correlation.channelId,
-      threadId: correlation.threadId,
-    };
+  if (scoped !== undefined && correlation?.threadId) {
+    const query = { ...scoped, threadId: correlation.threadId };
     levels.push({ pendingInteraction: [query], pendingAsk: [query] });
   }
-  if (correlation?.tokenHash) {
-    const query = {
-      endpointId: correlation.endpointId,
-      channelId: correlation.channelId,
-      tokenHash: correlation.tokenHash,
-    };
+  if (scoped !== undefined && correlation?.tokenHash) {
+    const query = { ...scoped, tokenHash: correlation.tokenHash };
     levels.push({ pendingInteraction: [query], pendingAsk: [query] });
   }
 
-  const pendingInteractionFallback: Dispatch.Correlation[] = [];
+  const pendingInteractionFallback: Communication.PendingInteraction.CorrelationQuery[] = [];
   const pendingAskFallback: Communication.PendingAsk.CorrelationQuery[] = [];
-  if (correlation?.externalConversationId) {
-    const query = {
-      endpointId: correlation.endpointId,
-      channelId: correlation.channelId,
-      externalConversationId: correlation.externalConversationId,
-    };
+  if (scoped !== undefined && correlation?.externalConversationId) {
+    const query = { ...scoped, externalConversationId: correlation.externalConversationId };
     pendingInteractionFallback.push(query);
     pendingAskFallback.push(query);
   } else if (scoped !== undefined) {

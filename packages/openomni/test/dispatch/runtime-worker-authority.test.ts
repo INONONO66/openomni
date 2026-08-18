@@ -72,7 +72,7 @@ describe("DispatchRuntime", () => {
   });
 
   test("default policy reserves new Worker allocation for the Resident", async () => {
-    for (const actorKind of ["system", "user"] as const) {
+    for (const actorKind of ["system", "human"] as const) {
       let called = false;
       const runtime = new DispatchRuntime();
       runtime.register("worker.spawn", () => {

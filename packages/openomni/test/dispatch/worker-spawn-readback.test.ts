@@ -147,7 +147,7 @@ describe("worker.spawn read-back completion gate", () => {
     expect(workItems[0]?.completionReport?.claims[0]?.evidenceIds).toEqual([readBackEvidenceId]);
     expect(result).toMatchObject({
       output: {
-        workItemHash: workItems[0]?.hash,
+        workItemHash: workItems[0]?.workItemId,
         reflection: { workItemStatus: "completed", completionBlocked: false },
       },
     });
@@ -211,7 +211,7 @@ describe("worker.spawn read-back completion gate", () => {
     );
     expect(result).toMatchObject({
       output: {
-        workItemHash: workItems[0]?.hash,
+        workItemHash: workItems[0]?.workItemId,
         reflection: { workItemStatus: "blocked", completionBlocked: true },
       },
     });
@@ -289,7 +289,7 @@ describe("worker.spawn read-back completion gate", () => {
       },
       "trace-test",
     );
-    const connector = await WorkItemStore.start(connectorCreated.hash, "trace-test");
+    const connector = await WorkItemStore.start(connectorCreated.workItemId, "trace-test");
     if (!connector) throw new Error("missing connector WorkItem");
     Storage.getAdapter().session.set("session:connector-read-back", {
       id: "session:connector-read-back",
@@ -300,7 +300,7 @@ describe("worker.spawn read-back completion gate", () => {
     });
     // #510 D2b — the active run is the WorkItem attempt, not a
     // worker_run_state row (the worker-run store is frozen).
-    await allocateTestAttempt(connector.hash);
+    await allocateTestAttempt(connector.workItemId);
     await registry.get("worker.complete")?.({
       ...command(
         "worker.complete",
@@ -310,7 +310,7 @@ describe("worker.spawn read-back completion gate", () => {
           sessionId: "session:connector-read-back",
         },
         {
-          workItemHash: connector.hash,
+          workItemHash: connector.workItemId,
           result: {
             runId: "run:connector-read-back",
             sessionId: "session:connector-read-back",
@@ -320,7 +320,7 @@ describe("worker.spawn read-back completion gate", () => {
         },
       ),
       actor: {
-        kind: "worker",
+        kind: "internal_worker",
         actorId: "session:connector-read-back:run:connector-read-back",
         sessionId: "session:connector-read-back",
         runId: "run:connector-read-back",
@@ -329,9 +329,9 @@ describe("worker.spawn read-back completion gate", () => {
       },
     });
 
-    const internalStored = WorkItemStore.get(internal.hash);
-    const connectorStored = WorkItemStore.get(connector.hash);
-    expect(recordedHashes).toEqual([internal.hash, connector.hash]);
+    const internalStored = WorkItemStore.get(internal.workItemId);
+    const connectorStored = WorkItemStore.get(connector.workItemId);
+    expect(recordedHashes).toEqual([internal.workItemId, connector.workItemId]);
     expect(internalStored ? WorkItem.deriveStatus(internalStored) : undefined).toBe("completed");
     expect(connectorStored ? WorkItem.deriveStatus(connectorStored) : undefined).toBe("completed");
     expect(internalStored?.completionFacts.admissions[0]?.createdAt).toBe(5_000);
@@ -402,7 +402,7 @@ describe("worker.spawn read-back completion gate", () => {
       expect(workItems[0]?.blockers[0]?.description).toStartWith("completion report is invalid:");
       expect(result).toMatchObject({
         output: {
-          workItemHash: workItems[0]?.hash,
+          workItemHash: workItems[0]?.workItemId,
           reflection: { workItemStatus: "blocked", completionBlocked: true },
         },
       });

@@ -57,16 +57,16 @@ async function seedRun(sessionId: string, runId: string, allocate = true): Promi
     },
     "trace-test",
   );
-  await WorkItemStore.start(created.hash, "trace-test");
+  await WorkItemStore.start(created.workItemId, "trace-test");
   if (allocate) {
     const allocation = await WorkItemStore.allocateAttempt(
-      created.hash,
+      created.workItemId,
       attemptIdentity("do the work"),
       "trace-test",
     );
     if (!allocation) throw new Error("attempt allocation failed");
   }
-  return created.hash;
+  return created.workItemId;
 }
 
 function seedLegacyRow(

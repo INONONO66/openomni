@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
+import { Command, PolicyDecision as Decision } from "@openomni/protocol";
 import { PendingInteractionStore, Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { requestedWaitAction, type RequestedWaitAction } from "../wait/index.js";
@@ -87,7 +87,7 @@ type CommandVerdictFact = Readonly<{
 // come from the parsed Command and the policy decision — that parse is the
 // one enforcement layer; the payload vocabulary is
 // LedgerAppend.CommandAuthorized/CommandDenied (@openomni/protocol).
-function appendCommandVerdict(command: DispatchProtocol.Command, fact: CommandVerdictFact): void {
+function appendCommandVerdict(command: Command.Request, fact: CommandVerdictFact): void {
   const ledger = Storage.get().ledger;
   if (!ledger) {
     throw new CommandRecordError(
@@ -178,24 +178,24 @@ function revalidatePinnedInteraction(
 }
 
 function denyStalePinnedInteraction(
-  command: DispatchProtocol.Command,
+  command: Command.Request,
   start: number,
   reason: string,
-): DispatchProtocol.Result {
+): Command.Result {
   appendCommandVerdict(command, {
     type: "command.denied",
     verdict: "deny",
     policyId: "dispatch.pending-interaction-revalidation",
     reason,
   });
-  Bus.publish(DispatchProtocol.Events.Denied, {
+  Bus.publish(Command.Events.Denied, {
     ...eventBase(command),
     verdict: "deny",
     reason,
     policyId: "dispatch.pending-interaction-revalidation",
     effects: [],
   });
-  return DispatchProtocol.Result.parse({
+  return Command.Result.parse({
     dispatchId: command.dispatchId,
     status: "denied",
     reason,
@@ -208,10 +208,10 @@ const submitPinnedInteraction = Symbol("submitPinnedInteraction");
 
 export function submitPinnedPendingInteraction(
   runtime: DispatchRuntime,
-  input: DispatchProtocol.Input,
+  input: Command.Input,
   pendingInteraction: PendingInteractionStore.Record,
   options: DispatchSubmitOptions,
-): Promise<DispatchProtocol.Result> {
+): Promise<Command.Result> {
   return runtime[submitPinnedInteraction](input, pendingInteraction, options);
 }
 
@@ -232,27 +232,24 @@ export class DispatchRuntime {
     return this.registry.register(action, handler);
   }
 
-  async submit(
-    input: DispatchProtocol.Input,
-    options: DispatchSubmitOptions,
-  ): Promise<DispatchProtocol.Result> {
+  async submit(input: Command.Input, options: DispatchSubmitOptions): Promise<Command.Result> {
     return this.submitResolved(input, options);
   }
 
   async [submitPinnedInteraction](
-    input: DispatchProtocol.Input,
+    input: Command.Input,
     pendingInteraction: PendingInteractionStore.Record,
     options: DispatchSubmitOptions,
-  ): Promise<DispatchProtocol.Result> {
+  ): Promise<Command.Result> {
     return this.submitResolved(input, options, pendingInteraction);
   }
 
   private async submitResolved(
-    input: DispatchProtocol.Input,
+    input: Command.Input,
     options: DispatchSubmitOptions,
     pendingInteraction?: PendingInteractionStore.Record,
-  ): Promise<DispatchProtocol.Result> {
-    const parsed = DispatchProtocol.Input.parse(input);
+  ): Promise<Command.Result> {
+    const parsed = Command.Input.parse(input);
     // The type makes this unreachable for a typed caller; it stands for the
     // untyped ones (`Reflect.apply`, JSON-shaped IPC params).
     if (options.traceId === undefined || options.traceId.length === 0) {
@@ -269,7 +266,7 @@ export class DispatchRuntime {
         ? initialPinnedValidation.record
         : undefined;
     const command = routePendingInteraction(
-      DispatchProtocol.Command.parse({
+      Command.Request.parse({
         ...parsed,
         dispatchId: crypto.randomUUID(),
         actor,
@@ -283,7 +280,7 @@ export class DispatchRuntime {
     );
     const start = Date.now();
 
-    Bus.publish(DispatchProtocol.Events.Submitted, {
+    Bus.publish(Command.Events.Submitted, {
       ...eventBase(command),
       ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
     });
@@ -327,14 +324,14 @@ export class DispatchRuntime {
         policyId: decision.policyId,
         reason,
       });
-      Bus.publish(DispatchProtocol.Events.Denied, {
+      Bus.publish(Command.Events.Denied, {
         ...eventBase(command),
         verdict,
         reason,
         policyId: decision.policyId,
         effects: decision.effects,
       });
-      return DispatchProtocol.Result.parse({
+      return Command.Result.parse({
         dispatchId: command.dispatchId,
         status: "denied",
         reason,
@@ -356,7 +353,7 @@ export class DispatchRuntime {
       policyId: decision.policyId,
       reason: Decision.reason(decision, "dispatch.authorize allowed"),
     });
-    Bus.publish(DispatchProtocol.Events.Authorized, {
+    Bus.publish(Command.Events.Authorized, {
       ...eventBase(command),
       verdict: "allow",
       reason: Decision.reason(decision, "dispatch.authorize allowed"),
@@ -367,12 +364,12 @@ export class DispatchRuntime {
     const handler = this.registry.get(command.action);
     if (!handler) {
       const reason = `No dispatch handler registered for ${command.action}`;
-      Bus.publish(DispatchProtocol.Events.Failed, {
+      Bus.publish(Command.Events.Failed, {
         ...eventBase(command),
         durationMs: Date.now() - start,
         reason,
       });
-      return DispatchProtocol.Result.parse({
+      return Command.Result.parse({
         dispatchId: command.dispatchId,
         status: "failed",
         error: reason,
@@ -383,7 +380,7 @@ export class DispatchRuntime {
     // #548: routing a frozen legacy PendingInteraction match records no state
     // transition — the store is read-only and correlation is gated at read
     // time, so the routed command is the only trace the match leaves here.
-    Bus.publish(DispatchProtocol.Events.Routed, { ...eventBase(command), handler: command.action });
+    Bus.publish(Command.Events.Routed, { ...eventBase(command), handler: command.action });
 
     try {
       const raw = await handler(command, {
@@ -401,12 +398,12 @@ export class DispatchRuntime {
         ...(options.sourceTool ? { sourceTool: options.sourceTool } : {}),
       });
       const output = normalizeHandlerOutput(raw);
-      Bus.publish(DispatchProtocol.Events.Completed, {
+      Bus.publish(Command.Events.Completed, {
         ...eventBase(command),
         handler: command.action,
         durationMs: Date.now() - start,
       });
-      return DispatchProtocol.Result.parse({
+      return Command.Result.parse({
         dispatchId: command.dispatchId,
         status: "completed",
         output,
@@ -415,13 +412,13 @@ export class DispatchRuntime {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      Bus.publish(DispatchProtocol.Events.Failed, {
+      Bus.publish(Command.Events.Failed, {
         ...eventBase(command),
         handler: command.action,
         durationMs: Date.now() - start,
         reason,
       });
-      return DispatchProtocol.Result.parse({
+      return Command.Result.parse({
         dispatchId: command.dispatchId,
         status: "failed",
         error: reason,

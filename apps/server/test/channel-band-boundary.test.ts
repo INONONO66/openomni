@@ -23,6 +23,17 @@ import ts from "typescript";
 const CHANNEL_ROOT = fileURLToPath(new URL("../src/channel", import.meta.url));
 const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/telemetry"] as const;
 
+/**
+ * Gateway amendment (docs/gateway-design.md §1/§8.2, Owner 2026-08-18/19):
+ * perimeter JUDGMENT code may import the shared policy engine — driver code
+ * may not. Today the only judgment sites in the band are under
+ * `channel/authn/`; they travel to the gateway router band at stage 2
+ * (#707), taking this allowance with them. Everything else in channel/**
+ * stays on the dumb-driver contract.
+ */
+const JUDGMENT_DIR = "src/channel/authn/";
+const JUDGMENT_EXTRA_PACKAGES = ["@openomni/policy"] as const;
+
 type ScannedSource = Readonly<{ path: string; text: string }>;
 
 function channelSources(): readonly ScannedSource[] {
@@ -77,10 +88,16 @@ function collectModuleSpecifiers(source: ts.SourceFile): readonly string[] {
   return specifiers;
 }
 
-function isAllowedSpecifier(specifier: string): boolean {
+function isAllowedSpecifier(specifier: string, path: string): boolean {
   for (const allowed of ALLOWED_PACKAGES) {
     if (specifier === allowed) return true;
     if (specifier.startsWith(`${allowed}/`)) return true;
+  }
+  if (path.startsWith(JUDGMENT_DIR)) {
+    for (const allowed of JUDGMENT_EXTRA_PACKAGES) {
+      if (specifier === allowed) return true;
+      if (specifier.startsWith(`${allowed}/`)) return true;
+    }
   }
   if (specifier.startsWith("./") || specifier.startsWith("../")) return true;
   if (specifier.startsWith("node:")) return true;
@@ -92,7 +109,7 @@ function detectBandViolations(sources: readonly ScannedSource[]): readonly strin
   for (const { path, text } of sources) {
     const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     for (const specifier of collectModuleSpecifiers(source)) {
-      if (!isAllowedSpecifier(specifier)) {
+      if (!isAllowedSpecifier(specifier, path)) {
         violations.push(`${path}: imports ${specifier}`);
       }
     }

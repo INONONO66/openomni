@@ -3,11 +3,11 @@ import type { TraceContext } from "@openomni/protocol";
 import { InjectionQueue } from "@openomni/openomni";
 import { Storage } from "@openomni/session";
 
-import type { WorkerRunState } from "../../src/execution/worker-runner-types";
+import type { ActiveRunHandle } from "../../src/execution/worker-runner-types";
 import type { WorkerRunner } from "../../src/execution/worker-runner";
 import { newTraceId } from "@openomni/telemetry";
 
-export type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
+export type ActiveRun = NonNullable<ReturnType<ActiveRunHandle.ActiveRunRegistry["get"]>>;
 type SpawnRunOptions = Parameters<typeof WorkerRunner.spawnRun>[0];
 type WorkerRunnerEnvironment = Omit<SpawnRunOptions, "params" | "respond">;
 

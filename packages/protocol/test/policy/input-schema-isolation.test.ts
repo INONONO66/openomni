@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
-import { Dispatch, Policy, Run, Tool } from "../../src/index.js";
+import { Command, Policy, Run, Tool } from "../../src/index.js";
 
 function whileFieldIsOptional<Shape extends z.ZodRawShape>(
   schema: z.ZodObject<Shape>,
@@ -28,12 +28,12 @@ test("policy input validators isolate authority schemas from shared public mutat
     runId: "run-1",
   };
   const missingActorIdAccepted = whileFieldIsOptional(
-    Dispatch.ActorContext,
+    Command.ActorContext,
     "actorId",
     () => dispatch.safeParse({ ...dispatchInput, actor: { kind: "resident" } }).success,
   );
   const missingTargetKindAccepted = whileFieldIsOptional(
-    Dispatch.Target,
+    Command.Target,
     "kind",
     () => dispatch.safeParse({ ...dispatchInput, target: { sessionId: "session-1" } }).success,
   );

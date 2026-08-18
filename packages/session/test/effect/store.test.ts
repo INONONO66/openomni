@@ -33,7 +33,7 @@ async function createWorkItem(hash = "linked"): Promise<string> {
     },
     "trace-test",
   );
-  return item.hash;
+  return item.workItemId;
 }
 
 describe("EffectStore durable sequence", () => {

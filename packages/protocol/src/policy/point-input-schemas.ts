@@ -9,14 +9,23 @@ const requiredValue = z.unknown().refine((value) => value !== undefined, {
 // Policy authority owns these equivalents so public schema mutation cannot change validation by reference.
 const dispatchActor = z
   .object({
-    kind: z.enum(["worker", "resident", "system", "user", "unknown"]),
+    // #498 A2 — mirrors THE canonical Actor.Kind vocabulary (kept as an
+    // owned literal copy per the authority note above).
+    kind: z.enum([
+      "human",
+      "ai_agent",
+      "service",
+      "resident",
+      "internal_worker",
+      "system",
+      "unknown",
+    ]),
     actorId: id,
     agentName: id.optional(),
     sessionId: id.optional(),
     runId: id.optional(),
     workerRunId: id.optional(),
     workspaceRoot: id.optional(),
-    permissions: z.array(z.string()).optional(),
     labels: z.array(z.string()).optional(),
     trustTier: z
       .enum(["owner", "co_owner", "manager", "collaborator", "observer", "assigned_worker"])

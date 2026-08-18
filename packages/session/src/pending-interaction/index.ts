@@ -24,7 +24,11 @@ function requireAdapter() {
   );
 }
 
-function frozenWrite(method: Communication.PendingInteraction.WriteMethod): never {
+// The retired write-method vocabulary lives only inside the FrozenError data
+// (#498 C4 export diet) — derive it from there instead of a second export.
+type FrozenWriteMethod = Communication.PendingInteraction.FrozenError["data"]["method"];
+
+function frozenWrite(method: FrozenWriteMethod): never {
   throw new Communication.PendingInteraction.FrozenError({
     message: `PendingInteractionStore is frozen (#548): ${method} is retired — historical pending_interaction rows are read-only archive`,
     code: "pending_interaction_frozen",
@@ -49,7 +53,9 @@ function stillAcceptsFollowUp(
 export namespace PendingInteractionStore {
   export type Record = Communication.PendingInteraction.Record;
 
-  export function create(_input: Communication.PendingInteraction.Create): never {
+  // Frozen writer: the Create input vocabulary is retired with the write
+  // path (#498 C4), so the refused input is deliberately untyped.
+  export function create(_input: unknown): never {
     frozenWrite("create");
   }
 

@@ -104,7 +104,7 @@ export function durableVerifierInput(
   const persisted = PersistedVerifierInput.safeParse(parseJson(evidence.detail));
   if (
     !persisted.success ||
-    persisted.data.workItemHash !== item.hash ||
+    persisted.data.workItemHash !== item.workItemId ||
     persisted.data.basisRef !== item.completionContract.basisRef ||
     persisted.data.criterionId !== criterion.id
   ) {

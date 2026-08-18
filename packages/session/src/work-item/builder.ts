@@ -30,8 +30,8 @@ export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem
     lastAttemptSeq: 0,
     timestamps: { created: now, updated: now },
     relations: {
-      parentHash: input.parentHash,
-      childHashes: [],
+      parentId: input.parentId,
+      childIds: [],
       dependsOn: input.dependsOn ?? [],
     },
     intent: input.intent,

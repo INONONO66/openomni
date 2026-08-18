@@ -145,43 +145,8 @@ export type ExecutorKind = z.infer<typeof ExecutorKind>;
 export const Outcome = z.enum(["adopted", "corrected", "redone", "ignored"]);
 export type Outcome = z.infer<typeof Outcome>;
 
-const VerificationGate = z.object({
-  automated: z
-    .object({
-      passed: z.boolean(),
-      checks: z.array(
-        z.object({
-          name: z.string(),
-          passed: z.boolean(),
-          output: z.string().optional(),
-        }),
-      ),
-    })
-    .optional(),
-  acceptance: z
-    .object({
-      passed: z.boolean(),
-      criteria: z.array(
-        z.object({
-          criterion: z.string(),
-          met: z.boolean(),
-          evidence: z.string().optional(),
-        }),
-      ),
-    })
-    .optional(),
-  review: z
-    .object({
-      passed: z.boolean(),
-      reviewer: z.string(),
-      recommendation: z.enum(["approve", "request_changes", "reject"]),
-      comments: z.string().optional(),
-    })
-    .optional(),
-});
-
 const InfoShape = z.object({
-  hash: z.string(),
+  workItemId: z.string(),
   revision: z.number().int().nonnegative(),
   name: z.string(),
   sourceMessageId: z.string(),
@@ -224,8 +189,8 @@ const InfoShape = z.object({
     deadline: z.number().optional(),
   }),
   relations: z.object({
-    parentHash: z.string().optional(),
-    childHashes: z.array(z.string()),
+    parentId: z.string().optional(),
+    childIds: z.array(z.string()),
     dependsOn: z.array(z.string()),
   }),
   intent: z.string(),
@@ -240,19 +205,58 @@ const InfoShape = z.object({
   completionContract: CompletionContract,
   completionFacts: CompletionFacts.refine((facts) => facts.criteria.length > 0),
   completionReport: CompletionReport.optional(),
-  verificationGate: VerificationGate.optional(),
   completionTerminalReceipt: CompletionTerminalReceipt.optional(),
   outcome: Outcome.optional(),
 });
 
+/**
+ * #498 K2 read upcast — persisted `work_item.data` blobs (and the baked
+ * `work_item.adopted` genesis snapshots) written before the identifier
+ * rename carry the retired keys `hash` / `relations.parentHash` /
+ * `relations.childHashes`. The VALUES are byte-identical (`wi_…` ids,
+ * `criterion:` ids, `work:<id>` stream keys all embed the same strings);
+ * only the keys map on read. Writers emit the new keys only. Mirrors the
+ * ledger actor-kind upcast in ledger-append/streams.ts.
+ */
+function upcastInfoKeys(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  let upcast = record;
+  if (upcast.workItemId === undefined && upcast.hash !== undefined) {
+    const { hash, ...rest } = upcast;
+    upcast = { ...rest, workItemId: hash };
+  }
+  const relations = upcast.relations;
+  if (typeof relations === "object" && relations !== null && !Array.isArray(relations)) {
+    const legacy = relations as Record<string, unknown>;
+    const mapParent = legacy.parentId === undefined && legacy.parentHash !== undefined;
+    const mapChildren = legacy.childIds === undefined && legacy.childHashes !== undefined;
+    if (mapParent || mapChildren) {
+      const { parentHash, childHashes, ...restRelations } = legacy;
+      upcast = {
+        ...(upcast === record ? { ...record } : upcast),
+        relations: {
+          ...restRelations,
+          ...(mapParent ? { parentId: parentHash } : {}),
+          ...(mapChildren ? { childIds: childHashes } : {}),
+        },
+      };
+    }
+  }
+  return upcast;
+}
+
 export const Info = Object.assign(
-  InfoShape.superRefine((item, ctx) => {
-    validateCompletionContract(item, ctx);
-    validateTerminalLinkage(item, ctx);
-  }),
+  z.preprocess(
+    upcastInfoKeys,
+    InfoShape.superRefine((item, ctx) => {
+      validateCompletionContract(item, ctx);
+      validateTerminalLinkage(item, ctx);
+    }),
+  ),
   { shape: InfoShape.shape },
 );
-export type Info = z.infer<typeof Info>;
+export type Info = z.infer<typeof InfoShape>;
 
 function validateCompletionContract(item: z.infer<typeof InfoShape>, ctx: z.RefinementCtx): void {
   const criteria = item.completionFacts.criteria;
@@ -274,7 +278,7 @@ function validateCompletionContract(item: z.infer<typeof InfoShape>, ctx: z.Refi
         path: ["completionFacts", "criteria", index, "statement"],
       });
     }
-    if (criterion.id !== criterionId(item.hash, index, statement)) {
+    if (criterion.id !== criterionId(item.workItemId, index, statement)) {
       ctx.addIssue({
         code: "custom",
         message: "criterion id must be deterministic for its WorkItem and acceptance criterion",

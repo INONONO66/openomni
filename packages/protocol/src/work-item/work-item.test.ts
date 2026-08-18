@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { WorkItem } from "./index.js";
 
 const baseItem = {
-  hash: "wi_000000000001",
+  workItemId: "wi_000000000001",
   revision: 0,
   name: "Implement WorkItem namespace",
   sourceMessageId: "msg_1",
@@ -13,7 +13,7 @@ const baseItem = {
     updated: 1,
   },
   relations: {
-    childHashes: [],
+    childIds: [],
     dependsOn: [],
   },
   intent: "build",
@@ -57,9 +57,52 @@ describe("WorkItem.Info", () => {
   test("parses valid data", () => {
     const item = WorkItem.Info.parse(baseItem);
 
-    expect(item.hash).toBe(baseItem.hash);
-    expect(item.relations.childHashes).toEqual([]);
+    expect(item.workItemId).toBe(baseItem.workItemId);
+    expect(item.relations.childIds).toEqual([]);
     expect(item.relations.dependsOn).toEqual([]);
+  });
+
+  test("#498 K2 read upcast: pre-rename persisted keys parse to the new identifiers, values unchanged", () => {
+    // A persisted work_item data blob exactly as pre-rename writers stored
+    // it: `hash` + `relations.parentHash`/`relations.childHashes`. Values
+    // (the wi_ id, criterion ids embedding it) are byte-identical.
+    const { workItemId: _renamed, relations: _relations, ...rest } = baseItem;
+    const legacyBlob = {
+      ...rest,
+      hash: baseItem.workItemId,
+      relations: {
+        parentHash: "wi_parent0000ab",
+        childHashes: ["wi_child00000cd"],
+        dependsOn: ["wi_dep000000ef"],
+      },
+    };
+
+    const item = WorkItem.Info.parse(legacyBlob);
+
+    expect(item.workItemId).toBe(baseItem.workItemId);
+    expect(item.relations.parentId).toBe("wi_parent0000ab");
+    expect(item.relations.childIds).toEqual(["wi_child00000cd"]);
+    expect(item.relations.dependsOn).toEqual(["wi_dep000000ef"]);
+    // criterionId revalidation reads the id VALUE — unchanged, so the
+    // persisted criteria of an upcast row keep passing the contract check.
+    expect(item.completionFacts.criteria[0]?.id).toBe(
+      WorkItem.criterionId(item.workItemId, 0, "add work item contracts"),
+    );
+    // The retired keys do not survive the parse.
+    expect("hash" in item).toBe(false);
+    expect("parentHash" in item.relations).toBe(false);
+    expect("childHashes" in item.relations).toBe(false);
+  });
+
+  test("#498 K2 read upcast: new keys win when both spellings are present", () => {
+    const item = WorkItem.Info.parse({
+      ...baseItem,
+      hash: "wi_should0lose0",
+      relations: { ...baseItem.relations, childHashes: ["wi_should0lose0"] },
+    });
+
+    expect(item.workItemId).toBe(baseItem.workItemId);
+    expect(item.relations.childIds).toEqual([]);
   });
 
   test("requires current WorkItems to carry non-empty stable completion criteria", () => {
@@ -73,7 +116,7 @@ describe("WorkItem.Info", () => {
         ...WorkItem.emptyCompletionFacts(),
         criteria: [
           {
-            id: WorkItem.criterionId(baseItem.hash, 0, "Protocol contracts are implemented"),
+            id: WorkItem.criterionId(baseItem.workItemId, 0, "Protocol contracts are implemented"),
             revision: 1,
             statement: "Protocol contracts are implemented",
             required: true,
@@ -100,7 +143,7 @@ describe("WorkItem.Info", () => {
     });
 
     expect(item.completionFacts.criteria[0]?.id).toBe(
-      WorkItem.criterionId(baseItem.hash, 0, "Protocol contracts are implemented"),
+      WorkItem.criterionId(baseItem.workItemId, 0, "Protocol contracts are implemented"),
     );
     expect({
       missingAcceptanceCriteria: missingAcceptanceCriteria.success,
@@ -112,7 +155,7 @@ describe("WorkItem.Info", () => {
     const first = "first acceptance criterion";
     const second = "second acceptance criterion";
     const criteria = [first, second].map((statement, index) => ({
-      id: WorkItem.criterionId(baseItem.hash, index, statement),
+      id: WorkItem.criterionId(baseItem.workItemId, index, statement),
       revision: 1,
       statement,
       required: true,
