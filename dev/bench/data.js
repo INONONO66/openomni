@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787063841804,
+  "lastUpdate": 1787064351012,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55607,6 +55607,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511151,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c470fada22785cffd372e7dee69786452afd4dce",
+          "message": "feat(agent,openomni): elision markers become recall pointers (#711) (#719)\n\n* feat(agent,openomni): elision markers become recall pointers (#711)\n\nCompaction-design L1: the elision marker now carries the elided part's callID\n('[output elided by compaction: N chars; recall: <callID>]'), and a new session-scoped\nsystem tool recall.output resolves that id back to the recorded original from the\nsession store — byte-exact, no re-execution. Compaction rewrites only the in-run\nhistory (run.replace_messages); transcript facts and the part projection keep the\noriginal, which is what recall reads.\n\nThe tool takes sessionId as an executor-injected implicit input, so it cannot reach\nanother session's outputs; non-completed calls and unknown ids are loud error results.\nThe marker keeps the id as a fact about the part — the tool name stays out of agent\ncore (no domain strings in core).\n\nConformance: recall.output joins earned.dormantTools beside the six existing builtins\n(same precedent — system tools are provider-registered, not name-referenced); the\none-line baseline diff is the sign-off surface per discipline rule 5.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): recall hardening + honest scoping (review round 1)\n\nReview round 1 (PASS WITH CHANGES), all three MAJORs closed:\n\nM1 — recoverability claims scoped to fact-recorded worker turns (recall.ts header,\nimplementation-status row, design-doc L1 row): resident direct runs and child-agent\nstreams persist no tool parts, so recall answers 'not recorded' loudly there.\n\nM2 — implicit slots are now override-or-strip, never pass-through: absent runtime\nstrips model-supplied values from implicit params instead of trusting them, closing\nthe latent sessionId spoof lane; pinned by a new executor test.\n\nM3 — duplicate callIDs (per-turn provider ids like call_0 repeat across turns) are\nrefused loudly instead of returning the oldest match's byte-exact-but-wrong output;\npinned by a new recall test.\n\nNIT6 — design-doc tool name drift fixed (recall_tool_output -> recall.output).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T14:44:20Z",
+          "tree_id": "48ca08ef443d8b157cd90a57376f952e9ed9b71d",
+          "url": "https://github.com/INONONO66/openomni/commit/c470fada22785cffd372e7dee69786452afd4dce"
+        },
+        "date": 1787064349517,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6171,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2653,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2829,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2506,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16240,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 850,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 53,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44385,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2237,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 533283,
             "unit": "ns/op"
           }
         ]
