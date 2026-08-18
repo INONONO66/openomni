@@ -29,6 +29,7 @@ type WorkerCompactionConfig = {
   readonly reserveRatio?: number;
   readonly protectRecentMessages?: number;
   readonly preserveUserMessageChars?: number;
+  readonly speculate?: false | { prepareRatio?: number };
   readonly onSummarize?: (
     messages: Message.WithParts[],
     previousAnchor?: string,

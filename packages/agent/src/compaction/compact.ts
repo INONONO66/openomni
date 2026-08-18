@@ -1,6 +1,7 @@
 import type { BusEvent } from "@openomni/protocol";
 import { AgentExecution, type Message } from "@openomni/protocol";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
+import type { CompactionCandidate } from "./speculate";
 
 export interface CompactionOptions {
   /**
@@ -34,6 +35,14 @@ export interface CompactionOptions {
    * The knobs are strategy, so they arrive as config.
    */
   elideToolOutputs?: ToolOutputElision;
+  /**
+   * Speculative prepare/promote (L4). Meaningful only with `onSummarize`:
+   * once the measured window passes the prepare ratio the summarize call
+   * runs in the background at turn settlement, and the seam promotes the
+   * result with zero model calls while its span is still live. `false`
+   * disables speculation; the seam then always merges synchronously.
+   */
+  speculate?: false | { prepareRatio?: number };
 }
 
 /** Options with the window already resolved — the mechanism never guesses it. */
@@ -43,6 +52,8 @@ interface CompactionResult {
   messages: Message.WithParts[];
   compacted: boolean;
   removedCount: number;
+  /** L4: what happened to the speculative candidate, when one was offered. */
+  candidate?: "promoted" | "discarded";
   /** Set when the trigger fired but no provider-valid cut exists: no summary
    * anchor and no user boundary at or before the cutoff. The caller records
    * it; killing the run over housekeeping would be worse than a full window. */
@@ -57,7 +68,7 @@ interface CompactionResult {
 export const DEFAULT_THRESHOLD_RATIO = 0.8;
 // Only decides the cut's eagerness after an elision round — never the trigger.
 const ESTIMATED_CHARS_PER_TOKEN = 4;
-const DEFAULT_PROTECT_RECENT = 6;
+export const DEFAULT_PROTECT_RECENT = 6;
 // ~20k tokens of verbatim user text carried through a cut (Codex ships the
 // same order of magnitude). Strategy may narrow or widen it.
 const DEFAULT_PRESERVE_USER_CHARS = 80_000;
@@ -90,7 +101,14 @@ export namespace Compaction {
     options: ResolvedCompactionOptions,
     identity: { readonly traceId: string; readonly sessionId: string; readonly runId?: string },
     events: BusEvent.Sink,
-    dispatch: { readonly trigger: "threshold" | "yield"; readonly measuredTokens?: number },
+    dispatch: {
+      readonly trigger: "threshold" | "yield";
+      readonly measuredTokens?: number;
+      /** A speculative candidate (L4): promoted with zero model calls when
+       * its span is still a live id-prefix of the history; otherwise the
+       * synchronous merge runs and the result reports the discard. */
+      readonly candidate?: CompactionCandidate;
+    },
   ): Promise<CompactionResult> {
     const messagesBefore = messages.length;
     events.publish(AgentExecution.CompactionStarted, {
@@ -122,7 +140,13 @@ export namespace Compaction {
     };
 
     try {
-      return await compactUnbracketed(messages, options, dispatch.measuredTokens, finish);
+      return await compactUnbracketed(
+        messages,
+        options,
+        dispatch.measuredTokens,
+        dispatch.candidate,
+        finish,
+      );
     } catch (error) {
       // The one exit finish() cannot serve: the summarizer threw. The
       // bracket still closes — `failed` is this operation's terminal — and
@@ -145,6 +169,7 @@ export namespace Compaction {
     messages: Message.WithParts[],
     options: ResolvedCompactionOptions,
     measuredContextTokens: number | undefined,
+    candidate: CompactionCandidate | undefined,
     finish: (
       result: CompactionResult,
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
@@ -247,83 +272,116 @@ export namespace Compaction {
     //      carries forward unchanged.
     const firstRemoved = toRemove[0];
     if (options.onSummarize && firstRemoved !== undefined) {
-      const previousAnchor = latestAnchorBody(toRemove);
-      const summarizerInput = toRemove.filter(
-        (message) => message.info.role !== "user" && !isAnchorMessage(message),
-      );
-      let anchorText = previousAnchor;
-      if (summarizerInput.length > 0) {
-        const merged = await options.onSummarize(summarizerInput, previousAnchor);
-        anchorText = merged.trim().length > 0 ? merged : previousAnchor;
+      const onSummarize = options.onSummarize;
+      const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
+
+      // One cut attempt over a chosen span. `precomputed` set = promote path
+      // (zero model calls); unset = synchronous merge. Returns undefined when
+      // the attempt cannot commit (no user-roled window head, or the rebuild
+      // is not strictly smaller — the #721 M1 progress guard).
+      const attemptCut = async (
+        cutSpan: Message.WithParts[],
+        keepSpan: Message.WithParts[],
+        precomputed: string | undefined,
+      ): Promise<CompactionResult | undefined> => {
+        const previousAnchor = latestAnchorBody(cutSpan);
+        const summarizerInput = cutSpan.filter(
+          (message) => message.info.role !== "user" && !isAnchorMessage(message),
+        );
+        let anchorText = precomputed ?? previousAnchor;
+        if (precomputed === undefined && summarizerInput.length > 0) {
+          const merged = await onSummarize(summarizerInput, previousAnchor);
+          anchorText = merged.trim().length > 0 ? merged : previousAnchor;
+        }
+        const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
+        if (anchorText === undefined && preservedUsers.length === 0) return undefined;
+        // The replacement record rides ON the anchor (compaction-design L3,
+        // #702): the ordered CONTENT kept after the anchor, not ids — message
+        // ids do not survive the hydration seam (resume flattens to
+        // role/content strings and the run re-mints ids; #722 review finding
+        // 1 proved an id record resolves to nothing on every production
+        // path). Size expectation: one copy of the preserve budget (default
+        // 80k chars) plus the protected tail per cut, in an append-only store
+        // — linear per record, and the newest-user unconditional rule means
+        // one oversized user message can ride into every subsequent record by
+        // design (user tokens are irreplaceable).
+        const keptWindow = [...preservedUsers, ...keepSpan].flatMap((message) =>
+          message.parts
+            .filter((part): part is Message.TextPart => part.type === "text")
+            .map((part) => ({ role: message.info.role, text: part.text })),
+        );
+        const anchorMessages =
+          anchorText === undefined
+            ? []
+            : [
+                buildAnchorMessage(
+                  anchorText,
+                  firstRemoved.info.sessionID,
+                  firstRemoved.info.agent,
+                  keptWindow,
+                ),
+              ];
+        const compacted = [...anchorMessages, ...preservedUsers, ...keepSpan];
+        // Progress guard (review #721 M1): the rebuilt window must be strictly
+        // smaller than what the seam received, or committing it would count as
+        // progress toward the #651 disarm while reclaiming nothing.
+        if (estimateContentChars(compacted) >= estimateContentChars(working)) return undefined;
+        return {
+          messages: compacted,
+          compacted: true,
+          removedCount: cutSpan.length - preservedUsers.length,
+        };
+      };
+
+      // Promote-or-merge (L4, #724 review M1): a fresh candidate's span is a
+      // live id-prefix — cut exactly that span with the precomputed anchor,
+      // zero model calls. But a promote that cannot commit (progress guard,
+      // window-head refusal) is a DISCARD, not a promotion: the seam falls
+      // back to the synchronous merge over the natural span, exactly what a
+      // speculation-free seam would have done. Speculation may only ever add
+      // a fast path, never take a cut away.
+      let candidateOutcome: "promoted" | "discarded" | undefined;
+      let cut: CompactionResult | undefined;
+      if (candidate !== undefined) {
+        const live =
+          candidate.spanIds.length > 0 &&
+          candidate.spanIds.length <= working.length &&
+          candidate.spanIds.every((id, index) => working[index]?.info.id === id);
+        if (live) {
+          cut = await attemptCut(
+            working.slice(0, candidate.spanIds.length),
+            working.slice(candidate.spanIds.length),
+            candidate.anchorBody,
+          );
+        }
+        candidateOutcome = cut === undefined ? "discarded" : "promoted";
       }
-      const preservedUsers = selectPreservedUsers(
-        toRemove,
-        options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS,
-      );
-      // The replacement record rides ON the anchor (compaction-design L3,
-      // #702): the ordered CONTENT kept after the anchor, not ids — message
-      // ids do not survive the hydration seam (resume flattens to
-      // role/content strings and the run re-mints ids; #722 review finding
-      // 1 proved an id record resolves to nothing on every production
-      // path). Size is bounded by the preserve budget plus the protected
-      // tail. A product-side observer persisting the anchor message thereby
-      // persists the whole window selection — hydration rebuilds
-      // [anchor render, kept content, everything stored after] with no
-      // re-summarization and no id resolution.
-      const keptWindow = [...preservedUsers, ...toKeep].flatMap((message) =>
-        message.parts
-          .filter((part): part is Message.TextPart => part.type === "text")
-          .map((part) => ({ role: message.info.role, text: part.text })),
-      );
-      const anchorMessages =
-        anchorText === undefined
-          ? []
-          : [
-              buildAnchorMessage(
-                anchorText,
-                firstRemoved.info.sessionID,
-                firstRemoved.info.agent,
-                keptWindow,
-              ),
-            ];
-      if (anchorMessages.length === 0 && preservedUsers.length === 0) {
-        // Nothing user-roled can head the kept window (summarizer yielded
-        // nothing, no prior anchor, no user in the span): committing would
-        // hand the provider an assistant-first history. Same refusal value
-        // as the no-summarizer path.
+      if (cut === undefined) {
+        cut = await attemptCut(toRemove, toKeep, undefined);
+      }
+      const withOutcome = (result: CompactionResult): CompactionResult =>
+        candidateOutcome === undefined ? result : { ...result, candidate: candidateOutcome };
+      if (cut === undefined) {
+        // Neither span can commit: nothing user-roled can head the kept
+        // window, or no rebuild is strictly smaller. Same refusal values as
+        // the no-summarizer path; the elision result (if any) is kept.
         return elidedChars > 0
-          ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+          ? finish(
+              withOutcome({ messages: working, compacted: true, removedCount: 0 }),
+              "reduced",
+              elidedChars,
+            )
           : finish(
-              {
-                messages: working,
-                compacted: false,
-                removedCount: 0,
-                blocked: "no_user_boundary",
-              },
-              "no_user_boundary",
+              withOutcome({ messages, compacted: false, removedCount: 0 }),
+              "nothing_reclaimed",
               0,
             );
       }
-      const compacted = [...anchorMessages, ...preservedUsers, ...toKeep];
-      // Progress guard (review #721 M1): the rebuilt window must be strictly
-      // smaller than what the seam received, or committing it would count as
-      // progress toward the #651 disarm while reclaiming nothing — re-arming
-      // the yield (and paying a summarizer call) every turn, forever. A
-      // no-progress rebuild is a recorded non-action, not a cut.
-      if (estimateContentChars(compacted) >= estimateContentChars(working)) {
-        return elidedChars > 0
-          ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
-          : finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
-      }
       return finish(
-        {
-          messages: compacted,
-          compacted: true,
-          removedCount: toRemove.length - preservedUsers.length,
-        },
+        withOutcome(cut),
         "cut",
         elidedChars,
-        anchorMessages.length > 0,
+        cut.messages[0] !== undefined && isAnchorMessage(cut.messages[0]),
       );
     }
 
@@ -368,6 +426,35 @@ function snapToUserBoundary(
     if (messages[index]?.info.role === "user") return index;
   }
   return undefined;
+}
+
+/**
+ * The anchored-cut plan, shared by the seam and the speculator (L4): which
+ * span a cut would summarize right now, by id, with the exclusions the L2
+ * contract owns (user messages and prior anchor renders never reach the
+ * summarizer). Pure — no elision, no events, no rebuild.
+ */
+export function planAnchoredCut(
+  messages: readonly Message.WithParts[],
+  protectRecentMessages: number,
+):
+  | {
+      readonly spanIds: readonly string[];
+      readonly previousAnchor: string | undefined;
+      readonly summarizerInput: Message.WithParts[];
+    }
+  | undefined {
+  if (messages.length <= protectRecentMessages) return undefined;
+  const cutoff = messages.length - protectRecentMessages;
+  if (cutoff <= 0) return undefined;
+  const toRemove = messages.slice(0, cutoff);
+  return {
+    spanIds: toRemove.map((message) => message.info.id),
+    previousAnchor: latestAnchorBody(toRemove),
+    summarizerInput: toRemove.filter(
+      (message) => message.info.role !== "user" && !isAnchorMessage(message),
+    ),
+  };
 }
 
 /**
