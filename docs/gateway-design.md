@@ -42,8 +42,8 @@ only in protocol contracts, wired by apps/server through injected ports.**
 ```
 {
   sessionId: string,            // opaque routing label to the gateway (S1)
-  envelope: {
-    messageId, traceId,         // trace minted at the driver's first frame (D11)
+  message: {                    // Gateway.InboundMessage — "envelope" is a
+    messageId, traceId,         //   banned identifier (#465 demotions)
     surfaceKey,                 // e.g. telegram:bot:chat:123 — origin identity
     text, media?, threadId?, replyToId?,
   },
