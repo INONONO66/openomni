@@ -49,6 +49,12 @@ export function resolveSenderTargetGrant(
     .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
     .find(
       (grant) =>
+        // Fail-closed containment guard: this evaluator has no surface
+        // context, so it CANNOT check replyScope — a scope-carrying
+        // (rule-materialized) instance is resolvable only by the scope-aware
+        // gateway evaluator (stage 2). Honoring it here would silently void
+        // the containment the instance was created with.
+        grant.replyScope === undefined &&
         grant.senderId === claim.senderId &&
         grant.targetActorId === claim.targetActorId &&
         grant.operations.includes(claim.operation) &&
