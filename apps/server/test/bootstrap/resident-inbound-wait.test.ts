@@ -132,9 +132,9 @@ async function createActiveRun(runId: string) {
     },
     "trace-test",
   );
-  await WorkItemStore.start(created.hash, "trace-test");
+  await WorkItemStore.start(created.workItemId, "trace-test");
   const allocation = await WorkItemStore.allocateAttempt(
-    created.hash,
+    created.workItemId,
     attemptIdentity("ask the Resident"),
     "trace-test",
   );
@@ -143,7 +143,7 @@ async function createActiveRun(runId: string) {
     residentSessionId: residentSession.id,
     workerSessionId: workerSession.id,
     runId,
-    workItemHash: created.hash,
+    workItemHash: created.workItemId,
   };
 }
 
@@ -364,7 +364,7 @@ describe("resident inbound wait kernel dispatch", () => {
       },
       "trace-test",
     );
-    await WorkItemStore.start(orphan.hash, "trace-test");
+    await WorkItemStore.start(orphan.workItemId, "trace-test");
     const submit = mock(
       async (): Promise<Command.Result> => ({ dispatchId: "never", status: "completed" }),
     );

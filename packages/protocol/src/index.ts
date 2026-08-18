@@ -22,7 +22,6 @@ export * from "./gateway/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
 export * from "./artifact/index.js";
-export * from "./worker-run/index.js";
 export * from "./execution/index.js";
 export * from "./ipc/index.js";
 export * from "./worker-bootstrap/index.js";

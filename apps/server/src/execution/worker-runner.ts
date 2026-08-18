@@ -10,12 +10,6 @@ import type { NativeTool } from "@openomni/openomni";
 import { Execution } from "@openomni/protocol";
 import { TranscriptStore } from "@openomni/session";
 import { createContextMiddleware } from "../context/middleware";
-import {
-  publishWorkerRunCancelled,
-  publishWorkerRunFailed,
-  publishWorkerRunStarted,
-  publishWorkerRunSucceeded,
-} from "./worker-runner-events";
 import { createMcpProxyProvider, createWorkerDispatchRuntime } from "./worker-runner-ipc";
 import { respondSpawnRejected, type WorkerRunnerSpawnOptions } from "./worker-runner-types";
 import {
@@ -77,7 +71,6 @@ export namespace WorkerRunner {
 
       try {
         activeRuns.set(runId, { sessionId, controller });
-        publishWorkerRunStarted({ traceId, sessionId, runId, prompt: request.prompt });
         await bootstrapReady;
         const bootstrap = getBootstrap();
         const messages = buildWorkerInputMessages(sessionId, request.prompt);
@@ -203,8 +196,6 @@ export namespace WorkerRunner {
           },
         );
         if (controller.signal.aborted) {
-          publishWorkerRunCancelled({ traceId, sessionId, runId });
-
           respond({
             runId,
             sessionId,
@@ -213,8 +204,6 @@ export namespace WorkerRunner {
           });
           return;
         }
-
-        publishWorkerRunSucceeded({ traceId, sessionId, runId });
 
         respond({
           runId,
@@ -227,8 +216,6 @@ export namespace WorkerRunner {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wasCancelled = controller.signal.aborted;
         if (wasCancelled) {
-          publishWorkerRunCancelled({ traceId, sessionId, runId });
-
           respond({
             runId,
             sessionId,
@@ -237,8 +224,6 @@ export namespace WorkerRunner {
           });
           return;
         }
-        publishWorkerRunFailed({ traceId, sessionId, runId, errorMessage });
-
         respond({
           runId,
           sessionId,

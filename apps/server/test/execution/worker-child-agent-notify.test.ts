@@ -3,7 +3,7 @@ import type { AgentResult } from "@openomni/agent";
 import { InjectionQueue } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
-import type { WorkerRunState } from "../../src/execution/worker-runner-types";
+import type { ActiveRunHandle } from "../../src/execution/worker-runner-types";
 import { WorkerRunner } from "../../src/execution/worker-runner";
 import {
   createValidRequest as createSharedValidRequest,
@@ -42,7 +42,7 @@ function createSpawnOptions(
         return undefined;
       },
     },
-    activeRuns: new Map() as WorkerRunState.ActiveRunRegistry,
+    activeRuns: new Map() as ActiveRunHandle.ActiveRunRegistry,
     bootstrapReady: Promise.resolve(),
     injectionQueue: InjectionQueue.create(),
     defaultWorkspaceRoot: undefined,

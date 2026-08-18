@@ -8,7 +8,7 @@ import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
 import { WorkerIpcHandlers } from "./worker-ipc-handlers";
-import type { WorkerRunState } from "./worker-runner-types";
+import type { ActiveRunHandle } from "./worker-runner-types";
 import { WorkerRunner } from "./worker-runner";
 
 function readCliArg(name: string): string | undefined {
@@ -56,7 +56,7 @@ initialize({
 });
 BusPersistence.start();
 
-const activeRuns: WorkerRunState.ActiveRunRegistry = new Map();
+const activeRuns: ActiveRunHandle.ActiveRunRegistry = new Map();
 const workerBootstrapState = WorkerBootstrapHandler.createState();
 const injectionQueue = InjectionQueue.create();
 

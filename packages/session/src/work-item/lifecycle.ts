@@ -42,7 +42,7 @@ export async function failWorkItem(
         traceId: publishTraceId,
         time: now,
         sessionId: updated.sessionId,
-        payload: { hash, reason, sessionId: updated.sessionId },
+        payload: { workItemId: hash, reason, sessionId: updated.sessionId },
       });
     },
   }));

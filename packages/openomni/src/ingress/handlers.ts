@@ -100,7 +100,7 @@ export namespace IngressHandlers {
 
   /**
    * #510 D2b — the durable run record for a worker-targeted ingress dispatch
-   * is a WorkItem with an allocated attempt on the `work:<hash>` owner
+   * is a WorkItem with an allocated attempt on the `work:<workItemId>` owner
    * stream. NO worker_run_state row is written: the attempt identity fact is
    * appended before the executor acts, and the terminal outcome (endedAt,
    * error — the fields that used to sit in the in-memory runExtras map)
@@ -137,9 +137,9 @@ export namespace IngressHandlers {
       },
       traceId,
     );
-    await WorkItemStore.start(workItem.hash, traceId);
+    await WorkItemStore.start(workItem.workItemId, traceId);
     await allocateWorkerSpawnAttempt(
-      workItem.hash,
+      workItem.workItemId,
       prompt || "(empty ingress payload)",
       "internal_chat_agent",
       {

@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Command, WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
+import { Command } from "@openomni/protocol";
 import {
   ActorRegistry,
   Session,
@@ -9,7 +9,6 @@ import {
   Storage,
   WaitStore,
   WorkItemStore,
-  WorkerRunStateStore,
 } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import {
@@ -116,13 +115,31 @@ function registerDriverActors(): void {
   for (const responder of Responders) registerAgent(responder, []);
 }
 
-/** WorkItem + Worker/session census: messaging must never move this number. */
-function allocationCount(): number {
-  const workerRuns = WorkerRunProtocol.Status.options.reduce(
-    (sum, status) => sum + WorkerRunStateStore.listByStatus(status).length,
+// Frozen worker_run_state archive statuses (#510 D2b / #498 K1) — counted at
+// the adapter layer; the store surface is session-internal.
+const FrozenWorkerRunStatuses = [
+  "queued",
+  "starting",
+  "running",
+  "waiting_input",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "interrupted",
+] as const;
+
+function frozenWorkerRunCount(): number {
+  const adapter = Storage.getAdapter().workerRunState;
+  if (!adapter) return 0;
+  return FrozenWorkerRunStatuses.reduce(
+    (sum, status) => sum + adapter.listByStatus(status).length,
     0,
   );
-  return Session.list().length + WorkItemStore.list().length + workerRuns;
+}
+
+/** WorkItem + Worker/session census: messaging must never move this number. */
+function allocationCount(): number {
+  return Session.list().length + WorkItemStore.list().length + frozenWorkerRunCount();
 }
 
 function awaitedWaitSpec() {
@@ -429,10 +446,7 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
 
   const after = quorumSnapshot(AwaitedWaitId);
   const allocationDelta = allocationCount() - baseline;
-  const workerRunCount = WorkerRunProtocol.Status.options.reduce(
-    (sum, status) => sum + WorkerRunStateStore.listByStatus(status).length,
-    0,
-  );
+  const workerRunCount = frozenWorkerRunCount();
 
   const duplicateObserved = duplicate.kind === "rejected" && duplicate.code === "duplicate_reply";
   const ambiguousReplyObserved =

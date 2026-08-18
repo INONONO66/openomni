@@ -146,7 +146,7 @@ describe("ReadBackExecutor", () => {
     );
 
     expect(check.passed).toBe(true);
-    expect(WorkItemStore.get(item.hash)?.evidence).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.evidence).toEqual([]);
   });
 
   test("re-fetches a URL and records status plus content digest", async () => {

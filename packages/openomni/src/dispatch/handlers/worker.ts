@@ -160,10 +160,10 @@ function assertWorkerCompletionWorkItemAuthority(
   const run = WorkItemAttemptRun.find(payload.result.sessionId, payload.result.runId);
   if (
     run?.source !== "attempt_facts" ||
-    run.workItemHash !== workItem.hash ||
+    run.workItemHash !== workItem.workItemId ||
     run.attemptId === undefined
   ) {
-    throw new Error(`worker.complete WorkerRun not found: ${payload.result.runId}`);
+    throw new Error(`worker.complete run not found: ${payload.result.runId}`);
   }
   // Active runs complete; a terminal-SUCCEEDED run additionally passes
   // through so a resubmission after a crash between admission and the
@@ -171,7 +171,7 @@ function assertWorkerCompletionWorkItemAuthority(
   // idempotent receipt (#510) instead of stranding.
   if (run.status !== "running" && run.status !== "waiting_input" && run.status !== "succeeded") {
     throw new Error(
-      `worker.complete WorkerRun is not assigned to this active WorkItem: executor=${run.executorKind ?? "missing"} status=${run.status}`,
+      `worker.complete run is not assigned to this active WorkItem: executor=${run.executorKind ?? "missing"} status=${run.status}`,
     );
   }
 }
@@ -294,7 +294,7 @@ export function createWorkerDispatchHandlers(
       assertWorkerCompletionActorAuthority(command, payload);
       const workItem = resolveCompletedWorkItem(command, payload);
       assertWorkerCompletionWorkItemAuthority(payload, workItem);
-      const workItemHash = workItem.hash;
+      const workItemHash = workItem.workItemId;
       // #510 D2b attempt-terminal ordering (deterministic idempotent
       // receipt): a NON-succeeded result definitively ends the execution
       // instance, so its terminal fact lands before the projection folds the

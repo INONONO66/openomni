@@ -2,11 +2,14 @@ import type { Database } from "bun:sqlite";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 
 /**
- * @internal The write surface (create/updateStatus/updateStatusIfCurrent) is
- * TEST-ONLY seeding of historical rows: the store is frozen (#510 D2b — its
- * writers throw `worker_run_frozen`) and no production path reaches these.
- * Tests across session/openomni/server seed pre-freeze archive rows here,
- * exactly as such rows persist on disk. Do not wire new production callers.
+ * @internal The remaining write surface (`create`) is TEST-ONLY seeding of
+ * historical rows: the store is frozen (#510 D2b — its writers throw
+ * `worker_run_frozen`) and no production path reaches this. Tests across
+ * session/openomni/server seed pre-freeze archive rows here, exactly as such
+ * rows persist on disk. The adapter-level update branches were deleted with
+ * #498 K1 — nothing (tests or scripts included) reached them; the store's
+ * throwing updateStatus/updateStatusIfCurrent never touch the adapter. Do
+ * not wire new production callers.
  */
 export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateStore.Adapter {
   return {
@@ -45,63 +48,6 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
         timeCreated,
         timeUpdated,
       );
-    },
-
-    updateStatus: (
-      sessionId: string,
-      runId: string,
-      status: WorkerRunStateStore.Status,
-      extra?: WorkerRunStateStore.StatusExtra,
-    ): boolean => {
-      const result = db
-        .query(
-          `UPDATE worker_run_state
-           SET status = ?,
-               error = COALESCE(?, error),
-               resume_count = CASE
-                 WHEN status = 'waiting_input' AND ? = 'running' THEN resume_count + 1
-                 ELSE resume_count
-               END,
-               time_updated = MAX(?, time_updated + 1)
-           WHERE session_id = ? AND run_id = ?`,
-        )
-        .run(status, extra?.error ?? null, status, Date.now(), sessionId, runId);
-      return result.changes > 0;
-    },
-
-    updateStatusIfCurrent: (
-      sessionId: string,
-      runId: string,
-      expected: WorkerRunStateStore.StatusPrecondition,
-      status: WorkerRunStateStore.Status,
-      extra?: WorkerRunStateStore.StatusExtra,
-    ): boolean => {
-      const result = db
-        .query(
-          `UPDATE worker_run_state
-           SET status = ?,
-               error = COALESCE(?, error),
-               resume_count = CASE
-                 WHEN status = 'waiting_input' AND ? = 'running' THEN resume_count + 1
-                 ELSE resume_count
-               END,
-               time_updated = MAX(?, time_updated + 1)
-           WHERE session_id = ?
-             AND run_id = ?
-             AND status = ?
-             AND time_updated = ?`,
-        )
-        .run(
-          status,
-          extra?.error ?? null,
-          status,
-          Date.now(),
-          sessionId,
-          runId,
-          expected.status,
-          expected.timeUpdated,
-        );
-      return result.changes > 0;
     },
 
     get: (sessionId: string, runId: string): WorkerRunStateStore.Record | undefined => {

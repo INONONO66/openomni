@@ -30,8 +30,8 @@ export namespace AppConnector {
   export const QuestionBridge = Schema.QuestionBridge;
   export type QuestionBridge = Schema.QuestionBridge;
 
-  export const CompletionReport = Schema.CompletionReport;
-  export type CompletionReport = Schema.CompletionReport;
+  export const ReportSource = Schema.ReportSource;
+  export type ReportSource = Schema.ReportSource;
 
   export const Evidence = Schema.Evidence;
   export type Evidence = Schema.Evidence;

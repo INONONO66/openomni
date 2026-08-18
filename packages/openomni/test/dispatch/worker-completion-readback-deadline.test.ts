@@ -90,7 +90,7 @@ async function createStartedWorkItem(): Promise<WorkItem.Info> {
     },
     "trace-test",
   );
-  const started = await WorkItemStore.start(workItem.hash, "trace-test");
+  const started = await WorkItemStore.start(workItem.workItemId, "trace-test");
   if (!started) throw new Error("missing started work item");
   return started;
 }
@@ -135,7 +135,7 @@ describe("worker completion read-back deadline", () => {
     const clock = [0, 0, 0, 0, 11];
 
     const reflection = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       completionResult(workItem, [
         citationRequest("http://example.com/first"),
         citationRequest("http://example.com/second"),
@@ -160,7 +160,7 @@ describe("worker completion read-back deadline", () => {
       },
     );
 
-    const blocked = WorkItemStore.get(workItem.hash);
+    const blocked = WorkItemStore.get(workItem.workItemId);
     expect(recorderCalls).toBe(1);
     expect(blocked ? WorkItem.deriveStatus(blocked) : undefined).toBe("blocked");
     expect(blocked?.evidence).toHaveLength(0);
@@ -176,7 +176,7 @@ describe("worker completion read-back deadline", () => {
     const workItem = await createStartedWorkItem();
 
     const reflection = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       completionResult(workItem, [citationRequest("http://example.com/pending")]),
       {
         sourceOrigin: { source: "internal_worker" },
@@ -195,7 +195,7 @@ describe("worker completion read-back deadline", () => {
       completionBlocked: true,
       completionBlocker: "read-back envelope deadline exceeded",
     });
-    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+    expect(WorkItemStore.get(workItem.workItemId)?.evidence).toEqual([]);
   });
 
   test("does not persist a recorder result produced after the shared deadline", async () => {
@@ -203,7 +203,7 @@ describe("worker completion read-back deadline", () => {
     let clock = 0;
 
     const reflection = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       completionResult(workItem, [citationRequest("http://example.com/late")]),
       {
         sourceOrigin: { source: "internal_worker" },
@@ -230,7 +230,7 @@ describe("worker completion read-back deadline", () => {
       completionBlocked: true,
       completionBlocker: "read-back envelope deadline exceeded",
     });
-    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+    expect(WorkItemStore.get(workItem.workItemId)?.evidence).toEqual([]);
   });
 
   test("observes a recorder rejection produced after synchronous deadline exhaustion", async () => {
@@ -238,7 +238,7 @@ describe("worker completion read-back deadline", () => {
     let clock = 0;
 
     const reflection = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       completionResult(workItem, [citationRequest("http://example.com/late-rejection")]),
       {
         sourceOrigin: { source: "internal_worker" },
@@ -256,7 +256,7 @@ describe("worker completion read-back deadline", () => {
       completionBlocked: true,
       completionBlocker: "read-back envelope deadline exceeded",
     });
-    expect(WorkItemStore.get(workItem.hash)?.evidence).toEqual([]);
+    expect(WorkItemStore.get(workItem.workItemId)?.evidence).toEqual([]);
   });
 
   test("blocks when the deadline expires during the final evidence persist", async () => {
@@ -273,7 +273,7 @@ describe("worker completion read-back deadline", () => {
 
     try {
       const reflection = await reflectCoordinatorResult(
-        workItem.hash,
+        workItem.workItemId,
         completionResult(workItem, [citationRequest("http://example.com/final-persist")]),
         {
           sourceOrigin: { source: "internal_worker" },
@@ -293,13 +293,13 @@ describe("worker completion read-back deadline", () => {
     }
     // The evidence stayed durable, so once the blocker is resolved a fresh
     // attempt completes without re-executing the read-back.
-    expect(WorkItemStore.get(workItem.hash)?.evidence).toHaveLength(1);
-    const blockerId = WorkItemStore.get(workItem.hash)?.blockers[0]?.id;
+    expect(WorkItemStore.get(workItem.workItemId)?.evidence).toHaveLength(1);
+    const blockerId = WorkItemStore.get(workItem.workItemId)?.blockers[0]?.id;
     if (!blockerId) throw new Error("missing deadline blocker");
-    await WorkItemStore.resolveBlocker(workItem.hash, blockerId, "trace-test");
+    await WorkItemStore.resolveBlocker(workItem.workItemId, blockerId, "trace-test");
     clock = 6_000;
     const retry = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       completionResult(workItem, [citationRequest("http://example.com/final-persist")]),
       {
         sourceOrigin: { source: "internal_worker" },
@@ -317,7 +317,7 @@ describe("worker completion read-back deadline", () => {
     const workItem = await createStartedWorkItem();
 
     const reflection = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       completionResult(workItem, [citationRequest("http://example.com/source")]),
       {
         sourceOrigin: { source: "internal_worker" },
@@ -342,7 +342,7 @@ describe("worker completion read-back deadline", () => {
       },
     );
 
-    const completed = WorkItemStore.get(workItem.hash);
+    const completed = WorkItemStore.get(workItem.workItemId);
     expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
     expect(completed?.completionFacts.admissions).toHaveLength(1);
     expect(completed?.completionFacts.admissions[0]).toMatchObject({
@@ -358,7 +358,7 @@ describe("worker completion read-back deadline", () => {
   test("rejects replay with changed criterion facts", async () => {
     const workItem = await createStartedWorkItem();
     const result = completionResult(workItem, [citationRequest("http://example.com/source")]);
-    await reflectCoordinatorResult(workItem.hash, result, {
+    await reflectCoordinatorResult(workItem.workItemId, result, {
       sourceOrigin: { source: "internal_worker" },
       readBackRecorder: successfulReadBackRecorder,
     });
@@ -366,7 +366,7 @@ describe("worker completion read-back deadline", () => {
     changedEnvelope.criterionFacts[0].verification.kind = "numeric_recheck";
 
     const replay = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       { ...result, output: JSON.stringify(changedEnvelope) },
       {
         sourceOrigin: { source: "internal_worker" },
@@ -383,7 +383,7 @@ describe("worker completion read-back deadline", () => {
   test("rejects replay with changed read-back request content", async () => {
     const workItem = await createStartedWorkItem();
     const result = completionResult(workItem, [citationRequest("http://example.com/source")]);
-    await reflectCoordinatorResult(workItem.hash, result, {
+    await reflectCoordinatorResult(workItem.workItemId, result, {
       sourceOrigin: { source: "internal_worker" },
       readBackRecorder: successfulReadBackRecorder,
     });
@@ -391,7 +391,7 @@ describe("worker completion read-back deadline", () => {
     changedEnvelope.readBackRequests[0].request.target = "http://example.com/other-source";
 
     const replay = await reflectCoordinatorResult(
-      workItem.hash,
+      workItem.workItemId,
       { ...result, output: JSON.stringify(changedEnvelope) },
       {
         sourceOrigin: { source: "internal_worker" },
@@ -408,16 +408,21 @@ describe("worker completion read-back deadline", () => {
   test("redelivers an unchanged blocked completion without writes", async () => {
     const workItem = await createStartedWorkItem();
     const check = await successfulReadBackRecorder(
-      workItem.hash,
+      workItem.workItemId,
       citationRequest("http://example.com/source").request,
     );
     const criterionId = workItem.completionFacts.criteria[0]?.id;
     if (!criterionId) throw new Error("missing read-back criterion");
-    const evidence = await WorkItemStore.addReadBackEvidence(workItem.hash, check, "trace-test", {
-      expectedAttempt: workItem.attempt,
-      expectedBasisRef: workItem.completionContract.basisRef,
-      criterionId,
-    });
+    const evidence = await WorkItemStore.addReadBackEvidence(
+      workItem.workItemId,
+      check,
+      "trace-test",
+      {
+        expectedAttempt: workItem.attempt,
+        expectedBasisRef: workItem.completionContract.basisRef,
+        criterionId,
+      },
+    );
     const evidenceId = evidence?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("missing completion evidence");
     const result = completionResult(workItem, []);
@@ -441,7 +446,7 @@ describe("worker completion read-back deadline", () => {
 
     const denyingService = completionService({ policyEngine });
     await reflectCoordinatorResultProduction(
-      workItem.hash,
+      workItem.workItemId,
       blockedResult,
       {
         completionService: denyingService,
@@ -450,11 +455,11 @@ describe("worker completion read-back deadline", () => {
       },
       "trace-test",
     );
-    const blocked = WorkItemStore.get(workItem.hash);
+    const blocked = WorkItemStore.get(workItem.workItemId);
     if (!blocked) throw new Error("missing blocked WorkItem");
 
     const replay = await reflectCoordinatorResultProduction(
-      workItem.hash,
+      workItem.workItemId,
       blockedResult,
       {
         completionService: denyingService,
@@ -465,9 +470,9 @@ describe("worker completion read-back deadline", () => {
     );
 
     expect(replay).toMatchObject({ completionBlocked: true, workItemStatus: "blocked" });
-    expect(WorkItemStore.get(workItem.hash)).toEqual(blocked);
-    expect(WorkItemStore.get(workItem.hash)?.revision).toBe(blocked.revision);
-    expect(WorkItemStore.get(workItem.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(WorkItemStore.get(workItem.hash)?.blockers).toHaveLength(1);
+    expect(WorkItemStore.get(workItem.workItemId)).toEqual(blocked);
+    expect(WorkItemStore.get(workItem.workItemId)?.revision).toBe(blocked.revision);
+    expect(WorkItemStore.get(workItem.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(WorkItemStore.get(workItem.workItemId)?.blockers).toHaveLength(1);
   });
 });

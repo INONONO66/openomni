@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
@@ -8,7 +7,7 @@ import { WorkerRunStateStore } from "../../src/worker-run/state-store";
 /**
  * #510 D2b pin (a) — the worker-run store is a FROZEN legacy writer
  * (pending-ask/pending-interaction precedent): every write surface throws
- * the typed `WorkerRun.FrozenError` (`data.code === "worker_run_frozen"`)
+ * the typed `WorkerRunFrozenError` (`data.code === "worker_run_frozen"`)
  * and persists nothing, while historical `worker_run_state` rows — seeded at
  * the adapter layer, exactly as pre-freeze rows persist on disk — keep
  * answering every read surface.
@@ -27,7 +26,7 @@ function seedSession(id: string): void {
 function seedFrozenRun(
   sessionId: string,
   runId: string,
-  status: WorkerRunProtocol.Status = "running",
+  status: WorkerRunStateStore.Status = "running",
 ): void {
   const adapter = Storage.getAdapter().workerRunState;
   if (!adapter) throw new Error("workerRunState sub-adapter missing");
@@ -60,8 +59,8 @@ afterEach(() => {
   Bus.reset();
 });
 
-function expectFrozen(thrown: unknown, method: WorkerRunProtocol.WriteMethod): void {
-  if (!WorkerRunProtocol.FrozenError.isInstance(thrown)) {
+function expectFrozen(thrown: unknown, method: WorkerRunStateStore.WriteMethod): void {
+  if (!WorkerRunStateStore.FrozenError.isInstance(thrown)) {
     throw new Error(`expected the typed WorkerRunFrozenError, got: ${String(thrown)}`);
   }
   expect(thrown.data.code).toBe("worker_run_frozen");

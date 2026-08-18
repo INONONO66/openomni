@@ -26,7 +26,7 @@ function absent(reason: string): { absent: true; reason: string } {
 
 /**
  * #510 C2 — allocates the Attempt identity for a spawned worker BEFORE the
- * executor acts (both the WorkerRun record and the dispatch happen after
+ * executor acts (the dispatch happens after
  * this durable append). Fingerprints are computed HERE, at the kernel spawn
  * site, from the materials in hand (model ref, executor kind, policy plan
  * labels, workspace root; environment: bun/platform/arch plus cheaply
@@ -123,8 +123,8 @@ export async function createWorkerSpawnWorkItem(
     },
     command.traceId,
   );
-  await WorkItemStore.start(workItem.hash, command.traceId);
-  return workItem.hash;
+  await WorkItemStore.start(workItem.workItemId, command.traceId);
+  return workItem.workItemId;
 }
 
 export async function failWorkerSpawnExecutor(

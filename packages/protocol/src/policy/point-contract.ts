@@ -3,8 +3,10 @@ import { PolicyDefinition } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
 
 export namespace PolicyPointContractModule {
-  export const Timing = PolicyDefinition.Timing;
-  export type Timing = PolicyDefinition.Timing;
+  // Module-internal alias: the engine consumers that used to reach this via
+  // the namespace moved to packages/policy (#498 W1) and read Policy.Timing;
+  // only TimingValue below needs it here.
+  const Timing = PolicyDefinition.Timing;
   const FailPolicy = PolicyDefinition.FailPolicy;
   const PolicyEffectType = PolicyEffects.PolicyEffectType;
   type PolicyEffectType = PolicyEffects.PolicyEffectType;

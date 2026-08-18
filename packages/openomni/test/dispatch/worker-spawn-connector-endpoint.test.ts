@@ -193,7 +193,7 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
     );
 
     expect(result.output).toMatchObject({
-      workItemHash: WorkItemStore.list()[0]?.hash,
+      workItemHash: WorkItemStore.list()[0]?.workItemId,
       connectorId: TEST_CONNECTOR_ID,
       connectorInstallationId: installation.id,
       result: { status: "succeeded", output: "done" },

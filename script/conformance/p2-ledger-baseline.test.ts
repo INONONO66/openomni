@@ -9,7 +9,6 @@ import {
   LedgerAppend,
   PolicyDecision,
   Wait,
-  WorkerRun as WorkerRunProtocol,
   WorkItem,
 } from "../../packages/protocol/src/index";
 import {
@@ -29,12 +28,12 @@ import {
   SqliteStorageAdapter,
   Storage,
   WaitStore,
-  WorkerRunStateStore,
   WorkItemAttemptRun,
   WorkItemStore,
 } from "../../packages/session/src/index";
 import { Bus } from "../../packages/telemetry/src/index";
 import { Ledger } from "../../packages/session/src/ledger-core/index";
+import { WorkerRunStateStore } from "../../packages/session/src/worker-run/state-store";
 import {
   hasRetryExhaustionBlocker,
   isRetryExhausted,
@@ -68,7 +67,7 @@ import {
  *
  *   (a) append-before-act: every committed transition has its
  *       decision-class fact on the owner stream (`wait:<id>` /
- *       `work:<hash>`) at seq === projected revision, and a failed append
+ *       `work:<workItemId>`) at seq === projected revision, and a failed append
  *       leaves no projection change and no Bus event;
  *   (b) a stale expectedHead is a typed conflict (revision_conflict /
  *       stale_revision at the store, cas_conflict at the append core) that
@@ -370,19 +369,19 @@ function buildCompletionRequest(item: WorkItem.Info): WorkItem.CompletionRequest
   const criterion = item.completionFacts.criteria[0];
   const evidenceId = item.evidence[0]?.id;
   if (!criterion || !evidenceId) throw new Error("missing completion criterion evidence");
-  const observationId = `observation:${item.hash}:${item.revision}`;
+  const observationId = `observation:${item.workItemId}:${item.revision}`;
   const basisRef = item.completionContract.basisRef;
   return WorkItem.CompletionRequest.parse({
     version: 1,
-    id: `completion-request:${item.hash}:${item.revision}:worker`,
+    id: `completion-request:${item.workItemId}:${item.revision}:worker`,
     origin: "worker",
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     contractRevision: item.completionContract.revision,
     basisRef,
     expectedHead: item.revision,
     claims: [
       {
-        id: `claim:${item.hash}:${item.revision}`,
+        id: `claim:${item.workItemId}:${item.revision}`,
         criterionId: criterion.id,
         statement: criterion.statement,
         observationIds: [observationId],
@@ -394,7 +393,7 @@ function buildCompletionRequest(item: WorkItem.Info): WorkItem.CompletionRequest
       {
         id: observationId,
         producer: "conformance:p2",
-        subjectRef: item.hash,
+        subjectRef: item.workItemId,
         basisRef,
         artifactRefs: [evidenceId],
         provenanceRef: evidenceId,
@@ -404,7 +403,7 @@ function buildCompletionRequest(item: WorkItem.Info): WorkItem.CompletionRequest
     ],
     results: [
       {
-        id: `result:${item.hash}:${item.revision}`,
+        id: `result:${item.workItemId}:${item.revision}`,
         criterionId: criterion.id,
         value: "verified",
         checkedPredicate: criterion.statement,
@@ -460,9 +459,9 @@ function buildAdmission(
 describe("p2 ledger baseline — WorkItem decision-class facts", () => {
   test("append-before-act: create and every lifecycle transition append their facts at seq === projected revision", async () => {
     const item = await createConformanceWorkItem("append-before-act");
-    await WorkItemStore.start(item.hash, "trace-test");
+    await WorkItemStore.start(item.workItemId, "trace-test");
     const blocked = await WorkItemStore.addBlocker(
-      item.hash,
+      item.workItemId,
       {
         kind: "external",
         description: "awaiting conformance reply",
@@ -471,10 +470,10 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
     );
     const blockerId = blocked?.blockers[0]?.id;
     if (!blockerId) throw new Error("missing conformance blocker");
-    await WorkItemStore.resolveBlocker(item.hash, blockerId, "trace-test");
-    await WorkItemStore.fail(item.hash, "trace-test", "conformance failure");
+    await WorkItemStore.resolveBlocker(item.workItemId, blockerId, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "conformance failure");
 
-    const facts = workFactsOf(item.hash);
+    const facts = workFactsOf(item.workItemId);
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([
       [1, "work_item.created"],
       [2, "work_item.started"],
@@ -484,8 +483,8 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
     ]);
     // Head↔revision binding: the stream head IS the projected revision.
     expect(item.revision).toBe(1);
-    expect(WorkItemStore.get(item.hash)?.revision).toBe(5);
-    expect(workHeadOf(item.hash)).toBe(5);
+    expect(WorkItemStore.get(item.workItemId)?.revision).toBe(5);
+    expect(workHeadOf(item.workItemId)).toBe(5);
 
     // Facts carry the typed transition payload plus the resulting revision —
     // never the row snapshot (the projection row stays the read model).
@@ -509,12 +508,12 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
     let injected = false;
     workItem.get = (hash: string) => {
       const current = originalGet(hash);
-      if (hash === item.hash && current && !injected) {
+      if (hash === item.workItemId && current && !injected) {
         injected = true;
         storage.transaction(() => {
           const appended = ledger.append(
             {
-              streamId: `work:${item.hash}`,
+              streamId: `work:${item.workItemId}`,
               type: "work_item.updated",
               data: { fields: ["name"], revision: current.revision + 1 },
             },
@@ -522,7 +521,7 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
           );
           if (appended.kind !== "appended") throw new Error("competing append must win");
           if (
-            !workItem.compareAndSet(item.hash, current.revision, {
+            !workItem.compareAndSet(item.workItemId, current.revision, {
               ...current,
               revision: current.revision + 1,
               name: "competing winner",
@@ -539,20 +538,20 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
 
     let thrown: unknown;
     try {
-      await WorkItemStore.fail(item.hash, "trace-test", "loser");
+      await WorkItemStore.fail(item.workItemId, "trace-test", "loser");
     } catch (error) {
       thrown = error;
     }
 
     expect(injected).toBe(true);
     expect(thrown).toMatchObject({ name: "WorkItemRevisionError", code: "stale_revision" });
-    const persisted = originalGet(item.hash);
+    const persisted = originalGet(item.workItemId);
     expect(persisted?.name).toBe("competing winner");
     expect(persisted?.revision).toBe(2);
     expect(persisted?.failureReason).toBeUndefined();
     // Only the competing write appended: the failed transition left no fact.
-    expect(workHeadOf(item.hash)).toBe(2);
-    expect(workFactsOf(item.hash).map((fact) => fact.type)).toEqual([
+    expect(workHeadOf(item.workItemId)).toBe(2);
+    expect(workFactsOf(item.workItemId).map((fact) => fact.type)).toEqual([
       "work_item.created",
       "work_item.updated",
     ]);
@@ -563,33 +562,39 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
 
   test("a pre-cutover row is adopted lazily at ITS revision: genesis fact carries the observed snapshot", async () => {
     const item = await createConformanceWorkItem("lazy-adoption");
-    const started = await WorkItemStore.start(item.hash, "trace-test");
+    const started = await WorkItemStore.start(item.workItemId, "trace-test");
     if (started?.revision !== 2) throw new Error("expected revision 2 after start");
     // Simulate a migration-shifted pre-cutover row: 0014 backfills every
     // existing row to old json revision + 1, so a row with prior transitions
     // sits at revision > 1 with an EMPTY owner stream. Adoption must land at
     // the row's OWN revision, not at 1 (review fix F4).
-    inspect.query("DELETE FROM ledger_event WHERE stream_id = ?").run(`work:${item.hash}`);
-    inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run(`work:${item.hash}`);
-    expect(workFactsOf(item.hash)).toHaveLength(0);
+    inspect.query("DELETE FROM ledger_event WHERE stream_id = ?").run(`work:${item.workItemId}`);
+    inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run(`work:${item.workItemId}`);
+    expect(workFactsOf(item.workItemId)).toHaveLength(0);
 
-    const failed = await WorkItemStore.fail(item.hash, "trace-test", "post-adoption transition");
+    const failed = await WorkItemStore.fail(
+      item.workItemId,
+      "trace-test",
+      "post-adoption transition",
+    );
 
     expect(failed?.revision).toBe(3);
-    const facts = workFactsOf(item.hash);
+    const facts = workFactsOf(item.workItemId);
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([
       [2, "work_item.adopted"],
       [3, "work_item.failed"],
     ]);
-    expect(workHeadOf(item.hash)).toBe(3);
+    expect(workHeadOf(item.workItemId)).toBe(3);
     const adopted = JSON.parse(facts[0]?.data ?? "{}") as {
-      snapshot?: { hash?: string; revision?: number };
+      snapshot?: { workItemId?: string; revision?: number };
       revision?: number;
     };
     // The genesis fact records the observed state at seq === revision —
-    // pre-cutover history is adopted, never fabricated.
+    // pre-cutover history is adopted, never fabricated. Post-#498 writers
+    // bake the renamed identifier keys into new adopted snapshots; the Info
+    // read upcast covers rows adopted before the rename.
     expect(adopted.revision).toBe(2);
-    expect(adopted.snapshot?.hash).toBe(item.hash);
+    expect(adopted.snapshot?.workItemId).toBe(item.workItemId);
     expect(adopted.snapshot?.revision).toBe(2);
     // The adopted stream verifies clean at boot.
     expect(Ledger.verifyTail(inspect)).toEqual([]);
@@ -598,7 +603,7 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
   test("completion admission verdicts are appended facts: refuse is recorded, accept precedes the terminal projection", async () => {
     const refused = await createConformanceWorkItem("admission-refused");
     await WorkItemStore.addEvidence(
-      refused.hash,
+      refused.workItemId,
       {
         kind: "verification",
         description: "conformance evidence",
@@ -606,7 +611,7 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
       },
       "trace-test",
     );
-    const refusedCurrent = WorkItemStore.get(refused.hash);
+    const refusedCurrent = WorkItemStore.get(refused.workItemId);
     if (!refusedCurrent) throw new Error("missing refused conformance item");
     const refusedRequest = buildCompletionRequest(refusedCurrent);
     const report: WorkItem.CompletionReport = {
@@ -634,20 +639,20 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
     });
 
     expect(refusal.completed).toBe(false);
-    const refusedFacts = workFactsOf(refused.hash);
+    const refusedFacts = workFactsOf(refused.workItemId);
     const refusalFact = refusedFacts.at(-1);
     expect(refusalFact?.type).toBe("work_item.admission_refused");
-    expect(refusalFact?.seq).toBe(WorkItemStore.get(refused.hash)?.revision);
+    expect(refusalFact?.seq).toBe(WorkItemStore.get(refused.workItemId)?.revision);
     expect(JSON.parse(refusalFact?.data ?? "{}")).toMatchObject({
       requestId: refusedRequest.id,
       decision: "block",
     });
-    expect(WorkItemStore.get(refused.hash)?.completionTerminalReceipt).toBeUndefined();
+    expect(WorkItemStore.get(refused.workItemId)?.completionTerminalReceipt).toBeUndefined();
     expect(refusedFacts.map((fact) => fact.type)).not.toContain("work_item.completed");
 
     const admitted = await createConformanceWorkItem("admission-accepted");
     await WorkItemStore.addEvidence(
-      admitted.hash,
+      admitted.workItemId,
       {
         kind: "verification",
         description: "conformance evidence",
@@ -655,7 +660,7 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
       },
       "trace-test",
     );
-    const admittedCurrent = WorkItemStore.get(admitted.hash);
+    const admittedCurrent = WorkItemStore.get(admitted.workItemId);
     if (!admittedCurrent) throw new Error("missing admitted conformance item");
     const admittedRequest = buildCompletionRequest(admittedCurrent);
     const admittedReport: WorkItem.CompletionReport = {
@@ -682,29 +687,29 @@ describe("p2 ledger baseline — WorkItem decision-class facts", () => {
     expect(admission.completed).toBe(true);
     // Record-before-terminal: the accept verdict fact precedes the terminal
     // completion fact on the same owner stream.
-    const admittedFacts = workFactsOf(admitted.hash).map((fact) => fact.type);
+    const admittedFacts = workFactsOf(admitted.workItemId).map((fact) => fact.type);
     const acceptedAt = admittedFacts.indexOf("work_item.admission_accepted");
     const completedAt = admittedFacts.indexOf("work_item.completed");
     expect(acceptedAt).toBeGreaterThan(-1);
     expect(completedAt).toBe(acceptedAt + 1);
-    expect(workHeadOf(admitted.hash)).toBe(WorkItemStore.get(admitted.hash)?.revision);
-    expect(WorkItemStore.get(admitted.hash)?.completionTerminalReceipt).toBeDefined();
+    expect(workHeadOf(admitted.workItemId)).toBe(WorkItemStore.get(admitted.workItemId)?.revision);
+    expect(WorkItemStore.get(admitted.workItemId)?.completionTerminalReceipt).toBeDefined();
   });
 
   test("boot tail verification covers work: streams and detects a tampered row", async () => {
     const item = await createConformanceWorkItem("tail-verify");
-    await WorkItemStore.start(item.hash, "trace-test");
+    await WorkItemStore.start(item.workItemId, "trace-test");
 
     expect(Ledger.verifyTail(inspect)).toEqual([]);
 
     inspect
       .query("UPDATE ledger_event SET data = ? WHERE stream_id = ? AND seq = ?")
-      .run('{"startedAt":0,"revision":2}', `work:${item.hash}`, 2);
+      .run('{"startedAt":0,"revision":2}', `work:${item.workItemId}`, 2);
 
     const breaks = Ledger.verifyTail(inspect);
     expect(breaks).toHaveLength(1);
     expect(breaks[0]).toMatchObject({
-      streamId: `work:${item.hash}`,
+      streamId: `work:${item.workItemId}`,
       seq: 2,
       code: "hash_mismatch",
     });
@@ -759,7 +764,7 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
               (candidate) => candidate.workerRunId === request.runId,
             );
             if (!spawned) throw new Error("spawned WorkItem not found at dispatch time");
-            const facts = factsOfStream(`work:${spawned.hash}`);
+            const facts = factsOfStream(`work:${spawned.workItemId}`);
             const allocated = facts.find((fact) => fact.type === "work_item.attempt_allocated");
             observations.push({
               factTypes: facts.map((fact) => fact.type),
@@ -817,12 +822,12 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
     const item = await createConformanceWorkItem("attempt-seq-monotonic");
 
     const first = await WorkItemStore.allocateAttempt(
-      item.hash,
+      item.workItemId,
       conformanceAttemptIdentity("first execution"),
       "trace-test",
     );
     const second = await WorkItemStore.allocateAttempt(
-      item.hash,
+      item.workItemId,
       conformanceAttemptIdentity("second execution"),
       "trace-test",
     );
@@ -836,7 +841,7 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
     expect(first.attempt.retryOf).toBeNull();
     expect(second.attempt.retryOf).toBe(first.attempt.attemptId);
 
-    const allocationFacts = workFactsOf(item.hash).filter(
+    const allocationFacts = workFactsOf(item.workItemId).filter(
       (fact) => fact.type === "work_item.attempt_allocated",
     );
     expect(
@@ -847,13 +852,13 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
       first.item.revision,
       second.item.revision,
     ]);
-    expect(workHeadOf(item.hash)).toBe(second.item.revision);
+    expect(workHeadOf(item.workItemId)).toBe(second.item.revision);
   });
 
   test("a cache hit creates a NEW attempt recording reusedFromAttemptId — never a row reuse", async () => {
     const item = await createConformanceWorkItem("cache-hit-new-attempt");
     const seeded = await WorkItemStore.allocateAttempt(
-      item.hash,
+      item.workItemId,
       conformanceAttemptIdentity("cache seed"),
       "trace-test",
     );
@@ -863,7 +868,7 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
     // and records the reused one — cache/replay EXECUTION (lookup, JSONL
     // export) is #493; the identity contract is #510's.
     const hit = await WorkItemStore.allocateAttempt(
-      item.hash,
+      item.workItemId,
       {
         ...conformanceAttemptIdentity("cache seed"),
         reusedFromAttemptId: seeded.attempt.attemptId,
@@ -879,7 +884,7 @@ describe("p2 ledger baseline — attempt identity decision-class facts (C2)", ()
 
     // Both allocations are separate durable facts; the seeded fact is
     // untouched by the hit (immutable reuse rejects rewrites).
-    const allocationFacts = workFactsOf(item.hash).filter(
+    const allocationFacts = workFactsOf(item.workItemId).filter(
       (fact) => fact.type === "work_item.attempt_allocated",
     );
     expect(allocationFacts).toHaveLength(2);
@@ -1703,38 +1708,38 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
 
   test("retry-policy reads the fact-bound WorkItem projection: retry and exhaustion decisions are recorded facts", async () => {
     const item = await createConformanceWorkItem("retry-policy-receipt", { maxAttempts: 2 });
-    await WorkItemStore.start(item.hash, "trace-test");
-    await WorkItemStore.fail(item.hash, "trace-test", "first failure");
+    await WorkItemStore.start(item.workItemId, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "first failure");
 
-    const retried = await WorkItemStore.retry(item.hash, "trace-test");
+    const retried = await WorkItemStore.retry(item.workItemId, "trace-test");
     if (!retried) throw new Error("retry must return the updated projection");
 
     // The attempt count retry-policy evaluates is carried by the head fact
     // at seq === revision — the projection is the fold of the work: stream,
     // never a WorkerRun read.
-    const facts = workFactsOf(item.hash);
+    const facts = workFactsOf(item.workItemId);
     const retriedFact = facts.at(-1);
     expect(retriedFact?.type).toBe("work_item.retried");
     expect(JSON.parse(retriedFact?.data ?? "{}")).toMatchObject({
       attempt: retried.attempt,
       revision: retried.revision,
     });
-    expect(workHeadOf(item.hash)).toBe(retried.revision);
+    expect(workHeadOf(item.workItemId)).toBe(retried.revision);
     expect(retried.attempt).toBe(2);
     expect(isRetryExhausted(retried)).toBe(true);
 
     // Exhaustion is itself a recorded decision: the blocker fact lands
     // before the typed throw, and the projection the policy reads agrees.
-    await WorkItemStore.fail(item.hash, "trace-test", "second failure");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "second failure");
     let thrown: unknown;
     try {
-      await WorkItemStore.retry(item.hash, "trace-test");
+      await WorkItemStore.retry(item.workItemId, "trace-test");
     } catch (error) {
       thrown = error;
     }
     expect(String(thrown)).toContain("retry attempts exhausted");
-    expect(workFactsOf(item.hash).at(-1)?.type).toBe("work_item.blocker_added");
-    const exhausted = WorkItemStore.get(item.hash);
+    expect(workFactsOf(item.workItemId).at(-1)?.type).toBe("work_item.blocker_added");
+    const exhausted = WorkItemStore.get(item.workItemId);
     if (!exhausted) throw new Error("exhausted projection must exist");
     expect(hasRetryExhaustionBlocker(exhausted)).toBe(true);
   });
@@ -1745,7 +1750,7 @@ describe("p2 ledger baseline — frozen worker-run writer + archive manifest (D2
   // the adapter layer, exactly as pre-freeze rows persist on disk.
   function seedFrozenWorkerRun(
     runId: string,
-    status: WorkerRunProtocol.Status,
+    status: WorkerRunStateStore.Status,
     sessionId = "session_conformance_wr",
   ): void {
     const storage = Storage.getAdapter();
@@ -1789,7 +1794,7 @@ describe("p2 ledger baseline — frozen worker-run writer + archive manifest (D2
       thrown = error;
     }
 
-    if (!WorkerRunProtocol.FrozenError.isInstance(thrown)) {
+    if (!WorkerRunStateStore.FrozenError.isInstance(thrown)) {
       throw new Error("expected the typed WorkerRunFrozenError");
     }
     expect(thrown.data.code).toBe("worker_run_frozen");
@@ -1962,17 +1967,17 @@ describe("p2 ledger baseline — telemetry and Bus.publish cannot authorize", ()
       // The observe-only projection: record what is ALREADY durable at
       // delivery time, then crash. Publish is lossy by contract — the
       // crash must not unwind the committed decision.
-      headsAtDelivery.push(workHeadOf(item.hash));
+      headsAtDelivery.push(workHeadOf(item.workItemId));
       throw new Error("subscriber crashed — publish is lossy");
     });
 
-    const started = await WorkItemStore.start(item.hash, "trace-test");
+    const started = await WorkItemStore.start(item.workItemId, "trace-test");
     await flushBus();
 
     if (!started) throw new Error("expected the started projection");
     // The decision-class fact folded despite the crashing subscriber…
-    expect(workFactsOf(item.hash).at(-1)?.type).toBe("work_item.started");
-    expect(workHeadOf(item.hash)).toBe(started.revision);
+    expect(workFactsOf(item.workItemId).at(-1)?.type).toBe("work_item.started");
+    expect(workHeadOf(item.workItemId)).toBe(started.revision);
     // …and the subscriber observed a head that was durable BEFORE delivery:
     // the publish is a delayed projection of the fact, never its cause.
     expect(headsAtDelivery).toEqual([started.revision]);
@@ -2090,10 +2095,10 @@ describe("p2 ledger baseline — boot tail verification and the Governor inciden
 
   test("corrupted-tail boot emits chain-break plus Governor incident and does NOT refuse boot", async () => {
     const item = await createConformanceWorkItem("boot-corrupt-tail");
-    const factsBefore = workFactsOf(item.hash).length;
+    const factsBefore = workFactsOf(item.workItemId).length;
     inspect
       .query("UPDATE ledger_event SET data = ? WHERE stream_id = ? AND seq = 1")
-      .run('{"tampered":true}', `work:${item.hash}`);
+      .run('{"tampered":true}', `work:${item.workItemId}`);
 
     const events: { name: string; payload: Record<string, unknown> }[] = [];
     Bus.observe((event, payload) =>
@@ -2118,12 +2123,12 @@ describe("p2 ledger baseline — boot tail verification and the Governor inciden
     expect(incidents[0]?.payload).toMatchObject({
       incident: "chain_break",
       component: "server",
-      context: { streamId: `work:${item.hash}`, seq: 1, code: "hash_mismatch" },
+      context: { streamId: `work:${item.workItemId}`, seq: 1, code: "hash_mismatch" },
     });
     // No refusal, and no post-break action: boot completed observe-only —
     // the tampered stream gained no fact and its head did not move.
     expect(events.some((event) => event.name === "operational.recovery.completed")).toBe(true);
-    expect(workFactsOf(item.hash)).toHaveLength(factsBefore);
+    expect(workFactsOf(item.workItemId)).toHaveLength(factsBefore);
   });
 });
 

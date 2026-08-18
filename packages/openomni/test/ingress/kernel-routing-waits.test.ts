@@ -117,8 +117,8 @@ async function seedFrozenPending(
     },
     "trace-test",
   );
-  await WorkItemStore.start(workItem.hash, "trace-test");
-  await allocateTestAttempt(workItem.hash);
+  await WorkItemStore.start(workItem.workItemId, "trace-test");
+  await allocateTestAttempt(workItem.workItemId);
   seedPendingInteraction({
     id,
     workerRunId: runId,
@@ -286,7 +286,7 @@ describe("IngressEngine wait routing", () => {
     expect(result.result.output).toBe("");
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-plain-text")?.status).toBe("open");
-    expect(WorkItemStore.get(workItem.hash)?.blockers).toEqual([
+    expect(WorkItemStore.get(workItem.workItemId)?.blockers).toEqual([
       expect.objectContaining({ description: "completion report is required" }),
     ]);
   });

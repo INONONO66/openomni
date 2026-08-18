@@ -46,7 +46,7 @@ function recordedVerifierEvidence(item: WorkItem.Info): string {
   return JSON.stringify({
     type: "verifier_recorded_inputs",
     version: 1,
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     basisRef: item.completionContract.basisRef,
     criterionId: criterion.id,
     verifierKind: "numeric_recheck",
@@ -191,7 +191,7 @@ describe("worker.spawn result reflection", () => {
         expect(workItems[0]?.failureReason).toBe(`worker ${status}`);
       }
       expect(result).toMatchObject({
-        output: { workItemHash: workItems[0]?.hash, result: { status } },
+        output: { workItemHash: workItems[0]?.workItemId, result: { status } },
       });
     }
   });
@@ -226,7 +226,7 @@ describe("worker.spawn result reflection", () => {
     });
     expect(result).toMatchObject({
       output: {
-        workItemHash: workItems[0]?.hash,
+        workItemHash: workItems[0]?.workItemId,
         reflection: {
           workItemStatus: "blocked",
           completionBlocked: true,
@@ -245,7 +245,7 @@ describe("worker.spawn result reflection", () => {
             const item = WorkItemStore.list()[0];
             if (!item) throw new Error("missing work item");
             const withEvidence = await WorkItemStore.addEvidence(
-              item.hash,
+              item.workItemId,
               {
                 kind: "verification",
                 description: "kernel-recorded verifier input",
@@ -287,7 +287,7 @@ describe("worker.spawn result reflection", () => {
     });
     expect(result).toMatchObject({
       output: {
-        workItemHash: workItems[0]?.hash,
+        workItemHash: workItems[0]?.workItemId,
         reflection: {
           workItemStatus: "blocked",
           completionBlocked: true,
@@ -306,7 +306,7 @@ describe("worker.spawn result reflection", () => {
             const workItem = WorkItemStore.list()[0];
             if (!workItem) throw new Error("missing work item");
             const withEvidence = await WorkItemStore.addEvidence(
-              workItem.hash,
+              workItem.workItemId,
               {
                 kind: "test_result",
                 description: "kernel-recorded verifier input",
@@ -349,7 +349,7 @@ describe("worker.spawn result reflection", () => {
     expect(workItems[0]?.completionReport?.claims[0]?.evidenceIds).toEqual([claimedEvidenceId]);
     expect(result).toMatchObject({
       output: {
-        workItemHash: workItems[0]?.hash,
+        workItemHash: workItems[0]?.workItemId,
         result: { status: "succeeded" },
         reflection: { workItemStatus: "completed", completionBlocked: false },
       },
@@ -378,7 +378,7 @@ describe("worker.spawn result reflection", () => {
             const workItem = WorkItemStore.list()[0];
             if (!workItem) throw new Error("missing work item");
             const withEvidence = await WorkItemStore.addEvidence(
-              workItem.hash,
+              workItem.workItemId,
               {
                 kind: "verification",
                 description: "kernel-recorded verifier input",
@@ -444,11 +444,11 @@ describe("worker.spawn result reflection", () => {
       },
       "trace-test",
     );
-    const connectorItem = await WorkItemStore.start(connectorCreated.hash, "trace-test");
+    const connectorItem = await WorkItemStore.start(connectorCreated.workItemId, "trace-test");
     if (!connectorItem) throw new Error("missing connector WorkItem");
-    await allocateTestAttempt(connectorItem.hash);
+    await allocateTestAttempt(connectorItem.workItemId);
     const connectorEvidence = await WorkItemStore.addEvidence(
-      connectorItem.hash,
+      connectorItem.workItemId,
       {
         kind: "verification",
         description: "kernel-recorded verifier input",
@@ -468,7 +468,7 @@ describe("worker.spawn result reflection", () => {
           sessionId: "session:connector-policy",
         },
         {
-          workItemHash: connectorItem.hash,
+          workItemHash: connectorItem.workItemId,
           result: {
             runId: "run:connector-policy",
             sessionId: "session:connector-policy",
@@ -487,7 +487,7 @@ describe("worker.spawn result reflection", () => {
       ),
     );
 
-    const connectorStored = WorkItemStore.get(connectorItem.hash);
+    const connectorStored = WorkItemStore.get(connectorItem.workItemId);
     expect(connectorStored ? WorkItem.deriveStatus(connectorStored) : undefined).toBe("blocked");
     expect(connectorStored?.completionFacts.admissions[0]).toMatchObject({
       origin: "worker",
@@ -519,11 +519,11 @@ describe("worker.spawn result reflection", () => {
       },
       "trace-test",
     );
-    const item = await WorkItemStore.start(created.hash, "trace-test");
+    const item = await WorkItemStore.start(created.workItemId, "trace-test");
     if (!item) throw new Error("missing blocked-retry WorkItem");
-    await allocateTestAttempt(item.hash);
+    await allocateTestAttempt(item.workItemId);
     const withEvidence = await WorkItemStore.addEvidence(
-      item.hash,
+      item.workItemId,
       {
         kind: "verification",
         description: "kernel-recorded verifier input",
@@ -540,7 +540,7 @@ describe("worker.spawn result reflection", () => {
         assignedWorkerCommand(
           { kind: "worker", runId: "run:blocked-retry", sessionId: "session:blocked-retry" },
           {
-            workItemHash: item.hash,
+            workItemHash: item.workItemId,
             result: {
               runId: "run:blocked-retry",
               sessionId: "session:blocked-retry",
@@ -557,16 +557,16 @@ describe("worker.spawn result reflection", () => {
     const blocked = await submit("not a completion envelope");
     expect(blocked.output.reflection.completionBlocked).toBe(true);
     // The attempt is still the live execution instance: no terminal record.
-    expect(WorkItemStore.get(item.hash)?.attemptTerminal).toBeUndefined();
+    expect(WorkItemStore.get(item.workItemId)?.attemptTerminal).toBeUndefined();
 
     // Resolve the block (the #490 active_blocker admission rule is the
     // pre-existing unblock step, not D2b scope), then resubmit the SAME
     // attempt with the corrected envelope: admitted once.
-    const blocker = WorkItemStore.get(item.hash)?.blockers.find(
+    const blocker = WorkItemStore.get(item.workItemId)?.blockers.find(
       (candidate) => candidate.resolvedAt === undefined,
     );
     if (!blocker) throw new Error("missing completion blocker after the blocked submission");
-    await WorkItemStore.resolveBlocker(item.hash, blocker.id, "trace-test");
+    await WorkItemStore.resolveBlocker(item.workItemId, blocker.id, "trace-test");
     const retried = await submit(
       JSON.stringify({
         completionReport: {
@@ -580,7 +580,7 @@ describe("worker.spawn result reflection", () => {
     );
     expect(retried.output.reflection.completionBlocked).toBe(false);
 
-    const stored = WorkItemStore.get(item.hash);
+    const stored = WorkItemStore.get(item.workItemId);
     if (!stored) throw new Error("blocked-retry WorkItem disappeared");
     expect(WorkItem.deriveStatus(stored)).toBe("completed");
     expect(
@@ -613,7 +613,7 @@ describe("worker.spawn result reflection", () => {
           assignedWorkerCommand(
             { kind: "worker", runId: "run:target" },
             {
-              workItemHash: item.hash,
+              workItemHash: item.workItemId,
               result: {
                 runId: "run:result",
                 sessionId: "session:bound",
@@ -632,7 +632,7 @@ describe("worker.spawn result reflection", () => {
           assignedWorkerCommand(
             { kind: "worker", runId: "run:target" },
             {
-              workItemHash: item.hash,
+              workItemHash: item.workItemId,
               result: {
                 runId: "run:target",
                 sessionId: "session:bound",
@@ -714,9 +714,9 @@ describe("worker.spawn result reflection", () => {
       },
       "trace-test",
     );
-    const item = await WorkItemStore.start(created.hash, "trace-test");
+    const item = await WorkItemStore.start(created.workItemId, "trace-test");
     if (!item) throw new Error("missing authenticated completion WorkItem");
-    const before = WorkItemStore.get(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
 
     await expectRejectsWithMessage(
       () =>
@@ -725,7 +725,7 @@ describe("worker.spawn result reflection", () => {
             "worker.complete",
             { kind: "worker", runId: "run:authenticated" },
             {
-              workItemHash: item.hash,
+              workItemHash: item.workItemId,
               result: {
                 runId: "run:authenticated",
                 sessionId: "session:authenticated",
@@ -738,7 +738,7 @@ describe("worker.spawn result reflection", () => {
       "worker.complete actor is not authorized",
     );
 
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
   });
 
   test("worker.complete rejects a missing WorkerRun assignment before mutation", async () => {
@@ -758,9 +758,9 @@ describe("worker.spawn result reflection", () => {
       },
       "trace-test",
     );
-    const item = await WorkItemStore.start(created.hash, "trace-test");
+    const item = await WorkItemStore.start(created.workItemId, "trace-test");
     if (!item) throw new Error("missing WorkerRun completion fixture");
-    const before = WorkItemStore.get(item.hash);
+    const before = WorkItemStore.get(item.workItemId);
 
     await expectRejectsWithMessage(
       () =>
@@ -772,7 +772,7 @@ describe("worker.spawn result reflection", () => {
               sessionId: "session:missing-worker-run",
             },
             {
-              workItemHash: item.hash,
+              workItemHash: item.workItemId,
               result: {
                 runId: "run:missing-worker-run",
                 sessionId: "session:missing-worker-run",
@@ -784,10 +784,10 @@ describe("worker.spawn result reflection", () => {
             "run:missing-worker-run",
           ),
         ),
-      "WorkerRun not found",
+      "run not found",
     );
 
-    expect(WorkItemStore.get(item.hash)).toEqual(before);
+    expect(WorkItemStore.get(item.workItemId)).toEqual(before);
   });
 
   test("worker.complete authenticates actor, target, session, and executor before mutation", async () => {
@@ -942,15 +942,15 @@ describe("worker.spawn result reflection", () => {
         },
         "trace-test",
       );
-      const item = await WorkItemStore.start(created.hash, "trace-test");
+      const item = await WorkItemStore.start(created.workItemId, "trace-test");
       if (!item) throw new Error(`missing WorkItem for ${scenario.name}`);
-      const before = WorkItemStore.get(item.hash);
+      const before = WorkItemStore.get(item.workItemId);
 
       await expectRejectsWithMessage(
-        () => registry.get("worker.complete")?.(scenario.buildCommand(item.hash)),
+        () => registry.get("worker.complete")?.(scenario.buildCommand(item.workItemId)),
         "worker.complete actor is not authorized",
       );
-      expect(WorkItemStore.get(item.hash)).toEqual(before);
+      expect(WorkItemStore.get(item.workItemId)).toEqual(before);
     }
   });
 
@@ -1006,7 +1006,7 @@ describe("worker.spawn result reflection", () => {
       },
       "trace-test",
     );
-    await allocateTestAttempt(item.hash);
+    await allocateTestAttempt(item.workItemId);
     const workItemAdapter = Storage.getAdapter().workItem;
     if (!workItemAdapter) throw new Error("missing work item adapter");
     workItemAdapter.compareAndSet = () => {
@@ -1019,7 +1019,7 @@ describe("worker.spawn result reflection", () => {
           assignedWorkerCommand(
             { kind: "worker", runId: "run:connector-evidence" },
             {
-              workItemHash: item.hash,
+              workItemHash: item.workItemId,
               result: {
                 runId: "run:connector-evidence",
                 sessionId: "session:connector-evidence",

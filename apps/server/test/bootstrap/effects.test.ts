@@ -49,13 +49,17 @@ describe("effect escalation seam (#492)", () => {
   it("adds exactly one waiting_input blocker and never stacks across sweeps", async () => {
     const item = await createWorkItem("escalation-dedup");
     const { service, reconciler } = assembleEffectRuntime();
-    await service.run({ effectId: "fx-unit-1", kind: "exhausting-probe", workItemHash: item.hash });
+    await service.run({
+      effectId: "fx-unit-1",
+      kind: "exhausting-probe",
+      workItemHash: item.workItemId,
+    });
 
     await reconciler.reconcile("trace-test");
     await reconciler.reconcile("trace-test");
     await reconciler.reconcile("trace-test");
 
-    const escalated = await WorkItemStore.get(item.hash);
+    const escalated = await WorkItemStore.get(item.workItemId);
     const blockers = escalated?.blockers.filter((b) => b.kind === "waiting_input") ?? [];
     expect(blockers).toHaveLength(1);
     expect(blockers[0]?.id).toBe("effect-escalation:fx-unit-1");
@@ -67,13 +71,17 @@ describe("effect escalation seam (#492)", () => {
   it("skips the blocker on a terminal WorkItem but still escalates loudly", async () => {
     const item = await createWorkItem("escalation-terminal");
     const { service, reconciler } = assembleEffectRuntime();
-    await service.run({ effectId: "fx-unit-2", kind: "exhausting-probe", workItemHash: item.hash });
-    await WorkItemStore.cancel(item.hash, "trace-test");
+    await service.run({
+      effectId: "fx-unit-2",
+      kind: "exhausting-probe",
+      workItemHash: item.workItemId,
+    });
+    await WorkItemStore.cancel(item.workItemId, "trace-test");
 
     const summary = await reconciler.reconcile("trace-test");
     expect(summary.escalated).toBe(1);
 
-    const cancelled = await WorkItemStore.get(item.hash);
+    const cancelled = await WorkItemStore.get(item.workItemId);
     expect(cancelled?.blockers.filter((b) => b.kind === "waiting_input")).toHaveLength(0);
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     const event = errors.find((e) => String(e.msg).includes("fx-unit-2"));

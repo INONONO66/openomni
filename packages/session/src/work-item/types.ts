@@ -15,7 +15,7 @@ export type CreateWorkItemInput = {
   context?: string;
   constraints?: string[];
   acceptanceCriteria: string[];
-  parentHash?: string;
+  parentId?: string;
   dependsOn?: string[];
   originSessionId?: string;
   workSessionId?: string;

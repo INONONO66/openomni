@@ -23,9 +23,9 @@ export function completionAdmissionDriverObservation(
   return {
     id,
     producer: overrides.producer ?? "completion-admission-driver",
-    subjectRef: item.hash,
+    subjectRef: item.workItemId,
     basisRef: item.completionContract.basisRef,
-    artifactRefs: overrides.artifactRefs ?? [`evidence:${item.hash}:report`],
+    artifactRefs: overrides.artifactRefs ?? [`evidence:${item.workItemId}:report`],
     ...(overrides.provenanceRef === undefined ? {} : { provenanceRef: overrides.provenanceRef }),
     ancestryRefs: [],
     observedAt: CompletionAdmissionDriverNow,
@@ -80,7 +80,7 @@ export function completionAdmissionDriverWorkItem(
       created: CompletionAdmissionDriverNow,
       updated: CompletionAdmissionDriverNow,
     },
-    relations: { childHashes: [], dependsOn: [] },
+    relations: { childIds: [], dependsOn: [] },
     intent: "verify completion admission",
     goal: "Exercise the public WorkItem completion boundary",
     constraints: [],
@@ -143,7 +143,7 @@ export function completionAdmissionDriverRequest(
     version: 1,
     id,
     origin: "worker",
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
@@ -264,7 +264,7 @@ export function completionAdmissionDriverReport(item: WorkItem.Info): WorkItem.C
     claims: [
       {
         statement: criterion.statement,
-        evidenceIds: [`evidence:${item.hash}:report`],
+        evidenceIds: [`evidence:${item.workItemId}:report`],
       },
     ],
     caveats: [],
@@ -285,8 +285,8 @@ export function insertCompletionAdmissionDriverItem(
   adapter: SqliteStorageAdapter,
   item: WorkItem.Info,
 ): void {
-  if (!adapter.workItem.create(item.hash, item)) {
-    throw new Error(`could not insert driver WorkItem ${item.hash}`);
+  if (!adapter.workItem.create(item.workItemId, item)) {
+    throw new Error(`could not insert driver WorkItem ${item.workItemId}`);
   }
 }
 

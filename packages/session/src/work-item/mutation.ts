@@ -58,11 +58,11 @@ export function commitMutation(
     revision: existing.revision + 1,
   };
   appendTransitionFact(ledger, existing, fact);
-  if (!adapter.compareAndSet(updated.hash, existing.revision, versioned)) {
+  if (!adapter.compareAndSet(updated.workItemId, existing.revision, versioned)) {
     // Unreachable while every writer appends first (the append CAS and the
     // projection CAS guard the same head==revision); kept as the explosive
     // backstop — the rollback discards the appended fact.
-    throw new WorkItemRevisionError(updated.hash);
+    throw new WorkItemRevisionError(updated.workItemId);
   }
   return versioned;
 }
@@ -79,7 +79,7 @@ export function persistMutation(
 ): WorkItem.Info {
   const storage = Storage.get();
   const ledger = requireWorkItemLedger(storage);
-  const versioned = runWorkItemTransaction(storage, existing.hash, () =>
+  const versioned = runWorkItemTransaction(storage, existing.workItemId, () =>
     commitMutation(adapter, ledger, existing, updated, fact),
   );
 
@@ -95,7 +95,7 @@ export function persistMutation(
       traceId,
       time,
       sessionId: versioned.sessionId,
-      payload: { hash: versioned.hash, from: previousStatus, to: nextStatus },
+      payload: { workItemId: versioned.workItemId, from: previousStatus, to: nextStatus },
     });
   }
   afterPublish?.(versioned, traceId);
@@ -103,7 +103,7 @@ export function persistMutation(
     traceId,
     time,
     sessionId: versioned.sessionId,
-    payload: { hash: versioned.hash, fields: changedFields },
+    payload: { workItemId: versioned.workItemId, fields: changedFields },
   });
   return versioned;
 }

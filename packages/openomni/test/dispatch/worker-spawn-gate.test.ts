@@ -65,7 +65,7 @@ describe("worker.spawn dispatch gate", () => {
     });
     expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("blocked");
     expect(result).toMatchObject({
-      output: { sessionId: requests[0]?.sessionId, workItemHash: workItems[0]?.hash },
+      output: { sessionId: requests[0]?.sessionId, workItemHash: workItems[0]?.workItemId },
     });
   });
 

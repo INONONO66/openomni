@@ -235,7 +235,7 @@ describe("effect ↔ completion admission linkage (#490)", () => {
       },
       "trace-test",
     );
-    return item.hash;
+    return item.workItemId;
   }
 
   function foldDecision(hash: string): WorkItem.CompletionAdmission {

@@ -189,21 +189,21 @@ describe("conversation task ledger command", () => {
       intent: "implement",
       goal: "build the feature",
     });
-    await WorkItemStore.start(running.hash, "trace-test");
+    await WorkItemStore.start(running.workItemId, "trace-test");
     const runningEarlierByName = await createWorkItem("Audit feature", {
       intent: "audit",
       goal: "audit the feature",
     });
-    await WorkItemStore.start(runningEarlierByName.hash, "trace-test");
+    await WorkItemStore.start(runningEarlierByName.workItemId, "trace-test");
     const blocked = await createWorkItem("Fix thing", {
       intent: "fix",
       goal: "fix the blocker",
       assigneeId: "worker-b",
       sessionId: "session-b",
     });
-    await WorkItemStore.start(blocked.hash, "trace-test");
+    await WorkItemStore.start(blocked.workItemId, "trace-test");
     await WorkItemStore.addBlocker(
-      blocked.hash,
+      blocked.workItemId,
       {
         kind: "waiting_input",
         description: "needs owner input",
@@ -211,7 +211,7 @@ describe("conversation task ledger command", () => {
       "trace-test",
     );
     const resolvedBlocker = await WorkItemStore.addBlocker(
-      blocked.hash,
+      blocked.workItemId,
       {
         kind: "external",
         description: "already handled elsewhere",
@@ -220,22 +220,22 @@ describe("conversation task ledger command", () => {
     );
     const resolvedBlockerId = resolvedBlocker?.blockers.at(-1)?.id;
     if (resolvedBlockerId)
-      await WorkItemStore.resolveBlocker(blocked.hash, resolvedBlockerId, "trace-test");
+      await WorkItemStore.resolveBlocker(blocked.workItemId, resolvedBlockerId, "trace-test");
     const completed = await createWorkItem("Done thing", {
       intent: "verify",
       goal: "verify complete items are hidden",
     });
-    const completedResult = await completeWorkItem(completionWriter, completed.hash);
+    const completedResult = await completeWorkItem(completionWriter, completed.workItemId);
     const failed = await createWorkItem("Failed thing", {
       intent: "verify",
       goal: "verify failed items are hidden",
     });
-    await WorkItemStore.fail(failed.hash, "trace-test", "not open");
+    await WorkItemStore.fail(failed.workItemId, "trace-test", "not open");
     const cancelled = await createWorkItem("Cancelled thing", {
       intent: "verify",
       goal: "verify cancelled items are hidden",
     });
-    await WorkItemStore.cancel(cancelled.hash, "trace-test");
+    await WorkItemStore.cancel(cancelled.workItemId, "trace-test");
     const handler = handlerFor();
 
     // When
@@ -245,10 +245,10 @@ describe("conversation task ledger command", () => {
     expect(response).toEqual({
       text: [
         "Open tasks (4)",
-        `- [blocked] Fix thing (hash: ${blocked.hash}, blockers: 1, assignee: worker-b, session: session-b)`,
-        `- [pending] Plan rollout (hash: ${pending.hash}, assignee: worker-a, session: session-a)`,
-        `- [running] Audit feature (hash: ${runningEarlierByName.hash})`,
-        `- [running] Build feature (hash: ${running.hash})`,
+        `- [blocked] Fix thing (hash: ${blocked.workItemId}, blockers: 1, assignee: worker-b, session: session-b)`,
+        `- [pending] Plan rollout (hash: ${pending.workItemId}, assignee: worker-a, session: session-a)`,
+        `- [running] Audit feature (hash: ${runningEarlierByName.workItemId})`,
+        `- [running] Build feature (hash: ${running.workItemId})`,
       ].join("\n"),
     });
     expect(completedResult ? WorkItem.deriveStatus(completedResult) : undefined).toBe("completed");
@@ -290,7 +290,7 @@ describe("conversation task ledger command", () => {
     expect(text.split("\n")).toHaveLength(2);
     expect(text).toStartWith("Open tasks (1)\n");
     expect(text).toContain(`- [pending] Task with spoofed row ${"x".repeat(55)}...`);
-    expect(text).toContain(`hash: ${item.hash}`);
+    expect(text).toContain(`hash: ${item.workItemId}`);
     expect(text).toContain(`assignee: worker ${"x".repeat(70)}...`);
     expect(text).toContain(`session: session ${"x".repeat(69)}...`);
     expect(text.length).toBeLessThanOrEqual(320);

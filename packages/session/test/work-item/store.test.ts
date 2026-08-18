@@ -101,10 +101,10 @@ describe("WorkItemStore", () => {
       events.push(`status:${event.payload.from}->${event.payload.to}`),
     );
     const item = await createItem("lifecycle");
-    const started = await WorkItemStore.start(item.hash, "trace-test");
-    const evidenceId = await addPassingEvidence(item.hash);
-    const withEvidence = WorkItemStore.get(item.hash);
-    const completed = persistCompletedFixture(item.hash, completionReport(evidenceId));
+    const started = await WorkItemStore.start(item.workItemId, "trace-test");
+    const evidenceId = await addPassingEvidence(item.workItemId);
+    const withEvidence = WorkItemStore.get(item.workItemId);
+    const completed = persistCompletedFixture(item.workItemId, completionReport(evidenceId));
     await flushBus();
 
     expect(started).toBeDefined();
@@ -137,8 +137,8 @@ describe("WorkItemStore", () => {
     );
 
     const item = await WorkItemStore.create({ ...baseInput, name: "trace-funnel" }, "trace-create");
-    await WorkItemStore.start(item.hash, "trace-start");
-    await WorkItemStore.fail(item.hash, "trace-fail", "deliberate failure");
+    await WorkItemStore.start(item.workItemId, "trace-start");
+    await WorkItemStore.fail(item.workItemId, "trace-fail", "deliberate failure");
     await flushBus();
 
     expect(traces).toEqual([
@@ -158,24 +158,24 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const traces: Array<{ event: string; traceId: string }> = [];
     Bus.subscribe(WorkItem.Events.Created, (event) =>
-      traces.push({ event: `created:${event.payload.hash}`, traceId: event.traceId }),
+      traces.push({ event: `created:${event.payload.workItemId}`, traceId: event.traceId }),
     );
     Bus.subscribe(WorkItem.Events.Updated, (event) =>
-      traces.push({ event: `updated:${event.payload.hash}`, traceId: event.traceId }),
+      traces.push({ event: `updated:${event.payload.workItemId}`, traceId: event.traceId }),
     );
 
     const parent = await WorkItemStore.create({ ...baseInput, name: "trace-parent" }, "trace-p");
     const child = await WorkItemStore.create(
-      { ...baseInput, name: "trace-child", parentHash: parent.hash },
+      { ...baseInput, name: "trace-child", parentId: parent.workItemId },
       "trace-c",
     );
     await flushBus();
 
     expect(traces).toEqual([
-      { event: `created:${parent.hash}`, traceId: "trace-p" },
+      { event: `created:${parent.workItemId}`, traceId: "trace-p" },
       // ONE create = ONE id: the parent-link Updated rides the child create.
-      { event: `updated:${parent.hash}`, traceId: "trace-c" },
-      { event: `created:${child.hash}`, traceId: "trace-c" },
+      { event: `updated:${parent.workItemId}`, traceId: "trace-c" },
+      { event: `created:${child.workItemId}`, traceId: "trace-c" },
     ]);
   });
 
@@ -205,7 +205,7 @@ describe("WorkItemStore", () => {
     const item = await createItem("shared-row-revision");
 
     const updated = await WorkItemStore.addEvidence(
-      item.hash,
+      item.workItemId,
       {
         kind: "verification",
         description: "ordinary mutation for the shared-row revision pin",
@@ -227,9 +227,9 @@ describe("WorkItemStore", () => {
     );
 
     const item = await createItem("blocker-flow");
-    await WorkItemStore.start(item.hash, "trace-test");
+    await WorkItemStore.start(item.workItemId, "trace-test");
     const blocked = await WorkItemStore.addBlocker(
-      item.hash,
+      item.workItemId,
       {
         kind: "waiting_input",
         description: "needs user confirmation",
@@ -238,7 +238,7 @@ describe("WorkItemStore", () => {
     );
     const blocker = blocked?.blockers[0];
     const resumed = await WorkItemStore.resolveBlocker(
-      item.hash,
+      item.workItemId,
       blocker?.id ?? "missing",
       "trace-test",
     );
@@ -253,11 +253,11 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("complete-then-fail");
 
-    const evidenceId = await addPassingEvidence(item.hash);
-    persistCompletedFixture(item.hash, completionReport(evidenceId));
+    const evidenceId = await addPassingEvidence(item.workItemId);
+    persistCompletedFixture(item.workItemId, completionReport(evidenceId));
 
     await expectRejectsWithMessage(
-      WorkItemStore.fail(item.hash, "trace-test"),
+      WorkItemStore.fail(item.workItemId, "trace-test"),
       "Cannot fail a completed work item",
     );
   });
@@ -271,8 +271,8 @@ describe("WorkItemStore", () => {
     });
     const updatedFields: string[][] = [];
     Bus.subscribe(WorkItem.Events.Updated, (event) => updatedFields.push(event.payload.fields));
-    const failed = await WorkItemStore.fail(item.hash, "trace-test", "transient error");
-    const retried = await WorkItemStore.retry(item.hash, "trace-test");
+    const failed = await WorkItemStore.fail(item.workItemId, "trace-test", "transient error");
+    const retried = await WorkItemStore.retry(item.workItemId, "trace-test");
 
     expect(failed?.attempt).toBe(1);
     expect(retried?.attempt).toBe(2);
@@ -299,7 +299,7 @@ describe("WorkItemStore", () => {
     ]);
     await expect(
       WorkItemStore.addEvidence(
-        item.hash,
+        item.workItemId,
         {
           kind: "verification",
           description: "late connector artifact",
@@ -312,9 +312,9 @@ describe("WorkItemStore", () => {
         },
       ),
     ).rejects.toThrow("attempt changed before evidence recording");
-    expect(WorkItemStore.get(item.hash)?.evidence).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.evidence).toEqual([]);
     const assigned = await WorkItemStore.assignExecution(
-      item.hash,
+      item.workItemId,
       {
         executorKind: "internal_chat_agent",
         workerRunId: "run:retry:2",
@@ -329,7 +329,7 @@ describe("WorkItemStore", () => {
     });
     await expect(
       WorkItemStore.assignExecution(
-        item.hash,
+        item.workItemId,
         {
           executorKind: "internal_chat_agent",
           workerRunId: "run:retry:duplicate",
@@ -354,12 +354,12 @@ describe("WorkItemStore", () => {
       passed: true,
     };
 
-    await WorkItemStore.addEvidence(item.hash, evidence, "trace-test", scope);
-    await WorkItemStore.fail(item.hash, "trace-test", "retry required");
-    await WorkItemStore.retry(item.hash, "trace-test");
+    await WorkItemStore.addEvidence(item.workItemId, evidence, "trace-test", scope);
+    await WorkItemStore.fail(item.workItemId, "trace-test", "retry required");
+    await WorkItemStore.retry(item.workItemId, "trace-test");
 
     await expect(
-      WorkItemStore.addEvidence(item.hash, evidence, "trace-test", scope),
+      WorkItemStore.addEvidence(item.workItemId, evidence, "trace-test", scope),
     ).rejects.toThrow("attempt changed before evidence recording");
   });
 
@@ -371,17 +371,17 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem(`terminal-assignment-${terminalState}`);
     if (terminalState === "failed") {
-      await WorkItemStore.fail(item.hash, "trace-test", "terminal failure");
+      await WorkItemStore.fail(item.workItemId, "trace-test", "terminal failure");
     } else if (terminalState === "cancelled") {
-      await WorkItemStore.cancel(item.hash, "trace-test");
+      await WorkItemStore.cancel(item.workItemId, "trace-test");
     } else {
-      const evidenceId = await addPassingEvidence(item.hash);
-      persistCompletedFixture(item.hash, completionReport(evidenceId));
+      const evidenceId = await addPassingEvidence(item.workItemId);
+      persistCompletedFixture(item.workItemId, completionReport(evidenceId));
     }
 
     await expect(
       WorkItemStore.assignExecution(
-        item.hash,
+        item.workItemId,
         {
           executorKind: "internal_chat_agent",
           workerRunId: `run:${terminalState}`,
@@ -416,14 +416,14 @@ describe("WorkItemStore", () => {
   test("rejects retry after max attempts and adds an Owner escalation blocker", async () => {
     configureSqlite();
     const item = await createItem("retry-exhaustion", { maxAttempts: 1 });
-    await WorkItemStore.fail(item.hash, "trace-test", "permanent error");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "permanent error");
 
     await expectRejectsWithMessage(
-      WorkItemStore.retry(item.hash, "trace-test"),
+      WorkItemStore.retry(item.workItemId, "trace-test"),
       "retry attempts exhausted for work item",
     );
 
-    const exhausted = WorkItemStore.get(item.hash);
+    const exhausted = WorkItemStore.get(item.workItemId);
     expect(exhausted?.attempt).toBe(1);
     expect(exhausted ? WorkItem.deriveStatus(exhausted) : undefined).toBe("failed");
     expect(exhausted?.blockers).toEqual([
@@ -440,18 +440,18 @@ describe("WorkItemStore", () => {
       executorKind: "internal_chat_agent",
     });
 
-    await WorkItemStore.fail(item.hash, "trace-test", "first failure");
-    const secondAttempt = await WorkItemStore.retry(item.hash, "trace-test");
-    await WorkItemStore.fail(item.hash, "trace-test", "second failure");
-    const thirdAttempt = await WorkItemStore.retry(item.hash, "trace-test");
-    await WorkItemStore.fail(item.hash, "trace-test", "third failure");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "first failure");
+    const secondAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "second failure");
+    const thirdAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "third failure");
 
     await expectRejectsWithMessage(
-      WorkItemStore.retry(item.hash, "trace-test"),
+      WorkItemStore.retry(item.workItemId, "trace-test"),
       "retry attempts exhausted for work item",
     );
 
-    const exhausted = WorkItemStore.get(item.hash);
+    const exhausted = WorkItemStore.get(item.workItemId);
     expect(secondAttempt?.attempt).toBe(2);
     expect(thirdAttempt?.attempt).toBe(3);
     expect(exhausted?.attempt).toBe(3);
@@ -467,18 +467,18 @@ describe("WorkItemStore", () => {
   test("does not duplicate retry exhaustion blockers", async () => {
     configureSqlite();
     const item = await createItem("retry-exhaustion-idempotent", { maxAttempts: 1 });
-    await WorkItemStore.fail(item.hash, "trace-test", "permanent error");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "permanent error");
 
     await expectRejectsWithMessage(
-      WorkItemStore.retry(item.hash, "trace-test"),
+      WorkItemStore.retry(item.workItemId, "trace-test"),
       "retry attempts exhausted for work item",
     );
     await expectRejectsWithMessage(
-      WorkItemStore.retry(item.hash, "trace-test"),
+      WorkItemStore.retry(item.workItemId, "trace-test"),
       "retry attempts exhausted for work item",
     );
 
-    const exhausted = WorkItemStore.get(item.hash);
+    const exhausted = WorkItemStore.get(item.workItemId);
     expect(exhausted?.blockers).toHaveLength(1);
   });
 
@@ -486,10 +486,10 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("retry-without-max-attempts");
 
-    await WorkItemStore.fail(item.hash, "trace-test", "first failure");
-    const secondAttempt = await WorkItemStore.retry(item.hash, "trace-test");
-    await WorkItemStore.fail(item.hash, "trace-test", "second failure");
-    const thirdAttempt = await WorkItemStore.retry(item.hash, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "first failure");
+    const secondAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "second failure");
+    const thirdAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
 
     expect(secondAttempt?.attempt).toBe(2);
     expect(thirdAttempt?.attempt).toBe(3);
@@ -554,9 +554,9 @@ describe("WorkItemStore", () => {
   test("rejects starting a failed item without retry", async () => {
     configureSqlite();
     const item = await createItem("start-failed");
-    await WorkItemStore.fail(item.hash, "trace-test", "broken");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "broken");
     await expectRejectsWithMessage(
-      WorkItemStore.start(item.hash, "trace-test"),
+      WorkItemStore.start(item.workItemId, "trace-test"),
       "Cannot start a failed work item",
     );
   });
@@ -565,7 +565,7 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("retry-pending");
     await expectRejectsWithMessage(
-      WorkItemStore.retry(item.hash, "trace-test"),
+      WorkItemStore.retry(item.workItemId, "trace-test"),
       "retry() can only be called on failed work items",
     );
   });
@@ -576,7 +576,7 @@ describe("WorkItemStore", () => {
 
     await expectRejectsWithMessage(
       WorkItemStore.addEvidence(
-        item.hash,
+        item.workItemId,
         {
           kind: "verification",
           description: "inconsistent read-back",
@@ -600,7 +600,7 @@ describe("WorkItemStore", () => {
     const item = await createItem("read-back");
 
     const updated = await WorkItemStore.addReadBackEvidence(
-      item.hash,
+      item.workItemId,
       {
         kind: "citation_match",
         target: "https://example.com/source",
@@ -642,11 +642,13 @@ describe("WorkItemStore", () => {
       if (created) order.push(`write:${hash}`);
       return created;
     };
-    Bus.subscribe(WorkItem.Events.Created, (event) => order.push(`event:${event.payload.hash}`));
+    Bus.subscribe(WorkItem.Events.Created, (event) =>
+      order.push(`event:${event.payload.workItemId}`),
+    );
 
     const item = await createItem("event-order");
     await flushBus();
 
-    expect(order).toEqual([`write:${item.hash}`, `event:${item.hash}`]);
+    expect(order).toEqual([`write:${item.workItemId}`, `event:${item.workItemId}`]);
   });
 });

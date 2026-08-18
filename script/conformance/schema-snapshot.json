@@ -53,11 +53,6 @@
     "workerGrantIds"
   ],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
-  "AppConnector.CompletionReport": [
-    "artifactGlobs",
-    "finalMessage",
-    "readBackRequests"
-  ],
   "AppConnector.Consent": [
     "capabilities",
     "credentials",
@@ -143,6 +138,11 @@
   ],
   "AppConnector.QuestionBridge#1": ["kind", "promptField", "responseMode"],
   "AppConnector.QuestionBridge#2": ["kind"],
+  "AppConnector.ReportSource": [
+    "artifactGlobs",
+    "finalMessage",
+    "readBackRequests"
+  ],
   "AppConnector.Requires": ["capabilities", "credentials", "permissions"],
   "AppConnector.Spawn": [
     "args",
@@ -1215,7 +1215,6 @@
     "executorKind",
     "failureReason",
     "goal",
-    "hash",
     "intent",
     "lastAttemptSeq",
     "maxAttempts",
@@ -1228,8 +1227,8 @@
     "sourceChannel",
     "sourceMessageId",
     "timestamps",
-    "verificationGate",
     "workerRunId",
+    "workItemId",
     "workSessionId"
   ],
   "WorkItem.NondeterminismManifest": ["absent", "recorded"],

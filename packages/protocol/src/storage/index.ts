@@ -11,7 +11,7 @@ export namespace Storage {
     status?: WorkItem.Status[];
     assigneeId?: string;
     sessionId?: string;
-    parentHash?: string;
+    parentId?: string;
   }
 
   export interface WorkItemSubAdapter {

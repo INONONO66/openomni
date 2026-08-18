@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { WorkItem } from "./index.js";
 
 const baseItem = {
-  hash: "wi_admission",
+  workItemId: "wi_admission",
   name: "Admission contract",
   sourceMessageId: "msg_admission",
   sourceChannel: "test",
   attempt: 1,
   timestamps: { created: 1, updated: 1 },
-  relations: { childHashes: [], dependsOn: [] },
+  relations: { childIds: [], dependsOn: [] },
   intent: "complete",
   goal: "close only after admission",
   constraints: [],
@@ -23,7 +23,7 @@ function completionRequestSnapshot(overrides: Readonly<Record<string, unknown>> 
     version: 1,
     id: "completion-request:one",
     origin: "worker",
-    workItemHash: baseItem.hash,
+    workItemHash: baseItem.workItemId,
     contractRevision: "contract:v1",
     basisRef: "basis:v1",
     expectedHead: 3,
@@ -54,11 +54,11 @@ const completionContract = {
   revision: "contract:v1",
   basisRef: "basis:v1",
 };
-const terminalCriterionId = WorkItem.criterionId(baseItem.hash, 0, "publish the artifact");
+const terminalCriterionId = WorkItem.criterionId(baseItem.workItemId, 0, "publish the artifact");
 const terminalObservation = WorkItem.Observation.parse({
   id: "observation:terminal",
   producer: "verifier:terminal",
-  subjectRef: baseItem.hash,
+  subjectRef: baseItem.workItemId,
   basisRef: completionContract.basisRef,
   artifactRefs: ["evidence:terminal"],
   provenanceRef: "evidence:terminal",
@@ -87,7 +87,7 @@ const admission = WorkItem.CompletionAdmission.parse({
   version: 1,
   id: "admission:terminal",
   requestId: "completion-request:terminal",
-  workItemHash: baseItem.hash,
+  workItemHash: baseItem.workItemId,
   origin: "worker",
   contractRevision: completionContract.revision,
   basisRef: completionContract.basisRef,
@@ -130,7 +130,7 @@ const completionFacts = {
 };
 const completionTerminalReceipt = {
   version: 1 as const,
-  hash: baseItem.hash,
+  hash: baseItem.workItemId,
   requestId: admission.requestId,
   admissionId: admission.id,
   contractRevision: completionContract.revision,
@@ -361,7 +361,7 @@ const invalidTerminalInputs: readonly [string, unknown][] = [
 ];
 
 const uncoveredCriterion = {
-  id: WorkItem.criterionId(baseItem.hash, 1, "verify the artifact"),
+  id: WorkItem.criterionId(baseItem.workItemId, 1, "verify the artifact"),
   revision: 1,
   statement: "verify the artifact",
   required: true,
@@ -449,7 +449,7 @@ describe("WorkItem completion admission contracts", () => {
           {
             id: duplicateId,
             producer: "verifier:test",
-            subjectRef: baseItem.hash,
+            subjectRef: baseItem.workItemId,
             basisRef: "basis:v1",
             artifactRefs: [],
             ancestryRefs: [],
@@ -673,7 +673,7 @@ describe("WorkItem completion admission contracts", () => {
       checkedPredicate: "Owner accepted the known verification failure",
     });
     const ownerUnresolvedCriterion = {
-      id: WorkItem.criterionId(baseItem.hash, 1, "accept the residual risk"),
+      id: WorkItem.criterionId(baseItem.workItemId, 1, "accept the residual risk"),
       revision: 1,
       statement: "accept the residual risk",
       required: true,
@@ -901,7 +901,7 @@ describe("WorkItem completion admission contracts", () => {
         version: 1,
         id: "completion-request:one",
         origin: "worker",
-        workItemHash: baseItem.hash,
+        workItemHash: baseItem.workItemId,
         contractRevision: "contract:v1",
         basisRef: "basis:v1",
         expectedHead: 3,
@@ -968,7 +968,7 @@ describe("WorkItem completion admission contracts", () => {
     const legacyReceipt = WorkItem.Events.Completed.schema.parse({
       traceId: "trace:legacy",
       time: 8,
-      payload: { hash: request.workItemHash, sessionId: "session:legacy" },
+      payload: { workItemId: request.workItemHash, sessionId: "session:legacy" },
     });
     const terminalReceipt = WorkItem.Events.CompletedV2.schema.parse({
       traceId: "trace:one",
@@ -985,7 +985,7 @@ describe("WorkItem completion admission contracts", () => {
     });
 
     expect(legacyReceipt.payload).toEqual({
-      hash: request.workItemHash,
+      workItemId: request.workItemHash,
       sessionId: "session:legacy",
     });
     expect(terminalReceipt.payload).toEqual({
@@ -1016,7 +1016,7 @@ describe("WorkItem completion admission contracts", () => {
       WorkItem.CompletionAdmission.safeParse({
         id: "admission:versionless",
         requestId: "completion-request:versionless",
-        workItemHash: baseItem.hash,
+        workItemHash: baseItem.workItemId,
         origin: "worker",
         contractRevision: "contract:v1",
         basisRef: "basis:v1",
@@ -1049,7 +1049,7 @@ describe("WorkItem completion admission contracts", () => {
       version: 1,
       id: "admission:one",
       requestId: "completion-request:one",
-      workItemHash: baseItem.hash,
+      workItemHash: baseItem.workItemId,
       origin: "worker",
       contractRevision: "contract:v1",
       basisRef: "basis:v1",

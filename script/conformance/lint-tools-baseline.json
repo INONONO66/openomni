@@ -23,8 +23,7 @@
       "tool",
       "tool-selection",
       "trace",
-      "worker-bootstrap",
-      "worker-run"
+      "worker-bootstrap"
     ]
   },
   "tools": {
@@ -38,7 +37,6 @@
       "packages/protocol/src/policy/point-contract.ts:PolicyPointContractModule",
       "packages/protocol/src/policy/point-registry.ts:PolicyPointRegistryModule",
       "packages/protocol/src/policy/policy-point.ts:PolicyPointModule",
-      "packages/protocol/src/policy/resource.ts:RuntimeResource",
       "packages/protocol/src/work-item/index.ts:ReadBackRequestEnvelope",
       "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope",
       "packages/protocol/src/worker-bootstrap/index.ts:RuntimeAgentDefinition",

@@ -45,8 +45,18 @@ export namespace Policy {
   export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint>;
   export type PolicyPointInputMap = PolicyPointModule.PolicyPointInputMap;
 
-  /** Runtime resource descriptors ride bus events; shape is wire-frozen. */
-  export import Resource = PolicyResource;
+  /**
+   * Runtime resource descriptors ride bus events; shape is wire-frozen.
+   * Explicit member re-exports (not `export import`) so the members carry
+   * direct references — the alias form hid every cross-package
+   * `Policy.Resource.*` consumer from the dead-export ratchet (#498 K4).
+   */
+  export namespace Resource {
+    export const Source = PolicyResource.Source;
+    export type Source = PolicyResource.Source;
+    export const Descriptor = PolicyResource.Descriptor;
+    export type Descriptor = PolicyResource.Descriptor;
+  }
   export const PolicyPlan = z.object({
     policies: z.array(
       z.object({
