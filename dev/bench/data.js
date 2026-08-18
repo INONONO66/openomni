@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787064351012,
+  "lastUpdate": 1787066671558,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55721,6 +55721,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 533283,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "580c6f15cb1e9fbbc6407efe314eb8929d18cd57",
+          "message": "feat(agent,openomni): anchored summarization + verbatim users (#712) (#721)\n\n* feat(agent,openomni): anchored summarization + verbatim users (#712)\n\nCompaction-design L2. The cut path now threads one persistent anchor:\nonSummarize(cutSpan, previousAnchor) receives the span with user messages and\nprior anchor renders already excluded, and merges into the previous anchor body\ninstead of regenerating — the recursive re-summarization path is structurally\ngone. Cut-span user messages survive verbatim, newest-first within\npreserveUserMessageChars (newest kept unconditionally); an empty merge input\ncosts no model call (anchor carries forward); anchor identity is a structural\nmetadata flag, not string matching. openomni ships the senpi-shaped sectioned\ntemplate (anchor-summarizer.ts) wired through WorkerCompactionConfig\nsummarizeWith; production default remains elision-only per the #649 ruling.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,openomni,protocol): compaction honesty guards (review round 1)\n\nReview round 1 (PASS WITH CHANGES), both MAJORs + both MINORs closed:\n\nM1 — progress guard: a rebuild that is not strictly smaller (content chars,\nsame classes the model projection resends) is a recorded non-action, never a\n'cut' — a zero-progress cut counted toward the #651 disarm and re-armed the\nyield (plus one summarizer call) every turn, forever. Pinned by test; fixture\nassistants gained realistic bulk so the guard's refusal stays honest.\n\nM2 — anchored flag on CompactionCompleted (upcast-on-read optional field, not\nsnapshotted): an anchor-less lossy cut no longer masquerades as an anchored\none; both classes pinned by tests.\n\nM3 — latestAnchorBody now shares isAnchorMessage's definition (role check):\na forged assistant-role part wearing anchor metadata can no longer thread as\npreviousAnchor while also entering the summarizer.\n\nM4 — user-role messages are never elided (reduce.ts role filter — verbatim is\na whole-message property), and the preservation budget weighs completed tool\noutputs, closing the free-ride of tool-bulked user messages.\n\nM5 — summarizeWith wiring pinned end-to-end: buildWorkerMiddleware compaction\nseam dispatch calls the senpi-template completion and rewrites history with\nthe anchor render heading it.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T15:23:13Z",
+          "tree_id": "1d99a9dec08d9c0bd47e57728626095c3ed4fd6a",
+          "url": "https://github.com/INONONO66/openomni/commit/580c6f15cb1e9fbbc6407efe314eb8929d18cd57"
+        },
+        "date": 1787066670156,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6247,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10804,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2683,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3147,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 989,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1609,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 52,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44993,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2258,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 546478,
             "unit": "ns/op"
           }
         ]
