@@ -117,11 +117,40 @@ function wrapCreated(
         warn(ctx, "replacement record not persisted: effect messages failed to parse");
         return decision;
       }
-      const anchor = parsed.data.find((message) =>
-        message.parts.some(
-          (part) => part.type === "text" && part.metadata?.compactionAnchor === true,
-        ),
-      );
+      // L7 byte guard (#717, compaction-design principle 2): a CORE-PIPELINE
+      // INTEGRITY check, single trust domain (the L3 M4 precedent) — it
+      // catches our own cut/promote/elision bugs, not adversaries. Every
+      // user-roled text in the rebuilt window must consume a byte-identical
+      // occurrence from the seam's input UNDER THE SAME TAG (policy-injected
+      // matches policy-injected); at most one well-shaped anchor per side
+      // earns the render exemption. Designed residual (#729 review D1): the
+      // one well-shaped anchor slot is by definition new text — a summary
+      // cannot be byte-checked; its body comes from a summarizer that never
+      // receives user text (L2). A violation refuses the effect (window
+      // unchanged, run intact) as a hard, visible finding. Decoration cannot
+      // introduce a violation afterwards: it rewrites only the anchor
+      // render, which holds the exemption.
+      const violation = userByteViolation((ctx.messages ?? []) as Message.WithParts[], parsed.data);
+      if (violation !== undefined) {
+        events.publish(Operational.Events.Error, {
+          traceId: ctx.traceContext?.traceId ?? "",
+          time: Date.now(),
+          ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),
+          component: "compaction-user-byte-guard",
+          msg: "user text in the rebuilt window is not byte-identical to the seam's input — effect refused",
+          context: { sample: violation.slice(0, 200) },
+        });
+        return {
+          ...decision,
+          reasonCodes: [...(decision.reasonCodes ?? []), "compaction_user_byte_guard_refused"],
+          effects: (decision.effects ?? []).filter(
+            (entry) => entry.type !== "run.replace_messages",
+          ),
+        };
+      }
+      // Persistence selects by the same earned identity the guard honors
+      // (#729 review D3): a flag without the record shape is not an anchor.
+      const anchor = parsed.data.find((message) => message.parts.some(isWellShapedAnchorPart));
       if (anchor === undefined) return decision;
       // #722 review M4: the anchor's session is copied from whatever history
       // the seam received — never write across sessions, even if a future
@@ -191,4 +220,61 @@ function wrapCreated(
       };
     },
   };
+}
+
+/**
+ * Multiset containment of user speech (#729 review F1 — tag-qualified so a
+ * tag cannot launder a paraphrase): every user-roled text part in the
+ * window must consume one byte-identical occurrence from the pre-cut
+ * history UNDER THE SAME TAG — a policy-injected window text only matches a
+ * policy-injected input text. Anchor renders are excluded only when the
+ * window carries AT MOST ONE anchor and it is well-shaped (string
+ * anchorBody + array keptWindow); a second anchor, or an anchor-flagged
+ * part without the record shape, is treated as plain user speech and fails
+ * the byte check if paraphrased. Returns the first violating text, or
+ * undefined when the window is clean.
+ */
+function userByteViolation(
+  before: readonly Message.WithParts[],
+  window: readonly Message.WithParts[],
+): string | undefined {
+  const counts = new Map<string, number>();
+  for (const key of userTextKeys(before)) {
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const windowKeys = userTextKeys(window);
+  for (const key of windowKeys) {
+    const remaining = counts.get(key) ?? 0;
+    if (remaining <= 0) return key.slice(2);
+    counts.set(key, remaining - 1);
+  }
+  return undefined;
+}
+
+function isWellShapedAnchorPart(part: Message.Part): boolean {
+  return (
+    part.type === "text" &&
+    part.metadata?.compactionAnchor === true &&
+    typeof part.metadata?.anchorBody === "string" &&
+    Array.isArray(part.metadata?.keptWindow)
+  );
+}
+
+function userTextKeys(messages: readonly Message.WithParts[]): string[] {
+  // The anchor exemption is earned, not claimed: at most one well-shaped
+  // anchor per side. Everything past that quota is plain user speech.
+  let anchorQuota = 1;
+  const keys: string[] = [];
+  for (const message of messages) {
+    if (message.info.role !== "user") continue;
+    for (const part of message.parts) {
+      if (part.type !== "text") continue;
+      if (isWellShapedAnchorPart(part) && anchorQuota > 0) {
+        anchorQuota -= 1;
+        continue;
+      }
+      keys.push(`${part.metadata?.policyInjected === true ? "i:" : "u:"}${part.text}`);
+    }
+  }
+  return keys;
 }
