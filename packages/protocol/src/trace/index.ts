@@ -4,7 +4,7 @@ import { z } from "zod";
 export type TraceId = string;
 
 /**
- * Pure trace-id mint (W3C shape): `crypto.randomUUID()` is already 32 hex
+ * Side-effect-free trace-id mint (W3C shape, nondeterministic by nature): `crypto.randomUUID()` is already 32 hex
  * once the dashes go. Lives in protocol so channel drivers can mint at the
  * first frame (D11 origin) without a telemetry import — gateway stage-1 seam
  * prep (#551); `@openomni/telemetry` re-exports it for its own consumers.
