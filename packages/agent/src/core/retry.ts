@@ -1,6 +1,11 @@
 import type { Run } from "@openomni/protocol";
 
-export type RetryReason = "timeout" | "tool_error" | "transient_error" | "validation_error";
+export type RetryReason =
+  | "timeout"
+  | "tool_error"
+  | "transient_error"
+  | "validation_error"
+  | "context_overflow";
 
 /**
  * What a terminal record may report. `aborted` is not a {@link RetryReason}:
@@ -59,6 +64,32 @@ export function classifyRetryReason(errorMessage: string): RetryReason {
  * is the identity {@link isAbort} checks — never the message, which tool and
  * provider errors are free to collide with.
  */
+/**
+ * Provider context-overflow, decided by message text (compaction-design L5;
+ * pattern list adopted from pss-runtime's loop-overflow classifier). Checked
+ * BEFORE the generic classification: an overflow is recoverable exactly once
+ * per run by re-entering the compaction seam, never by blind retry — the
+ * same prompt fails the same way.
+ */
+export function isContextOverflow(error: Error): boolean {
+  const normalized = error.message.toLowerCase();
+  return (
+    normalized.includes("context_length_exceeded") ||
+    normalized.includes("context length") ||
+    normalized.includes("context limit") ||
+    normalized.includes("context window") ||
+    normalized.includes("maximum context") ||
+    normalized.includes("prompt is too long") ||
+    normalized.includes("too many tokens") ||
+    normalized.includes("token limit") ||
+    // Gemini: "The input token count (N) exceeds the maximum number of
+    // tokens allowed (M)."; Bedrock-Anthropic: "Input is too long for
+    // requested model." (#726 review F3)
+    normalized.includes("exceeds the maximum number of tokens") ||
+    normalized.includes("input is too long")
+  );
+}
+
 export function abortError(message = "aborted"): Error {
   const error = new Error(message);
   error.name = "AbortError";
