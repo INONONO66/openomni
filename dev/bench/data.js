@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787078939663,
+  "lastUpdate": 1787080575863,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56519,6 +56519,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524468,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2742bf2d1d4ab182b6679de8f07fabf1f05259ce",
+          "message": "refactor(channels): extract channel band to packages/channels (#730)\n\n* refactor(channels): extract channel band to packages/channels (#551)\n\nGateway stage 1: pure move of apps/server/src/channel/* into the new\nstandalone @openomni/channels package. Zero behavior change, zero renames\nbeyond import paths.\n\nMove inventory:\n- src: 32 files, structure preserved (authn/, discord/, github/, support/,\n  telegram/, channel-authn.ts, types.ts, websocket.ts, index.ts)\n- tests: 8 files -> packages/channels/test/ (6x test/channel/*,\n  channel-band-boundary.test.ts, channel-normalizer.test.ts)\n- apps/server keeps composition only: bootstrap/channels.ts now imports\n  @openomni/channels; test/handler/conversation-routing.test.ts (a handler\n  composition test) stays and takes DiscordNormalizer from the barrel\n\nOut-of-tree import decisions: none needed — audit found ZERO relative\nimports leaving the channel tree (the #569/#653 seam precursors already\nclosed them). Band imports are exactly @openomni/protocol x30,\n@openomni/policy x1 (authn/decision.ts), node builtins, and in-tree\nrelatives.\n\nBand gate travels as the package import contract\n(test/channel-band-boundary.test.ts): root -> ../src, whitelist\n{protocol, ipc} + policy under src/authn/ only. The telemetry allowance\n(PR #653) is DROPPED — verified zero telemetry imports remain (newTraceId\nnow comes from protocol); a telemetry violation fixture pins the drop.\n\nS8 finding (docs/gateway-design.md S7 S8): the literal rule \"drivers/ may\nnot import router/ or store surfaces\" names bands that do not exist at\nstage 1, and drivers legitimately invoke the authn middleware today\n(surface.ts -> ../channel-authn -> authn/) — that edge IS the stage-2\nseam. The honest stage-1 S8 check, implemented in script/check-deps.ts\n(validateChannelsIntraPackageBanding + self-test cases): only\npackages/channels/src/authn/ may import @openomni/policy; drivers stay on\n{protocol, ipc}. Red-proofed against a poisoned driver file.\nTODO(stage 2) recorded for the full drivers/router split (#707).\n\nManifest note: check-deps whitelists {protocol, ipc, policy}, but the\nmanifest declares only what the band imports today (protocol, policy) —\nthe dead-export ratchet refuses unused manifest deps and baselining needs\nOwner sign-off; ipc joins the manifest when a driver first consumes it.\n\nDocs: root AGENTS.md (10 packages, dep graph/tables + channels rows),\nnew packages/channels/AGENTS.md, apps/server/AGENTS.md (registration-only\nrole; stale shared/ line fixed), implementation-status.md path sync,\nknip.json workspace, lint-guards path pins, check-deps TRACKED_DOCS.\n\nCompletion proof (standalone, only declared deps):\n  cd packages/channels && bun install && bun test && bun run build\n  -> install OK; 40 pass 0 fail (8 files); tsc build emits dist/ clean\n\nVerify: turbo build 6/6, check-types 16/16, lint + lint-tools +\nlint-guards OK, check-deps + self-test (10 discriminations) OK,\ncheck-import-cycles 508 modules 0 cycles, check-dead-exports 1 known\n0 new, turbo test 16/16 (server + channels), p2-ledger-baseline 46 pass.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(server): fix stale Adapter.* vocabulary in AGENTS.md\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T19:14:56Z",
+          "tree_id": "896124b99c06a0066060d2a6bd622b68c04f099c",
+          "url": "https://github.com/INONONO66/openomni/commit/2742bf2d1d4ab182b6679de8f07fabf1f05259ce"
+        },
+        "date": 1787080575064,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 549,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 665,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6232,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2706,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2902,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8568,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 987,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1527,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 51,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1572,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43961,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2207,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 535211,
             "unit": "ns/op"
           }
         ]
