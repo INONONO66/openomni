@@ -42,8 +42,8 @@ only in protocol contracts, wired by apps/server through injected ports.**
 ```
 {
   sessionId: string,            // opaque routing label to the gateway (S1)
-  message: {                    // Gateway.InboundMessage — "envelope" is a
-    messageId, traceId,         //   banned identifier (#465 demotions)
+  message: {                    // Gateway.InboundMessage — "Envelope" is demoted
+    messageId, traceId,         //   to a wire-format word, not a concept (#465)
     surfaceKey,                 // e.g. telegram:bot:chat:123 — origin identity
     text, media?, threadId?, replyToId?,
   },
@@ -121,7 +121,7 @@ delivery effect), platform-id re-key after delivery.
 - **Reply-scoped grant** (case-discovered 2026-08-19): `SenderTargetGrant`
   requires a known `targetActorId`, which cannot be pre-written for unknown
   initiators (marketplace inquiries). Provenance stays Owner: the Owner
-  writes a *reply-grant rule row* (channel-scoped, part of a standing
+  writes a *reply-grant rule row* (surface- or channel-scoped, part of a standing
   delegation); the gateway then materializes grant **instances** from it
   mechanically when it admits a first-contact actor on the covered channel.
   Instances are scoped by **perimeter facts only** — initiator actorId +

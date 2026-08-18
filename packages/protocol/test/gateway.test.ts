@@ -53,6 +53,50 @@ describe("Gateway.Deliver", () => {
     ).toThrow();
   });
 
+  test("rejects 'drop' across the seam — a dropped message is never delivered", () => {
+    expect(() =>
+      Gateway.Deliver.parse({
+        sessionId: "s-1",
+        message,
+        actorContext: { ...actorContext, inboundTreatment: "drop" },
+      }),
+    ).toThrow();
+  });
+
+  test("nested strictness: message and waitContext reject unknown fields", () => {
+    expect(() =>
+      Gateway.Deliver.parse({
+        sessionId: "s-1",
+        message: { ...message, rawPlatformPayload: {} },
+        actorContext,
+      }),
+    ).toThrow();
+    expect(() =>
+      Gateway.Deliver.parse({
+        sessionId: "s-1",
+        message,
+        actorContext,
+        waitContext: { waitId: "w-1", allowedAction: "report_result", sessionPeek: true },
+      }),
+    ).toThrow();
+  });
+
+  test("media reference needs a url or filename; kind alone is not addressable", () => {
+    expect(() =>
+      Gateway.Deliver.parse({
+        sessionId: "s-1",
+        message: { ...message, media: [{ kind: "image" }] },
+        actorContext,
+      }),
+    ).toThrow();
+    const ok = Gateway.Deliver.parse({
+      sessionId: "s-1",
+      message: { ...message, media: [{ kind: "image", url: "https://x/y.png" }] },
+      actorContext,
+    });
+    expect(ok.message.media?.length).toBe(1);
+  });
+
   test("rejects an out-of-enum treatment or trust tier", () => {
     expect(() =>
       Gateway.Deliver.parse({
@@ -125,6 +169,62 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
       },
     });
     expect(parsed.waitSpec?.waitId).toBe("w-1");
+  });
+});
+
+describe("Gateway.SenderTargetGrant (instances)", () => {
+  const standing = {
+    id: "g-1",
+    senderId: "persona-1",
+    targetActorId: "seller-1",
+    operations: ["awaited"],
+  };
+
+  test("an Owner-written standing grant parses without rule fields", () => {
+    expect(Gateway.SenderTargetGrant.parse(standing).ruleId).toBeUndefined();
+  });
+
+  test("a rule-materialized instance requires replyScope AND expiresAt", () => {
+    expect(() => Gateway.SenderTargetGrant.parse({ ...standing, ruleId: "r-1" })).toThrow();
+    expect(() =>
+      Gateway.SenderTargetGrant.parse({
+        ...standing,
+        ruleId: "r-1",
+        replyScope: { surfaceKey: "junggonara:chat:777" },
+      }),
+    ).toThrow();
+    const instance = Gateway.SenderTargetGrant.parse({
+      ...standing,
+      ruleId: "r-1",
+      replyScope: { surfaceKey: "junggonara:chat:777" },
+      expiresAt: 2_000,
+    });
+    expect(instance.replyScope?.surfaceKey).toBe("junggonara:chat:777");
+  });
+
+  test("replyScope without a ruleId is orphaned containment — rejected", () => {
+    expect(() =>
+      Gateway.SenderTargetGrant.parse({
+        ...standing,
+        replyScope: { surfaceKey: "junggonara:chat:777" },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("Gateway.AwaitSpec — quorum coherence is deliberately NOT refined here", () => {
+  test("quorum without resolutionPolicy 'quorum' still parses at spec level (#215 rule 4: Wait.Record.parse at WaitStore.create is the one enforcement layer)", () => {
+    const spec = Gateway.AwaitSpec.parse({
+      waitId: "w-1",
+      ownerRef: { kind: "session", id: "s-1" },
+      allowedActions: ["report_result"],
+      expectedResponders: ["a", "b"],
+      resolutionPolicy: "first_reply",
+      quorum: { expected: 2, threshold: 1 },
+      expiresAt: 2_000,
+      followUpWindow: 0,
+    });
+    expect(spec.quorum?.expected).toBe(2);
   });
 });
 

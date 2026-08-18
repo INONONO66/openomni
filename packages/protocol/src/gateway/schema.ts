@@ -31,11 +31,18 @@ const OriginSchema = z
  * `trustTier`/`inboundTreatment` verbatim (perimeter output = conduct input)
  * and frames `evidence_only` turns as evidence, never as user commands.
  */
+const DeliveredTreatmentSchema = z.enum(["full_access", "evidence_only"]);
+
 const ActorContextSchema = z
   .object({
     actorId: z.string().min(1).optional(),
     trustTier: Actor.TrustTier,
-    inboundTreatment: Actor.InboundTreatment,
+    /**
+     * Narrower than Actor.InboundTreatment on purpose: "drop" means the
+     * message was never delivered, so a Deliver stamped drop must be
+     * unrepresentable at this seam.
+     */
+    inboundTreatment: DeliveredTreatmentSchema,
     origin: OriginSchema,
   })
   .strict();
@@ -48,7 +55,10 @@ const MediaSchema = z
     mimeType: z.string().min(1).optional(),
     filename: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .refine((media) => media.url !== undefined || media.filename !== undefined, {
+    message: "a media reference needs at least a url or a filename",
+  });
 
 /** The normalized message a channel driver produced from a platform payload. */
 const InboundMessageSchema = z
@@ -117,8 +127,41 @@ const SenderTargetGrantSchema = z
     targetActorId: z.string().min(1),
     operations: z.array(MessageOperationSchema).min(1),
     expiresAt: z.number().optional(),
+    /** Present iff this grant was materialized from a ReplyGrantRule — the provenance link that makes `maxLiveInstances` countable. */
+    ruleId: z.string().min(1).optional(),
+    /** Perimeter-fact scope of a materialized instance: replies stay inside the initiating container. */
+    replyScope: z
+      .object({ surfaceKey: z.string().min(1) })
+      .strict()
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((grant, ctx) => {
+    // A rule-materialized instance is always bounded: containment + expiry
+    // are what distinguish it from an Owner-written standing grant.
+    if (grant.ruleId !== undefined) {
+      if (grant.replyScope === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "a rule-materialized grant requires replyScope (perimeter containment)",
+          path: ["replyScope"],
+        });
+      }
+      if (grant.expiresAt === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "a rule-materialized grant requires expiresAt (instanceTtlMs bound)",
+          path: ["expiresAt"],
+        });
+      }
+    } else if (grant.replyScope !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "replyScope without ruleId — reply containment has no owning rule",
+        path: ["ruleId"],
+      });
+    }
+  });
 
 /**
  * Owner-written rule row from which the gateway mechanically materializes
