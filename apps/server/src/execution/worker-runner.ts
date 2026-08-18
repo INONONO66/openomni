@@ -5,6 +5,7 @@ import {
   buildWorkerMiddleware,
   createChildAgentRuntime,
   createChildAgentTool,
+  createAnchorCompletion,
 } from "@openomni/openomni";
 import type { NativeTool } from "@openomni/openomni";
 import { Execution } from "@openomni/protocol";
@@ -115,6 +116,21 @@ export namespace WorkerRunner {
             permissions: request.permissions,
             injectionQueue,
             ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),
+            compaction: {
+              // Owner ruling 2026-08-19: summarization on by default; the
+              // summary uses the run's own model and auth (D7).
+              summarizeWith: createAnchorCompletion({
+                model: request.model,
+                auth: resolveAuth(request.model.provider),
+                allowAuthFallback: false,
+                ...(request.providerOptions === undefined
+                  ? {}
+                  : { providerOptions: request.providerOptions }),
+                signal: controller.signal,
+                trace: { traceId, sessionId, runId },
+                events: Bus,
+              }),
+            },
           }),
         ];
         const childMiddleware = middleware.filter(

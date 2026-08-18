@@ -564,3 +564,139 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     }
   });
 });
+
+describe("compaction config merge semantics (#734 F7)", () => {
+  it("a summarizer-only config keeps the elision defaults", async () => {
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        compaction: { summarizeWith: async () => "x" },
+      }),
+      "builtin:compaction",
+    );
+    expect(registration).toBeDefined();
+    // The default elision knobs survive the partial: dispatch a seam over a
+    // bulky-tool history with NO explicit elision config and observe the
+    // elision-only reduction (a replace effect with the same message count).
+    if (registration === undefined) throw new Error("expected registration");
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(registration);
+    const sessionID = "s-merge";
+    const id = "m-tool";
+    const decision = await engine.dispatchPoint("run.completion.pre", {
+      sessionId: sessionID,
+      runId: "r-merge",
+      completionCandidate: { type: "stop" },
+      traceContext: { traceId: "t-merge", sessionId: sessionID },
+      messages: [
+        {
+          info: {
+            id: "u0",
+            sessionID,
+            role: "user",
+            time: { created: 1 },
+            agent: "t",
+            model: { providerID: "", modelID: "" },
+          },
+          parts: [{ id: "u0-t", sessionID, messageID: "u0", type: "text", text: "q" }],
+        },
+        {
+          info: {
+            id,
+            sessionID,
+            role: "assistant",
+            time: { created: 1 },
+            parentID: "",
+            modelID: "m",
+            providerID: "p",
+            agent: "t",
+            path: { cwd: "/", root: "/" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+          parts: [
+            {
+              id: `${id}-tool`,
+              sessionID,
+              messageID: id,
+              type: "tool",
+              callID: "c-merge",
+              tool: "read",
+              state: {
+                status: "completed",
+                input: {},
+                output: "x".repeat(9000),
+                title: "read",
+                metadata: {},
+                time: { start: 1, end: 2 },
+              },
+            },
+          ],
+        },
+        ...Array.from({ length: 6 }, (_u, i) => ({
+          info: {
+            id: `tail-${i}`,
+            sessionID,
+            role: "user" as const,
+            time: { created: 1 },
+            agent: "t",
+            model: { providerID: "", modelID: "" },
+          },
+          parts: [
+            {
+              id: `tail-${i}-t`,
+              sessionID,
+              messageID: `tail-${i}`,
+              type: "text" as const,
+              text: `tail ${i}`,
+            },
+          ],
+        })),
+      ],
+      contextTokens: 99,
+      contextWindowTokens: 100,
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 1,
+      isCompletion: true,
+      continuationCount: 0,
+      elapsedMs: 0,
+    });
+    const effect = (
+      decision as { effects: Array<{ type: string; messages?: unknown }> }
+    ).effects.find((entry) => entry.type === "run.replace_messages");
+    if (effect?.type !== "run.replace_messages") throw new Error("expected elision effect");
+    const texts = JSON.stringify(effect.messages);
+    // Default elideToolOutputs (minOutputChars 4000) fired: the 9k output
+    // became a recall marker — the partial config did not clobber it.
+    expect(texts).toContain("output elided by compaction");
+  });
+
+  it("speculate: false still disables the turn.post registration", () => {
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        compaction: { summarizeWith: async () => "x", speculate: false },
+      }),
+      "builtin:compaction",
+    );
+    if (registration === undefined || registration.kind !== "factory") {
+      throw new Error("expected factory");
+    }
+    expect(registration.create().pointIds).toEqual(["run.completion.pre"]);
+  });
+
+  it("an explicitly-undefined key does not clobber the default", () => {
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        compaction: { summarizeWith: async () => "x", elideToolOutputs: undefined },
+      }),
+      "builtin:compaction",
+    );
+    expect(registration).toBeDefined();
+    // No throw + factory shape suffices here; the elision behavior itself is
+    // pinned by the first case (same merge path).
+    if (registration === undefined || registration.kind !== "factory") {
+      throw new Error("expected factory");
+    }
+    expect(registration.create().pointIds).toEqual(["run.turn.post", "run.completion.pre"]);
+  });
+});

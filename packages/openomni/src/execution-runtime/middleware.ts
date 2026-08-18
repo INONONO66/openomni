@@ -90,12 +90,11 @@ function shouldAppendIdleNudge(
 }
 
 /**
- * The product's default compaction strategy (#606 wiring ruling): the window
- * itself is the loop's fact — the resolved model's limit — so the default
- * carries only opinions. Elision knobs: outputs under ~1k tokens are not
- * worth rewriting history for, and half a k of head keeps the record legible.
- * No summarizer by default — the boundary-snap cut is deterministic and
- * needs no LLM. Hosts opt out or override by passing their own block.
+ * Elision knobs only in the DEFAULT block; the summarizer arrives from the
+ * host (worker-runner / resident wire createAnchorCompletion — Owner ruling
+ * 2026-08-19: summarization enabled by default in production, superseding
+ * #649's elision-only default). Hosts opt out with `speculate: false` +
+ * omitting the summarizer, or override any knob; partials merge.
  */
 const DEFAULT_WORKER_COMPACTION: WorkerCompactionConfig = {
   elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
@@ -104,7 +103,12 @@ const DEFAULT_WORKER_COMPACTION: WorkerCompactionConfig = {
 function buildAgentLifecycleMiddleware(
   compaction: WorkerMiddlewareConfig["compaction"],
 ): PolicyEngineRegistration[] {
-  const { summarizeWith, ...rest } = compaction ?? DEFAULT_WORKER_COMPACTION;
+  // Partial configs MERGE over the defaults: a host that only wires a
+  // summarizer must not silently lose the elision knobs (and vice versa).
+  const provided = Object.fromEntries(
+    Object.entries(compaction ?? {}).filter(([, value]) => value !== undefined),
+  ) as NonNullable<WorkerMiddlewareConfig["compaction"]>;
+  const { summarizeWith, ...rest } = { ...DEFAULT_WORKER_COMPACTION, ...provided };
   const summarizer =
     rest.onSummarize ?? (summarizeWith === undefined ? undefined : anchorSummarizer(summarizeWith));
   return [

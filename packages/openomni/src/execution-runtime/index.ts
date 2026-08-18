@@ -1,3 +1,4 @@
+export { createAnchorCompletion } from "./middleware/anchor-completion.js";
 export { buildWorkerMiddleware } from "./middleware.js";
 export type { WorkerMiddlewareConfig } from "./middleware.js";
 export { InjectionQueue } from "./injection-queue.js";

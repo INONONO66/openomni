@@ -151,7 +151,18 @@ function wrapCreated(
       // Persistence selects by the same earned identity the guard honors
       // (#729 review D3): a flag without the record shape is not an anchor.
       const anchor = parsed.data.find((message) => message.parts.some(isWellShapedAnchorPart));
-      if (anchor === undefined) return decision;
+      if (anchor === undefined) {
+        // #734 review note 1: an unanchored DEGRADED cut (summarizer failed,
+        // no previous anchor) leaves this cut without a resume record — say
+        // so in the same channel as the other resumability degradations.
+        if ((decision.reasonCodes ?? []).includes("compaction_summarizer_failed")) {
+          warn(
+            ctx,
+            "replacement record not persisted: degraded unanchored cut (summarizer failed)",
+          );
+        }
+        return decision;
+      }
       // #722 review M4: the anchor's session is copied from whatever history
       // the seam received — never write across sessions, even if a future
       // upstream policy rewrites it.
