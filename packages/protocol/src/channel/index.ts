@@ -1,14 +1,19 @@
-export namespace Adapter {
-  export interface Capabilities {
-    streaming: boolean;
-    media: {
-      send: boolean;
-      receive: boolean;
-    };
-    commands: boolean;
-    threads: boolean;
-  }
-
+/**
+ * Channel — the band-facing DRIVER contract (#499, renamed from Adapter).
+ *
+ * This is the {protocol, ipc}-implementable, import-free vocabulary a channel
+ * driver (Discord/Telegram/GitHub surface in apps/server) speaks: normalize a
+ * platform payload into an in-process envelope, hand it to one handler, start
+ * and stop. It is DISTINCT from the gateway↔brain seam (`Gateway.Deliver` /
+ * `Gateway.Send*`), which is the stage-3 outbound/inbound successor.
+ *
+ * Disambiguation — both are wire-format words, the namespaces disambiguate:
+ *   - `Channel.InboundMessage`: the driver's in-process envelope (plain TS
+ *     interface, never persisted, never crosses a process boundary).
+ *   - `Gateway.InboundMessage`: the gateway→brain zod delivery schema
+ *     (gateway/schema.ts), validated at the trust boundary.
+ */
+export namespace Channel {
   // TriggerRule uses AND logic — all rules must pass. Empty array = always trigger.
   export type TriggerRule =
     | { type: "event"; events: string[] }
@@ -29,17 +34,6 @@ export namespace Adapter {
     text: string;
   }
 
-  // TODO: implement runtime enforcement of "final" delivery policy (suppress intermediate streams)
-  export type DeliveryPolicy = "all" | "final";
-
-  export interface MediaAttachment {
-    kind: "image" | "file" | "audio" | "video";
-    url?: string;
-    data?: Uint8Array;
-    mimeType?: string;
-    filename?: string;
-  }
-
   export interface InboundMessage {
     id: string;
     /** Trace minted by the surface at the first frame of this inbound message (D11 origin) and carried unchanged to the run. */
@@ -50,7 +44,6 @@ export namespace Adapter {
       id: string;
       name?: string;
     };
-    media?: MediaAttachment[];
     replyToId?: string;
     threadId?: string;
     /** Raw platform payload for escape-hatch access */
@@ -59,68 +52,31 @@ export namespace Adapter {
 
   export interface OutboundMessage {
     text?: string;
-    media?: MediaAttachment[];
     replyToId?: string;
     threadId?: string;
   }
 
-  export interface Command {
-    name: string;
-    description: string;
-    options?: Array<{
-      name: string;
-      description: string;
-      required?: boolean;
-    }>;
-  }
-
-  export interface CommandContext {
-    command: string;
-    args: Record<string, string>;
-    message: InboundMessage;
-  }
-
   /** Returns null to suppress response */
   export type MessageHandler = (message: InboundMessage) => Promise<OutboundMessage | null>;
-  export type CommandHandler = (ctx: CommandContext) => Promise<OutboundMessage | null>;
-
-  export interface StreamSink {
-    write(text: string): void;
-    /** Forces flush of any buffered text */
-    attach(media: MediaAttachment): void;
-    end(): void;
-    error(err: Error): void;
-  }
-
-  export type StreamingHandler = (message: InboundMessage, sink: StreamSink) => Promise<void>;
 
   export interface Config {
     triggers: TriggerRule[];
-    deliveryPolicy: DeliveryPolicy;
   }
 
   export interface Surface {
     readonly id: string;
-    readonly capabilities: Capabilities;
     readonly config: Config;
 
     start(traceId: string): Promise<void>;
     stop(traceId: string): void;
 
     onMessage(handler: MessageHandler): void;
-    /** When set on a streaming-capable adapter, called instead of the regular message handler */
-    onStreamingMessage?(handler: StreamingHandler): void;
-
-    send(surfaceKey: string, message: OutboundMessage): Promise<void>;
-
-    registerCommands?(commands: Command[]): Promise<void>;
-    onCommand?(handler: CommandHandler): void;
   }
 
   /**
    * Pure string codec for surface keys — the wire vocabulary channel
-   * adapters and routing share. Moved here from @openomni/session (#499
-   * precursor): the codec is adapter vocabulary; storage semantics
+   * drivers and routing share. Moved here from @openomni/session (#499
+   * precursor): the codec is channel vocabulary; storage semantics
    * (register/claim/lookup) stay in the session surface-key store, which
    * imports this codec for format validation.
    *

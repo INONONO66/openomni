@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
 import { ChannelAuthnMiddleware } from "../../src/channel/channel-authn";
 
@@ -84,7 +84,7 @@ describe("channel-authn trigger policy", () => {
   });
 });
 
-function messageContext(overrides: Partial<Adapter.TriggerContext>): Adapter.TriggerContext {
+function messageContext(overrides: Partial<Channel.TriggerContext>): Channel.TriggerContext {
   return {
     event: "message",
     mentioned: false,
@@ -96,7 +96,7 @@ function messageContext(overrides: Partial<Adapter.TriggerContext>): Adapter.Tri
   };
 }
 
-function githubContext(overrides: Partial<Adapter.TriggerContext>): Adapter.TriggerContext {
+function githubContext(overrides: Partial<Channel.TriggerContext>): Channel.TriggerContext {
   return {
     event: "issue_comment.created",
     mentioned: false,

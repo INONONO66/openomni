@@ -1,4 +1,4 @@
-import type { Adapter, Policy } from "@openomni/protocol";
+import type { Channel, Policy } from "@openomni/protocol";
 
 export type ChannelAuthnPolicyId = string;
 
@@ -31,7 +31,7 @@ export interface ChannelTriggerAuthResult {
 }
 
 export interface ChannelTriggerAuthInput {
-  readonly triggers: Adapter.TriggerRule[];
-  readonly ctx: Adapter.TriggerContext;
+  readonly triggers: Channel.TriggerRule[];
+  readonly ctx: Channel.TriggerContext;
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }

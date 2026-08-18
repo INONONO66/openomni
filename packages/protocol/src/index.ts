@@ -11,7 +11,7 @@ export * from "./event/mcp.js";
 export * from "./event/operational.js";
 export * from "./event/worker-driver.js";
 export * from "./mcp/index.js";
-export * from "./adapter/index.js";
+export * from "./channel/index.js";
 export * from "./actor/index.js";
 export * from "./communication/index.js";
 export * from "./gateway/index.js";

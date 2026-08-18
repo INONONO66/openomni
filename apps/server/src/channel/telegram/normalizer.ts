@@ -1,4 +1,4 @@
-import { Adapter } from "@openomni/protocol";
+import { Channel } from "@openomni/protocol";
 import { normalizeContent } from "../support/trigger";
 import type { InboundNormalizer } from "../types";
 import type { TelegramMessage } from "./types";
@@ -6,13 +6,13 @@ import type { TelegramMessage } from "./types";
 export interface TelegramNormalizerContext {
   botId: string;
   botUsername: string;
-  triggers: Adapter.Config["triggers"];
+  triggers: Channel.Config["triggers"];
 }
 
 export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
   constructor(private readonly ctx: TelegramNormalizerContext) {}
 
-  normalize(message: TelegramMessage, traceId: string): Adapter.InboundMessage | null {
+  normalize(message: TelegramMessage, traceId: string): Channel.InboundMessage | null {
     const text = message.text;
     if (!text) return null;
     if (!message.from) return null;
@@ -23,7 +23,7 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
     const content = normalizeContent(text, this.ctx.triggers, this.ctx.botUsername);
     if (!content) return null;
 
-    const surfaceKey = Adapter.SurfaceKey.fromChannel({
+    const surfaceKey = Channel.SurfaceKey.fromChannel({
       surface: "telegram",
       namespace: this.ctx.botId,
       kind: "chat",

@@ -1,4 +1,4 @@
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import {
   WaitService,
@@ -12,7 +12,7 @@ import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
   queue: RecoveryItem[],
-  handler: Adapter.MessageHandler,
+  handler: Channel.MessageHandler,
   traceId: string,
 ): Promise<void> {
   Bus.publish(Operational.Events.Info, {
@@ -54,7 +54,7 @@ async function processRetryQueue(
 }
 
 export type BootstrapRecoveryInput = Readonly<{
-  handler: Adapter.MessageHandler | undefined;
+  handler: Channel.MessageHandler | undefined;
   coordinator?: {
     recoverInterruptedRuns(traceId: string): Promise<{ recovered: number; sessions: string[] }>;
   };

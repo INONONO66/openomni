@@ -74,20 +74,6 @@
     "spawn",
     "version"
   ],
-  "AppConnector.Detect": [
-    "args",
-    "command",
-    "testedVersions",
-    "versionPattern"
-  ],
-  "AppConnector.Driver": [
-    "emits",
-    "install",
-    "observedEvents",
-    "provider",
-    "submit"
-  ],
-  "AppConnector.Evidence": ["completionReport", "emits"],
   "AppConnector.Installation": [
     "connectorId",
     "connectorVersion",
@@ -122,13 +108,6 @@
     "toolCallField"
   ],
   "AppConnector.Logs#2": ["kind", "path"],
-  "AppConnector.Profile": [
-    "defaultMaxAttempts",
-    "defaultTimeoutMs",
-    "initialAutonomy",
-    "kind",
-    "taskTypes"
-  ],
   "AppConnector.QuestionBridge#0": [
     "args",
     "command",
@@ -152,12 +131,6 @@
     "promptArgument",
     "stallTimeoutMs",
     "timeoutMs"
-  ],
-  "AppConnector.WorkspaceIdentity": [
-    "repoPath",
-    "repoPathHash",
-    "worktreePath",
-    "worktreePathHash"
   ],
   "Artifact.Meta": [
     "createdAt",

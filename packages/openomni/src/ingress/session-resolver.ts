@@ -1,4 +1,4 @@
-import { Adapter, Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
+import { Channel, Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
 import { Session, SurfaceKey } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { DEFAULT_DISPATCH_MODEL } from "../dispatch/index.js";
@@ -36,7 +36,7 @@ export namespace IngressSessionResolver {
     if (target && target.kind !== "resident") {
       parts.push("target", targetKey(target));
     }
-    return Adapter.SurfaceKey.create(parts);
+    return Channel.SurfaceKey.create(parts);
   }
 
   export function resolve(

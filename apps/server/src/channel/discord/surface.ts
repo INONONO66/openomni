@@ -1,4 +1,4 @@
-import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
 import { Dedupe } from "../support/dedupe";
 import { DiscordClient } from "./client";
@@ -12,25 +12,19 @@ export interface DiscordAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
-export class DiscordAdapter implements Adapter.Surface {
+export class DiscordAdapter implements Channel.Surface {
   readonly id = "discord";
-  readonly capabilities: Adapter.Capabilities = {
-    streaming: false,
-    media: { send: false, receive: false },
-    commands: false,
-    threads: true,
-  };
 
   private readonly client: DiscordClient;
   private readonly gateway: DiscordGateway;
   private readonly dedupe = new Dedupe();
   private normalizer: DiscordNormalizer | null = null;
   private botId: string | null = null;
-  private handler: Adapter.MessageHandler | null = null;
+  private handler: Channel.MessageHandler | null = null;
 
   constructor(
     token: string,
-    readonly config: Adapter.Config,
+    readonly config: Channel.Config,
     private readonly publish: PublishPort,
     private readonly authOptions: DiscordAuthOptions = {},
   ) {
@@ -64,7 +58,7 @@ export class DiscordAdapter implements Adapter.Surface {
     );
   }
 
-  onMessage(handler: Adapter.MessageHandler): void {
+  onMessage(handler: Channel.MessageHandler): void {
     this.handler = handler;
   }
 
@@ -83,19 +77,6 @@ export class DiscordAdapter implements Adapter.Surface {
       component: "server",
       msg: "discord bot stopped",
     });
-  }
-
-  async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    // Origin: outbound send-as-surface carries no inbound trace to inherit
-    // until Wait/#215 threading lands — this send is its own causal chain.
-    const traceId = newTraceId();
-    const parsed = Adapter.SurfaceKey.parse(surfaceKey);
-    if (!parsed.id) {
-      throw new Error(`[discord] surface key missing id: ${surfaceKey}`);
-    }
-    const channelId =
-      parsed.kind === "dm" ? await this.client.createDmChannel(parsed.id, traceId) : parsed.id;
-    await sendDiscordMessage(this.client, channelId, message, traceId);
   }
 
   /**
@@ -159,7 +140,7 @@ export class DiscordAdapter implements Adapter.Surface {
   }
 
   private async handleIncoming(
-    inbound: Adapter.InboundMessage,
+    inbound: Channel.InboundMessage,
     channelId: string,
     traceId: string,
   ): Promise<void> {
@@ -211,7 +192,7 @@ const DISCORD_MESSAGE_LIMIT = 2000;
 async function sendDiscordMessage(
   client: ChannelClient,
   channelId: string,
-  message: Adapter.OutboundMessage,
+  message: Channel.OutboundMessage,
   traceId: string,
 ): Promise<string | undefined> {
   if (!message.text) return undefined;

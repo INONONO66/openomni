@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { Adapter } from "@openomni/protocol";
+import { Channel } from "@openomni/protocol";
 import { SurfaceKey } from "../src/surface-key";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
@@ -157,13 +157,13 @@ describe("SurfaceKey", () => {
 
   describe("codec-built keys route independently", () => {
     test("routes DM and group to different sessions", () => {
-      const dmKey = Adapter.SurfaceKey.fromChannel({
+      const dmKey = Channel.SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
         kind: "dm",
         id: "U001",
       });
-      const groupKey = Adapter.SurfaceKey.fromChannel({
+      const groupKey = Channel.SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
         kind: "group",
@@ -180,13 +180,13 @@ describe("SurfaceKey", () => {
     });
 
     test("routes thread separately from parent channel", () => {
-      const channelKey = Adapter.SurfaceKey.fromChannel({
+      const channelKey = Channel.SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
         kind: "group",
         id: "C001",
       });
-      const threadKey = Adapter.SurfaceKey.fromChannel({
+      const threadKey = Channel.SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
         kind: "group",
