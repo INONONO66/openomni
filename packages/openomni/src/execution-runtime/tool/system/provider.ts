@@ -5,6 +5,7 @@ import { createEditTool } from "../builtins/edit.js";
 import { createGlobTool } from "../builtins/glob.js";
 import { createGrepTool } from "../builtins/grep.js";
 import { createReadTool } from "../builtins/read.js";
+import { createRecallTool } from "../builtins/recall.js";
 import { createWriteTool } from "../builtins/write.js";
 
 export class SystemToolProvider implements ToolProvider {
@@ -14,7 +15,9 @@ export class SystemToolProvider implements ToolProvider {
   constructor(private readonly workspaceRoot?: string) {}
 
   listTools(): NativeTool[] {
-    const tools: NativeTool[] = [bashTool(this.workspaceRoot)];
+    // recall.output is session-scoped, not filesystem-scoped: it reads the
+    // session store, so it does not gate on workspaceRoot.
+    const tools: NativeTool[] = [bashTool(this.workspaceRoot), createRecallTool()];
     if (this.workspaceRoot) {
       tools.push(
         createReadTool(this.workspaceRoot),
