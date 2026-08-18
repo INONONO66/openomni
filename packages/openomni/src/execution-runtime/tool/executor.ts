@@ -140,11 +140,17 @@ function injectImplicitInputs(
   tool: NativeTool,
   runtime: ToolRuntimeContext | undefined,
 ): Tool.Call {
-  if (!tool.implicitInputs || !runtime) return call;
+  if (!tool.implicitInputs) return call;
 
+  // Override-or-strip, never pass-through: an implicit slot is owned by the
+  // executor. Passing a model-supplied value through when runtime is absent
+  // would let the model spoof identity-bearing fields (sessionId is a read
+  // boundary for session-scoped tools like recall.output) — absent runtime
+  // means absent value, and the tool sees the field missing, not forged.
   const injected: Record<string, unknown> = { ...call.input };
   for (const [param, source] of Object.entries(tool.implicitInputs)) {
-    const value = resolveImplicitValue(source, runtime);
+    delete injected[param];
+    const value = runtime === undefined ? undefined : resolveImplicitValue(source, runtime);
     if (value !== undefined) injected[param] = value;
   }
   return { ...call, input: injected };

@@ -26,12 +26,15 @@ async function cleanupTestDir(): Promise<void> {
 }
 
 describe("SystemToolProvider", () => {
-  it("includes only bash when no workspaceRoot is provided", () => {
+  it("includes bash and recall.output when no workspaceRoot is provided", () => {
     const provider = new SystemToolProvider();
     const tools = provider.listTools();
 
-    expect(tools).toHaveLength(1);
-    expect(tools[0]?.spec.name).toBe("bash");
+    expect(tools).toHaveLength(2);
+    const names = tools.map((t) => t.spec.name);
+    expect(names).toContain("bash");
+    // recall.output is session-scoped, so it does not gate on workspaceRoot
+    expect(names).toContain("recall.output");
   });
 
   it("includes bash plus all filesystem tools when workspaceRoot is set", async () => {
@@ -40,10 +43,11 @@ describe("SystemToolProvider", () => {
       const provider = new SystemToolProvider(testDir);
       const tools = provider.listTools();
 
-      expect(tools).toHaveLength(6);
+      expect(tools).toHaveLength(7);
 
       const names = tools.map((t) => t.spec.name);
       expect(names).toContain("bash");
+      expect(names).toContain("recall.output");
       expect(names).toContain("read");
       expect(names).toContain("write");
       expect(names).toContain("edit");

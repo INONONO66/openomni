@@ -60,7 +60,7 @@ Run memory (volatile):
 
 | Leaf | Scope | Packages | Depends on |
 | --- | --- | --- | --- |
-| L1 | Elision marker gains recall pointer (`reduce.ts`); `recall_tool_output` tool reads the original from the session store | agent, openomni | — |
+| L1 | Elision marker gains recall pointer (`reduce.ts`); the `recall.output` tool reads the original from the session store (scoped to fact-recorded turns — resident-direct and child streams persist no tool parts and refuse loudly) | agent, openomni | — |
 | L2 | `onSummarize(cutSpan, previousAnchor?)` contract; prior-summary and user-message exclusion from summarizer input; `[anchor, verbatim users, tail]` rebuild; senpi-template summarizer injected as openomni config (domain strings stay out of core) | agent, openomni | — |
 | L3 | CompactionRecord in protocol + session persistence; resume rehydration = projection recomputation (#702). Protocol schema growth — `lint:tools` snapshot diff is the Owner sign-off surface | protocol, session, openomni | L2 (anchor version) |
 | L4 | `compaction/speculate.ts`: prepare/promote, single-flight, abort-linked, freshness guard, discard-rate skip events | agent | L2 |
