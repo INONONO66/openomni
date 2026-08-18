@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyDecision, type Command } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { DispatchPolicyRegistrationError } from "../../src/dispatch";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 

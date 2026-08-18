@@ -1,5 +1,5 @@
 import { Command, Execution, type Wait } from "@openomni/protocol";
-import type { PendingInteractionStore } from "@openomni/session";
+import type { PendingInteractionStore } from "@openomni/ledger";
 import {
   dispatchEvidence,
   findWaitCandidates,

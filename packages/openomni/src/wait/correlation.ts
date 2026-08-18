@@ -1,5 +1,5 @@
 import type { Communication, Wait } from "@openomni/protocol";
-import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/session";
+import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/ledger";
 import { waitViewOfPendingAsk, waitViewOfPendingInteraction } from "./upcast.js";
 
 /**

@@ -1,5 +1,5 @@
 import { type Actor, Command } from "@openomni/protocol";
-import { WorkItemAttemptRun } from "@openomni/session";
+import { WorkItemAttemptRun } from "@openomni/ledger";
 
 export interface DispatchRuntimeContext {
   readonly sessionId?: string;

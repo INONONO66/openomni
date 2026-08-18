@@ -17,7 +17,7 @@ import { z } from "zod";
  *
  * AUTHORITY SOURCE — NOT bus_event. Every authoritative field is assembled
  * from the WorkItem attempt ledger facts (`work_item.attempt_allocated`, the
- * immutable Attempt identity — packages/session/src/work-item/facts.ts) plus
+ * immutable Attempt identity — packages/ledger/src/work-item/facts.ts) plus
  * the append-only `transcript_fact` rows (migration 0015). It is NEVER read
  * from `bus_event`, which is telemetry-tier, lossy, and destroys raw bodies
  * via `redactForPersistence`. `ProjectionInput` is the already-assembled

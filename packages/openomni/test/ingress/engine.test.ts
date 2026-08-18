@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { Ingress } from "@openomni/protocol";
-import { ChannelGrantStore, Session, Storage } from "@openomni/session";
+import { ChannelGrantStore, Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   defaultRunFn,

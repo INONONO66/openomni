@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import { Storage, TranscriptStore } from "@openomni/session";
+import { Storage, TranscriptStore } from "@openomni/ledger";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";
 import { createSpawnOptions, createValidRequest, successfulResult } from "./worker-runner-fixture";

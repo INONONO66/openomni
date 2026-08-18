@@ -8,7 +8,7 @@ import {
 } from "@openomni/openomni";
 import type { NativeTool } from "@openomni/openomni";
 import { Execution } from "@openomni/protocol";
-import { TranscriptStore } from "@openomni/session";
+import { TranscriptStore } from "@openomni/ledger";
 import { createContextMiddleware } from "../context/middleware";
 import { createMcpProxyProvider, createWorkerDispatchRuntime } from "./worker-runner-ipc";
 import { respondSpawnRejected, type WorkerRunnerSpawnOptions } from "./worker-runner-types";
@@ -186,12 +186,12 @@ export namespace WorkerRunner {
             // transcript fact stream meets durable recording —
             // TranscriptStore.record commits the fact and its message/part
             // projection in one storage transaction (recording tier;
-            // packages/session/src/session/transcript.ts). Injected
+            // packages/ledger/src/session/transcript.ts). Injected
             // responses into this session record synthesized facts at the
             // injection-queue persistResponse seam (#562). Resident direct
             // runs stay sinkless on purpose and child-agent streams record
             // nothing (bounded) — see the writer census in
-            // packages/session/src/session/transcript.ts.
+            // packages/ledger/src/session/transcript.ts.
             onFact: (fact) => TranscriptStore.record(sessionId, fact),
           },
         );

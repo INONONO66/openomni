@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import * as OpenOmni from "../../src/index.js";
 import {

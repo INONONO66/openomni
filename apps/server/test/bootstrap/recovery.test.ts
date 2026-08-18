@@ -12,7 +12,7 @@ import {
   Session,
   Storage,
   WaitStore,
-} from "@openomni/session";
+} from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { assembleEffectRuntime } from "../../src/bootstrap/effects";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "../../src/bootstrap/recovery";

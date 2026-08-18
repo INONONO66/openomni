@@ -1,5 +1,5 @@
 import { Channel, Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
-import { Session, SurfaceKey } from "@openomni/session";
+import { Session, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { DEFAULT_DISPATCH_MODEL } from "../dispatch/index.js";
 import { resolveTarget, targetKey } from "./target";

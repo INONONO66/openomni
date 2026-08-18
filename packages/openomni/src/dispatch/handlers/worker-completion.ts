@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { WorkItem, type Execution } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { WorkItemStore } from "@openomni/ledger";
 import { z } from "zod";
 import { ReadBackExecutor } from "../../evidence/read-back-executor.js";
 import { settleBeforeDeadline } from "../../evidence/read-back-http.js";

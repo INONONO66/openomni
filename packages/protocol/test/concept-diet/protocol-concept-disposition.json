@@ -71,8 +71,8 @@
         "productionConsumers": [],
         "testPins": [
           "packages/protocol/test/actor.test.ts:11 (relationship:\"owner\"), :36 (relationship:\"stranger\" negative)",
-          "packages/session/test/actor/persistence.test.ts:29,55,72,82,111,139,145,180",
-          "packages/session/test/app-connector/lifecycle.test.ts:188",
+          "packages/ledger/test/actor/persistence.test.ts:29,55,72,82,111,139,145,180",
+          "packages/ledger/test/app-connector/lifecycle.test.ts:188",
           "apps/server/test/bootstrap/messaging.test.ts:13",
           "packages/openomni/test/helpers/messaging.ts:16, packages/openomni/test/harness/existing-agent-message-driver.ts:98",
           "packages/openomni/test/ingress/_actor-resolver-fixture.ts:138, _kernel-routing-fixture.ts:71, actor-resolver.test.ts:49/82/145, actor-resolver-sanitization.test.ts:70, kernel-routing-waits.test.ts:76/728/771/997, wait/matcher.test.ts:162/174"
@@ -437,7 +437,7 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Zero production consumers. The session worker-run store defines and uses its OWN record shape WorkerRunStateStore.Record (packages/session/src/worker-run/state-store.ts:34-48) for both reads and the frozen writes — it never parses/returns protocol WorkerRun.Info. Every `.Info` reference in packages/session/src is WorkItem.Info / Message.Info / CronJob.Info / Operational.Info / Session.Info, none WorkerRun.Info. Not re-aliased as WorkerRunInfo anywhere. The lastMessageId field (index.ts:38) — the historical last-message pointer — dies with it. Test pins in worker-run.test.ts drop in the same batch."
+      "reason": "Zero production consumers. The session worker-run store defines and uses its OWN record shape WorkerRunStateStore.Record (packages/ledger/src/worker-run/state-store.ts:34-48) for both reads and the frozen writes — it never parses/returns protocol WorkerRun.Info. Every `.Info` reference in packages/ledger/src is WorkItem.Info / Message.Info / CronJob.Info / Operational.Info / Session.Info, none WorkerRun.Info. Not re-aliased as WorkerRunInfo anywhere. The lastMessageId field (index.ts:38) — the historical last-message pointer — dies with it. Test pins in worker-run.test.ts drop in the same batch."
     },
     {
       "symbol": "WorkerRun (namespace deletion candidate)",
@@ -447,16 +447,16 @@
       "exportSite": "packages/protocol/src/worker-run/index.ts:14 (namespace WorkerRun)",
       "evidence": {
         "productionConsumers": [
-          "packages/session/src/worker-run/state-store.ts:24 (WorkerRun.FrozenError — thrown by frozenWrite)",
-          "packages/session/src/worker-run/state-store.ts:23 (WorkerRun.WriteMethod)",
-          "packages/session/src/worker-run/state-store.ts:32,61 (WorkerRun.Status)",
-          "packages/session/src/work-item/attempt-run.ts:127 (WorkerRun.Status — legacyTerminalStatuses, the #498 upcast-on-read bridge)",
+          "packages/ledger/src/worker-run/state-store.ts:24 (WorkerRun.FrozenError — thrown by frozenWrite)",
+          "packages/ledger/src/worker-run/state-store.ts:23 (WorkerRun.WriteMethod)",
+          "packages/ledger/src/worker-run/state-store.ts:32,61 (WorkerRun.Status)",
+          "packages/ledger/src/work-item/attempt-run.ts:127 (WorkerRun.Status — legacyTerminalStatuses, the #498 upcast-on-read bridge)",
           "apps/server/src/execution/worker-runner-events.ts:10,24,38,53 (WorkerRun.Events.Started/Completed/Cancelled/Failed)"
         ],
         "testPins": [
           "packages/protocol/test/worker-run.test.ts:73-98 (Events)",
-          "packages/session/test/worker-run/frozen.test.ts (FrozenError)",
-          "packages/session/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
+          "packages/ledger/test/worker-run/frozen.test.ts (FrozenError)",
+          "packages/ledger/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
@@ -472,10 +472,10 @@
       "exportSite": "packages/protocol/src/worker-run/index.ts:56 (const), packages/protocol/src/worker-run/index.ts:64 (type)",
       "evidence": {
         "productionConsumers": [
-          "packages/session/src/worker-run/state-store.ts:24 (thrown on every frozen write; callers branch on data.code === 'worker_run_frozen')"
+          "packages/ledger/src/worker-run/state-store.ts:24 (thrown on every frozen write; callers branch on data.code === 'worker_run_frozen')"
         ],
         "testPins": [
-          "packages/session/test/worker-run/frozen.test.ts:63-120 (rewritten against WorkerRunStateStore in #679)"
+          "packages/ledger/test/worker-run/frozen.test.ts:63-120 (rewritten against WorkerRunStateStore in #679)"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
@@ -491,12 +491,12 @@
       "exportSite": "packages/protocol/src/worker-run/index.ts:15 (const), packages/protocol/src/worker-run/index.ts:25 (type)",
       "evidence": {
         "productionConsumers": [
-          "packages/session/src/worker-run/state-store.ts:32,61",
-          "packages/session/src/work-item/attempt-run.ts:127 (legacyTerminalStatuses set — #498 upcast bridge)",
+          "packages/ledger/src/worker-run/state-store.ts:32,61",
+          "packages/ledger/src/work-item/attempt-run.ts:127 (legacyTerminalStatuses set — #498 upcast bridge)",
           "apps/server/src/execution/worker-runner-events.ts (Events payloads embed Status)"
         ],
         "testPins": [
-          "packages/session/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
+          "packages/ledger/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
@@ -512,7 +512,7 @@
       "exportSite": "packages/protocol/src/worker-run/index.ts:43 (WriteMethod), packages/protocol/src/worker-run/index.ts:66-108 (Events.Started/Completed/Failed/Cancelled)",
       "evidence": {
         "productionConsumers": [
-          "packages/session/src/worker-run/state-store.ts:23 (WriteMethod param of frozenWrite)",
+          "packages/ledger/src/worker-run/state-store.ts:23 (WriteMethod param of frozenWrite)",
           "apps/server/src/execution/worker-runner-events.ts:10,24,38,53 (Events published via Bus.publish)"
         ],
         "testPins": ["packages/protocol/test/worker-run.test.ts:73-98"],
@@ -532,7 +532,7 @@
       "evidence": {
         "productionConsumers": [],
         "testPins": [
-          "packages/session/src/work-item/work-item.test.ts:235 (writes verificationGate field)",
+          "packages/ledger/src/work-item/work-item.test.ts:235 (writes verificationGate field)",
           "script/conformance/schema-snapshot.json:1109 (ln pin \"WorkItem.VerificationGate\")"
         ],
         "snapshotPin": "script/conformance/schema-snapshot.json:1109",
@@ -572,10 +572,10 @@
       "evidence": {
         "productionConsumers": [],
         "testPins": [
-          "packages/session/test/artifact/artifact.test.ts:69 (expect meta.version === 2)",
-          "packages/session/test/artifact/artifact.test.ts:105",
-          "packages/session/test/artifact/artifact.test.ts:132",
-          "packages/session/test/artifact/persistence.test.ts:101",
+          "packages/ledger/test/artifact/artifact.test.ts:69 (expect meta.version === 2)",
+          "packages/ledger/test/artifact/artifact.test.ts:105",
+          "packages/ledger/test/artifact/artifact.test.ts:132",
+          "packages/ledger/test/artifact/persistence.test.ts:101",
           "script/conformance/schema-snapshot.json:182 (ln pin: version key inside Artifact.Meta)"
         ],
         "snapshotPin": "script/conformance/schema-snapshot.json:182",
@@ -600,7 +600,7 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "regenerated-confirmation: CONFIRMED no runtime consumer of the Schema export; action is unexport (Type stays). The zod runtime validator TraceContext.Schema has ZERO consumers of any kind: `rg 'TraceContext.Schema'` hits only the ln snapshot; there is no `.parse`/`.safeParse` on it anywhere. Adversarially checked the wire boundary — worker-manager, ingress, policy, tool, agent all pass `TraceContext.Type` type-only across the IPC/bus boundary and never validate via Schema (the only trace-shaped `.parse` in the tree is ReplayTraceSchema in verifier-conformance-replay.ts, unrelated). So Schema is NOT a fail-closed/wire validator. It cannot be deleted because trace/index.ts:12 `export type Type = z.infer<typeof Schema>` derives the widely-consumed Type from it -> unexport: keep it as a local const feeding Type, drop the public `Schema` member. TraceContext.Type and the session-side live helpers (create/child/empty in packages/session/src/trace/index.ts) are unaffected survivors, exactly per the assignment."
+      "reason": "regenerated-confirmation: CONFIRMED no runtime consumer of the Schema export; action is unexport (Type stays). The zod runtime validator TraceContext.Schema has ZERO consumers of any kind: `rg 'TraceContext.Schema'` hits only the ln snapshot; there is no `.parse`/`.safeParse` on it anywhere. Adversarially checked the wire boundary — worker-manager, ingress, policy, tool, agent all pass `TraceContext.Type` type-only across the IPC/bus boundary and never validate via Schema (the only trace-shaped `.parse` in the tree is ReplayTraceSchema in verifier-conformance-replay.ts, unrelated). So Schema is NOT a fail-closed/wire validator. It cannot be deleted because trace/index.ts:12 `export type Type = z.infer<typeof Schema>` derives the widely-consumed Type from it -> unexport: keep it as a local const feeding Type, drop the public `Schema` member. TraceContext.Type and the session-side live helpers (create/child/empty in packages/ledger/src/trace/index.ts) are unaffected survivors, exactly per the assignment."
     },
     {
       "symbol": "policyKernelVersion",
@@ -1218,14 +1218,14 @@
       "evidence": {
         "productionConsumers": [],
         "testPins": [
-          "packages/session/test/app-connector/lifecycle.test.ts:226",
+          "packages/ledger/test/app-connector/lifecycle.test.ts:226",
           "packages/openomni/test/dispatch/worker-spawn-connector-endpoint.test.ts:118"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Persisted enrollment state-machine enum. Declared installation.ts:5-13, composed into the persisted Installation record at installation.ts:45 (status field). Installation is round-tripped through SQLite in packages/session/src/storage/sqlite-app-connector-installation-adapter.ts:16,44 (AppConnector.Installation.parse of DB JSON). The live enrollment state machine in packages/session/src/app-connector/index.ts:137-195 drives exact literal transitions (registered->pending_consent->consented->enabled/verification_failed/disabled) and fail-closes on illegal transitions. Persisted + fail-closed enrollment contract survivor. No direct namespace-qualified prod consumer (consumption is via the composed Installation type and literal values); test pins only."
+      "reason": "Persisted enrollment state-machine enum. Declared installation.ts:5-13, composed into the persisted Installation record at installation.ts:45 (status field). Installation is round-tripped through SQLite in packages/ledger/src/storage/sqlite-app-connector-installation-adapter.ts:16,44 (AppConnector.Installation.parse of DB JSON). The live enrollment state machine in packages/ledger/src/app-connector/index.ts:137-195 drives exact literal transitions (registered->pending_consent->consented->enabled/verification_failed/disabled) and fail-closes on illegal transitions. Persisted + fail-closed enrollment contract survivor. No direct namespace-qualified prod consumer (consumption is via the composed Installation type and literal values); test pins only."
     },
     {
       "symbol": "AppConnector.WorkspaceIdentity",
@@ -1244,7 +1244,7 @@
         "to": "unexport",
         "reclassified": "#499-convergence"
       },
-      "reason": "Persisted enrollment workspace-identity shape. Declared installation.ts:26-34, composed into the persisted Installation record at installation.ts:47 (workspace field). Its fields ARE consumed field-level in production: packages/session/src/app-connector/index.ts:66 (workspace.worktreePath) and :99-104 (workspace.repoPathHash / worktreePathHash) build the connector Actor.Endpoint. Persisted enrollment identity contract survivor. No direct namespace-qualified prod consumer of the symbol itself (consumed via installation.workspace on the Installation type); no test pins. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
+      "reason": "Persisted enrollment workspace-identity shape. Declared installation.ts:26-34, composed into the persisted Installation record at installation.ts:47 (workspace field). Its fields ARE consumed field-level in production: packages/ledger/src/app-connector/index.ts:66 (workspace.worktreePath) and :99-104 (workspace.repoPathHash / worktreePathHash) build the connector Actor.Endpoint. Persisted enrollment identity contract survivor. No direct namespace-qualified prod consumer of the symbol itself (consumed via installation.workspace on the Installation type); no test pins. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.Detect",
@@ -1263,7 +1263,7 @@
         "to": "unexport",
         "reclassified": "#499-convergence"
       },
-      "reason": "Connector-manifest detection sub-schema. Declared definition.ts:31-39, composed into the live Definition manifest at definition.ts:219 (Definition.detect, required). Definition is validated at enrollment, persisted inside Installation, and consumed cross-package (apps/server/src/connector/*, packages/openomni/src/dispatch/*, packages/session/src/app-connector/*). No direct namespace-qualified consumer (prod or test) and no field-level prod read of .detect, but it is a live constituent of the persisted connector manifest under the #499 AppConnector->Tier-2 Endpoint / adapter->Channel convergence (corpus docs/corpus/10-protocol.local.md:63 app-connector = retained+converged domain #497-#500; :66 #499 owns adapter->channel). #497 must freeze it as a handoff, not raw-remove it (removal would still leave the local const composing Definition; the convergence owns whether the manifest keeps/renames this sub-schema). SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
+      "reason": "Connector-manifest detection sub-schema. Declared definition.ts:31-39, composed into the live Definition manifest at definition.ts:219 (Definition.detect, required). Definition is validated at enrollment, persisted inside Installation, and consumed cross-package (apps/server/src/connector/*, packages/openomni/src/dispatch/*, packages/ledger/src/app-connector/*). No direct namespace-qualified consumer (prod or test) and no field-level prod read of .detect, but it is a live constituent of the persisted connector manifest under the #499 AppConnector->Tier-2 Endpoint / adapter->Channel convergence (corpus docs/corpus/10-protocol.local.md:63 app-connector = retained+converged domain #497-#500; :66 #499 owns adapter->channel). #497 must freeze it as a handoff, not raw-remove it (removal would still leave the local const composing Definition; the convergence owns whether the manifest keeps/renames this sub-schema). SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.Evidence",
@@ -1300,7 +1300,7 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Connector-manifest requirements sub-schema. Declared definition.ts:171-178, composed into Definition at definition.ts:225 (Definition.requires, required). Field-shape IS read in production via definition.requires: apps/server/src/connector/env.ts:116 (requires.credentials credential gating) and the fail-closed enrollment consent gate packages/session/src/app-connector/consent-validation.ts:14-16 (assertConsentMatchesRequirements over requires.credentials/capabilities/permissions). The standalone AppConnector.Requires symbol has only test pins (dispatch-owners.test.ts:54, process-driver.test.ts:71), no direct prod consumer. Live constituent of the persisted connector manifest entangled with the #499 AppConnector convergence; #497 freezes as handoff. The live field-consumers (fail-closed consent gate) mean #499 must preserve this shape, not drop it."
+      "reason": "Connector-manifest requirements sub-schema. Declared definition.ts:171-178, composed into Definition at definition.ts:225 (Definition.requires, required). Field-shape IS read in production via definition.requires: apps/server/src/connector/env.ts:116 (requires.credentials credential gating) and the fail-closed enrollment consent gate packages/ledger/src/app-connector/consent-validation.ts:14-16 (assertConsentMatchesRequirements over requires.credentials/capabilities/permissions). The standalone AppConnector.Requires symbol has only test pins (dispatch-owners.test.ts:54, process-driver.test.ts:71), no direct prod consumer. Live constituent of the persisted connector manifest entangled with the #499 AppConnector convergence; #497 freezes as handoff. The live field-consumers (fail-closed consent gate) mean #499 must preserve this shape, not drop it."
     },
     {
       "symbol": "AppConnector.Profile",
@@ -2213,7 +2213,7 @@
         "runtimeConsumer": "none"
       },
       "overturnOriginal": null,
-      "reason": "Envelope is a BANNED noun (script/lint-tools.ts:224 ban regex Runtime|Task|Envelope) with zero production consumers; across src/apps/script the only hit for Communication.Envelope was its own self-test at schema.test.ts. Delivered in two steps. #598 removed the public namespace member (index.ts:7-8), which at census time was the sole importer of the backing schema file src/communication/envelope.ts; #598 left that backing file in place — its only remaining consumer was its own test block, and it was parked in the naming-grandfather list — so residual dead product surface survived. PR #603 completed the delete: it removed envelope.ts, that self-test block, and the two Envelope naming-grandfather entries (envelope.ts:Envelope plus the already-stale index.ts:Envelope), leaving no Envelope surface anywhere. Sibling members PendingAsk/PendingInteraction/WorkerGrant stay (heavily consumed by packages/session)."
+      "reason": "Envelope is a BANNED noun (script/lint-tools.ts:224 ban regex Runtime|Task|Envelope) with zero production consumers; across src/apps/script the only hit for Communication.Envelope was its own self-test at schema.test.ts. Delivered in two steps. #598 removed the public namespace member (index.ts:7-8), which at census time was the sole importer of the backing schema file src/communication/envelope.ts; #598 left that backing file in place — its only remaining consumer was its own test block, and it was parked in the naming-grandfather list — so residual dead product surface survived. PR #603 completed the delete: it removed envelope.ts, that self-test block, and the two Envelope naming-grandfather entries (envelope.ts:Envelope plus the already-stale index.ts:Envelope), leaving no Envelope surface anywhere. Sibling members PendingAsk/PendingInteraction/WorkerGrant stay (heavily consumed by packages/ledger)."
     },
     {
       "symbol": "CronJob (cron namespace)",
@@ -2234,13 +2234,13 @@
           "packages/openomni/src/execution-runtime/cron-job-registry.ts:48",
           "packages/openomni/src/execution-runtime/cron-job-runner.ts:8",
           "packages/openomni/src/execution-runtime/cron-job-runner.ts:130",
-          "packages/session/src/storage/sqlite-cron-job-adapter.ts:10",
-          "packages/session/src/storage/sqlite-cron-job-adapter.ts:27"
+          "packages/ledger/src/storage/sqlite-cron-job-adapter.ts:10",
+          "packages/ledger/src/storage/sqlite-cron-job-adapter.ts:27"
         ],
         "testPins": [
           "packages/protocol/test/cron/schema.test.ts:7",
           "packages/openomni/test/execution-runtime/cron-job-runner.test.ts:16",
-          "packages/session/test/storage/sqlite-cron-job-adapter.test.ts:23"
+          "packages/ledger/test/storage/sqlite-cron-job-adapter.test.ts:23"
         ],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"

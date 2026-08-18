@@ -3,7 +3,7 @@
  * review fix minor). bun:sqlite surfaces a busy database as a `SQLiteError`
  * (a plain `Error` subclass) with `code: "SQLITE_BUSY"`, `errno: 5`, and
  * message "database is locked" — pinned empirically against bun 1.x by
- * `packages/session/test/storage/sqlite-busy.test.ts`. Extended result codes
+ * `packages/ledger/test/storage/sqlite-busy.test.ts`. Extended result codes
  * (SQLITE_BUSY_SNAPSHOT / SQLITE_BUSY_RECOVERY / SQLITE_BUSY_TIMEOUT) share
  * the "SQLITE_BUSY" prefix, so the predicate matches on the prefix instead
  * of strict equality.

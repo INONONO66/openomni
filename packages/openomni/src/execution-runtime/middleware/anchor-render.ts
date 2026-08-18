@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session } from "@openomni/ledger";
 
 /**
  * Anchor render enrichment (compaction-design L6, #716). Everything here is

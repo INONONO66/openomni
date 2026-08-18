@@ -168,7 +168,7 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
       ) {
         const moduleName = node.moduleSpecifier.text;
         if (ts.isNamespaceImport(clause.namedBindings)) {
-          if (moduleName === "@openomni/session") {
+          if (moduleName === "@openomni/ledger") {
             addBinding(scope, {
               name: clause.namedBindings.name.text,
               importKind: "namespace",
@@ -185,7 +185,7 @@ function lexicalModel(source: ts.SourceFile): LexicalModel {
             if (element.isTypeOnly) continue;
             const importedName = element.propertyName?.text ?? element.name.text;
             const importKind =
-              moduleName === "@openomni/session" && ROUTING_STORES.has(importedName)
+              moduleName === "@openomni/ledger" && ROUTING_STORES.has(importedName)
                 ? "store"
                 : undefined;
             if (importKind) {
@@ -421,11 +421,11 @@ function detectRoutingBoundaryViolations(parsed: readonly ParsedSource[]): reado
         continue;
       }
       const moduleName = statement.moduleSpecifier.text;
-      if (moduleName !== "@openomni/session" && moduleName !== "@openomni/openomni") continue;
+      if (moduleName !== "@openomni/ledger" && moduleName !== "@openomni/openomni") continue;
       for (const element of statement.importClause.namedBindings.elements) {
         const importedName = element.propertyName?.text ?? element.name.text;
         if (element.isTypeOnly) continue;
-        if (moduleName === "@openomni/session" && ROUTING_STORES.has(importedName)) {
+        if (moduleName === "@openomni/ledger" && ROUTING_STORES.has(importedName)) {
           violations.push(`${path}: imports ${importedName}`);
         }
         // #549: bridge/conversation receive the engine instance — they never
@@ -640,57 +640,57 @@ describe("server ingress routing ownership boundary", () => {
   const routingStoreFixtures = [
     [
       "aliased named import",
-      'import { PendingAskStore as Ask } from "@openomni/session"; Ask.get("id");',
+      'import { PendingAskStore as Ask } from "@openomni/ledger"; Ask.get("id");',
       "accesses routing store Ask",
     ],
     [
       "worker-grant named import",
-      'import { WorkerGrantStore } from "@openomni/session"; WorkerGrantStore.get("id");',
+      'import { WorkerGrantStore } from "@openomni/ledger"; WorkerGrantStore.get("id");',
       "accesses routing store WorkerGrantStore",
     ],
     [
       "namespace dot access",
-      'import * as Session from "@openomni/session"; Session.PendingInteractionStore.get("id");',
+      'import * as Session from "@openomni/ledger"; Session.PendingInteractionStore.get("id");',
       "accesses routing store PendingInteractionStore",
     ],
     [
       "namespace bracket access",
-      'import * as Session from "@openomni/session"; Session["ChannelGrantStore"].get("id");',
+      'import * as Session from "@openomni/ledger"; Session["ChannelGrantStore"].get("id");',
       "accesses routing store ChannelGrantStore",
     ],
     [
       "namespace destructuring alias and later use",
-      'import * as Session from "@openomni/session"; const { PendingAskStore: Ask } = Session; Ask.get("id");',
+      'import * as Session from "@openomni/ledger"; const { PendingAskStore: Ask } = Session; Ask.get("id");',
       "accesses routing store Ask",
     ],
     [
       "namespace alias dot access",
-      'import * as Session from "@openomni/session"; const KernelSession = Session; KernelSession.BlacklistStore.get("id");',
+      'import * as Session from "@openomni/ledger"; const KernelSession = Session; KernelSession.BlacklistStore.get("id");',
       "accesses routing store BlacklistStore",
     ],
     [
       "namespace alias-chain bracket access",
-      'import * as Session from "@openomni/session"; const First = Session; const Second = First; Second["PendingAskStore"].get("id");',
+      'import * as Session from "@openomni/ledger"; const First = Session; const Second = First; Second["PendingAskStore"].get("id");',
       "accesses routing store PendingAskStore",
     ],
     [
       "namespace alias-chain destructuring",
-      'import * as Session from "@openomni/session"; const First = Session; const Second = First; const { ChannelGrantStore: Grants } = Second; Grants.get("id");',
+      'import * as Session from "@openomni/ledger"; const First = Session; const Second = First; const { ChannelGrantStore: Grants } = Second; Grants.get("id");',
       "accesses routing store Grants",
     ],
     [
       "wrapped session namespace",
-      'import * as Session from "@openomni/session"; const KernelSession = ((Session as typeof Session) satisfies typeof Session)!; KernelSession.PendingAskStore.get("id");',
+      'import * as Session from "@openomni/ledger"; const KernelSession = ((Session as typeof Session) satisfies typeof Session)!; KernelSession.PendingAskStore.get("id");',
       "accesses routing store PendingAskStore",
     ],
     [
       "wrapped session store alias",
-      'import * as Session from "@openomni/session"; const Store = ((Session.BlacklistStore as typeof Session.BlacklistStore) satisfies typeof Session.BlacklistStore)!; (Store as typeof Store)!.get("id");',
+      'import * as Session from "@openomni/ledger"; const Store = ((Session.BlacklistStore as typeof Session.BlacklistStore) satisfies typeof Session.BlacklistStore)!; (Store as typeof Store)!.get("id");',
       "accesses routing store Store",
     ],
     [
       "wrapped static session member",
-      'import * as Session from "@openomni/session"; ((Session as typeof Session)!)[("ChannelGrantStore" as const)].get("id");',
+      'import * as Session from "@openomni/ledger"; ((Session as typeof Session)!)[("ChannelGrantStore" as const)].get("id");',
       "accesses routing store ChannelGrantStore",
     ],
     [
@@ -750,7 +750,7 @@ describe("server ingress routing ownership boundary", () => {
   it("keeps parameter and block-local Session shadows unrelated", () => {
     const path = SOURCE_FILES[1];
     const text = `
-      import * as Session from "@openomni/session";
+      import * as Session from "@openomni/ledger";
       function inspect(Session: unknown) {
         const Alias = Session;
         Alias.PendingAskStore.get("id");
@@ -767,7 +767,7 @@ describe("server ingress routing ownership boundary", () => {
   it("still detects a canonical Session alias outside sibling shadows", () => {
     const path = SOURCE_FILES[1];
     const text = `
-      import * as Session from "@openomni/session";
+      import * as Session from "@openomni/ledger";
       const Canonical = Session;
       { const Session = fakeSession; Session.PendingAskStore.get("shadow"); }
       const Store = Canonical["PendingAskStore"];
@@ -782,7 +782,7 @@ describe("server ingress routing ownership boundary", () => {
   it("isolates loop and switch Session shadows from an outer canonical alias", () => {
     const path = SOURCE_FILES[1];
     const text = `
-      import * as Session from "@openomni/session";
+      import * as Session from "@openomni/ledger";
       const Canonical = Session;
       for (const Canonical of fakeSessions) Canonical.PendingAskStore.get("for-of-shadow");
       switch (mode) {
@@ -800,7 +800,7 @@ describe("server ingress routing ownership boundary", () => {
   it("keeps dynamic computed Session members unsupported", () => {
     const path = SOURCE_FILES[1];
     const text = `
-      import * as Session from "@openomni/session";
+      import * as Session from "@openomni/ledger";
       Session[storeName].get("dynamic");
       (Session as typeof Session)![storeName].get("wrapped-dynamic");
     `;

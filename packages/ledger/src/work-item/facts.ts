@@ -5,7 +5,7 @@ import { isSqliteBusyError } from "../storage/sqlite-busy.js";
  * #510 C1 — every WorkItem lifecycle write is a decision-class fact on the
  * owner stream `work:<workItemId>` and awaits its durable append before the
  * projection write (no record, no action). Head↔revision binding mirrors the
- * Wait class (packages/session/src/wait/index.ts):
+ * Wait class (packages/ledger/src/wait/index.ts):
  *
  *   - fact seq N is the append that produced projected revision N, so
  *     `ledger_head.head` always equals the committed row's `revision`;

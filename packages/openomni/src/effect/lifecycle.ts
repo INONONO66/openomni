@@ -1,4 +1,4 @@
-import { EffectStore, WorkItemStore } from "@openomni/session";
+import { EffectStore, WorkItemStore } from "@openomni/ledger";
 import type { EffectExecution, EffectIntent } from "./driver.js";
 import type { EffectManifest } from "./manifest.js";
 

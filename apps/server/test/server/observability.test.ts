@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { Operational } from "@openomni/protocol";
-import { BusPersistence, BusQuery, Session, Storage } from "@openomni/session";
+import { BusPersistence, BusQuery, Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createRouter } from "../../src/server/routes";
 

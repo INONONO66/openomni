@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "@openomni/protocol";
-import { Session, SqliteStorageAdapter, Storage } from "@openomni/session";
+import { Session, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 
 let tmpDir = "";
 let dbPath = "";

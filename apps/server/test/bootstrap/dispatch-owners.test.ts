@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command, Wait, type AppConnector, type Execution } from "@openomni/protocol";
 import { createIngressEngine, type DispatchOwners } from "@openomni/openomni";
-import { PendingAskStore, Storage } from "@openomni/session";
+import { PendingAskStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 

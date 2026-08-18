@@ -1,5 +1,5 @@
 import type { Ingress } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/session";
+import { ActorRegistry, Storage } from "@openomni/ledger";
 
 function legacyActorFields(actor: Ingress.Actor | undefined): Ingress.Actor | undefined {
   if (!actor) return undefined;

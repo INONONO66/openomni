@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 

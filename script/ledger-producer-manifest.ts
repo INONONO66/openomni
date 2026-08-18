@@ -67,12 +67,12 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
   streams: [
     {
       streamClass: "wait",
-      producer: "packages/session/src/wait/index.ts",
+      producer: "packages/ledger/src/wait/index.ts",
       writes: "append+adoptStream",
     },
     {
       streamClass: "work",
-      producer: "packages/session/src/work-item/facts.ts",
+      producer: "packages/ledger/src/work-item/facts.ts",
       writes: "append+adoptStream",
     },
     {
@@ -87,32 +87,32 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
     },
     {
       streamClass: "effect",
-      producer: "packages/session/src/effect/index.ts",
+      producer: "packages/ledger/src/effect/index.ts",
       writes: "append",
     },
   ],
   appendCore: [
     // Raw prepared-statement writers of ledger_event/ledger_head:
-    "packages/session/src/ledger-core/append.ts",
-    "packages/session/src/ledger-core/adopt.ts",
+    "packages/ledger/src/ledger-core/append.ts",
+    "packages/ledger/src/ledger-core/adopt.ts",
     // The storage adapter binding that exposes them as `Storage.ledger`:
-    "packages/session/src/storage/sqlite-storage.ts",
+    "packages/ledger/src/storage/sqlite-storage.ts",
   ],
   frozenTableWriters: [
-    { table: "pending_ask", adapter: "packages/session/src/storage/sqlite-pending-ask-adapter.ts" },
+    { table: "pending_ask", adapter: "packages/ledger/src/storage/sqlite-pending-ask-adapter.ts" },
     {
       table: "pending_interaction",
-      adapter: "packages/session/src/storage/sqlite-pending-interaction-adapter.ts",
+      adapter: "packages/ledger/src/storage/sqlite-pending-interaction-adapter.ts",
     },
     {
       table: "worker_run_state",
-      adapter: "packages/session/src/storage/sqlite-worker-run-state-adapter.ts",
+      adapter: "packages/ledger/src/storage/sqlite-worker-run-state-adapter.ts",
     },
   ],
   migrationSqlWriters: [
     // Pre-freeze historical backfill: sets executor_kind on then-live rows.
     {
-      file: "packages/session/migration/0005_worker_run_executor_kind/migration.sql",
+      file: "packages/ledger/migration/0005_worker_run_executor_kind/migration.sql",
       table: "worker_run_state",
     },
   ],

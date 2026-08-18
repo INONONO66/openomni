@@ -1,6 +1,6 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { expect } from "bun:test";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import type { ReadBackExecutor } from "../../src/evidence/read-back-executor";
 
 const servers: Server[] = [];

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { PolicyDecision, Command } from "@openomni/protocol";
-import { PendingInteractionStore, Storage } from "@openomni/session";
+import { PendingInteractionStore, Storage } from "@openomni/ledger";
 import { DispatchRuntime, submitPinnedPendingInteraction } from "../../src/dispatch/runtime";
 import { seedPendingInteraction } from "../helpers/pending-interaction";
 import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";

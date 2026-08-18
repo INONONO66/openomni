@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChatAgentConfig, ChatAgentInput } from "@openomni/agent";
 import { Wait } from "@openomni/protocol";
-import { PendingAskStore, Session, Storage, SurfaceKey, WaitStore } from "@openomni/session";
+import { PendingAskStore, Session, Storage, SurfaceKey, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createIngressEngine } from "../../src/ingress/engine";
 import { ResidentRuntime } from "../../src/resident/runtime";

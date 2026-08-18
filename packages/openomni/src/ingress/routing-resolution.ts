@@ -1,5 +1,5 @@
 import { Actor, Ingress, Wait, type Communication } from "@openomni/protocol";
-import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/session";
+import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   findWaitCandidates,

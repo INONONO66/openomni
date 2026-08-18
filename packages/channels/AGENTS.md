@@ -24,7 +24,7 @@ Whitelist at stage 1: **{`@openomni/protocol`, `@openomni/ipc`, `@openomni/polic
 - `script/check-deps.ts` — package-level whitelist (manifest **and** source imports), plus the **S8 intra-package banding check**: only `src/authn/` (perimeter judgment) may import `@openomni/policy`; the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`) stays on the dumb-driver contract {protocol, ipc}. Drivers legitimately invoke the authn middleware today — that edge IS the stage-2 seam, cut when authn is promoted to the router band.
 - `test/channel-band-boundary.test.ts` — the AST-level scan that traveled with the band move: every import in `src/**` must be a whitelisted package, a node builtin, or relative; policy only under `src/authn/`. Telemetry is NOT allowed — the pre-move allowance was dropped at extraction (trace-id minting lives in protocol; observation goes through the injected `PublishPort`).
 
-No kernel (`@openomni/openomni`), no session, no telemetry, no brain imports — both sides meet only in protocol contracts, wired by `apps/server` through injected ports.
+No kernel (`@openomni/openomni`), no ledger, no telemetry, no brain imports — both sides meet only in protocol contracts, wired by `apps/server` through injected ports.
 
 ## CONTRACT
 

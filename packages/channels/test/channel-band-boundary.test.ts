@@ -129,28 +129,28 @@ describe("channels band import boundary", () => {
   const violationFixtures = [
     [
       "named session import",
-      'import { Storage } from "@openomni/session";',
-      "imports @openomni/session",
+      'import { Storage } from "@openomni/ledger";',
+      "imports @openomni/ledger",
     ],
     [
       "type-only session import",
-      'import type { SurfaceKey } from "@openomni/session";',
-      "imports @openomni/session",
+      'import type { SurfaceKey } from "@openomni/ledger";',
+      "imports @openomni/ledger",
     ],
     [
       "namespace session import",
-      'import * as Session from "@openomni/session";',
-      "imports @openomni/session",
+      'import * as Session from "@openomni/ledger";',
+      "imports @openomni/ledger",
     ],
     [
       "session re-export",
-      'export { SurfaceKey } from "@openomni/session";',
-      "imports @openomni/session",
+      'export { SurfaceKey } from "@openomni/ledger";',
+      "imports @openomni/ledger",
     ],
     [
       "dynamic session import",
-      'const { SurfaceKey } = await import("@openomni/session");',
-      "imports @openomni/session",
+      'const { SurfaceKey } = await import("@openomni/ledger");',
+      "imports @openomni/ledger",
     ],
     [
       "require of the kernel",
@@ -159,8 +159,8 @@ describe("channels band import boundary", () => {
     ],
     [
       "import-equals require",
-      'import session = require("@openomni/session");',
-      "imports @openomni/session",
+      'import session = require("@openomni/ledger");',
+      "imports @openomni/ledger",
     ],
     ["arbitrary npm package", 'import { z } from "zod";', "imports zod"],
     [

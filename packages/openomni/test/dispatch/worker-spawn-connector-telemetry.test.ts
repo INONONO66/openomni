@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { AppConnector, Execution } from "@openomni/protocol";
-import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
+import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/ledger";
 import { z } from "zod";
 import { PolicyEngine } from "@openomni/policy";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";

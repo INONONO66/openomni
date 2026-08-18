@@ -1,5 +1,5 @@
 import { PolicyDecision, type Command } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import type { DispatchPolicyRegistration } from "../../src/dispatch/policy-registration";
 

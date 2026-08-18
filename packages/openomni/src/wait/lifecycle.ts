@@ -1,5 +1,5 @@
 import { Operational, Wait } from "@openomni/protocol";
-import { WaitStore } from "@openomni/session";
+import { WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 /**

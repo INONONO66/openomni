@@ -2,7 +2,7 @@ import { createCompactionPolicy } from "@openomni/agent";
 import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@openomni/agent";
 import type { BusEvent } from "@openomni/protocol";
 import { Message, Operational } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session } from "@openomni/ledger";
 import { decorateAnchorRender, planDecoration } from "./anchor-render.js";
 import { z } from "zod";
 

@@ -1,5 +1,5 @@
 import type { Command, Communication, Ingress, Wait } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/session";
+import { ActorRegistry } from "@openomni/ledger";
 
 /**
  * THE sender matcher (#215): one core rule set — bearer tokenHash match plus

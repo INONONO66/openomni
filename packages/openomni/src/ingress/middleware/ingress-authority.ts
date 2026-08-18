@@ -1,6 +1,6 @@
 import { type Actor, Ingress, type Policy, PolicyDecision } from "@openomni/protocol";
 import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
-import type { ChannelGrantStore } from "@openomni/session";
+import type { ChannelGrantStore } from "@openomni/ledger";
 import type { CoordinatorLike } from "../coordinator-like";
 import { resolveTarget, targetKey } from "../target";
 import {

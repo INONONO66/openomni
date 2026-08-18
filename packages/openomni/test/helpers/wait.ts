@@ -1,5 +1,5 @@
 import type { Communication, Wait } from "@openomni/protocol";
-import type { PendingInteractionStore } from "@openomni/session";
+import type { PendingInteractionStore } from "@openomni/ledger";
 
 /** Shared Wait-domain fixture builders for openomni tests (#215). */
 

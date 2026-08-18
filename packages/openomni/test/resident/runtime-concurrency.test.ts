@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { Ingress } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { ResidentRuntime } from "../../src/resident/runtime";
 import { newTraceId } from "@openomni/telemetry";

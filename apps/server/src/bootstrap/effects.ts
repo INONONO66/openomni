@@ -6,7 +6,7 @@ import {
   type EffectDriver,
   type EffectEscalation,
 } from "@openomni/openomni";
-import { WorkItemStore } from "@openomni/session";
+import { WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 /**

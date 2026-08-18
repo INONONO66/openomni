@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import {
   createDefaultDispatchRuntime as createDefaultDispatchRuntimeProduction,

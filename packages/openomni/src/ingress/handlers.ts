@@ -4,7 +4,7 @@ import {
   type Execution,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { WorkItemAttemptRun, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { allocateWorkerSpawnAttempt } from "../dispatch/handlers/worker-work-item";
 import type { ResidentRuntime } from "../resident/runtime";

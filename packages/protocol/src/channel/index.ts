@@ -75,7 +75,7 @@ export namespace Channel {
 
   /**
    * Pure string codec for surface keys — the wire vocabulary channel
-   * drivers and routing share. Moved here from @openomni/session (#499
+   * drivers and routing share. Moved here from @openomni/ledger (#499
    * precursor): the codec is channel vocabulary; storage semantics
    * (register/claim/lookup) stay in the session surface-key store, which
    * imports this codec for format validation.

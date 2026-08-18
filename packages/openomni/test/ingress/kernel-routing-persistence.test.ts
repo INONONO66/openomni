@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BusPersistence, Storage } from "@openomni/session";
+import { BusPersistence, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   createMappedOwnerSession,

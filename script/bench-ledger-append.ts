@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // #510 — FULL-durability decision-append benchmark (receipt evidence).
 //
-// Measures the real append core (packages/session ledger sub-adapter over a
+// Measures the real append core (packages/ledger ledger sub-adapter over a
 // fresh SQLite file: PRAGMA synchronous=FULL on the decision connection,
 // write-path hash chain, CAS head receipt) in the two production shapes:
 //   - single-stream serialized appends (wait:/work: revision-bound CAS), and
@@ -17,7 +17,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Storage } from "../packages/session/src/index";
+import { Storage } from "../packages/ledger/src/index";
 
 function parseArgs(argv: readonly string[]): { outPath?: string; n: number } {
   let outPath: string | undefined;

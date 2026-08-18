@@ -1,5 +1,5 @@
 import type { AppConnector, Command, Execution, Model, WorkItem } from "@openomni/protocol";
-import { AppConnectorInstallationStore, WorkItemStore } from "@openomni/session";
+import { AppConnectorInstallationStore, WorkItemStore } from "@openomni/ledger";
 import type { ConnectorEndpointDriverOwner } from "../owners.js";
 import {
   projectConnectorCompletion,

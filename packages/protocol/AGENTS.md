@@ -51,11 +51,11 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
 - **Policy points**: `policy/point-registry.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema (`point-contract.ts`). Generic agent-loop `run.completion.pre` and WorkItem contract-closing `work.complete.pre` are distinct points. `Policy.PolicyPlan` (`plan.ts`) is the stamped per-task plan shape (#479). `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names and resolves only generic run timing; do not build new code on it.
 - **WorkerRun lifecycle**: `WorkerRun.Events.*` covers delegated run start, completion, failure, and cancellation.
-- **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/session`.
+- **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/ledger`.
 - **WorkItem namespace**: `work-item/index.ts` is the public facade. `work-item/schemas.ts` defines current-only `WorkItem.Info`; `completion-admission.ts` defines stable criteria, claims, observations, scoped results, invalidations, verification errors, effects, requests, admissions, and terminal receipts; Rows parse through `WorkItem.Info` directly; there is no historical upcast decoder (no pre-admission data exists). `work-item/events.ts` preserves the shipped `Completed` meaning and adds distinct request/admission/CompletedV2 descriptors. `work-item/status.ts` derives lifecycle status, and `work-item/hash.ts` owns WorkItem plus deterministic criterion identities.
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.
 - **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
-- **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/session`.
+- **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/ledger`.
 
 ## CONTRACT BOUNDARY
 
@@ -110,7 +110,7 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 - Adding a work-item field? Update `WorkItem.Info` in `work-item/schemas.ts`. If it affects status derivation, update `deriveStatus()` in `work-item/status.ts`.
 - Adding a work-item event? Extend `WorkItem.Events` in `work-item/events.ts` with a `BusEvent.define()` call.
 - Adding a new worker request or IPC field? Update `execution/`, `ipc/`, or `worker-bootstrap/` here first, then adapt coordinator/openomni/server callers.
-- Adding trace metadata? Update `trace/index.ts`; helper functions stay in `@openomni/session`.
+- Adding trace metadata? Update `trace/index.ts`; helper functions stay in `@openomni/ledger`.
 - This package builds to `dist/` — run `bun run build` after changes.
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._

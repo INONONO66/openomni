@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { PolicyEngine } from "@openomni/agent";
 import type { Message } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { findRegistration } from "../../src/execution-runtime/middleware-test-fixture";
 

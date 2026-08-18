@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 import {
   reflectCoordinatorResult as reflectCoordinatorResultProduction,
   type WorkerCompletionOptions,

@@ -5,7 +5,7 @@ import {
   type Model,
   type Policy,
 } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { WorkItemStore } from "@openomni/ledger";
 
 export type WorkerWorkItemRequest = {
   readonly prompt: string;

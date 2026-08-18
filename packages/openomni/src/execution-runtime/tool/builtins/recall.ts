@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session } from "@openomni/ledger";
 import { defineTool, errorResult, fromError, requireString, successResult } from "../define.js";
 
 /**

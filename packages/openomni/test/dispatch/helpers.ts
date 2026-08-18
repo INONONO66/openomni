@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import { WorkItem, type Command } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 
 export function command(
   action: string,

@@ -9,7 +9,7 @@ import * as Streams from "./streams.js";
  * #499 convergence: this namespace is THE `Ledger` authority vocabulary —
  * append-boundary types and the decision-fact stream registry. The runtime
  * verbs (`Ledger.append`, `Ledger.adoptStream`, ...) live in
- * `@openomni/session` ledger-core under the same name. Observation
+ * `@openomni/ledger` ledger-core under the same name. Observation
  * descriptors are NOT part of this namespace — they are `Noun.Events`
  * descriptors published via Bus.
  */

@@ -1,6 +1,6 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
 import { Command, PolicyDecision as Decision } from "@openomni/protocol";
-import { PendingInteractionStore, Storage } from "@openomni/session";
+import { PendingInteractionStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { requestedWaitAction, type RequestedWaitAction } from "../wait/index.js";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";

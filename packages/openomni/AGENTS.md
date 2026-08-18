@@ -1,6 +1,6 @@
 # packages/openomni
 
-Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@openomni/session`, and `@openomni/protocol` to own messaging/routing, access control, Resident/Worker orchestration, ledger/evidence gates, dispatch, and worker execution tooling. Lower packages provide primitives; this package decides product meaning.
+Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@openomni/ledger`, and `@openomni/protocol` to own messaging/routing, access control, Resident/Worker orchestration, ledger/evidence gates, dispatch, and worker execution tooling. Lower packages provide primitives; this package decides product meaning.
 
 ## Module Map
 
@@ -36,7 +36,7 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 - Messaging/access semantics live here. If a change decides target, session, run, principal, trust, grant, pending correlation, writeback, or response routing, implement it in `openomni`.
 - `ingress/` and `dispatch/` are implementation stages. New cross-boundary routing must not add another server-side or tool-side special case — use the shipped kernel `resolveRoute` pipeline (#464) and the existing dispatch stage.
 - Do not let `apps/server` inspect `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing. Server passes normalized facts; OpenOmni decides.
-- Do not let `packages/session` decide authority or match precedence. It may store and query records; OpenOmni owns lifecycle transitions that have product meaning.
+- Do not let `packages/ledger` decide authority or match precedence. It may store and query records; OpenOmni owns lifecycle transitions that have product meaning.
 - Do not let `packages/coordinator` decide actor/session authority. It executes primitive worker-process operations requested by this package.
 - Do not let `packages/agent` grow OpenOmni-specific durable lifecycle. Session-backed worker/background orchestration stays here.
 - The Resident never receives `child_agent`. Only Worker processes may use same-domain, context-sharing subagents.
@@ -62,9 +62,9 @@ Use these ownership boundaries when adding or moving code:
 
 ```
 agents/             → @openomni/protocol (Model.Ref only)
-resident/           → @openomni/session + @openomni/agent + @openomni/protocol
+resident/           → @openomni/ledger + @openomni/agent + @openomni/protocol
 policy/             → @openomni/protocol (pure label→plan resolution; consumed by dispatch)
-evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence), work-item/ (type-only: the admission port contract verifier-recorded-input implements)
+evidence/           → @openomni/ledger + @openomni/protocol (read-back → WorkItem evidence), work-item/ (type-only: the admission port contract verifier-recorded-input implements)
 ledger/             → evidence/ (canonical JSON snapshot boundary only); no orchestration deps
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → dispatch/ (DEFAULT_DISPATCH_MODEL), resident/ (type-only)
@@ -103,7 +103,7 @@ registry, completion admission, existing-agent messaging) live in
 ## What This Package Is Not
 
 - It is not the LLM provider layer. Use `@openomni/llm` for model access.
-- It is not the session package. Use `@openomni/session` for session CRUD, event log, worker runs, artifact storage, and indexed record stores. Keep access semantics here, not in session.
+- It is not the session package. Use `@openomni/ledger` for session CRUD, event log, worker runs, artifact storage, and indexed record stores. Keep access semantics here, not in session.
 - It is not the pure agent runtime. Use `@openomni/agent` when you only need the `ChatAgent` core or generic agent-loop primitives.
 - It is not the owner of provider-specific connector definitions, discovery, or installation UX. The current server connector surface under `apps/server/src/connector/` hosts provider-neutral process-driver and persisted-installation plumbing; first-party definitions and the unused discovery/registry modules were deleted, and the full installation lifecycle remains planned.
 

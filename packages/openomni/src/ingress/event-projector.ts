@@ -4,7 +4,7 @@ import {
   type Message,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createIngressAudit, summarizeText } from "./audit-envelope";
 import { extractText } from "./handlers";

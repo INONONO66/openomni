@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore, initialize } from "@openomni/session";
+import { Storage, WorkItemStore, initialize } from "@openomni/ledger";
 import { durableVerifierInput } from "../../src/evidence/verifier-recorded-input";
 
 /**

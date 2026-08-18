@@ -13,7 +13,7 @@
  * - the protocol build project derives one `.d.ts` per input, and when
  *   `dist/` exists the emitted declaration set matches exactly.
  *
- * `packages/openomni/bench` and `packages/session/bench` are intentionally
+ * `packages/openomni/bench` and `packages/ledger/bench` are intentionally
  * absent from the source roots: no tsconfig project claimed them before the
  * shared base existed, and changing compilation membership is a #501 non-goal.
  *
@@ -396,8 +396,8 @@ export function repoManifest(): Manifest {
       "packages/policy/test",
       "packages/protocol/src",
       "packages/protocol/test",
-      "packages/session/src",
-      "packages/session/test",
+      "packages/ledger/src",
+      "packages/ledger/test",
       "packages/telemetry/src",
       "packages/telemetry/test",
       "script",

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { PolicyEngine } from "@openomni/policy";
 import { type Execution, PolicyDecision, WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
 import {
   type ConnectorCompletionOptions,

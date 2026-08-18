@@ -1,6 +1,6 @@
 import type { Message, Policy } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
-import { Storage, TranscriptStore } from "@openomni/session";
+import { Storage, TranscriptStore } from "@openomni/ledger";
 import type { CanonicalPolicyRegistration, PolicyContext } from "@openomni/agent";
 import type { InjectionQueue } from "../injection-queue.js";
 
@@ -80,7 +80,7 @@ function contextString(
  * session's history across two sources. TranscriptStore.record commits each
  * fact and its message/part projection in one storage transaction — one
  * source of truth (see the writer census in
- * packages/session/src/session/transcript.ts).
+ * packages/ledger/src/session/transcript.ts).
  *
  * The attemptId is derived from the injected messageId: injected responses
  * arrive whole (no retries, no streaming), so one message = one attempt, and

@@ -1,5 +1,5 @@
 import { Wait as WaitProtocol, type Actor, type Wait } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/session";
+import { ActorRegistry } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { WaitService } from "../wait/index.js";
 import { Events } from "./events.js";

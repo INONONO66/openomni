@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/session";
+import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/ledger";
 import { findWaitCandidates } from "../../src/wait/index";
 import {
   buildAsk,

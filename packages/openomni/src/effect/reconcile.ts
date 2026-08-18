@@ -1,5 +1,5 @@
 import type { WorkItem } from "@openomni/protocol";
-import { EffectStore, WorkItemStore } from "@openomni/session";
+import { EffectStore, WorkItemStore } from "@openomni/ledger";
 import type { EffectIntent } from "./driver.js";
 import type { EffectManifest } from "./manifest.js";
 

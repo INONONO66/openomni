@@ -15,7 +15,7 @@ src/
 
 ## DEPENDENCIES
 
-Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`. This package is driver-band consumable as a published contract: driver-band packages (`channels`, `remote`, `browser`, `machines`, and successors, possibly from separate repositories) may depend on it, and it must never grow a kernel/ledger/policy/session import. Widening its dependency set requires Owner sign-off.
+Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`. This package is driver-band consumable as a published contract: driver-band packages (`channels`, `remote`, `browser`, `machines`, and successors, possibly from separate repositories) may depend on it, and it must never grow a kernel/ledger/policy import. Widening its dependency set requires Owner sign-off.
 
 ## CONTRACT
 
@@ -40,6 +40,6 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 
 ## ANTI-PATTERNS
 
-- Do NOT add `@openomni/session`/`@openomni/openomni`/`@openomni/policy` imports — the dep ratchet will fail.
+- Do NOT add `@openomni/ledger`/`@openomni/openomni`/`@openomni/policy` imports — the dep ratchet will fail.
 - Do NOT put message schemas here; they belong in `packages/protocol`.
 - Do NOT deep-import from `@openomni/ipc/src/*`; use the package barrel.

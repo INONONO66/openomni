@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BlacklistStore } from "@openomni/session";
+import { BlacklistStore } from "@openomni/ledger";
 import {
   getIngressEngine,
   makeEvent,

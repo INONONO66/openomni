@@ -1,5 +1,5 @@
 import type { Message, Model } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session } from "@openomni/ledger";
 import { createIngressAudit, summarizeText } from "./audit-envelope";
 
 // legacy marker from removed plan mode; filter from history to avoid leaking into model input

@@ -1,5 +1,5 @@
 import { Command, Execution, type Model, type WorkItem } from "@openomni/protocol";
-import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { WorkItemAttemptRun, WorkItemStore } from "@openomni/ledger";
 import { z } from "zod";
 import { VerifierRegistry } from "../../evidence/verifier-registry.js";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
