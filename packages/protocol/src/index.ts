@@ -14,6 +14,7 @@ export * from "./actor/index.js";
 export * from "./communication/index.js";
 export * from "./gateway/index.js";
 export * from "./ingress/index.js";
+export * from "./ingress/target.js";
 export * from "./policy/index.js";
 export * from "./artifact/index.js";
 export * from "./execution/index.js";

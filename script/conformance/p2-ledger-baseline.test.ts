@@ -39,10 +39,6 @@ import {
   isRetryExhausted,
 } from "../../packages/ledger/src/work-item/retry-policy";
 import {
-  waitViewOfPendingAsk,
-  waitViewOfPendingInteraction,
-} from "../../packages/openomni/src/wait/upcast";
-import {
   buildReplyInput,
   buildWaitCreate as buildSessionWaitCreate,
   captureStoreError,
@@ -1556,10 +1552,10 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
   test("upcast-on-read is deterministic and never materializes archive rows as active rows", () => {
     const record = seedFrozenPendingAsk("ask-upcast", { status: "ambiguous" });
 
-    const first = waitViewOfPendingAsk(record);
+    const first = Wait.waitViewOfPendingAsk(record);
     const reread = PendingAskStore.get("ask-upcast");
     if (!reread) throw new Error("frozen row must stay readable");
-    const second = waitViewOfPendingAsk(reread);
+    const second = Wait.waitViewOfPendingAsk(reread);
 
     // Deterministic: the same archived row always upcasts to the same view.
     expect(second).toEqual(first);
@@ -1685,10 +1681,10 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
       resolvedAt: 120,
     });
 
-    const first = waitViewOfPendingInteraction(record);
+    const first = Wait.waitViewOfPendingInteraction(record);
     const reread = PendingInteractionStore.get("pi-upcast");
     if (!reread) throw new Error("frozen row must stay readable");
-    const second = waitViewOfPendingInteraction(reread);
+    const second = Wait.waitViewOfPendingInteraction(reread);
 
     // Deterministic: the same archived row always upcasts to the same view.
     expect(second).toEqual(first);

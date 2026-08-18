@@ -1,5 +1,12 @@
-import { Ingress } from "@openomni/protocol";
+import { Ingress } from "./index.js";
 
+/**
+ * Pure target resolution over the Ingress vocabulary (#707 hoist): both
+ * planes (ingress routing and brain-side projection/authority labels) fold
+ * the same explicit-target > meta-target > resident-default precedence and
+ * the same stable target key. No store access, no defaulting judgment —
+ * absent targets are a protocol fact (resident), not a routing decision.
+ */
 export function resolveTarget(event: {
   target?: Ingress.Target;
   meta?: { target?: Ingress.Target };

@@ -1,12 +1,6 @@
-import { Command, Execution, type Wait } from "@openomni/protocol";
+import { Command, Execution, Wait } from "@openomni/protocol";
 import type { PendingInteractionStore } from "@openomni/ledger";
-import {
-  dispatchEvidence,
-  findWaitCandidates,
-  requestedWaitAction,
-  responderCandidates,
-  targetsOfPendingInteraction,
-} from "../wait/index.js";
+import { findWaitCandidates } from "../wait/index.js";
 
 // Correlation lookup is owned by wait/correlation.ts (THE single lookup);
 // this module only routes a single FROZEN legacy PendingInteraction match
@@ -83,7 +77,10 @@ function pendingInteractionSenderMatches(
   match: PendingInteractionStore.Record,
 ): boolean {
   return (
-    responderCandidates(targetsOfPendingInteraction(match), dispatchEvidence(command)).length === 1
+    Wait.responderCandidates(
+      Wait.targetsOfPendingInteraction(match),
+      Wait.dispatchEvidence(command),
+    ).length === 1
   );
 }
 
@@ -102,7 +99,7 @@ export function routePendingInteraction(
   // The "invalid" sentinel (explicit but unparseable action) is disallowed
   // like any action outside allowedActions: the command stays unrouted and
   // the default dispatch authority denies it fail-closed.
-  const action = requestedWaitAction(command.payload);
+  const action = Wait.requestedWaitAction(command.payload);
   if (action === "invalid" || !match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
     return Command.Request.parse({

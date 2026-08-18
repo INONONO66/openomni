@@ -1,6 +1,5 @@
-import type { Communication, Wait } from "@openomni/protocol";
+import { Wait, type Communication } from "@openomni/protocol";
 import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/ledger";
-import { waitViewOfPendingAsk, waitViewOfPendingInteraction } from "./upcast.js";
 
 /**
  * THE one correlation lookup (#215): the durable wait table is consulted
@@ -177,7 +176,7 @@ function resolveLegacyTier(input: WaitCorrelationInput): WaitResolution | undefi
         rawCandidates.push({
           source: "pending_interaction",
           key: `pending_interaction:${record.id}`,
-          wait: waitViewOfPendingInteraction(record),
+          wait: Wait.waitViewOfPendingInteraction(record),
           record,
         });
       }
@@ -187,7 +186,7 @@ function resolveLegacyTier(input: WaitCorrelationInput): WaitResolution | undefi
         rawCandidates.push({
           source: "pending_ask",
           key: `pending_ask:${record.id}`,
-          wait: waitViewOfPendingAsk(record),
+          wait: Wait.waitViewOfPendingAsk(record),
           record,
         });
       }

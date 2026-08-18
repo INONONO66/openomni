@@ -1,5 +1,4 @@
-import { Actor, type Ingress } from "@openomni/protocol";
-import { resolveTarget } from "../target";
+import { Actor, resolveTarget, type Ingress } from "@openomni/protocol";
 
 export type ActorRecord = Record<string, unknown>;
 

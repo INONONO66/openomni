@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Command } from "@openomni/protocol";
+import { Command, Wait } from "@openomni/protocol";
 import {
   ActorRegistry,
   Session,
@@ -11,13 +11,7 @@ import {
   WorkItemStore,
 } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import {
-  WaitService,
-  dispatchEvidence,
-  findWaitCandidates,
-  responderCandidates,
-  targetsOfWait,
-} from "../../src/wait/index.js";
+import { WaitService, findWaitCandidates, targetsOfWait } from "../../src/wait/index.js";
 import type { SenderTargetGrant } from "../../src/messaging/schema.js";
 import { type OutboundMessage, createExistingAgentMessaging } from "../../src/messaging/send.js";
 
@@ -181,9 +175,9 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     actor: { kind: "human", actorId: input.actorId },
     submittedAt: input.at,
   });
-  const candidates = responderCandidates(
+  const candidates = Wait.responderCandidates(
     targetsOfWait(resolution.candidate.wait),
-    dispatchEvidence(command),
+    Wait.dispatchEvidence(command),
   );
   return WaitService.attachReply(
     resolution.candidate.wait.id,

@@ -69,7 +69,11 @@ Brain-side consumption rules (normative, closes the known gap):
 
 Grant-write validation (perimeter): a channel grant whose `defaultTier`
 materializes strangers may never carry `inboundTreatment: "full_access"` —
-rejected at grant write, not at delivery time. Accepted residual: the
+rejected at grant write, not at delivery time. Deferred to the first
+Owner-write surface (#708): measured at cut, zero production writers exist
+for actor/blacklist/channel-grant rows — the sole-writer property is vacuous
+today (recorded), and the rejection has no write seam to attach to until
+that surface lands. Accepted residual: the
 unconditional recency window (§5) means admitted external text enters run
 context regardless of engagement match; the mitigation is taint framing plus
 the evidence tier, not exclusion.
@@ -82,8 +86,9 @@ The gateway resolves **physical context** only, by deterministic precedence:
    Wait **and the resolved sender is one of the Wait's
    `expectedResponders`** → that Wait's owner session, with `waitContext`
    attached. The responder gate is perimeter-side and runs BEFORE
-   `waitContext` attachment (preserves the current
-   `wait/matcher.ts` pinned-target invariant): a correlated message from a
+   `waitContext` attachment (preserves the
+   pinned-target invariant of the wait matcher core — protocol vocabulary
+   since the #707 slice-1 hoist): a correlated message from a
    non-responder never carries `waitContext` — it degrades to an ordinary
    delivery on the container session (rule 3) so a third party replying into
    an awaited thread cannot hijack the wait.
@@ -234,15 +239,49 @@ stays brain-side outside the loop — the harness never self-grades.
 ## 6. Migration inventory (measured at main 5a0610b7; re-verify at cut)
 
 Move `openomni → channels`: the **routing plane of `ingress/`**
-(resolve-route, routing-resolution, authority middleware, actor-resolver,
-event-projector), `messaging/`, `wait/` service (correlation/matcher/
-lifecycle/requested-action/upcast), perimeter half of `dispatch/actor.ts`
+(resolve-route's external arm, routing-resolution, authority middleware,
+actor-resolver), `messaging/`, the effectful `wait/` service
+(correlation/lifecycle; the pure parts are protocol vocabulary since the
+slice-1 hoist below), perimeter half of `dispatch/actor.ts`
 (the trustTier passthrough; `assigned_worker` derivation from WorkItem
 attempt facts stays brain-side). The **session plane of `ingress/` stays
 brain-side** — `session-bridge.ts` (reads session content and builds LLM
-messages: moving it would be the S1 violation), `session-resolver.ts`,
+messages: moving it would be the S1 violation),
 `audit-envelope.ts`, and the execution half of `engine.ts`/`handlers.ts`.
 The exact per-file map is a stage-2 deliverable, re-measured at cut time.
+
+Re-measured at cut (#707 slice 1, 2026-08-19) — corrections to the
+inventory above:
+
+- **event-projector: reclassified brain-side.** It writes session content
+  (`Session.addMessage`/`addPart`): moving it would be the S1 violation.
+  It is the Deliver consumer's projection step, not perimeter routing.
+- **session-resolver: splits.** The gateway mints the sessionId and claims
+  the surface↔session map (its own domain, record-before-act); the brain
+  lazily materializes the session row on first Deliver (idempotent
+  create-if-absent). The old atomic create+claim pair was itself an S2
+  violation — one call writing a perimeter surface and a brain surface —
+  and the split dissolves it. A crash between claim and deliver converges
+  by re-delivery.
+- **routing-execution: splits.** The wait/pending_ask resumption arms move
+  (perimeter wait writes); the pending-interaction arm stays brain-side
+  (dispatch work placement, §8.5).
+- **internal mode (cron, resident.ask) never crosses the perimeter.** The
+  brain keeps a small internal resolver (the internal arm of resolveRoute)
+  and its own route.decided recording path; the gateway router owns
+  external mode only.
+- **wait module.** The pure parts (requested-action parser, upcast views,
+  the matcher core — with the ActorRegistry delivery-endpoint lookup
+  restructured into a caller-resolved input) are hoisted to protocol in
+  this slice; the effectful WaitService moves to the gateway router in
+  slice 2. Brain-side READS of the frozen pending-* stores are recorded
+  residue: writer domains are machine-enforced, frozen reads tolerated.
+- **ledger raw-Storage bypass.** channels may consume only the named
+  perimeter store surfaces plus a scoped append port — the S8-evolved
+  banding check that enforces this is a slice-2 deliverable.
+- **§2a grant-write validation: deferred to #708** (first Owner-write
+  surface) — zero production writers exist today for
+  actor/blacklist/channel-grant rows (vacuous sole-writer, recorded).
 
 Perimeter stores do NOT move to channels (§4 SSOT): `actor/`, `blacklist/`,
 `channel-grant/`, `wait/` store, `surface-key/`, `pending-ask/`,

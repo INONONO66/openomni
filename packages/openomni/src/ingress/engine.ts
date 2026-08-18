@@ -1,6 +1,7 @@
 import {
   Ingress as IngressNamespace,
   Ingress,
+  targetKey,
   type Policy,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
@@ -20,7 +21,6 @@ import {
   requireRoutedDecision,
 } from "./routing-execution";
 import { resolveAndRecordRoute } from "./routing-resolution";
-import { targetKey } from "./target";
 
 export type { CoordinatorLike };
 

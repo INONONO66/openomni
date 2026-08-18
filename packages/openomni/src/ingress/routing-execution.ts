@@ -1,13 +1,7 @@
-import { Command, type Ingress } from "@openomni/protocol";
+import { Command, Wait, type Ingress } from "@openomni/protocol";
 import type { TraceContext } from "@openomni/protocol";
 import { submitPinnedPendingInteraction, type DispatchRuntime } from "../dispatch/runtime.js";
-import {
-  WaitService,
-  ingressEvidence,
-  responderCandidates,
-  targetsOfPendingInteraction,
-  targetsOfWait,
-} from "../wait/index.js";
+import { WaitService, targetsOfWait } from "../wait/index.js";
 import { IngressRoutingError, type KernelRouteResolution } from "./routing-resolution.js";
 
 type RoutedDecision = Extract<Ingress.RoutingDecisionPayload, { readonly outcome: "route" }>;
@@ -133,9 +127,9 @@ function senderMatchesPendingInteraction(
   event: Ingress.InboundEvent,
   wait: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_interaction" }>,
 ): boolean {
-  const candidates = responderCandidates(
-    targetsOfPendingInteraction(wait.record),
-    ingressEvidence(event, wait.correlation),
+  const candidates = Wait.responderCandidates(
+    Wait.targetsOfPendingInteraction(wait.record),
+    Wait.ingressEvidence(event, wait.correlation),
   );
   return candidates.length === 1;
 }
@@ -260,9 +254,9 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
         wait.record.id,
         {
           replyKey: resolution.event.id,
-          responderCandidates: responderCandidates(
+          responderCandidates: Wait.responderCandidates(
             targetsOfWait(wait.record),
-            ingressEvidence(resolution.event, wait.correlation),
+            Wait.ingressEvidence(resolution.event, wait.correlation),
           ),
           messageId: resolution.event.id,
           at,

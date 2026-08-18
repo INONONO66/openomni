@@ -1,14 +1,16 @@
-import { Wait, type Communication } from "@openomni/protocol";
+import type { Communication } from "../communication/index.js";
+import { Record, type Status } from "./schema.js";
 
 /**
  * Read-only Wait views over frozen legacy rows (#215): persisted
  * PendingInteraction / PendingAsk records map onto the single Wait vocabulary
  * so correlation resolves every waiting representation through one shape.
  * This module NEVER writes legacy stores — destructive migration is a #215
- * non-goal and legacy rows stay readable exactly as persisted.
+ * non-goal and legacy rows stay readable exactly as persisted. Pure protocol
+ * folds: record in, view out, no store access.
  */
 
-function pendingInteractionStatus(status: Communication.PendingInteraction.Status): Wait.Status {
+function pendingInteractionStatus(status: Communication.PendingInteraction.Status): Status {
   switch (status) {
     case "open":
       return "open";
@@ -24,8 +26,8 @@ function pendingInteractionStatus(status: Communication.PendingInteraction.Statu
 
 export function waitViewOfPendingInteraction(
   record: Communication.PendingInteraction.Record,
-): Wait.Record {
-  return Wait.Record.parse({
+): Record {
+  return Record.parse({
     id: record.id,
     ownerRef: { kind: "session", id: record.sessionId },
     // Legacy rows predate the awaited-message ledger; the synthetic origin id
@@ -52,7 +54,7 @@ export function waitViewOfPendingInteraction(
   });
 }
 
-function pendingAskStatus(status: Communication.PendingAsk.Status): Wait.Status {
+function pendingAskStatus(status: Communication.PendingAsk.Status): Status {
   switch (status) {
     case "open":
     // Legacy "ambiguous" asks stayed answerable (answer() accepted them), so
@@ -68,8 +70,8 @@ function pendingAskStatus(status: Communication.PendingAsk.Status): Wait.Status 
   }
 }
 
-export function waitViewOfPendingAsk(record: Communication.PendingAsk.Record): Wait.Record {
-  return Wait.Record.parse({
+export function waitViewOfPendingAsk(record: Communication.PendingAsk.Record): Record {
+  return Record.parse({
     id: record.id,
     ownerRef: { kind: "session", id: record.originSessionId },
     originMessageId: record.correlation.externalMessageId ?? `legacy:pending_ask:${record.id}`,

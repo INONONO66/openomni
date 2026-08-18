@@ -1,16 +1,17 @@
-import { Actor, Ingress, Wait, type Communication } from "@openomni/protocol";
+import {
+  Actor,
+  Ingress,
+  Wait,
+  resolveTarget,
+  targetKey,
+  type Communication,
+} from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import {
-  findWaitCandidates,
-  requestedWaitAction,
-  type RequestedWaitAction,
-  type WaitResolution,
-} from "../wait/index.js";
+import { findWaitCandidates, type WaitResolution } from "../wait/index.js";
 import { applyChannelGrantTreatment } from "./middleware/ingress-authority.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { IngressSessionResolver } from "./session-resolver.js";
-import { resolveTarget, targetKey } from "./target.js";
 
 export type IngressRoutingErrorCode =
   | "route_blocked"
@@ -62,13 +63,13 @@ type KernelWaitExecution =
       // feeds pendingAsk queries, never this tier) — the old optionality
       // weakened the sender-match evidence below its real invariant.
       correlation: ScopedCorrelation;
-      requestedAction: RequestedWaitAction;
+      requestedAction: Wait.RequestedWaitAction;
       record: Wait.Record;
     }>
   | Readonly<{
       kind: "pending_interaction";
       correlation: ScopedCorrelation;
-      requestedAction: RequestedWaitAction;
+      requestedAction: Wait.RequestedWaitAction;
       record: Communication.PendingInteraction.Record;
     }>
   | Readonly<{
@@ -143,7 +144,7 @@ function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
 function kernelWaitExecution(
   resolution: WaitResolution,
   correlation: ScopedCorrelation | undefined,
-  requestedAction: RequestedWaitAction,
+  requestedAction: Wait.RequestedWaitAction,
 ): KernelWaitExecution {
   switch (resolution.kind) {
     case "none":
@@ -283,7 +284,7 @@ function blacklistState(
 function rejectUnsupportedPendingInteractionAction(
   decision: Ingress.RoutingDecisionPayload,
   wait: RouteState["wait"],
-  requestedAction: RequestedWaitAction,
+  requestedAction: Wait.RequestedWaitAction,
 ): Ingress.RoutingDecisionPayload {
   if (
     decision.outcome !== "route" ||
@@ -317,7 +318,7 @@ function resolveKernelRoute<Event extends Ingress.InboundEvent>(
   traceId: string,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
-  const requestedAction = requestedWaitAction(event.payload);
+  const requestedAction = Wait.requestedWaitAction(event.payload);
   const gatheredWait = findWaitCandidates({
     ...(correlation === undefined ? {} : { correlation }),
     externalMessageId: event.id,

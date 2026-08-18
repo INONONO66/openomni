@@ -1,4 +1,4 @@
-import { Wait } from "@openomni/protocol";
+import { AllowedAction } from "./schema.js";
 
 /**
  * The wait action an inbound payload requests (#548), as a three-way parse:
@@ -12,12 +12,12 @@ import { Wait } from "@openomni/protocol";
  * matched worker context. One parser serves ingress and dispatch so the two
  * phases can never disagree about what a payload asked for.
  */
-export type RequestedWaitAction = Wait.AllowedAction | "invalid";
+export type RequestedWaitAction = AllowedAction | "invalid";
 
 export function requestedWaitAction(payload: unknown): RequestedWaitAction {
   if (payload === null || typeof payload !== "object" || !("action" in payload)) {
     return "report_result";
   }
-  const action = Wait.AllowedAction.safeParse(payload.action);
+  const action = AllowedAction.safeParse(payload.action);
   return action.success ? action.data : "invalid";
 }

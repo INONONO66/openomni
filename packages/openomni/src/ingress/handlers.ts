@@ -1,6 +1,7 @@
 import {
   Ingress,
   Operational,
+  resolveTarget,
   type Execution,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
@@ -10,7 +11,6 @@ import { allocateWorkerSpawnAttempt } from "../dispatch/handlers/worker-work-ite
 import type { ResidentRuntime } from "../resident/runtime";
 import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
-import { resolveTarget } from "./target";
 
 /**
  * THE canonical inbound payload-text parser: a string payload is the text, a
