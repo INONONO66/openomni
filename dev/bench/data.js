@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787075554632,
+  "lastUpdate": 1787077832923,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56291,6 +56291,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 515025,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e0e33987fc695b3374928e6d3d49c0e16845e76",
+          "message": "feat(openomni): deterministic anchor render enrichment (#716) (#727)\n\n* feat(openomni): deterministic anchor render enrichment (#716)\n\nCompaction-design L6. The persistence wrapper now decorates the anchor's\nmodel-facing render with three deterministic sections before persisting and\nbefore the effect returns — the summarizer contributes no byte to any of\nthem:\n\n- Files table derived mechanically from the session store's recorded tool\n  calls (read/glob/grep.search vs write/edit, modified wins, row-capped) —\n  the category every published probe evaluation fails when delegated to\n  summarization, solved here by reading the ledger projection instead.\n- Verbatim quotes of user text the preserve budget dropped from the window\n  (newest-first within a fixed quote budget; the remainder is counted,\n  never paraphrased) — design principle 2's quotation clause, injected at\n  render time from the seam's own frozen inputs.\n- Goal recitation: the latest surviving user message, quoted verbatim at\n  the render tail (mid-context collapse mitigation).\n\nIdentity is untouched: decoration rewrites only the part text; the metadata\nrecord (compactionAnchor/anchorBody/keptWindow) is byte-identical, so merge\nthreading, hydration, and the L3 record see exactly what they saw before —\npinned in the production-shaped e2e (raw anchorBody survives, decorated\nrender served on resume). Decoration failure is the same visible fail-open\nclass as persistence failure; window and store always carry the same render.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,openomni): reclaim-bound decoration (review FAIL fix)\n\nAdversarial review round 1 returned FAIL with an empirical probe: the\ndecoration grew a guard-passing cut past its pre-cut size (80k -> 160k\napplied window) because the core's progress guard compared sizes BEFORE the\nwrapper decorated, the 8k quote budget exempted the first quote entirely\n(a 50k dropped message quoted in full), and the goal recitation duplicated\nan unbounded newest user message.\n\nFixes:\nF1/F2/F3 — the whole decoration is now RECLAIM-BOUND: planDecoration\ncomputes the reclaim from the seam's own inputs and returns undefined below\na floor; total budget = reclaim/2 (applied window stays strictly smaller by\nat least reclaim/2); quotes have no first-quote exemption (over-budget text\nis counted, never kept); the goal is a capped excerpt labeled as such (the\nfull text is in the window — recitation is positional, not a second copy).\nPinned: growth < reclaim property test, 50k first-quote regression, tiny-\nreclaim returns undefined.\n\nF4 — prompt.inject_message user messages now carry policyInjected part\nmetadata (core, identity fact), and user-speech derivation excludes them:\na budget banner can no longer be recited as the user's goal. Pinned.\n\nF5 — dropped-twin detection is a multiset diff (duplicate text loses no\nquote, pinned); quote lifetime (one epoch) stated in the module doc and\nimplementation-status — long-term carriage is the summarizer's merge plus\nthe store's originals.\n\nF7/F8 — table header says what it is (builtin file-tools only; MCP/bash\nuntracked) and is char-capped; only the anchor slot is swapped in the\neffect (no blanket zod-normalized clones); decoration failure returns the\noriginal decision object.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): header drift in e2e pin + un-export decoration budget\n\nThe e2e pinned the old section header; decorationBudget is internal.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,openomni): rendered-size decoration budget (review round 2)\n\nRound-2 residual MEDIUM: the invariant charged raw text while the window\npays rendered bytes — probe C grew a 600-char-reclaim window by 1,904 chars\nvia the uncharged table, '> ' prefixes, and headers. decorateAnchorRender\nnow charges RENDERED section sizes (joiners included) against the reclaim-\nbound budget, dropping whole sections in reverse priority order (quotes >\ngoal > table); pinned with the probe-C shape (40 long-path table rows +\nnewline-heavy quote: growth <= budget <= reclaim/2).\n\nLOW residuals closed: run.continue_with_prompt and prompt.append_context\nuser messages now carry policyInjected (all four producer sites tagged),\nand provenance survives resume — keptWindow entries carry the flag and\nhydration maps it back to partMetadata, so a replayed nudge cannot become\na later epoch's 'goal'.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T18:29:19Z",
+          "tree_id": "89cb8bfe48cf5b0c2bc83b626b9e488018341f98",
+          "url": "https://github.com/INONONO66/openomni/commit/6e0e33987fc695b3374928e6d3d49c0e16845e76"
+        },
+        "date": 1787077831928,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 671,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6212,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9908,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2627,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2981,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2477,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16142,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8478,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1020,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 902,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1527,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 770,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46137,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2471,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518641,
             "unit": "ns/op"
           }
         ]
