@@ -124,6 +124,8 @@ jobs:
         working-directory: apps/server
       - name: Test (conformance)
         run: bun test --timeout 15000 script/conformance
+      - name: Test (tsconfig inheritance verifier)
+        run: bun test --timeout 15000 script/verify-tsconfig-inheritance.test.ts
       - name: Coverage ratchet
         run: bun run script/check-coverage-ratchet.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -181,6 +183,7 @@ jobs:
           bun run script/check-deps.ts --self-test
       - run: bun run script/check-dead-exports.ts
       - run: bun run script/check-import-cycles.ts
+      - run: bun run script/verify-tsconfig-inheritance.ts
       - run: bun run script/check-ledger-schema-drift.ts
       - run: bun run script/report-source-metrics.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
