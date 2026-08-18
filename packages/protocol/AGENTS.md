@@ -20,6 +20,7 @@ src/
 ├── dispatch/             # Dispatch.Command / Actions / ActorContext / target schemas
 ├── error/                # NamedError factory + built-in error classes (incl. WorkerDeliveryError, #478)
 ├── event/                # Typed event descriptors: agent-execution, ingress, llm, mcp, operational, policy, tool
+├── gateway/              # Gateway.Deliver / Send / WaitControl contracts + ReplyGrantRule (gateway stage 0, #706 — the channels↔openomni seam)
 ├── execution/            # Execution.Request / Result contracts + Execution.Driver command face (#478)
 ├── ingress/              # InboundEvent discriminated union (DirectEvent | InternalEvent), AgentDef, IngressResult, ResolvedInboundEvent
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
@@ -114,4 +115,4 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
 
-_2026-08-19: gateway stage 0 (docs/gateway-design.md §2) will add `Gateway.Deliver` / `Gateway.Send` contract schemas and the perimeter/conduct trust vocabulary here; perimeter store row schemas migrate here under the SSOT directive. Target only — not yet wired._
+_2026-08-19: gateway stage 0 (#706) landed `gateway/` — `Gateway.Deliver`/`Send`/`WaitControl` contracts, `ReplyGrantRule`, perimeter/conduct trust vocabulary (docs/gateway-design.md §2–§3). `openomni/messaging/schema.ts` re-exports the Send vocabulary from here; grant EVALUATION stays above protocol (contract boundary). Wiring lands at gateway stage 2+._
