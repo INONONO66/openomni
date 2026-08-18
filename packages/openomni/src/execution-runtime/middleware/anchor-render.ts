@@ -38,7 +38,7 @@ const MIN_RECLAIM_FOR_DECORATION_CHARS = 400;
  * decoration is capped at half the reclaimed chars — the applied window
  * stays strictly smaller than the pre-cut window by at least reclaim/2.
  */
-export function decorationBudget(beforeChars: number, afterChars: number): number {
+function decorationBudget(beforeChars: number, afterChars: number): number {
   const reclaimed = beforeChars - afterChars;
   if (reclaimed < MIN_RECLAIM_FOR_DECORATION_CHARS) return 0;
   return Math.floor(reclaimed / 2);

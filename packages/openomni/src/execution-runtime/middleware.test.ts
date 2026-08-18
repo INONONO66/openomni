@@ -332,7 +332,9 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     // L6: the render carries the deterministic goal recitation — produced by
     // the wrapper from verbatim window text, NOT by the summarizer (whose
     // constant output is "checkpoint after cut" and nothing else).
-    expect(window[0]?.content).toContain("## Current goal (verbatim, latest user message)");
+    expect(window[0]?.content).toContain(
+      "## Current goal (latest user message; full text is in the window)",
+    );
     // Anchor identity survived decoration: the record still carries the raw body.
     expect(window[0]?.partMetadata?.anchorBody).toBe("checkpoint after cut");
 
