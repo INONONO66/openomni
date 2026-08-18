@@ -106,6 +106,7 @@ export namespace Compaction {
       result: CompactionResult,
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
       elidedChars: number,
+      anchored?: boolean,
     ): CompactionResult => {
       events.publish(AgentExecution.CompactionCompleted, {
         ...identity,
@@ -115,6 +116,7 @@ export namespace Compaction {
         messagesAfter: result.messages.length,
         removedCount: result.removedCount,
         elidedChars,
+        ...(anchored === undefined ? {} : { anchored }),
       });
       return result;
     };
@@ -147,6 +149,7 @@ export namespace Compaction {
       result: CompactionResult,
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
       elidedChars: number,
+      anchored?: boolean,
     ) => CompactionResult,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
@@ -280,6 +283,16 @@ export namespace Compaction {
             );
       }
       const compacted = [...anchorMessages, ...preservedUsers, ...toKeep];
+      // Progress guard (review #721 M1): the rebuilt window must be strictly
+      // smaller than what the seam received, or committing it would count as
+      // progress toward the #651 disarm while reclaiming nothing — re-arming
+      // the yield (and paying a summarizer call) every turn, forever. A
+      // no-progress rebuild is a recorded non-action, not a cut.
+      if (estimateContentChars(compacted) >= estimateContentChars(working)) {
+        return elidedChars > 0
+          ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+          : finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
+      }
       return finish(
         {
           messages: compacted,
@@ -288,6 +301,7 @@ export namespace Compaction {
         },
         "cut",
         elidedChars,
+        anchorMessages.length > 0,
       );
     }
 
@@ -301,6 +315,7 @@ export namespace Compaction {
       },
       "cut",
       elidedChars,
+      false,
     );
   }
 }
@@ -351,6 +366,10 @@ function latestAnchorBody(span: readonly Message.WithParts[]): string | undefine
   for (let index = span.length - 1; index >= 0; index -= 1) {
     const message = span[index];
     if (message === undefined) continue;
+    // One identity, one definition (review #721 M3): only what
+    // isAnchorMessage accepts may thread its body — an assistant-role part
+    // wearing the metadata is content, never state.
+    if (!isAnchorMessage(message)) continue;
     for (const part of message.parts) {
       if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
       const body = part.metadata?.anchorBody;
@@ -363,9 +382,27 @@ function latestAnchorBody(span: readonly Message.WithParts[]): string | undefine
 }
 
 function userTextChars(message: Message.WithParts): number {
+  // All content weighs against the budget (review #721 M4): a user-role
+  // message bulked by a tool output must not ride through a 10-char budget
+  // as if free.
   let chars = 0;
   for (const part of message.parts) {
     if (part.type === "text") chars += part.text.length;
+    else if (part.type === "tool" && part.state.status === "completed") {
+      chars += part.state.output.length;
+    }
+  }
+  return chars;
+}
+
+/**
+ * Window-size proxy for the progress guard: the same content classes the
+ * model projection actually resends (text and completed tool outputs).
+ */
+function estimateContentChars(span: readonly Message.WithParts[]): number {
+  let chars = 0;
+  for (const message of span) {
+    chars += userTextChars(message);
   }
   return chars;
 }

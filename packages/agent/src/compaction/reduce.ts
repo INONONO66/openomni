@@ -48,6 +48,10 @@ export function elideToolOutputs(
 
   const reduced = messages.map((message, index) => {
     if (index >= cutoff) return message;
+    // User-role messages are never rewritten, tool parts included: the
+    // verbatim-preservation invariant (compaction-design principle 2) is a
+    // property of the whole message, not just its text parts.
+    if (message.info.role === "user") return message;
     let touched = false;
     const parts = message.parts.map((part) => {
       if (part.type !== "tool" || part.state.status !== "completed") return part;

@@ -86,6 +86,14 @@ export namespace AgentExecution {
       messagesAfter: z.number(),
       removedCount: z.number(),
       elidedChars: z.number(),
+      /**
+       * Cut outcomes only: whether an anchor render heads the kept window.
+       * An unanchored cut drops assistant/tool context with no checkpoint —
+       * legal (preserved users still head the window) but a different loss
+       * class than an anchored cut, so it must not masquerade as one.
+       * Upcast-on-read: absent on rows recorded before the field existed.
+       */
+      anchored: z.boolean().optional(),
       error: z.string().optional(),
     }),
     { visibility: "internal" },

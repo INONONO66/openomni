@@ -37,6 +37,10 @@ function makeUserMessage(text: string): Message.WithParts {
 function makeAssistantMessage(text: string): Message.WithParts {
   const id = nextId("assistant-message");
   const sessionID = "test";
+  // Realistic bulk: the progress guard (review #721 M1) rightly refuses a
+  // cut whose anchor render outweighs what it drops — production assistant
+  // turns are never 2 chars, so fixtures must not be either.
+  const bulked = `${text}\n${"filler ".repeat(50)}`;
   const info: Message.AssistantMessage = {
     id,
     sessionID,
@@ -55,7 +59,7 @@ function makeAssistantMessage(text: string): Message.WithParts {
     sessionID,
     messageID: id,
     type: "text",
-    text,
+    text: bulked,
   };
   return { info, parts: [part] };
 }
@@ -614,6 +618,96 @@ describe("Compaction", () => {
       // Budget 100 < 500: newest kept anyway; the older user no longer fits.
       expect(texts).toContain(huge);
       expect(texts).not.toContain("old-user");
+    });
+
+    it("refuses a zero-progress cut instead of reporting it as compaction (review M1)", async () => {
+      let called = 0;
+      // All-user span within budget: the rebuild would be [same users, tail]
+      // — not one char smaller. Committing it would count as progress toward
+      // the #651 disarm while reclaiming nothing, so it must be a recorded
+      // non-action, and the summarizer must not be paid for it.
+      const result = await Compaction.compact(
+        [
+          makeUserMessage("u0"),
+          makeUserMessage("u1"),
+          makeUserMessage("u2"),
+          makeUserMessage("u3"),
+          makeUserMessage("tail-1"),
+          makeAssistantMessage("tail-2"),
+        ],
+        {
+          ...opts,
+          onSummarize: async () => {
+            called += 1;
+            return "never";
+          },
+        },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      expect(called).toBe(0);
+      expect(result.compacted).toBe(false);
+      expect(result.removedCount).toBe(0);
+      expect(result.messages).toHaveLength(6);
+    });
+
+    it("records anchored=false when a cut commits without an anchor render", async () => {
+      const completed: Array<{ outcome: string; anchored?: boolean }> = [];
+      const unsubscribe = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
+        completed.push(event as unknown as { outcome: string; anchored?: boolean });
+      });
+      try {
+        // Whitespace merge + no prior anchor: the assistant span is dropped
+        // with only preserved users heading the window — a different loss
+        // class than an anchored cut, and the record must say so.
+        const result = await Compaction.compact(
+          [
+            makeUserMessage("u0"),
+            makeAssistantMessage("a1"),
+            makeAssistantMessage("a2"),
+            makeUserMessage("tail-u"),
+            makeAssistantMessage("tail-a"),
+          ],
+          { ...opts, onSummarize: async () => "   " },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        );
+        await Bun.sleep(0);
+        expect(result.compacted).toBe(true);
+        const cut = completed.find((event) => event.outcome === "cut");
+        expect(cut?.anchored).toBe(false);
+      } finally {
+        unsubscribe();
+      }
+    });
+
+    it("records anchored=true when the anchor render heads the kept window", async () => {
+      const completed: Array<{ outcome: string; anchored?: boolean }> = [];
+      const unsubscribe = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
+        completed.push(event as unknown as { outcome: string; anchored?: boolean });
+      });
+      try {
+        await Compaction.compact(
+          [
+            makeUserMessage("u0"),
+            makeAssistantMessage("a1"),
+            makeAssistantMessage("a2"),
+            makeUserMessage("tail-u"),
+            makeAssistantMessage("tail-a"),
+          ],
+          { ...opts, onSummarize: async () => "anchor body" },
+          trace,
+          Bus,
+          { trigger: "threshold" },
+        );
+        await Bun.sleep(0);
+        const cut = completed.find((event) => event.outcome === "cut");
+        expect(cut?.anchored).toBe(true);
+      } finally {
+        unsubscribe();
+      }
     });
   });
 });

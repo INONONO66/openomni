@@ -97,4 +97,93 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
       addMessageSpy.mockRestore();
     }
   });
+
+  it("summarizeWith wires the anchored summarizer into the compaction seam (L2)", async () => {
+    const prompts: string[] = [];
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        compaction: {
+          contextWindowTokens: 100,
+          protectRecentMessages: 2,
+          summarizeWith: async (prompt: string) => {
+            prompts.push(prompt);
+            return "merged checkpoint";
+          },
+        },
+      }),
+      "builtin:compaction",
+    );
+    if (registration === undefined) throw new Error("expected compaction registration");
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(registration);
+
+    const sessionID = "session-anchor-wire";
+    const user = (id: string, text: string) => ({
+      info: {
+        id,
+        sessionID,
+        role: "user" as const,
+        time: { created: 1 },
+        agent: "test",
+        model: { providerID: "", modelID: "" },
+      },
+      parts: [{ id: `${id}-t`, sessionID, messageID: id, type: "text" as const, text }],
+    });
+    const assistant = (id: string, text: string) => ({
+      info: {
+        id,
+        sessionID,
+        role: "assistant" as const,
+        time: { created: 1 },
+        parentID: "",
+        modelID: "m",
+        providerID: "p",
+        agent: "test",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+      parts: [
+        {
+          id: `${id}-t`,
+          sessionID,
+          messageID: id,
+          type: "text" as const,
+          text: `${text}\n${"filler ".repeat(60)}`,
+        },
+      ],
+    });
+
+    const decision = await engine.dispatchPoint("run.completion.pre", {
+      sessionId: sessionID,
+      runId: "run-anchor-wire",
+      completionCandidate: { type: "stop" },
+      traceContext: { traceId: "trace-anchor-wire", sessionId: sessionID },
+      messages: [
+        user("u0", "the goal"),
+        assistant("a1", "work one"),
+        assistant("a2", "work two"),
+        user("u3", "tail question"),
+        assistant("a4", "tail answer"),
+      ],
+      contextTokens: 99,
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 1,
+      isCompletion: true,
+      continuationCount: 0,
+      elapsedMs: 0,
+    });
+
+    // The senpi-shaped template reached the completion function…
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("## Goal");
+    expect(prompts[0]).toContain("work one");
+    expect(prompts[0]).not.toContain("the goal");
+    // …and the seam rewrote history with the anchor render heading it.
+    const effect = decision.effects.find((entry) => entry.type === "run.replace_messages");
+    if (effect?.type !== "run.replace_messages") throw new Error("expected replace effect");
+    const first = (effect.messages as Array<{ parts: Array<{ text?: string }> }>)[0];
+    expect(first?.parts[0]?.text).toContain("merged checkpoint");
+  });
 });
