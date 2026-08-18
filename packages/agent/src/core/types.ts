@@ -1,12 +1,4 @@
-import type {
-  AgentProfile,
-  BusEvent,
-  Model,
-  RuntimeResource,
-  Sink,
-  Token,
-  Tool,
-} from "@openomni/protocol";
+import type { AgentProfile, BusEvent, Model, Policy, Sink, Token, Tool } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyEngineRegistration } from "./policy/types";
 
@@ -15,7 +7,7 @@ export interface TokenUsage extends Token.AgentUsage {}
 export interface AgentBudget extends AgentProfile.AgentBudget {}
 
 type AgentToolSpec = Tool.Spec & {
-  readonly descriptor?: RuntimeResource.Descriptor;
+  readonly descriptor?: Policy.Resource.Descriptor;
 };
 
 export interface ChatAgentConfig {

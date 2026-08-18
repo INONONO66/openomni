@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RuntimeResource } from "../../../src/policy/index.js";
+import { Policy } from "../../../src/policy/index.js";
 
 function canonicalize(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
@@ -17,7 +17,7 @@ function canonicalize(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function digestDescriptor(descriptor: RuntimeResource.Descriptor): string {
+function digestDescriptor(descriptor: Policy.Resource.Descriptor): string {
   const { digest: _digest, ...content } = descriptor;
   let hash = 0x811c9dc5;
 
@@ -29,17 +29,17 @@ function digestDescriptor(descriptor: RuntimeResource.Descriptor): string {
   return `fnv1a:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function withDigest(descriptor: RuntimeResource.Descriptor): RuntimeResource.Descriptor {
-  return RuntimeResource.Descriptor.parse({
+function withDigest(descriptor: Policy.Resource.Descriptor): Policy.Resource.Descriptor {
+  return Policy.Resource.Descriptor.parse({
     ...descriptor,
     digest: digestDescriptor(descriptor),
   });
 }
 
-function redactDescriptor(descriptor: RuntimeResource.Descriptor): RuntimeResource.Descriptor {
+function redactDescriptor(descriptor: Policy.Resource.Descriptor): Policy.Resource.Descriptor {
   if (descriptor.source?.type !== "file") return descriptor;
 
-  return RuntimeResource.Descriptor.parse({
+  return Policy.Resource.Descriptor.parse({
     ...descriptor,
     source: {
       ...descriptor.source,
@@ -49,12 +49,12 @@ function redactDescriptor(descriptor: RuntimeResource.Descriptor): RuntimeResour
   });
 }
 
-function serializeForAudit(descriptor: RuntimeResource.Descriptor): string {
+function serializeForAudit(descriptor: Policy.Resource.Descriptor): string {
   return JSON.stringify(redactDescriptor(descriptor));
 }
 
-const descriptorFixtures: RuntimeResource.Descriptor[] = [
-  RuntimeResource.Descriptor.parse({
+const descriptorFixtures: Policy.Resource.Descriptor[] = [
+  Policy.Resource.Descriptor.parse({
     id: "tool:system:bash",
     kind: "tool",
     labels: ["source:system", "tool.shell"],
@@ -63,7 +63,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     source: { type: "system" },
     risk: 3,
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "tool:mcp:filesystem-read",
     kind: "tool",
     labels: ["source:mcp", "mcp.filesystem"],
@@ -71,7 +71,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: ["workspace.read"],
     source: { type: "mcp", serverId: "filesystem", remoteName: "read_file" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "tool:skill-mcp:publish",
     kind: "tool",
     labels: ["source:skill-mcp", "skill.github-workflow"],
@@ -84,7 +84,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
       skillId: "github-workflow",
     },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "tool:agent:delegate",
     kind: "tool",
     labels: ["source:agent", "delegation.worker"],
@@ -92,7 +92,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: ["session.create"],
     source: { type: "agent", agentId: "main-persona", agentProfileRef: "agent-profile:main" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "tool:server:telegram-send",
     kind: "tool",
     labels: ["source:server", "surface.telegram"],
@@ -100,7 +100,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: ["network.write"],
     source: { type: "server", serverId: "server-main", remoteName: "telegram.send" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "skill:project:git-master",
     kind: "skill",
     labels: ["source:project", "skill.git"],
@@ -108,7 +108,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: ["prompt.modify"],
     source: { type: "project", projectId: "openomni", path: ".opencode/skill/git-master" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "mcpSource:server:filesystem",
     kind: "mcpSource",
     labels: ["source:server", "mcp.filesystem"],
@@ -116,7 +116,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: ["tool.expose"],
     source: { type: "server", serverId: "filesystem" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "worker:coordinator:worker-1",
     kind: "worker",
     labels: ["source:coordinator", "worker.coordinator"],
@@ -124,7 +124,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: [],
     source: { type: "coordinator", coordinatorId: "coordinator-main" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "credential:anthropic:api-key",
     kind: "credential",
     labels: ["source:file", "credential.anthropic"],
@@ -132,7 +132,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     effects: [],
     source: { type: "file", path: "/var/openomni/secrets/anthropic.json" },
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "session:ses_child",
     kind: "session",
     labels: ["source:runtime", "session.self-loop", "session.parent:ses_root"],
@@ -141,7 +141,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
     source: { type: "runtime", runtimeId: "ses_child" },
     owner: "agent:main-persona",
   }),
-  RuntimeResource.Descriptor.parse({
+  Policy.Resource.Descriptor.parse({
     id: "policy:operator:default",
     kind: "policy",
     labels: ["source:user", "policy.default"],
@@ -151,18 +151,18 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   }),
 ];
 
-function firstFixture(): RuntimeResource.Descriptor {
+function firstFixture(): Policy.Resource.Descriptor {
   const [descriptor] = descriptorFixtures;
   if (descriptor === undefined) throw new Error("descriptor fixture missing");
   return descriptor;
 }
 
-describe("RuntimeResource.Descriptor conformance", () => {
+describe("Policy.Resource.Descriptor conformance", () => {
   test("roundtrip serializes and validates every descriptor kind", () => {
     for (const descriptor of descriptorFixtures) {
-      const parsed = RuntimeResource.Descriptor.parse(descriptor);
+      const parsed = Policy.Resource.Descriptor.parse(descriptor);
       const serialized = JSON.stringify(parsed);
-      const restored = RuntimeResource.Descriptor.parse(JSON.parse(serialized));
+      const restored = Policy.Resource.Descriptor.parse(JSON.parse(serialized));
 
       expect(restored).toEqual(parsed);
     }
@@ -170,10 +170,10 @@ describe("RuntimeResource.Descriptor conformance", () => {
 
   test("digest is stable for the same content and changes with descriptor content", () => {
     const base = firstFixture();
-    const sameContent = withDigest(RuntimeResource.Descriptor.parse({ ...base }));
-    const repeated = withDigest(RuntimeResource.Descriptor.parse({ ...base }));
+    const sameContent = withDigest(Policy.Resource.Descriptor.parse({ ...base }));
+    const repeated = withDigest(Policy.Resource.Descriptor.parse({ ...base }));
     const changedContent = withDigest(
-      RuntimeResource.Descriptor.parse({
+      Policy.Resource.Descriptor.parse({
         ...base,
         labels: [...base.labels, "risk.shell"],
       }),
@@ -181,12 +181,12 @@ describe("RuntimeResource.Descriptor conformance", () => {
 
     expect(sameContent.digest).toBe(repeated.digest);
     expect(changedContent.digest).not.toBe(sameContent.digest);
-    expect(RuntimeResource.Descriptor.parse(sameContent).digest).toBe(sameContent.digest);
+    expect(Policy.Resource.Descriptor.parse(sameContent).digest).toBe(sameContent.digest);
   });
 
   test("redact removes credential source paths from serialized descriptors", () => {
     const secretPath = "/var/openomni/secrets/anthropic.json";
-    const credential = RuntimeResource.Descriptor.parse({
+    const credential = Policy.Resource.Descriptor.parse({
       id: "credential:anthropic:api-key",
       kind: "credential",
       labels: ["source:file", "credential.anthropic"],
@@ -198,7 +198,7 @@ describe("RuntimeResource.Descriptor conformance", () => {
 
     expect(serialized.includes("[REDACTED]")).toBe(true);
     expect(serialized.includes(secretPath)).toBe(false);
-    expect(RuntimeResource.Descriptor.parse(JSON.parse(serialized)).source).toMatchObject({
+    expect(Policy.Resource.Descriptor.parse(JSON.parse(serialized)).source).toMatchObject({
       type: "file",
       path: "[REDACTED]",
     });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PolicyEvent } from "../src/event/policy.js";
-import type { Policy, RuntimeResource } from "../src/policy/index.js";
+import type { Policy } from "../src/policy/index.js";
 
 describe("PolicyEvent BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
@@ -95,7 +95,7 @@ describe("PolicyEvent BusEvents", () => {
           labels: ["tool.shell"],
           capabilities: ["execute"],
           effects: ["audit.annotate"],
-        } satisfies RuntimeResource.Descriptor,
+        } satisfies Policy.Resource.Descriptor,
       }),
     );
   });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Policy, RuntimeResource, policyKernelVersion } from "../../../src/policy/index.js";
+import { Policy, policyKernelVersion } from "../../../src/policy/index.js";
 
 type PolicyPointContract =
   (typeof Policy.PolicyPoint.Registry)[keyof typeof Policy.PolicyPoint.Registry];
@@ -8,13 +8,13 @@ type DecisionReplayFixture = {
   readonly name: string;
   readonly policyKernelVersion: number;
   readonly policyPoint: PolicyPointContract;
-  readonly resource: RuntimeResource.Descriptor;
+  readonly resource: Policy.Resource.Descriptor;
   readonly decision: unknown;
 };
 
 type ReplayResult = {
   readonly decision: Policy.PolicyDecision;
-  readonly resource: RuntimeResource.Descriptor;
+  readonly resource: Policy.Resource.Descriptor;
 };
 
 class PolicyFixtureMigrationError extends Error {
@@ -32,7 +32,7 @@ class PolicyFixtureMigrationError extends Error {
   }
 }
 
-const toolResource = RuntimeResource.Descriptor.parse({
+const toolResource = Policy.Resource.Descriptor.parse({
   id: "tool:system:bash",
   kind: "tool",
   labels: ["source:system", "tool.shell"],
@@ -41,7 +41,7 @@ const toolResource = RuntimeResource.Descriptor.parse({
   source: { type: "system" },
 });
 
-const runResource = RuntimeResource.Descriptor.parse({
+const runResource = Policy.Resource.Descriptor.parse({
   id: "policy:operator:workspace-safety",
   kind: "policy",
   labels: ["policy.workspace-safety"],
@@ -126,7 +126,7 @@ function replayDecisionFixture(fixture: DecisionReplayFixture): ReplayResult {
 
   return {
     decision: Policy.PolicyDecision.parse(fixture.decision),
-    resource: RuntimeResource.Descriptor.parse(fixture.resource),
+    resource: Policy.Resource.Descriptor.parse(fixture.resource),
   };
 }
 
@@ -151,7 +151,7 @@ describe("PolicyPoint versioning conformance", () => {
     for (const fixture of oldDecisionFixtures) {
       const replay = replayDecisionFixture(fixture);
 
-      expect(RuntimeResource.Descriptor.parse(replay.resource)).toEqual(replay.resource);
+      expect(Policy.Resource.Descriptor.parse(replay.resource)).toEqual(replay.resource);
       expect(replay.decision.policyId).toBe(Policy.PolicyDecision.parse(fixture.decision).policyId);
     }
   });
@@ -206,7 +206,7 @@ describe("PolicyPoint versioning conformance", () => {
   });
 
   test("exposes consistent kernel, point, and resource schema versions", () => {
-    const worker = RuntimeResource.Descriptor.parse({
+    const worker = Policy.Resource.Descriptor.parse({
       id: "worker:coordinator:version-worker",
       kind: "worker",
       labels: ["source:coordinator", "worker.coordinator"],
@@ -214,7 +214,7 @@ describe("PolicyPoint versioning conformance", () => {
       effects: [],
       source: { type: "coordinator" },
     });
-    const credential = RuntimeResource.Descriptor.parse({
+    const credential = Policy.Resource.Descriptor.parse({
       id: "credential:anthropic:api-key",
       kind: "credential",
       labels: ["source:file", "credential.anthropic"],
@@ -222,7 +222,7 @@ describe("PolicyPoint versioning conformance", () => {
       effects: [],
       source: { type: "file" },
     });
-    const session = RuntimeResource.Descriptor.parse({
+    const session = Policy.Resource.Descriptor.parse({
       id: "session:ses_version",
       kind: "session",
       labels: ["source:runtime", "session.self-loop"],
@@ -239,7 +239,7 @@ describe("PolicyPoint versioning conformance", () => {
     }
 
     for (const descriptor of [toolResource, worker, credential, session]) {
-      expect(RuntimeResource.Descriptor.safeParse(descriptor).success).toBe(true);
+      expect(Policy.Resource.Descriptor.safeParse(descriptor).success).toBe(true);
     }
   });
 });

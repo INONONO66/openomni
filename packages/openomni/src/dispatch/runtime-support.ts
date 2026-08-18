@@ -1,4 +1,4 @@
-import type { Dispatch as DispatchProtocol, RuntimeResource } from "@openomni/protocol";
+import type { Dispatch as DispatchProtocol, Policy } from "@openomni/protocol";
 import type { DispatchHandler } from "./registry.js";
 
 export type DispatchEventPayload = {
@@ -27,7 +27,7 @@ export function eventBase(command: DispatchProtocol.Command): DispatchEventPaylo
   };
 }
 
-export function resourceDescriptor(action: string): RuntimeResource.Descriptor {
+export function resourceDescriptor(action: string): Policy.Resource.Descriptor {
   return {
     id: `dispatch:${action}`,
     kind: "dispatch",

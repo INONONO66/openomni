@@ -1,4 +1,4 @@
-import type { BusEvent, Policy, RuntimeResource, TraceContext } from "@openomni/protocol";
+import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
 import { Operational, PolicyDecision, Tool, ToolExecution } from "@openomni/protocol";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
@@ -25,7 +25,7 @@ export interface ToolExecutorOptions {
   };
   getPolicyToolName?: (toolName: string) => string | undefined;
   getToolLabels?: (toolName: string) => readonly string[] | undefined;
-  getToolDescriptor?: (toolName: string) => RuntimeResource.Descriptor | undefined;
+  getToolDescriptor?: (toolName: string) => Policy.Resource.Descriptor | undefined;
   onToolComplete?: (durationMs: number) => void;
   onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void | Promise<void>;
   traceContext?: TraceContext.Type;
@@ -263,12 +263,12 @@ interface ToolPolicyRunContext {
 }
 
 interface NativeToolPolicyTarget {
-  readonly descriptor: RuntimeResource.Descriptor;
+  readonly descriptor: Policy.Resource.Descriptor;
   readonly kind: "native";
 }
 
 interface McpToolPolicyTarget {
-  readonly descriptor: RuntimeResource.Descriptor;
+  readonly descriptor: Policy.Resource.Descriptor;
   readonly kind: "mcp";
   readonly mcpServerId?: string;
 }
@@ -281,7 +281,7 @@ function mcpServerId(labels: readonly string[] | undefined): string | undefined 
 
 function sourceFromLabels(
   labels: readonly string[] | undefined,
-): RuntimeResource.Source | undefined {
+): Policy.Resource.Source | undefined {
   const sourceType = Tool.sourceFromLabels(labels);
   if (sourceType === undefined) return undefined;
   if (sourceType === "mcp") {
@@ -294,10 +294,10 @@ function sourceFromLabels(
 function policyTarget(
   toolName: string,
   labels: readonly string[] | undefined,
-  providedDescriptor: RuntimeResource.Descriptor | undefined,
+  providedDescriptor: Policy.Resource.Descriptor | undefined,
 ): ToolPolicyTarget {
   const source = providedDescriptor?.source ?? sourceFromLabels(labels);
-  const descriptor: RuntimeResource.Descriptor = providedDescriptor ?? {
+  const descriptor: Policy.Resource.Descriptor = providedDescriptor ?? {
     id: source ? `tool:${source.type}:${toolName}` : `tool:${toolName}`,
     kind: "tool",
     labels: labels ? [...labels] : [],
@@ -340,7 +340,7 @@ async function dispatchToolPre(
   toolName: string,
   call: Tool.Call,
   labels: readonly string[] | undefined,
-  descriptor?: RuntimeResource.Descriptor,
+  descriptor?: Policy.Resource.Descriptor,
 ): Promise<Policy.PolicyDecision> {
   const target = policyTarget(toolName, labels, descriptor);
   const input = {
@@ -377,7 +377,7 @@ async function dispatchToolPost(
   call: Tool.Call,
   result: Tool.Result,
   labels: readonly string[] | undefined,
-  descriptor?: RuntimeResource.Descriptor,
+  descriptor?: Policy.Resource.Descriptor,
 ): Promise<Policy.PolicyDecision> {
   const target = policyTarget(toolName, labels, descriptor);
   const input = {

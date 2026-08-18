@@ -40,7 +40,6 @@ export namespace DispatchSchemas {
       runId: z.string().min(1).optional(),
       workerRunId: z.string().min(1).optional(),
       workspaceRoot: z.string().min(1).optional(),
-      permissions: z.array(z.string()).optional(),
       labels: z.array(z.string()).optional(),
       trustTier: Actor.TrustTier.optional(),
       reason: z.string().min(1).optional(),

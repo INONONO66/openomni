@@ -1,5 +1,6 @@
 import type { BusEvent } from "@openomni/protocol";
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
+import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
 import { z } from "zod";
 import type {
   CanonicalPolicyRegistration,
@@ -53,7 +54,7 @@ export function createToolPermissionPolicy(
 
       let verdict: Policy.EvaluationResult;
       try {
-        verdict = Policy.evaluate(normalizedPermission, {
+        verdict = evaluatePermission(normalizedPermission, {
           action: TOOL_CALL_ACTION,
           resource: toolName,
           resourceLabels: ctx.toolLabels,
@@ -78,7 +79,7 @@ export function createToolPermissionPolicy(
       // The verdict carries the outcome: `require_approval` composes to a
       // `pending` decision, which `PolicyDecision.isBlocking` treats as
       // blocking, so the tool executor never runs the call.
-      return PolicyDecision.fromEvaluation(verdict);
+      return decisionFromEvaluation(verdict);
     },
   };
 }

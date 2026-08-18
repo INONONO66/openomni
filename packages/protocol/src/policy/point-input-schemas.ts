@@ -16,7 +16,6 @@ const dispatchActor = z
     runId: id.optional(),
     workerRunId: id.optional(),
     workspaceRoot: id.optional(),
-    permissions: z.array(z.string()).optional(),
     labels: z.array(z.string()).optional(),
     trustTier: z
       .enum(["owner", "co_owner", "manager", "collaborator", "observer", "assigned_worker"])

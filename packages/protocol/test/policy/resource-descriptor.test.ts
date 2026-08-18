@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { RuntimeResource } from "../../src/policy/index.js";
+import { Policy } from "../../src/policy/index.js";
 
-describe("RuntimeResource descriptors", () => {
+describe("Policy.Resource descriptors", () => {
   describe("Descriptor", () => {
     test("parses a two-segment descriptor id", () => {
-      const result = RuntimeResource.Descriptor.parse({
+      const result = Policy.Resource.Descriptor.parse({
         id: "tool:bash",
         kind: "tool",
         labels: ["source:system"],
@@ -18,7 +18,7 @@ describe("RuntimeResource descriptors", () => {
     });
 
     test("parses a three-segment descriptor id with source metadata", () => {
-      const result = RuntimeResource.Descriptor.parse({
+      const result = Policy.Resource.Descriptor.parse({
         id: "skill:project:git-master",
         kind: "skill",
         labels: ["source:project"],
@@ -38,7 +38,7 @@ describe("RuntimeResource descriptors", () => {
 
     test("rejects a custom kind string", () => {
       expect(
-        RuntimeResource.Descriptor.safeParse({
+        Policy.Resource.Descriptor.safeParse({
           id: "custom:thing",
           kind: "custom-resource-type",
           labels: [],
@@ -50,7 +50,7 @@ describe("RuntimeResource descriptors", () => {
 
     test("rejects mismatched id segments", () => {
       expect(
-        RuntimeResource.Descriptor.safeParse({
+        Policy.Resource.Descriptor.safeParse({
           id: "tool:project",
           kind: "tool",
           labels: [],
@@ -63,7 +63,7 @@ describe("RuntimeResource descriptors", () => {
 
     test("rejects descriptors with invalid source type", () => {
       expect(
-        RuntimeResource.Descriptor.safeParse({
+        Policy.Resource.Descriptor.safeParse({
           id: "tool:server:bash",
           kind: "tool",
           labels: [],

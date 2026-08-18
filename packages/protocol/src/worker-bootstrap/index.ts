@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
 import { Model } from "../model/index.js";
-import { Policy, RuntimeResource } from "../policy/index.js";
+import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 import { ToolSelection } from "../tool-selection/index.js";
 
@@ -25,7 +25,7 @@ export namespace WorkerBootstrap {
     category: ToolSelection.Category,
     riskTier: Tool.RiskTier,
     spec: Tool.Spec,
-    descriptor: RuntimeResource.Descriptor.optional(),
+    descriptor: Policy.Resource.Descriptor.optional(),
     mcpServer: z.string().optional(),
   });
   export type RuntimeToolCatalogEntry = z.infer<typeof RuntimeToolCatalogEntry>;

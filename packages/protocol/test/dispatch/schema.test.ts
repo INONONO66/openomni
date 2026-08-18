@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Dispatch, Policy, RuntimeResource } from "../../src/index.js";
+import { Dispatch, Policy } from "../../src/index.js";
 
 const actor: Dispatch.ActorContext = {
   kind: "worker",
@@ -191,8 +191,8 @@ describe("Dispatch protocol schemas", () => {
     expect(Dispatch.Events.Failed.name).toBe("dispatch.failed");
   });
 
-  test("RuntimeResource accepts dispatch descriptors for policy audit", () => {
-    const descriptor = RuntimeResource.Descriptor.parse({
+  test("Policy.Resource accepts dispatch descriptors for policy audit", () => {
+    const descriptor = Policy.Resource.Descriptor.parse({
       id: "dispatch:resident.ask",
       kind: "dispatch",
       labels: ["dispatch.resident"],
@@ -206,9 +206,6 @@ describe("Dispatch protocol schemas", () => {
 
   test("Policy timing and point expose the canonical dispatch authority gate", () => {
     expect(Policy.Timing.DISPATCH_AUTHORIZE).toBe("dispatch.authorize");
-    expect(Policy.PolicyPoint.MigrationMapping[Policy.Timing.DISPATCH_AUTHORIZE]).toEqual([
-      "dispatch.action.pre",
-    ]);
 
     const point = Policy.PolicyPoint.Registry["dispatch.action.pre"];
     expect(point.phase).toBe("pre");

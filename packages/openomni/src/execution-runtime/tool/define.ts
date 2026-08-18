@@ -1,4 +1,4 @@
-import type { RuntimeResource } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 import { Tool as ProtocolTool } from "@openomni/protocol";
 import type {
   ImplicitInputSource,
@@ -17,7 +17,7 @@ const TOOL_DEFAULTS = {
 
 const defaultRiskTier: ToolRiskTier = 1;
 
-function descriptorSource(source: ToolSource): RuntimeResource.Source {
+function descriptorSource(source: ToolSource): Policy.Resource.Source {
   return { type: source };
 }
 
@@ -92,7 +92,7 @@ export function defineTool<TInput>(def: ToolDefinition<TInput>): NativeTool {
   ];
   const effects = [...(typeof isDestructive === "boolean" && isDestructive ? ["destructive"] : [])];
   const source = def.source ?? "system";
-  const descriptor: RuntimeResource.Descriptor = {
+  const descriptor: Policy.Resource.Descriptor = {
     id: `tool:${source}:${def.name}`,
     kind: "tool",
     source: descriptorSource(source),

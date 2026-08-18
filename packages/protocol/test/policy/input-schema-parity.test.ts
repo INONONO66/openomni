@@ -38,7 +38,6 @@ const parityCases: readonly ParityCase[] = [
         runId: "run-2",
         workerRunId: "worker-1",
         workspaceRoot: "/workspace",
-        permissions: ["tool.read"],
         labels: ["trusted"],
         trustTier: "assigned_worker",
         reason: "delegated",

@@ -1,10 +1,4 @@
-import {
-  Operational,
-  PolicyDecision,
-  type Policy,
-  type RuntimeResource,
-  type TraceContext,
-} from "@openomni/protocol";
+import { Operational, PolicyDecision, type Policy, type TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { WorkspaceLock } from "../../workspace-lock.js";
 import type { ToolExecutorConfig, ToolRiskTier } from "../types.js";
@@ -47,7 +41,7 @@ function timeoutForRiskTier(
 }
 
 function riskTierFromDescriptor(
-  descriptor: RuntimeResource.Descriptor | undefined,
+  descriptor: Policy.Resource.Descriptor | undefined,
   fallback: ToolRiskTier,
 ): ToolRiskTier {
   return descriptor?.risk === 0 ||
@@ -74,7 +68,7 @@ interface PreToolContext {
   readonly toolCallId?: string;
   readonly input: Record<string, unknown>;
   readonly riskTier: ToolRiskTier;
-  readonly descriptor?: RuntimeResource.Descriptor;
+  readonly descriptor?: Policy.Resource.Descriptor;
   readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
   readonly workspaceRoot?: string;
   readonly lockOwnerId: string;

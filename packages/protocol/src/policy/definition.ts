@@ -20,7 +20,6 @@ export namespace PolicyDefinition {
   } as const;
 
   export type Timing = (typeof Timing)[keyof typeof Timing];
-  const TimingValue = z.nativeEnum(Timing);
 
   export const Scope = z.object({
     agentType: z.array(z.string()).optional(),
@@ -32,7 +31,6 @@ export namespace PolicyDefinition {
 
   export const Definition = z.object({
     name: z.string().min(1),
-    timing: z.union([TimingValue, z.array(TimingValue)]),
     priority: z.number().int().min(0),
     scope: Scope.optional(),
     failPolicy: FailPolicy.optional(),

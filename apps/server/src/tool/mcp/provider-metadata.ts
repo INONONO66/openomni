@@ -1,4 +1,4 @@
-import type { RuntimeResource } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 import { Tool } from "@openomni/protocol";
 
 function uniqueLabels(labels: readonly string[]): string[] {
@@ -9,7 +9,7 @@ function uniqueLabels(labels: readonly string[]): string[] {
 export function mcpToolMetadata(
   serverName: string,
   spec: Tool.Spec,
-): { readonly labels: string[]; readonly descriptor: RuntimeResource.Descriptor } {
+): { readonly labels: string[]; readonly descriptor: Policy.Resource.Descriptor } {
   // Canonical labels first: the grammar parsers take the first match, so a
   // remote spec shipping its own `mcp.*` or `source:*` label must not win.
   const labels = uniqueLabels([

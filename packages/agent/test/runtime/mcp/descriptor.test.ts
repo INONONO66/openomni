@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { Operational, type RuntimeResource, type Tool } from "@openomni/protocol";
+import { Operational, type Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
@@ -16,7 +16,7 @@ interface McpToolStub {
 }
 
 type ToolSpecWithDescriptor = Tool.Spec & {
-  readonly descriptor?: RuntimeResource.Descriptor;
+  readonly descriptor?: Policy.Resource.Descriptor;
 };
 
 function createStubClient(tools: McpToolStub[]): McpClientHandle {
@@ -54,7 +54,7 @@ function createRequestOptionsCaptureClient(tools: McpToolStub[] = []): McpClient
 }
 
 describe("McpClient tool descriptors", () => {
-  test("attaches RuntimeResource descriptors to listed MCP tools", async () => {
+  test("attaches Policy.Resource descriptors to listed MCP tools", async () => {
     const client = new McpClient(
       {
         name: "filesystem",

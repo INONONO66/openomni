@@ -1,4 +1,5 @@
-import { type Actor, Ingress, Policy, PolicyDecision } from "@openomni/protocol";
+import { type Actor, Ingress, type Policy, PolicyDecision } from "@openomni/protocol";
+import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
 import type { ChannelGrantStore } from "@openomni/session";
 import type { CoordinatorLike } from "../coordinator-like";
 import { resolveTarget, targetKey } from "../target";
@@ -124,8 +125,8 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
     ...(trustTier ? [`trust.${trustTier}`] : []),
     ...(eventAction ? [actionLabels[eventAction]] : []),
   ];
-  const decision = PolicyDecision.fromEvaluation(
-    Policy.evaluate(
+  const decision = decisionFromEvaluation(
+    evaluatePermission(
       {
         action,
         inputRules: authorityInputRules.map((rule) => ({ ...rule, toolPattern: resource })),

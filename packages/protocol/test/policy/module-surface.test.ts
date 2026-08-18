@@ -1,20 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { Policy, PolicyDecision, RuntimeResource, policyKernelVersion } from "../../src/index.js";
+import { Policy, PolicyDecision, PolicyPermission, policyKernelVersion } from "../../src/index.js";
 import {
   Policy as PolicyIndex,
   PolicyDecision as PolicyDecisionIndex,
-  RuntimeResource as RuntimeResourceIndex,
+  PolicyPermission as PolicyPermissionIndex,
   policyKernelVersion as policyKernelVersionIndex,
 } from "../../src/policy/index.js";
 
+// #498 receipts: `evaluate` moved to @openomni/policy (evaluatePermission),
+// `fromEvaluation` moved with it (decisionFromEvaluation), the RuntimeResource
+// sibling folded into the namespace as Policy.Resource, and the test-only
+// PolicyPoint.MigrationMapping compat surface was deleted.
 const expectedPolicyKeys = [
   "LabelEntry",
   "InputRule",
   "Permission",
   "EvaluationRequest",
   "EvaluationResult",
-  "evaluate",
   "Timing",
   "Scope",
   "FailPolicy",
@@ -25,17 +28,11 @@ const expectedPolicyKeys = [
   "PolicyDecision",
   "EffectiveDecision",
   "PolicyPoint",
+  "Resource",
   "PolicyPlan",
 ];
 
-const expectedPolicyDecisionKeys = [
-  "allow",
-  "deny",
-  "pending",
-  "isBlocking",
-  "reason",
-  "fromEvaluation",
-];
+const expectedPolicyDecisionKeys = ["allow", "deny", "pending", "isBlocking", "reason"];
 
 const expectedPolicyPointStaticKeys = [
   "version",
@@ -44,21 +41,20 @@ const expectedPolicyPointStaticKeys = [
   "RegistrySchema",
   "Registry",
   "InputSchemas",
-  "MigrationMapping",
 ];
 
-const expectedRuntimeResourceKeys = ["Source", "Descriptor"];
+const expectedResourceKeys = ["Source", "Descriptor"];
 
 const acceptsRootDecision = (decision: Policy.PolicyDecision): PolicyIndex.PolicyDecision =>
   decision;
 const acceptsPolicyIndexDecision = (decision: PolicyIndex.PolicyDecision): Policy.PolicyDecision =>
   decision;
 const acceptsRootResource = (
-  descriptor: RuntimeResource.Descriptor,
-): RuntimeResourceIndex.Descriptor => descriptor;
+  descriptor: Policy.Resource.Descriptor,
+): PolicyIndex.Resource.Descriptor => descriptor;
 const acceptsPolicyIndexResource = (
-  descriptor: RuntimeResourceIndex.Descriptor,
-): RuntimeResource.Descriptor => descriptor;
+  descriptor: PolicyIndex.Resource.Descriptor,
+): Policy.Resource.Descriptor => descriptor;
 
 void acceptsRootDecision;
 void acceptsPolicyIndexDecision;
@@ -71,7 +67,8 @@ describe("policy module public surface", () => {
     expect(Policy.PolicyDecision).toBe(PolicyIndex.PolicyDecision);
     expect(Policy.PolicyPoint).toBe(PolicyIndex.PolicyPoint);
     expect(PolicyDecision.allow).toBe(PolicyDecisionIndex.allow);
-    expect(RuntimeResource.Descriptor).toBe(RuntimeResourceIndex.Descriptor);
+    expect(Policy.Resource.Descriptor).toBe(PolicyIndex.Resource.Descriptor);
+    expect(PolicyPermission.isSafeInputPattern).toBe(PolicyPermissionIndex.isSafeInputPattern);
     expect(policyKernelVersion).toBe(policyKernelVersionIndex);
   });
 
@@ -85,7 +82,14 @@ describe("policy module public surface", () => {
     const zodObjectKeys = new Set(Object.keys(z.object({})));
     const policyPointStaticKeys = policyPointKeys.filter((key) => !zodObjectKeys.has(key));
     expect(policyPointStaticKeys).toEqual(expectedPolicyPointStaticKeys);
-    expect(Object.keys(RuntimeResource)).toEqual(expectedRuntimeResourceKeys);
-    expect(Object.keys(RuntimeResourceIndex)).toEqual(expectedRuntimeResourceKeys);
+    expect(Object.keys(Policy.Resource)).toEqual(expectedResourceKeys);
+    expect(Object.keys(PolicyIndex.Resource)).toEqual(expectedResourceKeys);
+  });
+
+  test("shares the ReDoS-safety predicate with the moved evaluator (no duplication)", () => {
+    expect(typeof PolicyPermission.isSafeInputPattern).toBe("function");
+    expect(PolicyPermission.MAX_INPUT_LENGTH).toBe(10_000);
+    expect(PolicyPermission.isSafeInputPattern("^true$")).toBe(true);
+    expect(PolicyPermission.isSafeInputPattern("(a+)+b")).toBe(false);
   });
 });

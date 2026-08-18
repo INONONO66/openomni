@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
-import { Policy, RuntimeResource } from "../policy/index.js";
+import { Policy } from "../policy/index.js";
 
 const PolicyBase = z.object({
   traceId: z.string(),
@@ -23,7 +23,7 @@ const PolicyAuditContext = z.object({
   durationMs: z.number().optional(),
   pointId: z.string().optional(),
   pointVersion: z.number().optional(),
-  resourceDescriptor: RuntimeResource.Descriptor.optional(),
+  resourceDescriptor: Policy.Resource.Descriptor.optional(),
 });
 
 const EffectiveVerdict = z.enum(["allow", "deny", "pending"]);

@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-export namespace RuntimeResource {
+/**
+ * Runtime resource vocabulary, exposed publicly as `Policy.Resource` (#498 W3).
+ * Descriptor rides bus events — the shape is wire-frozen.
+ */
+export namespace PolicyResource {
   const Kind = z.enum([
     "tool",
     "skill",
