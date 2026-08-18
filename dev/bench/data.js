@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787066671558,
+  "lastUpdate": 1787069703704,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55835,6 +55835,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 546478,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a7d705e8f8d9eee681c94deb6fea0bae9f59a5c",
+          "message": "feat(agent,openomni): compaction survives resume (#702) (#722)\n\n* feat(agent,openomni): compaction survives resume (#702)\n\nCompaction-design L3, closing #702. The anchor message's part metadata now\ncarries the ordered kept-message ids — the whole window selection in one\nrecord. The openomni seam wrapper (withReplacementPersistence, applied to both\nregistration paths) persists the anchor message into the session store BEFORE\nthe decision returns (record-before-act); persistence failure is fail-open —\nthe run keeps its compacted window, only resumability degrades, pinned by\ntest. Both hydration readers funnel through SessionBridge.buildDirectMessages,\nwhich now rebuilds [anchor, kept ids in recorded order, everything stored\nafter the anchor] instead of re-inflating the full pre-compaction history;\nkept ids that never reached the store are skipped (resident intermediates were\nnever resumable); absent a record, behavior is unchanged.\n\nRiders from the #701 reviews carried per the issue: bracket events record the\nrun's id (ctx.traceContext.runId), the dead measuredTokens conditional spread\nis gone (contextTokens is guarded earlier), and compaction_skipped_no_session\nis pinned by test.\n\nDisposition vs the issue's candidate home: a Transcript.Fact variant was\nweighed and set aside — both hydration readers already share one canonical\nseam (buildDirectMessages), so the record lives on the anchor message in the\nmessage/part projection both paths read; #493 remains the owner of\nreplay-from-facts consumption, as the issue states.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,openomni): content-borne replacement record (review FAIL fix)\n\nAdversarial review round 1 returned FAIL with an empirical probe: the kept-id\nrecord resolved to nothing on every production path because hydration flattens\nto role/content strings and the run re-mints message ids — one resume after a\ncompaction collapsed the window to the summary line alone, silently deleting\nevery preserved user message. Strictly worse than pre-#702.\n\nFix per the review's correction: the record is now CONTENT-borne — the anchor\nmetadata carries the ordered kept window as role/text entries (bounded by the\npreserve budget + protected tail), and hydration replays that content with no\nid resolution at all. The e2e repro is now production-shaped: it hydrates via\nbuildDirectMessages and re-mints ids exactly the way the run does, then\nresumes twice; the original goal, recent turns, and summary all survive, the\ncut span does not.\n\nAlso per review: fail-open is now VISIBLE (operational.warn, component\ncompaction-replacement-persistence, on parse-failure/session-mismatch/store\n-failure branches, pinned by test); a session-mismatch guard refuses\ncross-session anchor writes; the design-doc L3 row now records the shipped\ndisposition including the routed-around snapshot sign-off surface; the\nimplementation-status sentence matches what actually ships.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,openomni,server): anchor identity survives resume (re-review)\n\nRe-review round 2 (PASS WITH CHANGES) fixes:\n\nF1 (MAJOR) — structural identity now rides through hydration: DirectMessage\ncarries the text part's metadata, ChatAgentInput accepts partMetadata, and\nthe message factories stamp it onto the rebuilt part — so a resumed anchor\nis still an anchor. The two-cycle pin (compact → resume → compact) proves\nthe merge chain threads (previousAnchor arrives as state), exactly one\nsummary render exists, and no stale render stacks as a pseudo-user message.\n\nF3 — all three warn branches now pinned: store-failure and session-mismatch\nthrough the real seam, parse-failure against a hostile registration (the\ncore cannot produce it).\n\nF2 — ticketed as #723 (resident final-answer duplication into keptWindow).\nF4 — record size expectation stated beside the metadata.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T01:13:28+09:00",
+          "tree_id": "4b2252d1331ff41429be470bc55a6e623be268c7",
+          "url": "https://github.com/INONONO66/openomni/commit/4a7d705e8f8d9eee681c94deb6fea0bae9f59a5c"
+        },
+        "date": 1787069702426,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 403,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5140,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8054,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2209,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2381,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16234,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 912,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 823,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1350,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 43,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 38499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 497675,
             "unit": "ns/op"
           }
         ]
