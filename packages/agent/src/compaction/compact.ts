@@ -483,7 +483,11 @@ function buildAnchorMessage(
       // Ordered window selection after this anchor — the durable
       // replacement record (#702). Content-borne: hydration flattens to
       // role/content and re-mints ids, so an id record would resolve to
-      // nothing (#722 review). Bounded by preserve budget + protected tail.
+      // nothing (#722 review). Size expectation: one copy of the preserve
+      // budget (default 80k chars) plus the protected tail per cut, in an
+      // append-only store — linear per record, and the newest-user
+      // unconditional rule means one oversized user message can ride into
+      // every subsequent record by design (user tokens are irreplaceable).
       keptWindow: keptWindow.map((entry) => ({ ...entry })),
     },
   };

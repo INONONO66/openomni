@@ -246,7 +246,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     // role/content strings and re-mints message ids — store ids are erased
     // at this seam. Any record keyed on ids would resolve to nothing.
     const rehydrate = () =>
-      SessionBridge.buildDirectMessages(sessionID).map(({ role, content }) => {
+      SessionBridge.buildDirectMessages(sessionID).map(({ role, content, partMetadata }) => {
         const id = crypto.randomUUID();
         const info =
           role === "user"
@@ -280,6 +280,9 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
               messageID: id,
               type: "text" as const,
               text: content,
+              // Mirrors toMessagesWithParts → createUserMessage: structural
+              // identity rides through hydration (#722 re-review finding 1).
+              ...(partMetadata === undefined ? {} : { metadata: partMetadata }),
             },
           ],
         };
@@ -330,6 +333,56 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     // And the re-hydrated run is itself compact and coherent.
     const secondRun = rehydrate();
     expect(secondRun.length).toBe(window.length);
+
+    // Second cycle (#722 re-review finding 1): anchor identity must survive
+    // the resume seam — the next compaction merges into the SAME chain
+    // (previousAnchor threads through) and the window never stacks stale
+    // summary renders as pseudo-user messages.
+    store("user", "second epoch question");
+    store("assistant", `second epoch work\n${"filler ".repeat(60)}`);
+    store("assistant", `second epoch more\n${"filler ".repeat(60)}`);
+    store("assistant", "second epoch answer");
+
+    const previousAnchors: Array<string | undefined> = [];
+    const registration2 = findRegistration(
+      buildWorkerMiddleware({
+        compaction: {
+          contextWindowTokens: 100,
+          protectRecentMessages: 2,
+          onSummarize: async (_input, previousAnchor) => {
+            previousAnchors.push(previousAnchor);
+            return previousAnchor === undefined ? "epoch-1" : `${previousAnchor}+epoch-2`;
+          },
+        },
+      }),
+      "builtin:compaction",
+    );
+    if (registration2 === undefined) throw new Error("expected compaction registration");
+    const engine2 = PolicyEngine.create({ audit: false });
+    engine2.register(registration2);
+    await engine2.dispatchPoint("run.completion.pre", {
+      sessionId: sessionID,
+      runId: "run-702-cycle2",
+      completionCandidate: { type: "stop" },
+      traceContext: { traceId: "trace-702-2", sessionId: sessionID },
+      messages: rehydrate(),
+      contextTokens: 99,
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 1,
+      isCompletion: true,
+      continuationCount: 0,
+      elapsedMs: 0,
+    });
+
+    // The merge chain threaded across resume: the second cut saw the first
+    // epoch's anchor body as state, not as content.
+    expect(previousAnchors).toEqual(["checkpoint after cut"]);
+    const finalWindow = SessionBridge.buildDirectMessages(sessionID);
+    const renders = finalWindow.filter((m) => m.content.startsWith("[Conversation Summary]"));
+    expect(renders).toHaveLength(1);
+    expect(renders[0]?.content).toContain("checkpoint after cut+epoch-2");
+    expect(finalWindow.some((m) => m.content === "the original goal")).toBe(true);
   });
 
   it("replacement persistence is fail-open when the store is unavailable (#702)", async () => {
@@ -416,6 +469,87 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
       expect(decision.effects.some((entry) => entry.type === "run.replace_messages")).toBe(true);
       await Bun.sleep(0);
       expect(warns.some((w) => w.component === "compaction-replacement-persistence")).toBe(true);
+    } finally {
+      unsubscribe();
+      addMessageSpy.mockRestore();
+    }
+  });
+
+  it("replacement persistence refuses a cross-session anchor, visibly (#722 M4)", async () => {
+    const warns: Array<{ component: string; msg: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      warns.push(event as unknown as { component: string; msg: string });
+    });
+    const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
+      throw new Error("must never be reached on mismatch");
+    });
+    try {
+      const registration = findRegistration(
+        buildWorkerMiddleware({
+          compaction: {
+            contextWindowTokens: 100,
+            protectRecentMessages: 2,
+            summarizeWith: async () => "checkpoint",
+          },
+        }),
+        "builtin:compaction",
+      );
+      if (registration === undefined) throw new Error("expected compaction registration");
+      const engine = PolicyEngine.create({ audit: false });
+      engine.register(registration);
+      // History stamped with a FOREIGN session id: the anchor copies it, and
+      // the wrapper must refuse the cross-session write.
+      const foreign = "someone-elses-session";
+      const mk = (role: "user" | "assistant", id: string, text: string) => ({
+        info:
+          role === "user"
+            ? {
+                id,
+                sessionID: foreign,
+                role: "user" as const,
+                time: { created: 1 },
+                agent: "t",
+                model: { providerID: "", modelID: "" },
+              }
+            : {
+                id,
+                sessionID: foreign,
+                role: "assistant" as const,
+                time: { created: 1 },
+                parentID: "",
+                modelID: "m",
+                providerID: "p",
+                agent: "t",
+                path: { cwd: "/", root: "/" },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              },
+        parts: [{ id: `${id}-t`, sessionID: foreign, messageID: id, type: "text" as const, text }],
+      });
+      const decision = await engine.dispatchPoint("run.completion.pre", {
+        sessionId: "the-real-session",
+        runId: "run-mismatch",
+        completionCandidate: { type: "stop" },
+        traceContext: { traceId: "trace-mismatch", sessionId: "the-real-session" },
+        messages: [
+          mk("user", "u0", "goal"),
+          mk("assistant", "a1", `w1\n${"filler ".repeat(60)}`),
+          mk("assistant", "a2", `w2\n${"filler ".repeat(60)}`),
+          mk("user", "u3", "tail"),
+          mk("assistant", "a4", "ta"),
+        ],
+        contextTokens: 99,
+        steps: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        turnCount: 1,
+        isCompletion: true,
+        continuationCount: 0,
+        elapsedMs: 0,
+      });
+      await Bun.sleep(0);
+      expect(decision.effects.some((entry) => entry.type === "run.replace_messages")).toBe(true);
+      expect(addMessageSpy).not.toHaveBeenCalled();
+      expect(warns.some((w) => w.msg.includes("session mismatch"))).toBe(true);
     } finally {
       unsubscribe();
       addMessageSpy.mockRestore();

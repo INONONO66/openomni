@@ -34,6 +34,14 @@ interface StoredMessage {
 interface DirectMessage {
   readonly role: "user" | "assistant";
   readonly content: string;
+  /**
+   * Text-part metadata carried through hydration verbatim. Structural
+   * identity must survive the seam (#722 re-review finding 1): a compaction
+   * anchor whose metadata is stripped on resume breaks the L2 merge chain
+   * and stacks stale renders as pseudo-user messages, one per
+   * compact-resume cycle.
+   */
+  readonly partMetadata?: Record<string, unknown>;
 }
 
 function isKeptEntry(value: unknown): value is DirectMessage {
@@ -61,7 +69,11 @@ function anchorKeptWindow(entry: StoredMessage): DirectMessage[] | undefined {
 function pushTextParts(target: DirectMessage[], message: StoredMessage): void {
   for (const part of message.parts) {
     if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
-      target.push({ role: message.info.role, content: part.text });
+      target.push({
+        role: message.info.role,
+        content: part.text,
+        ...(part.metadata === undefined ? {} : { partMetadata: part.metadata }),
+      });
     }
   }
 }
