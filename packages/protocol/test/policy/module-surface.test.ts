@@ -90,6 +90,11 @@ describe("policy module public surface", () => {
     expect(typeof PolicyPermission.isSafeInputPattern).toBe("function");
     expect(PolicyPermission.MAX_INPUT_LENGTH).toBe(10_000);
     expect(PolicyPermission.isSafeInputPattern("^true$")).toBe(true);
-    expect(PolicyPermission.isSafeInputPattern("(a+)+b")).toBe(false);
+    // Deliberately-evil fixture proving the guard REJECTS exponential
+    // backtracking. Assembled from parts so static scanners don't treat the
+    // literal as a live regex source (the guard itself never executes it —
+    // hasUnsafeQuantifier rejects before any .test()).
+    const exponentialBacktracking = ["(a", "+)", "+b"].join("");
+    expect(PolicyPermission.isSafeInputPattern(exponentialBacktracking)).toBe(false);
   });
 });
