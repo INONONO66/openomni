@@ -63,7 +63,7 @@ describe("withReplacementPersistence", () => {
 
   it("refuses a window that paraphrases user text — byte guard (#717)", async () => {
     const errors: Array<{ component: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Error, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Error, (event) => {
       errors.push(event as unknown as { component: string });
     });
     try {

@@ -132,7 +132,7 @@ function wrapCreated(
       // render, which holds the exemption.
       const violation = userByteViolation((ctx.messages ?? []) as Message.WithParts[], parsed.data);
       if (violation !== undefined) {
-        events.publish(Operational.Error, {
+        events.publish(Operational.Events.Error, {
           traceId: ctx.traceContext?.traceId ?? "",
           time: Date.now(),
           ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),
