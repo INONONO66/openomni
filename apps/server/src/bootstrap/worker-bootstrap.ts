@@ -21,7 +21,7 @@ export async function assembleBootstrap(
   // Sole server-to-worker agent egress boundary: protocol parsing projects the
   // worker wire contract and intentionally strips server-only prompt metadata.
   const agents = [...createAllAgents().values()].map((definition) =>
-    WorkerBootstrap.RuntimeAgentDefinition.parse(definition),
+    WorkerBootstrap.AgentDefinition.parse(definition),
   );
 
   const toolCatalog = [
@@ -52,8 +52,8 @@ export async function assembleBootstrap(
 
 function createToolCatalogEntry(
   tool: NativeTool,
-  source: WorkerBootstrap.RuntimeToolCatalogEntry["source"],
-): WorkerBootstrap.RuntimeToolCatalogEntry {
+  source: WorkerBootstrap.ToolCatalogEntry["source"],
+): WorkerBootstrap.ToolCatalogEntry {
   const mcpServer =
     tool.descriptor?.source?.type === "mcp" ? tool.descriptor.source.serverId : undefined;
 

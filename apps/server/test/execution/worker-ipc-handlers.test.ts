@@ -178,7 +178,7 @@ describe("worker IPC handlers", () => {
 
     expect(
       WorkerIpcHandlers.canShutdownIdle({
-        params: { authToken: "token" },
+        params: { authToken: "token", workerId: "worker-1" },
         ipcAuthToken: "token",
         activeRuns: new Map([["run-1", createRun("session-1")]]),
       }),
@@ -186,11 +186,20 @@ describe("worker IPC handlers", () => {
 
     expect(
       WorkerIpcHandlers.canShutdownIdle({
-        params: { authToken: "token" },
+        params: { authToken: "token", workerId: "worker-1" },
         ipcAuthToken: "token",
         activeRuns: new Map(),
       }),
     ).toEqual({ acknowledged: true });
+
+    // #500 B3: a frame the Methods table rejects fails closed.
+    expect(
+      WorkerIpcHandlers.canShutdownIdle({
+        params: { authToken: "token" },
+        ipcAuthToken: "token",
+        activeRuns: new Map(),
+      }),
+    ).toEqual({ acknowledged: false, error: "invalid worker.shutdown_idle params" });
   });
 
   it("rejects unauthorized tool-settled notifications without clearing unsafe markers", () => {

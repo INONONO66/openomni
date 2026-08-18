@@ -5,9 +5,8 @@ import {
   Events as EventDescriptors,
   type RoutingDecisionPayload as RoutingDecisionPayloadType,
 } from "../event/ingress.js";
-import { Model } from "../model/index.js";
-import { Policy } from "../policy/index.js";
-import { Tool } from "../tool/index.js";
+import { Execution } from "../execution/index.js";
+import type { Tool } from "../tool/index.js";
 
 /**
  * #500 A6: every production-written actor key is declared (`runId` and
@@ -122,17 +121,22 @@ export namespace Ingress {
 
   export type ActivationMetadata = z.infer<typeof ActivationMetadataSchemaImpl>;
 
-  export const AgentDefSchema = z
-    .object({
-      model: Model.Ref,
-      systemPrompt: z.string().optional(),
-      tools: z.array(Tool.Spec).optional(),
-      budget: Actor.Profile.Budget.optional(),
-      permissions: Policy.Permission.optional(),
-      policyPlan: Policy.PolicyPlan.optional(),
-      toolConfig: Tool.Config.optional(),
-    })
-    .passthrough();
+  /**
+   * #500 B1: the zod half is PICKED from the canonical spawn config
+   * (Execution.Request) — same field names, same schema objects, including
+   * the #504 dual lane (`permissions` + `policyPlan`). Only the in-process
+   * callback half below is ingress-specific. `.passthrough()` keeps the
+   * historical inbound tolerance for extra keys.
+   */
+  export const AgentDefSchema = Execution.Request.pick({
+    model: true,
+    systemPrompt: true,
+    tools: true,
+    budget: true,
+    permissions: true,
+    policyPlan: true,
+    toolConfig: true,
+  }).passthrough();
   // Runtime callbacks can't be expressed in Zod.
   export type AgentDef = z.infer<typeof AgentDefSchema> & {
     toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;

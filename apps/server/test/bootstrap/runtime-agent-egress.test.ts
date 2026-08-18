@@ -20,10 +20,10 @@ describe("runtime agent egress projection", () => {
       budget: { maxTurns: 4, maxToolCalls: 8 },
     };
 
-    const runtime = WorkerBootstrap.RuntimeAgentDefinition.parse(definition);
+    const runtime = WorkerBootstrap.AgentDefinition.parse(definition);
 
     expect(runtime).toEqual(definition);
-    expect(WorkerBootstrap.RuntimeAgentDefinition.parse(runtime)).toEqual(runtime);
+    expect(WorkerBootstrap.AgentDefinition.parse(runtime)).toEqual(runtime);
   });
 
   it("keeps prompt metadata out of the worker bootstrap contract", () => {
@@ -41,7 +41,7 @@ describe("runtime agent egress projection", () => {
       metadata,
     } as AgentDefinition & { metadata: AgentPromptMetadata };
 
-    const runtime = WorkerBootstrap.RuntimeAgentDefinition.parse(definitionWithMetadata);
+    const runtime = WorkerBootstrap.AgentDefinition.parse(definitionWithMetadata);
 
     expect(runtime).toEqual({
       name: "dev",

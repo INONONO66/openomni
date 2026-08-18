@@ -5,7 +5,7 @@ import {
   type NativeTool,
   type ToolExecutionContext,
 } from "@openomni/openomni";
-import { Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { Ipc, Tool, type WorkerBootstrap } from "@openomni/protocol";
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
 const WORKER_RESIDENT_ASK_IPC_TIMEOUT_MS = 5 * 60_000;
@@ -65,17 +65,16 @@ export function createWorkerDispatchRuntime(options: {
       cancelInboundWait,
     );
 
-    if (raw === null || typeof raw !== "object") {
+    // #500 B3: the Methods table result schema replaces the hand-rolled cast.
+    const result = Ipc.Methods["worker.inbound_wait"].result.safeParse(raw);
+    if (!result.success) {
       throw new Error("invalid worker.inbound_wait response");
     }
-    const result = raw as { accepted?: unknown; output?: unknown; error?: unknown };
-    if (result.accepted !== true) {
-      throw new Error(
-        typeof result.error === "string" ? result.error : "worker.inbound_wait rejected",
-      );
+    if (result.data.accepted !== true) {
+      throw new Error(result.data.error ?? "worker.inbound_wait rejected");
     }
 
-    return { output: typeof result.output === "string" ? result.output : "" };
+    return { output: result.data.output ?? "" };
   };
 
   runtime.register("resident.ask", handler);
@@ -96,7 +95,7 @@ export function createWorkerDispatchRuntime(options: {
 }
 
 export function createMcpProxyProvider(options: {
-  readonly toolCatalog: WorkerBootstrap.RuntimeToolCatalogEntry[];
+  readonly toolCatalog: WorkerBootstrap.ToolCatalogEntry[];
   readonly server: WorkerRunIpcServer;
   readonly ipcAuthToken: string;
   readonly runId: string;

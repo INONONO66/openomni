@@ -1,4 +1,4 @@
-import { WorkerDeliveryError } from "@openomni/protocol";
+import { Ipc, WorkerDeliveryError } from "@openomni/protocol";
 import type { Subprocess } from "bun";
 
 const DEFAULT_WORKER_STOP_GRACE_MS = 5_000;
@@ -146,14 +146,14 @@ export async function waitForSupervisorReady(
   });
 }
 
+// #500 B3: both result guards validate against the Methods table instead of
+// duck-typed property peeks — a drifted frame reads as refusal, never success.
 export function isBootstrapAccepted(value: unknown): boolean {
-  return value !== null && typeof value === "object" && (value as { ok?: unknown }).ok === true;
+  const parsed = Ipc.Methods["coordinator.bootstrap"].result.safeParse(value);
+  return parsed.success && parsed.data.ok;
 }
 
 export function isShutdownAcknowledged(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    (value as { acknowledged?: unknown }).acknowledged === true
-  );
+  const parsed = Ipc.Methods["worker.shutdown_idle"].result.safeParse(value);
+  return parsed.success && parsed.data.acknowledged;
 }

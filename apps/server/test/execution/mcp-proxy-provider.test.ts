@@ -5,9 +5,9 @@ import {
   type WorkerRunIpcServer,
 } from "../../src/execution/worker-runner-ipc";
 
-type RuntimeToolCatalogEntry = WorkerBootstrap.RuntimeToolCatalogEntry;
+type ToolCatalogEntry = WorkerBootstrap.ToolCatalogEntry;
 
-function makeEntry(overrides?: Partial<RuntimeToolCatalogEntry>): RuntimeToolCatalogEntry {
+function makeEntry(overrides?: Partial<ToolCatalogEntry>): ToolCatalogEntry {
   return {
     canonicalName: "filesystem.read_file",
     exposedName: "filesystem_read_file",
@@ -45,7 +45,7 @@ function makeServer(result?: Tool.Result): { server: WorkerRunIpcServer; calls: 
 }
 
 function makeProvider(
-  entries: RuntimeToolCatalogEntry[],
+  entries: ToolCatalogEntry[],
   result?: Tool.Result,
 ): {
   tools: ReturnType<ReturnType<typeof createMcpProxyProvider>["listTools"]>;
@@ -266,7 +266,7 @@ describe("createMcpProxyProvider", () => {
       effects: [],
       risk: 1,
     };
-    const entry: RuntimeToolCatalogEntry = {
+    const entry: ToolCatalogEntry = {
       canonicalName: "remote.echo",
       exposedName: "remote_echo",
       source: "server",

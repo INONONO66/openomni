@@ -143,6 +143,8 @@ describe("Ipc.Methods param schemas", () => {
         authToken: "token",
         runId: "run-1",
         sessionId: "sess-1",
+        mode: "direct",
+        traceId: "trace-1",
         prompt: "do work",
         model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
         credentials: { ANTHROPIC_API_KEY: "sk-test" },
@@ -172,6 +174,8 @@ describe("Ipc.Methods param schemas", () => {
       authToken: "token",
       runId: "run-1",
       sessionId: "sess-1",
+      mode: "direct",
+      traceId: "trace-1",
       prompt: "do work",
       model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
       policyPlan: {
@@ -190,6 +194,8 @@ describe("Ipc.Methods param schemas", () => {
         authToken: "token",
         runId: "run-1",
         sessionId: "sess-1",
+        mode: "direct",
+        traceId: "trace-1",
         prompt: "do work",
         model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
         permissions: {
@@ -258,7 +264,7 @@ describe("Ipc.Methods param schemas", () => {
     ).toBe(true);
   });
 
-  test("worker.tool_call_settled accepts optional auth token for version-skew tolerance", () => {
+  test("worker.tool_call_settled requires the auth token the worker enforces", () => {
     expect(
       Ipc.Methods["worker.tool_call_settled"].params.safeParse({
         authToken: "token",
@@ -267,11 +273,14 @@ describe("Ipc.Methods param schemas", () => {
       }).success,
     ).toBe(true);
 
+    // #500 B3: the receiving worker has always refused unauthenticated
+    // settled frames; the schema now says so instead of documenting a
+    // version-skew tolerance that never existed.
     expect(
       Ipc.Methods["worker.tool_call_settled"].params.safeParse({
         callId: "call-1",
         workspaceRoot: "/workspace",
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 });

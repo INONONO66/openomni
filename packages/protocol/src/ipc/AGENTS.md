@@ -34,8 +34,8 @@ Defines the locked-in wire contract between the coordinator process and worker p
 
 The `v` field is a protocol version integer.
 
-- Current version: `v: 1`
-- Backward-incompatible changes (field removal, type change, semantic change) require bumping to `v: 2`
+- Current version: `v: 2`
+- Backward-incompatible changes (field removal, type change, semantic change) require bumping the version
 - Additive changes (new optional fields) are allowed without a version bump
 - Version mismatch should cause the receiver to reject the message with error code `4000`
 

@@ -3,7 +3,6 @@ import type {
   ActiveRequest,
   InboundWaitHandler,
   InboundWaitResult,
-  ToolCallCancelParams,
   ToolCallHandler,
   ToolCallResult,
 } from "./supervisor-types.js";
@@ -52,11 +51,14 @@ function handleToolCallCancel(
   respond: Respond,
   context: RequestContext,
 ): void {
-  const p = parseToolCallCancelParams(params);
-  if (!p) {
+  // #500 B3: the Methods table is the one params contract for every verb this
+  // handler serves — no hand-rolled typeof mirrors of it.
+  const parsed = Ipc.Methods["worker.tool_call_cancel"].params.safeParse(params);
+  if (!parsed.success) {
     respond({ cancelled: false, error: "invalid worker.tool_call_cancel params" });
     return;
   }
+  const p = parsed.data;
   const active = context.activeToolCalls.get(p.callId);
   if (!active || active.runId !== p.runId || active.sessionId !== p.sessionId) {
     respond({ cancelled: false });
@@ -143,11 +145,12 @@ function handleInboundWaitCancel(
   respond: Respond,
   context: RequestContext,
 ): void {
-  const p = parseInboundWaitCancelParams(params);
-  if (!p) {
+  const parsed = Ipc.Methods["worker.inbound_wait_cancel"].params.safeParse(params);
+  if (!parsed.success) {
     respond({ cancelled: false, error: "invalid worker.inbound_wait_cancel params" });
     return;
   }
+  const p = parsed.data;
   const callId = p.callId;
   const active = context.activeInboundWaitCalls.get(callId);
   if (!active || active.sessionId !== p.sessionId || (active.runId ?? "") !== (p.runId ?? "")) {
@@ -173,16 +176,27 @@ function handleInboundWait(
     respond({ requestId, accepted: false, error: "unauthorized worker request" });
     return;
   }
-  const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "";
-  const callId =
-    typeof params?.callId === "string" && params.callId.length > 0 ? params.callId : requestId;
-  const payload = typeof params?.payload === "string" ? params.payload : "";
-  const workspaceRoot =
-    typeof params?.workspaceRoot === "string" ? params.workspaceRoot : undefined;
-  // The asking run carries its trace across the hop; the handler dispatches
-  // under it rather than starting a second trace for the same conversation.
-  const traceId = typeof params?.traceId === "string" ? params.traceId : "";
-  if (!context.inboundWaitHandler || !sessionId || !payload || !traceId) {
+  // #500 B3: schema-validated against the Methods table (parse-don't-cast,
+  // same as worker.tool_call above). The trace requirement is the schema's:
+  // the asking run carries its trace across the hop, and the handler
+  // dispatches under it rather than starting a second trace for the same
+  // conversation.
+  const parsed = Ipc.Methods["worker.inbound_wait"].params.safeParse(params);
+  if (!parsed.success) {
+    respond({
+      requestId,
+      accepted: false,
+      error: "worker.inbound_wait requires traceId, sessionId and payload",
+    });
+    return;
+  }
+  const p = parsed.data;
+  const sessionId = p.sessionId;
+  const callId = p.callId && p.callId.length > 0 ? p.callId : requestId;
+  const payload = p.payload;
+  const workspaceRoot = p.workspaceRoot;
+  const traceId = p.traceId;
+  if (!context.inboundWaitHandler || !sessionId || !payload) {
     respond({
       requestId: callId,
       accepted: false,
@@ -194,7 +208,7 @@ function handleInboundWait(
   }
 
   const controller = new AbortController();
-  const runId = typeof params?.runId === "string" ? params.runId : undefined;
+  const runId = p.runId;
   const active: ActiveRequest = {
     ...(runId !== undefined && { runId }),
     sessionId,
@@ -250,28 +264,4 @@ function respondAndForget(
   active.completed = true;
   active.respond(result);
   activeRequests.delete(callId);
-}
-
-function parseToolCallCancelParams(
-  params: Record<string, unknown> | undefined,
-): ToolCallCancelParams | undefined {
-  if (!params) return undefined;
-  const { runId, sessionId, callId } = params;
-  if (typeof runId !== "string" || typeof sessionId !== "string" || typeof callId !== "string") {
-    return undefined;
-  }
-  return { runId, sessionId, callId };
-}
-
-function parseInboundWaitCancelParams(
-  params: Record<string, unknown> | undefined,
-): { runId?: string; sessionId: string; callId: string } | undefined {
-  if (!params) return undefined;
-  const { runId, sessionId, callId } = params;
-  if (typeof sessionId !== "string" || typeof callId !== "string") return undefined;
-  return {
-    ...(typeof runId === "string" ? { runId } : {}),
-    sessionId,
-    callId,
-  };
 }

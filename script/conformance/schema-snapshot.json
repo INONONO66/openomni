@@ -965,14 +965,7 @@
   ],
   "Wait.Reply": ["messageId", "receivedAt", "replyKey", "responderId"],
   "Wait.ReplyInput": ["at", "messageId", "replyKey", "responderCandidates"],
-  "WorkerBootstrap.Bootstrap": [
-    "agents",
-    "configEpoch",
-    "credentials",
-    "policyPlan",
-    "toolCatalog"
-  ],
-  "WorkerBootstrap.RuntimeAgentDefinition": [
+  "WorkerBootstrap.AgentDefinition": [
     "budget",
     "description",
     "model",
@@ -982,7 +975,14 @@
     "systemPrompt",
     "tools"
   ],
-  "WorkerBootstrap.RuntimeToolCatalogEntry": [
+  "WorkerBootstrap.Bootstrap": [
+    "agents",
+    "configEpoch",
+    "credentials",
+    "policyPlan",
+    "toolCatalog"
+  ],
+  "WorkerBootstrap.ToolCatalogEntry": [
     "canonicalName",
     "category",
     "descriptor",
