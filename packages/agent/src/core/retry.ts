@@ -81,7 +81,12 @@ export function isContextOverflow(error: Error): boolean {
     normalized.includes("maximum context") ||
     normalized.includes("prompt is too long") ||
     normalized.includes("too many tokens") ||
-    normalized.includes("token limit")
+    normalized.includes("token limit") ||
+    // Gemini: "The input token count (N) exceeds the maximum number of
+    // tokens allowed (M)."; Bedrock-Anthropic: "Input is too long for
+    // requested model." (#726 review F3)
+    normalized.includes("exceeds the maximum number of tokens") ||
+    normalized.includes("input is too long")
   );
 }
 

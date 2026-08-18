@@ -618,8 +618,17 @@ export async function handleError(
     if (state.overflowCompactionAttempted !== true) {
       state.overflowCompactionAttempted = true;
       const compactionsBefore = state.compactionCount;
+      // A deny here (blocked !== null) is discarded rather than returned as
+      // the run's result: the guarded "stop" would fabricate an answer for a
+      // run whose model call never succeeded. The deny itself is recorded by
+      // publishDenyDiagnostic inside applyPostCompaction; the terminal then
+      // names context_overflow — the proximate cause (#726 review F6).
       const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);
       if (blocked === null && state.compactionCount > compactionsBefore) {
+        // Note (#726 review F5): this retry is sanctioned OUTSIDE the retry
+        // policy ceiling — issue #715's "retry once" — so the ErrorRetry
+        // record may carry attempt === maxAttempts, a shape no other
+        // producer emits.
         emitErrorRetry(config.events, agentBase, {
           attempt,
           maxAttempts: effectiveRetryPolicy.maxAttempts,
