@@ -14,7 +14,7 @@ describe("compaction policy skip reasons", () => {
       contextWindowTokens: 100,
       events: Bus,
       priority: 900,
-    });
+    }).create();
     const decision = await registration.fn({
       pointId: "run.completion.pre",
       timing: "pre" as never,

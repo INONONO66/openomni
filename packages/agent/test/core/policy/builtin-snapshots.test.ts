@@ -61,7 +61,7 @@ describe("snapshot: compaction", () => {
       events: Bus,
       contextWindowTokens: 10000,
       thresholdRatio: 0.8,
-    });
+    }).create();
     const verdict = await mw.fn(
       baseCtx({
         pointId: "run.completion.pre",
@@ -75,7 +75,11 @@ describe("snapshot: compaction", () => {
 
 describe("snapshot: canonical registration metadata", () => {
   it("compaction: name, point, priority", () => {
-    const mw = createCompactionPolicy({ priority: 900, events: Bus, contextWindowTokens: 1000 });
+    const mw = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      contextWindowTokens: 1000,
+    }).create();
     expect(mw.name).toBe("builtin:compaction");
     expect(mw.pointIds).toEqual(["run.completion.pre"]);
     expect(mw.effectCapabilities).toEqual({

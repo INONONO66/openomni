@@ -109,10 +109,12 @@ describe("policyPlan-activated compaction (builtin:compaction backdoor)", () => 
     const registry = PolicyRegistry.create<PolicyContext>();
     registerCompaction(registry, Bus);
     const registrations = registry.resolve(plan, {});
-    const registration = registrations[0];
-    if (registration === undefined || registration.kind !== "point") {
-      throw new Error("expected canonical builtin:compaction registration");
+    const resolved = registrations[0];
+    // Factory form since L4 (per-run speculator state).
+    if (resolved === undefined || resolved.kind !== "factory") {
+      throw new Error("expected builtin:compaction factory registration");
     }
+    const registration = resolved.create();
 
     // Natural cutoff (length - protectRecent = 5) lands on the tool-bearing
     // assistant message: the invariant must produce a user-led kept window.

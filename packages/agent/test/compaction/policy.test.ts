@@ -59,7 +59,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       contextWindowTokens: 100,
       protectRecentMessages: 2,
-    });
+    }).create();
     for (const traceContext of [undefined, { traceId: "" }]) {
       const verdict = await middleware.fn(
         baseCtx({
@@ -79,7 +79,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       contextWindowTokens: 10000,
       thresholdRatio: 0.8,
-    });
+    }).create();
 
     const messages = [createTestMessage("msg1"), createTestMessage("msg2")];
     const ctx = baseCtx({
@@ -99,7 +99,7 @@ describe("createCompactionPolicy", () => {
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
       protectRecentMessages: 2,
-    });
+    }).create();
 
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
@@ -123,7 +123,7 @@ describe("createCompactionPolicy", () => {
       thresholdRatio: 0.95,
       reserveTokens: 250,
       protectRecentMessages: 2,
-    });
+    }).create();
 
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
@@ -145,7 +145,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
-    });
+    }).create();
 
     const ctx = baseCtx({
       messages: undefined,
@@ -163,7 +163,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
-    });
+    }).create();
 
     const ctx = baseCtx({
       messages: [],
@@ -181,7 +181,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
-    });
+    }).create();
 
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
@@ -200,7 +200,7 @@ describe("createCompactionPolicy", () => {
       priority: 42,
       events: Bus,
       contextWindowTokens: 1000,
-    });
+    }).create();
 
     expect(middleware.priority).toBe(42);
   });
@@ -210,7 +210,7 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-    });
+    }).create();
 
     expect(middleware.name).toBe("builtin:compaction");
   });
@@ -220,7 +220,7 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-    });
+    }).create();
 
     expect(middleware.pointIds).toEqual(["run.completion.pre"]);
     expect(middleware.effectCapabilities["run.completion.pre"]).toEqual(["run.replace_messages"]);
@@ -235,7 +235,7 @@ describe("createCompactionPolicy", () => {
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
       protectRecentMessages: 2,
-    });
+    }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
@@ -256,7 +256,7 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       protectRecentMessages: 2,
-    });
+    }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
@@ -275,7 +275,7 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       protectRecentMessages: 2,
-    });
+    }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
@@ -294,7 +294,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       protectRecentMessages: 2,
       contextWindowTokens: 500,
-    });
+    }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
@@ -313,7 +313,7 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       protectRecentMessages: 2,
-    });
+    }).create();
     const assistantOnly = Array.from({ length: 8 }, (_unused, index) => {
       const message = createTestMessage(`a${index}`);
       return { ...message, info: { ...message.info, role: "assistant" as const } };
@@ -339,7 +339,7 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       protectRecentMessages: 2,
-    });
+    }).create();
     const messages = [
       createTestMessage("u0"),
       ...Array.from({ length: 7 }, (_unused, index) => {
@@ -368,7 +368,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       thresholdRatio: 0.95,
       protectRecentMessages: 2,
-    });
+    }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
@@ -387,7 +387,7 @@ describe("createCompactionPolicy", () => {
       events: Bus,
       thresholdRatio: 0.95,
       protectRecentMessages: 2,
-    });
+    }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),

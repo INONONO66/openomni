@@ -1,6 +1,7 @@
 import { PolicyDecision, type BusEvent } from "@openomni/protocol";
-import { Compaction, type CompactionOptions } from "./compact";
-import type { CanonicalPolicyRegistration } from "../core/policy/types";
+import { Compaction, DEFAULT_PROTECT_RECENT, type CompactionOptions } from "./compact";
+import { DEFAULT_PREPARE_RATIO, createSpeculator, type Speculator } from "./speculate";
+import type { CanonicalPolicyRegistration, PolicyRegistrationFactory } from "../core/policy/types";
 
 type CompactionConfig = CompactionOptions & {
   /** Where the compaction record goes. The policy reports; it does not decide. */
@@ -9,13 +10,43 @@ type CompactionConfig = CompactionOptions & {
   readonly priority: number;
 };
 
-export function createCompactionPolicy(config: CompactionConfig): CanonicalPolicyRegistration {
+/**
+ * Factory form since L4: the speculator is per-run state (a candidate must
+ * die with its run — the #692 lesson), and factories are the one sanctioned
+ * home for stateful policies (engines are built once per run and invoke
+ * `create()` at registration).
+ */
+export function createCompactionPolicy(config: CompactionConfig): PolicyRegistrationFactory {
+  return {
+    kind: "factory",
+    name: "builtin:compaction",
+    create: () => buildRegistration(config),
+  };
+}
+
+function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistration {
   const { events, priority, ...compaction } = config;
+  const speculator: Speculator | undefined =
+    compaction.onSummarize !== undefined && compaction.speculate !== false
+      ? createSpeculator({
+          prepareRatio: compaction.speculate?.prepareRatio ?? DEFAULT_PREPARE_RATIO,
+          protectRecentMessages: compaction.protectRecentMessages ?? DEFAULT_PROTECT_RECENT,
+          onSummarize: compaction.onSummarize,
+        })
+      : undefined;
+  const pointIds =
+    speculator === undefined
+      ? (["run.completion.pre"] as const)
+      : (["run.turn.post", "run.completion.pre"] as const);
+
   return {
     name: "builtin:compaction",
     kind: "point",
-    pointIds: ["run.completion.pre"],
-    effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
+    pointIds,
+    effectCapabilities: {
+      "run.completion.pre": ["run.replace_messages"],
+      ...(speculator === undefined ? {} : { "run.turn.post": [] }),
+    },
     priority,
     fn: async (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {
@@ -41,6 +72,16 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_window"],
         });
       }
+
+      // L4: turn settlement is the prepare hook — observation only, no
+      // effects. The dispatch context is a frozen clone, which is exactly
+      // what a background summarize wants: content it can read while the
+      // run moves on.
+      if (ctx.pointId === "run.turn.post") {
+        speculator?.maybePrepare(ctx.messages, ctx.contextTokens, contextWindowTokens);
+        return PolicyDecision.allow({ policyId: "builtin.compaction" });
+      }
+
       const resolved = { ...compaction, contextWindowTokens };
       // A yield-borne dispatch skips the threshold gate: the loop already
       // measured and stopped. Gating it again lets a config ratio above the
@@ -72,6 +113,7 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
       // the lifecycle supplies one, and the measuredTokens spread was dead —
       // ctx.contextTokens is guarded at the top of this function.
       const runId = ctx.traceContext?.runId;
+      const candidate = speculator?.peek();
       const result = await Compaction.compact(
         ctx.messages,
         resolved,
@@ -80,8 +122,14 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
         {
           trigger: ctx.contextYielded ? "yield" : "threshold",
           measuredTokens: ctx.contextTokens,
+          ...(candidate === undefined ? {} : { candidate }),
         },
       );
+      // Whatever the seam saw, it consumed: a promoted candidate is spent,
+      // a discarded one is dead — either way the next prepare starts clean.
+      if (candidate !== undefined) speculator?.consume();
+      const candidateReason =
+        result.candidate === undefined ? [] : [`compaction_candidate_${result.candidate}`];
       if (!result.compacted) {
         // The trigger fired and nothing was reclaimed — the one silent path
         // the wiring review found. A full window with no visible reason is
@@ -92,13 +140,14 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
             result.blocked === "no_user_boundary"
               ? "compaction_skipped_no_boundary"
               : "compaction_skipped_nothing_reclaimed",
+            ...candidateReason,
           ],
         });
       }
 
       return PolicyDecision.allow({
         policyId: "builtin.compaction",
-        reasonCodes: ["compaction_threshold_exceeded"],
+        reasonCodes: ["compaction_threshold_exceeded", ...candidateReason],
         effects: [{ type: "run.replace_messages", messages: result.messages }],
       });
     },

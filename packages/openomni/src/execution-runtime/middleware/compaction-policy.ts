@@ -17,6 +17,9 @@ const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown
   protectRecentMessages: z.number().int().nonnegative().optional(),
   preserveUserMessageChars: z.number().int().positive().optional(),
   onSummarize: MessageSummarizerSchema.optional(),
+  speculate: z
+    .union([z.literal(false), z.object({ prepareRatio: z.number().gt(0).lt(1).optional() })])
+    .optional(),
   elideToolOutputs: z
     .object({
       minOutputChars: z.number().int().positive(),
@@ -74,6 +77,19 @@ export function withReplacementPersistence(
   registration: ReturnType<typeof createCompactionPolicy>,
   events: BusEvent.Sink,
 ): ReturnType<typeof createCompactionPolicy> {
+  // L4 made the compaction policy a per-run factory (speculator state); the
+  // persistence wrap applies to each created registration so the wrapped fn
+  // still closes over that run's state.
+  return {
+    ...registration,
+    create: () => wrapCreated(registration.create(), events),
+  };
+}
+
+function wrapCreated(
+  registration: ReturnType<ReturnType<typeof createCompactionPolicy>["create"]>,
+  events: BusEvent.Sink,
+): ReturnType<ReturnType<typeof createCompactionPolicy>["create"]> {
   const warn = (
     ctx: { traceContext?: { traceId?: string }; sessionId?: string },
     msg: string,

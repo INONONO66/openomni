@@ -31,9 +31,13 @@ describe("withReplacementPersistence", () => {
           }),
       };
       const wrapped = withReplacementPersistence(
-        hostile as unknown as Parameters<typeof withReplacementPersistence>[0],
+        {
+          kind: "factory",
+          name: "builtin:compaction",
+          create: () => hostile,
+        } as unknown as Parameters<typeof withReplacementPersistence>[0],
         Bus,
-      );
+      ).create();
       const decision = await wrapped.fn({
         pointId: "run.completion.pre",
         sessionId: "s-parse",
