@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787080575863,
+  "lastUpdate": 1787080985014,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56633,6 +56633,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 535211,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8138e202ab8ade581cc0a3f9a3a79654d1044b4",
+          "message": "feat(openomni): user byte guard + deterministic probe bench (#717) (#729)\n\n* feat(openomni): user byte guard + deterministic probe bench (#717)\n\nCompaction-design L7 — the stack's closing leaf.\n\nByte guard: the wrapper refuses any rebuilt window whose user-roled text is\nnot byte-identical (multiset containment, anchors and policy-injected texts\nexcluded on both sides) to what the seam received. A paraphrase-laundering\nwindow loses its run.replace_messages effect — the run keeps its unchanged\nwindow — and the violation is a hard, visible finding (operational.error,\ncomponent compaction-user-byte-guard, reasonCode\ncompaction_user_byte_guard_refused). The guard runs before decoration and\npersistence; decoration cannot introduce a violation afterwards because it\nrewrites only the anchor render, which the guard excludes by identity.\nPinned with a hostile paraphrasing registration.\n\nProbe bench: Factory's probe methodology made deterministic — byte-presence\nprobes (constraints with exact quantifiers, goal, ledger-derived artifact\npath) over a seeded corpus, tokens-per-task floor asserted, scores exact\nand reproducible with no live judge. Includes the user-verbatim vs\nuniform-summarization A/B no published benchmark has run: the anchored\nseam answers 100% of user probes byte-exact; the regenerate-uniform\nbaseline answers none outside the protected tail. A live blind-judge pass\nstays a pluggable manual step — presence probes are the CI-safe floor,\nstated in the doc row.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): guard tag-laundering closed + honest bench framing\n\nReview round 1 (PASS WITH CHANGES) fixes:\n\nF1 — the tag exemption is now earned, not claimed: the guard's multiset is\ntag-qualified (a policyInjected window text must consume a policyInjected\ninput occurrence), and at most ONE well-shaped anchor (string anchorBody +\narray keptWindow) earns the render exemption per side — a second anchor, or\nan anchor flag without the record shape, is plain user speech and fails the\nbyte check when paraphrased. The reviewer's three counter-PoCs (second\ntagged anchor, shapeless anchor flag, injected-tag paraphrase) are pinned\nrefused. The guard's role is stated: core-pipeline integrity against the\nseam's input, single trust domain per the L3 M4 precedent.\n\nF2 — design-doc L7 row and implementation-status now state the shipped\nscope: guard reference point is the seam's input; anchor quotations stay\nverbatim BY CONSTRUCTION (L6 deterministic quoting), not re-checked.\n\nF3 — the uniform baseline is labeled illustrative (byte-absent by\nconstruction); the measured half of the A/B is the shipped anchored path\nthrough the real seam.\n\nF4 — 'tokens-per-task floor' renamed to 'compaction floor' everywhere\n(tokens-per-task proper needs task completion, out of bench scope).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): guard comment states shipped semantics (review D2/D3)\n\nD2 — the guard-block comment now states the tag-qualified, earned-exemption\nsemantics, the core-pipeline-integrity role (single trust domain, L3 M4\nprecedent), and the designed residual: the one well-shaped anchor slot is by\ndefinition new text a byte check cannot cover; its body comes from a\nsummarizer that never receives user text (L2).\n\nD3 — persistence selects the anchor by the same earned identity the guard\nhonors (well-shaped, not flag-alone): one identity, one definition, the\n#721 M3 rule applied to this file.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): migrate to Operational.Events after #728 refactor\n\nMain's #728 moved operational events under Operational.Events; the branch's\nguard/wrapper call sites and test subscriptions follow.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T19:21:39Z",
+          "tree_id": "750c517489a9dea7bb60d51b0f85005e4dc0d313",
+          "url": "https://github.com/INONONO66/openomni/commit/a8138e202ab8ade581cc0a3f9a3a79654d1044b4"
+        },
+        "date": 1787080984562,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10046,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2514,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2965,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15425,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8124,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1025,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1543,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 748,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47993,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514287,
             "unit": "ns/op"
           }
         ]
