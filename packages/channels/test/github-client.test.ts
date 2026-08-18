@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { GitHubClient } from "../../src/channel/github/client";
+import { GitHubClient } from "../src/github/client";
 
 describe("GitHubClient", () => {
   it("records a warn instead of silently skipping a reply without a token (#606)", async () => {

@@ -29,6 +29,10 @@
       ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
+    "packages/channels": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
     "packages/coordinator": {
       "entry": ["test/**/*.test.ts", "test/harness/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]

@@ -5,33 +5,33 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 /**
- * Channels band-extraction readiness gate (#499 precursor).
+ * Channels band import contract (#551 stage 1 — the extraction gate that
+ * traveled with the band move from apps/server/src/channel).
  *
- * The future channels band depends on @openomni/protocol plus the leaf
- * @openomni/telemetry: channel code observes through the injected publish
- * port (channel/types.ts), speaks the Channel.SurfaceKey codec, and mints
- * W3C trace ids at its genuine trace origins (D11 — gateway events, inbound
- * frames). #499's text pinned the band to {protocol, ipc}; this amendment
- * (+telemetry, PR #653) is recorded on that issue for Owner review — an
- * injected-mint port would be one-off ceremony for a pure leaf function no
- * other band bothers with. This static scan pins the seam — every import in
- * apps/server/src/channel/** must be one of the allowed packages, a node
- * builtin, or relative. When the band MOVE lands (post-#499) this gate
- * travels with it as the package's import contract.
+ * The channels package whitelist at gateway stage 1 is {protocol, ipc,
+ * policy} (docs/gateway-design.md §1/§9; ledger arrives at stage 2): channel
+ * code observes through the injected publish port (src/types.ts), speaks the
+ * protocol Channel.SurfaceKey codec, and mints W3C trace ids via protocol's
+ * newTraceId at its genuine trace origins (D11 — gateway events, inbound
+ * frames). The pre-move telemetry allowance (PR #653) is DROPPED: since the
+ * trace-id mint moved into protocol, the band imports telemetry zero times —
+ * verified at extraction. This static scan pins the seam — every import in
+ * src/** must be one of the allowed packages, a node builtin, or relative.
  */
 
-const CHANNEL_ROOT = fileURLToPath(new URL("../src/channel", import.meta.url));
-const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/telemetry"] as const;
+const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
+const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/ipc"] as const;
 
 /**
  * Gateway amendment (docs/gateway-design.md §1/§8.2, Owner 2026-08-18/19):
  * perimeter JUDGMENT code may import the shared policy engine — driver code
- * may not. Today the only judgment sites in the band are under
- * `channel/authn/`; they travel to the gateway router band at stage 2
- * (#707), taking this allowance with them. Everything else in channel/**
- * stays on the dumb-driver contract.
+ * may not (S8 banding; the same rule is enforced repo-wide by
+ * script/check-deps.ts). Today the only judgment sites in the band are under
+ * `src/authn/`; they travel to the gateway router band at stage 2 (#707),
+ * taking this allowance with them. Everything else in src/** stays on the
+ * dumb-driver contract {protocol, ipc}.
  */
-const JUDGMENT_DIR = "src/channel/authn/";
+const JUDGMENT_DIR = "src/authn/";
 const JUDGMENT_EXTRA_PACKAGES = ["@openomni/policy"] as const;
 
 type ScannedSource = Readonly<{ path: string; text: string }>;
@@ -42,7 +42,7 @@ function channelSources(): readonly ScannedSource[] {
     .filter((entry) => entry.endsWith(".ts"))
     .map((entry) => {
       const path = join(CHANNEL_ROOT, entry);
-      return { path: join("src/channel", entry), text: readFileSyncText(path) };
+      return { path: join("src", entry), text: readFileSyncText(path) };
     });
 }
 
@@ -122,7 +122,7 @@ describe("channels band import boundary", () => {
     expect(channelSources().length).toBeGreaterThan(10);
   });
 
-  it("keeps channel/* on the band contract: protocol, node builtins, relative only", () => {
+  it("keeps src/* on the band contract: protocol, ipc, node builtins, relative only", () => {
     expect(detectBandViolations(channelSources())).toEqual([]);
   });
 
@@ -164,6 +164,16 @@ describe("channels band import boundary", () => {
     ],
     ["arbitrary npm package", 'import { z } from "zod";', "imports zod"],
     [
+      "telemetry import (allowance dropped at extraction)",
+      'import { newTraceId } from "@openomni/telemetry";',
+      "imports @openomni/telemetry",
+    ],
+    [
+      "policy import outside the judgment dir",
+      'import { evaluatePermission } from "@openomni/policy";',
+      "imports @openomni/policy",
+    ],
+    [
       "non-literal dynamic import",
       "const mod = await import(moduleName);",
       "imports <non-literal dynamic import>",
@@ -172,20 +182,28 @@ describe("channels band import boundary", () => {
 
   for (const [name, text, violation] of violationFixtures) {
     it(`detects ${name}`, () => {
-      const path = "src/channel/synthetic.ts";
+      const path = "src/synthetic.ts";
       expect(detectBandViolations([{ path, text }])).toContain(`${path}: ${violation}`);
     });
   }
 
-  it("allows protocol, telemetry, node builtin, and relative imports", () => {
+  it("allows protocol, ipc, node builtin, and relative imports", () => {
     const text = [
-      'import { Channel, Operational } from "@openomni/protocol";',
-      'import { newTraceId } from "@openomni/telemetry";',
+      'import { Channel, Operational, newTraceId } from "@openomni/protocol";',
+      'import { IpcConnectionError } from "@openomni/ipc";',
       'import { timingSafeEqual } from "node:crypto";',
       'import type { PublishPort } from "../types";',
       'import { GatewayOp } from "./types";',
       'export * from "./surface.js";',
     ].join("\n");
-    expect(detectBandViolations([{ path: "src/channel/synthetic.ts", text }])).toEqual([]);
+    expect(detectBandViolations([{ path: "src/synthetic.ts", text }])).toEqual([]);
+  });
+
+  it("allows the policy engine only under the authn judgment dir", () => {
+    const text = 'import { evaluatePermission } from "@openomni/policy";';
+    expect(detectBandViolations([{ path: "src/authn/synthetic.ts", text }])).toEqual([]);
+    expect(detectBandViolations([{ path: "src/discord/synthetic.ts", text }])).toEqual([
+      "src/discord/synthetic.ts: imports @openomni/policy",
+    ]);
   });
 });
