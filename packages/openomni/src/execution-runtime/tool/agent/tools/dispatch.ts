@@ -95,6 +95,7 @@ function result(call: Tool.Call, output: Command.Result, isError?: boolean): Too
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
+    toolName: call.tool,
     output: JSON.stringify(output),
     ...(isError ? { isError: true } : {}),
   };

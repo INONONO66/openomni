@@ -178,6 +178,7 @@ export function successResult(call: ProtocolTool.Call, output: string): Protocol
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
+    toolName: call.tool,
     output,
   };
 }
@@ -186,6 +187,7 @@ export function errorResult(call: ProtocolTool.Call, output: string): ProtocolTo
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
+    toolName: call.tool,
     output,
     isError: true,
   };

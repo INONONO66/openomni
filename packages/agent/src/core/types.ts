@@ -1,5 +1,5 @@
-import type { Actor, BusEvent, Model, Policy, Sink, Token, Tool } from "@openomni/protocol";
-import type { Provider, RunInput } from "@openomni/llm";
+import type { Actor, BusEvent, Model, Policy, Token, Tool } from "@openomni/protocol";
+import type { Provider, RunInput, Sink } from "@openomni/llm";
 import type { PolicyEngineRegistration } from "./policy/types";
 
 export interface TokenUsage extends Token.AgentUsage {}
@@ -30,7 +30,7 @@ export interface ChatAgentConfig {
   toolChoice?: "auto" | "required" | "none";
   middleware?: PolicyEngineRegistration[];
   llm?: {
-    run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
+    run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/llm").Run.Outcome>;
     resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
   };
 }

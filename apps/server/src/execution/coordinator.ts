@@ -1,11 +1,7 @@
-import {
-  Execution,
-  WorkerDeliveryError,
-  type Tool,
-  type WorkerBootstrap,
-} from "@openomni/protocol";
+import { Execution, type Tool, type WorkerBootstrap } from "@openomni/protocol";
 import {
   createWorkerManager,
+  WorkerDeliveryError,
   type InboundWaitParams,
   type InboundWaitResult,
   type ToolCallContext,
@@ -101,6 +97,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
               return {
                 id: params.callId,
                 toolCallId: params.callId,
+                toolName: params.tool,
                 output: `Unknown tool: ${params.tool}`,
                 isError: true,
               };
@@ -109,6 +106,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
             return {
               id: result.id,
               toolCallId: result.toolCallId,
+              toolName: result.toolName ?? params.tool,
               output: result.output,
               isError: result.isError,
             };

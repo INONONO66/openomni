@@ -1,4 +1,24 @@
-import type { Run } from "@openomni/protocol";
+import { z } from "zod";
+
+/**
+ * #500 C1: the loop's retry policy, moved here from protocol `RetryPolicy`
+ * — this package is its only producer and consumer. `retryOn` speaks the same
+ * closed reason vocabulary as `RunEvents.ErrorRetry.reason` ({@link RetryReason}).
+ */
+export const RetryPolicy = z.object({
+  maxAttempts: z.number(),
+  backoffMs: z.object({
+    initial: z.number(),
+    multiplier: z.number(),
+    max: z.number(),
+  }),
+  retryOn: z
+    .array(
+      z.enum(["timeout", "tool_error", "transient_error", "validation_error", "context_overflow"]),
+    )
+    .optional(),
+});
+export type RetryPolicy = z.infer<typeof RetryPolicy>;
 
 export type RetryReason =
   | "timeout"
@@ -14,13 +34,13 @@ export type RetryReason =
  */
 export type TerminalReason = RetryReason | "aborted";
 
-export const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   maxAttempts: 3,
   backoffMs: { initial: 1000, multiplier: 2, max: 30_000 },
   retryOn: ["timeout", "tool_error", "transient_error"],
 };
 
-export function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): number {
+export function calculateBackoffMs(policy: RetryPolicy, attempt: number): number {
   const rawDelay =
     policy.backoffMs.initial * policy.backoffMs.multiplier ** Math.max(0, attempt - 1);
   return Math.min(rawDelay, policy.backoffMs.max);
@@ -110,11 +130,7 @@ export function isAbort(error: Error, signal?: AbortSignal): boolean {
  * Whether this attempt may be retried. An empty or absent `retryOn` means no
  * filter, so every reason is retryable up to `maxAttempts`.
  */
-export function shouldRetry(
-  policy: Run.RetryPolicy,
-  reason: RetryReason,
-  attempt: number,
-): boolean {
+export function shouldRetry(policy: RetryPolicy, reason: RetryReason, attempt: number): boolean {
   if (attempt >= policy.maxAttempts) return false;
   if (policy.retryOn === undefined || policy.retryOn.length === 0) return true;
   return policy.retryOn.includes(reason);

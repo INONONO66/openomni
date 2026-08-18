@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { Sink, Tool } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
+import type { Tool } from "@openomni/protocol";
 import {
   createStopOutcome,
   createMockLlmConfig,

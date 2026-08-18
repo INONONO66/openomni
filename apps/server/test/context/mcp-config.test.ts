@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { Operational, type McpServerConfig } from "@openomni/protocol";
+import { Operational, type McpConfig } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { McpConfigLoader } from "../../src/context/mcp-config";
 
@@ -39,7 +39,7 @@ describe("McpConfigLoader.discover", () => {
     const openomniDir = join(dir, ".openomni");
     mkdirSync(openomniDir, { recursive: true });
 
-    const servers: McpServerConfig[] = [
+    const servers: McpConfig.ServerConfig[] = [
       { name: "server-a", transport: "stdio", command: "node", args: ["a.js"] },
     ];
     writeFileSync(join(openomniDir, "mcp.json"), JSON.stringify({ servers }), "utf-8");
@@ -53,7 +53,7 @@ describe("McpConfigLoader.discover", () => {
     const openomniDir = join(dir, ".openomni");
     mkdirSync(openomniDir, { recursive: true });
 
-    const servers: McpServerConfig[] = [
+    const servers: McpConfig.ServerConfig[] = [
       {
         name: "server-b",
         transport: "sse",
@@ -85,7 +85,7 @@ describe("McpConfigLoader.discover", () => {
     const openomniDir = join(dir, ".openomni");
     const configPath = join(openomniDir, "mcp.json");
     mkdirSync(openomniDir, { recursive: true });
-    const valid: McpServerConfig = { name: "valid", transport: "stdio", command: "node" };
+    const valid: McpConfig.ServerConfig = { name: "valid", transport: "stdio", command: "node" };
     writeFileSync(
       configPath,
       JSON.stringify({
@@ -139,12 +139,12 @@ describe("McpConfigLoader.discover", () => {
 });
 
 describe("McpConfigLoader.merge", () => {
-  const globalServers: McpServerConfig[] = [
+  const globalServers: McpConfig.ServerConfig[] = [
     { name: "global-a", transport: "stdio", command: "ga" },
     { name: "global-b", transport: "sse", url: "http://gb" },
   ];
 
-  const projectServers: McpServerConfig[] = [
+  const projectServers: McpConfig.ServerConfig[] = [
     { name: "project-c", transport: "stdio", command: "pc" },
   ];
 
@@ -161,7 +161,7 @@ describe("McpConfigLoader.merge", () => {
   });
 
   it("project server overrides global on name conflict", () => {
-    const conflictProject: McpServerConfig[] = [
+    const conflictProject: McpConfig.ServerConfig[] = [
       { name: "global-a", transport: "sse", url: "http://override" },
     ];
     const result = McpConfigLoader.merge(globalServers, conflictProject);
@@ -171,7 +171,7 @@ describe("McpConfigLoader.merge", () => {
   });
 
   it("project overrides preserve protocol MCP fields", () => {
-    const conflictProject: McpServerConfig[] = [
+    const conflictProject: McpConfig.ServerConfig[] = [
       {
         name: "global-b",
         transport: "streamable-http",

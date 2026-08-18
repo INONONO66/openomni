@@ -1,7 +1,7 @@
 import { newTraceId } from "@openomni/telemetry";
 import type { IpcServer } from "@openomni/ipc";
 import type { Auth } from "@openomni/llm";
-import { Operational, WorkerBootstrap } from "@openomni/protocol";
+import { Ipc, Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 
 export namespace WorkerBootstrapHandler {
@@ -67,7 +67,9 @@ export namespace WorkerBootstrapHandler {
     }
 
     try {
-      const bootstrap = WorkerBootstrap.Bootstrap.parse(options.params.bootstrap);
+      // #500 B3: the Methods table entry is the one params contract (it
+      // wraps WorkerBootstrap.Bootstrap — same schema object, whole frame).
+      const { bootstrap } = Ipc.Methods["coordinator.bootstrap"].params.parse(options.params);
       options.state.setBootstrap(bootstrap);
       options.server.useConnection(options.connectionId);
       options.state.markReady();

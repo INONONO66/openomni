@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { WorkerDeliveryError } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import { resolveRestartDelay, waitForSupervisorReady } from "./supervisor-process";
 
 // buildWorkerEnv coverage (fixture keys off the production allowlist, opt-in

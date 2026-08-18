@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { WorkerDeliveryError } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../../src/error";
 import {
   createWorkerManager,
   killWorkerForTest,

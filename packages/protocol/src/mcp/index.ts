@@ -34,5 +34,3 @@ export namespace McpConfig {
   ]);
   export type ServerConfig = z.infer<typeof ServerConfig>;
 }
-
-export type McpServerConfig = McpConfig.ServerConfig;

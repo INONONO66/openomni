@@ -490,6 +490,7 @@ function createErrorResult(call: Tool.Call, message: string): Tool.Result {
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
+    toolName: call.tool,
     output: message,
     isError: true,
   };

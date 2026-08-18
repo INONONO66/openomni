@@ -1,4 +1,4 @@
-import type { McpServerConfig, Tool } from "@openomni/protocol";
+import type { McpConfig, Tool } from "@openomni/protocol";
 import type { ToolExecutionContext } from "@openomni/openomni";
 
 /** @internal Package-local injected client seam for McpToolProvider tests/options. */
@@ -15,7 +15,7 @@ export interface McpClientLike {
 }
 
 export interface McpToolProviderOptions {
-  readonly createClient?: (config: McpServerConfig) => McpClientLike;
+  readonly createClient?: (config: McpConfig.ServerConfig) => McpClientLike;
   /**
    * The trace of the boot that created this provider. Connect failures are
    * reported under it — boot is a trace origin, an MCP connect is not.

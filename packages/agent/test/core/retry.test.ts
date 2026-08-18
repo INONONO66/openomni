@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import type { Run } from "@openomni/protocol";
+
 import {
   abortError,
   calculateBackoffMs,
   classifyRetryReason,
   isAbort,
+  RetryPolicy,
   shouldRetry,
   sleep,
 } from "../../src/core/retry";
@@ -100,7 +101,7 @@ describe("isAbort (audit M4)", () => {
 });
 
 describe("shouldRetry", () => {
-  const policy: Run.RetryPolicy = {
+  const policy: RetryPolicy = {
     maxAttempts: 3,
     backoffMs: { initial: 10, multiplier: 2, max: 100 },
     retryOn: ["timeout"],
@@ -138,5 +139,55 @@ describe("calculateBackoffMs", () => {
 
   it("does not go below the initial delay", () => {
     expect(calculateBackoffMs(policy, 0)).toBe(100);
+  });
+});
+
+// #500 C1: moved from packages/protocol/test/run.test.ts with the schema —
+// RetryPolicy is agent-local now.
+describe("RetryPolicy schema", () => {
+  it("parses a valid retry policy with retryOn", () => {
+    const policy = RetryPolicy.parse({
+      maxAttempts: 3,
+      backoffMs: {
+        initial: 100,
+        multiplier: 2,
+        max: 1000,
+      },
+      retryOn: ["timeout", "tool_error", "transient_error", "validation_error"],
+    });
+
+    expect(policy.retryOn).toEqual([
+      "timeout",
+      "tool_error",
+      "transient_error",
+      "validation_error",
+    ]);
+  });
+
+  it("parses a valid retry policy without retryOn", () => {
+    const policy = RetryPolicy.parse({
+      maxAttempts: 1,
+      backoffMs: {
+        initial: 10,
+        multiplier: 1.5,
+        max: 100,
+      },
+    });
+
+    expect(policy.retryOn).toBeUndefined();
+  });
+
+  it("rejects invalid retryOn values", () => {
+    expect(() =>
+      RetryPolicy.parse({
+        maxAttempts: 3,
+        backoffMs: {
+          initial: 100,
+          multiplier: 2,
+          max: 1000,
+        },
+        retryOn: ["invalid"],
+      }),
+    ).toThrow();
   });
 });

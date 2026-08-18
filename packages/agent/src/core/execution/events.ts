@@ -1,6 +1,5 @@
+import { BusEvent, Token } from "@openomni/protocol";
 import { z } from "zod";
-import { BusEvent } from "../bus/index.js";
-import { Token } from "../token/index.js";
 
 const AgentBase = z.object({
   traceId: z.string(),
@@ -10,7 +9,16 @@ const AgentBase = z.object({
   time: z.number(),
 });
 
-export const Events = {
+/**
+ * #499 observation descriptors — loop-run events published via Bus.
+ *
+ * #500 C1: moved here from protocol's `Run.Events` — every publisher lives in
+ * this package (run-events.ts, compaction/compact.ts), so the descriptors
+ * live with them (precedent: openomni messaging defines its own descriptors).
+ * The persisted event names stay the historical `agent.*` strings (frozen —
+ * ledger rows and downstream category derivation key on them byte-for-byte).
+ */
+export const RunEvents = {
   TurnStart: BusEvent.define(
     "agent.turn.start",
     AgentBase.extend({

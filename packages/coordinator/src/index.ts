@@ -12,3 +12,6 @@ export type {
   ToolCallContext,
   WorkerManager,
 } from "./worker-manager";
+// #500 C3: the deliver-verb rejection taxonomy lives with its throwers now;
+// apps/server (composition root) catches it through this export.
+export { WorkerDeliveryError } from "./error";

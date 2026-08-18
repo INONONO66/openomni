@@ -1,4 +1,5 @@
-import { PolicyDecision, type Run } from "@openomni/protocol";
+import type { Run } from "@openomni/llm";
+import { PolicyDecision } from "@openomni/protocol";
 import { effectOf, PolicyEffectApplier } from "./effects";
 import { publishBudgetTelemetry } from "../budget";
 import type { PolicyEngineInstance } from "../policy";

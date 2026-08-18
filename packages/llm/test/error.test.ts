@@ -137,3 +137,67 @@ describe("APIError", () => {
     expect(APIError.isInstance(new NamedError.Unknown({ message: "x" }))).toBe(false);
   });
 });
+
+// #500 C3: moved from packages/protocol/test/error.test.ts with the schema.
+describe("APIError", () => {
+  test("parses the minimal shape", () => {
+    const parsed = APIError.Schema.parse({
+      name: "APIError",
+      data: {
+        message: "fail",
+        isRetryable: true,
+      },
+    });
+
+    expect(parsed).toEqual({
+      name: "APIError",
+      data: {
+        message: "fail",
+        isRetryable: true,
+      },
+    });
+  });
+
+  test("parses optional API metadata fields", () => {
+    const parsed = APIError.Schema.parse({
+      name: "APIError",
+      data: {
+        message: "fail",
+        isRetryable: false,
+        statusCode: 503,
+        responseHeaders: { "content-type": "application/json" },
+        responseBody: "{}",
+        metadata: { requestId: "req-1" },
+      },
+    });
+
+    expect(parsed.data).toEqual({
+      message: "fail",
+      isRetryable: false,
+      statusCode: 503,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: "{}",
+      metadata: { requestId: "req-1" },
+    });
+  });
+
+  test("rejects missing isRetryable", () => {
+    expect(() =>
+      APIError.Schema.parse({
+        name: "APIError",
+        data: {
+          message: "fail",
+        },
+      }),
+    ).toThrow();
+  });
+
+  test("constructs and identifies APIError instances", () => {
+    const error = new APIError({ message: "fail", isRetryable: false });
+
+    expect(error.name).toBe("APIError");
+    expect(error.message).toBe("fail");
+    expect(APIError.isInstance(error)).toBe(true);
+    expect(APIError.isInstance(new NamedError.Unknown({ message: "oops" }))).toBe(false);
+  });
+});

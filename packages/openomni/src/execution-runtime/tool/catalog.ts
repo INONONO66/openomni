@@ -1,7 +1,7 @@
-import type { ToolSelection } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolSource } from "./types.js";
 
-const DEFAULT_CATEGORY_MAP: Record<string, ToolSelection.Category> = {
+const DEFAULT_CATEGORY_MAP: Record<string, Tool.Category> = {
   read: "filesystem",
   write: "filesystem",
   edit: "filesystem",
@@ -15,15 +15,15 @@ const DEFAULT_CATEGORY_MAP: Record<string, ToolSelection.Category> = {
 export interface CatalogEntry {
   tool: NativeTool;
   canonicalName: string;
-  category: ToolSelection.Category;
+  category: Tool.Category;
   source: ToolSource;
 }
 
 export function resolveCategory(
   canonicalName: string,
   source: ToolSource,
-  explicitCategory?: ToolSelection.Category,
-): ToolSelection.Category {
+  explicitCategory?: Tool.Category,
+): Tool.Category {
   if (explicitCategory) return explicitCategory;
   const mapped = DEFAULT_CATEGORY_MAP[canonicalName];
   if (mapped) return mapped;
@@ -56,7 +56,7 @@ export function buildToolCatalog(
 
 export function resolveToolSelection(
   catalog: CatalogEntry[],
-  selection: ToolSelection.Selection,
+  selection: Tool.Selection,
   parentAllowed?: Set<string>,
   depth = 0,
 ): CatalogEntry[] {

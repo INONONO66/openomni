@@ -1,39 +1,49 @@
 import { z } from "zod";
-import { Actor } from "../actor/index.js";
+import { Execution } from "../execution/index.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
-import { ToolSelection } from "../tool-selection/index.js";
 
 export namespace WorkerBootstrap {
-  export const RuntimeAgentDefinition = z.object({
+  /**
+   * #500 B1: an agent definition delivered at worker bootstrap. The spawn
+   * config fields (`systemPrompt`/`permissions`/`policyPlan`/`budget`) are
+   * PICKED from the canonical Execution.Request instead of re-declared —
+   * the #504 dual lane (`permissions` + `policyPlan`) rides the same schema
+   * objects the spawn parse enforces. Bootstrap-only extensions: identity
+   * (`name`/`description`), a per-agent `model` override (optional here,
+   * required on a spawn), and `tools` as a Tool.Selection (resolved to
+   * concrete Tool.Spec[] before a run is spawned).
+   */
+  export const AgentDefinition = Execution.Request.pick({
+    systemPrompt: true,
+    permissions: true,
+    policyPlan: true,
+    budget: true,
+  }).extend({
     name: z.string(),
     description: z.string(),
     model: Model.Ref.optional(),
-    systemPrompt: z.string().optional(),
-    tools: ToolSelection.Selection,
-    permissions: Policy.Permission.optional(),
-    policyPlan: Policy.PolicyPlan.optional(),
-    budget: Actor.Profile.Budget.optional(),
+    tools: Tool.Selection,
   });
-  export type RuntimeAgentDefinition = z.infer<typeof RuntimeAgentDefinition>;
+  export type AgentDefinition = z.infer<typeof AgentDefinition>;
 
-  export const RuntimeToolCatalogEntry = z.object({
+  export const ToolCatalogEntry = z.object({
     canonicalName: z.string(),
     exposedName: z.string(),
     source: Tool.Source,
-    category: ToolSelection.Category,
+    category: Tool.Category,
     riskTier: Tool.RiskTier,
     spec: Tool.Spec,
     descriptor: Policy.Resource.Descriptor.optional(),
     mcpServer: z.string().optional(),
   });
-  export type RuntimeToolCatalogEntry = z.infer<typeof RuntimeToolCatalogEntry>;
+  export type ToolCatalogEntry = z.infer<typeof ToolCatalogEntry>;
 
   export const Bootstrap = z.object({
     configEpoch: z.string(),
-    agents: RuntimeAgentDefinition.array(),
-    toolCatalog: RuntimeToolCatalogEntry.array(),
+    agents: AgentDefinition.array(),
+    toolCatalog: ToolCatalogEntry.array(),
     credentials: z.record(z.string()).optional(),
     policyPlan: Policy.PolicyPlan.optional(),
   });

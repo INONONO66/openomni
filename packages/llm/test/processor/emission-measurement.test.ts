@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { Message, Sink } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
+import type { Sink } from "../../src/sink";
 import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";
 import { Bus } from "@openomni/telemetry";

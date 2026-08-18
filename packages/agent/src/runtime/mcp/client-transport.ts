@@ -8,7 +8,7 @@ import {
   type StreamableHTTPClientTransportOptions,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { McpServerConfig } from "@openomni/protocol";
+import type { McpConfig } from "@openomni/protocol";
 
 const DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS = {
   initialReconnectionDelay: 1_000,
@@ -16,7 +16,7 @@ const DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS = {
   reconnectionDelayGrowFactor: 1.5,
 } as const;
 
-export function createTransport(config: McpServerConfig): Transport {
+export function createTransport(config: McpConfig.ServerConfig): Transport {
   switch (config.transport) {
     case "stdio":
       return new StdioClientTransport({
@@ -35,7 +35,9 @@ export function createTransport(config: McpServerConfig): Transport {
   }
 }
 
-function sseTransportOptions(config: McpServerConfig): SSEClientTransportOptions | undefined {
+function sseTransportOptions(
+  config: McpConfig.ServerConfig,
+): SSEClientTransportOptions | undefined {
   const headers = config.headers;
   if (headers === undefined) return undefined;
 
@@ -46,7 +48,7 @@ function sseTransportOptions(config: McpServerConfig): SSEClientTransportOptions
 }
 
 function streamableHttpTransportOptions(
-  config: McpServerConfig,
+  config: McpConfig.ServerConfig,
 ): StreamableHTTPClientTransportOptions | undefined {
   const requestInit = requestInitForHeaders(config);
   const maxRetries = normalizeRetries(config.retries);
@@ -63,7 +65,7 @@ function streamableHttpTransportOptions(
   };
 }
 
-function requestInitForHeaders(config: McpServerConfig): RequestInit | undefined {
+function requestInitForHeaders(config: McpConfig.ServerConfig): RequestInit | undefined {
   if (config.headers === undefined) return undefined;
   return { headers: { ...config.headers } };
 }

@@ -1,4 +1,4 @@
-import type { Run, Sink } from "@openomni/protocol";
+import type { Run, Sink } from "@openomni/llm";
 import type { ChatAgentConfig } from "../../src/core/types";
 
 type MockLlmInput = {

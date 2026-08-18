@@ -38,6 +38,7 @@ export class SystemToolProvider implements ToolProvider {
       return Promise.resolve({
         id: crypto.randomUUID(),
         toolCallId: call.id,
+        toolName: call.tool,
         output: `Unknown tool: ${call.tool}`,
         isError: true,
       });

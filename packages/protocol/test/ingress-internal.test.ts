@@ -70,13 +70,13 @@ describe("InternalEventSchema", () => {
       mode: "internal",
       agentName: "dev",
       payload: "hello",
-      runtime: {
+      activation: {
         trigger: { kind: "cron", id: "job-1", scheduledAt: 1000, firedAt: 1001 },
       },
     });
 
-    expect(result.runtime?.trigger?.kind).toBe("cron");
-    expect(result.runtime?.trigger?.id).toBe("job-1");
+    expect(result.activation?.trigger?.kind).toBe("cron");
+    expect(result.activation?.trigger?.id).toBe("job-1");
   });
 });
 

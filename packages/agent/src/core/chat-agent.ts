@@ -1,4 +1,4 @@
-import type { Sink } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
 import type { ChatAgentConfig, ChatAgentInput, AgentResult } from "./types";
 import { runAgent } from "./execution/run";
 

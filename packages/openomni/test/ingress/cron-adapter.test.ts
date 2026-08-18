@@ -45,8 +45,8 @@ describe("CronAdapter.fire", () => {
     expect(capturedEvent?.surface).toBe("cron");
     expect(capturedEvent?.mode).toBe("internal");
     expect(capturedEvent?.agentName).toBe("dev");
-    expect(capturedEvent?.runtime?.trigger?.kind).toBe("cron");
-    expect(capturedEvent?.runtime?.trigger?.id).toBe("job-1");
+    expect(capturedEvent?.activation?.trigger?.kind).toBe("cron");
+    expect(capturedEvent?.activation?.trigger?.id).toBe("job-1");
   });
 
   it("emits Ingress.Events.Received when fired through ingestInternal", async () => {

@@ -4,9 +4,9 @@ import {
   Transcript,
   type BusEvent,
   type Message,
-  type Sink,
   type Tool,
 } from "@openomni/protocol";
+import type { Sink } from "../sink";
 import { coerceApiError } from "../error";
 import { Retry } from "../retry";
 import type { Provider } from "../provider";

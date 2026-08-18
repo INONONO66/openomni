@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { WorkerDeliveryError, Worker } from "../src/index.js";
+import { Worker } from "../src/index.js";
 
 const settledBase = {
   traceId: "trace-1",
@@ -29,14 +29,5 @@ describe("Worker.Events.RunSettled outcome", () => {
   });
 });
 
-describe("WorkerDeliveryError codes", () => {
-  test.each([
-    "worker_unavailable",
-    "worker_not_ready",
-    "worker_stopped",
-    "ipc_connection_lost",
-  ] as const)("supervisor rejection code %s is part of the taxonomy", (code) => {
-    const error = new WorkerDeliveryError({ message: "m", code });
-    expect(WorkerDeliveryError.Schema.safeParse(error.toObject()).success).toBe(true);
-  });
-});
+// #500 C3: the WorkerDeliveryError taxonomy suite moved to
+// packages/coordinator/test/error.test.ts with the error type.

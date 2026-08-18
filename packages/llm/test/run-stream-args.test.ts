@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Sink } from "@openomni/protocol";
+import type { Sink } from "../src/sink";
 import { Bus, collector, newTraceId } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
 

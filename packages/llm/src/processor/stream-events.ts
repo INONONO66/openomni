@@ -1,4 +1,5 @@
-import type { Message, Sink, Transcript } from "@openomni/protocol";
+import type { Message, Transcript } from "@openomni/protocol";
+import type { Sink } from "../sink";
 import { TokenTracker } from "../token";
 
 export interface StreamEvent {

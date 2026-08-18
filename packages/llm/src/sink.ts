@@ -1,7 +1,11 @@
-import type { Message } from "../message/index.js";
-import type { Tool } from "../tool/index.js";
-import type { Transcript } from "../transcript/index.js";
+import type { Message, Tool, Transcript } from "@openomni/protocol";
 
+/**
+ * #500 C2: the streaming callback contract of `run()`/the processor, moved
+ * here from protocol — llm is the producer side and every consumer (agent,
+ * openomni) already depends on llm. The move also retires the name pun with
+ * the unrelated `BusEvent.Sink` observation port, which stays in protocol.
+ */
 export interface Sink {
   onMessage: (message: Message.WithParts) => void;
   /**

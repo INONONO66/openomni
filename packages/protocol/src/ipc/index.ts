@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { Model } from "../model/index.js";
-import { Policy } from "../policy/index.js";
+import { Execution } from "../execution/index.js";
+import { Tool } from "../tool/index.js";
 import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
 const baseMessage = z.object({
@@ -43,25 +43,34 @@ const notificationSchema = baseMessage.extend({
  */
 const methods = {
   "coordinator.spawn_run": {
-    params: z.object({
-      authToken: z.string(),
-      runId: z.string(),
-      sessionId: z.string(),
-      prompt: z.string(),
-      model: Model.Ref,
-      systemPrompt: z.string().optional(),
-      // IronClaw capability injection — workers never read env vars for API keys
-      credentials: z.record(z.string()).optional(),
-      permissions: Policy.Permission.optional(),
-      policyPlan: Policy.PolicyPlan.optional(),
-      softTimeoutMs: z.number().optional(),
-      hardTimeoutMs: z.number().optional(),
-    }),
-    result: z.object({ accepted: z.boolean() }),
+    /**
+     * #500 B1: the params ARE the canonical spawn config — Execution.Request
+     * (parsed worker-side at apps/server worker-runner) plus the supervisor's
+     * per-worker auth token. The previous inline clone had drifted from the
+     * wire: it omitted required `mode`/`traceId` (every sender spreads the
+     * full Execution.Request), and carried `softTimeoutMs`/`hardTimeoutMs`
+     * that no sender wrote and no receiver read — the delivery ceiling is
+     * derived from `budget.maxWallTimeMs` (supervisor-process). Wire values
+     * unchanged; entry now matches reality. `credentials` stays IronClaw
+     * capability injection — workers never read env vars for API keys.
+     */
+    params: Execution.Request.extend({ authToken: z.string() }),
+    /**
+     * #500 B3 drift fix: the worker has always responded with an
+     * Execution.Result frame (status/output/error), never `{ accepted }` —
+     * the consumer (apps/server execution coordinator) parses exactly that.
+     */
+    result: Execution.Result,
   },
   "coordinator.cancel_run": {
     params: z.object({ authToken: z.string(), runId: z.string(), sessionId: z.string() }),
-    result: z.object({ cancelled: z.boolean(), error: z.string().optional() }),
+    result: z.object({
+      cancelled: z.boolean(),
+      error: z.string().optional(),
+      // #500 B3: the worker's confirmation frame echoes the run it aborted.
+      runId: z.string().optional(),
+      sessionId: z.string().optional(),
+    }),
   },
   "worker.deliver_message": {
     params: z.object({
@@ -128,13 +137,13 @@ const methods = {
       input: z.record(z.string(), z.unknown()),
       workspaceRoot: z.string().optional(),
     }),
-    result: z.object({
-      id: z.string(),
-      toolCallId: z.string(),
-      output: z.string(),
-      isError: z.boolean().optional(),
-      settlement: z.enum(["settled", "unknown"]).optional(),
-    }),
+    /**
+     * #500 C4: the result frame IS a Tool.Result — the inline clone had
+     * already drifted once and would again. Referencing the canonical schema
+     * also carries the additive-optional `toolName` across the UDS boundary
+     * (safe wire evolution: optional field, both ends parse Tool.Result).
+     */
+    result: Tool.Result,
   },
   "worker.tool_call_cancel": {
     params: z.object({
@@ -162,7 +171,10 @@ const methods = {
   },
   "worker.tool_call_settled": {
     params: z.object({
-      authToken: z.string().optional(),
+      // #500 B3 drift fix: the receiving worker has always REQUIRED the token
+      // (unauthorized frames are refused) and the supervisor always sends it —
+      // the `.optional()` here documented a tolerance that never existed.
+      authToken: z.string(),
       callId: z.string(),
       workspaceRoot: z.string().optional(),
     }),

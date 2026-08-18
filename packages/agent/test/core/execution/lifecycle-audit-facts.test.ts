@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
-import type { Message, Run } from "@openomni/protocol";
+import type { Run } from "@openomni/llm";
+import type { Message } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
 import { runAgent } from "../../../src/core/execution/run";
 import type { PolicyContext } from "../../../src/core/policy/types";

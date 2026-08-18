@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Sink } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 import type { PolicyContext } from "../../../src/core/policy";
 import {

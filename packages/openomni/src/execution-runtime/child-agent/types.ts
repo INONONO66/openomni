@@ -5,7 +5,7 @@ import type {
   ChatAgentInstance,
 } from "@openomni/agent";
 import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "@openomni/policy";
-import type { Model, Policy, ToolSelection, TraceContext } from "@openomni/protocol";
+import type { Model, Policy, Tool, TraceContext } from "@openomni/protocol";
 import type { InjectionQueue } from "../injection-queue.js";
 import type { NativeTool } from "../tool/types.js";
 
@@ -81,7 +81,7 @@ export type ChildAgentRuntimeOptions = {
 
 export type ChildAgentSpawnInput = {
   readonly prompt: string;
-  readonly tools?: ToolSelection.Selection;
+  readonly tools?: Tool.Selection;
   readonly notifyOnComplete?: boolean;
 };
 

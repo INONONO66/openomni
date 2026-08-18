@@ -1,7 +1,24 @@
 import z from "zod";
-import { NamedError, APIError } from "@openomni/protocol";
+import { NamedError } from "@openomni/protocol";
 
-export { NamedError, APIError };
+export { NamedError };
+
+/**
+ * #500 C3: APIError's home — moved here from protocol (its callers were
+ * llm-only: retry classification and provider-error coercion below). The
+ * previous alias re-export of the protocol definition is gone with the move.
+ */
+export const APIError = NamedError.create(
+  "APIError",
+  z.object({
+    message: z.string(),
+    statusCode: z.number().optional(),
+    isRetryable: z.boolean(),
+    responseHeaders: z.record(z.string(), z.string()).optional(),
+    responseBody: z.string().optional(),
+    metadata: z.record(z.string(), z.string()).optional(),
+  }),
+);
 
 export const ProviderError = NamedError.create(
   "ProviderError",

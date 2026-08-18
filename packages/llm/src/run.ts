@@ -1,5 +1,7 @@
-import type { BusEvent, Sink, Message, Tool, Run } from "@openomni/protocol";
+import type { BusEvent, Message, Tool } from "@openomni/protocol";
 import { LlmCall, Operational } from "@openomni/protocol";
+import { z } from "zod";
+import type { Sink } from "./sink";
 import type { SDKMessage } from "./message";
 import { Processor } from "./processor";
 import { toModelMessages } from "./message";
@@ -46,6 +48,31 @@ export interface RunInput {
    * `llm` reports what it did without reaching for a process-wide singleton.
    */
   events: BusEvent.Sink;
+}
+
+/**
+ * #500 C1: the loop-run result vocabulary, moved here from protocol — this
+ * package's `run()` is the sole producer and the consumers (agent core) all
+ * depend on llm already. The `Run.Outcome` name is kept: llm hosted no `Run`
+ * namespace, so there is no collision (`run` the function and `Run` the
+ * namespace are distinct identifiers).
+ */
+export namespace Run {
+  export const Outcome = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("stop") }),
+    z.object({ type: z.literal("continue") }),
+    z.object({ type: z.literal("compact") }),
+    z.object({ type: z.literal("aborted") }),
+    z.object({
+      type: z.literal("error"),
+      error: z.object({
+        message: z.string(),
+        name: z.string().optional(),
+        stack: z.string().optional(),
+      }),
+    }),
+  ]);
+  export type Outcome = z.infer<typeof Outcome>;
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {

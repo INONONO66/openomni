@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { Message, Sink } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
+import type { Message } from "@openomni/protocol";
 import { Storage, TranscriptStore } from "@openomni/session";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";

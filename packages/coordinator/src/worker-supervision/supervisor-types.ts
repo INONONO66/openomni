@@ -9,12 +9,6 @@ export type ToolCallParams = {
   workspaceRoot?: string;
 };
 
-export type ToolCallCancelParams = {
-  runId: string;
-  sessionId: string;
-  callId: string;
-};
-
 export type ToolCallContext = {
   readonly signal?: AbortSignal;
 };

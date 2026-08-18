@@ -14,12 +14,9 @@
       "mcp",
       "message",
       "model",
-      "run",
-      "sink",
       "storage",
       "token",
       "tool",
-      "tool-selection",
       "trace",
       "worker-bootstrap"
     ]
@@ -36,9 +33,7 @@
       "packages/protocol/src/policy/point-registry.ts:PolicyPointRegistryModule",
       "packages/protocol/src/policy/policy-point.ts:PolicyPointModule",
       "packages/protocol/src/work-item/index.ts:ReadBackRequestEnvelope",
-      "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope",
-      "packages/protocol/src/worker-bootstrap/index.ts:RuntimeAgentDefinition",
-      "packages/protocol/src/worker-bootstrap/index.ts:RuntimeToolCatalogEntry"
+      "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope"
     ]
   },
   "earned": {

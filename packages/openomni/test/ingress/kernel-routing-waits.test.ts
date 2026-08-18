@@ -463,7 +463,7 @@ describe("IngressEngine wait routing", () => {
         correlation,
         target: { kind: "worker", sessionId: "stale-meta-session" },
       },
-      runtime: {
+      activation: {
         durableSessionId: "stale-runtime-session",
         runId: "stale-runtime-run",
         activationId: "stale-activation",
@@ -516,7 +516,7 @@ describe("IngressEngine wait routing", () => {
         correlation,
         target: { kind: "worker", sessionId: "stale-meta-session" },
       },
-      runtime: {
+      activation: {
         durableSessionId: "stale-runtime-session",
         runId: "stale-runtime-run",
       },
@@ -553,7 +553,7 @@ describe("IngressEngine wait routing", () => {
       originSessionId: ask.originSessionId,
       originRunId: ask.originRunId,
     });
-    expect(projectedEvent.runtime).toMatchObject({
+    expect(projectedEvent.activation).toMatchObject({
       durableSessionId: ask.originSessionId,
       runId: ask.originRunId,
     });
@@ -577,7 +577,7 @@ describe("IngressEngine wait routing", () => {
         correlation,
         target: { kind: "worker", sessionId: "stale-meta-session" },
       },
-      runtime: {
+      activation: {
         durableSessionId: "stale-runtime-session",
         runId: "stale-runtime-run",
         activationId: "inbound-activation",
@@ -608,7 +608,7 @@ describe("IngressEngine wait routing", () => {
       status: ask.status,
       ambiguous: false,
     });
-    expect(projectedEvent.runtime).toEqual({
+    expect(projectedEvent.activation).toEqual({
       durableSessionId: ask.originSessionId,
       activationId: "inbound-activation",
     });

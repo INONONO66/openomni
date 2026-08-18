@@ -3,10 +3,9 @@ import { describe, it, expect, mock } from "bun:test";
 import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
 import { buildToolDispatcher } from "../../src/execution/coordinator";
 import type { NativeTool, ToolExecutionContext, ToolProvider } from "@openomni/openomni";
-import type { ToolSelection } from "@openomni/protocol";
 import type { Tool } from "@openomni/protocol";
 
-function makeTool(name: string, category?: ToolSelection.Category): NativeTool {
+function makeTool(name: string, category?: Tool.Category): NativeTool {
   return {
     spec: { name, description: `${name} tool`, inputSchema: {} },
     riskTier: 0,
@@ -94,7 +93,7 @@ describe("tool catalog", () => {
       { tools: tools.slice(4), source: "mcp" },
     ]);
 
-    const selection: ToolSelection.Selection = { categories: ["filesystem", "execution"] };
+    const selection: Tool.Selection = { categories: ["filesystem", "execution"] };
     const result = resolveToolSelection(catalog, selection);
 
     const names = result.map((e) => e.canonicalName);
@@ -105,7 +104,7 @@ describe("tool catalog", () => {
     const tools = [makeTool("read"), makeTool("write"), makeTool("bash"), makeTool("dispatch")];
     const catalog = buildToolCatalog([{ tools, source: "system" }]);
 
-    const selection: ToolSelection.Selection = {
+    const selection: Tool.Selection = {
       categories: ["filesystem", "execution", "delegation"],
     };
 

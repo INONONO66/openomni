@@ -1,5 +1,6 @@
 import { mock } from "bun:test";
-import type { Message, Run, Sink } from "@openomni/protocol";
+import type { Run, Sink } from "@openomni/llm";
+import type { Message } from "@openomni/protocol";
 
 type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
 

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { WorkerDeliveryError, Worker } from "@openomni/protocol";
+import { Worker } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../../src/error";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 

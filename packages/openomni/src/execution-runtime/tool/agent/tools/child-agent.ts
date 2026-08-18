@@ -1,11 +1,11 @@
-import { ToolSelection, type Tool } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { ChildAgentRuntime, ChildAgentSnapshot } from "../../../child-agent/index.js";
 import { defineTool } from "../../define.js";
 
 const toolSelectionSchema = z.object({
   all: z.boolean().optional(),
-  categories: z.array(ToolSelection.Category).optional(),
+  categories: z.array(Tool.Category).optional(),
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
 });
@@ -91,6 +91,7 @@ function result(call: Tool.Call, output: unknown, isError?: boolean): Tool.Resul
   return {
     id: crypto.randomUUID(),
     toolCallId: call.id,
+    toolName: call.tool,
     output: JSON.stringify(output),
     ...(isError ? { isError: true } : {}),
   };

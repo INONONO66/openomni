@@ -21,9 +21,8 @@ function workerEvent(sessionId: string): Ingress.ResolvedInboundEvent {
     mode: "direct",
     payload: "do the thing",
     target: { kind: "worker", sessionId },
-    // `background` rides the open runtime bag (isBackgroundWorkerIngress
-    // reads it structurally).
-    runtime: { background: true } as Ingress.ResolvedInboundEvent["runtime"],
+    // `background` is a declared ActivationMetadata field (#500 A2).
+    activation: { background: true },
     agent: { model: { provider: "anthropic", id: "claude-3-haiku-20240307" } },
   };
 }

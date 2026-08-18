@@ -1,10 +1,5 @@
-import {
-  Operational,
-  WorkerDeliveryError,
-  Worker,
-  type Execution,
-  type WorkerBootstrap,
-} from "@openomni/protocol";
+import { Ipc, Operational, Worker, type Execution, type WorkerBootstrap } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import fs from "node:fs";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
 import {
@@ -259,10 +254,10 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     // failed cancel RPC: the run's own outcome stays truthful.
     try {
       const result = await supervisor.cancel(runId, activeRun.sessionId);
-      const confirmed =
-        typeof result === "object" &&
-        result !== null &&
-        (result as { cancelled?: unknown }).cancelled === true;
+      // #500 B3: confirmation is schema-validated against the Methods table —
+      // a frame the contract rejects can never count as a landed cancel.
+      const parsed = Ipc.Methods["coordinator.cancel_run"].result.safeParse(result);
+      const confirmed = parsed.success && parsed.data.cancelled === true;
       if (!confirmed) activeRun.cancelled = false;
       return result;
     } catch (error) {

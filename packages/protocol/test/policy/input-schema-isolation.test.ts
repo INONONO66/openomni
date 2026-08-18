@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
-import { Command, Policy, Run, Tool } from "../../src/index.js";
+import { Command, Policy, Tool } from "../../src/index.js";
 
 function whileFieldIsOptional<Shape extends z.ZodRawShape>(
   schema: z.ZodObject<Shape>,
@@ -59,24 +59,12 @@ test("policy input validators isolate authority schemas from shared public mutat
       }).success,
   );
 
-  const optionsMap = Reflect.get(Run.Outcome, "optionsMap");
-  if (!(optionsMap instanceof Map)) throw new Error("Missing run outcome options map");
-  const stopOption = optionsMap.get("stop");
-  expect(Reflect.apply(Map.prototype.delete, optionsMap, ["stop"])).toBe(true);
-  let validStopAccepted = false;
-  try {
-    validStopAccepted = Policy.PolicyPoint.InputSchemas["run.lifecycle.post"].safeParse({
-      sessionId: "session-1",
-      runId: "run-1",
-      runOutcome: { type: "stop" },
-    }).success;
-  } finally {
-    Reflect.apply(Map.prototype.set, optionsMap, ["stop", stopOption]);
-  }
+  // #500 C1: the Run.Outcome mutation-isolation half of this test moved to
+  // packages/llm/test/run-outcome.test.ts with the canonical schema (protocol
+  // cannot import llm).
 
   expect(missingActorIdAccepted).toBe(false);
   expect(missingTargetKindAccepted).toBe(false);
   expect(missingToolNameAccepted).toBe(false);
   expect(missingToolOutputAccepted).toBe(false);
-  expect(validStopAccepted).toBe(true);
 });

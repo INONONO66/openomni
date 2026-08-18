@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { WorkerBootstrap } from "./index.js";
 
 describe("WorkerBootstrap", () => {
-  test("RuntimeAgentDefinition round-trip parse", () => {
+  test("AgentDefinition round-trip parse", () => {
     const agent = {
       name: "test-agent",
       description: "A test agent",
@@ -15,13 +15,13 @@ describe("WorkerBootstrap", () => {
       },
     };
 
-    const parsed = WorkerBootstrap.RuntimeAgentDefinition.parse(agent);
+    const parsed = WorkerBootstrap.AgentDefinition.parse(agent);
     expect(parsed.name).toBe("test-agent");
     expect(parsed.tools).toEqual({ allow: ["tool1", "tool2"] });
     expect(parsed.policyPlan?.labels).toEqual(["worker"]);
   });
 
-  test("RuntimeToolCatalogEntry round-trip parse", () => {
+  test("ToolCatalogEntry round-trip parse", () => {
     const entry = {
       canonicalName: "fs.read",
       exposedName: "read_file",
@@ -35,16 +35,16 @@ describe("WorkerBootstrap", () => {
       },
     };
 
-    const parsed = WorkerBootstrap.RuntimeToolCatalogEntry.parse(entry);
+    const parsed = WorkerBootstrap.ToolCatalogEntry.parse(entry);
     expect(parsed.canonicalName).toBe("fs.read");
     expect(parsed.source).toBe("system");
     expect(parsed.category).toBe("filesystem");
     expect(parsed.riskTier).toEqual(2);
   });
 
-  test("RuntimeToolCatalogEntry rejects non-canonical source and risk tier", () => {
+  test("ToolCatalogEntry rejects non-canonical source and risk tier", () => {
     expect(
-      WorkerBootstrap.RuntimeToolCatalogEntry.safeParse({
+      WorkerBootstrap.ToolCatalogEntry.safeParse({
         canonicalName: "fs.read",
         exposedName: "read_file",
         source: "custom",
@@ -58,7 +58,7 @@ describe("WorkerBootstrap", () => {
     ).toBe(false);
 
     expect(
-      WorkerBootstrap.RuntimeToolCatalogEntry.safeParse({
+      WorkerBootstrap.ToolCatalogEntry.safeParse({
         canonicalName: "fs.read",
         exposedName: "read_file",
         source: "system",

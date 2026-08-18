@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { BusEvent, McpServerConfig, Tool } from "@openomni/protocol";
+import type { BusEvent, McpConfig, Tool } from "@openomni/protocol";
 import { Mcp, Operational } from "@openomni/protocol";
 import {
   cleanupFailedConnection,
@@ -21,13 +21,13 @@ export type {
 
 export class McpClient {
   private client: McpClientHandle;
-  private config: McpServerConfig;
+  private config: McpConfig.ServerConfig;
   private createTransport: McpTransportFactory;
   private readonly lifecycleTraceId: string | undefined;
   private readonly events: BusEvent.Sink;
   private connected = false;
 
-  constructor(config: McpServerConfig, dependencies: McpClientDependencies) {
+  constructor(config: McpConfig.ServerConfig, dependencies: McpClientDependencies) {
     this.config = config;
     this.client = dependencies.client ?? new Client({ name: "openomni-agent", version: "0.1.0" });
     this.createTransport = dependencies.createTransport ?? createTransport;
@@ -162,13 +162,17 @@ export class McpClient {
         requestOptions(this.config, context),
       );
 
-      return convertMcpResult(
-        response as {
-          content: Array<{ type: string; text?: string }>;
-          isError?: boolean;
-        },
-        toolCallId,
-      );
+      return {
+        ...convertMcpResult(
+          response as {
+            content: Array<{ type: string; text?: string }>;
+            isError?: boolean;
+          },
+          toolCallId,
+        ),
+        // #500 C4: the exposed (server-prefixed) name the caller invoked.
+        toolName: name,
+      };
     } catch (err) {
       this.events.publish(Mcp.Events.ToolFailed, {
         traceId,
@@ -189,7 +193,7 @@ export class McpClient {
 }
 
 function requestOptions(
-  config: McpServerConfig,
+  config: McpConfig.ServerConfig,
   context?: { readonly signal?: AbortSignal },
 ): RequestOptions | undefined {
   const timeout = normalizeTimeout(config.timeout);

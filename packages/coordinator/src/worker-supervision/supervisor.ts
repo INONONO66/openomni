@@ -1,12 +1,7 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import {
-  type BusEvent,
-  Operational,
-  WorkerDeliveryError,
-  Worker,
-  type WorkerBootstrap,
-} from "@openomni/protocol";
+import { type BusEvent, Ipc, Operational, Worker, type WorkerBootstrap } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import {
   connectIpcClient,
   IpcConnectionError,
@@ -206,7 +201,11 @@ export class WorkerSupervisor {
             });
           },
           onNotification: (method, params) => {
-            if (method === "worker.bootstrap_ready" && params?.authToken === authToken) {
+            if (method !== "worker.bootstrap_ready") return;
+            // #500 B3: schema-validated against the Methods table before the
+            // token check — a malformed frame can never flip readiness.
+            const parsed = Ipc.Methods["worker.bootstrap_ready"].params.safeParse(params);
+            if (parsed.success && parsed.data.authToken === authToken) {
               this.bootstrapped = true;
             }
           },
@@ -426,11 +425,17 @@ export class WorkerSupervisor {
     if (!client?.connected) {
       return { accepted: false, error: `worker ${this.id} not available` };
     }
-    return client.call(
+    const result = await client.call(
       "worker.deliver_message",
       { authToken: this.authToken, traceId, sessionId, ...(runId ? { runId } : {}), message },
       5_000,
     );
+    // #500 B3: fail closed on a result frame the Methods table rejects — the
+    // callers branch on `accepted`, so a drifted frame must read as refusal.
+    // Valid frames pass through RAW (validation, not normalization): parsing
+    // would strip additive keys the sender legitimately echoed.
+    const accepted = Ipc.Methods["worker.deliver_message"].result.safeParse(result).success;
+    return accepted ? result : { accepted: false, error: "invalid worker.deliver_message result" };
   }
 
   async shutdownIdle(): Promise<boolean> {

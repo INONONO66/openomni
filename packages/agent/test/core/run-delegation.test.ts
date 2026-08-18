@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { Sink } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
 import {
   createStopOutcome,
   createErrorOutcome,

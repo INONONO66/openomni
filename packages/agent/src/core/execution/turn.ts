@@ -1,6 +1,7 @@
 import type { RunInput } from "@openomni/llm";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import type { BusEvent, Policy, Sink, Tool } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
+import type { BusEvent, Policy, Tool } from "@openomni/protocol";
 import {
   describeBudgetRemaining,
   effectiveBudgetThresholds,

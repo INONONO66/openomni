@@ -314,6 +314,7 @@
   "Gateway.WaitControl": ["action", "reason", "waitId"],
   "Ingress.ActorSchema": [
     "actorId",
+    "agentName",
     "endpoint",
     "endpointId",
     "id",
@@ -321,6 +322,7 @@
     "isResident",
     "kind",
     "role",
+    "runId",
     "sessionId",
     "trustTier",
     "type",
@@ -336,13 +338,13 @@
     "tools"
   ],
   "Ingress.DirectEventSchema": [
+    "activation",
     "agent",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -350,13 +352,13 @@
     "workspace"
   ],
   "Ingress.InboundEventSchema#0": [
+    "activation",
     "agent",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -364,13 +366,13 @@
     "workspace"
   ],
   "Ingress.InboundEventSchema#1": [
+    "activation",
     "agentName",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -378,13 +380,13 @@
     "workspace"
   ],
   "Ingress.InternalEventSchema": [
+    "activation",
     "agentName",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -833,12 +835,6 @@
     "requireApproval",
     "requireApprovalLabels"
   ],
-  "Run.Outcome#0": ["type"],
-  "Run.Outcome#1": ["type"],
-  "Run.Outcome#2": ["type"],
-  "Run.Outcome#3": ["type"],
-  "Run.Outcome#4": ["error", "type"],
-  "Run.RetryPolicy": ["backoffMs", "maxAttempts", "retryOn"],
   "Token.AgentUsage": [
     "cacheReadTokens",
     "cacheWriteTokens",
@@ -872,7 +868,15 @@
   ],
   "Tool.Call": ["id", "input", "tool"],
   "Tool.Config": ["agentTools", "mcpTools", "systemTools", "workspaceRoot"],
-  "Tool.Result": ["id", "isError", "output", "settlement", "toolCallId"],
+  "Tool.Result": [
+    "id",
+    "isError",
+    "output",
+    "settlement",
+    "toolCallId",
+    "toolName"
+  ],
+  "Tool.Selection": ["all", "allow", "categories", "deny"],
   "Tool.Spec": [
     "description",
     "inputSchema",
@@ -885,7 +889,6 @@
   "Tool.State#1": ["input", "status", "time"],
   "Tool.State#2": ["input", "metadata", "output", "status", "time", "title"],
   "Tool.State#3": ["error", "input", "status", "time"],
-  "ToolSelection.Selection": ["all", "allow", "categories", "deny"],
   "Transcript.Fact#0": ["attemptId", "message", "type"],
   "Transcript.Fact#1": ["attemptId", "messageId", "part", "type"],
   "Transcript.Fact#2": [
@@ -963,14 +966,7 @@
   ],
   "Wait.Reply": ["messageId", "receivedAt", "replyKey", "responderId"],
   "Wait.ReplyInput": ["at", "messageId", "replyKey", "responderCandidates"],
-  "WorkerBootstrap.Bootstrap": [
-    "agents",
-    "configEpoch",
-    "credentials",
-    "policyPlan",
-    "toolCatalog"
-  ],
-  "WorkerBootstrap.RuntimeAgentDefinition": [
+  "WorkerBootstrap.AgentDefinition": [
     "budget",
     "description",
     "model",
@@ -980,7 +976,14 @@
     "systemPrompt",
     "tools"
   ],
-  "WorkerBootstrap.RuntimeToolCatalogEntry": [
+  "WorkerBootstrap.Bootstrap": [
+    "agents",
+    "configEpoch",
+    "credentials",
+    "policyPlan",
+    "toolCatalog"
+  ],
+  "WorkerBootstrap.ToolCatalogEntry": [
     "canonicalName",
     "category",
     "descriptor",
