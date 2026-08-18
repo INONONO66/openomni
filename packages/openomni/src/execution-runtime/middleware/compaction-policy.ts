@@ -3,6 +3,7 @@ import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@
 import type { BusEvent } from "@openomni/protocol";
 import { Message, Operational } from "@openomni/protocol";
 import { Session } from "@openomni/session";
+import { decorateAnchorRender, planDecoration } from "./anchor-render.js";
 import { z } from "zod";
 
 const MessageSummarizerSchema = z.custom<
@@ -131,17 +132,51 @@ function wrapCreated(
         });
         return decision;
       }
+      // L6 (#716): decorate the anchor's model-facing render with the
+      // deterministic sections — ledger-derived artifact table, verbatim
+      // quotes of budget-dropped user text, goal recitation. Metadata (the
+      // record, the merge state, hydration identity) is untouched; window
+      // and store see the same decorated render. Decoration failure is the
+      // same fail-open class as persistence failure: the undecorated cut is
+      // still a correct cut.
+      let outgoing = parsed.data;
+      let persistAnchor = anchor;
       try {
-        Session.addMessage(anchor.info.sessionID, anchor.info);
-        for (const part of anchor.parts) {
-          Session.addPart(anchor.info.id, part);
+        const decoration = planDecoration(
+          anchor.info.sessionID,
+          (ctx.messages ?? []) as Message.WithParts[],
+          parsed.data,
+        );
+        const decoratedParts = anchor.parts.map((part) =>
+          part.type === "text" && part.metadata?.compactionAnchor === true
+            ? { ...part, text: decorateAnchorRender(part.text, decoration) }
+            : part,
+        );
+        persistAnchor = { info: anchor.info, parts: decoratedParts };
+        outgoing = parsed.data.map((message) =>
+          message.info.id === anchor.info.id ? persistAnchor : message,
+        );
+      } catch (error) {
+        warn(ctx, "anchor render not decorated: derivation failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      try {
+        Session.addMessage(persistAnchor.info.sessionID, persistAnchor.info);
+        for (const part of persistAnchor.parts) {
+          Session.addPart(persistAnchor.info.id, part);
         }
       } catch (error) {
         warn(ctx, "replacement record not persisted: session store write failed", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
-      return decision;
+      return {
+        ...decision,
+        effects: (decision.effects ?? []).map((entry) =>
+          entry.type === "run.replace_messages" ? { ...entry, messages: outgoing } : entry,
+        ),
+      };
     },
   };
 }

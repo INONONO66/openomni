@@ -329,6 +329,12 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     expect(window.some((m) => m.content === "recent answer")).toBe(true);
     expect(window.some((m) => m.content.includes("old work"))).toBe(false);
     expect(window.length).toBeLessThan(6);
+    // L6: the render carries the deterministic goal recitation — produced by
+    // the wrapper from verbatim window text, NOT by the summarizer (whose
+    // constant output is "checkpoint after cut" and nothing else).
+    expect(window[0]?.content).toContain("## Current goal (verbatim, latest user message)");
+    // Anchor identity survived decoration: the record still carries the raw body.
+    expect(window[0]?.partMetadata?.anchorBody).toBe("checkpoint after cut");
 
     // And the re-hydrated run is itself compact and coherent.
     const secondRun = rehydrate();
