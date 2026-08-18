@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787069703704,
+  "lastUpdate": 1787072698895,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55949,6 +55949,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 497675,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b9e112d00ede568d2fa14d7dc07d600acfd0454",
+          "message": "feat(agent,openomni): speculative prepare/promote compaction (#714) (#724)\n\n* feat(agent,openomni): speculative prepare/promote compaction (#714)\n\nCompaction-design L4, resolving the D8 open row. The compaction policy is\nnow a per-run factory (the sanctioned home for stateful policies — a\ncandidate must die with its run, the #692 lesson) registered at\nrun.turn.post + run.completion.pre when a summarizer is configured.\n\nPrepare: at turn settlement, once the measured window passes the prepare\nratio (default 0.65), the anchored merge runs fire-and-forget single-flight\nagainst the frozen dispatch clone. Promote: the seam cuts exactly the\ncandidate's span with zero model calls while that span is still a live\nid-prefix of the history — later turns only deepen the natural cutoff, so a\nshorter candidate span is still a valid smaller cut, and elision preserves\nids; any replacement invalidates structurally. A stale candidate is\ndiscarded visibly (compaction_candidate_discarded reasonCode) and the\nsynchronous merge runs; promotion is equally visible. Application never\nleaves run.completion.pre (D8 preserved). speculate: false disables; the\nprepare ratio is config through the plan schema.\n\nNo AbortSignal linkage by design: dispatch contexts are structured-clone\nfrozen, so a signal cannot ride them; per-run candidate state dies with the\nrun's engine and the prepare's duration is bounded by the host completion\nfn — stated in speculate.ts and the design doc L4 row.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): compaction candidate type consumed at the seam\n\nThe dispatch candidate shape in compact.ts now imports the speculate type\ninstead of restating it inline — one definition, and the export earns its\nexistence per the dead-exports ratchet.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent): speculation honesty — fallback, retention, cap (review)\n\nReview round 1 (PASS WITH CHANGES) fixes:\n\nM1 — a promote refused by the progress guard now falls back to the\nsynchronous natural-span merge and reports the candidate discarded:\nspeculation may only ever add a fast path, never take a cut away (the\nreviewer's probe showed a refused promote returning zero effects where a\nspeculation-free seam compacted, then disarming the yield). Cut logic\nrestructured into attemptCut() tried at most twice.\n\nM2 — the seam consumes only candidates it actually evaluated: an\nelision-covered round (or any pre-cut early return) keeps a still-live\ncandidate instead of silently destroying it and re-paying the prepare every\nelision cycle; staleness stays structural via the prefix check.\n\nM3 — engine-level pin: prepare fires through a real PolicyEngine dispatch of\nrun.turn.post with a lifecycle-built context — if a future lifecycle change\ndrops contextTokens at turn.post, this fails instead of leaving the feature\ndead under green tests.\n\nM5 — prepare failures are visible (operational.warn, component\ncompaction-speculate) and capped: after 2 consecutive failures speculation\nstops for the run; pinned by test.\n\nM4 — design-doc lifecycle section aligned with the shipped shape (policy\nfactory, no AbortSignal, warn-with-cap instead of aspirational skip events).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T02:03:49+09:00",
+          "tree_id": "bb963365e2141b01212771562fd76a6fc3abe403",
+          "url": "https://github.com/INONONO66/openomni/commit/3b9e112d00ede568d2fa14d7dc07d600acfd0454"
+        },
+        "date": 1787072697993,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 349,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4847,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 7595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2014,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2259,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1764,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 775,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 694,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1204,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1186,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 33816,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1798,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 401138,
             "unit": "ns/op"
           }
         ]
