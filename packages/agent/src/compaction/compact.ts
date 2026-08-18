@@ -13,7 +13,20 @@ export interface CompactionOptions {
   reserveTokens?: number;
   reserveRatio?: number;
   protectRecentMessages?: number;
-  onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+  /**
+   * Anchored iterative summarization (compaction-design L2). The summarizer
+   * receives the newly cut span WITH user messages and prior anchor renders
+   * already excluded, plus the previous anchor body when one exists — it
+   * merges, it never regenerates. The mechanism owns the exclusions and the
+   * threading; what the summarizer does with them is strategy.
+   */
+  onSummarize?: (messages: Message.WithParts[], previousAnchor?: string) => Promise<string>;
+  /**
+   * Budget (chars) of most-recent user messages carried verbatim through a
+   * cut. The newest user message is always preserved even when it alone
+   * exceeds the budget — user tokens are the irreplaceable part.
+   */
+  preserveUserMessageChars?: number;
   /**
    * Opt-in deterministic reduction: when the trigger fires, old completed
    * tool outputs are elided first; the lossy cut joins the same round
@@ -45,6 +58,10 @@ export const DEFAULT_THRESHOLD_RATIO = 0.8;
 // Only decides the cut's eagerness after an elision round — never the trigger.
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_PROTECT_RECENT = 6;
+// ~20k tokens of verbatim user text carried through a cut (Codex ships the
+// same order of magnitude). Strategy may narrow or widen it.
+const DEFAULT_PRESERVE_USER_CHARS = 80_000;
+const ANCHOR_HEADER = "[Conversation Summary]\n";
 
 export namespace Compaction {
   export function shouldCompact(totalTokens: number, options: ResolvedCompactionOptions): boolean {
@@ -89,6 +106,7 @@ export namespace Compaction {
       result: CompactionResult,
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
       elidedChars: number,
+      anchored?: boolean,
     ): CompactionResult => {
       events.publish(AgentExecution.CompactionCompleted, {
         ...identity,
@@ -98,6 +116,7 @@ export namespace Compaction {
         messagesAfter: result.messages.length,
         removedCount: result.removedCount,
         elidedChars,
+        ...(anchored === undefined ? {} : { anchored }),
       });
       return result;
     };
@@ -130,6 +149,7 @@ export namespace Compaction {
       result: CompactionResult,
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
       elidedChars: number,
+      anchored?: boolean,
     ) => CompactionResult,
   ): Promise<CompactionResult> {
     const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
@@ -215,16 +235,77 @@ export namespace Compaction {
     const toRemove = working.slice(0, cutoff);
     const toKeep = working.slice(cutoff);
 
-    let summaryMessages: Message.WithParts[] = [];
+    // Anchored cut (compaction-design L2). Three invariants the mechanism
+    // owns, whatever the summarizer does:
+    //   1. user messages never enter the summarizer — they are preserved
+    //      verbatim (newest-first within budget) or dropped from the window,
+    //      never paraphrased;
+    //   2. a prior anchor render never re-enters the summarizer as content —
+    //      its BODY threads through as `previousAnchor`, so summaries merge
+    //      instead of recursively re-summarizing (the drift OpenAI measured);
+    //   3. an empty merge input costs no model call — the previous anchor
+    //      carries forward unchanged.
     const firstRemoved = toRemove[0];
     if (options.onSummarize && firstRemoved !== undefined) {
-      const summaryText = await options.onSummarize(toRemove);
-      summaryMessages = [
-        buildSummaryMessage(summaryText, firstRemoved.info.sessionID, firstRemoved.info.agent),
-      ];
+      const previousAnchor = latestAnchorBody(toRemove);
+      const summarizerInput = toRemove.filter(
+        (message) => message.info.role !== "user" && !isAnchorMessage(message),
+      );
+      let anchorText = previousAnchor;
+      if (summarizerInput.length > 0) {
+        const merged = await options.onSummarize(summarizerInput, previousAnchor);
+        anchorText = merged.trim().length > 0 ? merged : previousAnchor;
+      }
+      const preservedUsers = selectPreservedUsers(
+        toRemove,
+        options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS,
+      );
+      const anchorMessages =
+        anchorText === undefined
+          ? []
+          : [buildAnchorMessage(anchorText, firstRemoved.info.sessionID, firstRemoved.info.agent)];
+      if (anchorMessages.length === 0 && preservedUsers.length === 0) {
+        // Nothing user-roled can head the kept window (summarizer yielded
+        // nothing, no prior anchor, no user in the span): committing would
+        // hand the provider an assistant-first history. Same refusal value
+        // as the no-summarizer path.
+        return elidedChars > 0
+          ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+          : finish(
+              {
+                messages: working,
+                compacted: false,
+                removedCount: 0,
+                blocked: "no_user_boundary",
+              },
+              "no_user_boundary",
+              0,
+            );
+      }
+      const compacted = [...anchorMessages, ...preservedUsers, ...toKeep];
+      // Progress guard (review #721 M1): the rebuilt window must be strictly
+      // smaller than what the seam received, or committing it would count as
+      // progress toward the #651 disarm while reclaiming nothing — re-arming
+      // the yield (and paying a summarizer call) every turn, forever. A
+      // no-progress rebuild is a recorded non-action, not a cut.
+      if (estimateContentChars(compacted) >= estimateContentChars(working)) {
+        return elidedChars > 0
+          ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+          : finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
+      }
+      return finish(
+        {
+          messages: compacted,
+          compacted: true,
+          removedCount: toRemove.length - preservedUsers.length,
+        },
+        "cut",
+        elidedChars,
+        anchorMessages.length > 0,
+      );
     }
 
-    const compacted = [...summaryMessages, ...toKeep];
+    const compacted = [...toKeep];
 
     return finish(
       {
@@ -234,6 +315,7 @@ export namespace Compaction {
       },
       "cut",
       elidedChars,
+      false,
     );
   }
 }
@@ -266,13 +348,97 @@ function snapToUserBoundary(
   return undefined;
 }
 
-function buildSummaryMessage(
-  summaryText: string,
+/**
+ * Anchor identity is structural — the metadata flag, never string-matching
+ * on the render — so later render decoration (L6: artifact table, goal
+ * recitation) cannot break extraction. `anchorBody` in metadata is the raw
+ * merge state the next cut threads back into the summarizer; the part text
+ * is its model-facing render.
+ */
+function isAnchorMessage(message: Message.WithParts): boolean {
+  return (
+    message.info.role === "user" &&
+    message.parts.some((part) => part.type === "text" && part.metadata?.compactionAnchor === true)
+  );
+}
+
+function latestAnchorBody(span: readonly Message.WithParts[]): string | undefined {
+  for (let index = span.length - 1; index >= 0; index -= 1) {
+    const message = span[index];
+    if (message === undefined) continue;
+    // One identity, one definition (review #721 M3): only what
+    // isAnchorMessage accepts may thread its body — an assistant-role part
+    // wearing the metadata is content, never state.
+    if (!isAnchorMessage(message)) continue;
+    for (const part of message.parts) {
+      if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
+      const body = part.metadata?.anchorBody;
+      // A marked part without a string body is a foreign or corrupt render:
+      // fall back to the visible text rather than dropping the anchor.
+      return typeof body === "string" ? body : part.text;
+    }
+  }
+  return undefined;
+}
+
+function userTextChars(message: Message.WithParts): number {
+  // All content weighs against the budget (review #721 M4): a user-role
+  // message bulked by a tool output must not ride through a 10-char budget
+  // as if free.
+  let chars = 0;
+  for (const part of message.parts) {
+    if (part.type === "text") chars += part.text.length;
+    else if (part.type === "tool" && part.state.status === "completed") {
+      chars += part.state.output.length;
+    }
+  }
+  return chars;
+}
+
+/**
+ * Window-size proxy for the progress guard: the same content classes the
+ * model projection actually resends (text and completed tool outputs).
+ */
+function estimateContentChars(span: readonly Message.WithParts[]): number {
+  let chars = 0;
+  for (const message of span) {
+    chars += userTextChars(message);
+  }
+  return chars;
+}
+
+/**
+ * Newest-first selection under the budget, returned in original order. The
+ * newest user message is taken unconditionally: a budget that silently
+ * dropped ALL user text would violate the invariant the budget exists to
+ * serve.
+ */
+function selectPreservedUsers(
+  span: readonly Message.WithParts[],
+  budgetChars: number,
+): Message.WithParts[] {
+  const users = span.filter((message) => message.info.role === "user" && !isAnchorMessage(message));
+  const kept: Message.WithParts[] = [];
+  let total = 0;
+  for (let index = users.length - 1; index >= 0; index -= 1) {
+    const candidate = users[index];
+    if (candidate === undefined) continue;
+    const size = userTextChars(candidate);
+    if (kept.length > 0 && total + size > budgetChars) break;
+    kept.unshift(candidate);
+    total += size;
+  }
+  return kept;
+}
+
+function buildAnchorMessage(
+  anchorBody: string,
   sessionID: string,
   agent: string,
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
+  const render = `${ANCHOR_HEADER}${anchorBody}`;
   const info: Message.UserMessage = {
     id,
     sessionID,
@@ -280,14 +446,15 @@ function buildSummaryMessage(
     time: { created: now },
     agent,
     model: { providerID: "", modelID: "" },
-    system: `[Conversation Summary]\n${summaryText}`,
+    system: render,
   };
   const textPart: Message.TextPart = {
     id: crypto.randomUUID(),
     sessionID,
     messageID: id,
     type: "text",
-    text: `[Conversation Summary]\n${summaryText}`,
+    text: render,
+    metadata: { compactionAnchor: true, anchorBody },
   };
   return { info, parts: [textPart] };
 }

@@ -160,7 +160,11 @@ describe("Compaction bracket", () => {
     const capture = captureBracket();
     try {
       const attempt = Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
+        // Mixed roles: user messages never reach the summarizer (L2), so an
+        // all-user span would skip the summarize call this test needs to throw.
+        Array.from({ length: 12 }, (_unused, index) =>
+          index % 2 === 0 ? makeUserMessage(`message ${index}`) : makeAssistantMessage(`a${index}`),
+        ),
         {
           contextWindowTokens: 1000,
           protectRecentMessages: 2,
