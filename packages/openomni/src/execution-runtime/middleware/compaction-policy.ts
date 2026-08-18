@@ -117,15 +117,19 @@ function wrapCreated(
         warn(ctx, "replacement record not persisted: effect messages failed to parse");
         return decision;
       }
-      // L7 byte guard (#717, compaction-design principle 2): every user-roled
-      // text in the rebuilt window must be byte-identical to a user text the
-      // seam received — anchors and policy-injected messages excluded on both
-      // sides. A violation means something between the cut and here rewrote
-      // user speech; committing that window would launder a paraphrase as the
-      // user's words, so the effect is REFUSED (window unchanged, run intact)
-      // and the violation is a hard, visible finding. Decoration cannot
-      // introduce a violation afterwards: it rewrites only the anchor render,
-      // which the guard excludes by identity.
+      // L7 byte guard (#717, compaction-design principle 2): a CORE-PIPELINE
+      // INTEGRITY check, single trust domain (the L3 M4 precedent) — it
+      // catches our own cut/promote/elision bugs, not adversaries. Every
+      // user-roled text in the rebuilt window must consume a byte-identical
+      // occurrence from the seam's input UNDER THE SAME TAG (policy-injected
+      // matches policy-injected); at most one well-shaped anchor per side
+      // earns the render exemption. Designed residual (#729 review D1): the
+      // one well-shaped anchor slot is by definition new text — a summary
+      // cannot be byte-checked; its body comes from a summarizer that never
+      // receives user text (L2). A violation refuses the effect (window
+      // unchanged, run intact) as a hard, visible finding. Decoration cannot
+      // introduce a violation afterwards: it rewrites only the anchor
+      // render, which holds the exemption.
       const violation = userByteViolation((ctx.messages ?? []) as Message.WithParts[], parsed.data);
       if (violation !== undefined) {
         events.publish(Operational.Error, {
@@ -144,11 +148,9 @@ function wrapCreated(
           ),
         };
       }
-      const anchor = parsed.data.find((message) =>
-        message.parts.some(
-          (part) => part.type === "text" && part.metadata?.compactionAnchor === true,
-        ),
-      );
+      // Persistence selects by the same earned identity the guard honors
+      // (#729 review D3): a flag without the record shape is not an anchor.
+      const anchor = parsed.data.find((message) => message.parts.some(isWellShapedAnchorPart));
       if (anchor === undefined) return decision;
       // #722 review M4: the anchor's session is copied from whatever history
       // the seam received — never write across sessions, even if a future
