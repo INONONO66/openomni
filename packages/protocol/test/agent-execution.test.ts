@@ -63,6 +63,68 @@ describe("AgentExecution BusEvents", () => {
     ).not.toThrow();
   });
 
+  test("CompactionStarted parses, with and without measurement", () => {
+    expect(() =>
+      AgentExecution.CompactionStarted.schema.parse({
+        ...base,
+        messagesBefore: 20,
+        contextTokens: 180_000,
+        trigger: "threshold",
+        summarizer: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      AgentExecution.CompactionStarted.schema.parse({
+        ...base,
+        messagesBefore: 20,
+        trigger: "yield",
+        summarizer: true,
+      }),
+    ).not.toThrow();
+  });
+
+  test("CompactionStarted rejects an unknown trigger", () => {
+    expect(() =>
+      AgentExecution.CompactionStarted.schema.parse({
+        ...base,
+        messagesBefore: 20,
+        trigger: "manual",
+        summarizer: false,
+      }),
+    ).toThrow();
+  });
+
+  test("CompactionCompleted parses every outcome; rejects unknown ones", () => {
+    for (const outcome of [
+      "cut",
+      "reduced",
+      "nothing_reclaimed",
+      "no_user_boundary",
+      "failed",
+    ] as const) {
+      expect(() =>
+        AgentExecution.CompactionCompleted.schema.parse({
+          ...base,
+          outcome,
+          messagesBefore: 20,
+          messagesAfter: 5,
+          removedCount: 15,
+          elidedChars: 0,
+        }),
+      ).not.toThrow();
+    }
+    expect(() =>
+      AgentExecution.CompactionCompleted.schema.parse({
+        ...base,
+        outcome: "partial",
+        messagesBefore: 20,
+        messagesAfter: 5,
+        removedCount: 15,
+        elidedChars: 0,
+      }),
+    ).toThrow();
+  });
+
   /** One field at a time, or relaxing either alone still throws on the other. */
   test.each(["reason", "backoffMs"] as const)("ErrorRetry requires %s", (field) => {
     const payload: Record<string, unknown> = {

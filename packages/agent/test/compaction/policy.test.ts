@@ -13,6 +13,7 @@ function baseCtx(
     timing: "turn.finish",
     pointId: "run.completion.pre",
     traceContext: { traceId: "trace-builtin-test" },
+    sessionId: "session-builtin-test",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
