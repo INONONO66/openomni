@@ -12,10 +12,7 @@ import {
   verify,
 } from "../../../../script/check-protocol-disposition.ts";
 
-const INVENTORY_PATH = join(
-  import.meta.dir,
-  "../../../../.omo/evidence/p3/protocol-concept-disposition.json",
-);
+const INVENTORY_PATH = join(import.meta.dir, "protocol-concept-disposition.json");
 const FIXTURES_DIR = join(import.meta.dir, "fixtures");
 
 const inventory = readInventory(INVENTORY_PATH);

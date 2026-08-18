@@ -1,0 +1,2503 @@
+{
+  "leaf": "#497",
+  "roadmap": "#459",
+  "baselineCommit": "87d4fc8da6ab57212a2aea1ea187d8d56706b210",
+  "generatedFrom": "adversarial evidence workflow wf_b5558306-84f (124 symbols / 13 families, verify phase) + reviewer reconciliation 2026-08-13",
+  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone. Status backfill: #595 wired 6 Dispatch.Actions constants (shipped) and #596 shipped 8 ingress/message/actor kills; their rows are marked status:shipped with their PR number. Remaining kill batches stay status:pending until delivered; the #497 completion receipt does the final sweep. COMPLETION SWEEP (#497 receipt, 2026-08-13): 27 delivered kill/unexport rows marked status:shipped with their PR — #598 (10: Tool.State x4 + McpConfig x3 unexport; McpServerConfig/Communication.Envelope/Model.isRef delete), #599 (11: RuntimeResource satellite x8 delete + Kind unexport; Policy.Label/PermissionDecision delete), #601 (6: Dispatch.TargetKind/Run.Budget/WorkerRun.Info/Artifact.Part delete; WorkItem.VerificationGate/TraceContext.Schema unexport). Three delete rows were reclassified after read-verification (see per-row reason): Run.Snapshot->already-removed (phantom), PolicyDecision.pending->preserve (live require_approval ctor), Artifact.Meta.version->preserve (live cross-package field). No census rows added; total stays 124 (corrections only rebalance buckets: delete 44->41, preserve 48->50, already-removed 2->3). Two internal-implementation unexports done during batch execution are recorded here rather than as census rows, because they are private building blocks behind public aliases, not tracked public-concept surface: #600 unexported PolicyPermission.Label + PolicyPermission.PermissionDecision (behind the deleted Policy.Label/PermissionDecision aliases), and #601 unexported work-item/schemas.ts VerificationGate (behind the removed WorkItem.VerificationGate re-export; the check-dead-exports gate forced it once the public re-export was dropped). DispatchSchemas.TargetKind was NOT unexported: it retains a live external consumer at ledger-append/streams.ts:116 plus a bare ref in Dispatch.Target. Preserve/defer/already-removed rows keep status:pending (no delivery PR). ENVELOPE COMPLETION (#603): a third internal-completion is recorded here rather than as a census row. PR #603 finished the Communication.Envelope delete that #598 began — #598 removed the public namespace member but left the backing src/communication/envelope.ts alive (its only consumer was its own schema.test.ts block, and it was naming-grandfathered), so #603 deleted envelope.ts, that self-test block, and both Envelope naming-grandfather entries (envelope.ts:Envelope + the already-stale index.ts:Envelope). The Communication.Envelope census row stays delete/shipped/#598 (the public concept died there); this note records the internal backing removal, mirroring the #600/#601 building-block cleanups above. Found by adversarial verification of the #602 receipt before merge.",
+  "dispositions": [
+    "delete",
+    "unexport",
+    "preserve",
+    "defer",
+    "wire",
+    "already-removed"
+  ],
+  "tally": {
+    "unexport": 12,
+    "preserve": 50,
+    "defer": 12,
+    "delete": 41,
+    "already-removed": 3,
+    "wire": 6
+  },
+  "symbols": [
+    {
+      "symbol": "Actor.Kind",
+      "family": "actor",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/actor/index.ts:4 (const Kind = z.enum([...])), :12 (type Kind = z.infer<typeof Kind>)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/actor/index.ts:39 — `kind: Kind` inside the Actor.Identity z.object (intra-package, same-file namespace use; this is the ONLY src consumer of the symbol)"
+        ],
+        "testPins": [
+          "packages/protocol/test/actor.test.ts:9 (kind:\"human\" via Actor.Identity.parse), :34 (kind:\"bot\" negative case) — exercise the enum only through Identity, never import the Kind symbol"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Qualified `Actor.Kind` has ZERO cross-package imports (rg over packages/apps/script found none outside the declaration). Its sole src reference is the intra-file Identity schema field at actor/index.ts:39. ADVERSARIAL CHECK: the many `actor.kind === \"worker\"/\"resident\"/\"unknown\"` branches in packages/openomni/src/dispatch/policy.ts (92-155), wait/matcher.ts:109, dispatch/runtime.ts branch on Dispatch.ActorKind (enum worker/resident/system/user/unknown), NOT protocol Actor.Kind (enum human/ai_agent/service/resident/internal_worker/system) — different symbol, no import of Actor.Kind. actor-resolver.ts:47 copies resolved.identity.kind into Ingress.Actor.kind (typed z.string().optional(), line 13), a pass-through, not a symbol import. So Actor.Kind is intra-package-only: drop `export` (keep `const Kind`/`type Kind`); Identity still validates. Not delete because Identity references it; not preserve because no Tier-1 axis consumer branches on it."
+    },
+    {
+      "symbol": "Actor.BlacklistKind",
+      "family": "actor",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/actor/index.ts:69 (const BlacklistKind = z.enum([\"actor\",\"endpoint\",\"channel\",\"pattern\"])), :70 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/ingress/resolve-route.ts:74 — `readonly kind: Actor.BlacklistKind` in RouteState.blacklist (CROSS-PACKAGE type import from @openomni/protocol); the value is read by the exported resolveRoute() at :88 and emitted at :105 (`blacklist.kind:${state.blacklist.kind}` in factsUsed)",
+          "packages/protocol/src/actor/index.ts:74 — `kind: BlacklistKind` inside Actor.BlacklistEntry z.object (intra-package)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "CORRECTION to the 'unexport candidate' label: rg NOW shows a live CROSS-PACKAGE type import at packages/openomni/src/ingress/resolve-route.ts:74, feeding the exported resolveRoute routing decision. It cannot be unexported (would break the openomni import) and is not intra-package-only. Owner: openomni ingress routing (RouteState.blacklist.kind) plus the persisted Actor.BlacklistEntry contract consumed by session blacklist store/adapter. Survivor."
+    },
+    {
+      "symbol": "Actor.Relationship",
+      "family": "actor",
+      "disposition": "defer",
+      "handoff": "#498",
+      "status": "pending",
+      "deviatesFromIssueKillList": true,
+      "exportSite": "packages/protocol/src/actor/index.ts:24 (const Relationship = z.enum([\"owner\",\"co_owner\",\"collaborator\",\"observer\",\"contractor\",\"external_agent\",\"worker\"])), :33 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/actor.test.ts:11 (relationship:\"owner\"), :36 (relationship:\"stranger\" negative)",
+          "packages/session/test/actor/persistence.test.ts:29,55,72,82,111,139,145,180",
+          "packages/session/test/app-connector/lifecycle.test.ts:188",
+          "apps/server/test/bootstrap/messaging.test.ts:13",
+          "packages/openomni/test/helpers/messaging.ts:16, packages/openomni/test/harness/existing-agent-message-driver.ts:98",
+          "packages/openomni/test/ingress/_actor-resolver-fixture.ts:138, _kernel-routing-fixture.ts:71, actor-resolver.test.ts:49/82/145, actor-resolver-sanitization.test.ts:70, kernel-routing-waits.test.ts:76/728/771/997, wait/matcher.test.ts:162/174"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "delete",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "REAL consumer: `relationship: Relationship` is a REQUIRED field of the live, cross-package, persisted Actor.Identity (actor/index.ts:41; stored in sqlite-actor-registry-adapter `data` blob; NOT NULL migration 0006; parsed on every DB read via Actor.Identity.parse). Deleting is a persistence-schema migration, which #497 non-goal forbids ('do not delete persisted surfaces without regenerated proof'). Concept removal belongs to #498 actor->Actor convergence."
+    },
+    {
+      "symbol": "Message.StepStartPart",
+      "family": "message-parts",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/message/index.ts:39 (const), packages/protocol/src/message/index.ts:42 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/llm/src/processor/stream-events.ts:175-185 — LIVE PRODUCER: case \"step-start\" calls appendPart({type:\"step-start\",...}) which records a part.appended fact",
+          "packages/llm/src/processor/stream-events.ts:203 — appendPart(part: Message.Part) carrier for the produced step-start part",
+          "packages/llm/src/run.ts:165 — upstream provider event rename (start-step -> step-start) feeding the producer",
+          "packages/protocol/src/transcript/fold.ts:143 — isAppendableInitialState punctual case; fold.ts:161 — advancePart punctual case (folds the part into Message.WithParts)"
+        ],
+        "testPins": [
+          "packages/protocol/test/message.test.ts:75",
+          "packages/protocol/test/message.test.ts:77"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Still produced by packages/llm/src/processor/stream-events.ts:175 (appendPart). #545 T1 did NOT stop production; ordering precondition unmet. Preserve until production stops."
+    },
+    {
+      "symbol": "Message.StepFinishPart",
+      "family": "message-parts",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/message/index.ts:44 (const), packages/protocol/src/message/index.ts:60 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/llm/src/processor/stream-events.ts:187-189 — case \"step-finish\" -> handleStepFinish; stream-events.ts:440-459 — LIVE PRODUCER: appendPart({type:\"step-finish\",reason,cost,tokens}) recording a part.appended fact",
+          "packages/llm/src/run.ts:163 — upstream provider event rename (finish-step -> step-finish) feeding the producer",
+          "packages/protocol/src/transcript/fold.ts:144 — isAppendableInitialState punctual case; fold.ts:162 — advancePart punctual case"
+        ],
+        "testPins": [
+          "packages/protocol/test/message.test.ts:87",
+          "packages/protocol/test/message.test.ts:89",
+          "packages/protocol/test/message.test.ts:110",
+          "packages/protocol/test/message.test.ts:121",
+          "packages/protocol/test/message.test.ts:132",
+          "packages/protocol/test/message.test.ts:142",
+          "packages/llm/test/processor/processor.test.ts:306 — asserts a step-finish part IS present in the emitted message (proves producer is live post-#545)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Still produced by stream-events.ts handleStepFinish (appendPart type:'step-finish'). Ordering precondition unmet. Preserve."
+    },
+    {
+      "symbol": "Message.RetryPart",
+      "family": "message-parts",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/message/index.ts:62 (const), packages/protocol/src/message/index.ts:70 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/message.test.ts:153",
+          "packages/protocol/test/message.test.ts:155",
+          "packages/protocol/test/message.test.ts:175"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer creates a type:'retry' message part; runner/turn-outcome action:'retry' is an execution decision, not a part. fold.ts:145/163 arms + message.test.ts + schema-snapshot.json:590 edited surgically. Never produced => never persisted => union removal is fail-closed-safe."
+    },
+    {
+      "symbol": "Message.SnapshotPart",
+      "family": "message-parts",
+      "disposition": "already-removed",
+      "status": "pending",
+      "exportSite": "(absent — no export site in current tree)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Does not exist in packages/protocol/src/message/index.ts (removed by a prior leaf). Issue kill-list row is vacuous. No-op."
+    },
+    {
+      "symbol": "Message.CompactionPart",
+      "family": "message-parts",
+      "disposition": "already-removed",
+      "status": "pending",
+      "exportSite": "(absent — no export site in current tree)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Does not exist in message/index.ts. Vacuous kill-list row. No-op."
+    },
+    {
+      "symbol": "Ingress.ActorMetadata",
+      "family": "ingress",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/ingress/index.ts:93",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Type alias `export type ActorMetadata = Actor` with ZERO references anywhere (whole-repo rg over packages/apps/script incl *.test.ts returns only the declaration at :93). The underlying Ingress.Actor type and ActorSchema value are live; this alias is orphaned. Raw-removable in #497."
+    },
+    {
+      "symbol": "Ingress.EventMetadata",
+      "family": "ingress",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/ingress/index.ts:100",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Type alias `export type EventMetadata = Meta` with ZERO references anywhere (only the declaration at :100). Underlying Ingress.Meta/MetaSchema are live; alias orphaned. Raw-removable in #497."
+    },
+    {
+      "symbol": "Ingress.ExternalInboundEventSchema",
+      "family": "ingress",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/ingress/index.ts:157",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": ["packages/protocol/test/ingress-internal.test.ts:52"],
+        "snapshotPin": "script/conformance/schema-snapshot.json:389",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "`export const ExternalInboundEventSchema = DirectEventSchema` is a pure alias to the live DirectEventSchema. Only consumer is a single test .parse at ingress-internal.test.ts:52 (test pin, does not block). The production inbound parse boundary calls DirectEventSchema.parse directly (openomni/src/ingress/engine.ts:113, ingress/middleware/ingress-authority.ts:193), never this alias, so deleting it leaves the live schema intact. Confirmed NOT the live named export."
+    },
+    {
+      "symbol": "Ingress.ExternalInboundEvent (inferred/paired type)",
+      "family": "ingress",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/ingress/index.ts:159",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": "script/conformance/schema-snapshot.json:389",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "delete",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Bare type = alias of DirectEvent, zero refs. Paired schema ExternalInboundEventSchema = pure alias `= DirectEventSchema` (index.ts:157). Trust-boundary test ingress-internal.test.ts:50 repoints to DirectEventSchema with zero coverage loss. Delete both; surgically drop snapshot key.",
+      "note": "Repoint ingress-internal.test.ts trust-boundary parse to DirectEventSchema."
+    },
+    {
+      "symbol": "Ingress.InboundEventSchema",
+      "family": "ingress",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ingress/index.ts:153",
+      "evidence": {
+        "productionConsumers": [
+          "only mode-discriminating validator (discriminatedUnion(mode) of Direct+Internal; rejects mode:'auto'), value-parsed (.parse) cross-package by packages/openomni/test/ingress/target.test.ts + protocol tests; no repoint target"
+        ],
+        "testPins": [
+          "packages/protocol/test/ingress.test.ts:142",
+          "packages/protocol/test/ingress.test.ts:159",
+          "packages/protocol/test/ingress.test.ts:175",
+          "packages/protocol/test/ingress.test.ts:187",
+          "packages/protocol/test/ingress.test.ts:200",
+          "packages/protocol/test/ingress.test.ts:214",
+          "packages/protocol/test/ingress-internal.test.ts:30",
+          "packages/protocol/test/ingress-internal.test.ts:39",
+          "packages/openomni/test/ingress/target.test.ts:7",
+          "packages/openomni/test/ingress/target.test.ts:19"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:402",
+        "runtimeConsumer": "mode-discriminating validator (no equivalent)"
+      },
+      "overturnOriginal": {
+        "from": "delete",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "PRESERVED by merged #596 after fresh-grep proof refuted the delete brief."
+    },
+    {
+      "symbol": "Ingress.InternalEventSchema",
+      "family": "ingress",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ingress/index.ts:146",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/ingress/index.ts:151 (intra-file: type InternalEvent = z.infer<typeof InternalEventSchema>) -> derived InternalEvent type is cross-package consumed at apps/server/src/bootstrap/dispatch-owners.ts:22, apps/server/src/bootstrap/index.ts:134, packages/openomni/src/ingress/engine.ts:29/48/145, packages/openomni/src/dispatch/handlers/resident.ts:37"
+        ],
+        "testPins": [
+          "packages/protocol/test/ingress-internal.test.ts — dedicated describe('InternalEventSchema') block parses the const directly (valid / missing-agentName / trigger-metadata)"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:428",
+        "runtimeConsumer": "const parsed directly by tests; InternalEvent type cross-package consumed"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "PRESERVED by merged #596; unexporting breaks the test import with no repoint target. Both const and type stay exported.",
+      "note": "MUST keep `export type InternalEvent` — it is cross-package consumed (engine.ts, bootstrap, resident)."
+    },
+    {
+      "symbol": "Ingress.DirectResult",
+      "family": "ingress",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/ingress/index.ts:162",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/ingress/index.ts:172 (intra-file: ExecutedIngressResult.result: DirectResult) -> ExecutedIngressResult is a member of the live Ingress.IngressResult union consumed cross-package at apps/server/src/handler/conversation.ts:34, packages/openomni/src/ingress/routing-execution.ts:148/221, packages/openomni/src/ingress/handlers.ts:181/222/302/329, packages/openomni/src/ingress/engine.ts:46/53/63/112/150, packages/openomni/src/ingress/cron-adapter.ts:16"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "The type NAME `Ingress.DirectResult` has zero direct references (all repo `DirectResult` grep hits are the unrelated SessionBridge.storeDirectResult function/method, not this type). It is used only intra-file at index.ts:172 as the `result` field of ExecutedIngressResult, which is a variant of the heavily-consumed live IngressResult union. Cannot delete (would break IngressResult and its many cross-package consumers). No cross-package import of DirectResult itself, so the #497 action is to make it non-exported (namespace-private) while keeping it load-bearing for ExecutedIngressResult/IngressResult."
+    },
+    {
+      "symbol": "Ingress.ActivationMetadataSchema",
+      "family": "ingress",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 596,
+      "exportSite": "packages/protocol/src/ingress/index.ts:102 (const); paired type ActivationMetadata at :103",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": "script/conformance/schema-snapshot.json:345",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "delete",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn was pin-only (schema-snapshot.json:345). Runtime uses module-local ActivationMetadataSchemaImpl (index.ts:51), NOT the exported alias. Zero cross-package importers. Delete alias; surgically drop snapshot key."
+    },
+    {
+      "symbol": "Dispatch.TargetKind (standalone re-export)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 601,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:10 (const), packages/protocol/src/dispatch/index.ts:11 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Dead duplicate. rg for `Dispatch.TargetKind` returns ZERO hits anywhere (no production, not even a test pin). It only re-exports DispatchSchemas.TargetKind. The live target path is Dispatch.Target / Dispatch.Command (consumed at apps/server/src/connector/process-driver.ts:16,82) which embed the kind enum INTERNALLY via DispatchSchemas.TargetKind (schemas.ts:21) — nobody consumes the separately-exported Dispatch.TargetKind. Command.Target confirmed as the live superset. Delete lines 10-11; the enum itself survives under DispatchSchemas (see preserve entry)."
+    },
+    {
+      "symbol": "DispatchSchemas.TargetKind (live backer — DO NOT delete)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/schemas.ts:8 (const), packages/protocol/src/dispatch/schemas.ts:17 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/ledger-append/streams.ts:116 (CommandVerdictBase.targetKind — command.authorized/command.denied persisted fact schema)",
+          "packages/protocol/src/dispatch/schemas.ts:21 (Target.kind — backs Dispatch.Target/Command)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Owner: ledger-append CommandAuthorized/CommandDenied fact (persisted/wire contract) + Dispatch.Target schema. Distinct symbol from the deleted standalone re-export above. #497 must delete only Dispatch.TargetKind (index.ts:10-11), NOT this backer."
+    },
+    {
+      "symbol": "Run.Budget",
+      "family": "dispatch-run-workerrun",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 601,
+      "exportSite": "packages/protocol/src/run/index.ts:33 (const), packages/protocol/src/run/index.ts:39 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/run.test.ts:101",
+          "packages/protocol/test/run.test.ts:103",
+          "packages/protocol/test/run.test.ts:119"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Zero production consumers confirmed. Only refs are the three run.test.ts pins (deleted in the same kill batch). Every other repo `Budget` hit is the agent budget-policy STRING literal `[Budget Status]`/`[Budget Warning]` (packages/agent/src/core/policy/builtin/budget.ts), not the symbol. Sibling Run.Outcome (llm/src/run.ts:33, agent lifecycle-dispatch.ts:70, agent/src/core/types.ts:40) and Run.RetryPolicy (agent/src/core/retry.ts:7,13,66) ARE live — the #498 run->llm StepResult move covers Outcome only; Budget is an orphan with no exit, outright delete now."
+    },
+    {
+      "symbol": "Run.Snapshot",
+      "family": "dispatch-run-workerrun",
+      "disposition": "already-removed",
+      "status": "pending",
+      "exportSite": "(absent — no such symbol exists in the current tree)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "CORRECTION (delete->already-removed): the symbol does not exist in source. A whole-tree grep of packages/protocol/src/run/** finds no `Snapshot` schema; it was removed before #497 began (no src, no test, no snapshot key). A delete row for a non-existent symbol is a phantom; reclassified already-removed."
+    },
+    {
+      "symbol": "WorkerRun.Info (incl lastMessageId field)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 601,
+      "exportSite": "packages/protocol/src/worker-run/index.ts:27 (const), packages/protocol/src/worker-run/index.ts:41 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/worker-run.test.ts:7",
+          "packages/protocol/test/worker-run.test.ts:39",
+          "packages/protocol/test/worker-run.test.ts:60"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Zero production consumers. The session worker-run store defines and uses its OWN record shape WorkerRunStateStore.Record (packages/session/src/worker-run/state-store.ts:34-48) for both reads and the frozen writes — it never parses/returns protocol WorkerRun.Info. Every `.Info` reference in packages/session/src is WorkItem.Info / Message.Info / CronJob.Info / Operational.Info / Session.Info, none WorkerRun.Info. Not re-aliased as WorkerRunInfo anywhere. The lastMessageId field (index.ts:38) — the historical last-message pointer — dies with it. Test pins in worker-run.test.ts drop in the same batch."
+    },
+    {
+      "symbol": "WorkerRun (namespace deletion candidate)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/worker-run/index.ts:14 (namespace WorkerRun)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/session/src/worker-run/state-store.ts:24 (WorkerRun.FrozenError — thrown by frozenWrite)",
+          "packages/session/src/worker-run/state-store.ts:23 (WorkerRun.WriteMethod)",
+          "packages/session/src/worker-run/state-store.ts:32,61 (WorkerRun.Status)",
+          "packages/session/src/work-item/attempt-run.ts:127 (WorkerRun.Status — legacyTerminalStatuses, the #498 upcast-on-read bridge)",
+          "apps/server/src/execution/worker-runner-events.ts:10,24,38,53 (WorkerRun.Events.Started/Completed/Cancelled/Failed)"
+        ],
+        "testPins": [
+          "packages/protocol/test/worker-run.test.ts:73-98 (Events)",
+          "packages/session/test/worker-run/frozen.test.ts (FrozenError)",
+          "packages/session/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Namespace-level removal is entangled and CANNOT happen in #497: WorkerRun still has live production members — FrozenError (fail-closed #510 D2b frozen-writer contract), WriteMethod, Status (cross-package, incl the attempt-run.ts:127 legacy-status bridge), and Events.* (published by the server worker runner). Downstream leaf that owns full retirement: #498 WorkItem-attempts convergence (WorkItem attempt facts + upcast-on-read attempt-run view eventually retire the worker-run legacy writer). #497 freezes the namespace as a handoff and removes only its dead member WorkerRun.Info; it must NOT raw-remove the namespace."
+    },
+    {
+      "symbol": "WorkerRun.FrozenError (survivor)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/worker-run/index.ts:56 (const), packages/protocol/src/worker-run/index.ts:64 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/session/src/worker-run/state-store.ts:24 (thrown on every frozen write; callers branch on data.code === 'worker_run_frozen')"
+        ],
+        "testPins": [
+          "packages/session/test/worker-run/frozen.test.ts:63-120 (rewritten against WorkerRunStateStore in #679)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Owner: #510 D2b frozen-writer fail-closed contract. Persisted-behavior/recovery guarantee — every WorkerRunStateStore write throws this typed error while historical worker_run_state rows stay readable. Live production consumer. Survivor."
+    },
+    {
+      "symbol": "WorkerRun.Status (survivor)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/worker-run/index.ts:15 (const), packages/protocol/src/worker-run/index.ts:25 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/session/src/worker-run/state-store.ts:32,61",
+          "packages/session/src/work-item/attempt-run.ts:127 (legacyTerminalStatuses set — #498 upcast bridge)",
+          "apps/server/src/execution/worker-runner-events.ts (Events payloads embed Status)"
+        ],
+        "testPins": [
+          "packages/session/src/worker-run/state-store.ts:32 (compile-time: export type Status = WorkerRun.Status; contract-alias.test.ts pin retired with the dead session alias in #679)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Cross-package live consumer and the semantic bridge #498 reads to upcast legacy worker-run terminal statuses into the attempt-run view. Survivor; part of why the namespace defers."
+    },
+    {
+      "symbol": "WorkerRun.WriteMethod / WorkerRun.Events.* (survivors)",
+      "family": "dispatch-run-workerrun",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/worker-run/index.ts:43 (WriteMethod), packages/protocol/src/worker-run/index.ts:66-108 (Events.Started/Completed/Failed/Cancelled)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/session/src/worker-run/state-store.ts:23 (WriteMethod param of frozenWrite)",
+          "apps/server/src/execution/worker-runner-events.ts:10,24,38,53 (Events published via Bus.publish)"
+        ],
+        "testPins": ["packages/protocol/test/worker-run.test.ts:73-98"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "WriteMethod is the discriminator carried in the FrozenError; Events.* are live Bus events published by the server worker runner (wire contract). Live production consumers. Survivors; block namespace deletion."
+    },
+    {
+      "symbol": "WorkItem.VerificationGate",
+      "family": "workitem-artifact-trace",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 601,
+      "exportSite": "packages/protocol/src/work-item/schemas.ts:143 (const), :177 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/session/src/work-item/work-item.test.ts:235 (writes verificationGate field)",
+          "script/conformance/schema-snapshot.json:1109 (ln pin \"WorkItem.VerificationGate\")"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:1109",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "regenerated-confirmation: historical dead-as-delete claim is WRONG; correct action is unexport. Zero cross-package and zero non-barrel/non-test src consumers of the exported symbol WorkItem.VerificationGate. The ONLY value/type use is intra-file at schemas.ts:237 `verificationGate: VerificationGate.optional()`, which builds Info. So the const is not deletable, but its export is not needed anywhere -> unexport: drop the namespace re-export (index.ts:107-108) and the `export` keyword on schemas.ts:143/177, keeping it a local const feeding Info. NOT delete-eligible: Info.verificationGate is a persisted field (WorkItem.Info schema) guarded in crud.ts:159 managedFields (a production reference to the FIELD name, not the exported schema symbol). It is never populated by any lifecycle helper (only 3 repo refs to `verificationGate` total), so a later leaf could drop the Info field itself, but that is a persisted-shape change (migration + ln re-baseline) beyond #497's raw export removal."
+    },
+    {
+      "symbol": "Artifact.Part",
+      "family": "workitem-artifact-trace",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 601,
+      "exportSite": "packages/protocol/src/artifact/index.ts:14 (const), :19 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/artifact.test.ts:113 (describe)",
+          "packages/protocol/test/artifact.test.ts:115",
+          "packages/protocol/test/artifact.test.ts:134",
+          "packages/protocol/test/artifact.test.ts:150",
+          "script/conformance/schema-snapshot.json:184 (ln pin \"Artifact.Part\": [artifactId, meta, type])"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:184",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "regenerated-confirmation: CONFIRMED dead in production. Zero production consumers. Adversarially checked the obvious hidden path: Artifact.Part (type:'artifact') is NOT a member of the message discriminated union — message/index.ts:80 Part union = [TextPart, ReasoningPart, StepStartPart, StepFinishPart, RetryPart, ToolPart] only. Session-side Artifact (session/src/artifact/index.ts) consumes only ArtifactSchema.Meta in store/get/list/versions; it never references Part. The only references are protocol test pins + the ln snapshot entry (both co-deleted in the kill batch). Safe to remove now in #497."
+    },
+    {
+      "symbol": "Artifact.Meta.version (field)",
+      "family": "workitem-artifact-trace",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/artifact/index.ts:9 (`version: z.number().int().default(1)` within Artifact.Meta)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/session/test/artifact/artifact.test.ts:69 (expect meta.version === 2)",
+          "packages/session/test/artifact/artifact.test.ts:105",
+          "packages/session/test/artifact/artifact.test.ts:132",
+          "packages/session/test/artifact/persistence.test.ts:101",
+          "script/conformance/schema-snapshot.json:182 (ln pin: version key inside Artifact.Meta)"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:182",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "CORRECTION (delete->preserve): live test-asserted Meta field. Defined artifact/index.ts:9 (`version: z.number().int().default(1)`); consumed cross-package by session artifact.test.ts / persistence.test.ts (makeMeta({version}), meta.version assertions, Artifact.store version bumps). Deleting it breaks session tests. Genuinely live, not deferred."
+    },
+    {
+      "symbol": "TraceContext.Schema",
+      "family": "workitem-artifact-trace",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 601,
+      "exportSite": "packages/protocol/src/trace/index.ts:4 (the zod Schema const inside namespace TraceContext)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "script/conformance/schema-snapshot.json:845 (ln pin \"TraceContext.Schema\": [agentName, parentSpanId, runId, sessionId, taskId, traceId])"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:845",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "regenerated-confirmation: CONFIRMED no runtime consumer of the Schema export; action is unexport (Type stays). The zod runtime validator TraceContext.Schema has ZERO consumers of any kind: `rg 'TraceContext.Schema'` hits only the ln snapshot; there is no `.parse`/`.safeParse` on it anywhere. Adversarially checked the wire boundary — worker-manager, ingress, policy, tool, agent all pass `TraceContext.Type` type-only across the IPC/bus boundary and never validate via Schema (the only trace-shaped `.parse` in the tree is ReplayTraceSchema in verifier-conformance-replay.ts, unrelated). So Schema is NOT a fail-closed/wire validator. It cannot be deleted because trace/index.ts:12 `export type Type = z.infer<typeof Schema>` derives the widely-consumed Type from it -> unexport: keep it as a local const feeding Type, drop the public `Schema` member. TraceContext.Type and the session-side live helpers (create/child/empty in packages/session/src/trace/index.ts) are unaffected survivors, exactly per the assignment."
+    },
+    {
+      "symbol": "policyKernelVersion",
+      "family": "policy",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/policy/definition.ts:3",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/handlers/worker-work-item.ts:2 (import)",
+          "packages/openomni/src/dispatch/handlers/worker-work-item.ts:65 (schemaVersions.policyKernel manifest wire value)",
+          "packages/protocol/src/policy/policy-point.ts:8 (import)",
+          "packages/protocol/src/policy/policy-point.ts:14 (PolicyPoint.version, intra-src)"
+        ],
+        "testPins": [
+          "packages/protocol/test/policy/conformance/versioning.test.ts:2,56,68,87,117,120,214",
+          "packages/protocol/test/policy/module-surface.test.ts:3,8,89"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Real cross-package production consumer: openomni worker-work-item.ts bakes it into the worker manifest schemaVersions.policyKernel (a wire/manifest value the worker ships). Also intra-src as PolicyPoint.version. Version constant / kernel contract -> survivor."
+    },
+    {
+      "symbol": "Policy.Label",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/index.ts:12 (lift of PolicyPermission.Label into Policy namespace)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/module-surface.test.ts:11 (expectedPolicyKeys \"Label\" key-lock)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "The Policy.Label namespace lift has zero production consumers (repo-wide Policy.Label word-boundary grep = 0; the prod hits are Policy.LabelEntry, a different symbol not in this family). Only the module-surface key-lock test pins it. Delete removes ONLY the Policy-namespace lift (index.ts:12-15). The underlying PolicyPermission.Label enum at permission.ts:11-17 is RETAINED because LabelEntry.source references Label.Source and Policy.LabelEntry is production-live."
+    },
+    {
+      "symbol": "Policy.PermissionDecision",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/index.ts:18 (lift of PolicyPermission.PermissionDecision into Policy namespace)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/module-surface.test.ts:14 (expectedPolicyKeys \"PermissionDecision\" key-lock)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Dead alternative to the effects-based Policy.PolicyDecision. The Policy.PermissionDecision namespace lift has no production consumer (repo-wide grep: only protocol src + the surface test). Delete removes the Policy-namespace lift (index.ts:18-19). The underlying PolicyPermission.PermissionDecision enum at permission.ts:26 is RETAINED — it is an inline field of InputRule.action (permission.ts:35) and EvaluationResult.decision (permission.ts:66), and Policy.Permission/Policy.InputRule/Policy.EvaluationResult/Policy.evaluate are heavily production-consumed (tool-guard, ingress-authority, mcp-prefix-guard, channel/authn, plus 7 protocol schemas embed Policy.Permission)."
+    },
+    {
+      "symbol": "PolicyDecision.pending",
+      "family": "policy",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/policy/index.ts:89 (public PolicyDecision.pending wrapper)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/openomni/test/execution-runtime/child-agent-policy-pre.test.ts:61",
+          "packages/agent/test/helpers/policy-decision.ts:45",
+          "packages/openomni/test/work-item/completion-admission-authority.test.ts:315",
+          "packages/protocol/test/policy.test.ts:556",
+          "packages/agent/test/core/execution/tools-verdicts.test.ts:86,112",
+          "packages/protocol/test/policy/module-surface.test.ts (expectedPolicyDecisionKeys \"pending\")"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "CORRECTION (delete->preserve): live require_approval verdict constructor. `PolicyDecisionHelpers.pending` is defined at policy/decision.ts:39 and called internally at :64 inside fromEvaluation's require_approval branch; `PolicyDecision.pending` has 4 cross-package consumers (agent policy-decision.ts:45, tool-executor-verdicts.test.ts:93/117, openomni completion-admission-authority.test.ts:315, child-agent-policy-pre.test.ts:61). The batch-15 implementer refuted the delete brief; the symbol was kept. Not dead surface."
+    },
+    {
+      "symbol": "RuntimeResource.Kind",
+      "family": "policy",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:7",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/policy/resource.ts:103 (Descriptor.kind field, intra-src)",
+          "packages/protocol/src/policy/resource.ts:176 (DescriptorInput.kind, intra-src)"
+        ],
+        "testPins": [
+          "packages/protocol/test/policy/module-surface.test.ts:55 (expectedRuntimeResourceKeys \"Kind\" key-lock)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "No cross-package reference (repo-wide RuntimeResource.Kind grep = 0). But it is required intra-src by the LIVE production Descriptor schema (Descriptor.kind) which is consumed across agent/openomni/server. Drop `export` on the Kind const+type inside the RuntimeResource namespace; Descriptor still closes over it. Surface key-lock test trims \"Kind\" in the same batch."
+    },
+    {
+      "symbol": "RuntimeResource.ActorType",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:75",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/module-surface.test.ts:56 (expectedRuntimeResourceKeys \"ActorType\")"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:735",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Zero production consumers (repo-wide RuntimeResource.ActorType grep = 0). Its only intra-src user is ActorDescriptor.actorType (resource.ts:83), and ActorDescriptor is itself production-dead and deleted in this same batch. Runtime-authority actor-typing that no engine ever consumes."
+    },
+    {
+      "symbol": "RuntimeResource.SessionType",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:78",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/module-surface.test.ts:57 (expectedRuntimeResourceKeys \"SessionType\")"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:756",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "delete",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn cited SessionDescriptor(resource.ts:94) + createSessionDescriptor(resource.ts:227) as consumers, but BOTH are in the same policy kill batch (issue: delete SessionDescriptor + createSessionDescriptor). Co-deleted => SessionType loses all consumers. Delete together; surgically drop SessionDescriptor snapshot key.",
+      "note": "Delete in the SAME increment as SessionDescriptor + createSessionDescriptor."
+    },
+    {
+      "symbol": "RuntimeResource.ActorDescriptor",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:81",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/resource-descriptor.test.ts:80,93,106",
+          "packages/protocol/test/policy/module-surface.test.ts:58 (expectedRuntimeResourceKeys \"ActorDescriptor\")"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:735",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Runtime-authority actor descriptor with ZERO production consumers — grep across openomni/agent/policy/server src returned nothing. The 'runtime banned via Policy.Resource/Profile-derived' hint: this carries actorType+permissions but no authority/policy engine ever builds or reads it. Not in the policy event (event/policy.ts uses Descriptor, not ActorDescriptor). Only conformance + surface test pins."
+    },
+    {
+      "symbol": "RuntimeResource.SessionDescriptor",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:91",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/resource-descriptor.test.ts:117,129,142",
+          "packages/protocol/test/policy/module-surface.test.ts:59 (expectedRuntimeResourceKeys \"SessionDescriptor\")"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:756",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Runtime-authority session descriptor with ZERO production consumers (openomni/agent/policy/server src grep = nothing). No authority engine constructs or reads it. Only conformance + surface test pins."
+    },
+    {
+      "symbol": "RuntimeResource.createWorkerDescriptor",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:197",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/conformance/descriptor.test.ts:119",
+          "packages/protocol/test/policy/conformance/versioning.test.ts:209",
+          "packages/protocol/test/policy/descriptor-helpers.test.ts:6",
+          "packages/protocol/test/policy/module-surface.test.ts:61 (key-lock)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Descriptor factory with ZERO production consumers (grep across all src returned only the declaration + tests). No coordinator/worker path builds worker descriptors via this helper. Test-only pins do not block deletion."
+    },
+    {
+      "symbol": "RuntimeResource.createCredentialDescriptor",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:209",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/conformance/descriptor.test.ts:120,172",
+          "packages/protocol/test/policy/conformance/versioning.test.ts:210",
+          "packages/protocol/test/policy/descriptor-helpers.test.ts:22",
+          "packages/protocol/test/policy/module-surface.test.ts:62 (key-lock)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Descriptor factory with ZERO production consumers (grep = declaration + tests only). No credential/token path builds descriptors via this helper."
+    },
+    {
+      "symbol": "RuntimeResource.createSessionDescriptor",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:222",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/conformance/descriptor.test.ts:123",
+          "packages/protocol/test/policy/conformance/versioning.test.ts:211",
+          "packages/protocol/test/policy/resource-descriptor.test.ts:151",
+          "packages/protocol/test/policy/descriptor-helpers.test.ts:38",
+          "packages/protocol/test/policy/module-surface.test.ts:63 (key-lock)"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:756",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Descriptor factory with ZERO production consumers (grep = declaration + tests only). Sole intra-src reader of SessionType. No session lifecycle path builds descriptors via this helper."
+    },
+    {
+      "symbol": "RuntimeResource.schemaVersion",
+      "family": "policy",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 599,
+      "exportSite": "packages/protocol/src/policy/resource.ts:5",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/policy/conformance/versioning.test.ts:215 (asserts === policyKernelVersion)",
+          "packages/protocol/test/policy/module-surface.test.ts:54 (expectedRuntimeResourceKeys \"schemaVersion\")"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "RuntimeResource.schemaVersion (= policyKernelVersion) has ZERO production consumers (repo-wide grep = 1 conformance test + surface key-lock). Not read intra-src. The kernel version wire value is carried by policyKernelVersion (preserved) via the worker manifest; this duplicate alias export is dead. Deleting it also removes the import of policyKernelVersion at resource.ts:2."
+    },
+    {
+      "symbol": "Tool.Config",
+      "family": "tool-token",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/tool/index.ts:25 (const), :31 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/execution/index.ts:16 — Execution.Request.toolConfig: Tool.Config.optional()",
+          "packages/protocol/src/ingress/index.ts:113 — Ingress.AgentDefSchema.toolConfig: Tool.Config.optional()",
+          "apps/server/src/execution/worker-runtime.ts:77,84 — reads request.toolConfig?.workspaceRoot",
+          "apps/server/src/execution/worker-runner.ts:83,151-152 — reads/forwards request.toolConfig",
+          "apps/server/src/ingress/bridge.ts:61 — constructs toolConfig payload",
+          "packages/openomni/src/ingress/routing-execution.ts:181 — event.agent.toolConfig?.workspaceRoot",
+          "packages/openomni/src/ingress/handlers.ts:142,288,292 — event.agent.toolConfig(.workspaceRoot)",
+          "packages/openomni/src/resident/runtime.ts:116 — ctx.event.agent.toolConfig?.workspaceRoot"
+        ],
+        "testPins": [
+          "packages/protocol/test/tool.test.ts:6,20,21",
+          "packages/protocol/src/execution/execution.test.ts:30,52,53",
+          "packages/protocol/test/ingress.test.ts:43,58"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "PREMISE CORRECTED: not dead. Tool.Config is the shared tool-exposure/workspaceRoot selector embedded in two live protocol wire schemas — Execution.Request (executor request) and Ingress.AgentDefSchema. The toolConfig field it types is read cross-package by server worker-runtime/worker-runner (workspaceRoot resolution) and openomni ingress handlers/resident runtime. Both embedding modules are separate files inside protocol, so the namespace member must stay exported (cannot unexport). Live cross-package wire contract → survivor. Owner: Execution.Request.toolConfig + Ingress.AgentDefSchema.toolConfig."
+    },
+    {
+      "symbol": "Tool.State",
+      "family": "tool-token",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/tool/index.ts:72 (const), :78 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/message/index.ts:76 — Message.ToolPart.state: Tool.State (persisted transcript/wire part)",
+          "packages/protocol/src/transcript/fold.ts:139,183-241 — reads part.state.status and reconstructs tool state across pending→running→completed|error|interrupted",
+          "packages/llm/src/processor/stream-events.ts:321,357 — constructs Message.ToolPart values carrying state",
+          "packages/agent/src/core/execution/compaction.ts:55-62 — projects ToolPart.state into tool-call/result pairs"
+        ],
+        "testPins": [
+          "packages/protocol/test/tool.test.ts:182-230",
+          "packages/protocol/test/message.test.ts:256",
+          "packages/protocol/test/transcript.test.ts:166"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "PREMISE CORRECTED: not dead. Tool.State is embedded in Message.ToolPart, which is part of the Message.Part discriminated union — a persisted/wire transcript contract. It is read deeply by the deterministic transcript fold (fold.ts advanceToolPart) and constructed cross-package by llm stream-events and agent compaction. Ring-0 persisted contract with real cross-package consumers → survivor. (fold.ts:170-175 and schema.ts:33 mention it only in comments; those are not consumers but the union itself is.)"
+    },
+    {
+      "symbol": "Tool.StatePending",
+      "family": "tool-token",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/tool/index.ts:33 (const), :37 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": ["packages/protocol/test/tool.test.ts:35,37,47,51,56"],
+        "snapshotPin": "script/conformance/schema-snapshot.json:842",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn pin-only (schema-snapshot.json:842). Union variant Tool.State#0 survives via lexical ref (index.ts). Unexport; surgically drop the standalone Tool.StatePending snapshot key."
+    },
+    {
+      "symbol": "Tool.StateRunning",
+      "family": "tool-token",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/tool/index.ts:39 (const), :46 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": ["packages/protocol/test/tool.test.ts:64,66,78,87"],
+        "snapshotPin": "script/conformance/schema-snapshot.json:843",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn pin-only (schema-snapshot.json:843). Persisted shape survives via Tool.State#1. Unexport; surgically drop standalone key."
+    },
+    {
+      "symbol": "Tool.StateCompleted",
+      "family": "tool-token",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/tool/index.ts:48 (const), :59 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": ["packages/protocol/test/tool.test.ts:95,97,113,125,137"],
+        "snapshotPin": "script/conformance/schema-snapshot.json:833",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Dead export surface. Only non-test src reference is the Tool.State union (tool/index.ts:75); no cross-package import by name. Fold builds the completed shape inline (fold.ts:202-211). Drop `export`; keep as internal union member."
+    },
+    {
+      "symbol": "Tool.StateError",
+      "family": "tool-token",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/tool/index.ts:61 (const), :70 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": ["packages/protocol/test/tool.test.ts:148,150,163,173"],
+        "snapshotPin": "script/conformance/schema-snapshot.json:841",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn pin-only (schema-snapshot.json:841). Error shape survives via Tool.State#3. Unexport; surgically drop standalone key."
+    },
+    {
+      "symbol": "Token.Usage",
+      "family": "tool-token",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/token/index.ts:17 (const), :25 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "AMENDMENT RESOLVED: Token.Usage is NOT transcript-referenced. The transcript-owned minimal Usage the amendment protects is a self-contained local shape in transcript/schema.ts:17 (input/output/reasoning/cache.read/write via a local TokenCount, deliberately avoiding Token.* so ring-0 facts stay llm-free — see schema.ts:9-11). Token.Usage has ZERO direct references anywhere (no `Token.Usage`, no destructured import, no test). It exists only as the intra-file base for AgentUsage (extend) and ProviderUsage (omit), which are the token->llm Usage-split family: ProviderUsage is consumed by llm TokenTracker (llm/src/token/index.ts:10,62), AgentUsage by agent/src/core/types.ts:17 and event/agent-execution.ts:26. #497 must NOT raw-remove; freeze as handoff. Owner: #498 token->llm Usage split (moves the whole Usage/AgentUsage/ProviderUsage/ExecutionUsage family to the llm package)."
+    },
+    {
+      "symbol": "Token.Count",
+      "family": "tool-token",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/token/index.ts:4 (const+type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/message/index.ts:49,50,51,54,55 — Message.StepFinishPart.tokens fields",
+          "packages/protocol/src/message/index.ts:127,128,129,131,132 — Message.AssistantMessage.tokens fields",
+          "packages/protocol/src/event/llm.ts:30,31,32,33,34 — LlmUsage event token counters",
+          "packages/protocol/src/token/index.ts:18-23,49-55 — intra-file base for Usage/ExecutionUsage fields"
+        ],
+        "testPins": [
+          "packages/protocol/test/token.test.ts (via Usage/ExecutionUsage parse)",
+          "packages/protocol/test/message.test.ts (token shape assertions)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "AMENDMENT RESOLVED: transcript-referenced → survivor, stays in protocol (not part of the llm move). Token.Count is the atomic nonnegative-int counter embedded in Message.AssistantMessage.tokens (message/index.ts:127-132) and Message.StepFinishPart.tokens (49-55). Message.Info/Message.Part are embedded in transcript facts (transcript/schema.ts MessageCreatedFact/PartAppendedFact) and the fold writes the finished assistant tokens (fold.ts:114-122), so Token.Count is a ring-0 persisted/wire contract reached through Message. Also consumed by the LlmUsage event. Real cross-module production consumers + persisted contract → preserve. #497 leaves it untouched; because Message depends on it, #498 cannot exit it to llm."
+    },
+    {
+      "symbol": "Adapter.Command",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:65",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/adapter/index.ts:114 — `registerCommands?(commands: Command[])` on the LIVE Surface interface (implemented by apps/server discord/telegram/github surfaces)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "kept Surface interface signature"
+      },
+      "overturnOriginal": null,
+      "reason": "live interface-contract member; namespaced Adapter.Command grep missed the bare-internal ref inside Surface. Not dead."
+    },
+    {
+      "symbol": "Adapter.CommandContext",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:75",
+      "evidence": {
+        "productionConsumers": [
+          "adapter/index.ts:83 — parameter type of CommandHandler, a live Surface.onCommand member"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "kept via CommandHandler"
+      },
+      "overturnOriginal": null,
+      "reason": "transitively live."
+    },
+    {
+      "symbol": "Adapter.CommandHandler",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:83",
+      "evidence": {
+        "productionConsumers": [
+          "adapter/index.ts:115 — `onCommand?(handler: CommandHandler)` on live Surface"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "kept Surface signature"
+      },
+      "overturnOriginal": null,
+      "reason": "live interface-contract member; namespaced grep missed the bare-internal ref inside Surface. Not dead."
+    },
+    {
+      "symbol": "Adapter.StreamSink",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:85",
+      "evidence": {
+        "productionConsumers": [
+          "adapter/index.ts:93 — parameter type of StreamingHandler, a live Surface.onStreamingMessage member"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "kept via StreamingHandler"
+      },
+      "overturnOriginal": null,
+      "reason": "transitively live."
+    },
+    {
+      "symbol": "Adapter.StreamingHandler",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:93",
+      "evidence": {
+        "productionConsumers": [
+          "adapter/index.ts:110 — `onStreamingMessage?(handler: StreamingHandler)` on live Surface"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "kept Surface signature"
+      },
+      "overturnOriginal": null,
+      "reason": "removing these optional command/streaming capability members is an adapter-capability redesign, out of #497 dead-surface scope."
+    },
+    {
+      "symbol": "Adapter.MediaAttachment",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:35",
+      "evidence": {
+        "productionConsumers": [
+          "apps/server/src/ingress/bridge.ts:145 (reads InboundMessage.media (MediaAttachment[]) and forwards it into Ingress.DirectEvent.meta.media)"
+        ],
+        "testPins": [
+          "apps/server/test/ingress-bridge.test.ts:81 (media: message.media — asserts the forwarding)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Live wire contract. MediaAttachment is the element type of InboundMessage.media (adapter/index.ts:51) and OutboundMessage.media (adapter/index.ts:60), both consumed interfaces: channel normalizers build InboundMessage, surfaces send OutboundMessage, and the ingress bridge reads message.media and forwards MediaAttachment[] into the Ingress.DirectEvent meta payload (bridge.ts:145). Survivor; #499 renames adapter->Channel but #497 must not remove it."
+    },
+    {
+      "symbol": "Adapter.DeliveryPolicy",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:33",
+      "evidence": {
+        "productionConsumers": [
+          "apps/server/src/bootstrap/channels.ts:53 (constructs Adapter.Config with deliveryPolicy:\"final\" for Telegram)",
+          "apps/server/src/bootstrap/channels.ts:72 (GitHub Config.deliveryPolicy)",
+          "apps/server/src/bootstrap/channels.ts:93 (Discord Config.deliveryPolicy)"
+        ],
+        "testPins": [
+          "apps/server/test/channel/github-authn.test.ts:11",
+          "apps/server/test/channel/github-authn.test.ts:113"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Type of the live Config.deliveryPolicy field (adapter/index.ts:97). Config is a consumed interface — every channel surface takes config: Adapter.Config (discord/telegram/github surface.ts) and bootstrap constructs Config objects with deliveryPolicy:\"final\" (channels.ts:53/72/93). Value side is a string literal but the type governs a live, constructed-and-consumed contract field. Survivor; renamed under #499, not removed by #497."
+    },
+    {
+      "symbol": "Adapter.Capabilities",
+      "family": "adapter",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/adapter/index.ts:2",
+      "evidence": {
+        "productionConsumers": [
+          "apps/server/src/channel/discord/surface.ts:16 (readonly capabilities: Adapter.Capabilities = {...})",
+          "apps/server/src/channel/telegram/surface.ts:19 (readonly capabilities: Adapter.Capabilities = {...})",
+          "apps/server/src/channel/github/surface.ts:15 (readonly capabilities: Adapter.Capabilities = {...})"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "CENSUS CORRECTION REFUTED. Claim 'zero readers' holds only for runtime VALUE reads — nothing branches on surface.capabilities.streaming/media/commands/threads. The two unrelated value-readers the correction warns about are apps/../app-connector/consent-validation.ts:15 (input.capabilities) and packages/openomni/src/evidence/verifier-registry-core.ts:58 (program.capabilities) — different Capabilities-shaped fields, correctly NOT confused. BUT Adapter.Capabilities has 3 direct TYPE-position production consumers (the three channel surfaces annotate their capabilities property with Adapter.Capabilities) and is a required field of Adapter.Surface (adapter/index.ts:102), which those same 3 classes implement (implements Adapter.Surface). Live public contract → preserve; #499 renames to Channel.Capabilities. Not delete-eligible in #497."
+    },
+    {
+      "symbol": "AppConnector.InstallationStatus",
+      "family": "appconnector",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:51 (const) + :52 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/session/test/app-connector/lifecycle.test.ts:226",
+          "packages/openomni/test/dispatch/worker-spawn-connector-endpoint.test.ts:118"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Persisted enrollment state-machine enum. Declared installation.ts:5-13, composed into the persisted Installation record at installation.ts:45 (status field). Installation is round-tripped through SQLite in packages/session/src/storage/sqlite-app-connector-installation-adapter.ts:16,44 (AppConnector.Installation.parse of DB JSON). The live enrollment state machine in packages/session/src/app-connector/index.ts:137-195 drives exact literal transitions (registered->pending_consent->consented->enabled/verification_failed/disabled) and fail-closes on illegal transitions. Persisted + fail-closed enrollment contract survivor. No direct namespace-qualified prod consumer (consumption is via the composed Installation type and literal values); test pins only."
+    },
+    {
+      "symbol": "AppConnector.WorkspaceIdentity",
+      "family": "appconnector",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:57 (const) + :58 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Persisted enrollment workspace-identity shape. Declared installation.ts:26-34, composed into the persisted Installation record at installation.ts:47 (workspace field). Its fields ARE consumed field-level in production: packages/session/src/app-connector/index.ts:66 (workspace.worktreePath) and :99-104 (workspace.repoPathHash / worktreePathHash) build the connector Actor.Endpoint. Persisted enrollment identity contract survivor. No direct namespace-qualified prod consumer of the symbol itself (consumed via installation.workspace on the Installation type); no test pins."
+    },
+    {
+      "symbol": "AppConnector.Detect",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:21 (const) + :22 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Connector-manifest detection sub-schema. Declared definition.ts:31-39, composed into the live Definition manifest at definition.ts:219 (Definition.detect, required). Definition is validated at enrollment, persisted inside Installation, and consumed cross-package (apps/server/src/connector/*, packages/openomni/src/dispatch/*, packages/session/src/app-connector/*). No direct namespace-qualified consumer (prod or test) and no field-level prod read of .detect, but it is a live constituent of the persisted connector manifest under the #499 AppConnector->Tier-2 Endpoint / adapter->Channel convergence (corpus docs/corpus/10-protocol.local.md:63 app-connector = retained+converged domain #497-#500; :66 #499 owns adapter->channel). #497 must freeze it as a handoff, not raw-remove it (removal would still leave the local const composing Definition; the convergence owns whether the manifest keeps/renames this sub-schema)."
+    },
+    {
+      "symbol": "AppConnector.Evidence",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:36 (const) + :37 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Connector-manifest evidence/completion sub-schema (distinct from WorkItem.Evidence, which is a different live symbol). Declared definition.ts:163-169, composed into Definition at definition.ts:224 (Definition.evidence, required). Its field-shape IS read in production via definition.evidence: apps/server/src/connector/process-driver.ts:40 (evidence.completionReport.finalMessage) and apps/server/src/connector/read-back-builder.ts:22 (evidence.completionReport.readBackRequests). No direct namespace-qualified consumer of the AppConnector.Evidence symbol itself. Live constituent of the persisted connector manifest entangled with the #499 AppConnector convergence; #497 freezes as handoff. #499 must carry this shape (it is live), not drop it."
+    },
+    {
+      "symbol": "AppConnector.Requires",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:39 (const) + :40 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "apps/server/test/bootstrap/dispatch-owners.test.ts:54",
+          "apps/server/test/connector/process-driver.test.ts:71"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Connector-manifest requirements sub-schema. Declared definition.ts:171-178, composed into Definition at definition.ts:225 (Definition.requires, required). Field-shape IS read in production via definition.requires: apps/server/src/connector/env.ts:116 (requires.credentials credential gating) and the fail-closed enrollment consent gate packages/session/src/app-connector/consent-validation.ts:14-16 (assertConsentMatchesRequirements over requires.credentials/capabilities/permissions). The standalone AppConnector.Requires symbol has only test pins (dispatch-owners.test.ts:54, process-driver.test.ts:71), no direct prod consumer. Live constituent of the persisted connector manifest entangled with the #499 AppConnector convergence; #497 freezes as handoff. The live field-consumers (fail-closed consent gate) mean #499 must preserve this shape, not drop it."
+    },
+    {
+      "symbol": "AppConnector.Profile",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:45 (const) + :46 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Connector-endpoint profile sub-schema — the literal Tier-2 Endpoint profile named by this family ('connector_endpoint' kind). Declared definition.ts:202-211, composed into Definition at definition.ts:226 (Definition.profile, required). Field-shape IS read in production: packages/openomni/src/dispatch/handlers/connector-endpoint-worker.ts:85 gates on definition.profile.kind === 'connector_endpoint'. No direct namespace-qualified consumer of the AppConnector.Profile symbol itself. Live constituent central to the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff. (apps/server/src/profile/resident.ts:188 '## Profile' is an unrelated markdown heading, not this symbol.)"
+    },
+    {
+      "symbol": "AppConnector.InitialAutonomy",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:9 (const) + :10 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Connector-endpoint autonomy-policy enum. Declared definition.ts:19-20, composed into Profile at definition.ts:208 (Profile.initialAutonomy, optional) -> Definition.profile. No direct namespace-qualified consumer (prod or test) and no field-level prod read of .initialAutonomy — only the intra-file schema composition. But it is a live constituent of the persisted connector endpoint profile under the #499 AppConnector->Tier-2 Endpoint convergence, which owns the endpoint autonomy contract. #497 freezes as handoff rather than raw-removing."
+    },
+    {
+      "symbol": "AppConnector.DriverInstallScope",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:12 (const) + :13 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Driver install-scope enum (user/workspace/repository). Declared definition.ts:22-23, composed into Driver at definition.ts:185 (Driver.install.scopes) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of .scopes — only schema composition. Live constituent of the connector Driver sub-schema, which is exactly the surface the #499 AppConnector->Channel/Tier-2 convergence reshapes (corpus 10-protocol.local.md:66, #499 adapter->channel). #497 freezes as handoff."
+    },
+    {
+      "symbol": "AppConnector.SubmitMode",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:15 (const) + :16 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Driver submit-mode enum (spawn/hook/plugin/api). Declared definition.ts:25-26, composed into Driver at definition.ts:192 (Driver.submit.mode) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of driver.submit.mode (the '.submit' hits in prod are unrelated dispatchRuntime.submit calls). Live constituent of the connector Driver contract under the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff."
+    },
+    {
+      "symbol": "AppConnector.SubmitAck",
+      "family": "appconnector",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/app-connector/index.ts:18 (const) + :19 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Driver submit-ack enum (submitted/accepted/running). Declared definition.ts:28-29, composed into Driver at definition.ts:193 (Driver.submit.ack) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of driver.submit.ack. Live constituent of the connector Driver contract under the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff."
+    },
+    {
+      "symbol": "Extension.LifecycleState",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:11 (const enum), :22 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:14",
+          "packages/protocol/test/extension.test.ts:29",
+          "packages/protocol/test/extension.test.ts:34",
+          "packages/protocol/test/extension.test.ts:35",
+          "packages/protocol/test/extension.test.ts:36"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "rg '\\bExtension\\b' over packages/apps/script (non-test) returns ZERO hits outside the declaring file. Zero producers, zero consumers, not published anywhere. Test-only pins do not block. Barrel re-export at index.ts:38 must be removed with it."
+    },
+    {
+      "symbol": "Extension.SurfaceBinding",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:24 (const), :28 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:186 (exercised indirectly via Extension.Manifest.safeParse contributes.surfaces; no direct symbol reference)"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:344",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Only referenced by its sibling Extension.Contributes at extension/index.ts:36 (intra-file, itself dead and deleted in the same batch). No external, no cross-package, no direct test reference. Exercised only indirectly through Manifest parse fixtures."
+    },
+    {
+      "symbol": "Extension.Contributes",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:30 (const), :39 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:65",
+          "packages/protocol/test/extension.test.ts:90",
+          "packages/protocol/test/extension.test.ts:113",
+          "packages/protocol/test/extension.test.ts:139",
+          "packages/protocol/test/extension.test.ts:163",
+          "packages/protocol/test/extension.test.ts:186",
+          "packages/protocol/test/extension.test.ts:281 (all indirect via Extension.Manifest.safeParse contributes; the 'Contributes ...' matches are description string literals, not symbol refs)"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:317",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Only referenced by sibling Extension.Manifest at extension/index.ts:48 (intra-file, dead, same batch). Its own body pulls AgentProfile/Tool/Skill.Definition/McpConfig/Policy/AppConnector but those inbound imports are one-directional (extension consuming others, not others consuming extension). No external/cross-package/direct-test reference."
+    },
+    {
+      "symbol": "Extension.Manifest",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:41 (const), :65 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:40",
+          "packages/protocol/test/extension.test.ts:42",
+          "packages/protocol/test/extension.test.ts:61",
+          "packages/protocol/test/extension.test.ts:86",
+          "packages/protocol/test/extension.test.ts:109",
+          "packages/protocol/test/extension.test.ts:135",
+          "packages/protocol/test/extension.test.ts:159",
+          "packages/protocol/test/extension.test.ts:182",
+          "packages/protocol/test/extension.test.ts:202",
+          "packages/protocol/test/extension.test.ts:225",
+          "packages/protocol/test/extension.test.ts:250",
+          "packages/protocol/test/extension.test.ts:268",
+          "packages/protocol/test/extension.test.ts:279",
+          "packages/protocol/test/extension.test.ts:335",
+          "packages/protocol/test/extension.test.ts:353",
+          "packages/protocol/test/extension.test.ts:359",
+          "packages/protocol/test/extension.test.ts:365",
+          "packages/protocol/test/extension.test.ts:371",
+          "packages/protocol/test/extension.test.ts:377",
+          "packages/protocol/test/extension.test.ts:400"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:332",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Only referenced by sibling Extension.InstallRequest at extension/index.ts:68 (intra-file, dead, same batch). No non-test consumer publishes/validates a Manifest anywhere in packages/apps/script. Not persisted (no DB column, no snapshot — no schema-snapshot.json exists in packages/protocol)."
+    },
+    {
+      "symbol": "Extension.InstallRequest",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:67 (const), :73 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:413",
+          "packages/protocol/test/extension.test.ts:415",
+          "packages/protocol/test/extension.test.ts:435",
+          "packages/protocol/test/extension.test.ts:455",
+          "packages/protocol/test/extension.test.ts:464"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:326",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "delete",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn was pin-only false positive (schema-snapshot.json:326; productionConsumers=[]). Issue mandates 'extension all 14'. Deleted in PR #594; snapshot key surgically removed; build/type/test green."
+    },
+    {
+      "symbol": "Extension.Events.Proposed",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:84",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:474",
+          "packages/protocol/test/extension.test.ts:475",
+          "packages/protocol/test/extension.test.ts:549"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "BusEvent.define is a pure factory (bus/index.ts:17) that returns a Descriptor — NO global registry enumerates events, so no dynamic dispatch consumes it. No .publish(Extension.Events.*) anywhere; event topic string 'extension.proposed' appears only at the definition and the test. Dead wire contract with zero producers and zero consumers."
+    },
+    {
+      "symbol": "Extension.Events.Approved",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:87",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:480",
+          "packages/protocol/test/extension.test.ts:481",
+          "packages/protocol/test/extension.test.ts:550"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.approved' only at definition + test. Pure Descriptor, no registry."
+    },
+    {
+      "symbol": "Extension.Events.Staged",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:90",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:486",
+          "packages/protocol/test/extension.test.ts:487"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.staged' only at definition + test."
+    },
+    {
+      "symbol": "Extension.Events.Installed",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:93",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:492",
+          "packages/protocol/test/extension.test.ts:493",
+          "packages/protocol/test/extension.test.ts:556"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.installed' only at definition + test."
+    },
+    {
+      "symbol": "Extension.Events.Enabled",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:96",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:498",
+          "packages/protocol/test/extension.test.ts:499"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.enabled' only at definition + test."
+    },
+    {
+      "symbol": "Extension.Events.Disabled",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:99",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:504",
+          "packages/protocol/test/extension.test.ts:505",
+          "packages/protocol/test/extension.test.ts:551"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.disabled' only at definition + test."
+    },
+    {
+      "symbol": "Extension.Events.RolledBack",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:102",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:510",
+          "packages/protocol/test/extension.test.ts:512",
+          "packages/protocol/test/extension.test.ts:521"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.rolled_back' only at definition + test. Extends EventBase with fromVersion — that extension is local and dies with it."
+    },
+    {
+      "symbol": "Extension.Events.Uninstalled",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:107",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:526",
+          "packages/protocol/test/extension.test.ts:527"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.uninstalled' only at definition + test."
+    },
+    {
+      "symbol": "Extension.Events.Failed",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/extension/index.ts:110",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/extension.test.ts:532",
+          "packages/protocol/test/extension.test.ts:534",
+          "packages/protocol/test/extension.test.ts:543"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "No producer/consumer; topic 'extension.failed' only at definition + test. Extends EventBase with error — local, dies with it. NOTE: the private const EventBase (extension/index.ts:75, not exported) is consumed only by these Events and is removed as part of the same file deletion."
+    },
+    {
+      "symbol": "Skill.Layer",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/skill/index.ts:4 (const enum), :5 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/skill.test.ts:169",
+          "packages/protocol/test/skill.test.ts:171",
+          "packages/protocol/test/skill.test.ts:172",
+          "packages/protocol/test/skill.test.ts:173",
+          "packages/protocol/test/skill.test.ts:177",
+          "packages/protocol/test/skill.test.ts:178",
+          "packages/protocol/test/skill.test.ts:179"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Only referenced by sibling Skill.Definition at skill/index.ts:14 (intra-file). Skill.Definition itself has no surviving consumer (see below). Barrel re-export at index.ts:37 removed with it."
+    },
+    {
+      "symbol": "Skill.Scope",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/skill/index.ts:7 (const enum), :8 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/skill.test.ts:183",
+          "packages/protocol/test/skill.test.ts:185",
+          "packages/protocol/test/skill.test.ts:186",
+          "packages/protocol/test/skill.test.ts:190",
+          "packages/protocol/test/skill.test.ts:191",
+          "packages/protocol/test/skill.test.ts:192"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Only referenced by sibling Skill.Definition at skill/index.ts:13 (intra-file). No cross-package consumer."
+    },
+    {
+      "symbol": "Skill.Definition",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/skill/index.ts:10 (const), :22 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/skill.test.ts:7",
+          "packages/protocol/test/skill.test.ts:18",
+          "packages/protocol/test/skill.test.ts:42",
+          "packages/protocol/test/skill.test.ts:63",
+          "packages/protocol/test/skill.test.ts:80",
+          "packages/protocol/test/skill.test.ts:94",
+          "packages/protocol/test/skill.test.ts:104"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:774",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "The ONLY non-test src reference is Extension.Contributes at packages/protocol/src/extension/index.ts:33 (skills: z.array(Skill.Definition)), reached via the import at extension/index.ts:4. Extension is in the SAME kill batch, so this reference vanishes — no surviving consumer. Confirm ordering: extension must be removed together with (or before) skill so index.ts:33 does not dangle."
+    },
+    {
+      "symbol": "Skill.RegistryEntry",
+      "family": "extension-skill",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 594,
+      "exportSite": "packages/protocol/src/skill/index.ts:24 (const), :31 (type alias)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/skill.test.ts:109",
+          "packages/protocol/test/skill.test.ts:118",
+          "packages/protocol/test/skill.test.ts:135",
+          "packages/protocol/test/skill.test.ts:149",
+          "packages/protocol/test/skill.test.ts:161"
+        ],
+        "snapshotPin": "script/conformance/schema-snapshot.json:786",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Leaf schema — no symbol references it at all (not even intra-file). Zero production consumers; test pins only. Despite the 'Registry' name there is no runtime skill registry that reads/persists it."
+    },
+    {
+      "symbol": "McpConfig.StdioServerConfig (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/mcp/index.ts:12 (const), :17 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": "script/conformance/schema-snapshot.json:479",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn pin-only (schema-snapshot.json:479). Stdio shape survives via McpConfig.ServerConfig#0 union option. Unexport const (keep lexical for the union); surgically drop standalone key."
+    },
+    {
+      "symbol": "McpConfig.SseServerConfig (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/mcp/index.ts:19 (const), :23 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": "script/conformance/schema-snapshot.json:471",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn pin-only (schema-snapshot.json:471). Union survives. Unexport; surgically drop standalone key."
+    },
+    {
+      "symbol": "McpConfig.StreamableHttpServerConfig (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "unexport",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/mcp/index.ts:25 (const), :29 (type)",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": "script/conformance/schema-snapshot.json:488",
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": {
+        "from": "unexport",
+        "to": "preserve",
+        "reclassified": "reviewer-reconciled"
+      },
+      "reason": "Overturn pin-only (schema-snapshot.json:488). Union survives. Unexport; surgically drop standalone key."
+    },
+    {
+      "symbol": "McpServerConfig (top-level value const)",
+      "family": "mcp-ipc",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/mcp/index.ts:39",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/mcp.test.ts:21 (McpServerConfig.parse(...)) — sole value consumer"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "THE redundant duplicate ServerConfig VALUE the family targets. It is a runtime alias `const McpServerConfig = McpConfig.ServerConfig` with ZERO production value consumers — production value-parsing goes through McpConfig.ServerConfig.safeParse (apps/server/src/config/mcp-server-config.ts:36). Its only runtime user is the test pin at mcp.test.ts:21. Deleting the const is safe: the companion type alias on line 40 has RHS `McpConfig.ServerConfig` (the namespaced TYPE), independent of this const, so every `import type { McpServerConfig }` keeps working; the one test pin migrates to McpConfig.ServerConfig.parse or is dropped in the same kill batch. NOTE: assignment premise 'Tool owns the canonical MCP ServerConfig' is FALSE per grep — packages/protocol/src/tool/index.ts defines no ServerConfig; the canonical is McpConfig.ServerConfig."
+    },
+    {
+      "symbol": "McpServerConfig (top-level type alias)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/mcp/index.ts:40",
+      "evidence": {
+        "productionConsumers": [
+          "apps/server/src/tool/mcp/provider.ts:2,38",
+          "apps/server/src/tool/mcp/provider-audit.ts:1,86",
+          "apps/server/src/tool/mcp/provider-types.ts:1,18",
+          "apps/server/src/config.ts:8,55",
+          "apps/server/src/context/mcp-config.ts:5,7,10,35,60,61,62,65",
+          "packages/agent/src/index.ts:30 (type re-export)",
+          "packages/agent/src/runtime/mcp/index.ts:2 (type re-export)",
+          "packages/agent/src/runtime/mcp/client.ts:5,26,30,175",
+          "packages/agent/src/runtime/mcp/client-types.ts:3,7",
+          "packages/agent/src/runtime/mcp/client-transport.ts:11,19,38,49,66"
+        ],
+        "testPins": [
+          "apps/server/test/config.test.ts:2,61,81",
+          "apps/server/test/context/mcp-config.test.ts:5,39,53,85,139,144,161,171"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Primary cross-package PUBLIC TYPE for MCP server config; imported (type-only) by apps/server MCP provider + config + context and by packages/agent MCP runtime client. The name must survive as a type. Only the runtime const facet (line 39) is removable; the type stays."
+    },
+    {
+      "symbol": "McpConfig.ServerConfig (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/mcp/index.ts:31 (const), :36 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "apps/server/src/config/mcp-server-config.ts:5 (type alias), :36 (McpConfig.ServerConfig.safeParse — fail-closed parse of persisted server/project MCP config)",
+          "packages/protocol/src/extension/index.ts:34 (z.array(McpConfig.ServerConfig) inside the Extension/bundled manifest schema)"
+        ],
+        "testPins": ["packages/protocol/test/mcp.test.ts:6,34,43,50,57,74"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "CANONICAL MCP ServerConfig discriminated union — the single source of truth (Tool does NOT own one). Persisted-config wire contract: apps/server safeParses user/project config files against it (fail-closed, warns+drops on bad rows), and the protocol Extension manifest embeds it as `mcpServers`. Real production value + type consumers plus persisted/bundled contract → survivor."
+    },
+    {
+      "symbol": "McpConfig (namespace)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/mcp/index.ts:3",
+      "evidence": {
+        "productionConsumers": [
+          "apps/server/src/config/mcp-server-config.ts:1,5,36",
+          "packages/protocol/src/extension/index.ts:5,34"
+        ],
+        "testPins": ["packages/protocol/test/mcp.test.ts:2,4,6,34,43,50,57,74"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Container namespace whose ServerConfig member is a live persisted/bundled config contract. Namespace survives; only its unused per-transport members are unexported and the top-level value alias is deleted."
+    },
+    {
+      "symbol": "Mcp (event namespace: Connected/Disconnected/ToolCalled/ToolCompleted/ToolFailed)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/event/mcp.ts:10",
+      "evidence": {
+        "productionConsumers": [
+          "packages/agent/src/runtime/mcp/client.ts:54 (Mcp.Connected)",
+          "packages/agent/src/runtime/mcp/client.ts:91 (Mcp.Disconnected)",
+          "packages/agent/src/runtime/mcp/client.ts:130 (Mcp.ToolCalled)",
+          "packages/agent/src/runtime/mcp/client.ts:156 (Mcp.ToolFailed)",
+          "apps/server/src/tool/mcp/provider-execution.ts:67 (Mcp.ToolCompleted)"
+        ],
+        "testPins": [
+          "packages/protocol/test/mcp.test.ts:80-153 (Mcp.ToolCompleted)",
+          "apps/server/test/tool/mcp/provider-trace-audit.test.ts",
+          "apps/server/test/tool/mcp/provider-completion-events.test.ts",
+          "packages/agent/test/runtime/mcp/client-trace.test.ts"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "All five MCP bus events are Bus.publish'd in production (agent MCP client emits Connected/Disconnected/ToolCalled/ToolFailed; server MCP provider emits ToolCompleted). Live telemetry surface, entirely out of scope for #497 removal. Separate barrel: packages/protocol/src/index.ts:13."
+    },
+    {
+      "symbol": "Ipc.Methods",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:164",
+      "evidence": {
+        "productionConsumers": [
+          "packages/coordinator/src/worker-supervision/supervisor-requests.ts:89 (Ipc.Methods[\"worker.tool_call\"].params.safeParse(params) — fail-closed parse-don't-cast at the most dangerous worker verb boundary, #QB1 BUG2)"
+        ],
+        "testPins": [
+          "packages/protocol/test/ipc/schema.test.ts:139 (describe() label string)",
+          "packages/protocol/test/ipc/schema.test.ts:142 (coordinator.spawn_run)",
+          "packages/protocol/test/ipc/schema.test.ts:171 (coordinator.spawn_run)",
+          "packages/protocol/test/ipc/schema.test.ts:189 (coordinator.spawn_run)",
+          "packages/protocol/test/ipc/schema.test.ts:204 (coordinator.spawn_run)",
+          "packages/protocol/test/ipc/schema.test.ts:213 (worker.inbound_wait)",
+          "packages/protocol/test/ipc/schema.test.ts:234 (worker.tool_call)",
+          "packages/protocol/test/ipc/schema.test.ts:236 (worker.tool_call)",
+          "packages/protocol/test/ipc/schema.test.ts:241 (worker.inbound_wait_cancel)",
+          "packages/protocol/test/ipc/schema.test.ts:251 (worker.tool_call_settled)",
+          "packages/protocol/test/ipc/schema.test.ts:259 (worker.tool_call_settled)"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "CORRECTION: assignment claim 'Ipc.Methods is PRODUCTION-DEAD, TEST-PINNED by 12 protocol references' is FALSE per current grep. It has a REAL production consumer at packages/coordinator/src/worker-supervision/supervisor-requests.ts:89, where Ipc.Methods['worker.tool_call'].params validates the most dangerous worker->coordinator verb (fail-closed safeParse that keeps the handler total). The 'wire real validation' fork of the issue is ALREADY SATISFIED for worker.tool_call, so DELETE is invalid. The '12 references' figure = 11 lines in packages/protocol/test/ipc/schema.test.ts (one of which, :139, is a describe-string label) PLUS the coordinator production line the census miscounted as the 12th 'pin'. The table object cannot be raw-removed; individual entries are object keys, not exported symbols."
+    },
+    {
+      "symbol": "Ipc.Methods table entries (sub-key coverage note)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:44-158 (methods object literal)",
+      "evidence": {
+        "productionConsumers": [
+          "worker.tool_call → packages/coordinator/src/worker-supervision/supervisor-requests.ts:89"
+        ],
+        "testPins": [
+          "coordinator.spawn_run → schema.test.ts:142,171,189,204",
+          "worker.inbound_wait → schema.test.ts:213",
+          "worker.tool_call → schema.test.ts:234,236 (also production-used)",
+          "worker.inbound_wait_cancel → schema.test.ts:241",
+          "worker.tool_call_settled → schema.test.ts:251,259"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Sub-table granularity note (NOT an independently exported symbol). Of the 11 method keys, only worker.tool_call is consumed in production; coordinator.spawn_run / worker.inbound_wait / worker.inbound_wait_cancel / worker.tool_call_settled are test-only; and coordinator.cancel_run, worker.deliver_message, worker.shutdown_idle, coordinator.bootstrap, worker.bootstrap_ready, worker.tool_call_cancel are referenced NOWHERE (documented-only same-version param contracts). These are object keys inside a live export, so #497 must not raw-remove them — pruning them would shrink a consumed boundary-validation table and is a judgment call better deferred to whichever leaf hardens IPC param validation, not this dead-export pass."
+    },
+    {
+      "symbol": "Ipc.Request (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:161 (const), :166 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/ipc/src/server.ts:128,245,248",
+          "packages/ipc/src/client.ts:94"
+        ],
+        "testPins": [
+          "packages/protocol/test/ipc/schema.test.ts:4,13,14,20,26,37,93,102"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Real transport frame schema. safeParsed at the UDS socket boundary in the ipc server/client. Wire contract survivor."
+    },
+    {
+      "symbol": "Ipc.Response (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:162 (const), :167 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/ipc/src/server.ts:128,245,251",
+          "packages/ipc/src/client.ts:79"
+        ],
+        "testPins": [
+          "packages/protocol/test/ipc/schema.test.ts:47,50,51,62,63,68,108,116"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Real transport frame schema; safeParsed at socket boundary in ipc client/server. Wire contract survivor."
+    },
+    {
+      "symbol": "Ipc.Notification (const+type)",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:163 (const), :168 (type)",
+      "evidence": {
+        "productionConsumers": [
+          "packages/ipc/src/server.ts:128,245,254",
+          "packages/ipc/src/client.ts:120"
+        ],
+        "testPins": [
+          "packages/protocol/test/ipc/schema.test.ts:72,80,81,86,127,134"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Real transport frame schema; safeParsed at socket boundary. Wire contract survivor."
+    },
+    {
+      "symbol": "Ipc.createRequest",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:172",
+      "evidence": {
+        "productionConsumers": [
+          "packages/ipc/src/server.ts:211",
+          "packages/ipc/src/client.ts:151"
+        ],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:92,101"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Frame constructor used by ipc server/client to emit request frames. Live."
+    },
+    {
+      "symbol": "Ipc.createResponse",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:176",
+      "evidence": {
+        "productionConsumers": [
+          "packages/ipc/src/server.ts:154",
+          "packages/ipc/src/client.ts:98"
+        ],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:107"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Frame constructor used by ipc server/client to emit response frames. Live."
+    },
+    {
+      "symbol": "Ipc.createErrorResponse",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:180",
+      "evidence": {
+        "productionConsumers": [
+          "packages/ipc/src/server.ts:117,133,164",
+          "packages/ipc/src/client.ts:108"
+        ],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:115"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Error-frame constructor used at multiple ipc server/client boundaries (version mismatch, parse failure). Live fail-path contract."
+    },
+    {
+      "symbol": "Ipc.createNotification",
+      "family": "mcp-ipc",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/ipc/index.ts:184",
+      "evidence": {
+        "productionConsumers": ["packages/ipc/src/server.ts:157,223"],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:123,133"],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Notification-frame constructor used by ipc server. Live."
+    },
+    {
+      "symbol": "NamedError.Unknown",
+      "family": "error-comm-cron-model",
+      "disposition": "defer",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/error/index.ts:60",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/error.test.ts:78",
+          "packages/protocol/test/error.test.ts:80",
+          "packages/protocol/test/error.test.ts:92",
+          "packages/protocol/test/error.test.ts:102",
+          "packages/protocol/test/error.test.ts:169",
+          "packages/llm/test/error.test.ts:42",
+          "packages/llm/test/error.test.ts:54",
+          "packages/llm/test/error.test.ts:55",
+          "packages/llm/test/error.test.ts:78",
+          "packages/llm/test/error.test.ts:137"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "production-dead (no `new NamedError.Unknown` in any src/), but it is the generic fallback primitive of the NamedError taxonomy, guarded by dedicated instanceof-isolation tests (llm/test/error.test.ts + protocol/test/error.test.ts assert APIError/ProviderError.isInstance(new NamedError.Unknown(...)) === false). Delete-vs-wire is a taxonomy decision, not dead-surface cleanup. Conservative-direction deviation from the issue's gated-delete; flagged for a dedicated error-taxonomy review (no handoff issue number)."
+    },
+    {
+      "symbol": "APIError",
+      "family": "error-comm-cron-model",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/error/index.ts:90",
+      "evidence": {
+        "productionConsumers": [
+          "packages/llm/src/retry/index.ts:66",
+          "packages/llm/src/retry/index.ts:97",
+          "packages/llm/src/retry/index.ts:160",
+          "packages/llm/src/error.ts:22",
+          "packages/llm/src/error.ts:23",
+          "packages/llm/src/error.ts:44",
+          "packages/protocol/src/message/index.ts:65"
+        ],
+        "testPins": [
+          "packages/llm/test/error.test.ts:6",
+          "packages/llm/test/retry/retry.test.ts:89",
+          "packages/llm/test/processor/processor.test.ts:428",
+          "packages/protocol/test/error.test.ts:112",
+          "packages/protocol/test/message.test.ts:160"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "The retry stack references APIError, which per the assignment rule forces preserve. retry/index.ts matches it via APIError.isInstance at :66 and :160 and reads error.data.{isRetryable,responseHeaders,message,responseBody} for classification/backoff; headerDelay() at :97 is typed InstanceType<typeof APIError>. coerceApiError constructs `new APIError(...)` at error.ts:44 as the sole coercion of AI-SDK provider errors into the retry taxonomy. Additionally APIError.Schema is a persisted/wire contract: message/index.ts:65 embeds it as the `error` field of Message.RetryPart (serialized retry part). Owner: packages/llm retry classifier + protocol message RetryPart."
+    },
+    {
+      "symbol": "Communication.Envelope",
+      "family": "error-comm-cron-model",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/communication/index.ts:7",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Envelope is a BANNED noun (script/lint-tools.ts:224 ban regex Runtime|Task|Envelope) with zero production consumers; across src/apps/script the only hit for Communication.Envelope was its own self-test at schema.test.ts. Delivered in two steps. #598 removed the public namespace member (index.ts:7-8), which at census time was the sole importer of the backing schema file src/communication/envelope.ts; #598 left that backing file in place — its only remaining consumer was its own test block, and it was parked in the naming-grandfather list — so residual dead product surface survived. PR #603 completed the delete: it removed envelope.ts, that self-test block, and the two Envelope naming-grandfather entries (envelope.ts:Envelope plus the already-stale index.ts:Envelope), leaving no Envelope surface anywhere. Sibling members PendingAsk/PendingInteraction/WorkerGrant stay (heavily consumed by packages/session)."
+    },
+    {
+      "symbol": "CronJob (cron namespace)",
+      "family": "error-comm-cron-model",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/cron/index.ts:12",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/storage/index.ts:114",
+          "packages/protocol/src/storage/index.ts:115",
+          "packages/protocol/src/storage/index.ts:116",
+          "packages/openomni/src/dispatch/handlers/schedule.ts:27",
+          "packages/openomni/src/dispatch/handlers/schedule.ts:58",
+          "packages/openomni/src/dispatch/owners.ts:7",
+          "packages/openomni/src/execution-runtime/cron-job-registry.ts:21",
+          "packages/openomni/src/execution-runtime/cron-job-registry.ts:23",
+          "packages/openomni/src/execution-runtime/cron-job-registry.ts:48",
+          "packages/openomni/src/execution-runtime/cron-job-runner.ts:8",
+          "packages/openomni/src/execution-runtime/cron-job-runner.ts:130",
+          "packages/session/src/storage/sqlite-cron-job-adapter.ts:10",
+          "packages/session/src/storage/sqlite-cron-job-adapter.ts:27"
+        ],
+        "testPins": [
+          "packages/protocol/test/cron/schema.test.ts:7",
+          "packages/openomni/test/execution-runtime/cron-job-runner.test.ts:16",
+          "packages/session/test/storage/sqlite-cron-job-adapter.test.ts:23"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "CORRECTION: the historical 'deletion candidate' claim is false at current head. The CronJob namespace is a live persisted/wire contract. CronJob.Info flows through the cross-package Storage.CronJobs interface (storage/index.ts:114-116), is persisted+parsed by the sqlite cron-job adapter (sqlite-cron-job-adapter.ts:10,27), registered/served by the live scheduler (execution-runtime/cron-job-registry.ts, cron-job-runner.ts), and produced by the dispatch schedule handler (schedule.ts:58). CronJob.Target is a production type at schedule.ts:27 and owners.ts. CronJob.Events.{CronJobScheduled,CronJobFired,CronJobCancelled} are Bus-published by the registry/runner. Owner: openomni execution-runtime cron scheduler + protocol Storage.CronJobs + session sqlite adapter."
+    },
+    {
+      "symbol": "Model.Status",
+      "family": "error-comm-cron-model",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/model/index.ts:4",
+      "evidence": {
+        "productionConsumers": [
+          "packages/llm/src/model/index.ts:10",
+          "packages/llm/src/model/index.ts:53"
+        ],
+        "testPins": [
+          "packages/protocol/test/agent.test.ts:179",
+          "packages/protocol/test/agent.test.ts:181",
+          "packages/llm/test/model/models.test.ts:109"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Live cross-package production consumer: packages/llm/src/model/index.ts:10 aliases `export const ModelStatus = ProtocolModel.Status` (ProtocolModel imported from @openomni/protocol at line 4) and uses it at :53 as the `status: ModelStatus.optional()` field of the ModelsDev.Model zod schema (the models.dev catalog schema). Deleting Model.Status would break the llm model registry. Owner: packages/llm ModelsDev catalog."
+    },
+    {
+      "symbol": "Model.isRef",
+      "family": "error-comm-cron-model",
+      "disposition": "delete",
+      "status": "shipped",
+      "pr": 598,
+      "exportSite": "packages/protocol/src/model/index.ts:13",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [
+          "packages/protocol/test/agent.test.ts:174",
+          "packages/protocol/test/agent.test.ts:175"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "The isRef type-guard helper has zero production consumers. Clean rg for Model.isRef and \\bisRef\\b (excluding basisRef noise) across src/apps/script yields only the declaration at model/index.ts:13 and two test assertions at agent.test.ts:174-175. Model.Ref itself stays (survivor), but the isRef guard is dead surface removable in #497; its test pins get deleted in the same batch."
+    },
+    {
+      "symbol": "Model.Ref",
+      "family": "error-comm-cron-model",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/model/index.ts:7",
+      "evidence": {
+        "productionConsumers": [
+          "packages/protocol/src/agent/index.ts:58",
+          "packages/protocol/src/ingress/index.ts:107",
+          "packages/protocol/src/execution/index.ts:13",
+          "packages/protocol/src/ipc/index.ts:51",
+          "packages/protocol/src/worker-bootstrap/index.ts:12",
+          "packages/agent/src/core/types.ts:28",
+          "packages/agent/src/core/types.ts:41",
+          "packages/openomni/src/dispatch/owners.ts:55",
+          "packages/openomni/src/dispatch/owners.ts:62",
+          "packages/openomni/src/dispatch/handlers/worker.ts:33",
+          "packages/openomni/src/agents/resident/prompt/index.ts:46",
+          "packages/openomni/src/ingress/session-bridge.ts:8"
+        ],
+        "testPins": [
+          "packages/protocol/test/agent.test.ts:169",
+          "packages/openomni/test/execution-runtime/child-agent-tool.test.ts:7"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Explicitly designated survivor: Model.Ref is the shared model scalar ({provider,id}) that stays. It is a wire/schema contract embedded across protocol schemas (agent, ingress, execution, ipc, worker-bootstrap) and consumed by dispatch handlers, agent core types, and the resident prompt/session bridge. ~30 production references across packages/protocol, packages/openomni, packages/agent. Owner: cross-package model identity contract."
+    },
+    {
+      "symbol": "Dispatch.Actions.WorkerSpawn",
+      "family": "actions-wiring",
+      "disposition": "wire",
+      "status": "shipped",
+      "pr": 595,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:143",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Constant value \"worker.spawn\". Zero symbolic (Actions.WorkerSpawn) refs anywhere. The verb is live ONLY as the raw object-literal handler key at packages/openomni/src/dispatch/handlers/worker.ts:170 (`async \"worker.spawn\"(command) {`). #497 replaces that raw key with `[Dispatch.Actions.WorkerSpawn]:` (same pattern already used at handlers/device.ts:43 and handlers/outbound.ts:51-53). Do NOT delete — this is the primary spawn entrypoint."
+    },
+    {
+      "symbol": "Dispatch.Actions.WorkerSend",
+      "family": "actions-wiring",
+      "disposition": "wire",
+      "status": "shipped",
+      "pr": 595,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:145",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Constant value \"worker.send\". Zero symbolic refs. Live only as raw handler key at packages/openomni/src/dispatch/handlers/worker.ts:305 (`async \"worker.send\"(command) {`). #497 replaces raw key with `[Dispatch.Actions.WorkerSend]:`."
+    },
+    {
+      "symbol": "Dispatch.Actions.WorkerResume",
+      "family": "actions-wiring",
+      "disposition": "wire",
+      "status": "shipped",
+      "pr": 595,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:146",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Constant value \"worker.resume\". Zero symbolic refs. Live only as raw handler key at packages/openomni/src/dispatch/handlers/worker.ts:320 (`async \"worker.resume\"(command) {`). #497 replaces raw key with `[Dispatch.Actions.WorkerResume]:`."
+    },
+    {
+      "symbol": "Dispatch.Actions.WorkerCancel",
+      "family": "actions-wiring",
+      "disposition": "wire",
+      "status": "shipped",
+      "pr": 595,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:147",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Constant value \"worker.cancel\". Zero symbolic refs. Live only as raw handler key at packages/openomni/src/dispatch/handlers/worker.ts:335 (`async \"worker.cancel\"(command) {`). #497 replaces raw key with `[Dispatch.Actions.WorkerCancel]:`."
+    },
+    {
+      "symbol": "Dispatch.Actions.ScheduleCreate",
+      "family": "actions-wiring",
+      "disposition": "wire",
+      "status": "shipped",
+      "pr": 595,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:148",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Constant value \"schedule.create\". Zero symbolic refs. Live only as raw handler key at packages/openomni/src/dispatch/handlers/schedule.ts:47 (`\"schedule.create\"(command) {`). #497 replaces raw key with `[Dispatch.Actions.ScheduleCreate]:`."
+    },
+    {
+      "symbol": "Dispatch.Actions.ScheduleCancel",
+      "family": "actions-wiring",
+      "disposition": "wire",
+      "status": "shipped",
+      "pr": 595,
+      "exportSite": "packages/protocol/src/dispatch/index.ts:149",
+      "evidence": {
+        "productionConsumers": [],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "none"
+      },
+      "overturnOriginal": null,
+      "reason": "Constant value \"schedule.cancel\". Zero symbolic refs. Live only as raw handler key at packages/openomni/src/dispatch/handlers/schedule.ts:70 (`\"schedule.cancel\"(command) {`). #497 replaces raw key with `[Dispatch.Actions.ScheduleCancel]:`."
+    },
+    {
+      "symbol": "Dispatch.Actions.ResidentAsk",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:142",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/pending-interaction-routing.ts:110 (`action: Dispatch.Actions.ResidentAsk,`)",
+          "packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts:185"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"resident.ask\". Actively consumed as a routing/dispatch verb — survivor."
+    },
+    {
+      "symbol": "Dispatch.Actions.WorkerComplete",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:144",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/policy.ts:126 (`action === Dispatch.Actions.ActorReply || action === Dispatch.Actions.WorkerComplete`)",
+          "packages/openomni/src/dispatch/policy.ts:183",
+          "packages/openomni/src/dispatch/pending-interaction-routing.ts:141"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"worker.complete\". Actively consumed in dispatch policy and interaction routing — survivor. (Note: worker.ts:159/250 also carries the raw \"worker.complete\" key; separate wiring candidate but outside this six-symbol family.)"
+    },
+    {
+      "symbol": "Dispatch.Actions.ActorMessage",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:150",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/pending-interaction-routing.ts:94 (`if (command.action !== Dispatch.Actions.ActorMessage) return command;`)",
+          "packages/openomni/src/dispatch/policy.ts:118",
+          "packages/openomni/src/ingress/routing-execution.ts:185"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"actor.message\". Actively consumed in routing/policy/ingress — survivor."
+    },
+    {
+      "symbol": "Dispatch.Actions.ActorReply",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:151",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/policy.ts:126 (`action === Dispatch.Actions.ActorReply`)"
+        ],
+        "testPins": [
+          "packages/openomni/test/harness/existing-agent-message-driver.ts:160"
+        ],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"actor.reply\". Real production consumer in dispatch policy — survivor. (worker.ts:163/346 also carries raw \"actor.reply\" handler key; separate wiring candidate, not in this family.)"
+    },
+    {
+      "symbol": "Dispatch.Actions.ExternalAsk",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:152",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/handlers/outbound.ts:51 (`[Dispatch.Actions.ExternalAsk]: handler,`)",
+          "packages/openomni/src/dispatch/handlers/outbound.ts:10 (type position)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"external.ask\". Already wired as a computed handler key in outbound.ts — survivor."
+    },
+    {
+      "symbol": "Dispatch.Actions.A2aAsk",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:153",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/handlers/outbound.ts:52 (`[Dispatch.Actions.A2aAsk]: handler,`)",
+          "packages/openomni/src/dispatch/handlers/outbound.ts:11 (type position)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"a2a.ask\". Already wired as a computed handler key in outbound.ts — survivor."
+    },
+    {
+      "symbol": "Dispatch.Actions.ApiAsk",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:154",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/handlers/outbound.ts:53 (`[Dispatch.Actions.ApiAsk]: handler,`)",
+          "packages/openomni/src/dispatch/handlers/outbound.ts:12 (type position)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"api.ask\". Already wired as a computed handler key in outbound.ts — survivor."
+    },
+    {
+      "symbol": "Dispatch.Actions.DeviceCommand",
+      "family": "actions-wiring",
+      "disposition": "preserve",
+      "status": "pending",
+      "exportSite": "packages/protocol/src/dispatch/index.ts:155",
+      "evidence": {
+        "productionConsumers": [
+          "packages/openomni/src/dispatch/handlers/device.ts:43 (`[Dispatch.Actions.DeviceCommand]: (command, context) =>`)",
+          "packages/openomni/src/dispatch/handlers/device.ts:41 (type position)"
+        ],
+        "testPins": [],
+        "snapshotPin": null,
+        "runtimeConsumer": "see productionConsumers"
+      },
+      "overturnOriginal": null,
+      "reason": "Value \"device.command\". Already wired as a computed handler key in device.ts — survivor."
+    }
+  ]
+}
