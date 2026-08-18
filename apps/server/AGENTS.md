@@ -41,7 +41,7 @@ src/
 ├── handler/
 │   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls OpenOmni kernel/IngressEngine
 ├── ingress/
-│   └── bridge.ts         # Transitional Adapter.InboundMessage → OpenOmni inbound bridge
+│   └── bridge.ts         # Transitional Channel.InboundMessage → OpenOmni inbound bridge
 ├── agents/
 │   ├── index.ts          # createAllAgents() — builds the full agent registry map
 │   ├── registry.ts       # Per-server AgentDefinition registry (keyed by name)
@@ -84,7 +84,7 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 ## MESSAGE FLOW
 
 ```
-Adapter.InboundMessage
+Channel.InboundMessage
   ↓ handler/conversation.ts — createMessageHandler
   ├─ per-surfaceKey FIFO queue (avoids concurrent ingestion for the same surface)
   └─ processMessage()
@@ -124,7 +124,7 @@ The current server connector surface hosts the process driver and provider-neutr
 | WebSocket | built-in (token-gated via `config.server.wsToken`) | streaming |
 
 Add a new channel by:
-1. Creating a driver under `packages/channels/src/{name}/` implementing `Adapter.Surface` (or wrap an existing SDK) — it must stay on the band import contract (`packages/channels/AGENTS.md`).
+1. Creating a driver under `packages/channels/src/{name}/` implementing `Channel.Surface` (or wrap an existing SDK) — it must stay on the band import contract (`packages/channels/AGENTS.md`).
 2. Registering it in `bootstrap/channels.ts` behind a config flag.
 3. Surfacing it over HTTP in `server/routes.ts` if it needs a webhook endpoint.
 
