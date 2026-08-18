@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787086589293,
+  "lastUpdate": 1787088405390,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56861,6 +56861,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518554,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8de02e213f21032e886b26051e3a3dca51a5f29b",
+          "message": "chore: add shared tsconfig base without behavior drift (#732)\n\n* chore: add shared tsconfig base without behavior drift (#501)\n\nP3-03. One root tsconfig.base.json now carries the genuinely shared\ncompiler policy (target/lib ES2020, module ESNext, bundler resolution,\nstrict + noUncheckedIndexedAccess, esModuleInterop, skipLibCheck,\nforceConsistentCasingInFileNames, resolveJsonModule, types [bun]). The\n12 root project configs extend it and retain only intentional\noverrides; the 17 build/test/bench/contract-test configs are untouched\nand inherit through their package tsconfig.json. Path-relative options\n(rootDir/outDir/baseUrl/paths) and emit policy (declaration,\ndeclarationMap, sourceMap, noEmit) stay per-project by design: extends\nrebases relative paths against the declaring config, and protocol\ndeclaration emission / llm no-emit are issue-named preservation\nconstraints.\n\nMeasured proof — `tsc --showConfig` and `--listFilesOnly` captured for\nall 29 projects before and after, diffed normalized (jq -S; object keys\nsorted, array order preserved). Resolved config AND file membership per\nproject:\n\n  identical  apps/server/tsconfig.json\n  identical  apps/server/tsconfig.build.json\n  identical  apps/server/tsconfig.test.json\n  identical  packages/agent/tsconfig.json\n  identical  packages/agent/tsconfig.build.json\n  identical  packages/agent/tsconfig.test.json\n  identical  packages/agent/tsconfig.bench.json\n  identical  packages/agent/test/tsconfig.json\n  identical  packages/channels/tsconfig.json\n  identical  packages/channels/tsconfig.build.json\n  identical  packages/coordinator/tsconfig.json\n  identical  packages/ipc/tsconfig.json\n  identical  packages/ipc/tsconfig.build.json\n  identical  packages/llm/tsconfig.json\n  identical  packages/llm/tsconfig.test.json\n  identical  packages/openomni/tsconfig.json\n  identical  packages/openomni/tsconfig.build.json\n  identical  packages/openomni/tsconfig.test.json\n  identical  packages/openomni/tsconfig.contract-test.json\n  identical  packages/policy/tsconfig.json\n  identical  packages/protocol/tsconfig.json\n  identical  packages/protocol/tsconfig.build.json\n  identical  packages/protocol/tsconfig.test.json\n  identical  packages/protocol/test/tsconfig.json\n  identical  packages/session/tsconfig.json\n  identical  packages/session/tsconfig.test.json\n  identical  packages/session/tsconfig.contract-test.json\n  identical  packages/telemetry/tsconfig.json\n  identical  script/tsconfig.json\n\nZero effective-config drift: 29/29 resolved configs normalized-identical\nand 29/29 --listFilesOnly outputs byte-identical. Intentional retained\noverrides (values unchanged, only their location moved or stayed):\nscript/tsconfig.json keeps target/lib ES2022 + noEmit; apps/server keeps\ndeclaration without declarationMap/sourceMap (its baseline never set\nthem, so the base deliberately excludes all emit options); llm keeps\nnoEmit true; package path aliases and rootDir \"..\" layouts unchanged.\n\nDeclaration-output equivalence: protocol dist rebuilt with --force is\nbyte-identical to the pre-change build (sha256 over all 256 emitted\nfiles, .d.ts/.d.ts.map included); `tsc --listEmittedFiles -p\npackages/llm/tsconfig.json` emits nothing (0 bytes).\n\nAlso delivered per the #501 verification contract:\n- script/verify-tsconfig-inheritance.ts: discovers every workspace\n  tsconfig project, requires each extends chain to reach the base,\n  pins protocol declaration emission (non-composite, reference-free)\n  and llm no-emit, fails when any source under the claimed roots\n  belongs to no project, and compares derived vs built protocol\n  declaration outputs. --json/--fixture modes; missing-base fixture\n  exits nonzero with code missing_base_config.\n- script/verify-tsconfig-inheritance.test.ts + known-bad fixtures\n  (missing base, omitted input, emit/declaration mutation) proving the\n  comparisons fail on bad trees.\n- packages/protocol/test/module-surface.test.ts: pins the\n  declaration-backed dist barrel surface and build membership.\n- turbo.json globalDependencies gains tsconfig.base.json so check-types\n  and build caches invalidate when the shared base changes.\n  packages/{openomni,session}/bench stay outside every project, as at\n  baseline — changing compilation membership is a #501 non-goal.\n\nVerified green: bun run build (forced, 6/6), bun run check-types (16/16\n+ script project), turbo test (16/16), lint:guards, lint:side-effects,\nlint:tools, check-deps, check-import-cycles, check-dead-exports,\np2-ledger-baseline conformance, packages/channels standalone bun test,\nverifier + its test suite, and the issue-named test set including both\nmodule-surface suites.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ci): wire tsconfig inheritance verifier into gates\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T21:25:27Z",
+          "tree_id": "eca4b446eef1c1053847ee399ea0d7aa6bc6d93f",
+          "url": "https://github.com/INONONO66/openomni/commit/8de02e213f21032e886b26051e3a3dca51a5f29b"
+        },
+        "date": 1787088404708,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5892,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15401,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8120,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1007,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 903,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46921,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2334,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512366,
             "unit": "ns/op"
           }
         ]
