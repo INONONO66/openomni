@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentResult, ChatAgentConfig } from "@openomni/agent";
-import { PolicyDecision, type Model, type RuntimeResource } from "@openomni/protocol";
+import { PolicyDecision, type Model, type Policy } from "@openomni/protocol";
 import {
   InjectionQueue,
   createChildAgentRuntime,
@@ -183,7 +183,7 @@ describe("child agent delegation pre-policy", () => {
 
   test("preserves the selected parent tool descriptor in child agent config", async () => {
     const configs: ChatAgentConfig[] = [];
-    const descriptor: RuntimeResource.Descriptor = {
+    const descriptor: Policy.Resource.Descriptor = {
       id: "tool:mcp:server-1:remote.read",
       kind: "tool",
       labels: ["source:mcp", "capability.read"],

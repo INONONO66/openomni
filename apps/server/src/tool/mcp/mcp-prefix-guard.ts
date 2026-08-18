@@ -1,15 +1,11 @@
 import {
   PolicyEngine,
+  decisionFromEvaluation,
+  evaluatePermission,
   type CanonicalPolicyRegistrationGeneric,
   type GenericPolicyContext,
 } from "@openomni/policy";
-import {
-  Policy,
-  PolicyDecision,
-  Tool,
-  type RuntimeResource,
-  type TraceContext,
-} from "@openomni/protocol";
+import { type Policy, PolicyDecision, Tool, type TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { NativeTool } from "@openomni/openomni";
 
@@ -45,8 +41,8 @@ function evaluatePrefixGuard(input: {
   readonly serverName?: string;
 }): Policy.PolicyDecision {
   const action = "mcp.tool.call";
-  return PolicyDecision.fromEvaluation(
-    Policy.evaluate(
+  return decisionFromEvaluation(
+    evaluatePermission(
       {
         action,
         inputRules: [
@@ -88,7 +84,7 @@ function createMcpDescriptor(
   attemptedToolName: string,
   tool: NativeTool | undefined,
   serverName: string | undefined,
-): RuntimeResource.Descriptor {
+): Policy.Resource.Descriptor {
   if (tool?.descriptor) return tool.descriptor;
 
   const toolName = tool?.spec.name ?? attemptedToolName;

@@ -72,7 +72,6 @@ function connectorActorIdentity(installation: AppConnector.Installation): Actor.
     id: actorIdFor(installation.id),
     kind: "ai_agent",
     trustTier: "assigned_worker",
-    relationship: "external_agent",
     displayName: installation.definition.name,
     metadata: {
       connectorId: installation.connectorId,

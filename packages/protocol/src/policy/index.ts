@@ -4,8 +4,9 @@ import { PolicyDefinition } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
 import { PolicyPermission } from "./permission.js";
 import { PolicyPointModule } from "./policy-point.js";
+import { PolicyResource } from "./resource.js";
 
-export { RuntimeResource } from "./resource.js";
+export { PolicyPermission } from "./permission.js";
 export { policyKernelVersion } from "./definition.js";
 
 export namespace Policy {
@@ -19,7 +20,6 @@ export namespace Policy {
   export type EvaluationRequest = z.infer<typeof EvaluationRequest>;
   export const EvaluationResult = PolicyPermission.EvaluationResult;
   export type EvaluationResult = z.infer<typeof EvaluationResult>;
-  export const evaluate = PolicyPermission.evaluate;
 
   export const Timing = PolicyDefinition.Timing;
   export type Timing = (typeof Timing)[keyof typeof Timing];
@@ -42,9 +42,21 @@ export namespace Policy {
   export type EffectiveDecision = z.infer<typeof EffectiveDecision>;
 
   export const PolicyPoint = PolicyPointModule.PolicyPoint;
-  export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint> &
-    Pick<typeof PolicyPointModule.PolicyPoint, "MigrationMapping">;
+  export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint>;
   export type PolicyPointInputMap = PolicyPointModule.PolicyPointInputMap;
+
+  /**
+   * Runtime resource descriptors ride bus events; shape is wire-frozen.
+   * Explicit member re-exports (not `export import`) so the members carry
+   * direct references — the alias form hid every cross-package
+   * `Policy.Resource.*` consumer from the dead-export ratchet (#498 K4).
+   */
+  export namespace Resource {
+    export const Source = PolicyResource.Source;
+    export type Source = PolicyResource.Source;
+    export const Descriptor = PolicyResource.Descriptor;
+    export type Descriptor = PolicyResource.Descriptor;
+  }
   export const PolicyPlan = z.object({
     policies: z.array(
       z.object({
@@ -93,12 +105,5 @@ export namespace PolicyDecision {
     fallback: string = decision.verdict,
   ): string {
     return PolicyDecisionHelpers.reason(decision, fallback);
-  }
-
-  export function fromEvaluation(
-    result: Policy.EvaluationResult,
-    options: { readonly policyId?: string; readonly denyEffect?: Policy.PolicyEffect } = {},
-  ): Policy.PolicyDecision {
-    return PolicyDecisionHelpers.fromEvaluation(result, options);
   }
 }

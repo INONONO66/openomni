@@ -365,7 +365,7 @@ async function admitWorkerCompletion(
     id: requestId,
     origin: WorkItem.projectCompletionOrigin(input.sourceOrigin),
     sourceIdentity: workerCompletionSourceIdentity(input.sourceOrigin, input.result),
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
     expectedHead: item.revision,
@@ -433,7 +433,7 @@ export function workerCompletionRequestId(item: WorkItem.Info, result: Execution
 }
 
 export function workerCompletionRequestRoot(item: WorkItem.Info, result: Execution.Result): string {
-  return `completion-request:${item.hash}:${result.runId}:${result.sessionId}:attempt:${item.attempt}`;
+  return `completion-request:${item.workItemId}:${result.runId}:${result.sessionId}:attempt:${item.attempt}`;
 }
 
 export function workerCompletionReservationRoot(
@@ -551,7 +551,7 @@ function projectCriterionFacts(
     const observation: WorkItem.Observation = {
       id: `observation:${factRef}`,
       producer: verification.verifierId,
-      subjectRef: item.hash,
+      subjectRef: item.workItemId,
       basisRef: item.completionContract.basisRef,
       artifactRefs: [evidence.id],
       provenanceRef: evidence.id,

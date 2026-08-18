@@ -64,7 +64,7 @@ export function createResidentInboundWaitHandler(
           traceId,
           sessionId,
           ...(runId ? { runId } : {}),
-          actorKind: "worker",
+          actorKind: "internal_worker",
           actorId: `${sessionId}:${runId ?? workerId}`,
           agentName: "worker",
           trustTier: "assigned_worker",

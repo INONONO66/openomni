@@ -19,7 +19,7 @@ const Created = BusEvent.define(
   "work_item.created",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       name: z.string(),
       sessionId: z.string().optional(),
       assigneeId: z.string().optional(),
@@ -32,7 +32,7 @@ const Updated = BusEvent.define(
   "work_item.updated",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       fields: z.array(z.string()),
     }),
   }),
@@ -43,7 +43,7 @@ const StatusChanged = BusEvent.define(
   "work_item.status_changed",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       from: Status,
       to: Status,
     }),
@@ -55,7 +55,7 @@ const Completed = BusEvent.define(
   "work_item.completed",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       sessionId: z.string().optional(),
     }),
   }),
@@ -82,7 +82,7 @@ const CompletionAdmissionRecorded = BusEvent.define(
   "work_item.completion_admission_recorded",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       admissionId: z.string(),
       decision: CompletionDecision,
       recordedHead: z.number().int().positive(),
@@ -95,7 +95,7 @@ const Failed = BusEvent.define(
   "work_item.failed",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       reason: z.string().optional(),
       sessionId: z.string().optional(),
     }),
@@ -107,7 +107,7 @@ const OutcomeRecorded = BusEvent.define(
   "work_item.outcome_recorded",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       outcome: Outcome,
       sessionId: z.string().optional(),
     }),
@@ -119,7 +119,7 @@ const Removed = BusEvent.define(
   "work_item.removed",
   BaseEvent.extend({
     payload: z.object({
-      hash: z.string(),
+      workItemId: z.string(),
       sessionId: z.string().optional(),
     }),
   }),

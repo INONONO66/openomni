@@ -1,10 +1,10 @@
 import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
-import type { RuntimeResource } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 import type { buildWorkerMiddleware } from "./middleware";
 
 type Registration = ReturnType<typeof buildWorkerMiddleware>[number];
 
-const fixtureDescriptor: RuntimeResource.Descriptor = {
+const fixtureDescriptor: Policy.Resource.Descriptor = {
   id: "tool:fixture",
   kind: "tool",
   labels: [],

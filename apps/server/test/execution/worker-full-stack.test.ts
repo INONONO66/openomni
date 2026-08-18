@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { createIngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { ChannelGrantStore, Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
-import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import type { Execution, Ingress, Tool } from "@openomni/protocol";
 import {
   createExecutionCoordinator,
@@ -199,18 +198,14 @@ describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
   });
 });
 
-describe("bus bridge — worker lifecycle events reach server Bus", () => {
-  test("dispatch does not publish worker lifecycle events directly", async () => {
-    const events: unknown[] = [];
-
-    const unsubscribeStarted = Bus.subscribe(WorkerRunProtocol.Events.Started, (data) => {
-      events.push(data);
-    });
-    const unsubscribeCompleted = Bus.subscribe(WorkerRunProtocol.Events.Completed, (data) => {
-      events.push(data);
-    });
-    const unsubscribeFailed = Bus.subscribe(WorkerRunProtocol.Events.Failed, (data) => {
-      events.push(data);
+describe("bus bridge — worker lifecycle stays off the Bus", () => {
+  test("dispatch publishes no worker lifecycle bus events", async () => {
+    // #498 K1: the worker.run.* telemetry descriptors are retired (zero
+    // subscribers); run lifecycle is WorkItem attempt facts. Dispatch must
+    // publish NOTHING on the Bus for a worker run.
+    const events: string[] = [];
+    const stopObserving = Bus.observe((descriptor) => {
+      if (descriptor.name.startsWith("worker.run.")) events.push(descriptor.name);
     });
 
     const coordinator = createExecutionCoordinator({
@@ -224,9 +219,7 @@ describe("bus bridge — worker lifecycle events reach server Bus", () => {
 
     expect(events).toHaveLength(0);
 
-    unsubscribeStarted();
-    unsubscribeCompleted();
-    unsubscribeFailed();
+    stopObserving();
   });
 });
 

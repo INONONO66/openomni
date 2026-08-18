@@ -83,7 +83,7 @@ describe("PendingInteractionStore (frozen legacy writer, #548)", () => {
     Bus.observe((event) => events.push(event.name));
 
     const attempts: ReadonlyArray<
-      readonly [Communication.PendingInteraction.WriteMethod, () => unknown]
+      readonly [Communication.PendingInteraction.FrozenError["data"]["method"], () => unknown]
     > = [
       [
         "create",

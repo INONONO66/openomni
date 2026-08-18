@@ -71,7 +71,7 @@ function isWebSocketRaw(raw: unknown): raw is { websocket: { authenticated: bool
 function formatOpenTask(task: OpenTask): string {
   const { item, status } = task;
   const activeBlockers = item.blockers.filter((blocker) => blocker.resolvedAt === undefined).length;
-  const details = [`hash: ${item.hash}`];
+  const details = [`hash: ${item.workItemId}`];
   if (status === "blocked" || status === "failed") details.push(`blockers: ${activeBlockers}`);
   if (status === "failed" && item.maxAttempts !== undefined) {
     details.push(`attempts: ${item.attempt}/${item.maxAttempts}`);
@@ -106,7 +106,7 @@ function listOpenTasks(): string {
       if (statusDelta !== 0) return statusDelta;
       const nameDelta = compareStable(a.item.name, b.item.name);
       if (nameDelta !== 0) return nameDelta;
-      return compareStable(a.item.hash, b.item.hash);
+      return compareStable(a.item.workItemId, b.item.workItemId);
     });
   if (tasks.length === 0) return "Open tasks: none";
   const visibleTasks = tasks.slice(0, MAX_OPEN_TASKS);

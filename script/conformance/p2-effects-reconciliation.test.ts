@@ -210,11 +210,11 @@ describe("p2 effects conformance (#492)", () => {
     // land, but the terminal WorkItem projection (a separate, later tx) never
     // ran — so the effect stream says confirmed while completionFacts.effects
     // (the admission fold's only input) is stuck outcome-less.
-    EffectStore.intend({ effectId: "fx-crash", kind: "manual", workItemHash: item.hash });
-    WorkItemStore.recordEffect(item.hash, { intentRef: "fx-crash" });
+    EffectStore.intend({ effectId: "fx-crash", kind: "manual", workItemHash: item.workItemId });
+    WorkItemStore.recordEffect(item.workItemId, { intentRef: "fx-crash" });
     EffectStore.confirm("fx-crash", "receipt");
 
-    const stuck = await WorkItemStore.get(item.hash);
+    const stuck = await WorkItemStore.get(item.workItemId);
     const stuckLatest = stuck?.completionFacts.effects
       .filter((effect) => effect.intentRef === "fx-crash")
       .at(-1);
@@ -230,7 +230,7 @@ describe("p2 effects conformance (#492)", () => {
     expect(summary.reprojected).toBe(1);
     expect(summary.resolved).toBe(0);
 
-    const healed = await WorkItemStore.get(item.hash);
+    const healed = await WorkItemStore.get(item.workItemId);
     const healedLatest = healed?.completionFacts.effects
       .filter((effect) => effect.intentRef === "fx-crash")
       .at(-1);
@@ -255,13 +255,13 @@ describe("p2 effects conformance (#492)", () => {
     const result = await service.run({
       effectId: "fx-exhaust",
       kind: "exhausting-probe",
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
     });
     expect(result.runtime).toBe("unknown");
 
     // #490 linkage: the outcome-less intent rides completionFacts.effects —
     // the exact input the admission fold blocks on (`effect_outcome_unresolved`).
-    const linked = await WorkItemStore.get(item.hash);
+    const linked = await WorkItemStore.get(item.workItemId);
     expect(
       linked?.completionFacts.effects.some(
         (effect) => effect.intentRef === "fx-exhaust" && effect.outcome === "unknown",
@@ -274,7 +274,7 @@ describe("p2 effects conformance (#492)", () => {
     expect(summary.escalated).toBe(1);
     expect(summary.resolved).toBe(0);
 
-    const escalated = await WorkItemStore.get(item.hash);
+    const escalated = await WorkItemStore.get(item.workItemId);
     const blockers = escalated?.blockers.filter((entry) => entry.kind === "waiting_input") ?? [];
     expect(blockers).toHaveLength(1);
     expect(blockers[0]?.id).toBe("effect-escalation:fx-exhaust");
@@ -283,7 +283,7 @@ describe("p2 effects conformance (#492)", () => {
     // Re-escalation across sweeps (every boot) must NOT stack blockers.
     await reconciler.reconcile("trace-test");
     await reconciler.reconcile("trace-test");
-    const afterSweeps = await WorkItemStore.get(item.hash);
+    const afterSweeps = await WorkItemStore.get(item.workItemId);
     expect(afterSweeps?.blockers.filter((entry) => entry.kind === "waiting_input")).toHaveLength(1);
 
     // Never terminalized: the intent is still outcome-less and reconcilable.

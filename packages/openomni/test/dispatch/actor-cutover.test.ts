@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Session, Storage, WorkerRunStateStore, WorkItemStore } from "@openomni/session";
+import { Session, Storage, WorkItemStore } from "@openomni/session";
 import { deriveActorContext } from "../../src/dispatch/actor";
 
 /**
@@ -74,19 +74,19 @@ describe("dispatch actor trustTier (#510 D2b)", () => {
       },
       "trace-test",
     );
-    await WorkItemStore.start(item.hash, "trace-test");
+    await WorkItemStore.start(item.workItemId, "trace-test");
     const allocation = await WorkItemStore.allocateAttempt(
-      item.hash,
+      item.workItemId,
       attemptIdentity("derive trust from attempt facts"),
       "trace-test",
     );
     if (!allocation) throw new Error("attempt allocation failed");
 
     // No worker_run_state row exists for this run.
-    expect(WorkerRunStateStore.get(session.id, runId)).toBeUndefined();
+    expect(Storage.getAdapter().workerRunState?.get(session.id, runId)).toBeUndefined();
 
     const actor = deriveActorContext({ sessionId: session.id, runId });
-    expect(actor.kind).toBe("worker");
+    expect(actor.kind).toBe("internal_worker");
     expect(actor.trustTier).toBe("assigned_worker");
     expect(actor.workerRunId).toBe(runId);
   });
@@ -111,7 +111,7 @@ describe("dispatch actor trustTier (#510 D2b)", () => {
     });
 
     const actor = deriveActorContext({ sessionId: session.id, runId: "run-legacy-actor" });
-    expect(actor.kind).toBe("worker");
+    expect(actor.kind).toBe("internal_worker");
     expect(actor.trustTier).toBe("assigned_worker");
     expect(actor.workerRunId).toBe("run-legacy-actor");
   });

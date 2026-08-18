@@ -99,7 +99,7 @@ export type {
 // namespace; the entry re-export keeps them public until archived replay lands)
 export * as VerifierConformance from "./evidence/verifier-conformance";
 
-// Dispatch runtime
+// Dispatch runtime (openomni product runtime for protocol Command submits)
 export {
   DEFAULT_DISPATCH_MODEL,
   DispatchRuntime,

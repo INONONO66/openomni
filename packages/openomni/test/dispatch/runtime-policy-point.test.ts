@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
+import { PolicyDecision, type Command } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
 /** A dispatch inherits the trace of whatever ordered it; the runtime refuses to mint one. */
 const TEST_DISPATCH_TRACE_ID = "trace-dispatch-test";
 
-function residentAskInput(): DispatchProtocol.Input {
+function residentAskInput(): Command.Input {
   return { action: "resident.ask", target: { kind: "resident" }, payload: "hello" };
 }
 

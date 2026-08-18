@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
+import type { AppConnector, Command, Execution } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
@@ -32,7 +32,7 @@ function tempDir(name: string): string {
   return path;
 }
 
-function command(): Dispatch.Command {
+function command(): Command.Request {
   return {
     traceId: "trace-fixture",
     dispatchId: "dispatch-connector-endpoint-telemetry",
@@ -43,7 +43,7 @@ function command(): Dispatch.Command {
       endpointId: "endpoint:install:telemetry-cli",
     },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
-    actor: { kind: "user", actorId: "act_owner" },
+    actor: { kind: "human", actorId: "act_owner" },
     submittedAt: 1,
   };
 }

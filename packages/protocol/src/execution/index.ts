@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentProfile } from "../agent/index.js";
+import { Actor } from "../actor/index.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Token } from "../token/index.js";
@@ -16,7 +16,7 @@ const requestSchema = z.object({
   toolConfig: Tool.Config.optional(),
   permissions: Policy.Permission.optional(),
   credentials: z.record(z.string()).optional(),
-  budget: AgentProfile.AgentBudget.optional(),
+  budget: Actor.Profile.Budget.optional(),
   skills: z.array(z.string()).optional(),
   agentName: z.string().optional(),
   workspaceRoot: z.string().optional(),

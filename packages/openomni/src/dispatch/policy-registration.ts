@@ -16,7 +16,7 @@ import type {
 import type { DispatchPolicyContext } from "./policy.js";
 
 const DISPATCH_POINT_ID = "dispatch.action.pre" as const;
-const canonicalMetadataSchema = Policy.Definition.omit({ timing: true });
+const canonicalMetadataSchema = Policy.Definition;
 
 type DispatchPointId = typeof DISPATCH_POINT_ID;
 

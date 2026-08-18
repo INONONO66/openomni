@@ -61,20 +61,20 @@ async function seedAttemptRun(
     },
     "trace-test",
   );
-  await WorkItemStore.start(created.hash, "trace-test");
-  if (state === "unallocated") return created.hash;
+  await WorkItemStore.start(created.workItemId, "trace-test");
+  if (state === "unallocated") return created.workItemId;
   const allocation = await WorkItemStore.allocateAttempt(
-    created.hash,
+    created.workItemId,
     attemptIdentity("do it"),
     "trace-test",
   );
   if (!allocation) throw new Error(`attempt allocation failed for ${runId}`);
-  if (state === "allocated") return created.hash;
+  if (state === "allocated") return created.workItemId;
   if (state === "waiting_input") {
     if (!(await WorkItemAttemptRun.beginWait(sessionId, runId, "trace-test"))) {
       throw new Error(`beginWait failed for ${runId}`);
     }
-    return created.hash;
+    return created.workItemId;
   }
   if (
     !(await WorkItemAttemptRun.finish(sessionId, runId, state, "trace-test", {
@@ -83,7 +83,7 @@ async function seedAttemptRun(
   ) {
     throw new Error(`finish failed for ${runId}`);
   }
-  return created.hash;
+  return created.workItemId;
 }
 
 beforeEach(() => {

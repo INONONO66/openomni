@@ -1,15 +1,15 @@
-import { Dispatch, PolicyDecision, type Policy } from "@openomni/protocol";
+import { Command, PolicyDecision, type Policy } from "@openomni/protocol";
 import type { GenericPolicyContext } from "@openomni/policy";
 import { BlacklistStore, PendingInteractionStore, WorkerGrantStore } from "@openomni/session";
 import { EffectiveAuthority } from "./effective-authority.js";
 import type { DispatchPolicyRegistration } from "./policy-registration.js";
 
 export interface DispatchPolicyContext extends GenericPolicyContext {
-  readonly actor?: Dispatch.ActorContext;
+  readonly actor?: Command.ActorContext;
   readonly dispatchId?: string;
   readonly action?: string;
-  readonly target?: Dispatch.Target;
-  readonly correlation?: Dispatch.Command["correlation"];
+  readonly target?: Command.Target;
+  readonly correlation?: Command.Request["correlation"];
   readonly sessionId?: string;
   readonly runId?: string;
 }
@@ -42,9 +42,9 @@ function decide(result: EffectiveAuthority.Result): Policy.PolicyDecision {
 }
 
 function blacklistMatchInput(
-  actor: Dispatch.ActorContext | undefined,
-  target: Dispatch.Target | undefined,
-  correlation: Dispatch.Command["correlation"] | undefined,
+  actor: Command.ActorContext | undefined,
+  target: Command.Target | undefined,
+  correlation: Command.Request["correlation"] | undefined,
 ) {
   const correlationHints = typeof correlation === "object" ? correlation : undefined;
   return {
@@ -95,18 +95,18 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
 
       if (action === "worker.spawn" && actor.kind !== "resident") {
         return decide(
-          actor.kind === "worker"
+          actor.kind === "internal_worker"
             ? EffectiveAuthority.workerDenied("dispatch.worker.spawn.denied")
             : EffectiveAuthority.actorDenied("dispatch.worker.spawn.resident_required"),
         );
       }
 
-      if (actor.kind === "worker" && action.startsWith("schedule.")) {
+      if (actor.kind === "internal_worker" && action.startsWith("schedule.")) {
         const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.schedule.denied"));
       }
 
-      if (actor.kind === "worker" && action === "resident.ask") {
+      if (actor.kind === "internal_worker" && action === "resident.ask") {
         if (target?.kind !== "resident") {
           return decide(
             EffectiveAuthority.workerDenied("dispatch.worker.resident_ask.target.denied"),
@@ -115,15 +115,15 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
         return decide(EffectiveAuthority.workerNotRequired("dispatch.worker.resident_ask.allowed"));
       }
 
-      if (action === Dispatch.Actions.ActorMessage) {
+      if (action === Command.Actions.ActorMessage) {
         return decide(
           EffectiveAuthority.pendingInteractionDenied("dispatch.pending_interaction.required"),
         );
       }
 
       if (
-        actor.kind === "worker" &&
-        (action === Dispatch.Actions.ActorReply || action === Dispatch.Actions.WorkerComplete) &&
+        actor.kind === "internal_worker" &&
+        (action === Command.Actions.ActorReply || action === Command.Actions.WorkerComplete) &&
         actor.trustTier === "assigned_worker"
       ) {
         const pendingInteraction = evaluatePendingInteractionScope(actor, action, target);
@@ -138,12 +138,12 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
         return decide(EffectiveAuthority.pendingInteractionDenied(pendingInteraction.reason));
       }
 
-      if (actor.kind === "worker" && isWorkerScopedEgress(action)) {
+      if (actor.kind === "internal_worker" && isWorkerScopedEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.scope.denied"));
       }
 
-      if (actor.kind === "worker" && isExternalEgress(action)) {
+      if (actor.kind === "internal_worker" && isExternalEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.external.denied"));
       }
@@ -152,7 +152,7 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
         return decide(EffectiveAuthority.nonWorker("dispatch.system.schedule.allowed"));
       }
 
-      if (actor.kind === "worker") {
+      if (actor.kind === "internal_worker") {
         return decide(EffectiveAuthority.workerDenied("dispatch.worker.action.denied"));
       }
 
@@ -162,9 +162,9 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
 }
 
 function evaluatePendingInteractionScope(
-  actor: Dispatch.ActorContext,
+  actor: Command.ActorContext,
   action: string,
-  target: Dispatch.Target | undefined,
+  target: Command.Target | undefined,
 ): { allowed: true; id: string } | { allowed: false; reason: string } {
   if (actor.reason !== "pending_interaction.match") {
     return { allowed: false, reason: "dispatch.pending_interaction.match.required" };
@@ -180,7 +180,7 @@ function evaluatePendingInteractionScope(
     return { allowed: false, reason: "dispatch.pending_interaction.not_found" };
   }
   const requiredAction =
-    action === Dispatch.Actions.WorkerComplete ? "report_result" : "attach_artifact";
+    action === Command.Actions.WorkerComplete ? "report_result" : "attach_artifact";
   if (!record.allowedActions.includes(requiredAction)) {
     return { allowed: false, reason: "dispatch.pending_interaction.action.denied" };
   }
@@ -224,9 +224,9 @@ function requireDispatchTraceId(ctx: {
 }
 
 function evaluateWorkerGrant(
-  actor: Dispatch.ActorContext,
+  actor: Command.ActorContext,
   action: string,
-  target: Dispatch.Target | undefined,
+  target: Command.Target | undefined,
   traceId: string,
 ): { allowed: boolean; reason: string } {
   if (!actor.workerRunId) return { allowed: false, reason: "worker_grant.worker_run.required" };

@@ -109,7 +109,14 @@ export const QuestionBridge = z.discriminatedUnion("kind", [
 ]);
 export type QuestionBridge = z.infer<typeof QuestionBridge>;
 
-export const CompletionReport = z
+// #498 K3 dictionary rule: "CompletionReport" is WorkItem-only vocabulary.
+// This connector-side schema describes WHERE the connector's completion
+// report material comes from (final message channel, artifact globs,
+// read-back templates), so the TS symbol is ReportSource. The persisted/wire
+// JSON field name inside installed connector definitions stays
+// `evidence.completionReport` — installations and authored manifests are a
+// persisted surface (see Evidence below).
+export const ReportSource = z
   .object({
     finalMessage: z.enum(["stdout", "stderr", "log", "artifact"]),
     artifactGlobs: z.array(nonEmptyString).optional(),
@@ -158,12 +165,16 @@ export const CompletionReport = z
       .optional(),
   })
   .strict();
-export type CompletionReport = z.infer<typeof CompletionReport>;
+export type ReportSource = z.infer<typeof ReportSource>;
 
 export const Evidence = z
   .object({
     emits: z.array(EvidenceEmitter).min(1),
-    completionReport: CompletionReport.optional(),
+    // JSON key deliberately stays `completionReport`: it is the persisted
+    // shape of installed connector definitions (app_connector_installation
+    // rows) and of authored connector manifests — renaming the key would
+    // orphan every installed definition. TS-symbol-only rename (#498 K3).
+    completionReport: ReportSource.optional(),
   })
   .strict();
 export type Evidence = z.infer<typeof Evidence>;

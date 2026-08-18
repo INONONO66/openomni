@@ -1,4 +1,4 @@
-import type { Communication, Dispatch, Ingress, Wait } from "@openomni/protocol";
+import type { Command, Communication, Ingress, Wait } from "@openomni/protocol";
 import { ActorRegistry } from "@openomni/session";
 
 /**
@@ -74,7 +74,7 @@ export function responderCandidates(
 /** Ingress evidence extension: resolved-actor endpoint proof with the direct-mode userId fallback. */
 export function ingressEvidence(
   event: Ingress.InboundEvent,
-  correlation: Dispatch.Correlation,
+  correlation: Wait.Correlation,
 ): SenderEvidence {
   const actor = event.meta?.actor;
   const actorId = typeof actor?.actorId === "string" ? actor.actorId : undefined;
@@ -100,8 +100,8 @@ export function ingressEvidence(
   };
 }
 
-/** Dispatch evidence extension: the Command actor context is the proof surface. */
-export function dispatchEvidence(command: Dispatch.Command): SenderEvidence {
+/** Command-seam evidence extension: the Command.Request actor context is the proof surface. */
+export function dispatchEvidence(command: Command.Request): SenderEvidence {
   const correlation =
     command.correlation !== undefined && typeof command.correlation !== "string"
       ? command.correlation

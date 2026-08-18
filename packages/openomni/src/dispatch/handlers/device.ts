@@ -1,4 +1,4 @@
-import { Dispatch } from "@openomni/protocol";
+import { Command } from "@openomni/protocol";
 import type { DeviceDispatchOwner } from "../owners.js";
 import type { DispatchHandler, DispatchHandlerContext } from "../registry.js";
 
@@ -11,7 +11,7 @@ function requireDevice(device: DeviceDispatchOwner | undefined): DeviceDispatchO
   return device;
 }
 
-function requireDeviceId(command: Dispatch.Command): string {
+function requireDeviceId(command: Command.Request): string {
   if (command.target.kind !== "system") {
     throw new Error("device.command requires system target");
   }
@@ -22,7 +22,7 @@ function requireDeviceId(command: Dispatch.Command): string {
 
 async function dispatchDeviceCommand(
   device: DeviceDispatchOwner,
-  command: Dispatch.Command,
+  command: Command.Request,
   context: DispatchHandlerContext | undefined,
 ): Promise<{ readonly output: unknown }> {
   const output = await device.dispatch({
@@ -38,9 +38,9 @@ async function dispatchDeviceCommand(
 
 export function createDeviceDispatchHandlers(
   options: DeviceDispatchHandlerOptions = {},
-): Record<typeof Dispatch.Actions.DeviceCommand, DispatchHandler> {
+): Record<typeof Command.Actions.DeviceCommand, DispatchHandler> {
   return {
-    [Dispatch.Actions.DeviceCommand]: (command, context) =>
+    [Command.Actions.DeviceCommand]: (command, context) =>
       dispatchDeviceCommand(requireDevice(options.device), command, context),
   };
 }

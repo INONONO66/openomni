@@ -135,8 +135,8 @@ const nullableString = z.string().nullable();
 export const FlatEvent = z
   .object({
     // -- identity (WorkItem owner stream + Attempt ledger facts) --
-    owner_key: nonEmpty, // work-item owner stream id `work:<hash>`
-    work_item_id: nonEmpty, // WorkItem.Info.hash
+    owner_key: nonEmpty, // work-item owner stream id `work:<workItemId>`
+    work_item_id: nonEmpty, // WorkItem.Info.workItemId
     attempt_id: nonEmpty, // Attempt.attemptId
     attempt_seq: z.number().int().positive(), // Attempt.attemptSeq
     retry_of: z.string().min(1).nullable(), // Attempt.retryOf

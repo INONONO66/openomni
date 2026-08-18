@@ -63,7 +63,7 @@ function createQuestionBridgeHandler(
         traceId: request.traceId,
         sessionId: request.sessionId,
         runId: request.runId,
-        actorKind: "worker",
+        actorKind: "internal_worker",
         actorId: `${request.sessionId}:${request.runId}`,
         trustTier: "assigned_worker",
         signal: request.signal,

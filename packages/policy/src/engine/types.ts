@@ -1,10 +1,10 @@
-import type { BusEvent, Message, Policy, RuntimeResource, TraceContext } from "@openomni/protocol";
+import type { BusEvent, Message, Policy, TraceContext } from "@openomni/protocol";
 
 export type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
 
 export interface GenericPolicyContext {
   agentType?: string;
-  resourceDescriptor?: RuntimeResource.Descriptor;
+  resourceDescriptor?: Policy.Resource.Descriptor;
   traceContext?: TraceContext.Type;
   toolName?: string;
   toolCallId?: string;
@@ -17,7 +17,7 @@ export interface GenericPolicyContext {
 }
 
 export type DispatchContextGeneric<TCtx extends GenericPolicyContext> = Omit<TCtx, "timing"> & {
-  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+  readonly resourceDescriptor?: Policy.Resource.Descriptor;
 };
 
 export type AuditDispatchContextGeneric<TCtx extends GenericPolicyContext> =

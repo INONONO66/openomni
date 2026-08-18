@@ -1,16 +1,20 @@
-import { WorkerRun, type WorkItem } from "@openomni/protocol";
+import { NamedError, type WorkItem } from "@openomni/protocol";
 import { z } from "zod";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
 /**
- * #510 D2b — WorkerRunStateStore is FROZEN: every write surface throws the
- * typed `WorkerRun.FrozenError` and persists nothing (the worker-run
- * transition table died with the writes — run transition legality lives in
- * the WorkItem fold). Reads keep serving the immutable historical
- * `worker_run_state` rows for the upcast-on-read attempt-run view and the
- * archive manifest. Historical rows are seeded in tests at the adapter
- * layer, exactly as pre-freeze rows persist on disk.
+ * #510 D2b / #498 K1 — WorkerRunStateStore is FROZEN and session-internal:
+ * every write surface throws the typed `WorkerRunFrozenError` and persists
+ * nothing (the worker-run transition table died with the writes — run
+ * transition legality lives in the WorkItem fold). Reads keep serving the
+ * immutable historical `worker_run_state` rows for the upcast-on-read
+ * attempt-run view and the archive manifest. Historical rows are seeded in
+ * tests at the adapter layer, exactly as pre-freeze rows persist on disk.
+ *
+ * The frozen vocabulary (Status/WriteMethod/FrozenError) lives HERE — the
+ * protocol `worker-run` namespace was retired with #498 (absorption into
+ * WorkItem attempts); this module is the archive's one owner.
  */
 
 function requireAdapter(): WorkerRunStateStore.Adapter {
@@ -20,8 +24,8 @@ function requireAdapter(): WorkerRunStateStore.Adapter {
   );
 }
 
-function frozenWrite(method: WorkerRun.WriteMethod): never {
-  throw new WorkerRun.FrozenError({
+function frozenWrite(method: WorkerRunStateStore.WriteMethod): never {
+  throw new WorkerRunStateStore.FrozenError({
     message: `WorkerRunStateStore is frozen (#510 D2b): ${method} is retired — historical worker_run_state rows are read-only archive`,
     code: "worker_run_frozen",
     method,
@@ -29,7 +33,41 @@ function frozenWrite(method: WorkerRun.WriteMethod): never {
 }
 
 export namespace WorkerRunStateStore {
-  export type Status = WorkerRun.Status;
+  /** Legacy run-status vocabulary of the frozen `worker_run_state` archive. */
+  export const Status = z.enum([
+    "queued",
+    "starting",
+    "running",
+    "waiting_input",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "interrupted",
+  ]);
+  export type Status = z.infer<typeof Status>;
+
+  export const WriteMethod = z.enum(["create", "updateStatus", "updateStatusIfCurrent"]);
+  export type WriteMethod = z.infer<typeof WriteMethod>;
+
+  /**
+   * #510 D2b — worker-run is a frozen legacy writer. Its live production
+   * consumers cut over to WorkItem attempt facts (`work_item.attempt_*` on
+   * the `work:<workItemId>` owner stream), so every worker-run store write
+   * method throws this typed error. Callers branch on `data.code`, never
+   * message text. Historical `worker_run_state` rows stay readable through
+   * the store's read methods and the upcast-on-read attempt-run view; the
+   * archive manifest (script/generate-ledger-archive-manifest.ts) records
+   * their range identity and integrity hash.
+   */
+  export const FrozenError = NamedError.create(
+    "WorkerRunFrozenError",
+    z.object({
+      message: z.string(),
+      code: z.literal("worker_run_frozen"),
+      method: WriteMethod,
+    }),
+  );
+  export type FrozenError = InstanceType<typeof FrozenError>;
 
   export interface Record {
     readonly runId: string;
@@ -53,26 +91,21 @@ export namespace WorkerRunStateStore {
   > &
     Partial<Pick<Record, "resumeCount" | "timeCreated" | "timeUpdated">>;
 
-  export interface StatusExtra {
+  // Non-exported: only the frozen write signatures below reference these —
+  // their last external consumers died with the adapter update branches
+  // (#498 K1).
+  interface StatusExtra {
     readonly error?: string;
   }
 
-  export const StatusPrecondition = z.object({
-    status: WorkerRun.Status,
-    timeUpdated: z.number(),
-  });
-  export type StatusPrecondition = z.infer<typeof StatusPrecondition>;
+  interface StatusPrecondition {
+    readonly status: Status;
+    readonly timeUpdated: number;
+  }
 
   export interface Adapter {
+    /** @internal Archive seeding only (tests/tooling) — see the adapter module doc. */
     create(sessionId: string, record: CreateRecord): void;
-    updateStatus(sessionId: string, runId: string, status: Status, extra?: StatusExtra): boolean;
-    updateStatusIfCurrent(
-      sessionId: string,
-      runId: string,
-      expected: StatusPrecondition,
-      status: Status,
-      extra?: StatusExtra,
-    ): boolean;
     get(sessionId: string, runId: string): Record | undefined;
     listBySession(sessionId: string): Record[];
     listByStatus(status: Status): Record[];

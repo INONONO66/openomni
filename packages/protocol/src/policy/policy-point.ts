@@ -8,8 +8,6 @@ import { PolicyPointRegistryModule } from "./point-registry.js";
 import { policyKernelVersion } from "./definition.js";
 
 export namespace PolicyPointModule {
-  type Timing = PolicyPointContractModule.Timing;
-  type RegisteredPolicyPointId = PolicyPointContractModule.RegisteredPolicyPointId;
   export const PolicyPoint = Object.assign(PolicyPointContractModule.policyPoint, {
     version: policyKernelVersion,
     Id: PolicyPointContractModule.PolicyPointId,
@@ -20,7 +18,6 @@ export namespace PolicyPointModule {
     ),
     Registry: PolicyPointRegistryModule.PolicyPointRegistry,
     InputSchemas: policyPointInputSchemas,
-    MigrationMapping: PolicyPointRegistryModule.policyPointMigrationMapping,
   });
   Object.defineProperties(PolicyPoint, {
     Registry: {
@@ -33,9 +30,7 @@ export namespace PolicyPointModule {
     },
   });
 
-  export type PolicyPoint = z.infer<typeof PolicyPointContractModule.policyPoint> & {
-    MigrationMapping: Readonly<Record<Timing, readonly RegisteredPolicyPointId[]>>;
-  };
+  export type PolicyPoint = z.infer<typeof PolicyPointContractModule.policyPoint>;
 
   export type PolicyPointInputMap = PolicyPointInputMapType;
 }

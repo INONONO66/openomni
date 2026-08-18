@@ -15,7 +15,7 @@ const authorizedWriter = new AsyncLocalStorage<symbol>();
  * #510 C1 — the admission service's record-before-terminal seam. Every
  * completion-authority write (request reservation, reservation release,
  * admission verdict, terminal commit) flows through this writer, and each
- * appends its decision-class fact on `work:<hash>` BEFORE the projection CAS
+ * appends its decision-class fact on `work:<workItemId>` BEFORE the projection CAS
  * inside one sync immediate storage transaction. The verdict facts are
  * work_item.admission_accepted (admit / owner_override) and
  * work_item.admission_refused (block / escalate) — accept AND refuse are
@@ -67,7 +67,7 @@ function completionFactOf(existing: WorkItem.Info, next: WorkItem.Info): WorkIte
         existing.completionFacts.requestReservations.length
     ) {
       throw new Error(
-        `WorkItem terminal receipt cannot commit with an admission/reservation in one write: ${next.hash}`,
+        `WorkItem terminal receipt cannot commit with an admission/reservation in one write: ${next.workItemId}`,
       );
     }
     const receipt = next.completionTerminalReceipt;
@@ -85,7 +85,8 @@ function completionFactOf(existing: WorkItem.Info, next: WorkItem.Info): WorkIte
   const admissions = next.completionFacts.admissions;
   if (admissions.length > existing.completionFacts.admissions.length) {
     const admission = admissions.at(-1);
-    if (!admission) throw new Error(`WorkItem admission write appended nothing: ${next.hash}`);
+    if (!admission)
+      throw new Error(`WorkItem admission write appended nothing: ${next.workItemId}`);
     const accepted = admission.decision === "admit" || admission.decision === "owner_override";
     return {
       type: accepted ? "work_item.admission_accepted" : "work_item.admission_refused",
@@ -103,7 +104,8 @@ function completionFactOf(existing: WorkItem.Info, next: WorkItem.Info): WorkIte
   const reservations = next.completionFacts.requestReservations;
   if (reservations.length > existing.completionFacts.requestReservations.length) {
     const reservation = reservations.at(-1);
-    if (!reservation) throw new Error(`WorkItem reservation write appended nothing: ${next.hash}`);
+    if (!reservation)
+      throw new Error(`WorkItem reservation write appended nothing: ${next.workItemId}`);
     const released =
       reservation.leaseExpiresAt !== undefined &&
       reservation.leaseExpiresAt <= reservation.createdAt;

@@ -1,4 +1,4 @@
-import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
+import type { AppConnector, Command, Execution } from "@openomni/protocol";
 import {
   type ConnectorEndpointCredentialMap,
   redactConnectorCredentialValues,
@@ -13,7 +13,7 @@ export type { ConnectorEndpointCredentialMap } from "./env.js";
 export type { ConnectorQuestionBridgeHandler } from "./question-bridge.js";
 
 interface ConnectorEndpointProcessDriverInput {
-  readonly command: Dispatch.Command;
+  readonly command: Command.Request;
   readonly executionRequest: Execution.Request;
   readonly installation: AppConnector.Installation;
 }
@@ -79,7 +79,7 @@ function redactOutcome(
   };
 }
 
-function resolveResidentSessionId(command: Dispatch.Command, request: Execution.Request): string {
+function resolveResidentSessionId(command: Command.Request, request: Execution.Request): string {
   return command.target.parentSessionId ?? command.actor.sessionId ?? request.sessionId;
 }
 

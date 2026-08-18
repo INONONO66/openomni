@@ -4,14 +4,14 @@ import {
   type CanonicalPolicyRegistration,
   type PolicyContext,
 } from "@openomni/agent";
-import { PolicyDecision, type Ingress, type RuntimeResource } from "@openomni/protocol";
+import { PolicyDecision, type Ingress, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 type PreDispatchContext = Omit<PolicyContext, "timing"> & {
-  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+  readonly resourceDescriptor?: Policy.Resource.Descriptor;
 };
 
 function baseCtx(overrides?: Partial<PreDispatchContext>): PreDispatchContext {

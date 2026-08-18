@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   Communication,
   IngressEvent,
-  type Dispatch as DispatchProtocol,
+  type Command,
   type Ingress,
+  type Wait,
 } from "@openomni/protocol";
 import {
   ActorRegistry,
@@ -37,7 +38,7 @@ const correlation = {
   endpointId: "telegram:seller-1",
   channelId: "telegram:dm",
   tokenHash: "token-hash-1",
-} satisfies DispatchProtocol.Correlation;
+} satisfies Wait.Correlation;
 let completionWriter: Storage.WorkItemCompletionWriter;
 
 function replyEvent(
@@ -74,7 +75,6 @@ async function seedFrozenPending(
       id: targetActorId,
       kind: "human",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: correlation.endpointId,
@@ -117,8 +117,8 @@ async function seedFrozenPending(
     },
     "trace-test",
   );
-  await WorkItemStore.start(workItem.hash, "trace-test");
-  await allocateTestAttempt(workItem.hash);
+  await WorkItemStore.start(workItem.workItemId, "trace-test");
+  await allocateTestAttempt(workItem.workItemId);
   seedPendingInteraction({
     id,
     workerRunId: runId,
@@ -139,7 +139,7 @@ async function seedFrozenPending(
 function createPendingAsk(
   id: string,
   sessionId: string,
-  askCorrelation: Communication.PendingAsk.Create["correlation"],
+  askCorrelation: Communication.PendingAsk.Record["correlation"],
   originRunId: string | null = `run-${id}`,
 ): Communication.PendingAsk.Record {
   const session = Session.create({
@@ -185,7 +185,7 @@ describe("IngressEngine wait routing", () => {
   test("dispatches one exact reply through the injected shared DispatchRuntime", async () => {
     const sessionId = await seedFrozenPending("pi-exact", "run-exact");
     const runtime = new DispatchRuntime();
-    const routed: DispatchProtocol.Command[] = [];
+    const routed: Command.Request[] = [];
     const order: string[] = [];
     const actualPublish = Bus.publish;
     const publish = spyOn(Bus, "publish").mockImplementation((event, data) => {
@@ -234,7 +234,7 @@ describe("IngressEngine wait routing", () => {
     // green before and after the cutover.
     const sessionId = await seedFrozenPending("pi-frozen-legacy", "run-frozen-legacy");
     const runtime = new DispatchRuntime();
-    const routed: DispatchProtocol.Command[] = [];
+    const routed: Command.Request[] = [];
     runtime.register("worker.complete", (command) => {
       routed.push(command);
       return { output: "accepted" };
@@ -286,7 +286,7 @@ describe("IngressEngine wait routing", () => {
     expect(result.result.output).toBe("");
     // #548: the store is frozen — routing leaves the legacy row as persisted.
     expect(PendingInteractionStore.get("pi-plain-text")?.status).toBe("open");
-    expect(WorkItemStore.get(workItem.hash)?.blockers).toEqual([
+    expect(WorkItemStore.get(workItem.workItemId)?.blockers).toEqual([
       expect.objectContaining({ description: "completion report is required" }),
     ]);
   });
@@ -382,7 +382,7 @@ describe("IngressEngine wait routing", () => {
       "ask_clarification",
     ]);
     const runtime = new DispatchRuntime();
-    const commands: DispatchProtocol.Command[] = [];
+    const commands: Command.Request[] = [];
     runtime.register("resident.ask", (command) => {
       commands.push(command);
       return { output: "clarified" };
@@ -453,7 +453,7 @@ describe("IngressEngine wait routing", () => {
   test("pins a poisoned PendingInteraction event to the matched session and run", async () => {
     const sessionId = await seedFrozenPending("pi-poisoned", "run-poisoned");
     const runtime = new DispatchRuntime();
-    let submittedCommand: DispatchProtocol.Command | undefined;
+    let submittedCommand: Command.Request | undefined;
     let handlerContext: { sessionId?: string; runId?: string } | undefined;
     runtime.register("worker.complete", (command, context) => {
       submittedCommand = command;
@@ -737,7 +737,6 @@ describe("IngressEngine wait routing", () => {
       id: "actor-shared-channel-intruder",
       kind: "human",
       trustTier: "observer",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-shared-channel-intruder",
@@ -780,7 +779,6 @@ describe("IngressEngine wait routing", () => {
       id: "actor-seller-resolved",
       kind: "human",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-seller-resolved",
@@ -856,7 +854,7 @@ describe("IngressEngine wait routing", () => {
     });
     const observed = routingDecisions();
 
-    let pendingInteractionQueries: DispatchProtocol.Correlation[] = [];
+    let pendingInteractionQueries: Communication.PendingInteraction.CorrelationQuery[] = [];
     let pendingAskQueries: Communication.PendingAsk.CorrelationQuery[] = [];
     let result: Ingress.IngressResult;
     try {
@@ -963,7 +961,7 @@ describe("IngressEngine wait routing", () => {
     expect(PendingInteractionStore.get("pi-no-handler")?.status).toBe("open");
   });
 
-  test("does not expose structured Dispatch handler output as channel text", async () => {
+  test("does not expose structured Command handler output as channel text", async () => {
     await seedFrozenPending("pi-structured-output", "run-structured-output");
     const runtime = new DispatchRuntime();
     runtime.register("worker.complete", () => ({ output: { internal: "result" } }));
@@ -977,7 +975,7 @@ describe("IngressEngine wait routing", () => {
     expect(PendingInteractionStore.get("pi-structured-output")?.status).toBe("open");
   });
 
-  test("fails with typed evidence for unsupported primitive Dispatch output", async () => {
+  test("fails with typed evidence for unsupported primitive Command output", async () => {
     await seedFrozenPending("pi-primitive-output", "run-primitive-output");
     const runtime = new DispatchRuntime();
     runtime.register("worker.complete", () => ({ output: 42 }));
@@ -1007,7 +1005,6 @@ describe("IngressEngine durable wait routing", () => {
       id: actorId,
       kind: "human",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: `telegram:${externalId}`,

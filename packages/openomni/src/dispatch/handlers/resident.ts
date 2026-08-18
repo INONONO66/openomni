@@ -1,4 +1,4 @@
-import type { Dispatch, Ingress, Model } from "@openomni/protocol";
+import type { Command, Ingress, Model } from "@openomni/protocol";
 import type { ResidentRuntime } from "../../resident/runtime.js";
 import type { AgentResolver, IngressEngine } from "../../ingress/engine.js";
 import { WaitService } from "../../wait/index.js";
@@ -32,7 +32,7 @@ function fallbackAgentResolver(model: Model.Ref | undefined): AgentResolver | un
 }
 
 function eventFromCommand(
-  command: Dispatch.Command,
+  command: Command.Request,
   context: Parameters<DispatchHandler>[1],
 ): Ingress.InternalEvent {
   return {
@@ -75,7 +75,7 @@ function eventFromCommand(
 // or Wait row (#215 owner decision 2). Historical PendingAsk rows stay
 // readable through the wait/upcast read path.
 function auditSyncAsk(
-  command: Dispatch.Command,
+  command: Command.Request,
   fallbackSessionId: string,
   phase: "opened" | "answered" | "failed",
 ): void {

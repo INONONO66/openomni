@@ -133,336 +133,6 @@ describe("Policy schemas", () => {
     });
   });
 
-  describe("evaluate", () => {
-    const request = (
-      resource: string,
-      input?: Record<string, unknown>,
-    ): Policy.EvaluationRequest => ({
-      action: "tool.call",
-      resource,
-      input,
-    });
-
-    it("allows by default", () => {
-      expect(Policy.evaluate({ action: "tool.call" }, request("any_tool"))).toMatchObject({
-        action: "continue",
-        reason: "default_allow",
-        policyId: "guardrail.permission",
-      });
-    });
-
-    it("aborts on action mismatch", () => {
-      expect(Policy.evaluate({ action: "task.create" }, request("any_tool"))).toMatchObject({
-        action: "abort",
-        reason: "action_mismatch",
-        policyId: "guardrail.permission",
-      });
-    });
-
-    it("denies resources matched by denylist", () => {
-      expect(
-        Policy.evaluate(
-          { action: "tool.call", denylist: ["dangerous_tool"] },
-          request("dangerous_tool"),
-        ),
-      ).toMatchObject({
-        action: "abort",
-        reason: "denylist",
-        policyId: "guardrail.permission",
-        matchedPattern: "dangerous_tool",
-      });
-    });
-
-    it("allows only resources matched by allowlist", () => {
-      const permission = { action: "tool.call", allowlist: ["safe_tool"] };
-
-      expect(Policy.evaluate(permission, request("safe_tool"))).toMatchObject({
-        action: "continue",
-        reason: "allowlist",
-        policyId: "guardrail.permission",
-      });
-      expect(Policy.evaluate(permission, request("other_tool"))).toMatchObject({
-        action: "abort",
-        reason: "allowlist_miss",
-        policyId: "guardrail.permission",
-      });
-    });
-
-    it("evaluates resource labels after explicit deny and approval lists", () => {
-      const permission: Policy.Permission = {
-        action: "tool.call",
-        allowLabels: ["capability:read"],
-        denyLabels: ["capability:destructive"],
-        requireApprovalLabels: ["risk:tier-2"],
-      };
-
-      expect(
-        Policy.evaluate(permission, {
-          ...request("read"),
-          resourceLabels: ["capability:read", "source:system"],
-        }),
-      ).toMatchObject({
-        action: "continue",
-        reason: "allow_label",
-        matchedPattern: "capability:read",
-      });
-
-      expect(
-        Policy.evaluate(permission, {
-          ...request("rm"),
-          resourceLabels: ["capability:destructive", "risk:tier-2"],
-        }),
-      ).toMatchObject({
-        action: "abort",
-        decision: "deny",
-        reason: "deny_label",
-        matchedPattern: "capability:destructive",
-      });
-
-      expect(
-        Policy.evaluate(permission, {
-          ...request("bash"),
-          resourceLabels: ["risk:tier-2"],
-        }),
-      ).toMatchObject({
-        action: "abort",
-        decision: "require_approval",
-        reason: "require_approval_label",
-        matchedPattern: "risk:tier-2",
-      });
-    });
-
-    it("aborts when allowlist is empty", () => {
-      expect(
-        Policy.evaluate({ action: "tool.call", allowlist: [] }, request("safe_tool")),
-      ).toMatchObject({
-        action: "abort",
-        reason: "allowlist_empty",
-        policyId: "guardrail.permission",
-      });
-    });
-
-    it("requires approval for matched resources", () => {
-      expect(
-        Policy.evaluate(
-          { action: "tool.call", requireApproval: ["sensitive_tool"] },
-          request("sensitive_tool"),
-        ),
-      ).toMatchObject({
-        action: "abort",
-        reason: "require_approval",
-        policyId: "guardrail.permission",
-        matchedPattern: "sensitive_tool",
-      });
-    });
-
-    it("matches wildcard for all policy lists", () => {
-      expect(
-        Policy.evaluate({ action: "tool.call", allowlist: ["*"] }, request("file.read")),
-      ).toMatchObject({
-        action: "continue",
-        reason: "allowlist",
-        policyId: "guardrail.permission",
-        matchedPattern: "*",
-      });
-      expect(
-        Policy.evaluate({ action: "tool.call", denylist: ["*"] }, request("file.read")),
-      ).toMatchObject({
-        action: "abort",
-        reason: "denylist",
-        policyId: "guardrail.permission",
-        matchedPattern: "*",
-      });
-      expect(
-        Policy.evaluate({ action: "tool.call", requireApproval: ["*"] }, request("file.read")),
-      ).toMatchObject({
-        action: "abort",
-        reason: "require_approval",
-        policyId: "guardrail.permission",
-        matchedPattern: "*",
-      });
-    });
-
-    it("matches prefix wildcard for all policy lists", () => {
-      expect(
-        Policy.evaluate({ action: "tool.call", allowlist: ["file.*"] }, request("file.read")),
-      ).toMatchObject({
-        action: "continue",
-        reason: "allowlist",
-        policyId: "guardrail.permission",
-        matchedPattern: "file.*",
-      });
-      expect(
-        Policy.evaluate({ action: "tool.call", denylist: ["file.*"] }, request("file.read")),
-      ).toMatchObject({
-        action: "abort",
-        reason: "denylist",
-        policyId: "guardrail.permission",
-        matchedPattern: "file.*",
-      });
-      expect(
-        Policy.evaluate({ action: "tool.call", requireApproval: ["file.*"] }, request("file.read")),
-      ).toMatchObject({
-        action: "abort",
-        reason: "require_approval",
-        policyId: "guardrail.permission",
-        matchedPattern: "file.*",
-      });
-      expect(
-        Policy.evaluate({ action: "tool.call", allowlist: ["file.*"] }, request("filesystem.read")),
-      ).toMatchObject({
-        action: "abort",
-        reason: "allowlist_miss",
-        policyId: "guardrail.permission",
-      });
-    });
-
-    it("gives denylist precedence over approval and allowlist matches", () => {
-      expect(
-        Policy.evaluate(
-          {
-            action: "tool.call",
-            allowlist: ["*"],
-            denylist: ["file.*"],
-            requireApproval: ["file.read"],
-          },
-          request("file.read"),
-        ),
-      ).toMatchObject({
-        action: "abort",
-        reason: "denylist",
-        policyId: "guardrail.permission",
-        matchedPattern: "file.*",
-      });
-    });
-
-    it("populates decision for every result branch", () => {
-      const allowDefault = Policy.evaluate(undefined, request("bash"));
-      expect(allowDefault.decision).toBe("allow");
-      expect(allowDefault.action).toBe("continue");
-
-      const allowList = Policy.evaluate(
-        { action: "tool.call", allowlist: ["bash"] },
-        request("bash"),
-      );
-      expect(allowList.decision).toBe("allow");
-
-      const denyList = Policy.evaluate(
-        { action: "tool.call", denylist: ["bash"] },
-        request("bash"),
-      );
-      expect(denyList.decision).toBe("deny");
-
-      const requireApproval = Policy.evaluate(
-        { action: "tool.call", requireApproval: ["bash"] },
-        request("bash"),
-      );
-      expect(requireApproval.decision).toBe("require_approval");
-      expect(requireApproval.action).toBe("abort");
-
-      const allowMiss = Policy.evaluate(
-        { action: "tool.call", allowlist: ["other"] },
-        request("bash"),
-      );
-      expect(allowMiss.decision).toBe("deny");
-
-      const actionMismatch = Policy.evaluate(
-        { action: "channel.send", allowlist: ["*"] },
-        request("bash"),
-      );
-      expect(actionMismatch.decision).toBe("deny");
-    });
-
-    it("preserves require_approval decision when an input rule supplies a custom reason", () => {
-      const result = Policy.evaluate(
-        {
-          action: "tool.call",
-          inputRules: [
-            {
-              toolPattern: "bash",
-              field: "command",
-              pattern: "^sudo",
-              action: "require_approval",
-              reason: "destructive_command",
-              priority: 5,
-            },
-          ],
-        },
-        request("bash", { command: "sudo rm -rf /" }),
-      );
-
-      expect(result).toMatchObject({
-        action: "abort",
-        decision: "require_approval",
-        reason: "destructive_command",
-        policyId: "guardrail.permission",
-        matchedPattern: "bash",
-      });
-    });
-
-    it("fails closed when unsafe or invalid runtime input rules reach evaluation", () => {
-      for (const pattern of ["^a*a*a*$", "("]) {
-        expect(
-          Policy.evaluate(
-            {
-              action: "tool.call",
-              allowlist: ["*"],
-              inputRules: [
-                {
-                  toolPattern: "bash",
-                  field: "command",
-                  pattern,
-                  action: "allow",
-                  priority: 100,
-                },
-              ],
-            },
-            request("bash", { command: "aaaaab" }),
-          ),
-        ).toMatchObject({
-          action: "abort",
-          decision: "deny",
-          reason: "unsafe_input_rule",
-          matchedPattern: "bash",
-        });
-      }
-    });
-
-    it("uses highest priority matching input rule before list policies", () => {
-      expect(
-        Policy.evaluate(
-          {
-            action: "tool.call",
-            denylist: ["bash"],
-            inputRules: [
-              {
-                toolPattern: "bash",
-                field: "command",
-                pattern: "^npm",
-                action: "deny",
-                priority: 1,
-              },
-              {
-                toolPattern: "bash",
-                field: "command",
-                pattern: "^npm test$",
-                action: "allow",
-                reason: "safe command",
-                priority: 10,
-              },
-            ],
-          },
-          request("bash", { command: "npm test" }),
-        ),
-      ).toMatchObject({
-        action: "continue",
-        reason: "safe command",
-        policyId: "guardrail.permission",
-        matchedPattern: "bash",
-      });
-    });
-  });
-
   describe("Policy.Timing", () => {
     it("parses all 13 valid timing values", () => {
       const timingValues = [
@@ -568,30 +238,27 @@ describe("Policy schemas", () => {
   });
 
   describe("Policy.Definition", () => {
-    it("parses definition with single timing", () => {
+    it("parses canonical definition metadata", () => {
+      const result = Policy.Definition.parse({
+        name: "test-policy",
+        priority: 100,
+      });
+      expect(result.name).toBe("test-policy");
+      expect(result.priority).toBe(100);
+    });
+
+    it("strips the removed timing field instead of carrying it (#498 W4)", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
         timing: "turn.start",
         priority: 100,
       });
-      expect(result.name).toBe("test-policy");
-      expect(result.timing).toBe("turn.start");
-      expect(result.priority).toBe(100);
-    });
-
-    it("parses definition with multiple timings", () => {
-      const result = Policy.Definition.parse({
-        name: "test-policy",
-        timing: ["turn.start", "turn.finish"],
-        priority: 100,
-      });
-      expect(result.timing).toEqual(["turn.start", "turn.finish"]);
+      expect("timing" in result).toBe(false);
     });
 
     it("parses definition with scope", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
-        timing: "turn.start",
         priority: 100,
         scope: { agentType: ["worker"] },
       });
@@ -601,7 +268,6 @@ describe("Policy schemas", () => {
     it("parses definition with failPolicy", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
-        timing: "turn.start",
         priority: 100,
         failPolicy: "fail-closed",
       });
@@ -612,7 +278,6 @@ describe("Policy schemas", () => {
       expect(
         Policy.Definition.safeParse({
           name: "",
-          timing: "turn.start",
           priority: 100,
         }).success,
       ).toBe(false);
@@ -622,7 +287,6 @@ describe("Policy schemas", () => {
       expect(
         Policy.Definition.safeParse({
           name: "test",
-          timing: "turn.start",
           priority: -1,
         }).success,
       ).toBe(false);

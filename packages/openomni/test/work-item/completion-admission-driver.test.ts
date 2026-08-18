@@ -70,7 +70,7 @@ describe("WorkItem completion admission driver", () => {
 
       expect(execution.exitCode).toBe(0);
       expect(Storage.get()).toBe(hostAdapter);
-      expect(WorkItemStore.get(hostItem.hash)?.name).toBe("Host state sentinel");
+      expect(WorkItemStore.get(hostItem.workItemId)?.name).toBe("Host state sentinel");
       expect(Bus.stats().subscriberCount).toBe(1);
       await WorkItemStore.create(
         {

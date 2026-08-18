@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
-import { Policy, RuntimeResource } from "../../src/policy/index.js";
+import { Policy } from "../../src/policy/index.js";
 
 const expectedPointIds = [
   "dispatch.action.pre",
@@ -105,7 +105,7 @@ describe("PolicyPoint registry", () => {
 
   test("accepts the canonical WorkItem resource kind", () => {
     expect(
-      RuntimeResource.Descriptor.safeParse({
+      Policy.Resource.Descriptor.safeParse({
         id: "work:wi_admission",
         kind: "work",
         labels: [],
@@ -156,31 +156,6 @@ describe("PolicyPoint registry", () => {
       expect(contract).toBeDefined();
       if (contract === undefined) continue;
       expect(contract.inputSchema).toBe(`policy.point.${pointId}.input.v1`);
-    }
-  });
-
-  test("maps legacy timings only to their generic registered points", () => {
-    const aliases = Policy.PolicyPoint.MigrationMapping;
-
-    expect(Object.keys(aliases).sort()).toEqual(Object.values(Policy.Timing).sort());
-    expect(aliases[Policy.Timing.COMPLETION_PREPARE]).toEqual(["run.completion.pre"]);
-    expect(Object.values(aliases).flat()).not.toContain("work.complete.pre");
-    expect(aliases[Policy.Timing.DISPATCH_AUTHORIZE]).toEqual(["dispatch.action.pre"]);
-    expect(aliases[Policy.Timing.INVOKE_PREPARE]).toEqual([
-      "tool.native.pre",
-      "tool.mcp.pre",
-      "delegation.worker.pre",
-    ]);
-    expect(aliases[Policy.Timing.INVOKE_RESULT]).toEqual([
-      "tool.native.post",
-      "tool.mcp.post",
-      "delegation.worker.post",
-    ]);
-
-    for (const pointIds of Object.values(aliases)) {
-      for (const pointId of pointIds) {
-        expect(Policy.PolicyPoint.Registry[pointId] !== undefined).toBe(true);
-      }
     }
   });
 

@@ -71,7 +71,7 @@ function existingReadBackRequests(output: OutputObject): WorkItem.ReadBackReques
 }
 
 function renderReadBackBuilder(
-  builder: NonNullable<AppConnector.CompletionReport["readBackRequests"]>[number],
+  builder: NonNullable<AppConnector.ReportSource["readBackRequests"]>[number],
   values: ConnectorTemplateValues,
   rawOutput: string,
   output: OutputObject,

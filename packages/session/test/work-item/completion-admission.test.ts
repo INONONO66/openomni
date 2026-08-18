@@ -46,7 +46,7 @@ function admissionCandidate(
   const criterion = item.completionFacts.criteria[0];
   if (!criterion) throw new Error("missing stable criterion");
   const result = WorkItem.CriterionResult.parse({
-    id: `result:${item.hash}:${item.revision}`,
+    id: `result:${item.workItemId}:${item.revision}`,
     criterionId: criterion.id,
     value: "verified",
     checkedPredicate: criterion.statement,
@@ -57,12 +57,12 @@ function admissionCandidate(
     residualRisks: [],
     createdAt: item.timestamps.updated + 1,
   });
-  const requestId = `completion-request:${item.hash}:${item.revision}`;
+  const requestId = `completion-request:${item.workItemId}:${item.revision}`;
   const admission = WorkItem.CompletionAdmission.parse({
     version: 1,
-    id: `admission:${item.hash}:${item.revision + 1}:${decision}`,
+    id: `admission:${item.workItemId}:${item.revision + 1}:${decision}`,
     requestId,
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     origin: "worker",
     contractRevision: item.completionContract.revision,
     basisRef: item.completionContract.basisRef,
@@ -112,14 +112,14 @@ describe("WorkItemStore completion admission storage boundary", () => {
     expect(first.completionContract).toEqual({
       version: 1,
       revision: "1",
-      basisRef: `${first.hash}:attempt:1`,
+      basisRef: `${first.workItemId}:attempt:1`,
     });
     expect(first.completionContract.basisRef).not.toBe(second.completionContract.basisRef);
     expect(first.completionFacts).toEqual({
       ...WorkItem.emptyCompletionFacts(),
       criteria: [
         {
-          id: WorkItem.criterionId(first.hash, 0, "criterion one"),
+          id: WorkItem.criterionId(first.workItemId, 0, "criterion one"),
           revision: 1,
           statement: "criterion one",
           required: true,
@@ -133,28 +133,30 @@ describe("WorkItemStore completion admission storage boundary", () => {
     const item = await createItem();
     const candidate = admissionCandidate(item);
 
-    const recorded = authorizedCompareAndSet(adapter, item.hash, item.revision, candidate);
+    const recorded = authorizedCompareAndSet(adapter, item.workItemId, item.revision, candidate);
 
     expect(recorded).toBe(true);
-    expect(adapter.workItem.get(item.hash)?.revision).toBe(item.revision + 1);
-    expect(adapter.workItem.get(item.hash)?.completionFacts.revision).toBe(1);
-    expect(adapter.workItem.get(item.hash)?.completionFacts.criteria).toHaveLength(1);
-    expect(adapter.workItem.get(item.hash)?.completionFacts.results).toHaveLength(1);
-    expect(adapter.workItem.get(item.hash)?.completionFacts.admissions[0]?.decision).toBe("admit");
+    expect(adapter.workItem.get(item.workItemId)?.revision).toBe(item.revision + 1);
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.revision).toBe(1);
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.criteria).toHaveLength(1);
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.results).toHaveLength(1);
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.admissions[0]?.decision).toBe(
+      "admit",
+    );
   });
 
   test("rejects stale compare-and-set without appending any fact", async () => {
     const adapter = configure();
     const item = await createItem();
     const first = admissionCandidate(item);
-    expect(authorizedCompareAndSet(adapter, item.hash, item.revision, first)).toBe(true);
+    expect(authorizedCompareAndSet(adapter, item.workItemId, item.revision, first)).toBe(true);
     const stale = admissionCandidate(item, "block");
 
-    const recorded = authorizedCompareAndSet(adapter, item.hash, item.revision, stale);
+    const recorded = authorizedCompareAndSet(adapter, item.workItemId, item.revision, stale);
 
     expect(recorded).toBe(false);
-    expect(adapter.workItem.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
-    expect(adapter.workItem.get(item.hash)?.completionFacts.admissions[0]?.id).toBe(
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.admissions).toHaveLength(1);
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.admissions[0]?.id).toBe(
       first.completionFacts.admissions[0]?.id,
     );
   });
@@ -163,7 +165,7 @@ describe("WorkItemStore completion admission storage boundary", () => {
     const adapter = configure();
     const item = await createItem();
     const mutated = await WorkItemStore.addEvidence(
-      item.hash,
+      item.workItemId,
       {
         kind: "verification",
         description: "ordinary mutation",
@@ -174,13 +176,13 @@ describe("WorkItemStore completion admission storage boundary", () => {
     if (!mutated) throw new Error("missing mutated item");
     const candidate = admissionCandidate(mutated);
 
-    const recorded = authorizedCompareAndSet(adapter, item.hash, mutated.revision, candidate);
+    const recorded = authorizedCompareAndSet(adapter, item.workItemId, mutated.revision, candidate);
 
     expect(mutated).toMatchObject({ revision: 2 });
     expect(mutated.completionFacts.revision).toBe(0);
     expect(recorded).toBe(true);
-    expect(adapter.workItem.get(item.hash)).toMatchObject({ revision: 3 });
-    expect(adapter.workItem.get(item.hash)?.completionFacts.admissions).toHaveLength(1);
+    expect(adapter.workItem.get(item.workItemId)).toMatchObject({ revision: 3 });
+    expect(adapter.workItem.get(item.workItemId)?.completionFacts.admissions).toHaveLength(1);
   });
 
   test("does not expose completion mutation methods from WorkItemStore", () => {

@@ -420,7 +420,7 @@ describe("BusPersistence", () => {
       "trace-test",
     );
     await WorkItemStore.assignExecution(
-      item.hash,
+      item.workItemId,
       {
         executorKind: "internal_chat_agent",
         workerRunId: "worker-run-fact",

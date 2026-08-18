@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Dispatch, Tool } from "@openomni/protocol";
+import type { Command, Tool } from "@openomni/protocol";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
 import {
   createDispatchTool,
@@ -63,7 +63,7 @@ describe("dispatch tool", () => {
   });
 
   test("executes through runtime with implicit context", async () => {
-    let capturedInput: Dispatch.Input | undefined;
+    let capturedInput: Command.Input | undefined;
     let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1] | undefined;
     const tool = createDispatchTool({
       async submit(input, options) {
@@ -162,7 +162,7 @@ describe("dispatch tool", () => {
   });
 
   test("passes worker endpoint selectors through runtime submission", async () => {
-    let capturedInput: Dispatch.Input | undefined;
+    let capturedInput: Command.Input | undefined;
     const tool = createDispatchTool({
       async submit(input) {
         capturedInput = input;

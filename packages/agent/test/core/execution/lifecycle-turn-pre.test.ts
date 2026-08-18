@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { testProviderModel } from "../../helpers/provider-model";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
-import { AgentExecution, type RuntimeResource, type Tool } from "@openomni/protocol";
+import { AgentExecution, type Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -229,7 +229,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
         return allow();
       },
     });
-    const descriptor: RuntimeResource.Descriptor = {
+    const descriptor: Policy.Resource.Descriptor = {
       id: "tool:skill-mcp:publish",
       kind: "tool",
       labels: ["skill.release-workflow"],
@@ -237,7 +237,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       effects: [],
       source: { type: "skill-mcp", serverId: "github", skillId: "release-workflow" },
     };
-    const skillTool: Tool.Spec & { readonly descriptor: RuntimeResource.Descriptor } = {
+    const skillTool: Tool.Spec & { readonly descriptor: Policy.Resource.Descriptor } = {
       name: "publish",
       inputSchema: {},
       labels: descriptor.labels,

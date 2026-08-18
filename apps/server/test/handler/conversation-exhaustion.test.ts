@@ -86,10 +86,10 @@ describe("conversation task ledger exhaustion escalations", () => {
       },
       "trace-test",
     );
-    await WorkItemStore.fail(item.hash, "trace-test", "permanent failure");
+    await WorkItemStore.fail(item.workItemId, "trace-test", "permanent failure");
     let thrown: unknown;
     try {
-      await WorkItemStore.retry(item.hash, "trace-test");
+      await WorkItemStore.retry(item.workItemId, "trace-test");
     } catch (error) {
       thrown = error;
     }
@@ -104,7 +104,7 @@ describe("conversation task ledger exhaustion escalations", () => {
     expect(response).toEqual({
       text: [
         "Open tasks (1)",
-        `- [failed] Retry exhausted worker (hash: ${item.hash}, blockers: 1, attempts: 1/1)`,
+        `- [failed] Retry exhausted worker (hash: ${item.workItemId}, blockers: 1, attempts: 1/1)`,
       ].join("\n"),
     });
   });
@@ -122,7 +122,7 @@ describe("conversation task ledger exhaustion escalations", () => {
       },
       "trace-test",
     );
-    await WorkItemStore.fail(ordinaryFailed.hash, "trace-test", "non-retry failure");
+    await WorkItemStore.fail(ordinaryFailed.workItemId, "trace-test", "non-retry failure");
 
     const resolvedExhaustion = await WorkItemStore.create(
       {
@@ -136,18 +136,18 @@ describe("conversation task ledger exhaustion escalations", () => {
       },
       "trace-test",
     );
-    await WorkItemStore.fail(resolvedExhaustion.hash, "trace-test", "permanent failure");
+    await WorkItemStore.fail(resolvedExhaustion.workItemId, "trace-test", "permanent failure");
     let thrown: unknown;
     try {
-      await WorkItemStore.retry(resolvedExhaustion.hash, "trace-test");
+      await WorkItemStore.retry(resolvedExhaustion.workItemId, "trace-test");
     } catch (error) {
       thrown = error;
     }
     if (!(thrown instanceof Error)) throw new Error("expected retry exhaustion error");
-    const exhausted = WorkItemStore.get(resolvedExhaustion.hash);
+    const exhausted = WorkItemStore.get(resolvedExhaustion.workItemId);
     const blockerId = exhausted?.blockers.at(-1)?.id;
     if (!blockerId) throw new Error("expected retry exhaustion blocker");
-    await WorkItemStore.resolveBlocker(resolvedExhaustion.hash, blockerId, "trace-test");
+    await WorkItemStore.resolveBlocker(resolvedExhaustion.workItemId, blockerId, "trace-test");
 
     const handler = createMessageHandler(deps);
 

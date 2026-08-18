@@ -31,9 +31,9 @@ export async function createWorkItem(
   }
 
   const now = Date.now();
-  const parent = input.parentHash ? workItem.get(input.parentHash) : undefined;
-  if (input.parentHash && !parent) {
-    throw new Error(`Parent work item not found: ${input.parentHash}`);
+  const parent = input.parentId ? workItem.get(input.parentId) : undefined;
+  if (input.parentId && !parent) {
+    throw new Error(`Parent work item not found: ${input.parentId}`);
   }
 
   const item = buildWorkItem(input, now);
@@ -41,7 +41,7 @@ export async function createWorkItem(
   // child-link rides the SAME transaction, so a stale parent head rolls the
   // whole create back — no compensating remove.
   let linkedParent: WorkItem.Info | undefined;
-  runWorkItemTransaction(storage, item.hash, () => {
+  runWorkItemTransaction(storage, item.workItemId, () => {
     appendCreatedFact(ledger, item, {
       name: item.name,
       sourceMessageId: item.sourceMessageId,
@@ -50,11 +50,11 @@ export async function createWorkItem(
       maxAttempts: item.maxAttempts,
       ...(item.sessionId === undefined ? {} : { sessionId: item.sessionId }),
       ...(item.assigneeId === undefined ? {} : { assigneeId: item.assigneeId }),
-      ...(item.relations.parentHash === undefined ? {} : { parentHash: item.relations.parentHash }),
+      ...(item.relations.parentId === undefined ? {} : { parentId: item.relations.parentId }),
       ...(item.executorKind === undefined ? {} : { executorKind: item.executorKind }),
     });
-    if (!workItem.create(item.hash, item)) throw new WorkItemDuplicateError(item.hash);
-    if (parent && !parent.relations.childHashes.includes(item.hash)) {
+    if (!workItem.create(item.workItemId, item)) throw new WorkItemDuplicateError(item.workItemId);
+    if (parent && !parent.relations.childIds.includes(item.workItemId)) {
       linkedParent = commitMutation(
         workItem,
         ledger,
@@ -63,7 +63,7 @@ export async function createWorkItem(
           ...parent,
           relations: {
             ...parent.relations,
-            childHashes: [...parent.relations.childHashes, item.hash],
+            childIds: [...parent.relations.childIds, item.workItemId],
           },
           timestamps: { ...parent.timestamps, updated: now },
         },
@@ -79,7 +79,7 @@ export async function createWorkItem(
       traceId,
       time: now,
       sessionId: linkedParent.sessionId,
-      payload: { hash: linkedParent.hash, fields: ["relations"] },
+      payload: { workItemId: linkedParent.workItemId, fields: ["relations"] },
     });
   }
   Bus.publish(WorkItem.Events.Created, {
@@ -87,7 +87,7 @@ export async function createWorkItem(
     time: now,
     sessionId: item.sessionId,
     payload: {
-      hash: item.hash,
+      workItemId: item.workItemId,
       name: item.name,
       sessionId: item.sessionId,
       assigneeId: item.assigneeId,

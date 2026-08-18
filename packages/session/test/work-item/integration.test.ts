@@ -99,9 +99,13 @@ describe("WorkItem integration", () => {
     stop = BusPersistence.start({ resolveSessionId });
 
     const item = await WorkItemStore.create(createInput({ sessionId }), "trace-test");
-    const completed = persistCompletedFixture(item.hash, await addEvidenceBackedReport(item.hash), {
-      publishTerminalEvents: true,
-    });
+    const completed = persistCompletedFixture(
+      item.workItemId,
+      await addEvidenceBackedReport(item.workItemId),
+      {
+        publishTerminalEvents: true,
+      },
+    );
 
     await BusPersistence.flush();
     unsubscribeCreated();
@@ -135,7 +139,7 @@ describe("WorkItem integration", () => {
       createInput({
         name: "Child one",
         sourceMessageId: "msg-child-1",
-        parentHash: parent.hash,
+        parentId: parent.workItemId,
       }),
       "trace-test",
     );
@@ -143,28 +147,28 @@ describe("WorkItem integration", () => {
       createInput({
         name: "Child two",
         sourceMessageId: "msg-child-2",
-        parentHash: parent.hash,
-        dependsOn: [child1.hash],
+        parentId: parent.workItemId,
+        dependsOn: [child1.workItemId],
       }),
       "trace-test",
     );
 
-    const storedParent = WorkItemStore.get(parent.hash);
+    const storedParent = WorkItemStore.get(parent.workItemId);
 
-    expect(storedParent?.relations.childHashes).toContain(child1.hash);
-    expect(storedParent?.relations.childHashes).toContain(child2.hash);
+    expect(storedParent?.relations.childIds).toContain(child1.workItemId);
+    expect(storedParent?.relations.childIds).toContain(child2.workItemId);
     // #606: areDependenciesMet was removed (no consumer); the dependency
     // GRAPH round-trip is the pin — readiness derivation belongs to a future
     // scheduler.
-    expect(WorkItemStore.get(child2.hash)?.relations.dependsOn).toEqual([child1.hash]);
-    const dependency = WorkItemStore.get(child1.hash);
+    expect(WorkItemStore.get(child2.workItemId)?.relations.dependsOn).toEqual([child1.workItemId]);
+    const dependency = WorkItemStore.get(child1.workItemId);
     expect(dependency ? WorkItem.deriveStatus(dependency) : undefined).toBe("pending");
 
-    persistCompletedFixture(child1.hash, await addEvidenceBackedReport(child1.hash), {
+    persistCompletedFixture(child1.workItemId, await addEvidenceBackedReport(child1.workItemId), {
       publishTerminalEvents: false,
     });
 
-    const completedDependency = WorkItemStore.get(child1.hash);
+    const completedDependency = WorkItemStore.get(child1.workItemId);
     expect(completedDependency ? WorkItem.deriveStatus(completedDependency) : undefined).toBe(
       "completed",
     );
@@ -180,10 +184,10 @@ describe("WorkItem integration", () => {
       "trace-test",
     );
 
-    const stored = adapter?.workItem?.get(item.hash);
+    const stored = adapter?.workItem?.get(item.workItemId);
 
     expect(stored).toEqual(item);
-    expect(stored?.hash).toBe(item.hash);
+    expect(stored?.workItemId).toBe(item.workItemId);
     expect(WorkItem.deriveStatus(stored as WorkItem.Info)).toBe("pending");
   });
 });

@@ -63,7 +63,6 @@ export function registerOwnerDm(): void {
     id: "actor-owner",
     kind: "human",
     trustTier: "owner",
-    relationship: "owner",
   });
   ActorRegistry.registerEndpoint({
     id: "endpoint-owner-dm",

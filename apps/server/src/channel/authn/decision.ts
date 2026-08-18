@@ -1,4 +1,5 @@
-import { Policy, PolicyDecision } from "@openomni/protocol";
+import { type Policy, PolicyDecision } from "@openomni/protocol";
+import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
 import { authTiming } from "./definitions";
 import type { ChannelAuthnDecisionObserver, ChannelAuthnPolicyId } from "./types";
 
@@ -18,8 +19,8 @@ export function evaluateChannelPermission(input: {
     ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
   };
 
-  return PolicyDecision.fromEvaluation(
-    Policy.evaluate(
+  return decisionFromEvaluation(
+    evaluatePermission(
       {
         action: input.action,
         inputRules: [

@@ -202,7 +202,7 @@ function registerAdminLedgerRoutes(app: Hono<Env>, options: RouterOptions): void
     }),
   );
 
-  // Newest recorded fact of one owner stream (`wait:<id>`, `work:<hash>`, ...).
+  // Newest recorded fact of one owner stream (`wait:<id>`, `work:<workItemId>`, ...).
   app.get("/admin/ledger/streams/:streamId/head", (c) =>
     respondWithLedgerRead(c, () => {
       const fact = requireLedger().headFact(c.req.param("streamId"));

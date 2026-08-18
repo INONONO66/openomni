@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ChatAgentConfig } from "@openomni/agent";
-import type { RuntimeResource, WorkerBootstrap } from "@openomni/protocol";
+import type { Policy, WorkerBootstrap } from "@openomni/protocol";
 
 import { WorkerRunner } from "../../src/execution/worker-runner";
 import { createSpawnOptions, createValidRequest, successfulResult } from "./worker-runner-fixture";
@@ -10,7 +10,7 @@ type AgentTool = NonNullable<ChatAgentConfig["tools"]>[number];
 describe("WorkerRunner tool descriptors", () => {
   it("preserves the listed MCP descriptor when exposing a renamed tool to ChatAgent", async () => {
     // Given
-    const descriptor: RuntimeResource.Descriptor = {
+    const descriptor: Policy.Resource.Descriptor = {
       id: "tool:mcp:filesystem:write_file",
       kind: "tool",
       source: { type: "mcp", serverId: "filesystem", remoteName: "write_file" },

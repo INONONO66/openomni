@@ -1,5 +1,4 @@
 import type { PolicyEffects } from "./effects.js";
-import type { PolicyPermission } from "./permission.js";
 
 interface PolicyDecisionOptions {
   readonly policyId: string;
@@ -49,41 +48,5 @@ export namespace PolicyDecisionHelpers {
     fallback: string = decision.verdict,
   ): string {
     return decision.reasonCodes[0] ?? fallback;
-  }
-
-  export function fromEvaluation(
-    result: PolicyPermission.EvaluationResult,
-    options: {
-      readonly policyId?: string;
-      readonly denyEffect?: PolicyEffects.PolicyEffect;
-    } = {},
-  ): PolicyEffects.PolicyDecision {
-    const policyId = options.policyId ?? result.policyId;
-    const reasonCodes = [result.reason];
-    if (result.decision === "require_approval") {
-      return pending({
-        policyId,
-        reasonCodes,
-        effects: [{ type: "tool.require_approval", reason: result.reason }],
-        obligations: [
-          {
-            obligationId: `${policyId}.approval`,
-            type: "humanApproval",
-            description: result.reason,
-          },
-        ],
-      });
-    }
-
-    if (result.action === "continue") return allow({ policyId, reasonCodes });
-
-    return deny({
-      policyId,
-      reasonCodes,
-      effects: [
-        options.denyEffect ?? { type: "run.abort", reason: result.reason },
-        { type: "audit.annotate", annotation: result.reason, severity: "error" },
-      ],
-    });
   }
 }

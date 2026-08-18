@@ -186,7 +186,6 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     expect(actorRegistry?.getIdentity("actor:install-actor")).toMatchObject({
       kind: "ai_agent",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     expect(actorRegistry?.getEndpoint(stored.endpointId)).toMatchObject({
       id: "endpoint:install-actor",

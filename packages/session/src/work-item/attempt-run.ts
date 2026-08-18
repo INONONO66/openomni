@@ -1,4 +1,4 @@
-import { WorkItem, type WorkerRun } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
 import { WorkerRunStateStore } from "../worker-run/state-store.js";
 import { WorkItemRevisionError } from "./facts.js";
@@ -7,7 +7,7 @@ import { mutate } from "./mutation.js";
 /**
  * #510 D2b — the run-lifecycle read/write surface over WorkItem attempt
  * facts, replacing the retired worker-run second ledger. Every write is a
- * decision-class fact on the `work:<hash>` owner stream through the existing
+ * decision-class fact on the `work:<workItemId>` owner stream through the existing
  * head==revision transaction (facts.ts); status transition legality stays in
  * the existing work-item fold (deriveStatus + assertTransition + the
  * attempt-allocation watermark) — the worker-run transition table is NOT
@@ -107,13 +107,13 @@ function endedAtOfItem(item: WorkItem.Info): number | undefined {
 
 function viewOfItem(item: WorkItem.Info): AttemptRunView {
   if (item.workerRunId === undefined || item.workSessionId === undefined) {
-    throw new Error(`WorkItem has no run assignment: ${item.hash}`);
+    throw new Error(`WorkItem has no run assignment: ${item.workItemId}`);
   }
   return {
     runId: item.workerRunId,
     sessionId: item.workSessionId,
     parentSessionId: item.originSessionId,
-    workItemHash: item.hash,
+    workItemHash: item.workItemId,
     attemptId: item.currentAttemptId,
     executorKind: item.executorKind,
     status: statusOfItem(item),
@@ -124,7 +124,7 @@ function viewOfItem(item: WorkItem.Info): AttemptRunView {
   };
 }
 
-const legacyTerminalStatuses: ReadonlySet<WorkerRun.Status> = new Set([
+const legacyTerminalStatuses: ReadonlySet<WorkerRunStateStore.Status> = new Set([
   "succeeded",
   "failed",
   "cancelled",
@@ -165,7 +165,7 @@ async function mutateRun(
   const item = findItem(sessionId, runId);
   if (!item) return false;
   try {
-    return (await mutate(item.hash, traceId, build)) !== undefined;
+    return (await mutate(item.workItemId, traceId, build)) !== undefined;
   } catch (error) {
     // Contention (a concurrent transition won the head) and losing the
     // acquire race both mean "not acquired/finished" — the caller retries

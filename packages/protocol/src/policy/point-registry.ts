@@ -4,8 +4,6 @@ export namespace PolicyPointRegistryModule {
   const contract = PolicyPointContractModule.contract;
   const preBoundary = PolicyPointContractModule.preBoundary;
   const postBoundary = PolicyPointContractModule.postBoundary;
-  const Timing = PolicyPointContractModule.Timing;
-  type Timing = PolicyPointContractModule.Timing;
   type RegisteredPolicyPointId = PolicyPointContractModule.RegisteredPolicyPointId;
   type PolicyPointContract = PolicyPointContractModule.PolicyPointContractSnapshot;
 
@@ -199,28 +197,4 @@ export namespace PolicyPointRegistryModule {
       false,
     ),
   } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>);
-
-  export const policyPointMigrationMapping = Object.freeze({
-    [Timing.DISPATCH_AUTHORIZE]: Object.freeze(["dispatch.action.pre"] as const),
-    [Timing.RUN_START]: Object.freeze(["run.lifecycle.pre"] as const),
-    [Timing.TURN_START]: Object.freeze(["run.turn.pre"] as const),
-    [Timing.CONTEXT_PREPARE]: Object.freeze(["prompt.context.pre"] as const),
-    [Timing.RESOURCES_PREPARE]: Object.freeze(["tool.catalog.pre"] as const),
-    [Timing.MODEL_REQUEST]: Object.freeze(["connection.llm.pre"] as const),
-    [Timing.MODEL_RESPONSE]: Object.freeze(["connection.llm.post"] as const),
-    [Timing.INVOKE_PREPARE]: Object.freeze([
-      "tool.native.pre",
-      "tool.mcp.pre",
-      "delegation.worker.pre",
-    ] as const),
-    [Timing.INVOKE_RESULT]: Object.freeze([
-      "tool.native.post",
-      "tool.mcp.post",
-      "delegation.worker.post",
-    ] as const),
-    [Timing.TURN_FINISH]: Object.freeze(["run.turn.post"] as const),
-    [Timing.COMPLETION_PREPARE]: Object.freeze(["run.completion.pre"] as const),
-    [Timing.RUN_FINISH]: Object.freeze(["run.lifecycle.post"] as const),
-    [Timing.ERROR]: Object.freeze(["run.error.error"] as const),
-  }) satisfies Readonly<Record<Timing, readonly RegisteredPolicyPointId[]>>;
 }

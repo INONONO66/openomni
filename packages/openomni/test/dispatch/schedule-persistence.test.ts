@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Dispatch } from "@openomni/protocol";
+import type { Command } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
@@ -10,9 +10,9 @@ import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 
 function command(
   action: string,
-  target: Dispatch.Target,
+  target: Command.Target,
   payload: unknown = "hello",
-): Dispatch.Command {
+): Command.Request {
   return {
     dispatchId: `dispatch-${action}`,
     action,

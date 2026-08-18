@@ -3,31 +3,22 @@ import * as PendingInteractionSchema from "./pending-interaction.js";
 import * as WorkerGrantSchema from "./worker-grant.js";
 
 export namespace Communication {
+  /** Frozen-store read surface (#498 C4): Record/Status/CorrelationQuery for reads, FrozenError for the typed write refusal. */
   export namespace PendingAsk {
     export const Status = PendingAskSchema.Status;
     export type Status = PendingAskSchema.Status;
 
-    export const TargetKind = PendingAskSchema.TargetKind;
-    export type TargetKind = PendingAskSchema.TargetKind;
-
     export const Record = PendingAskSchema.Record;
     export type Record = PendingAskSchema.Record;
-
-    export const Create = PendingAskSchema.Create;
-    export type Create = PendingAskSchema.Create;
 
     export const CorrelationQuery = PendingAskSchema.CorrelationQuery;
     export type CorrelationQuery = PendingAskSchema.CorrelationQuery;
 
-    export const WriteMethod = PendingAskSchema.WriteMethod;
-    export type WriteMethod = PendingAskSchema.WriteMethod;
-
     export const FrozenError = PendingAskSchema.FrozenError;
     export type FrozenError = InstanceType<typeof PendingAskSchema.FrozenError>;
-
-    export const Events = PendingAskSchema.Events;
   }
 
+  /** Frozen-store read surface (#498 C4): Record/Status/AllowedAction/CorrelationQuery for reads, FrozenError for the typed write refusal. */
   export namespace PendingInteraction {
     export const Status = PendingInteractionSchema.Status;
     export type Status = PendingInteractionSchema.Status;
@@ -35,25 +26,14 @@ export namespace Communication {
     export const AllowedAction = PendingInteractionSchema.AllowedAction;
     export type AllowedAction = PendingInteractionSchema.AllowedAction;
 
-    export const Correlation = PendingInteractionSchema.Correlation;
-    export type Correlation = PendingInteractionSchema.Correlation;
-
     export const Record = PendingInteractionSchema.Record;
     export type Record = PendingInteractionSchema.Record;
-
-    export const Create = PendingInteractionSchema.Create;
-    export type Create = PendingInteractionSchema.Create;
 
     export const CorrelationQuery = PendingInteractionSchema.CorrelationQuery;
     export type CorrelationQuery = PendingInteractionSchema.CorrelationQuery;
 
-    export const WriteMethod = PendingInteractionSchema.WriteMethod;
-    export type WriteMethod = PendingInteractionSchema.WriteMethod;
-
     export const FrozenError = PendingInteractionSchema.FrozenError;
     export type FrozenError = InstanceType<typeof PendingInteractionSchema.FrozenError>;
-
-    export const Events = PendingInteractionSchema.Events;
   }
 
   export namespace WorkerGrant {

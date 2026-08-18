@@ -1,5 +1,5 @@
 import type { BusEvent } from "@openomni/protocol";
-import { AgentProfile, Operational } from "@openomni/protocol";
+import { Actor, Operational } from "@openomni/protocol";
 import type { AgentBudget } from "./types";
 
 export interface BudgetState {
@@ -22,14 +22,14 @@ export function createBudgetState(): BudgetState {
   };
 }
 
-export function effectiveBudgetThresholds(budget?: AgentProfile.BudgetThresholdInput): {
+export function effectiveBudgetThresholds(budget?: Actor.Profile.BudgetThresholdInput): {
   reassuranceThreshold: number;
   warningThreshold: number;
 } {
   return {
     reassuranceThreshold:
-      budget?.reassuranceThreshold ?? AgentProfile.DEFAULT_REASSURANCE_THRESHOLD,
-    warningThreshold: budget?.warningThreshold ?? AgentProfile.DEFAULT_WARNING_THRESHOLD,
+      budget?.reassuranceThreshold ?? Actor.Profile.DEFAULT_REASSURANCE_THRESHOLD,
+    warningThreshold: budget?.warningThreshold ?? Actor.Profile.DEFAULT_WARNING_THRESHOLD,
   };
 }
 

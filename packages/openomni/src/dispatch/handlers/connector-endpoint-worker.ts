@@ -1,4 +1,4 @@
-import type { AppConnector, Dispatch, Execution, Model, WorkItem } from "@openomni/protocol";
+import type { AppConnector, Command, Execution, Model, WorkItem } from "@openomni/protocol";
 import { AppConnectorInstallationStore, WorkItemStore } from "@openomni/session";
 import type { ConnectorEndpointDriverOwner } from "../owners.js";
 import {
@@ -25,12 +25,12 @@ export interface ConnectorEndpointWorkerSpawnOptions extends ConnectorCompletion
   readonly driver?: ConnectorEndpointDriverOwner;
 }
 
-function resolveConnectorWorkerName(target: Dispatch.Target): string | undefined {
+function resolveConnectorWorkerName(target: Command.Target): string | undefined {
   return target.connectorInstallationId ?? target.endpointId ?? target.id ?? target.name;
 }
 
 function buildRequest(
-  command: Dispatch.Command,
+  command: Command.Request,
   model: Model.Ref,
   payload: ConnectorEndpointWorkerSpawnPayload,
 ): Execution.Request {
@@ -49,7 +49,7 @@ function buildRequest(
 
 function targetMatchesInstallation(
   installation: AppConnector.Installation,
-  target: Dispatch.Target,
+  target: Command.Target,
 ): boolean {
   const workerName = resolveConnectorWorkerName(target);
   if (workerName === undefined) return false;
@@ -63,7 +63,7 @@ function targetMatchesInstallation(
 }
 
 function resolveEnabledConnectorInstallation(
-  target: Dispatch.Target,
+  target: Command.Target,
 ): AppConnector.Installation | undefined {
   return AppConnectorInstallationStore.list().find(
     (installation) =>
@@ -75,7 +75,7 @@ function resolveEnabledConnectorInstallation(
 }
 
 async function failConnectorEndpointWorkerSpawn(
-  command: Dispatch.Command,
+  command: Command.Request,
   payload: ConnectorEndpointWorkerSpawnPayload,
   reason: string,
 ): Promise<never> {
@@ -97,12 +97,12 @@ async function failConnectorEndpointWorkerSpawn(
   );
 }
 
-export function isConnectorEndpointTarget(target: Dispatch.Target): boolean {
+export function isConnectorEndpointTarget(target: Command.Target): boolean {
   return target.endpointId !== undefined || target.connectorInstallationId !== undefined;
 }
 
 export async function handleConnectorEndpointWorkerSpawn(
-  command: Dispatch.Command,
+  command: Command.Request,
   model: Model.Ref,
   payload: ConnectorEndpointWorkerSpawnPayload,
   options: ConnectorEndpointWorkerSpawnOptions,

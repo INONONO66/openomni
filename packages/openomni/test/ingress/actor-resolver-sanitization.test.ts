@@ -67,7 +67,6 @@ describe("Ingress actor resolver sanitization", () => {
           kind: "system",
           type: "system",
           trustTier: "observer",
-          relationship: "owner",
           endpointId: "ep_spoofed",
           trusted: true,
           isTrustedManager: true,

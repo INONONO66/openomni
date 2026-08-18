@@ -55,7 +55,7 @@ export async function completeWorkItem(
         {
           id: observationId,
           producer: "verifier:server-test",
-          subjectRef: current.hash,
+          subjectRef: current.workItemId,
           basisRef: current.completionContract.basisRef,
           artifactRefs: [evidenceId],
           provenanceRef: evidenceId,

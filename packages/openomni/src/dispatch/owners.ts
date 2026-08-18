@@ -1,4 +1,4 @@
-import type { AppConnector, CronJob, Dispatch, Execution, Model } from "@openomni/protocol";
+import type { AppConnector, CronJob, Command, Execution, Model } from "@openomni/protocol";
 import type { CoordinatorLike } from "../ingress/coordinator-like.js";
 import type { IngressEngine } from "../ingress/engine.js";
 import type { ResidentRuntime } from "../resident/runtime.js";
@@ -10,10 +10,10 @@ export interface DispatchSchedulerOwner {
 }
 
 export interface OutboundDispatchOwnerInput {
-  readonly command: Dispatch.Command;
+  readonly command: Command.Request;
   readonly endpointId: string;
   readonly payload: unknown;
-  readonly correlation?: Dispatch.Command["correlation"];
+  readonly correlation?: Command.Request["correlation"];
   readonly signal?: AbortSignal;
   readonly wait?: boolean;
   readonly timeoutMs?: number;
@@ -24,7 +24,7 @@ export interface OutboundDispatchOwner {
 }
 
 export interface DeviceDispatchOwnerInput {
-  readonly command: Dispatch.Command;
+  readonly command: Command.Request;
   readonly deviceId: string;
   readonly payload: unknown;
   readonly signal?: AbortSignal;
@@ -38,7 +38,7 @@ export interface DeviceDispatchOwner {
 
 export interface ConnectorEndpointDriverOwner {
   dispatch(input: {
-    readonly command: Dispatch.Command;
+    readonly command: Command.Request;
     readonly executionRequest: Execution.Request;
     readonly installation: AppConnector.Installation;
   }): Promise<Execution.Result>;

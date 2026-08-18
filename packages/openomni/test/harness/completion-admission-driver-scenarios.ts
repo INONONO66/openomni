@@ -173,7 +173,7 @@ async function runKnownBadCompletionAdmissionScenario() {
       requestRoot: completionRequestRoot(request),
       sourceIdentity: request.sourceIdentity,
       origin: request.origin,
-      workItemHash: item.hash,
+      workItemHash: item.workItemId,
       contractRevision: item.completionContract.revision,
       basisRef: item.completionContract.basisRef,
       expectedHead: item.revision,
@@ -197,7 +197,7 @@ async function runKnownBadCompletionAdmissionScenario() {
       completionAdmissionDriverReport(item),
       { traceId: "trace-test" },
     );
-    const stored = requiredCompletionAdmissionDriverItem(item.hash);
+    const stored = requiredCompletionAdmissionDriverItem(item.workItemId);
     const status = WorkItem.deriveStatus(stored);
     const blocked =
       outcome.admission.decision === "block" &&
@@ -485,7 +485,7 @@ export async function runAllOriginsCompletionAdmissionScenario(
               traceId: "trace-test",
             })
           : await service.requestCompletion(request, completionReport, { traceId: "trace-test" });
-      const stored = requiredCompletionAdmissionDriverItem(item.hash);
+      const stored = requiredCompletionAdmissionDriverItem(item.workItemId);
       const persistedAdmission = stored.completionFacts.admissions.find(
         ({ id }) => id === outcome.admission.id,
       );
@@ -568,14 +568,14 @@ async function runStaleBasisCompletionAdmissionScenario() {
       resolver(item, request),
       CompletionAdmissionError,
     );
-    const before = requiredCompletionAdmissionDriverItem(item.hash);
+    const before = requiredCompletionAdmissionDriverItem(item.workItemId);
     const errorCode = await captureCompletionAdmissionDriverCode(
       service.requestCompletion(request, completionAdmissionDriverReport(item), {
         traceId: "trace-test",
       }),
       CompletionAdmissionError,
     );
-    const after = requiredCompletionAdmissionDriverItem(item.hash);
+    const after = requiredCompletionAdmissionDriverItem(item.workItemId);
     const status = WorkItem.deriveStatus(after);
     const admissionCount = after.completionFacts.admissions.length;
     const terminalAppendCount = Number(after.completionTerminalReceipt !== undefined);
@@ -650,7 +650,7 @@ async function runRestartRecoveryCompletionAdmissionScenario() {
       }),
       "simulated restart after admission",
     );
-    const recorded = requiredCompletionAdmissionDriverItem(item.hash);
+    const recorded = requiredCompletionAdmissionDriverItem(item.workItemId);
     const admission = recorded.completionFacts.admissions[0];
     if (!admission) throw new Error("restart scenario did not record admission");
     const admissionId = admission.id;
@@ -669,12 +669,12 @@ async function runRestartRecoveryCompletionAdmissionScenario() {
       stakesResolver: completionAdmissionDriverStakesResolver(),
     });
     await resumedService.resumeCompletion(
-      item.hash,
+      item.workItemId,
       admissionId,
       completionAdmissionDriverReport(item),
       "trace-test",
     );
-    const completed = requiredCompletionAdmissionDriverItem(item.hash);
+    const completed = requiredCompletionAdmissionDriverItem(item.workItemId);
     const resumedAdmissionId = completed.completionFacts.admissions[0]?.id ?? "missing";
     fields = {
       admissionRecordedBeforeRestart,
@@ -720,13 +720,13 @@ async function runBypassRefusalCompletionAdmissionScenario() {
       "Completion uses admission authority",
     ]);
     insertCompletionAdmissionDriverItem(adapter, item);
-    const before = requiredCompletionAdmissionDriverItem(item.hash);
+    const before = requiredCompletionAdmissionDriverItem(item.workItemId);
     // #606: the raw complete() tombstone (it only threw admission_required)
     // is deleted from WorkItemStore. Bypass is refused at the surface — no
     // completion entry point exists outside the admission writer returned by
     // Storage.configure. The scenario pins that absence plus zero mutation.
     const completeSurfaceAbsent = Reflect.get(WorkItemStore, "complete") === undefined;
-    const after = requiredCompletionAdmissionDriverItem(item.hash);
+    const after = requiredCompletionAdmissionDriverItem(item.workItemId);
     const status = WorkItem.deriveStatus(after);
     const terminalMutation =
       after.completionTerminalReceipt !== undefined || after.timestamps.completed !== undefined;
