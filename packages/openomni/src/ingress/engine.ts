@@ -1,8 +1,7 @@
 import {
   Ingress as IngressNamespace,
-  type Ingress,
+  Ingress,
   type Policy,
-  IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
@@ -68,7 +67,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
         ? inboundEvent.payload.length
         : (JSON.stringify(inboundEvent.payload ?? null) ?? "").length;
 
-    Bus.publish(IngressEvent.Received, {
+    Bus.publish(Ingress.Events.Received, {
       traceId: trace.traceId,
       surface: inboundEvent.surface,
       mode: inboundEvent.mode,

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { z } from "zod";
-import { Bus, BusEvent } from "@openomni/telemetry";
+import { BusEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 
 describe("Bus async dispatch", () => {
   beforeEach(() => {

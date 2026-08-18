@@ -112,7 +112,7 @@ export namespace CronJobRunner {
     try {
       jobs = CronJobRegistry.list();
     } catch (err) {
-      Bus.publish(Operational.Error, {
+      Bus.publish(Operational.Events.Error, {
         // Origin: the tick itself — listing failed before any job existed to inherit from.
         traceId: newTraceId(),
         time: Date.now(),
@@ -143,7 +143,7 @@ export namespace CronJobRunner {
           CronJobRegistry.save({ ...job, nextFireAt: computeNextFireAt(job.schedule, now) });
         }
       } catch (err) {
-        Bus.publish(Operational.Error, {
+        Bus.publish(Operational.Events.Error, {
           traceId: jobTraceId,
           time: Date.now(),
           component: "cron",

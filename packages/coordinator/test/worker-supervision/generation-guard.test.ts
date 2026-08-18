@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WorkerDriver } from "@openomni/protocol";
+import { Worker } from "@openomni/protocol";
 import { WorkerSupervisor } from "../../src/worker-supervision/supervisor.js";
 
 const FIXTURE = new URL("../harness/worker-fixture.ts", import.meta.url).pathname;
@@ -48,7 +48,7 @@ function startSupervisor(
     socketDir,
     events: {
       publish(event, data) {
-        if (event.name === WorkerDriver.Ready.name) readyEvents.push(data);
+        if (event.name === Worker.Events.Ready.name) readyEvents.push(data);
       },
     },
     extraEnvKeys: ["OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS"],

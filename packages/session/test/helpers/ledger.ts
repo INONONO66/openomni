@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { LedgerAppend } from "@openomni/protocol";
+import type { Ledger as LedgerTypes } from "@openomni/protocol";
 import { Ledger } from "../../src/ledger-core/index";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
 
@@ -14,7 +14,7 @@ export function openLedgerDatabase(): Database {
   return db;
 }
 
-export function buildAppendInput(overrides: Partial<LedgerAppend.Input> = {}): LedgerAppend.Input {
+export function buildAppendInput(overrides: Partial<LedgerTypes.Input> = {}): LedgerTypes.Input {
   return {
     streamId: "stream-1",
     type: "decision.recorded",
@@ -29,8 +29,8 @@ export function appendChain(
   db: Database,
   count: number,
   streamId = "stream-1",
-): Extract<LedgerAppend.Outcome, { kind: "appended" }>[] {
-  const outcomes: Extract<LedgerAppend.Outcome, { kind: "appended" }>[] = [];
+): Extract<LedgerTypes.Outcome, { kind: "appended" }>[] {
+  const outcomes: Extract<LedgerTypes.Outcome, { kind: "appended" }>[] = [];
   for (let head = 0; head < count; head += 1) {
     const outcome = Ledger.append(
       db,

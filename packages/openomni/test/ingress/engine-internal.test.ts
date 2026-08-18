@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { IngressEvent, type Ingress } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import {
@@ -88,7 +88,7 @@ describe("ingestInternal", () => {
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toContain("agent resolver not configured");
     expect(decisions).toHaveLength(1);
-    expect(IngressEvent.RoutingDecision.schema.parse(decisions[0])).toMatchObject({
+    expect(Ingress.Events.RoutingDecision.schema.parse(decisions[0])).toMatchObject({
       inboundId: event.id,
       stage: "surface_default",
       outcome: "route",
@@ -135,7 +135,7 @@ describe("ingestInternal", () => {
     if (result.kind === "dropped") throw new Error("shape");
     expect(result.sessionId).toBeTruthy();
     expect(decisions).toHaveLength(1);
-    expect(IngressEvent.RoutingDecision.schema.parse(decisions[0])).toMatchObject({
+    expect(Ingress.Events.RoutingDecision.schema.parse(decisions[0])).toMatchObject({
       inboundId: "t2",
       mode: "internal",
       stage: "surface_default",

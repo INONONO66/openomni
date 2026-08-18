@@ -76,7 +76,7 @@ describe("config", () => {
 
   it("drops invalid MCP server entries at the config boundary", async () => {
     const warnings: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
     const configPath = join(tempDir, "config.json");
     const valid: McpServerConfig = {
       name: "valid",
@@ -116,7 +116,7 @@ describe("config", () => {
 
   it("treats non-array MCP servers as empty at the config boundary", async () => {
     const warnings: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
     const configPath = join(tempDir, "config.json");
     writeFileSync(
       configPath,

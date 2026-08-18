@@ -105,7 +105,7 @@ export function createResidentInboundWaitHandler(
       try {
         await WorkItemAttemptRun.endWait(sessionId, runId, traceId);
       } catch (releaseError) {
-        Bus.publish(Operational.Warn, {
+        Bus.publish(Operational.Events.Warn, {
           traceId,
           time: Date.now(),
           sessionId,

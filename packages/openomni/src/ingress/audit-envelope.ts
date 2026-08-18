@@ -45,7 +45,7 @@ export function createIngressAudit(traceId: string, sessionId: string, component
       parentSpanId?: string,
     ): IngressAuditEvent {
       const spanId = newSpanId();
-      Bus.publish(Operational.Info, {
+      Bus.publish(Operational.Events.Info, {
         traceId,
         sessionId,
         time: Date.now(),

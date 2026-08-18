@@ -71,7 +71,7 @@ function loadRaw(configPath: string, traceId: string): RawConfig {
   try {
     return JSON.parse(readFileSync(configPath, "utf-8")) as RawConfig;
   } catch {
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -91,7 +91,7 @@ function resolveMessagingGrants(
   const parsed = z.array(SenderTargetGrant).safeParse(raw.messaging.grants);
   if (parsed.success) return parsed.data;
   // Fail closed: a malformed grant list grants nothing.
-  Bus.publish(Operational.Warn, {
+  Bus.publish(Operational.Events.Warn, {
     traceId,
     time: Date.now(),
     component: "server",
@@ -106,7 +106,7 @@ function resolve(raw: RawConfig, configPath: string, traceId: string): ServerCon
   const workspaceRoot = raw.workspace?.root;
 
   if (workspaceRoot && !existsSync(workspaceRoot)) {
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId,
       time: Date.now(),
       component: "server",

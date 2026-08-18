@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AgentExecution, BusEvent, Operational } from "@openomni/protocol";
+import { Run, BusEvent, Operational } from "@openomni/protocol";
 import { z } from "zod";
 import {
   collector,
@@ -30,9 +30,9 @@ describe("telemetry scope", () => {
     const sink = collector();
     const log = scope(TRACE, sink, { now: clock });
 
-    log.emit(Operational.Info, { component: "test", msg: "hello" });
+    log.emit(Operational.Events.Info, { component: "test", msg: "hello" });
 
-    expect(sink.named(Operational.Info.name)).toEqual([
+    expect(sink.named(Operational.Events.Info.name)).toEqual([
       {
         time: clock(),
         component: "test",
@@ -54,14 +54,14 @@ describe("telemetry scope", () => {
     const sink = collector();
     const log = scope(TRACE, sink, { now: clock });
 
-    log.emit(Operational.Info, {
+    log.emit(Operational.Events.Info, {
       component: "test",
       msg: "forged",
       traceId: "attacker-trace",
       sessionId: "attacker-session",
     } as never);
 
-    expect(sink.named(Operational.Info.name)[0]).toMatchObject({
+    expect(sink.named(Operational.Events.Info.name)[0]).toMatchObject({
       traceId: TRACE_ID,
       sessionId: "session-1",
     });
@@ -76,9 +76,9 @@ describe("telemetry scope", () => {
     const sink = collector();
     const child = scope(TRACE, sink, { now: clock }).child({ runId: "run-2" });
 
-    child.emit(Operational.Info, { component: "test", msg: "child" });
+    child.emit(Operational.Events.Info, { component: "test", msg: "child" });
 
-    expect(sink.named(Operational.Info.name)[0]).toMatchObject({
+    expect(sink.named(Operational.Events.Info.name)[0]).toMatchObject({
       traceId: TRACE_ID,
       sessionId: "session-1",
       runId: "run-2",
@@ -115,9 +115,9 @@ describe("telemetry scope", () => {
       traceId: "attacker-trace",
     } as never);
 
-    child.emit(Operational.Info, { component: "test", msg: "child" });
+    child.emit(Operational.Events.Info, { component: "test", msg: "child" });
 
-    expect(sink.named(Operational.Info.name)[0]).toMatchObject({ traceId: TRACE_ID });
+    expect(sink.named(Operational.Events.Info.name)[0]).toMatchObject({ traceId: TRACE_ID });
   });
 
   /** Narrowing mid-run must not be able to kill the run. */
@@ -125,9 +125,9 @@ describe("telemetry scope", () => {
     const sink = collector();
     const child = scope(TRACE, sink, { now: clock }).child({ runId: undefined, actorId: "a2" });
 
-    child.emit(Operational.Info, { component: "test", msg: "kept" });
+    child.emit(Operational.Events.Info, { component: "test", msg: "kept" });
 
-    expect(sink.named(Operational.Info.name)[0]).toMatchObject({
+    expect(sink.named(Operational.Events.Info.name)[0]).toMatchObject({
       runId: "run-1",
       actorId: "a2",
     });
@@ -145,9 +145,9 @@ describe("telemetry scope", () => {
     });
 
     const child = scope(TRACE, sink, { now: clock }).child(narrowing);
-    child.emit(Operational.Info, { component: "test", msg: "narrowed" });
+    child.emit(Operational.Events.Info, { component: "test", msg: "narrowed" });
 
-    expect(sink.named(Operational.Info.name)[0]).toMatchObject({
+    expect(sink.named(Operational.Events.Info.name)[0]).toMatchObject({
       runId: "run-1",
       actorId: "kept",
     });
@@ -169,8 +169,10 @@ describe("telemetry scope", () => {
       { now: clock, onEmitError: (_error, name) => errors.push(name) },
     );
 
-    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
-    expect(errors).toEqual([Operational.Info.name]);
+    expect(() =>
+      log.emit(Operational.Events.Info, { component: "test", msg: "survive" }),
+    ).not.toThrow();
+    expect(errors).toEqual([Operational.Events.Info.name]);
   });
 
   /**
@@ -194,7 +196,9 @@ describe("telemetry scope", () => {
       },
     );
 
-    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
+    expect(() =>
+      log.emit(Operational.Events.Info, { component: "test", msg: "survive" }),
+    ).not.toThrow();
   });
 });
 
@@ -214,7 +218,7 @@ const TEST_SPAN: SpanPair<
   { readonly label: string },
   { readonly kind: string; readonly elapsedMs: number }
 > = {
-  start: AgentExecution.TurnStart as never,
+  start: Run.Events.TurnStart as never,
   end: SpanEnd as never,
   terminal: (outcome, elapsedMs) => ({ kind: outcome.kind, elapsedMs }),
 };
@@ -229,7 +233,7 @@ describe("telemetry span", () => {
       // the throwing case still has to emit its terminal event
     }
     return {
-      starts: sink.named(AgentExecution.TurnStart.name).length,
+      starts: sink.named(Run.Events.TurnStart.name).length,
       ends: sink.named(SpanEnd.name) as Array<{ kind: string }>,
     };
   }
@@ -247,11 +251,11 @@ describe("telemetry span", () => {
     await log.span(TEST_SPAN, { label: "t" }, async (_handle, child) => {
       // The emitter handed to the body belongs to the child span too, or an
       // event raised inside the span is attributed to its caller.
-      child.emit(Operational.Info, { component: "test", msg: "inside" });
+      child.emit(Operational.Events.Info, { component: "test", msg: "inside" });
       return "ok";
     });
 
-    const start = sink.named(AgentExecution.TurnStart.name)[0] as {
+    const start = sink.named(Run.Events.TurnStart.name)[0] as {
       spanId: string;
       parentSpanId?: string;
     };
@@ -264,7 +268,7 @@ describe("telemetry span", () => {
     expect(end.spanId).toBe(start.spanId);
     expect(end.parentSpanId).toBe(SPAN_ID);
 
-    const inside = sink.named(Operational.Info.name)[0] as { spanId: string };
+    const inside = sink.named(Operational.Events.Info.name)[0] as { spanId: string };
     expect(inside.spanId).toBe(start.spanId);
   });
 

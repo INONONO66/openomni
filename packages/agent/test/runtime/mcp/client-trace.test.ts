@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Mcp } from "@openomni/protocol";
-import { Bus, type BusEvent } from "@openomni/telemetry";
+import type { BusEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
 /** An MCP server's lifecycle belongs to whatever brought it up — the boot. */
@@ -51,8 +52,8 @@ describe("McpClient call audit trace", () => {
     const client = createClient(async () => {
       throw failure;
     });
-    const called = nextEvent(Mcp.ToolCalled);
-    const failed = nextEvent(Mcp.ToolFailed);
+    const called = nextEvent(Mcp.Events.ToolCalled);
+    const failed = nextEvent(Mcp.Events.ToolFailed);
 
     // When
     const result = client.callTool("search-server.search", {}, "call-active", {
@@ -88,8 +89,8 @@ describe("McpClient call audit trace", () => {
    */
   test("files connect and disconnect under the lifecycle trace", async () => {
     Bus.reset();
-    const connected = nextEvent(Mcp.Connected);
-    const disconnected = nextEvent(Mcp.Disconnected);
+    const connected = nextEvent(Mcp.Events.Connected);
+    const disconnected = nextEvent(Mcp.Events.Disconnected);
     const client = createClient(async () => ({ content: [] }));
 
     await client.connect();

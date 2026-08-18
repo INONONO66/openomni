@@ -95,7 +95,7 @@ function wrapCreated(
     msg: string,
     context?: Record<string, unknown>,
   ): void => {
-    events.publish(Operational.Warn, {
+    events.publish(Operational.Events.Warn, {
       traceId: ctx.traceContext?.traceId ?? "",
       time: Date.now(),
       ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),

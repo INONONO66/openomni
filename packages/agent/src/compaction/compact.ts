@@ -1,5 +1,5 @@
 import type { BusEvent } from "@openomni/protocol";
-import { AgentExecution, type Message } from "@openomni/protocol";
+import { Run, type Message } from "@openomni/protocol";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 import type { CompactionCandidate } from "./speculate";
 
@@ -111,7 +111,7 @@ export namespace Compaction {
     },
   ): Promise<CompactionResult> {
     const messagesBefore = messages.length;
-    events.publish(AgentExecution.CompactionStarted, {
+    events.publish(Run.Events.CompactionStarted, {
       ...identity,
       time: Date.now(),
       messagesBefore,
@@ -126,7 +126,7 @@ export namespace Compaction {
       elidedChars: number,
       anchored?: boolean,
     ): CompactionResult => {
-      events.publish(AgentExecution.CompactionCompleted, {
+      events.publish(Run.Events.CompactionCompleted, {
         ...identity,
         time: Date.now(),
         outcome,
@@ -151,7 +151,7 @@ export namespace Compaction {
       // The one exit finish() cannot serve: the summarizer threw. The
       // bracket still closes — `failed` is this operation's terminal — and
       // the throw propagates unchanged into the seam's fail-closed contract.
-      events.publish(AgentExecution.CompactionCompleted, {
+      events.publish(Run.Events.CompactionCompleted, {
         ...identity,
         time: Date.now(),
         outcome: "failed",

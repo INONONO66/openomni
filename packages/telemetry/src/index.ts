@@ -1,4 +1,4 @@
-export { Bus, BusEvent } from "./bus";
+export { Bus } from "./bus";
 export { scope } from "./scope";
 export { collector, noopSink, tee } from "./sink";
 export { spanStatus, spanStatusMessage } from "./span";

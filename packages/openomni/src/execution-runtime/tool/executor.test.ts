@@ -585,7 +585,7 @@ describe("createToolExecutor", () => {
     }
   });
 
-  it("emits ToolExecution.TimedOut event when timeout fires", async () => {
+  it("emits Tool.Events.TimedOut event when timeout fires", async () => {
     const publishedEvents: Array<{ name: string; payload: unknown }> = [];
     const unsubscribe = Bus.observe((descriptor, payload) => {
       publishedEvents.push({ name: descriptor.name, payload });
@@ -626,7 +626,7 @@ describe("createToolExecutor", () => {
     }
   });
 
-  it("does not emit ToolExecution.TimedOut for a tool that throws timeout-like error message", async () => {
+  it("does not emit Tool.Events.TimedOut for a tool that throws timeout-like error message", async () => {
     const publishedEvents: Array<{ name: string; payload: unknown }> = [];
     const unsubscribe = Bus.observe((descriptor, payload) => {
       publishedEvents.push({ name: descriptor.name, payload });

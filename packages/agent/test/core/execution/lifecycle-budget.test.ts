@@ -13,7 +13,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
    */
   it("files the budget event under the run's trace, from the dispatch frame", async () => {
     const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       seen.push(event as unknown as { traceId: string; sessionId?: string });
     });
     const agentBase = makeAgentBase();
@@ -88,7 +88,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
 
     expect(result).not.toBeNull();
     expect(result?.finishReason).toBe("max-steps");
-    const warns = collected.named(Operational.Warn.name);
+    const warns = collected.named(Operational.Events.Warn.name);
     expect(warns).toHaveLength(1);
     expect(warns[0]).toMatchObject({
       msg: "budget exceeded: wall time",
@@ -130,7 +130,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
       unsubscribe();
     }
 
-    expect(collected.named(Operational.Warn.name)).toHaveLength(1);
+    expect(collected.named(Operational.Events.Warn.name)).toHaveLength(1);
     expect(busSaw).toEqual([]);
   });
 });

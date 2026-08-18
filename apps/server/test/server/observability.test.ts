@@ -73,7 +73,7 @@ describe("observability routes", () => {
       timeUpdated: 200,
     });
 
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId: "trace-warn",
       sessionId: session.id,
       time: 100,
@@ -81,7 +81,7 @@ describe("observability routes", () => {
       msg: "warn",
       context: { secret: "redacted by route" },
     });
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId: "trace-error",
       sessionId: session.id,
       time: 200,

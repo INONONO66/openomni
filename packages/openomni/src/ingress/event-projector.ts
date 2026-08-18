@@ -96,7 +96,7 @@ export namespace IngressEventProjector {
     Session.addPart(message.id, part);
 
     if (traceContext) {
-      Bus.publish(Operational.Info, {
+      Bus.publish(Operational.Events.Info, {
         traceId: traceContext.traceId,
         time: Date.now(),
         sessionId,

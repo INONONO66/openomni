@@ -118,7 +118,7 @@ export async function resolveRuntimeModel(
     : "model not in provider catalog";
 
   if (defaultModel && defaultModel.provider === model.provider) {
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -133,7 +133,7 @@ export async function resolveRuntimeModel(
     return defaultModel;
   }
 
-  Bus.publish(Operational.Warn, {
+  Bus.publish(Operational.Events.Warn, {
     traceId,
     time: Date.now(),
     component: "server",
@@ -166,7 +166,7 @@ export async function resolveDefaultProviderModel(
     return resolveCatalogModel(preferred.id, models) ?? preferred;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId,
       time: Date.now(),
       component: "server",

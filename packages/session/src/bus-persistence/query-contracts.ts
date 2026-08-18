@@ -1,7 +1,9 @@
+import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 
-export const EventVisibility = z.enum(["internal", "llm_reason", "user_audit", "ephemeral"]);
-export type EventVisibility = z.infer<typeof EventVisibility>;
+/** #499 L4: one visibility vocabulary — reuse the protocol enum, not a copy. */
+export const EventVisibility = BusEvent.Visibility;
+export type EventVisibility = BusEvent.Visibility;
 
 export const QueryStats = z.object({
   totalEvents: z.number().describe("Total number of events"),

@@ -1,10 +1,4 @@
-import {
-  Operational,
-  PolicyDecision,
-  PolicyEvent,
-  ToolExecution,
-  type Policy,
-} from "@openomni/protocol";
+import { Operational, PolicyDecision, Policy, Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { ToolRuntimeContext } from "./types.js";
 
@@ -62,7 +56,7 @@ export function publishActionRequested(args: {
   readonly resource: string;
   readonly input: unknown;
 }): void {
-  Bus.publish(PolicyEvent.ActionRequested, {
+  Bus.publish(Policy.Events.ActionRequested, {
     ...args.base,
     actionId: args.actionId,
     actor: args.actor,
@@ -80,7 +74,7 @@ export function publishPolicyEvaluated(args: {
 }): void {
   if (args.decision.verdict === "allow") return;
 
-  Bus.publish(PolicyEvent.Evaluated, {
+  Bus.publish(Policy.Events.Evaluated, {
     ...args.base,
     policyId: args.decision.policyId,
     actor: args.actor,
@@ -99,7 +93,7 @@ export function publishActionBlocked(args: {
   readonly verdict: Policy.PolicyDecision["verdict"];
   readonly reason: string;
 }): void {
-  Bus.publish(PolicyEvent.ActionBlocked, {
+  Bus.publish(Policy.Events.ActionBlocked, {
     ...args.base,
     actionId: args.actionId,
     actor: args.actor,
@@ -116,7 +110,7 @@ export function publishToolStarted(args: {
   readonly toolCallId: string;
   readonly toolName: string;
 }): void {
-  Bus.publish(ToolExecution.Started, {
+  Bus.publish(Tool.Events.Started, {
     ...args.base,
     actor: args.actor,
     toolCallId: args.toolCallId,
@@ -132,7 +126,7 @@ export function publishToolCompleted(args: {
   readonly durationMs: number;
   readonly isError: boolean;
 }): void {
-  Bus.publish(ToolExecution.Completed, {
+  Bus.publish(Tool.Events.Completed, {
     ...args.base,
     actor: args.actor,
     toolCallId: args.toolCallId,
@@ -148,7 +142,7 @@ export function publishToolTimedOut(args: {
   readonly toolName: string;
   readonly timeoutMs: number;
 }): void {
-  Bus.publish(ToolExecution.TimedOut, {
+  Bus.publish(Tool.Events.TimedOut, {
     ...args.base,
     toolCallId: args.toolCallId,
     toolName: args.toolName,
@@ -162,7 +156,7 @@ export function publishTimeoutSettlementWarning(args: {
   readonly toolCallId: string;
   readonly graceMs: number;
 }): void {
-  Bus.publish(Operational.Warn, {
+  Bus.publish(Operational.Events.Warn, {
     ...args.base,
     component: "executor",
     msg: "timed-out tool did not settle before post-timeout grace elapsed",

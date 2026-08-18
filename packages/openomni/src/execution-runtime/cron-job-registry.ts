@@ -11,7 +11,7 @@ import { Bus } from "@openomni/telemetry";
 // boot-order bug, never a silent in-memory fallback. Both consumers run after
 // init (CronJobRunner.start at bootstrap; dispatch schedule handlers at
 // runtime), and CronJobRunner.tick already treats a throw here as a logged
-// Operational.Error rather than a crash.
+// Operational.Events.Error rather than a crash.
 function cronJobs(): ProtocolStorage.CronJobSubAdapter {
   const adapter = Storage.get().cronJob;
   if (!adapter) throw new Error("Storage adapter does not implement cronJob");

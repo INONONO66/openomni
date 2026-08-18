@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { PolicyDecision, PolicyEvent } from "@openomni/protocol";
+import { PolicyDecision, Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
@@ -510,7 +510,7 @@ describe("PolicyEngine", () => {
     const previousNodeEnv = env().NODE_ENV;
     env().NODE_ENV = "production";
     const warnings: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+    const unsub = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
     try {
       const decisions: Array<{ policyId: string; reasonCodes: string[] }> = [];
       const engine = PolicyEngine.create({
@@ -553,7 +553,7 @@ describe("PolicyEngine", () => {
   it("isolates onDecision observer errors from policy dispatch", async () => {
     Bus.reset();
     const warnings: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+    const unsub = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
     try {
       const engine = PolicyEngine.create({
         onDecision: () => {
@@ -598,7 +598,7 @@ describe("PolicyEngine", () => {
   it("isolates async onDecision observer rejections from policy dispatch", async () => {
     Bus.reset();
     const warnings: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+    const unsub = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
     try {
       const engine = PolicyEngine.create({
         // The publisher reports under the engine's trace or not at all, so an
@@ -665,9 +665,9 @@ describe("PolicyEngine", () => {
     releaseObserver?.();
   });
 
-  it("publishes PolicyEvent.Evaluated via Bus when session context is available", async () => {
+  it("publishes Policy.Events.Evaluated via Bus when session context is available", async () => {
     const published: unknown[] = [];
-    const unsub = Bus.subscribe(PolicyEvent.Evaluated, (data) => {
+    const unsub = Bus.subscribe(Policy.Events.Evaluated, (data) => {
       published.push(data);
     });
 

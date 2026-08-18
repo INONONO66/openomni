@@ -137,7 +137,7 @@ describe("WaitService", () => {
     expect(events).toContainEqual({ name: "wait.expired", partial: true });
   });
 
-  test("sweepExpired isolates one corrupt wait: records Operational.Error and keeps sweeping", async () => {
+  test("sweepExpired isolates one corrupt wait: records Operational.Events.Error and keeps sweeping", async () => {
     const events: { name: string; msg?: string }[] = [];
     Bus.observe((event, payload) =>
       events.push({

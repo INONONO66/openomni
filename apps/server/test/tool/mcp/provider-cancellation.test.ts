@@ -121,7 +121,7 @@ describe("McpToolProvider", () => {
     const subscriberCountBeforeWarning = Bus.stats().subscriberCount;
     let unsubscribeSettlementWarning: () => void = () => undefined;
     const settlementWarning = new Promise<void>((resolve) => {
-      unsubscribeSettlementWarning = Bus.subscribe(Operational.Warn, (event) => {
+      unsubscribeSettlementWarning = Bus.subscribe(Operational.Events.Warn, (event) => {
         if (
           event.component !== "executor" ||
           event.msg !== "timed-out tool did not settle before post-timeout grace elapsed" ||

@@ -85,7 +85,7 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
           (error, failStreak) => {
             // Visible failure (#724 review M5): the burn is capped by the
             // streak, and the record says when speculation gave up.
-            events.publish(Operational.Warn, {
+            events.publish(Operational.Events.Warn, {
               traceId: ctx.traceContext?.traceId ?? "",
               time: Date.now(),
               ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),

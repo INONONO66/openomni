@@ -45,7 +45,7 @@ export class DiscordAdapter implements Adapter.Surface {
             botId,
             triggers: this.config.triggers,
           });
-          this.publish(Operational.Info, {
+          this.publish(Operational.Events.Info, {
             // Origin: a gateway READY is a distinct occurrence (initial connect
             // AND every re-identify) — deliberately its own trace, not the boot's.
             traceId: newTraceId(),
@@ -77,7 +77,7 @@ export class DiscordAdapter implements Adapter.Surface {
 
   stop(traceId: string): void {
     this.gateway.stop();
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -148,7 +148,7 @@ export class DiscordAdapter implements Adapter.Surface {
     if (!inbound) return;
 
     this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {
-      this.publish(Operational.Error, {
+      this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -163,7 +163,7 @@ export class DiscordAdapter implements Adapter.Surface {
     channelId: string,
     traceId: string,
   ): Promise<void> {
-    this.publish(Operational.Debug, {
+    this.publish(Operational.Events.Debug, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -183,7 +183,7 @@ export class DiscordAdapter implements Adapter.Surface {
       const outbound = await handler(inbound);
       if (outbound) await sendDiscordMessage(this.client, channelId, outbound, traceId);
     } catch (err) {
-      this.publish(Operational.Error, {
+      this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",

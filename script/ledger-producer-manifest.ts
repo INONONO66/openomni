@@ -27,7 +27,7 @@
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
 //     (`wait:` / `work:` / `route:` / `command:` / `effect:` — the class
-//     vocabulary is protocol `LedgerAppend.StreamRegistry`).
+//     vocabulary is protocol `Ledger.StreamRegistry`).
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
 //     rows directly (raw prepared statements) plus the storage-adapter
 //     binding that exposes them as the ledger sub-adapter.
@@ -45,7 +45,7 @@ import { Glob } from "bun";
 import { join } from "node:path";
 
 interface LedgerStreamProducer {
-  /** Stream class key — must match `LedgerAppend.StreamRegistry`. */
+  /** Stream class key — must match `Ledger.StreamRegistry`. */
   readonly streamClass: "wait" | "work" | "route" | "command" | "effect";
   /** Repo-relative path of the ONE module that appends this class's facts. */
   readonly producer: string;

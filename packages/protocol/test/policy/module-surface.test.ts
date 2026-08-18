@@ -30,6 +30,8 @@ const expectedPolicyKeys = [
   "PolicyPoint",
   "Resource",
   "PolicyPlan",
+  // #499: observation descriptors converged under the noun namespace.
+  "Events",
 ];
 
 const expectedPolicyDecisionKeys = ["allow", "deny", "pending", "isBlocking", "reason"];

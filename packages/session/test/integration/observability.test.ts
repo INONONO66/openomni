@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { AgentExecution, LlmCall, ToolExecution } from "@openomni/protocol";
+import { Run, LlmCall, Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
@@ -41,14 +41,14 @@ describe("Observability Pipeline Integration", () => {
       const runId = "run-pipeline-1";
       const time = Date.UTC(2026, 4, 10, 12, 0, 0);
 
-      Bus.publish(AgentExecution.TurnStart, {
+      Bus.publish(Run.Events.TurnStart, {
         traceId: "t1",
         sessionId,
         runId,
         time,
         turnIndex: 0,
       });
-      Bus.publish(LlmCall.Started, {
+      Bus.publish(LlmCall.Events.Started, {
         traceId: "t2",
         sessionId,
         time: time + 10,
@@ -57,7 +57,7 @@ describe("Observability Pipeline Integration", () => {
         messageCount: 5,
         toolCount: 2,
       });
-      Bus.publish(LlmCall.Completed, {
+      Bus.publish(LlmCall.Events.Completed, {
         traceId: "t3",
         sessionId,
         time: time + 200,
@@ -71,7 +71,7 @@ describe("Observability Pipeline Integration", () => {
         cacheWriteTokens: 0,
         finishReason: "end_turn",
       });
-      Bus.publish(ToolExecution.Started, {
+      Bus.publish(Tool.Events.Started, {
         traceId: "t4",
         sessionId,
         runId,
@@ -79,7 +79,7 @@ describe("Observability Pipeline Integration", () => {
         toolCallId: "tc-1",
         toolName: "read_file",
       });
-      Bus.publish(ToolExecution.Completed, {
+      Bus.publish(Tool.Events.Completed, {
         traceId: "t5",
         sessionId,
         runId,
@@ -89,7 +89,7 @@ describe("Observability Pipeline Integration", () => {
         durationMs: 200,
         isError: false,
       });
-      Bus.publish(AgentExecution.TurnComplete, {
+      Bus.publish(Run.Events.TurnComplete, {
         traceId: "t6",
         sessionId,
         runId,
@@ -156,7 +156,7 @@ describe("Observability Pipeline Integration", () => {
       const session = createSession("cascade");
       const sessionId = session.id;
 
-      Bus.publish(LlmCall.Completed, {
+      Bus.publish(LlmCall.Events.Completed, {
         traceId: "t-cascade",
         sessionId,
         time: Date.now(),
@@ -192,13 +192,13 @@ describe("Observability Pipeline Integration", () => {
       const sessionA = createSession("session-a");
       const sessionB = createSession("session-b");
 
-      Bus.publish(AgentExecution.TurnStart, {
+      Bus.publish(Run.Events.TurnStart, {
         traceId: "a1",
         sessionId: sessionA.id,
         time: Date.now(),
         turnIndex: 0,
       });
-      Bus.publish(LlmCall.Started, {
+      Bus.publish(LlmCall.Events.Started, {
         traceId: "a2",
         sessionId: sessionA.id,
         time: Date.now(),
@@ -207,7 +207,7 @@ describe("Observability Pipeline Integration", () => {
         messageCount: 3,
         toolCount: 1,
       });
-      Bus.publish(AgentExecution.TurnComplete, {
+      Bus.publish(Run.Events.TurnComplete, {
         traceId: "a3",
         sessionId: sessionA.id,
         time: Date.now(),
@@ -215,7 +215,7 @@ describe("Observability Pipeline Integration", () => {
         usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700 },
       });
 
-      Bus.publish(LlmCall.Started, {
+      Bus.publish(LlmCall.Events.Started, {
         traceId: "b1",
         sessionId: sessionB.id,
         time: Date.now(),
@@ -224,7 +224,7 @@ describe("Observability Pipeline Integration", () => {
         messageCount: 2,
         toolCount: 0,
       });
-      Bus.publish(LlmCall.Completed, {
+      Bus.publish(LlmCall.Events.Completed, {
         traceId: "b2",
         sessionId: sessionB.id,
         time: Date.now(),

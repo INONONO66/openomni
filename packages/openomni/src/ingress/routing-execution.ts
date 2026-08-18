@@ -1,4 +1,4 @@
-import { Command, type Ingress, type RoutingDecisionPayload } from "@openomni/protocol";
+import { Command, type Ingress } from "@openomni/protocol";
 import type { TraceContext } from "@openomni/protocol";
 import { submitPinnedPendingInteraction, type DispatchRuntime } from "../dispatch/runtime.js";
 import {
@@ -10,20 +10,20 @@ import {
 } from "../wait/index.js";
 import { IngressRoutingError, type KernelRouteResolution } from "./routing-resolution.js";
 
-type RoutedDecision = Extract<RoutingDecisionPayload, { readonly outcome: "route" }>;
+type RoutedDecision = Extract<Ingress.RoutingDecisionPayload, { readonly outcome: "route" }>;
 
 type BlacklistDropDecision = Extract<
-  RoutingDecisionPayload,
+  Ingress.RoutingDecisionPayload,
   { readonly stage: "blacklist"; readonly outcome: "drop" }
 >;
 type AcceptedDecision = RoutedDecision | BlacklistDropDecision;
 
-function factValue(decision: RoutingDecisionPayload, prefix: string): string | undefined {
+function factValue(decision: Ingress.RoutingDecisionPayload, prefix: string): string | undefined {
   const fact = decision.factsUsed.find((candidate) => candidate.startsWith(prefix));
   return fact?.slice(prefix.length);
 }
 
-function terminalMessage(decision: RoutingDecisionPayload): string {
+function terminalMessage(decision: Ingress.RoutingDecisionPayload): string {
   if (decision.stage === "blacklist") {
     return factValue(decision, "blacklist.reason:") ?? decision.reason;
   }
@@ -41,7 +41,7 @@ function terminalMessage(decision: RoutingDecisionPayload): string {
   return decision.reason;
 }
 
-export function requireRoutedDecision(decision: RoutingDecisionPayload): AcceptedDecision {
+export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload): AcceptedDecision {
   if (decision.outcome === "route") return decision;
   if (decision.stage === "blacklist" && decision.outcome === "drop") return decision;
   if (decision.outcome === "ambiguous") {

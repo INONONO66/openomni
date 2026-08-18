@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
-import { Policy } from "../policy/index.js";
+// Deep imports (not ../policy/index.js): the Policy namespace re-exports these
+// descriptors as `Policy.Events`, so importing the barrel here would be a cycle.
+import { PolicyEffects } from "../policy/effects.js";
+import { PolicyResource } from "../policy/resource.js";
 
 const PolicyBase = z.object({
   traceId: z.string(),
@@ -16,20 +19,20 @@ const PolicyObligation = z
   .passthrough();
 
 const PolicyAuditContext = z.object({
-  effects: Policy.PolicyEffect.array().optional(),
+  effects: PolicyEffects.PolicyEffect.array().optional(),
   obligations: PolicyObligation.array().optional(),
   reasonCodes: z.string().array().optional(),
   factsUsed: z.string().array().optional(),
   durationMs: z.number().optional(),
   pointId: z.string().optional(),
   pointVersion: z.number().optional(),
-  resourceDescriptor: Policy.Resource.Descriptor.optional(),
+  resourceDescriptor: PolicyResource.Descriptor.optional(),
 });
 
 const EffectiveVerdict = z.enum(["allow", "deny", "pending"]);
 
-export namespace PolicyEvent {
-  export const ActionRequested = BusEvent.define(
+export const Events = {
+  ActionRequested: BusEvent.define(
     "policy.action.requested",
     PolicyBase.extend({
       actionId: z.string(),
@@ -39,9 +42,8 @@ export namespace PolicyEvent {
       context: z.record(z.string(), z.unknown()).optional(),
     }),
     { visibility: "ephemeral" },
-  );
-
-  export const Evaluated = BusEvent.define(
+  ),
+  Evaluated: BusEvent.define(
     "policy.evaluated",
     PolicyBase.extend({
       policyId: z.string(),
@@ -53,9 +55,8 @@ export namespace PolicyEvent {
       beforeSideEffect: z.record(z.string(), z.unknown()).optional(),
     }).merge(PolicyAuditContext),
     { visibility: "llm_reason" },
-  );
-
-  export const DecisionComposed = BusEvent.define(
+  ),
+  DecisionComposed: BusEvent.define(
     "policy.decision.composed",
     PolicyBase.extend({
       actor: z.record(z.string(), z.unknown()),
@@ -65,9 +66,8 @@ export namespace PolicyEvent {
       reason: z.string(),
     }).merge(PolicyAuditContext),
     { visibility: "llm_reason" },
-  );
-
-  export const ActionBlocked = BusEvent.define(
+  ),
+  ActionBlocked: BusEvent.define(
     "policy.action.blocked",
     PolicyBase.extend({
       actionId: z.string(),
@@ -78,9 +78,8 @@ export namespace PolicyEvent {
       reason: z.string(),
     }),
     { visibility: "llm_reason" },
-  );
-
-  export const ActionApproved = BusEvent.define(
+  ),
+  ActionApproved: BusEvent.define(
     "policy.action.approved",
     PolicyBase.extend({
       actionId: z.string(),
@@ -91,5 +90,5 @@ export namespace PolicyEvent {
       reason: z.string(),
     }),
     { visibility: "ephemeral" },
-  );
-}
+  ),
+};

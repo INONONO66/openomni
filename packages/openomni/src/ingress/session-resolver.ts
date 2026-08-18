@@ -1,9 +1,4 @@
-import {
-  Adapter,
-  type Ingress,
-  IngressEvent,
-  type TraceContext as TraceContextProtocol,
-} from "@openomni/protocol";
+import { Adapter, Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
 import { Session, SurfaceKey } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { DEFAULT_DISPATCH_MODEL } from "../dispatch/index.js";
@@ -109,7 +104,7 @@ export namespace IngressSessionResolver {
       }
     }
 
-    Bus.publish(IngressEvent.SessionResolved, {
+    Bus.publish(Ingress.Events.SessionResolved, {
       traceId: traceContext.traceId,
       sessionId: session.id,
       isNew,

@@ -528,7 +528,7 @@ describe("McpClient connection cleanup", () => {
         readonly context?: Record<string, unknown>;
       };
       if (
-        event.name === Operational.Error.name &&
+        event.name === Operational.Events.Error.name &&
         errorPayload.component === "agent.mcp" &&
         errorPayload.context?.serverName === serverName
       ) {
@@ -579,7 +579,7 @@ describe("McpClient connection cleanup", () => {
         readonly context?: Record<string, unknown>;
       };
       if (
-        event.name === Operational.Error.name &&
+        event.name === Operational.Events.Error.name &&
         errorPayload.component === "agent.mcp" &&
         errorPayload.context?.serverName === serverName
       ) {
@@ -630,7 +630,7 @@ describe("McpClient connection cleanup", () => {
         readonly context?: Record<string, unknown>;
       };
       if (
-        event.name === Operational.Error.name &&
+        event.name === Operational.Events.Error.name &&
         errorPayload.component === "agent.mcp" &&
         errorPayload.context?.serverName === serverName
       ) {

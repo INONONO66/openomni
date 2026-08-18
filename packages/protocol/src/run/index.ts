@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Events as EventDescriptors } from "../event/agent-execution.js";
 
 export namespace Run {
   export const Outcome = z.discriminatedUnion("type", [
@@ -29,4 +30,10 @@ export namespace Run {
       .optional(),
   });
   export type RetryPolicy = z.infer<typeof RetryPolicy>;
+
+  /**
+   * #499 observation descriptors — loop-run events published via Bus. The
+   * persisted event names stay the historical `agent.*` strings (frozen).
+   */
+  export const Events = EventDescriptors;
 }

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import {
   Communication,
   type Ingress,
-  LedgerAppend,
+  Ledger as LedgerTypes,
   PolicyDecision,
   Wait,
   WorkItem,
@@ -1020,7 +1020,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
           const first = facts[0]
             ? (JSON.parse(facts[0].data) as Record<string, unknown>)
             : undefined;
-          const decided = first === undefined ? undefined : LedgerAppend.RouteDecided.parse(first);
+          const decided = first === undefined ? undefined : LedgerTypes.RouteDecided.parse(first);
           observed.push({
             factTypes: facts.map((fact) => fact.type),
             ...(decided === undefined ? {} : { parsedOutcome: decided.outcome }),
@@ -1049,7 +1049,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     // The writer and the protocol stream registry agree on the vocabulary.
     // Widened to string[]: the DB rows carry plain strings, and membership
     // in the registry's literal vocabulary is exactly what's being pinned.
-    const routeVocabulary: readonly string[] = LedgerAppend.StreamRegistry.route.factTypes;
+    const routeVocabulary: readonly string[] = LedgerTypes.StreamRegistry.route.factTypes;
     for (const fact of facts) {
       expect(routeVocabulary).toContain(fact.type);
     }
@@ -1079,7 +1079,7 @@ describe("p2 ledger baseline — routing decision-class facts (C3)", () => {
     expect((thrown as IngressRoutingError).code).toBe("route_blocked");
     const facts = factsOfStream(routeStreamOf("inbound-route-blocked-1"));
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
-    const decided = LedgerAppend.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    const decided = LedgerTypes.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
     expect(decided.outcome).toBe("block");
     expect(decided.inboundId).toBe("inbound-route-blocked-1");
   });
@@ -1327,7 +1327,7 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
     expect(observed).toEqual([{ order: ["handler"], factTypes: ["command.authorized"] }]);
     const facts = factsOfStream(`command:${result.dispatchId}`);
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "command.authorized"]]);
-    const authorized = LedgerAppend.CommandAuthorized.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    const authorized = LedgerTypes.CommandAuthorized.parse(JSON.parse(facts[0]?.data ?? "{}"));
     expect(authorized).toEqual({
       verdict: "allow",
       // The dispatch point composes registered policies into one decision;
@@ -1339,7 +1339,7 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
       targetKind: "system",
     });
     expect(headOfStream(`command:${result.dispatchId}`)).toBe(1);
-    const commandVocabulary: readonly string[] = LedgerAppend.StreamRegistry.command.factTypes;
+    const commandVocabulary: readonly string[] = LedgerTypes.StreamRegistry.command.factTypes;
     for (const fact of facts) {
       expect(commandVocabulary).toContain(fact.type);
     }
@@ -1367,7 +1367,7 @@ describe("p2 ledger baseline — dispatch authorization decision-class facts (C3
     expect(handlerCalls).toBe(0);
     const facts = factsOfStream(`command:${result.dispatchId}`);
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "command.denied"]]);
-    const denied = LedgerAppend.CommandDenied.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    const denied = LedgerTypes.CommandDenied.parse(JSON.parse(facts[0]?.data ?? "{}"));
     expect(denied).toEqual({
       verdict: "deny",
       policyId: "agent.policy.composed",
@@ -1952,7 +1952,7 @@ describe("p2 ledger baseline — effect decision-class facts (intent/outcome)", 
       [2, "effect.confirmed"],
     ]);
     // The writer and the protocol stream registry agree on the vocabulary.
-    const effectVocabulary: readonly string[] = LedgerAppend.StreamRegistry.effect.factTypes;
+    const effectVocabulary: readonly string[] = LedgerTypes.StreamRegistry.effect.factTypes;
     for (const fact of factsOfStream("effect:eff-happy")) {
       expect(effectVocabulary).toContain(fact.type);
     }
@@ -2036,7 +2036,7 @@ describe("p2 ledger baseline — telemetry and Bus.publish cannot authorize", ()
     expect(expectExecuted(result).result.output).toBe("routed");
     const facts = factsOfStream(routeStreamOf("inbound-telemetry-forge"));
     expect(facts.map((fact) => [fact.seq, fact.type])).toEqual([[1, "route.decided"]]);
-    const decided = LedgerAppend.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
+    const decided = LedgerTypes.RouteDecided.parse(JSON.parse(facts[0]?.data ?? "{}"));
     expect(decided.outcome).toBe("route");
     // The recorded fact is the fresh decision, not the forged payload.
     expect(JSON.parse(facts[0]?.data ?? "{}")).not.toMatchObject({
@@ -2206,7 +2206,7 @@ describe("p2 ledger baseline — exact producer manifest", () => {
     const manifestClasses: string[] = LEDGER_PRODUCER_MANIFEST.streams.map(
       (entry) => entry.streamClass,
     );
-    expect(manifestClasses.sort()).toEqual(Object.keys(LedgerAppend.StreamRegistry).sort());
+    expect(manifestClasses.sort()).toEqual(Object.keys(LedgerTypes.StreamRegistry).sort());
     const producers = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.producer);
     expect(new Set(producers).size).toBe(producers.length);
   });

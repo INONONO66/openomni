@@ -1,7 +1,7 @@
 import {
   Operational,
   WorkerDeliveryError,
-  WorkerDriver,
+  Worker,
   type Execution,
   type WorkerBootstrap,
 } from "@openomni/protocol";
@@ -89,7 +89,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     ) {
       // Not silent (#audit L7): a clamped capacity changes throughput physics;
       // the operator finds out from the ledger, not from a surprise ceiling.
-      ports.events.publish(Operational.Warn, {
+      ports.events.publish(Operational.Events.Warn, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "coordinator.worker-manager",
@@ -179,7 +179,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
           error: "cancelled before worker delivery",
         };
       }
-      this.ports.events.publish(WorkerDriver.RunDelivered, {
+      this.ports.events.publish(Worker.Events.RunDelivered, {
         traceId: activeRun.traceId,
         time: Date.now(),
         workerId: slot.id,
@@ -227,7 +227,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     outcome: "completed" | "interrupted" | "error" | "cancelled",
     deliveredAt: number,
   ): void {
-    this.ports.events.publish(WorkerDriver.RunSettled, {
+    this.ports.events.publish(Worker.Events.RunSettled, {
       traceId,
       time: Date.now(),
       workerId,
@@ -467,7 +467,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     if (this.waiters.length >= this.maxQueuedDeliveries) {
       // The saturation belongs to the delivery that hit it — the same trace
       // RunDelivered/RunSettled already carry (D11).
-      this.ports.events.publish(WorkerDriver.QueueSaturated, {
+      this.ports.events.publish(Worker.Events.QueueSaturated, {
         traceId,
         time: Date.now(),
         queued: this.waiters.length,
@@ -562,7 +562,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
         slot.reserved = false;
         this.releaseOneWaiter();
         // State recovery stays, but the failure is ledgered, not swallowed.
-        this.ports.events.publish(Operational.Warn, {
+        this.ports.events.publish(Operational.Events.Warn, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "coordinator.worker-manager",

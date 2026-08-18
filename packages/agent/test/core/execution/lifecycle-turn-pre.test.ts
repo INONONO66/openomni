@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { testProviderModel } from "../../helpers/provider-model";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
-import { AgentExecution, type Policy, type Tool } from "@openomni/protocol";
+import { Run, type Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -19,8 +19,8 @@ function collectBudgetNames(): { readonly names: string[]; readonly stop: () => 
   const names: string[] = [];
   const stop = Bus.observe((event) => {
     if (
-      event.name === AgentExecution.BudgetReassurance.name ||
-      event.name === AgentExecution.BudgetWarning.name
+      event.name === Run.Events.BudgetReassurance.name ||
+      event.name === Run.Events.BudgetWarning.name
     ) {
       names.push(event.name);
     }
@@ -89,7 +89,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     budget.stop();
 
     expect(result.type).toBe("ready");
-    expect(budget.names).toEqual([AgentExecution.BudgetReassurance.name]);
+    expect(budget.names).toEqual([Run.Events.BudgetReassurance.name]);
   });
 
   it("buildTurn publishes a budget warning when the verdict carries that reason code", async () => {
@@ -121,7 +121,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     budget.stop();
 
     expect(result.type).toBe("ready");
-    expect(budget.names).toEqual([AgentExecution.BudgetWarning.name]);
+    expect(budget.names).toEqual([Run.Events.BudgetWarning.name]);
   });
 
   it("buildTurn publishes no budget event for an unrelated inject message", async () => {

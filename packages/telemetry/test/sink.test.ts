@@ -15,7 +15,7 @@ describe("telemetry sinks", () => {
     const right = collector();
     const log = scope(TRACE, tee([left, right]));
 
-    log.emit(Operational.Info, { component: "test", msg: "both" });
+    log.emit(Operational.Events.Info, { component: "test", msg: "both" });
 
     expect(left.events).toHaveLength(1);
     expect(right.events).toHaveLength(1);
@@ -39,9 +39,11 @@ describe("telemetry sinks", () => {
       tee([hostile, survivor], { onSinkError: (_error, eventName) => errors.push({ eventName }) }),
     );
 
-    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
+    expect(() =>
+      log.emit(Operational.Events.Info, { component: "test", msg: "survive" }),
+    ).not.toThrow();
     expect(survivor.events).toHaveLength(1);
-    expect(errors).toEqual([{ eventName: Operational.Info.name }]);
+    expect(errors).toEqual([{ eventName: Operational.Events.Info.name }]);
   });
 
   /**
@@ -51,11 +53,11 @@ describe("telemetry sinks", () => {
    */
   test("noopSink discards without throwing", () => {
     const sink = noopSink();
-    expect(() => sink.publish(Operational.Info, {} as never)).not.toThrow();
+    expect(() => sink.publish(Operational.Events.Info, {} as never)).not.toThrow();
 
     const errors: string[] = [];
     const log = scope(TRACE, sink, { onEmitError: (_error, name) => errors.push(name) });
-    log.emit(Operational.Info, { component: "test", msg: "gone" });
+    log.emit(Operational.Events.Info, { component: "test", msg: "gone" });
     expect(errors).toEqual([]);
   });
 
@@ -79,7 +81,9 @@ describe("telemetry sinks", () => {
       }),
     );
 
-    expect(() => log.emit(Operational.Info, { component: "test", msg: "survive" })).not.toThrow();
+    expect(() =>
+      log.emit(Operational.Events.Info, { component: "test", msg: "survive" }),
+    ).not.toThrow();
     expect(survivor.events).toHaveLength(1);
   });
 
@@ -97,7 +101,9 @@ describe("telemetry sinks", () => {
       ]),
     );
 
-    expect(() => log.emit(Operational.Info, { component: "test", msg: "default" })).not.toThrow();
+    expect(() =>
+      log.emit(Operational.Events.Info, { component: "test", msg: "default" }),
+    ).not.toThrow();
     expect(survivor.events).toHaveLength(1);
   });
 
@@ -105,11 +111,11 @@ describe("telemetry sinks", () => {
     const sink = collector();
     const log = scope(TRACE, sink);
 
-    log.emit(Operational.Info, { component: "a", msg: "one" });
-    log.emit(Operational.Warn, { component: "b", msg: "two" });
+    log.emit(Operational.Events.Info, { component: "a", msg: "one" });
+    log.emit(Operational.Events.Warn, { component: "b", msg: "two" });
 
-    expect(sink.named(Operational.Info.name)).toHaveLength(1);
-    expect(sink.named(Operational.Warn.name)).toHaveLength(1);
+    expect(sink.named(Operational.Events.Info.name)).toHaveLength(1);
+    expect(sink.named(Operational.Events.Warn.name)).toHaveLength(1);
 
     sink.reset();
     expect(sink.events).toHaveLength(0);

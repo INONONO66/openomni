@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { AgentExecution } from "../src/event/agent-execution.js";
+import { Run } from "../src/run/index.js";
 
-describe("AgentExecution BusEvents", () => {
+describe("Run.Events BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
 
   test("TurnStart parses", () => {
-    expect(() => AgentExecution.TurnStart.schema.parse({ ...base, turnIndex: 0 })).not.toThrow();
+    expect(() => Run.Events.TurnStart.schema.parse({ ...base, turnIndex: 0 })).not.toThrow();
   });
 
   test("TurnComplete parses", () => {
     expect(() =>
-      AgentExecution.TurnComplete.schema.parse({
+      Run.Events.TurnComplete.schema.parse({
         ...base,
         turnIndex: 0,
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
@@ -20,7 +20,7 @@ describe("AgentExecution BusEvents", () => {
 
   test("TurnComplete requires total usage", () => {
     expect(() =>
-      AgentExecution.TurnComplete.schema.parse({
+      Run.Events.TurnComplete.schema.parse({
         ...base,
         turnIndex: 0,
         usage: { inputTokens: 100, outputTokens: 50 },
@@ -28,14 +28,14 @@ describe("AgentExecution BusEvents", () => {
     ).toThrow();
   });
 
-  test("tool execution events are not duplicated under AgentExecution", () => {
-    expect("ToolInvoked" in AgentExecution).toBe(false);
-    expect("ToolBlocked" in AgentExecution).toBe(false);
+  test("tool execution events are not duplicated under Run.Events", () => {
+    expect("ToolInvoked" in Run.Events).toBe(false);
+    expect("ToolBlocked" in Run.Events).toBe(false);
   });
 
   test("BudgetWarning parses", () => {
     expect(() =>
-      AgentExecution.BudgetWarning.schema.parse({
+      Run.Events.BudgetWarning.schema.parse({
         ...base,
         remaining: "5 turns remaining",
         threshold: 0.8,
@@ -45,7 +45,7 @@ describe("AgentExecution BusEvents", () => {
 
   test("BudgetReassurance parses", () => {
     expect(() =>
-      AgentExecution.BudgetReassurance.schema.parse({
+      Run.Events.BudgetReassurance.schema.parse({
         ...base,
         remaining: "15 turns remaining",
         threshold: 0.6,
@@ -55,7 +55,7 @@ describe("AgentExecution BusEvents", () => {
 
   test("Compaction parses", () => {
     expect(() =>
-      AgentExecution.Compaction.schema.parse({
+      Run.Events.Compaction.schema.parse({
         ...base,
         messagesBefore: 20,
         messagesAfter: 5,
@@ -65,7 +65,7 @@ describe("AgentExecution BusEvents", () => {
 
   test("CompactionStarted parses, with and without measurement", () => {
     expect(() =>
-      AgentExecution.CompactionStarted.schema.parse({
+      Run.Events.CompactionStarted.schema.parse({
         ...base,
         messagesBefore: 20,
         contextTokens: 180_000,
@@ -74,7 +74,7 @@ describe("AgentExecution BusEvents", () => {
       }),
     ).not.toThrow();
     expect(() =>
-      AgentExecution.CompactionStarted.schema.parse({
+      Run.Events.CompactionStarted.schema.parse({
         ...base,
         messagesBefore: 20,
         trigger: "yield",
@@ -85,7 +85,7 @@ describe("AgentExecution BusEvents", () => {
 
   test("CompactionStarted rejects an unknown trigger", () => {
     expect(() =>
-      AgentExecution.CompactionStarted.schema.parse({
+      Run.Events.CompactionStarted.schema.parse({
         ...base,
         messagesBefore: 20,
         trigger: "manual",
@@ -103,7 +103,7 @@ describe("AgentExecution BusEvents", () => {
       "failed",
     ] as const) {
       expect(() =>
-        AgentExecution.CompactionCompleted.schema.parse({
+        Run.Events.CompactionCompleted.schema.parse({
           ...base,
           outcome,
           messagesBefore: 20,
@@ -114,7 +114,7 @@ describe("AgentExecution BusEvents", () => {
       ).not.toThrow();
     }
     expect(() =>
-      AgentExecution.CompactionCompleted.schema.parse({
+      Run.Events.CompactionCompleted.schema.parse({
         ...base,
         outcome: "partial",
         messagesBefore: 20,
@@ -137,12 +137,12 @@ describe("AgentExecution BusEvents", () => {
     };
     delete payload[field];
 
-    expect(() => AgentExecution.ErrorRetry.schema.parse(payload)).toThrow();
+    expect(() => Run.Events.ErrorRetry.schema.parse(payload)).toThrow();
   });
 
   test("ErrorRetry parses", () => {
     expect(() =>
-      AgentExecution.ErrorRetry.schema.parse({
+      Run.Events.ErrorRetry.schema.parse({
         ...base,
         attempt: 2,
         maxAttempts: 3,

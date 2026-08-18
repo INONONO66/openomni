@@ -86,7 +86,7 @@ type CommandVerdictFact = Readonly<{
 // Events.Authorized/Denied publishes follow the append. Fact data fields
 // come from the parsed Command and the policy decision — that parse is the
 // one enforcement layer; the payload vocabulary is
-// LedgerAppend.CommandAuthorized/CommandDenied (@openomni/protocol).
+// Ledger.CommandAuthorized/CommandDenied (@openomni/protocol).
 function appendCommandVerdict(command: Command.Request, fact: CommandVerdictFact): void {
   const ledger = Storage.get().ledger;
   if (!ledger) {

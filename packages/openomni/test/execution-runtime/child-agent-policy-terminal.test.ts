@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentResult } from "@openomni/agent";
-import { PolicyDecision, PolicyEvent, type Model } from "@openomni/protocol";
+import { PolicyDecision, Policy, type Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import {
   ChildAgentEvents,
@@ -44,7 +44,7 @@ describe("child agent delegation terminal policy", () => {
   test("dispatches one post decision with the completed worker result", async () => {
     const contexts: Array<Record<string, unknown>> = [];
     const composed: Array<{ pointId?: string; pointVersion?: number }> = [];
-    const unsubscribe = Bus.subscribe(PolicyEvent.DecisionComposed, (event) =>
+    const unsubscribe = Bus.subscribe(Policy.Events.DecisionComposed, (event) =>
       composed.push(event),
     );
     const runtime = createChildAgentRuntime({

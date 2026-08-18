@@ -68,7 +68,7 @@ describe("WebSocketHandler authentication", () => {
   it("keeps query token fallback and publishes a deprecation warning", () => {
     const warnings: string[] = [];
     const collector: PublishPort = (event, data) => {
-      if (event.name === Operational.Warn.name) {
+      if (event.name === Operational.Events.Warn.name) {
         warnings.push((data as { msg: string }).msg);
       }
     };

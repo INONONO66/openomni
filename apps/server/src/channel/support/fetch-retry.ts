@@ -44,7 +44,7 @@ export async function fetchWithRetry(
       }
     }
 
-    options.publish?.(Operational.Warn, {
+    options.publish?.(Operational.Events.Warn, {
       traceId: options.traceId,
       time: Date.now(),
       component: "server",

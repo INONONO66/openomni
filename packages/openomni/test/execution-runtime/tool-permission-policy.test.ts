@@ -27,7 +27,7 @@ describe("createToolPermissionPolicy", () => {
    */
   it("reports an evaluation failure under the run's trace", async () => {
     const seen: Array<{ traceId: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Debug, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Debug, (event) => {
       seen.push(event as unknown as { traceId: string });
     });
     const hostileInput = new Proxy<Record<string, unknown>>(

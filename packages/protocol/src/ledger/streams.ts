@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { CommandSchemas } from "../command/schemas.js";
-import { IngressEvent, type RoutingDecisionPayload } from "../event/ingress.js";
+import { Events as IngressEvents, type RoutingDecisionPayload } from "../event/ingress.js";
 
 /**
  * Owner-stream registry — the ONE place the #510 decision-class stream
@@ -106,7 +106,7 @@ export const StreamRegistry = {
  * `ingress.routing.decision` Bus event schema; the observe-only Bus publish
  * is a projection of this fact.
  */
-export const RouteDecided: z.ZodType<RoutingDecisionPayload> = IngressEvent.RoutingDecision.schema;
+export const RouteDecided: z.ZodType<RoutingDecisionPayload> = IngressEvents.RoutingDecision.schema;
 export type RouteDecided = RoutingDecisionPayload;
 
 /**

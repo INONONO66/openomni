@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { AgentExecution, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { Run, type Message, type Sink, type Tool } from "@openomni/protocol";
 import type { AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
@@ -396,7 +396,7 @@ it("does not retry missing toolExecutor configuration errors", async () => {
   // same message three backoffs later.
   const retries: unknown[] = [];
   const stop = Bus.observe((event, payload) => {
-    if (event.name === AgentExecution.ErrorRetry.name) retries.push(payload);
+    if (event.name === Run.Events.ErrorRetry.name) retries.push(payload);
   });
 
   let configurationError: unknown;

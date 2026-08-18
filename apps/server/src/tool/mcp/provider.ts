@@ -34,7 +34,7 @@ export class McpToolProvider implements ToolProvider {
       this.connected.add(config.name);
       this.cachedTools = null;
     } catch (err) {
-      Bus.publish(Operational.Warn, {
+      Bus.publish(Operational.Events.Warn, {
         traceId: this.options.traceId,
         time: Date.now(),
         component: "server",

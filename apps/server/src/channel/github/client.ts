@@ -18,7 +18,7 @@ export class GitHubClient {
       // Loud absence (#606 audit): a deployment with a webhook secret but no
       // token would receive events, spend a full run, then silently never
       // reply. The run's work must not vanish without a record.
-      this.publish(Operational.Warn, {
+      this.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -53,7 +53,7 @@ export class GitHubClient {
       throw new Error(`GitHub API failed (${response.status}): ${text}`);
     }
 
-    this.publish(Operational.Debug, {
+    this.publish(Operational.Events.Debug, {
       traceId,
       time: Date.now(),
       component: "server",

@@ -64,12 +64,12 @@ function capturingSink(): PartsCapture {
 
 /**
  * Run-status telemetry (busy/retry/idle) goes to the injected events port as
- * an `Operational.Info` named "sink.snapshot" (the `Sink.onSnapshot` hop was
+ * an `Operational.Events.Info` named "sink.snapshot" (the `Sink.onSnapshot` hop was
  * removed — no consumer).
  */
 function processorInfo(events: ReturnType<typeof collector>): OperationalInfoPayload[] {
   return events
-    .named(Operational.Info.name)
+    .named(Operational.Events.Info.name)
     .map((event) => event as OperationalInfoPayload)
     .filter((data) => data.component === "llm.processor");
 }
@@ -555,7 +555,7 @@ describe("Processor", () => {
 
     test("warns when an inferred ratelimit reset above the cap demotes to backoff", async () => {
       // #audit: Decision.retryAfterOverCap was produced and unit-tested but
-      // consumed by nobody — the demotion now surfaces as Operational.Warn.
+      // consumed by nobody — the demotion now surfaces as Operational.Events.Warn.
       const processor = createProcessor({
         createStream: async () => ({
           fullStream: (async function* () {
@@ -578,7 +578,7 @@ describe("Processor", () => {
       // not wait the multi-second backoff out.
       const warns = () =>
         events
-          .named(Operational.Warn.name)
+          .named(Operational.Events.Warn.name)
           .map((event) => event as OperationalInfoPayload)
           .filter((data) => data.component === "llm.retry");
       const deadline = Date.now() + 2000;
@@ -713,8 +713,12 @@ describe("Processor", () => {
       });
 
       await processor.process({ system: "" });
-      retries.push(...events.named(LlmCall.RetryDecided.name).map((event) => event as never));
-      rateLimits.push(...events.named(LlmCall.RateLimited.name).map((event) => event as never));
+      retries.push(
+        ...events.named(LlmCall.Events.RetryDecided.name).map((event) => event as never),
+      );
+      rateLimits.push(
+        ...events.named(LlmCall.Events.RateLimited.name).map((event) => event as never),
+      );
 
       expect(retries).toHaveLength(1);
       expect(retries[0]).toMatchObject({
@@ -770,7 +774,9 @@ describe("Processor", () => {
       });
 
       await processor.process({ system: "" });
-      rateLimits.push(...events.named(LlmCall.RateLimited.name).map((event) => event as never));
+      rateLimits.push(
+        ...events.named(LlmCall.Events.RateLimited.name).map((event) => event as never),
+      );
 
       expect(attemptCount).toBe(2);
       expect(rateLimits).toHaveLength(1);
@@ -875,7 +881,7 @@ describe("Processor", () => {
     });
 
     test("usageTotals accumulates billed usage across retried attempts", async () => {
-      // Regression (#audit M3): LlmCall.Completed read message.tokens — the
+      // Regression (#audit M3): LlmCall.Events.Completed read message.tokens — the
       // final attempt's fold — so a retried attempt's billed tokens vanished
       // from telemetry. usageTotals must carry every attempt.
       let attemptCount = 0;

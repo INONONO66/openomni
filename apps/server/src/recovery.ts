@@ -19,7 +19,7 @@ export interface RecoveryItem {
 export async function recoverInterruptedMessages(traceId: string): Promise<RecoveryItem[]> {
   const retryQueue: RecoveryItem[] = [];
 
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId,
     time: Date.now(),
     component: "server",
@@ -40,7 +40,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
     const interrupted = [...processing, ...received];
 
     if (interrupted.length === 0) {
-      Bus.publish(Operational.Info, {
+      Bus.publish(Operational.Events.Info, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -49,7 +49,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
       return retryQueue;
     }
 
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -74,7 +74,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
         if (hasAssistantAfter) {
           Session.updateMessageStatus(messageId, "completed");
           recovered++;
-          Bus.publish(Operational.Info, {
+          Bus.publish(Operational.Events.Info, {
             traceId,
             time: Date.now(),
             component: "server",
@@ -86,7 +86,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
 
         const session = Session.get(sessionId);
         if (!session) {
-          Bus.publish(Operational.Warn, {
+          Bus.publish(Operational.Events.Warn, {
             traceId,
             time: Date.now(),
             component: "server",
@@ -101,7 +101,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
         const textPart = parts.find((p): p is Message.TextPart => p.type === "text");
 
         if (!textPart?.text) {
-          Bus.publish(Operational.Warn, {
+          Bus.publish(Operational.Events.Warn, {
             traceId,
             time: Date.now(),
             component: "server",
@@ -124,7 +124,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
           text: textPart.text,
           resumeExisting: true,
         });
-        Bus.publish(Operational.Info, {
+        Bus.publish(Operational.Events.Info, {
           traceId,
           time: Date.now(),
           component: "server",
@@ -132,7 +132,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
           context: { messageId },
         });
       } catch (err) {
-        Bus.publish(Operational.Error, {
+        Bus.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
           component: "server",
@@ -142,7 +142,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
       }
     }
 
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -150,7 +150,7 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
       context: { recovered, queued: retryQueue.length, total: processing.length },
     });
   } catch (err) {
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId,
       time: Date.now(),
       component: "server",

@@ -1,5 +1,6 @@
 import { Operational } from "@openomni/protocol";
-import { Bus, BusEvent } from "@openomni/telemetry";
+import { BusEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { toRecord } from "./record-fields.js";
 import { writeOperationalToStdout } from "./operational-logging.js";
 import { parsePayload } from "./payload.js";
@@ -14,7 +15,7 @@ const SELF_COMPONENT = "bus-persistence";
 /**
  * Telemetry is lossy-tolerant by contract, but a drop must be LOUD, never a
  * console-only whisper: every dropped row increments this counter (surfaced
- * via BusPersistence.stats) and publishes one Operational.Warn — which is
+ * via BusPersistence.stats) and publishes one Operational.Events.Warn — which is
  * itself a persisted bus event, so the audit trail records its own gap.
  */
 let droppedEventCount = 0;
@@ -28,7 +29,7 @@ export function busPersistenceStats(): { readonly droppedEventCount: number } {
  * another drop-warning (a persistent write failure would loop forever).
  */
 function isSelfWarn(event: Bus.PublishedDescriptor, payload: unknown): boolean {
-  if (event.name !== Operational.Warn.name) return false;
+  if (event.name !== Operational.Events.Warn.name) return false;
   return toRecord(payload)?.component === SELF_COMPONENT;
 }
 
@@ -51,7 +52,7 @@ function reportDroppedEvent(
   // session — FK-failing the warn's own insert and degrading the "audit
   // trail records its own gap" guarantee to a console whisper. Sessionless,
   // the warn always persists.
-  Bus.publish(Operational.Warn, {
+  Bus.publish(Operational.Events.Warn, {
     traceId: typeof traceId === "string" ? traceId : "untraced",
     time: Date.now(),
     component: SELF_COMPONENT,

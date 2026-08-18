@@ -116,7 +116,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     idleTimeoutMs: Number(process.env.OPENOMNI_RESIDENT_IDLE_TIMEOUT_MS ?? 30_000),
   });
 
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId: bootTraceId,
     time: Date.now(),
     component: "server",
@@ -213,14 +213,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
     : undefined;
 
   if (model) {
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId: bootTraceId,
       time: Date.now(),
       component: "server",
       msg: `server using model: ${model.providerID}/${model.id}`,
     });
   } else {
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId: bootTraceId,
       time: Date.now(),
       component: "server",
@@ -243,7 +243,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   });
 
   if (hasAnyChannel && !routingHandler) {
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId: bootTraceId,
       time: Date.now(),
       component: "server",
@@ -296,7 +296,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   });
 
   if (channels.length === 0) {
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId: bootTraceId,
       time: Date.now(),
       component: "server",
@@ -304,13 +304,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
     });
   }
 
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId: bootTraceId,
     time: Date.now(),
     component: "server",
     msg: `server listening on http://${config.server.host}:${server.port}`,
   });
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId: bootTraceId,
     time: Date.now(),
     component: "server",
@@ -323,7 +323,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     },
   });
 
-  Bus.publish(Operational.BootstrapCompleted, {
+  Bus.publish(Operational.Events.BootstrapCompleted, {
     traceId,
     mode,
     channelCount: channels.length,

@@ -271,7 +271,7 @@ describe("run() streamText arguments", () => {
     }
 
     const errors = collected
-      .named(Operational.Error.name)
+      .named(Operational.Events.Error.name)
       .map((event) => event as { component?: string; error?: string });
     const fromStream = errors.filter((event) => event.component === "llm.stream");
     expect(fromStream).toHaveLength(1);

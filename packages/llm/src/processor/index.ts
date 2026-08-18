@@ -237,7 +237,7 @@ export namespace Processor {
                 if (!decision.retry && decision.reason !== "non_retryable") {
                   // A retryable error declined for another reason (e.g. the
                   // server-directed wait exceeded the cap) must say why.
-                  events.publish(Operational.Error, {
+                  events.publish(Operational.Events.Error, {
                     traceId: trace.traceId,
                     time: Date.now(),
                     sessionId: trace.sessionId,
@@ -251,7 +251,7 @@ export namespace Processor {
                 } else if (decision.retry) {
                   // Cap exhaustion is a decline too: the terminal error alone
                   // does not say the retry budget ran out (#606 audit).
-                  events.publish(Operational.Error, {
+                  events.publish(Operational.Events.Error, {
                     traceId: trace.traceId,
                     time: Date.now(),
                     sessionId: trace.sessionId,
@@ -279,7 +279,7 @@ export namespace Processor {
                 // An inferred ratelimit reset exceeded the header-delay cap
                 // and was demoted to backoff — say so instead of silently
                 // shortening the server's ask (#audit: flag had no consumer).
-                events.publish(Operational.Warn, {
+                events.publish(Operational.Events.Warn, {
                   traceId: trace.traceId,
                   time: Date.now(),
                   sessionId: trace.sessionId,
@@ -296,7 +296,7 @@ export namespace Processor {
               finishAttempt("error");
 
               const delayMs = decision.delayMs;
-              events.publish(LlmCall.RetryDecided, {
+              events.publish(LlmCall.Events.RetryDecided, {
                 traceId: trace.traceId,
                 sessionId: trace.sessionId,
                 ...(trace.runId !== undefined && { runId: trace.runId }),
@@ -308,7 +308,7 @@ export namespace Processor {
               });
 
               if (publishesRateLimited(retryReason)) {
-                events.publish(LlmCall.RateLimited, {
+                events.publish(LlmCall.Events.RateLimited, {
                   traceId: trace.traceId,
                   sessionId: trace.sessionId,
                   ...(trace.runId !== undefined && { runId: trace.runId }),
@@ -354,7 +354,7 @@ export namespace Processor {
     data?: Record<string, unknown>,
   ): void {
     if (!sessionID) return;
-    events.publish(Operational.Info, {
+    events.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       sessionId: sessionID,

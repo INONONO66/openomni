@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { AgentExecution } from "@openomni/protocol";
+import { Run } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createCompactionPolicy } from "../../../src/compaction";
@@ -44,7 +44,7 @@ describe("compaction through the lifecycle", () => {
 
   it("files the compaction record under the run's trace, not a minted one", async () => {
     const seen: Array<{ traceId: string }> = [];
-    const unsubscribe = Bus.subscribe(AgentExecution.CompactionStarted, (event) => {
+    const unsubscribe = Bus.subscribe(Run.Events.CompactionStarted, (event) => {
       seen.push(event as unknown as { traceId: string });
     });
     const engine = PolicyEngine.create();

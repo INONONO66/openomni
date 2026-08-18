@@ -6,11 +6,14 @@ import * as Streams from "./streams.js";
  * `Ledger.append(event, expectedHead)` CAS input/outcome, the FULL/NORMAL
  * durability vocabulary, and the boot tail-verification chain-break fact.
  *
- * Folder/namespace is `ledger-append` (not `Ledger`) on purpose: the future
- * #499 protocol convergence owns the `Ledger` namespace; this module carries
- * only the append-boundary types so the rename lands without a clash.
+ * #499 convergence: this namespace is THE `Ledger` authority vocabulary —
+ * append-boundary types and the decision-fact stream registry. The runtime
+ * verbs (`Ledger.append`, `Ledger.adoptStream`, ...) live in
+ * `@openomni/session` ledger-core under the same name. Observation
+ * descriptors are NOT part of this namespace — they are `Noun.Events`
+ * descriptors published via Bus.
  */
-export namespace LedgerAppend {
+export namespace Ledger {
   export const Durability = Schema.Durability;
   export type Durability = Schema.Durability;
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Events as EventDescriptors } from "../event/tool.js";
 import type { TraceContext } from "../trace/index.js";
 
 export namespace Tool {
@@ -147,4 +148,7 @@ export namespace Tool {
     prompt: z.string().optional(),
   });
   export type Spec = z.infer<typeof Spec>;
+
+  /** #499 observation descriptors — published via Bus; event name strings frozen. */
+  export const Events = EventDescriptors;
 }

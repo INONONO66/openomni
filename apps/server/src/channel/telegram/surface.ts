@@ -53,7 +53,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const botId = String(me.id);
     const botUsername = me.username ?? "";
     this.botUsername = botUsername;
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -76,7 +76,7 @@ export class TelegramAdapter implements Adapter.Surface {
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();
           this.handleMessage(message, messageTraceId).catch((err) => {
-            this.publish(Operational.Error, {
+            this.publish(Operational.Events.Error, {
               traceId: messageTraceId,
               time: Date.now(),
               component: "server",
@@ -94,7 +94,7 @@ export class TelegramAdapter implements Adapter.Surface {
 
   stop(traceId: string): void {
     this.poller?.stop();
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -150,7 +150,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(message, traceId);
     if (!inbound) return;
 
-    this.publish(Operational.Debug, {
+    this.publish(Operational.Events.Debug, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -167,7 +167,7 @@ export class TelegramAdapter implements Adapter.Surface {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound, traceId);
     } catch (err) {
-      this.publish(Operational.Error, {
+      this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",

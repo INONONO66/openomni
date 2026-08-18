@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyEvent } from "../src/event/policy.js";
-import type { Policy } from "../src/policy/index.js";
+import { Policy } from "../src/policy/index.js";
 
-describe("PolicyEvent BusEvents", () => {
+describe("Policy.Events BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
   const actor = { userId: "user-1", role: "admin" };
 
@@ -20,7 +19,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("ActionRequested parses with required fields", () => {
     expectParseOk(() =>
-      PolicyEvent.ActionRequested.schema.parse({
+      Policy.Events.ActionRequested.schema.parse({
         ...base,
         actionId: "action-1",
         actor,
@@ -32,7 +31,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("ActionRequested parses with optional context", () => {
     expectParseOk(() =>
-      PolicyEvent.ActionRequested.schema.parse({
+      Policy.Events.ActionRequested.schema.parse({
         ...base,
         actionId: "action-1",
         actor,
@@ -45,7 +44,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("Evaluated parses with required fields", () => {
     expectParseOk(() =>
-      PolicyEvent.Evaluated.schema.parse({
+      Policy.Events.Evaluated.schema.parse({
         ...base,
         policyId: "policy-1",
         actor,
@@ -59,7 +58,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("Evaluated parses with beforeSideEffect", () => {
     expectParseOk(() =>
-      PolicyEvent.Evaluated.schema.parse({
+      Policy.Events.Evaluated.schema.parse({
         ...base,
         policyId: "policy-1",
         actor,
@@ -74,7 +73,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("Evaluated parses with policy audit context", () => {
     expectParseOk(() =>
-      PolicyEvent.Evaluated.schema.parse({
+      Policy.Events.Evaluated.schema.parse({
         ...base,
         policyId: "policy-1",
         actor,
@@ -102,7 +101,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("DecisionComposed parses merged decision context", () => {
     expectParseOk(() =>
-      PolicyEvent.DecisionComposed.schema.parse({
+      Policy.Events.DecisionComposed.schema.parse({
         ...base,
         pointId: "tool.native.pre",
         pointVersion: 1,
@@ -119,7 +118,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("ActionBlocked parses", () => {
     expectParseOk(() =>
-      PolicyEvent.ActionBlocked.schema.parse({
+      Policy.Events.ActionBlocked.schema.parse({
         ...base,
         actionId: "action-1",
         actor,
@@ -133,7 +132,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("ActionApproved parses", () => {
     expectParseOk(() =>
-      PolicyEvent.ActionApproved.schema.parse({
+      Policy.Events.ActionApproved.schema.parse({
         ...base,
         actionId: "action-1",
         actor,
@@ -150,7 +149,7 @@ describe("PolicyEvent BusEvents", () => {
 
     for (const verdict of verdicts) {
       expectParseOk(() =>
-        PolicyEvent.ActionBlocked.schema.parse({
+        Policy.Events.ActionBlocked.schema.parse({
           ...base,
           actionId: "action-1",
           actor,
@@ -165,7 +164,7 @@ describe("PolicyEvent BusEvents", () => {
 
   test("Evaluated parses with deny verdict", () => {
     expectParseOk(() =>
-      PolicyEvent.Evaluated.schema.parse({
+      Policy.Events.Evaluated.schema.parse({
         ...base,
         policyId: "policy-deny",
         actor,
@@ -178,7 +177,7 @@ describe("PolicyEvent BusEvents", () => {
   });
 
   test("ActionRequested includes runId when provided", () => {
-    const parsed = PolicyEvent.ActionRequested.schema.parse({
+    const parsed = Policy.Events.ActionRequested.schema.parse({
       ...base,
       runId: "run-123",
       actionId: "action-1",
@@ -191,23 +190,23 @@ describe("PolicyEvent BusEvents", () => {
   });
 
   test("event descriptors have correct names", () => {
-    expect(PolicyEvent.ActionRequested.name).toBe("policy.action.requested");
-    expect(PolicyEvent.Evaluated.name).toBe("policy.evaluated");
-    expect(PolicyEvent.DecisionComposed.name).toBe("policy.decision.composed");
-    expect(PolicyEvent.ActionBlocked.name).toBe("policy.action.blocked");
-    expect(PolicyEvent.ActionApproved.name).toBe("policy.action.approved");
+    expect(Policy.Events.ActionRequested.name).toBe("policy.action.requested");
+    expect(Policy.Events.Evaluated.name).toBe("policy.evaluated");
+    expect(Policy.Events.DecisionComposed.name).toBe("policy.decision.composed");
+    expect(Policy.Events.ActionBlocked.name).toBe("policy.action.blocked");
+    expect(Policy.Events.ActionApproved.name).toBe("policy.action.approved");
   });
 
   test("event descriptors have schemas", () => {
-    expect(PolicyEvent.ActionRequested.schema != null).toBe(true);
-    expect(PolicyEvent.Evaluated.schema != null).toBe(true);
-    expect(PolicyEvent.DecisionComposed.schema != null).toBe(true);
-    expect(PolicyEvent.ActionBlocked.schema != null).toBe(true);
-    expect(PolicyEvent.ActionApproved.schema != null).toBe(true);
+    expect(Policy.Events.ActionRequested.schema != null).toBe(true);
+    expect(Policy.Events.Evaluated.schema != null).toBe(true);
+    expect(Policy.Events.DecisionComposed.schema != null).toBe(true);
+    expect(Policy.Events.ActionBlocked.schema != null).toBe(true);
+    expect(Policy.Events.ActionApproved.schema != null).toBe(true);
   });
 
   test("policy audit events are persistent", () => {
-    expect(PolicyEvent.Evaluated.visibility).not.toBe("ephemeral");
-    expect(PolicyEvent.DecisionComposed.visibility).not.toBe("ephemeral");
+    expect(Policy.Events.Evaluated.visibility).not.toBe("ephemeral");
+    expect(Policy.Events.DecisionComposed.visibility).not.toBe("ephemeral");
   });
 });

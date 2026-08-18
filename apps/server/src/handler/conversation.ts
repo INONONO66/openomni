@@ -137,7 +137,7 @@ async function processMessage(
     return toResponseText(await ingress.ingest(event));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       // D11: the failing ingest belongs to the inbound message's trace.
       traceId: message.traceId,
       time: Date.now(),

@@ -175,7 +175,7 @@ describe("execution helper deny verdicts", () => {
     Bus.reset();
     const diagnostics: unknown[] = [];
     const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name === Operational.Info.name) diagnostics.push(payload);
+      if (event.name === Operational.Events.Info.name) diagnostics.push(payload);
     });
     const engine = PolicyEngine.create();
     engine.register({
@@ -209,7 +209,7 @@ describe("execution helper deny verdicts", () => {
     Bus.reset();
     const diagnostics: unknown[] = [];
     const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name === Operational.Info.name) diagnostics.push(payload);
+      if (event.name === Operational.Events.Info.name) diagnostics.push(payload);
     });
     const engine = PolicyEngine.create();
     engine.register({

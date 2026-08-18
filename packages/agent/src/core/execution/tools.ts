@@ -1,5 +1,5 @@
 import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
-import { Operational, PolicyDecision, Tool, ToolExecution } from "@openomni/protocol";
+import { Operational, PolicyDecision, Tool } from "@openomni/protocol";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
@@ -61,7 +61,7 @@ export function createToolExecutor(
     decision: Policy.PolicyDecision,
     err: unknown,
   ): void {
-    events.publish(Operational.Warn, {
+    events.publish(Operational.Events.Warn, {
       traceId: activeTraceContext.traceId,
       time: Date.now(),
       component: "agent.tool-executor",
@@ -96,7 +96,7 @@ export function createToolExecutor(
     toolName: string,
     reason: string,
   ): void {
-    events.publish(ToolExecution.PermissionDenied, {
+    events.publish(Tool.Events.PermissionDenied, {
       ...eventBase,
       toolCallId: call.id,
       toolName,
@@ -207,7 +207,7 @@ export function createToolExecutor(
     const rewriteInput = effectOf(preDecision, "tool.rewrite_input");
     const effectiveCall = rewriteInput ? { ...call, input: rewriteInput.input } : call;
 
-    // #522 defect 2: ToolExecution.Started/Completed are emitted SOLELY by
+    // #522 defect 2: Tool.Events.Started/Completed are emitted SOLELY by
     // the worker-side executor this wrapper delegates to (packages/openomni
     // execution-runtime/tool/executor.ts) — this layer keeps policy point
     // dispatch, decision recording, and effect application only.

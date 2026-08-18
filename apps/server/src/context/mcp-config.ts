@@ -26,7 +26,7 @@ export namespace McpConfigLoader {
     try {
       parsed = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      Bus.publish(Operational.Warn, {
+      Bus.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -48,7 +48,7 @@ export namespace McpConfigLoader {
         traceId,
       });
     } else {
-      Bus.publish(Operational.Warn, {
+      Bus.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "server",

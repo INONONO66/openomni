@@ -1,4 +1,5 @@
-import { Bus, BusEvent } from "@openomni/telemetry";
+import { BusEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 
 export namespace InjectionQueue {

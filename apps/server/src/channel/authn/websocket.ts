@@ -48,7 +48,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
   const subprotocolAuth = readSubprotocolAuth(state.request);
   const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
   if (provided !== state.token) {
-    state.publish(Operational.Warn, {
+    state.publish(Operational.Events.Warn, {
       traceId: state.traceId,
       time: Date.now(),
       component: "server",
@@ -77,7 +77,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
     });
   }
 
-  state.publish(Operational.Warn, {
+  state.publish(Operational.Events.Warn, {
     traceId: state.traceId,
     time: Date.now(),
     component: "server",

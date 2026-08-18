@@ -135,7 +135,7 @@ export namespace ToolRuntimePolicyMiddleware {
     const riskDecision = allowDecision(
       riskTier >= 2 ? "high-risk tool execution recorded" : "risk tier evaluated",
     );
-    Bus.publish(riskTier >= 2 ? Operational.Warn : Operational.Debug, {
+    Bus.publish(riskTier >= 2 ? Operational.Events.Warn : Operational.Events.Debug, {
       traceId: requirePolicyTraceId(ctx),
       time: Date.now(),
       component: "executor.policy",

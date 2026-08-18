@@ -12,7 +12,6 @@
       "execution",
       "ingress",
       "ipc",
-      "ledger-append",
       "mcp",
       "message",
       "model",

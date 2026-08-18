@@ -102,7 +102,7 @@ const TERMINAL_WORK_ITEM_STATUSES = new Set(["completed", "failed", "cancelled"]
 function createEffectEscalation(): EffectEscalation {
   return async (intent, detail, traceId) => {
     const escalation = await recordEscalationBlocker(intent.workItemHash, intent, detail, traceId);
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId,
       time: Date.now(),
       component: "server",
