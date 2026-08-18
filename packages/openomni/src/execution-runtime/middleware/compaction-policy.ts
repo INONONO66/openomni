@@ -3,9 +3,9 @@ import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@
 import type { BusEvent, Message } from "@openomni/protocol";
 import { z } from "zod";
 
-const MessageSummarizerSchema = z.custom<(messages: Message.WithParts[]) => Promise<string>>(
-  (value) => typeof value === "function",
-);
+const MessageSummarizerSchema = z.custom<
+  (messages: Message.WithParts[], previousAnchor?: string) => Promise<string>
+>((value) => typeof value === "function");
 
 const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown> = z.object({
   contextWindowTokens: z.number().int().positive().optional(),
@@ -13,6 +13,7 @@ const CompactionConfigSchema: z.ZodType<CompactionOptions, z.ZodTypeDef, unknown
   reserveTokens: z.number().nonnegative().optional(),
   reserveRatio: z.number().gte(0).lte(1).optional(),
   protectRecentMessages: z.number().int().nonnegative().optional(),
+  preserveUserMessageChars: z.number().int().positive().optional(),
   onSummarize: MessageSummarizerSchema.optional(),
   elideToolOutputs: z
     .object({

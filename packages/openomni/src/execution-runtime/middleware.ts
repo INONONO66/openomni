@@ -7,6 +7,7 @@ import type { InjectionQueue } from "./injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "./middleware/injection-queue-policy.js";
 import { createIdleNudgePolicy, registerIdleNudge } from "./middleware/idle-nudge-policy.js";
 import { COMPACTION_PRIORITY, registerCompaction } from "./middleware/compaction-policy.js";
+import { anchorSummarizer, type CompletionFn } from "./middleware/anchor-summarizer.js";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
@@ -23,7 +24,17 @@ type WorkerCompactionConfig = {
   readonly reserveTokens?: number;
   readonly reserveRatio?: number;
   readonly protectRecentMessages?: number;
-  readonly onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+  readonly preserveUserMessageChars?: number;
+  readonly onSummarize?: (
+    messages: Message.WithParts[],
+    previousAnchor?: string,
+  ) => Promise<string>;
+  /**
+   * Convenience over `onSummarize`: a bare completion function (host wires
+   * it to the run's model, D7) that this module turns into the canonical
+   * anchored summarizer. `onSummarize` wins when both are set.
+   */
+  readonly summarizeWith?: CompletionFn;
   readonly elideToolOutputs?: { minOutputChars: number; keepHeadChars: number };
 };
 
@@ -88,11 +99,15 @@ const DEFAULT_WORKER_COMPACTION: WorkerCompactionConfig = {
 function buildAgentLifecycleMiddleware(
   compaction: WorkerMiddlewareConfig["compaction"],
 ): PolicyEngineRegistration[] {
+  const { summarizeWith, ...rest } = compaction ?? DEFAULT_WORKER_COMPACTION;
+  const summarizer =
+    rest.onSummarize ?? (summarizeWith === undefined ? undefined : anchorSummarizer(summarizeWith));
   return [
     createBudgetReassurancePolicy(),
     createBudgetWarningPolicy(),
     createCompactionPolicy({
-      ...(compaction ?? DEFAULT_WORKER_COMPACTION),
+      ...rest,
+      ...(summarizer === undefined ? {} : { onSummarize: summarizer }),
       events: Bus,
       priority: COMPACTION_PRIORITY,
     }),

@@ -396,9 +396,18 @@ describe("Compaction", () => {
         { trigger: "threshold" },
       );
       expect(result.compacted).toBe(true);
-      expect(result.removedCount).toBe(5);
-      expect(result.messages).toHaveLength(4);
+      // L2: the cut span's user messages (u0, u2, u4) survive verbatim, so
+      // only the two assistant messages are dropped into the anchor.
+      expect(result.removedCount).toBe(2);
+      expect(result.messages).toHaveLength(7);
       expect(result.messages[0]?.info.role).toBe("user");
+      const texts = result.messages.flatMap((m) =>
+        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+      );
+      expect(texts).toContain("u0");
+      expect(texts).toContain("u2");
+      expect(texts).toContain("u4");
+      expect(texts.some((t) => t.includes("a1"))).toBe(false);
     });
 
     it("threads the history session id into the summary message", async () => {
@@ -423,6 +432,188 @@ describe("Compaction", () => {
       expect(summary?.info.sessionID).toBe("test");
       expect(summary?.parts[0]?.sessionID).toBe("test");
       expect(summary?.parts[0]?.messageID).toBe(summary?.info.id);
+    });
+  });
+
+  describe("anchored iterative summarization (L2)", () => {
+    const trace = { traceId: TEST_TRACE_ID, sessionId: "test" };
+    const opts = { contextWindowTokens: 1000, protectRecentMessages: 2 };
+
+    it("excludes user messages from the summarizer and preserves them byte-exact", async () => {
+      const userText = `제약: 절대 요약하지 마라\n${"x".repeat(50)}\t🧭`;
+      const seen: Message.WithParts[][] = [];
+      const messages = [
+        makeUserMessage(userText),
+        makeAssistantMessage("a1"),
+        makeUserMessage("u2"),
+        makeAssistantMessage("a3"),
+        makeUserMessage("u4"),
+        makeAssistantMessage("a5"),
+      ];
+      const result = await Compaction.compact(
+        messages,
+        {
+          ...opts,
+          onSummarize: async (input) => {
+            seen.push(input);
+            return "anchor-v1";
+          },
+        },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+
+      // Summarizer saw assistants only.
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.every((m) => m.info.role === "assistant")).toBe(true);
+      // Every user message survives byte-exact, in order, after the anchor.
+      const texts = result.messages.flatMap((m) =>
+        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+      );
+      expect(texts[0]).toContain("anchor-v1");
+      expect(texts[1]).toBe(userText);
+      expect(texts[2]).toBe("u2");
+    });
+
+    it("threads the previous anchor body through the second cut — no recursive re-summarization", async () => {
+      const calls: Array<{ input: Message.WithParts[]; previous: string | undefined }> = [];
+      const summarize = async (input: Message.WithParts[], previous?: string) => {
+        calls.push({ input, previous });
+        return previous === undefined ? "anchor-v1" : `${previous}+v2`;
+      };
+      const first = await Compaction.compact(
+        [
+          makeUserMessage("u0"),
+          makeAssistantMessage("a1"),
+          makeAssistantMessage("a2"),
+          makeUserMessage("u3"),
+          makeAssistantMessage("a4"),
+        ],
+        { ...opts, onSummarize: summarize },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      expect(calls[0]?.previous).toBeUndefined();
+
+      // Grow the compacted history and cut again: the anchor render from cut
+      // one sits in the new cut span.
+      const grown = [
+        ...first.messages,
+        makeAssistantMessage("a5"),
+        makeAssistantMessage("a6"),
+        makeUserMessage("u7"),
+        makeAssistantMessage("a8"),
+      ];
+      const second = await Compaction.compact(
+        grown,
+        { ...opts, onSummarize: summarize },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+
+      expect(calls).toHaveLength(2);
+      // The previous anchor arrived as state, not as content:
+      expect(calls[1]?.previous).toBe("anchor-v1");
+      // ...and the anchor RENDER never re-entered the summarizer input.
+      const secondInputTexts = calls[1]?.input.flatMap((m) =>
+        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+      );
+      expect(secondInputTexts?.some((t) => t.includes("anchor-v1"))).toBe(false);
+      expect(calls[1]?.input.every((m) => m.info.role === "assistant")).toBe(true);
+      // Exactly one anchor message in the result — replaced, not stacked.
+      const anchors = second.messages.filter((m) =>
+        m.parts.some((p) => p.type === "text" && p.metadata?.compactionAnchor === true),
+      );
+      expect(anchors).toHaveLength(1);
+      const anchorPart = anchors[0]?.parts[0];
+      if (anchorPart?.type !== "text") throw new Error("shape");
+      expect(anchorPart.metadata?.anchorBody).toBe("anchor-v1+v2");
+    });
+
+    it("skips the model call when the cut span holds nothing summarizable", async () => {
+      let called = 0;
+      // First cut produces an anchor; the follow-up span contains only user
+      // messages, so the anchor must carry forward without a summarize call.
+      const first = await Compaction.compact(
+        [
+          makeUserMessage("u0"),
+          makeAssistantMessage("a1"),
+          makeUserMessage("u2"),
+          makeAssistantMessage("a3"),
+        ],
+        {
+          ...opts,
+          onSummarize: async () => {
+            called += 1;
+            return "anchor-v1";
+          },
+        },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      expect(called).toBe(1);
+      const anchorMessage = first.messages[0];
+      if (anchorMessage === undefined) throw new Error("shape");
+      // Cut span = [anchor, u4, u5]: nothing summarizable, anchor must carry.
+      const grown = [
+        anchorMessage,
+        makeUserMessage("u4"),
+        makeUserMessage("u5"),
+        makeUserMessage("u6"),
+        makeAssistantMessage("tail"),
+      ];
+      const second = await Compaction.compact(
+        grown,
+        {
+          ...opts,
+          protectRecentMessages: 2,
+          onSummarize: async () => {
+            called += 1;
+            return "should-not-run";
+          },
+        },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      expect(called).toBe(1);
+      const anchorPart = second.messages[0]?.parts[0];
+      if (anchorPart?.type !== "text") throw new Error("shape");
+      expect(anchorPart.metadata?.anchorBody).toBe("anchor-v1");
+    });
+
+    it("keeps the newest user message even when it alone exceeds the budget", async () => {
+      const huge = "h".repeat(500);
+      // protect 2 → the cut span is [old-user, a1, huge, a2]; both user
+      // messages face the budget, only the newest survives it.
+      const result = await Compaction.compact(
+        [
+          makeUserMessage("old-user"),
+          makeAssistantMessage("a1"),
+          makeUserMessage(huge),
+          makeAssistantMessage("a2"),
+          makeUserMessage("tail-u"),
+          makeAssistantMessage("tail-a"),
+        ],
+        {
+          ...opts,
+          preserveUserMessageChars: 100,
+          onSummarize: async () => "anchor",
+        },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      const texts = result.messages.flatMap((m) =>
+        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
+      );
+      // Budget 100 < 500: newest kept anyway; the older user no longer fits.
+      expect(texts).toContain(huge);
+      expect(texts).not.toContain("old-user");
     });
   });
 });
