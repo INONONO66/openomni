@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { IngressEvent, type Ingress } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { ChannelGrantStore, Session, Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import {
@@ -136,7 +136,7 @@ describe("IngressEngine", () => {
       model: { providerID: "test", modelID: "fixture" },
     });
     const received: Array<{ target?: string; traceId?: string }> = [];
-    const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
+    const unsubscribe = Bus.subscribe(Ingress.Events.Received, (event) => {
       received.push(event);
     });
 

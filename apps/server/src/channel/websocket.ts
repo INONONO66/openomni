@@ -1,5 +1,5 @@
 import { newTraceId } from "@openomni/protocol";
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 import type { PublishPort } from "./types";
@@ -21,7 +21,7 @@ interface WebSocketUpgradeOptions {
 
 export class WebSocketHandler {
   constructor(
-    private readonly handler: Adapter.MessageHandler,
+    private readonly handler: Channel.MessageHandler,
     private readonly publish: PublishPort,
     private readonly config: WebSocketConfig = {},
   ) {}
@@ -34,7 +34,7 @@ export class WebSocketHandler {
         // Origin: the first frame of an inbound websocket message — this ONE
         // mint is the message's trace, carried to the run (D11).
         const traceId = newTraceId();
-        self.publish(Operational.Debug, {
+        self.publish(Operational.Events.Debug, {
           traceId,
           time: Date.now(),
           component: "server",
@@ -48,7 +48,7 @@ export class WebSocketHandler {
           surfaceKey: ws.data.surfaceKey,
           authenticated: ws.data.authenticated,
         };
-        self.publish(Operational.Info, {
+        self.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),
           component: "server",
@@ -57,7 +57,7 @@ export class WebSocketHandler {
         });
       },
       close(ws: { data: WsConnectionData }) {
-        self.publish(Operational.Info, {
+        self.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),
           component: "server",

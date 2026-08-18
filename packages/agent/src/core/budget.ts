@@ -135,7 +135,7 @@ export function publishBudgetTelemetry(
   const evaluation = evaluateBudget(state, budget);
 
   if (evaluation.status === "exceeded") {
-    events.publish(Operational.Warn, {
+    events.publish(Operational.Events.Warn, {
       traceId: run.traceId,
       sessionId: run.sessionId,
       time: Date.now(),
@@ -154,7 +154,7 @@ export function publishBudgetTelemetry(
     return evaluation.status;
   }
   if (evaluation.status === "warning") {
-    events.publish(Operational.Warn, {
+    events.publish(Operational.Events.Warn, {
       traceId: run.traceId,
       sessionId: run.sessionId,
       time: Date.now(),
@@ -169,7 +169,7 @@ export function publishBudgetTelemetry(
     return evaluation.status;
   }
   if (evaluation.status === "reassurance") {
-    events.publish(Operational.Info, {
+    events.publish(Operational.Events.Info, {
       traceId: run.traceId,
       sessionId: run.sessionId,
       time: Date.now(),

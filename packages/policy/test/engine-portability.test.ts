@@ -38,7 +38,7 @@ function createAuditedEngine() {
 function debugEvent(
   events: ReadonlyArray<{ name: string; data: unknown }>,
 ): { name: string; data: unknown } | undefined {
-  return events.find((event) => event.name === Operational.Debug.name);
+  return events.find((event) => event.name === Operational.Events.Debug.name);
 }
 
 function capturedRegistrationError(register: () => void): PolicyRegistrationError {
@@ -192,7 +192,7 @@ describe("PolicyEngine portability", () => {
     const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
 
     expect(decision.verdict).toBe("allow");
-    expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
+    expect(events.some(({ name }) => name === Operational.Events.Debug.name)).toBe(true);
   });
 
   it("denies and fires audit callback on deny verdict", async () => {
@@ -210,7 +210,7 @@ describe("PolicyEngine portability", () => {
     const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
 
     expect(decision.verdict).toBe("deny");
-    expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
+    expect(events.some(({ name }) => name === Operational.Events.Debug.name)).toBe(true);
   });
 
   it("runs without server, session, or agent bootstrap", async () => {
@@ -232,6 +232,6 @@ describe("PolicyEngine portability", () => {
     const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
 
     expect(decision.verdict).toBe("allow");
-    expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
+    expect(events.some(({ name }) => name === Operational.Events.Debug.name)).toBe(true);
   });
 });

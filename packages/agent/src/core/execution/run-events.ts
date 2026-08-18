@@ -1,4 +1,4 @@
-import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol";
+import { Run, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
 import type { RetryReason, TerminalReason } from "../retry";
 import type { AgentResult, AgentStep, TokenUsage } from "../types";
@@ -9,7 +9,7 @@ export function emitRunStarted(
   trace: TraceContext.Type,
   modelId: string,
 ): void {
-  events.publish(Operational.Info, {
+  events.publish(Operational.Events.Info, {
     traceId: trace.traceId,
     time: Date.now(),
     sessionId: trace.sessionId,
@@ -26,7 +26,7 @@ export function emitTurnStart(
 ): void {
   const turnIndex = state.turnIndex;
   const sessionId = agentBase.sessionId;
-  events.publish(AgentExecution.TurnStart, {
+  events.publish(Run.Events.TurnStart, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -41,7 +41,7 @@ export function emitTurnComplete(
   turnUsage: TokenUsage,
 ): void {
   const sessionId = agentBase.sessionId;
-  events.publish(AgentExecution.TurnComplete, {
+  events.publish(Run.Events.TurnComplete, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -60,7 +60,7 @@ export function emitBudgetReassurance(
   remaining: string,
   threshold: number,
 ): void {
-  events.publish(AgentExecution.BudgetReassurance, {
+  events.publish(Run.Events.BudgetReassurance, {
     ...agentBase,
     time: Date.now(),
     remaining,
@@ -74,7 +74,7 @@ export function emitBudgetWarning(
   remaining: string,
   threshold: number,
 ): void {
-  events.publish(AgentExecution.BudgetWarning, {
+  events.publish(Run.Events.BudgetWarning, {
     ...agentBase,
     time: Date.now(),
     remaining,
@@ -88,7 +88,7 @@ export function emitRunCompleted(
   agentBase: AgentRunBase,
   finishReason: AgentResult["finishReason"],
 ): void {
-  events.publish(Operational.Info, {
+  events.publish(Operational.Events.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId,
@@ -114,7 +114,7 @@ export function emitErrorRetry(
   },
 ): void {
   const sessionId = agentBase.sessionId;
-  events.publish(AgentExecution.ErrorRetry, {
+  events.publish(Run.Events.ErrorRetry, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -144,7 +144,7 @@ export function emitRunFailed(
     readonly maxAttempts: number;
   },
 ): void {
-  events.publish(Operational.Error, {
+  events.publish(Operational.Events.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId,
@@ -161,7 +161,7 @@ export function emitCompaction(
   messagesBefore: number,
   messagesAfter: number,
 ): void {
-  events.publish(AgentExecution.Compaction, {
+  events.publish(Run.Events.Compaction, {
     ...agentBase,
     time: Date.now(),
     messagesBefore,
@@ -178,7 +178,7 @@ export function publishDenyDiagnostic(
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
   const sessionId = agentBase.sessionId;
-  events.publish(Operational.Info, {
+  events.publish(Operational.Events.Info, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId,

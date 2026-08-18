@@ -53,11 +53,11 @@ describe("Processor retry cap", () => {
     const retryErrors = [rateLimitError(), rateLimitError(), rateLimitError()];
     let attemptCount = 0;
     const retries: number[] = [];
-    const unsubRetry = Bus.subscribe(LlmCall.RetryDecided, (event) => {
+    const unsubRetry = Bus.subscribe(LlmCall.Events.RetryDecided, (event) => {
       retries.push(event.maxAttempts);
     });
     const exhausted: string[] = [];
-    const unsubExhausted = Bus.subscribe(Operational.Error, (event) => {
+    const unsubExhausted = Bus.subscribe(Operational.Events.Error, (event) => {
       if (event.msg === "retry attempts exhausted") exhausted.push(String(event.error));
     });
 
@@ -142,7 +142,7 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
     // A retryable error declined for a reason other than "non_retryable" has
     // to say why, and say it through the port.
     const declined = events
-      .named(Operational.Error.name)
+      .named(Operational.Events.Error.name)
       .map((event) => event as { component?: string; traceId?: string });
     const fromRetry = declined.filter((event) => event.component === "llm.retry");
     expect(fromRetry).toHaveLength(1);

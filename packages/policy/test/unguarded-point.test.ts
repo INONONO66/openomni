@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Policy } from "@openomni/protocol";
-import { PolicyDecision, PolicyEvent } from "@openomni/protocol";
+import { Policy, PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "@openomni/policy";
 
 /**
@@ -98,7 +97,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
       traceContext,
     });
 
-    const composed = events.find(({ name }) => name === PolicyEvent.DecisionComposed.name);
+    const composed = events.find(({ name }) => name === Policy.Events.DecisionComposed.name);
     expect(composed?.data).toMatchObject({ ...traceContext, verdict: "allow" });
   });
 
@@ -125,7 +124,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
       },
     });
 
-    const composed = events.find(({ name }) => name === PolicyEvent.DecisionComposed.name);
+    const composed = events.find(({ name }) => name === Policy.Events.DecisionComposed.name);
     expect(composed?.data).toMatchObject(traceContext);
   });
 
@@ -151,7 +150,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
       resourceDescriptor: new Map([["mutable", true]]) as never,
     });
 
-    const composed = events.find(({ name }) => name === PolicyEvent.DecisionComposed.name);
+    const composed = events.find(({ name }) => name === Policy.Events.DecisionComposed.name);
     expect(composed?.data).toMatchObject({ ...traceContext, resource: "tool:partial" });
     // The uncapturable field is absent, not half-captured.
     expect(composed?.data).not.toHaveProperty("resourceDescriptor");

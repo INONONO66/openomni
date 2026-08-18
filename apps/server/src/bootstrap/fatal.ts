@@ -21,7 +21,7 @@ export async function reportFatalAndExit(
     // A boot that dies before BusPersistence.start() publishes into a
     // subscriber-less Bus — stderr is the only outlet that always exists.
     process.stderr.write(`openomni fatal: ${message}\n`);
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId: newTraceId(),
       time: Date.now(),
       component: "server",

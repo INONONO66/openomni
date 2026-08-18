@@ -1,4 +1,4 @@
-import type { Adapter, BusEvent } from "@openomni/protocol";
+import type { Channel, BusEvent } from "@openomni/protocol";
 
 /**
  * Observation port: channel code reports Operational telemetry through this
@@ -23,11 +23,11 @@ export interface ChannelClient {
 }
 
 /**
- * Raw platform payload → Adapter.InboundMessage.
+ * Raw platform payload → Channel.InboundMessage.
  * MUST NOT: call platform API, manage state, or have side effects.
  * Pure transformation function — same input always produces same output.
  */
 export interface InboundNormalizer<TPayload = unknown> {
   /** `traceId` is the surface's first-frame mint (D11) — the normalizer stamps it onto the InboundMessage, never mints. */
-  normalize(payload: TPayload, traceId: string): Adapter.InboundMessage | null;
+  normalize(payload: TPayload, traceId: string): Channel.InboundMessage | null;
 }

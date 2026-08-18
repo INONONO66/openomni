@@ -79,7 +79,7 @@ describe("Processor instant transport-failure streak", () => {
     // A retryable error declined for a non-"non_retryable" reason must say
     // why, through the port.
     const declined = events
-      .named(Operational.Error.name)
+      .named(Operational.Events.Error.name)
       .map((event) => event as { component?: string; msg?: string; error?: string });
     const fromRetry = declined.filter((event) => event.component === "llm.retry");
     expect(fromRetry).toHaveLength(1);

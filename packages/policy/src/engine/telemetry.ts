@@ -55,7 +55,7 @@ export function publishMiddlewareError(
 ): void {
   const traceId = nonEmptyTraceId(dispatchTrace) ?? nonEmptyTraceId(options.traceContext);
   if (traceId === undefined) return;
-  options.auditEmit?.(Operational.Warn, {
+  options.auditEmit?.(Operational.Events.Warn, {
     traceId,
     time: Date.now(),
     component: "agent.policy",
@@ -74,7 +74,7 @@ export function publishMiddlewareDebug(
 ): void {
   const traceId = nonEmptyTraceId(dispatchTrace) ?? nonEmptyTraceId(options.traceContext);
   if (traceId === undefined) return;
-  options.auditEmit?.(Operational.Debug, {
+  options.auditEmit?.(Operational.Events.Debug, {
     traceId,
     time: Date.now(),
     component: "agent.policy",

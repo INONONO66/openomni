@@ -135,7 +135,7 @@ describe("conversation kernel routing", () => {
       msg: string;
       context?: Record<string, unknown>;
     }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Error, (payload) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Error, (payload) => {
       operationalErrors.push(payload);
     });
     const handler = handlerFor(ingest);

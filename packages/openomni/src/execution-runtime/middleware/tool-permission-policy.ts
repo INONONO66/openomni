@@ -62,7 +62,7 @@ export function createToolPermissionPolicy(
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        config.events.publish(Operational.Debug, {
+        config.events.publish(Operational.Events.Debug, {
           traceId: requireGuardTraceId(ctx),
           time: Date.now(),
           component: "agent.policy.tool-permission",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BusEvent } from "@openomni/telemetry";
+import { BusEvent } from "@openomni/protocol";
 import { SessionInfo } from "./info";
 
 export const Event = {

@@ -166,7 +166,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
             ]),
       ],
       onError: ({ error }: { error: unknown }) => {
-        input.events.publish(Operational.Error, {
+        input.events.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
           sessionId: sessionID,
@@ -227,7 +227,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     },
   });
 
-  input.events.publish(LlmCall.Started, {
+  input.events.publish(LlmCall.Events.Started, {
     traceId,
     sessionId: sessionID,
     runId: input.trace.runId,
@@ -249,7 +249,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     const finalTokens = processor.usageTotals;
     const finishReason = processor.message.finish ?? "unknown";
 
-    input.events.publish(LlmCall.Completed, {
+    input.events.publish(LlmCall.Events.Completed, {
       traceId,
       sessionId: sessionID,
       runId: input.trace.runId,
@@ -270,7 +270,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     const err = error instanceof Error ? error : new Error(String(error));
     const aborted = abortSignal.aborted;
 
-    input.events.publish(LlmCall.Failed, {
+    input.events.publish(LlmCall.Events.Failed, {
       traceId,
       sessionId: sessionID,
       runId: input.trace.runId,

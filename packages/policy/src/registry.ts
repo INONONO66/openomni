@@ -48,7 +48,7 @@ function publishOptionalPolicyMissing(id: string, runtime: RuntimeContext): void
   // put a value of the wrong kind in a field every reader treats as a trace,
   // and a minted one correlates to nothing — both are worse than silence.
   if (runtime.traceId === undefined || runtime.traceId.length === 0) return;
-  runtime.auditEmit?.(Operational.Warn, {
+  runtime.auditEmit?.(Operational.Events.Warn, {
     traceId: runtime.traceId,
     ...(runtime.sessionId !== undefined && { sessionId: runtime.sessionId }),
     time: Date.now(),

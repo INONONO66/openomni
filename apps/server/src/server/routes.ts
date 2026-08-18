@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import {
-  type LedgerAppend,
+  type Ledger,
   Operational,
   type Storage as ProtocolStorage,
   WorkItem,
@@ -79,7 +79,7 @@ export function createRouter(
     const start = performance.now();
     await next();
     const duration = Math.round(performance.now() - start);
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId: c.get("requestId"),
       time: Date.now(),
       component: "server",
@@ -126,7 +126,7 @@ export function createRouter(
         chainIntegrity,
       });
     } catch (error) {
-      Bus.publish(Operational.Error, {
+      Bus.publish(Operational.Events.Error, {
         traceId: c.get("requestId"),
         time: Date.now(),
         component: "server",
@@ -337,7 +337,7 @@ async function respondWithEffectWrite(
         422,
       );
     }
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId: c.get("requestId"),
       time: Date.now(),
       component: "server",
@@ -356,7 +356,7 @@ function respondWithLedgerRead(c: Context<Env>, read: () => Response): Response 
   try {
     return read();
   } catch (error) {
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId: c.get("requestId"),
       time: Date.now(),
       component: "server",
@@ -369,7 +369,7 @@ function respondWithLedgerRead(c: Context<Env>, read: () => Response): Response 
 }
 
 /** The attempt fact payload is the full Attempt identity plus the projected revision (see `attemptAllocatedFact`). */
-function toAttemptSummary(fact: LedgerAppend.RecordedFact) {
+function toAttemptSummary(fact: Ledger.RecordedFact) {
   const { revision: _revision, ...identity } = fact.data;
   const attempt = WorkItem.Attempt.parse(identity);
   return {

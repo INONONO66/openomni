@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { IngressEvent } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 
@@ -46,7 +46,7 @@ describe("IngressEngine kernel routing", () => {
 
     // Then
     expect(observed.decisions).toHaveLength(1);
-    expect(IngressEvent.RoutingDecision.schema.parse(observed.decisions[0])).toMatchObject({
+    expect(Ingress.Events.RoutingDecision.schema.parse(observed.decisions[0])).toMatchObject({
       inboundId: ownerEvent.id,
       stage: "surface_default",
       outcome: "route",
@@ -63,7 +63,7 @@ describe("IngressEngine kernel routing", () => {
     createMappedOwnerSession();
     const actualPublish = Bus.publish;
     const publish = spyOn(Bus, "publish").mockImplementation((event, data) => {
-      if (event === IngressEvent.RoutingDecision) throw new Error("routing publish failed");
+      if (event === Ingress.Events.RoutingDecision) throw new Error("routing publish failed");
       actualPublish(event, data);
     });
     const project = spyOn(IngressEventProjector, "project");

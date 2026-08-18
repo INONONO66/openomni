@@ -24,7 +24,7 @@ describe("McpToolProvider", () => {
    */
   it("hands its boot trace to the clients it creates", async () => {
     const seen: Array<{ component?: string; traceId: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Error, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Error, (event) => {
       seen.push(event as unknown as { component?: string; traceId: string });
     });
     // A real `McpClient`, not the injected stub: the stub would bypass the

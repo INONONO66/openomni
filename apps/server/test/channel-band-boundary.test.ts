@@ -9,7 +9,7 @@ import ts from "typescript";
  *
  * The future channels band depends on @openomni/protocol plus the leaf
  * @openomni/telemetry: channel code observes through the injected publish
- * port (channel/types.ts), speaks the Adapter.SurfaceKey codec, and mints
+ * port (channel/types.ts), speaks the Channel.SurfaceKey codec, and mints
  * W3C trace ids at its genuine trace origins (D11 — gateway events, inbound
  * frames). #499's text pinned the band to {protocol, ipc}; this amendment
  * (+telemetry, PR #653) is recorded on that issue for Owner review — an
@@ -179,7 +179,7 @@ describe("channels band import boundary", () => {
 
   it("allows protocol, telemetry, node builtin, and relative imports", () => {
     const text = [
-      'import { Adapter, Operational } from "@openomni/protocol";',
+      'import { Channel, Operational } from "@openomni/protocol";',
       'import { newTraceId } from "@openomni/telemetry";',
       'import { timingSafeEqual } from "node:crypto";',
       'import type { PublishPort } from "../types";',

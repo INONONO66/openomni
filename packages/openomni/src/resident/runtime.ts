@@ -1,9 +1,5 @@
 import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
-import {
-  type Ingress,
-  IngressEvent,
-  type TraceContext as TraceContextProtocol,
-} from "@openomni/protocol";
+import { Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
@@ -322,7 +318,7 @@ export class ResidentRuntime {
       });
       activation.lastUsedAt = Date.now();
       this.scheduleIdleRelease(ctx.sessionId, activation);
-      Bus.publish(IngressEvent.Completed, {
+      Bus.publish(Ingress.Events.Completed, {
         traceId: traceContext.traceId,
         sessionId: ctx.sessionId,
         mode: ctx.event.mode,
@@ -341,7 +337,7 @@ export class ResidentRuntime {
       if (!activation) throw error;
       activation.lastUsedAt = Date.now();
       this.scheduleIdleRelease(ctx.sessionId, activation);
-      Bus.publish(IngressEvent.Failed, {
+      Bus.publish(Ingress.Events.Failed, {
         traceId: traceContext.traceId,
         sessionId: ctx.sessionId,
         mode: ctx.event.mode,

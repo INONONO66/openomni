@@ -52,7 +52,7 @@ export namespace WaitService {
    * Expiry sweep entry (boot recovery): folds every deadline-passed open
    * wait to expired (partial when replies attached). Per-wait fault
    * isolation (#510 review fix F3): one corrupt wait (e.g. a stream whose
-   * head disagrees with its row) records an Operational.Error and the sweep
+   * head disagrees with its row) records an Operational.Events.Error and the sweep
    * continues — a single bad row must never kill boot recovery.
    *
    * `traceId` is the caller's (boot recovery's): the sweep is mid-flow, not a
@@ -67,7 +67,7 @@ export namespace WaitService {
         const outcome = expire(record.id, traceId, now);
         if (outcome.kind === "expired") expired.push(outcome.record);
       } catch (error) {
-        Bus.publish(Operational.Error, {
+        Bus.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
           component: "wait",

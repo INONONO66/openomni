@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Command, LedgerAppend, Policy } from "../../src/index.js";
+import { Command, Ledger, Policy } from "../../src/index.js";
 
 const actor: Command.ActorContext = {
   kind: "internal_worker",
@@ -127,20 +127,19 @@ describe("Command protocol schemas", () => {
 
     // Old persisted bytes decode to the canonical vocabulary…
     expect(
-      LedgerAppend.CommandAuthorized.parse({ ...base, verdict: "allow", actorKind: "worker" })
-        .actorKind,
+      Ledger.CommandAuthorized.parse({ ...base, verdict: "allow", actorKind: "worker" }).actorKind,
     ).toBe("internal_worker");
     expect(
-      LedgerAppend.CommandDenied.parse({ ...base, verdict: "deny", actorKind: "user" }).actorKind,
+      Ledger.CommandDenied.parse({ ...base, verdict: "deny", actorKind: "user" }).actorKind,
     ).toBe("human");
 
     // …and canonical values pass through unchanged.
     expect(
-      LedgerAppend.CommandAuthorized.parse({ ...base, verdict: "allow", actorKind: "resident" })
+      Ledger.CommandAuthorized.parse({ ...base, verdict: "allow", actorKind: "resident" })
         .actorKind,
     ).toBe("resident");
     expect(
-      LedgerAppend.CommandAuthorized.parse({
+      Ledger.CommandAuthorized.parse({
         ...base,
         verdict: "allow",
         actorKind: "internal_worker",

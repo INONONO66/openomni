@@ -1,4 +1,4 @@
-import { Operational, Policy, PolicyEvent, type TraceContext } from "@openomni/protocol";
+import { Operational, Policy, type TraceContext } from "@openomni/protocol";
 import type {
   AuditDispatchContextGeneric,
   GenericPolicyContext,
@@ -10,7 +10,6 @@ function buildActor(traceContext: TraceContext.Type | undefined): Record<string,
     kind: "agent",
     ...(traceContext?.agentName !== undefined && { name: traceContext.agentName }),
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
-    ...(traceContext?.taskId !== undefined && { taskId: traceContext.taskId }),
   };
 }
 
@@ -64,7 +63,7 @@ export function publishPolicyEvent(
   ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
 ): void {
   publishAuditRecord(options, ctx, decision, {
-    descriptor: PolicyEvent.Evaluated,
+    descriptor: Policy.Events.Evaluated,
     action: resolveAction(ctx.timing),
     resource: resolveResource(reg, ctx),
     policyId: decision.policyId,
@@ -78,7 +77,7 @@ export function publishComposedDecision(
   decision: Policy.PolicyDecision,
 ): void {
   publishAuditRecord(options, ctx, decision, {
-    descriptor: PolicyEvent.DecisionComposed,
+    descriptor: Policy.Events.DecisionComposed,
     action: resolveAction(timing),
     resource: resolveComposedResource(ctx),
   });
@@ -91,7 +90,7 @@ export function publishComposedDecision(
  * alone; an audit row without its session names nothing queryable.
  *
  * The drop is no longer silent: with a trace but no session, an
- * `Operational.Warn` files the degradation under that trace so a reader can
+ * `Operational.Events.Warn` files the degradation under that trace so a reader can
  * see audit rows are missing. Without even a trace id there is nothing real
  * to file under — a minted id correlates to nothing, worse than silence —
  * so that residual case stays quiet by design.
@@ -101,7 +100,7 @@ function publishAuditRecord(
   ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
   decision: Policy.PolicyDecision,
   record: {
-    descriptor: typeof PolicyEvent.Evaluated | typeof PolicyEvent.DecisionComposed;
+    descriptor: typeof Policy.Events.Evaluated | typeof Policy.Events.DecisionComposed;
     action: string;
     resource: string;
     policyId?: string;
@@ -114,7 +113,7 @@ function publishAuditRecord(
   const sessionId = traceContext?.sessionId;
   if (!sessionId || !traceId) {
     if (traceId) {
-      options.auditEmit?.(Operational.Warn, {
+      options.auditEmit?.(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "agent.policy",
@@ -160,7 +159,7 @@ export function publishDecisionObserverError(
   const traceContext = ctx.traceContext ?? options.traceContext;
   const traceId = traceContext?.traceId;
   if (traceId === undefined || traceId.length === 0) return;
-  options.auditEmit?.(Operational.Warn, {
+  options.auditEmit?.(Operational.Events.Warn, {
     traceId,
     time: Date.now(),
     ...(traceContext?.sessionId !== undefined && { sessionId: traceContext.sessionId }),

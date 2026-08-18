@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
-import type { Adapter, Ingress, Tool } from "@openomni/protocol";
+import type { Channel, Ingress, Tool } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
@@ -36,7 +36,7 @@ function makeProvider(tools: readonly NativeTool[]): ToolProvider {
   };
 }
 
-function makeMessage(text: string, surfaceKey = "ws:local-test"): Adapter.InboundMessage {
+function makeMessage(text: string, surfaceKey = "ws:local-test"): Channel.InboundMessage {
   return {
     id: "message-1",
     traceId: "trace-test",

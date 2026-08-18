@@ -51,7 +51,7 @@ describe("pre-persistence boot window (#606 / #676 review)", () => {
       preBootEvents.push([descriptor, data] as Parameters<typeof Bus.publish>);
     });
 
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId: "trace-preboot",
       time: Date.now(),
       component: "server",

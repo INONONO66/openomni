@@ -145,7 +145,7 @@ describe("canonical tool policy execution", () => {
     const delegatedContexts: Array<{ sessionId?: string; runId?: string } | undefined> = [];
     const warningErrors: unknown[] = [];
     const observerFailure = { toString: () => "observer-failure" };
-    const unsubscribeWarnings = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribeWarnings = Bus.subscribe(Operational.Events.Warn, (event) => {
       warningErrors.push(event.context?.error);
     });
     const engine = buildPolicyEngine(

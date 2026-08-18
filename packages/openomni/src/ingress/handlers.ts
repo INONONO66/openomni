@@ -1,8 +1,7 @@
 import {
-  IngressEvent,
+  Ingress,
   Operational,
   type Execution,
-  type Ingress,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
@@ -56,7 +55,7 @@ export namespace IngressHandlers {
 
   function publishModeDetected(ctx: HandlerContext, target: string | undefined): void {
     if (!ctx.traceContext) return;
-    Bus.publish(IngressEvent.ModeDetected, {
+    Bus.publish(Ingress.Events.ModeDetected, {
       traceId: ctx.traceContext.traceId,
       sessionId: ctx.sessionId,
       mode: ctx.event.mode,
@@ -67,7 +66,7 @@ export namespace IngressHandlers {
 
   function publishCompleted(ctx: HandlerContext, target: string | undefined, start: number): void {
     if (!ctx.traceContext) return;
-    Bus.publish(IngressEvent.Completed, {
+    Bus.publish(Ingress.Events.Completed, {
       traceId: ctx.traceContext.traceId,
       sessionId: ctx.sessionId,
       mode: ctx.event.mode,
@@ -85,7 +84,7 @@ export namespace IngressHandlers {
   ): void {
     if (!ctx.traceContext) return;
     const message = error instanceof Error ? error.message : String(error);
-    Bus.publish(IngressEvent.Failed, {
+    Bus.publish(Ingress.Events.Failed, {
       traceId: ctx.traceContext.traceId,
       sessionId: ctx.sessionId,
       mode: ctx.event.mode,
@@ -183,7 +182,7 @@ export namespace IngressHandlers {
     stage: string,
     error: unknown,
   ): void {
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId: requireTraceId(ctx),
       time: Date.now(),
       sessionId: ctx.sessionId,

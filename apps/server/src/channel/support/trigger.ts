@@ -1,14 +1,14 @@
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 
 export function evaluateTriggers(
-  rules: Adapter.TriggerRule[],
-  ctx: Adapter.TriggerContext,
+  rules: Channel.TriggerRule[],
+  ctx: Channel.TriggerContext,
 ): boolean {
   if (rules.length === 0) return true;
   return rules.every((rule) => evaluateRule(rule, ctx));
 }
 
-function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): boolean {
+function evaluateRule(rule: Channel.TriggerRule, ctx: Channel.TriggerContext): boolean {
   switch (rule.type) {
     case "event":
       return rule.events.includes(ctx.event);
@@ -37,9 +37,9 @@ function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): b
   }
 }
 
-function stripTriggerPrefix(text: string, rules: Adapter.TriggerRule[]): string {
+function stripTriggerPrefix(text: string, rules: Channel.TriggerRule[]): string {
   const prefix = rules.find(
-    (r): r is Extract<Adapter.TriggerRule, { type: "prefix" }> => r.type === "prefix",
+    (r): r is Extract<Channel.TriggerRule, { type: "prefix" }> => r.type === "prefix",
   );
   if (prefix) {
     return text.slice(prefix.value.length).trim();
@@ -53,7 +53,7 @@ function escapeRegex(str: string): string {
 
 export function normalizeContent(
   text: string,
-  rules: Adapter.TriggerRule[],
+  rules: Channel.TriggerRule[],
   botUsername?: string,
 ): string {
   let result = stripTriggerPrefix(text, rules);

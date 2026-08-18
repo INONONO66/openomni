@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IngressEvent, type CronJob, type Command } from "@openomni/protocol";
+import { Ingress, type CronJob, type Command } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { DispatchRegistry, registerBuiltInDispatchHandlers } from "../../src/dispatch";
@@ -340,7 +340,7 @@ describe("CronJobRunner", () => {
 
     const received: Array<{ surface: string; mode: string; target?: string }> = [];
     const outputs: string[] = [];
-    const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
+    const unsubscribe = Bus.subscribe(Ingress.Events.Received, (event) => {
       received.push(event);
     });
     const engine = createIngressEngine({

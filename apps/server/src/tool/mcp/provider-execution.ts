@@ -1,5 +1,5 @@
 import type { Tool } from "@openomni/protocol";
-import { Mcp, PolicyDecision, PolicyEvent } from "@openomni/protocol";
+import { Mcp, PolicyDecision, Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
@@ -41,7 +41,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   const actionId = crypto.randomUUID();
   const actor = buildActor(audit.sessionId);
 
-  Bus.publish(PolicyEvent.ActionRequested, {
+  Bus.publish(Policy.Events.ActionRequested, {
     ...audit,
     time: Date.now(),
     actionId,
@@ -55,16 +55,16 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   const result = await tool.execute({ ...call, tool: tool.spec.name }, executionContext);
   const durationMs = Date.now() - startTime;
 
-  // #522 defect 2: ToolExecution.Started/Completed for MCP calls are emitted
+  // #522 defect 2: Tool.Events.Started/Completed for MCP calls are emitted
   // solely by the worker-side executor that dispatches this provider's tools
   // (packages/openomni execution-runtime/tool/executor.ts). This layer keeps
-  // MCP-prefix authorization audit (PolicyEvent.*) and the MCP-domain
-  // Mcp.ToolCompleted event only.
+  // MCP-prefix authorization audit (Policy.Events.*) and the MCP-domain
+  // Mcp.Events.ToolCompleted event only.
   if (!result.isError) {
     const resultSummary = createResultSummary(result.output);
     const serverName = tool.spec.name.split(".")[0] ?? "unknown";
 
-    Bus.publish(Mcp.ToolCompleted, {
+    Bus.publish(Mcp.Events.ToolCompleted, {
       traceId: audit.traceId,
       serverName,
       toolName: tool.spec.name,
@@ -91,7 +91,7 @@ function publishBlockedResult(input: {
     output: reason,
     isError: true,
   };
-  Bus.publish(PolicyEvent.ActionBlocked, {
+  Bus.publish(Policy.Events.ActionBlocked, {
     ...audit,
     time: Date.now(),
     actionId: crypto.randomUUID(),

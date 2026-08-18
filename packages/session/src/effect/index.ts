@@ -1,4 +1,4 @@
-import { LedgerAppend, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { Ledger, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { isSqliteBusyError } from "../storage/sqlite-busy.js";
 import { Storage } from "../storage/storage.js";
 
@@ -92,7 +92,7 @@ export namespace EffectStore {
   }>;
 
   export type IntendResult = Readonly<{
-    intent: LedgerAppend.EffectIntended;
+    intent: Ledger.EffectIntended;
     /** true when THIS call appended the intent; false on an idempotent replay of an existing intent. */
     fresh: boolean;
     status: StatusView;
@@ -107,7 +107,7 @@ export namespace EffectStore {
    * behind (#538). It NEVER terminalizes: both facts already exist.
    */
   export type TerminalIntent = Readonly<{
-    intent: LedgerAppend.EffectIntended;
+    intent: Ledger.EffectIntended;
     outcome: "confirmed" | "failed";
   }>;
 
@@ -117,9 +117,9 @@ export namespace EffectStore {
    * a replay: report the recorded status and `fresh: false` (the caller must
    * NOT blindly re-execute; a still-pending replay is the reconciler's job).
    */
-  export function intend(input: LedgerAppend.EffectIntended): IntendResult {
+  export function intend(input: Ledger.EffectIntended): IntendResult {
     const ledger = requireLedger();
-    const intent = LedgerAppend.EffectIntended.parse(input);
+    const intent = Ledger.EffectIntended.parse(input);
     const streamId = effectStreamId(intent.effectId);
     const appended = runEffectTransaction(intent.effectId, () =>
       ledger.append({ streamId, type: "effect.intended", data: { ...intent } }, 0),
@@ -139,7 +139,7 @@ export namespace EffectStore {
     return finalize(
       effectId,
       "effect.confirmed",
-      LedgerAppend.EffectConfirmed.parse({
+      Ledger.EffectConfirmed.parse({
         effectId,
         ...(receipt === undefined ? {} : { receipt }),
       }),
@@ -148,11 +148,7 @@ export namespace EffectStore {
 
   /** Records the definite failure outcome at seq 2 (distinct from unknown). Idempotent on replay. */
   export function fail(effectId: string, reason: string): StatusView {
-    return finalize(
-      effectId,
-      "effect.failed",
-      LedgerAppend.EffectFailed.parse({ effectId, reason }),
-    );
+    return finalize(effectId, "effect.failed", Ledger.EffectFailed.parse({ effectId, reason }));
   }
 
   export function status(effectId: string): StatusView {
@@ -163,7 +159,7 @@ export namespace EffectStore {
       case "effect.intended":
         return { effectId, status: "pending", materializationCount: 0 };
       case "effect.confirmed": {
-        const data = LedgerAppend.EffectConfirmed.parse(head.data);
+        const data = Ledger.EffectConfirmed.parse(head.data);
         return {
           effectId,
           status: "confirmed",
@@ -172,7 +168,7 @@ export namespace EffectStore {
         };
       }
       case "effect.failed": {
-        const data = LedgerAppend.EffectFailed.parse(head.data);
+        const data = Ledger.EffectFailed.parse(head.data);
         return { effectId, status: "failed", materializationCount: 1, reason: data.reason };
       }
       default:
@@ -190,7 +186,7 @@ export namespace EffectStore {
    * excluded; the rest are the crash-window intents to probe under the same
    * idempotency key.
    */
-  export function outstandingIntents(): readonly LedgerAppend.EffectIntended[] {
+  export function outstandingIntents(): readonly Ledger.EffectIntended[] {
     const ledger = requireLedger();
     const terminal = new Set<string>([
       ...ledger.factsByType("effect.confirmed").map((fact) => fact.streamId),
@@ -199,7 +195,7 @@ export namespace EffectStore {
     return ledger
       .factsByType("effect.intended")
       .filter((fact) => !terminal.has(fact.streamId))
-      .map((fact) => LedgerAppend.EffectIntended.parse(fact.data));
+      .map((fact) => Ledger.EffectIntended.parse(fact.data));
   }
 
   /**
@@ -221,7 +217,7 @@ export namespace EffectStore {
     return ledger.factsByType("effect.intended").flatMap((fact) => {
       const outcome = outcomeByStream.get(fact.streamId);
       if (!outcome) return [];
-      return [{ intent: LedgerAppend.EffectIntended.parse(fact.data), outcome }];
+      return [{ intent: Ledger.EffectIntended.parse(fact.data), outcome }];
     });
   }
 

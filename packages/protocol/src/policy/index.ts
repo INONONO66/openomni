@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Events as EventDescriptors } from "../event/policy.js";
 import { PolicyDecisionHelpers } from "./decision.js";
 import { PolicyDefinition } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
@@ -69,6 +70,9 @@ export namespace Policy {
     registryVersion: z.string().optional(),
   });
   export type PolicyPlan = z.infer<typeof PolicyPlan>;
+
+  /** #499 observation descriptors — published via Bus; event name strings frozen. */
+  export const Events = EventDescriptors;
 }
 
 export type PolicyDecision = Policy.PolicyDecision;

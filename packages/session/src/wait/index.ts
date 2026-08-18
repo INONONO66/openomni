@@ -1,4 +1,4 @@
-import { LedgerAppend, Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { Ledger, Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { isSqliteBusyError } from "../storage/sqlite-busy";
 import { Storage } from "../storage/storage";
@@ -320,7 +320,7 @@ export namespace WaitStore {
             },
           });
         } catch (error) {
-          if (LedgerAppend.AdoptError.isInstance(error)) {
+          if (Ledger.AdoptError.isInstance(error)) {
             throw revisionConflict(id, current.revision);
           }
           throw error;

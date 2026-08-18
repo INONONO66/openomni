@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
 import { GitHubAdapter } from "../../src/channel/github/surface";
 
@@ -8,8 +8,7 @@ type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 const secret = "github-webhook-secret";
 const config = {
   triggers: [],
-  deliveryPolicy: "final",
-} satisfies Adapter.Config;
+} satisfies Channel.Config;
 
 describe("GitHubAdapter channel-authn", () => {
   it("accepts valid HMAC signatures through channel-authn middleware", async () => {
@@ -64,7 +63,6 @@ describe("GitHubAdapter channel-authn", () => {
         { type: "event", events: ["issues.opened"] },
         { type: "label", values: ["approved"] },
       ],
-      deliveryPolicy: "final",
     });
     const request = new Request("http://localhost/github/webhook", {
       method: "POST",
@@ -152,7 +150,6 @@ describe("GitHubAdapter channel-authn", () => {
         { type: "event", events: ["issue_comment.created"] },
         { type: "label", values: ["approved"] },
       ],
-      deliveryPolicy: "final",
     });
     const request = new Request("http://localhost/github/webhook", {
       method: "POST",
@@ -186,7 +183,7 @@ describe("GitHubAdapter channel-authn", () => {
 
 function createAdapter(
   decisions: ChannelAuthnDecision[],
-  adapterConfig: Adapter.Config = config,
+  adapterConfig: Channel.Config = config,
 ): GitHubAdapter {
   return new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
     onDecision: (decision) => {

@@ -1,4 +1,4 @@
-import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
 import { Dedupe } from "../support/dedupe";
 import { GitHubClient } from "./client";
@@ -11,23 +11,17 @@ export interface GitHubAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
-export class GitHubAdapter implements Adapter.Surface {
+export class GitHubAdapter implements Channel.Surface {
   readonly id = "github";
-  readonly capabilities: Adapter.Capabilities = {
-    streaming: false,
-    media: { send: false, receive: false },
-    commands: false,
-    threads: true,
-  };
 
   private readonly client: GitHubClient;
   private readonly normalizer: GitHubNormalizer;
   private readonly dedupe = new Dedupe();
-  private handler: Adapter.MessageHandler | null = null;
+  private handler: Channel.MessageHandler | null = null;
 
   constructor(
     private readonly secret: string,
-    readonly config: Adapter.Config,
+    readonly config: Channel.Config,
     private readonly publish: PublishPort,
     githubToken?: string,
     private readonly botUsername?: string,
@@ -40,7 +34,7 @@ export class GitHubAdapter implements Adapter.Surface {
     });
   }
 
-  onMessage(handler: Adapter.MessageHandler): void {
+  onMessage(handler: Channel.MessageHandler): void {
     this.handler = handler;
   }
 
@@ -48,7 +42,7 @@ export class GitHubAdapter implements Adapter.Surface {
     if (!this.handler) {
       throw new Error("[github] No message handler registered. Call onMessage() before start().");
     }
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -58,31 +52,6 @@ export class GitHubAdapter implements Adapter.Surface {
 
   stop(_traceId: string): void {
     // no-op: GitHub adapter is webhook-based, no persistent connection to close
-  }
-
-  async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    // Origin: outbound send-as-surface carries no inbound trace to inherit
-    // until Wait/#215 threading lands — this send is its own causal chain.
-    const traceId = newTraceId();
-    const parsed = Adapter.SurfaceKey.parse(surfaceKey);
-    const repo = parsed.namespace;
-    const [, issueId] = (parsed.id ?? "").split("-");
-    const issueNumber = Number.parseInt(issueId ?? "", 10);
-
-    if (Number.isNaN(issueNumber)) {
-      this.publish(Operational.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "github invalid surface key",
-        context: { surfaceKey },
-      });
-      return;
-    }
-
-    if (message.text) {
-      await this.client.postComment(repo, issueNumber, message.text, traceId);
-    }
   }
 
   async handleWebhook(request: Request): Promise<Response> {
@@ -110,7 +79,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
     const payload = JSON.parse(body) as Record<string, unknown>;
     const eventKey = `${event}.${payload.action}`;
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -143,7 +112,7 @@ export class GitHubAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(content, eventKey, traceId, deliveryId ?? undefined);
     if (!inbound) return new Response("Filtered", { status: 200 });
 
-    this.publish(Operational.Debug, {
+    this.publish(Operational.Events.Debug, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -161,7 +130,7 @@ export class GitHubAdapter implements Adapter.Surface {
         await this.client.postComment(content.repo, content.issueNumber, outbound.text, traceId);
       }
     } catch (err) {
-      this.publish(Operational.Error, {
+      this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -216,7 +185,7 @@ export class GitHubAdapter implements Adapter.Surface {
     }
   }
 
-  private getHandler(): Adapter.MessageHandler {
+  private getHandler(): Channel.MessageHandler {
     if (!this.handler) {
       throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
     }

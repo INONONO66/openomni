@@ -26,7 +26,7 @@ export class DiscordClient implements ChannelClient {
       method: "POST",
       headers: { Authorization: `Bot ${this.token}` },
     }).catch((e) =>
-      this.publish(Operational.Warn, {
+      this.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "server",

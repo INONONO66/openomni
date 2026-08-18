@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Operational, WorkerDriver } from "@openomni/protocol";
+import { Operational, Worker } from "@openomni/protocol";
 import { WorkerSupervisor } from "../../src/worker-supervision/supervisor";
 import { MAX_CONSECUTIVE_FAST_CRASHES } from "../../src/worker-supervision/supervisor-process";
 import { collectorPorts } from "../harness/ports";
@@ -57,7 +57,7 @@ describe("zombie supervisor prevention (#audit H1)", () => {
     await waitFor(() =>
       ports.collected.some(
         (entry) =>
-          entry.event.name === Operational.Warn.name &&
+          entry.event.name === Operational.Events.Warn.name &&
           (entry.data as { msg: string }).msg ===
             "worker IPC connect failed within deadline; killing worker",
       ),
@@ -65,7 +65,7 @@ describe("zombie supervisor prevention (#audit H1)", () => {
     await waitFor(() =>
       ports.collected.some(
         (entry) =>
-          entry.event.name === WorkerDriver.Exited.name &&
+          entry.event.name === Worker.Events.Exited.name &&
           (entry.data as { planned: boolean }).planned === false,
       ),
     );
@@ -84,13 +84,13 @@ describe("crash-loop circuit breaker (#audit M2)", () => {
     });
 
     const spawnedCount = () =>
-      ports.collected.filter((entry) => entry.event.name === WorkerDriver.Spawned.name).length;
+      ports.collected.filter((entry) => entry.event.name === Worker.Events.Spawned.name).length;
 
     await waitFor(
       () =>
         ports.collected.some(
           (entry) =>
-            entry.event.name === Operational.Warn.name &&
+            entry.event.name === Operational.Events.Warn.name &&
             (entry.data as { msg: string }).msg === "worker is crash-looping; restarts suspended",
         ),
       15_000,

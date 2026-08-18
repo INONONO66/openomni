@@ -160,7 +160,7 @@ describe("InstructionLoader.load", () => {
     // Pin (D11): the skip-warn INHERITS the caller's dispatch trace — a
     // revert to a per-warn mint would break this equality.
     const warns: Array<{ traceId: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       warns.push(event);
     });
     let result: string;

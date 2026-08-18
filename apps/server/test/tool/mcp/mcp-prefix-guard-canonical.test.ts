@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { NativeTool } from "@openomni/openomni";
 import { PolicyEngine } from "@openomni/policy";
-import { Policy, PolicyEvent, type Tool } from "@openomni/protocol";
+import { Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { McpPrefixGuardMiddleware } from "../../../src/tool/mcp/mcp-prefix-guard";
 
@@ -35,10 +35,10 @@ function makeTool(name: string): NativeTool {
 function collectPointAudit() {
   const evaluated: PointAuditEvent[] = [];
   const composed: PointAuditEvent[] = [];
-  const unsubscribeEvaluated = Bus.subscribe(PolicyEvent.Evaluated, (event) => {
+  const unsubscribeEvaluated = Bus.subscribe(Policy.Events.Evaluated, (event) => {
     evaluated.push(event);
   });
-  const unsubscribeComposed = Bus.subscribe(PolicyEvent.DecisionComposed, (event) => {
+  const unsubscribeComposed = Bus.subscribe(Policy.Events.DecisionComposed, (event) => {
     composed.push(event);
   });
   activeCleanups.push(unsubscribeEvaluated, unsubscribeComposed);

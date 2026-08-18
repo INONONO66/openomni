@@ -254,7 +254,7 @@ describe("DispatchRuntime", () => {
   test("default policy preserves WorkerGrant store errors as middleware audit evidence", async () => {
     let called = false;
     const warnings: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
     try {
       const runtime = new DispatchRuntime();
       runtime.register("api.ask", () => {

@@ -97,7 +97,7 @@ describe("#497 fixture rules", () => {
     expect(testPinned?.disposition).toBe("delete");
     expect(testPinned?.testPinned).toBe(true);
 
-    const retainedOwner = bySymbol.get("Adapter.Capabilities");
+    const retainedOwner = bySymbol.get("AppConnector.InstallationStatus");
     expect(retainedOwner?.disposition).toBe("preserve");
 
     const deferred = bySymbol.get("Actor.Relationship");
@@ -134,13 +134,13 @@ describe("#497 fixture rules", () => {
   });
 
   test("a fixture that omits a required fail-closed owner is rejected by that symbol", () => {
-    // Given — claims to retain Adapter.Capabilities but omits Actor.Relationship
+    // Given — claims to retain AppConnector.InstallationStatus but omits Actor.Relationship
     const fixture: Fixture = {
       description: "omits a required owner",
       expect: "accept",
       crossPackage: true,
-      retainsFailClosed: ["Adapter.Capabilities"],
-      requiredOwners: ["Adapter.Capabilities", "Actor.Relationship"],
+      retainsFailClosed: ["AppConnector.InstallationStatus"],
+      requiredOwners: ["AppConnector.InstallationStatus", "Actor.Relationship"],
     };
 
     // When

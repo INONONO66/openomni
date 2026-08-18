@@ -3,7 +3,7 @@
   "roadmap": "#459",
   "baselineCommit": "87d4fc8da6ab57212a2aea1ea187d8d56706b210",
   "generatedFrom": "adversarial evidence workflow wf_b5558306-84f (124 symbols / 13 families, verify phase) + reviewer reconciliation 2026-08-13",
-  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone. Status backfill: #595 wired 6 Dispatch.Actions constants (shipped) and #596 shipped 8 ingress/message/actor kills; their rows are marked status:shipped with their PR number. Remaining kill batches stay status:pending until delivered; the #497 completion receipt does the final sweep. COMPLETION SWEEP (#497 receipt, 2026-08-13): 27 delivered kill/unexport rows marked status:shipped with their PR — #598 (10: Tool.State x4 + McpConfig x3 unexport; McpServerConfig/Communication.Envelope/Model.isRef delete), #599 (11: RuntimeResource satellite x8 delete + Kind unexport; Policy.Label/PermissionDecision delete), #601 (6: Dispatch.TargetKind/Run.Budget/WorkerRun.Info/Artifact.Part delete; WorkItem.VerificationGate/TraceContext.Schema unexport). Three delete rows were reclassified after read-verification (see per-row reason): Run.Snapshot->already-removed (phantom), PolicyDecision.pending->preserve (live require_approval ctor), Artifact.Meta.version->preserve (live cross-package field). No census rows added; total stays 124 (corrections only rebalance buckets: delete 44->41, preserve 48->50, already-removed 2->3). Two internal-implementation unexports done during batch execution are recorded here rather than as census rows, because they are private building blocks behind public aliases, not tracked public-concept surface: #600 unexported PolicyPermission.Label + PolicyPermission.PermissionDecision (behind the deleted Policy.Label/PermissionDecision aliases), and #601 unexported work-item/schemas.ts VerificationGate (behind the removed WorkItem.VerificationGate re-export; the check-dead-exports gate forced it once the public re-export was dropped). DispatchSchemas.TargetKind was NOT unexported: it retains a live external consumer at ledger-append/streams.ts:116 plus a bare ref in Dispatch.Target. Preserve/defer/already-removed rows keep status:pending (no delivery PR). ENVELOPE COMPLETION (#603): a third internal-completion is recorded here rather than as a census row. PR #603 finished the Communication.Envelope delete that #598 began — #598 removed the public namespace member but left the backing src/communication/envelope.ts alive (its only consumer was its own schema.test.ts block, and it was naming-grandfathered), so #603 deleted envelope.ts, that self-test block, and both Envelope naming-grandfather entries (envelope.ts:Envelope + the already-stale index.ts:Envelope). The Communication.Envelope census row stays delete/shipped/#598 (the public concept died there); this note records the internal backing removal, mirroring the #600/#601 building-block cleanups above. Found by adversarial verification of the #602 receipt before merge.",
+  "reconciliationNote": "The workflow verify phase systematically over-preserved by treating schema-snapshot.json pins as runtime consumers. 11 of 13 overturns reclassified to the issue kill-list disposition (pin-only); 1 (Actor.Relationship) confirmed a real persisted required-field consumer -> deferred to #498; 1 (ExternalInboundEvent) delete + trust-boundary test repoint. Authoritative disposition = issue #497 kill-list EXCEPT where regenerated proof shows a real persisted/wire/required-field consumer. After the seed, batch re-verification applied three correction classes: (a) 5 adapter symbols (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler) were live members of the kept Surface interface signature — bare-internal-ref blindness that a namespaced grep and production-only consumer scan miss — reclassified to preserve; (b) Ingress.InboundEventSchema and Ingress.InternalEventSchema were preserved by the merged #596 kill after fresh-grep proof refuted the delete/unexport brief; (c) NamedError.Unknown deferred as a latent-role error-taxonomy primitive rather than dead surface. Every DELETE is re-verified by READING definitions plus a full build at kill-batch review, not grep alone. Status backfill: #595 wired 6 Dispatch.Actions constants (shipped) and #596 shipped 8 ingress/message/actor kills; their rows are marked status:shipped with their PR number. Remaining kill batches stay status:pending until delivered; the #497 completion receipt does the final sweep. COMPLETION SWEEP (#497 receipt, 2026-08-13): 27 delivered kill/unexport rows marked status:shipped with their PR — #598 (10: Tool.State x4 + McpConfig x3 unexport; McpServerConfig/Communication.Envelope/Model.isRef delete), #599 (11: RuntimeResource satellite x8 delete + Kind unexport; Policy.Label/PermissionDecision delete), #601 (6: Dispatch.TargetKind/Run.Budget/WorkerRun.Info/Artifact.Part delete; WorkItem.VerificationGate/TraceContext.Schema unexport). Three delete rows were reclassified after read-verification (see per-row reason): Run.Snapshot->already-removed (phantom), PolicyDecision.pending->preserve (live require_approval ctor), Artifact.Meta.version->preserve (live cross-package field). No census rows added; total stays 124 (corrections only rebalance buckets: delete 44->41, preserve 48->50, already-removed 2->3). Two internal-implementation unexports done during batch execution are recorded here rather than as census rows, because they are private building blocks behind public aliases, not tracked public-concept surface: #600 unexported PolicyPermission.Label + PolicyPermission.PermissionDecision (behind the deleted Policy.Label/PermissionDecision aliases), and #601 unexported work-item/schemas.ts VerificationGate (behind the removed WorkItem.VerificationGate re-export; the check-dead-exports gate forced it once the public re-export was dropped). DispatchSchemas.TargetKind was NOT unexported: it retains a live external consumer at ledger-append/streams.ts:116 plus a bare ref in Dispatch.Target. Preserve/defer/already-removed rows keep status:pending (no delivery PR). ENVELOPE COMPLETION (#603): a third internal-completion is recorded here rather than as a census row. PR #603 finished the Communication.Envelope delete that #598 began — #598 removed the public namespace member but left the backing src/communication/envelope.ts alive (its only consumer was its own schema.test.ts block, and it was naming-grandfathered), so #603 deleted envelope.ts, that self-test block, and both Envelope naming-grandfather entries (envelope.ts:Envelope + the already-stale index.ts:Envelope). The Communication.Envelope census row stays delete/shipped/#598 (the public concept died there); this note records the internal backing removal, mirroring the #600/#601 building-block cleanups above. Found by adversarial verification of the #602 receipt before merge. CHANNEL CONVERGENCE SWEEP (#499 final slice, branch feat-499-convergence, 2026-08-19): the adapter namespace was renamed to Channel (packages/protocol/src/channel/index.ts) with zero shape changes to the kept members (Surface{id,config,start,stop,onMessage}, InboundMessage, OutboundMessage, MessageHandler, TriggerRule, TriggerContext, Config{triggers}, SurfaceKey codec verbatim). 8 adapter rows flipped preserve->delete/shipped (Command/CommandContext/CommandHandler/StreamSink/StreamingHandler/MediaAttachment/DeliveryPolicy/Capabilities) — every prior preserve rested on membership in the old Surface interface or constant type-position driver declarations, and #499 deleted those members in the same increment with re-verified zero-reader proofs (Surface.send also died: ZERO callers anywhere; outbound goes through the drivers' non-interface deliver(externalId, body), Gateway.Send is the stage-3 successor — no census row existed for send, recorded here). 8 appconnector rows flipped ->unexport/shipped (Detect/Evidence/Profile/InitialAutonomy/DriverInstallScope/SubmitMode/SubmitAck defer->unexport; WorkspaceIdentity preserve->unexport): all are composed sub-schemas of the untouched persisted Definition/Installation shapes, now module-local. Two unexports have no census rows and are recorded here: AppConnector.EvidenceEmitter and AppConnector.Driver (same composed-sub-schema class). One delete has no census row: AppConnector.Events.VerificationFailed (app-connector/events.ts) — zero production publishers (the session store sets status:'verification_failed' without publishing); its only toucher was protocol/test/app-connector.test.ts, pruned with it, and the thereby-orphaned VerificationFailureReason enum (installation.ts) died too. AppConnector.Requires stays defer-row-as-written but is RESOLVED kept-exported (live test consumers; #499 ruling: test-consumers count as consumers). The readBack-template unification bullet of #499 was deliberately NOT executed: definition.ts ReportSource.readBackRequests targets are placeholders the server-side builder renders, while WorkItem.ReadBackRequest (work-item/schemas.ts) validates resolved http(s) URLs — unifying would validate placeholders as URLs; the in-code non-unification comments are the recorded ruling. Census total stays 124 (rebalance only: preserve 50->41, delete 41->49, defer 12->5, unexport 12->20).",
   "dispositions": [
     "delete",
     "unexport",
@@ -13,10 +13,10 @@
     "already-removed"
   ],
   "tally": {
-    "unexport": 12,
-    "preserve": 50,
-    "defer": 12,
-    "delete": 41,
+    "unexport": 20,
+    "preserve": 41,
+    "defer": 5,
+    "delete": 49,
     "already-removed": 3,
     "wire": 6
   },
@@ -1035,8 +1035,8 @@
     {
       "symbol": "Adapter.Command",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:65",
       "evidence": {
         "productionConsumers": [
@@ -1046,14 +1046,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "kept Surface interface signature"
       },
-      "overturnOriginal": null,
-      "reason": "live interface-contract member; namespaced Adapter.Command grep missed the bare-internal ref inside Surface. Not dead."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "live interface-contract member; namespaced Adapter.Command grep missed the bare-internal ref inside Surface. Not dead. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.CommandContext",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:75",
       "evidence": {
         "productionConsumers": [
@@ -1063,14 +1067,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "kept via CommandHandler"
       },
-      "overturnOriginal": null,
-      "reason": "transitively live."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "transitively live. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.CommandHandler",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:83",
       "evidence": {
         "productionConsumers": [
@@ -1080,14 +1088,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "kept Surface signature"
       },
-      "overturnOriginal": null,
-      "reason": "live interface-contract member; namespaced grep missed the bare-internal ref inside Surface. Not dead."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "live interface-contract member; namespaced grep missed the bare-internal ref inside Surface. Not dead. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.StreamSink",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:85",
       "evidence": {
         "productionConsumers": [
@@ -1097,14 +1109,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "kept via StreamingHandler"
       },
-      "overturnOriginal": null,
-      "reason": "transitively live."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "transitively live. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.StreamingHandler",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:93",
       "evidence": {
         "productionConsumers": [
@@ -1114,14 +1130,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "kept Surface signature"
       },
-      "overturnOriginal": null,
-      "reason": "removing these optional command/streaming capability members is an adapter-capability redesign, out of #497 dead-surface scope."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "removing these optional command/streaming capability members is an adapter-capability redesign, out of #497 dead-surface scope. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.MediaAttachment",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:35",
       "evidence": {
         "productionConsumers": [
@@ -1133,14 +1153,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
-      "overturnOriginal": null,
-      "reason": "Live wire contract. MediaAttachment is the element type of InboundMessage.media (adapter/index.ts:51) and OutboundMessage.media (adapter/index.ts:60), both consumed interfaces: channel normalizers build InboundMessage, surfaces send OutboundMessage, and the ingress bridge reads message.media and forwards MediaAttachment[] into the Ingress.DirectEvent meta payload (bridge.ts:145). Survivor; #499 renames adapter->Channel but #497 must not remove it."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Live wire contract. MediaAttachment is the element type of InboundMessage.media (adapter/index.ts:51) and OutboundMessage.media (adapter/index.ts:60), both consumed interfaces: channel normalizers build InboundMessage, surfaces send OutboundMessage, and the ingress bridge reads message.media and forwards MediaAttachment[] into the Ingress.DirectEvent meta payload (bridge.ts:145). Survivor; #499 renames adapter->Channel but #497 must not remove it. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.DeliveryPolicy",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:33",
       "evidence": {
         "productionConsumers": [
@@ -1155,14 +1179,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
-      "overturnOriginal": null,
-      "reason": "Type of the live Config.deliveryPolicy field (adapter/index.ts:97). Config is a consumed interface — every channel surface takes config: Adapter.Config (discord/telegram/github surface.ts) and bootstrap constructs Config objects with deliveryPolicy:\"final\" (channels.ts:53/72/93). Value side is a string literal but the type governs a live, constructed-and-consumed contract field. Survivor; renamed under #499, not removed by #497."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Type of the live Config.deliveryPolicy field (adapter/index.ts:97). Config is a consumed interface — every channel surface takes config: Adapter.Config (discord/telegram/github surface.ts) and bootstrap constructs Config objects with deliveryPolicy:\"final\" (channels.ts:53/72/93). Value side is a string literal but the type governs a live, constructed-and-consumed contract field. Survivor; renamed under #499, not removed by #497. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "Adapter.Capabilities",
       "family": "adapter",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "delete",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/adapter/index.ts:2",
       "evidence": {
         "productionConsumers": [
@@ -1174,8 +1202,12 @@
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
-      "overturnOriginal": null,
-      "reason": "CENSUS CORRECTION REFUTED. Claim 'zero readers' holds only for runtime VALUE reads — nothing branches on surface.capabilities.streaming/media/commands/threads. The two unrelated value-readers the correction warns about are apps/../app-connector/consent-validation.ts:15 (input.capabilities) and packages/openomni/src/evidence/verifier-registry-core.ts:58 (program.capabilities) — different Capabilities-shaped fields, correctly NOT confused. BUT Adapter.Capabilities has 3 direct TYPE-position production consumers (the three channel surfaces annotate their capabilities property with Adapter.Capabilities) and is a required field of Adapter.Surface (adapter/index.ts:102), which those same 3 classes implement (implements Adapter.Surface). Live public contract → preserve; #499 renames to Channel.Capabilities. Not delete-eligible in #497."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "delete",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "CENSUS CORRECTION REFUTED. Claim 'zero readers' holds only for runtime VALUE reads — nothing branches on surface.capabilities.streaming/media/commands/threads. The two unrelated value-readers the correction warns about are apps/../app-connector/consent-validation.ts:15 (input.capabilities) and packages/openomni/src/evidence/verifier-registry-core.ts:58 (program.capabilities) — different Capabilities-shaped fields, correctly NOT confused. BUT Adapter.Capabilities has 3 direct TYPE-position production consumers (the three channel surfaces annotate their capabilities property with Adapter.Capabilities) and is a required field of Adapter.Surface (adapter/index.ts:102), which those same 3 classes implement (implements Adapter.Surface). Live public contract → preserve; #499 renames to Channel.Capabilities. Not delete-eligible in #497. SHIPPED by the #499 Channel-convergence slice (branch feat-499-convergence): the adapter namespace was renamed to Channel (protocol/src/channel/) and this member was DELETED with re-verified zero-reader proof — prior preserve rationale rested on Surface interface membership / constant type-position declarations that #499 removed in the same increment (Surface shrank to {id, config, start, stop, onMessage}; Config shrank to {triggers}; media fields and the bridge.ts pass-through died with MediaAttachment)."
     },
     {
       "symbol": "AppConnector.InstallationStatus",
@@ -1198,8 +1230,8 @@
     {
       "symbol": "AppConnector.WorkspaceIdentity",
       "family": "appconnector",
-      "disposition": "preserve",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:57 (const) + :58 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1207,14 +1239,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Persisted enrollment workspace-identity shape. Declared installation.ts:26-34, composed into the persisted Installation record at installation.ts:47 (workspace field). Its fields ARE consumed field-level in production: packages/session/src/app-connector/index.ts:66 (workspace.worktreePath) and :99-104 (workspace.repoPathHash / worktreePathHash) build the connector Actor.Endpoint. Persisted enrollment identity contract survivor. No direct namespace-qualified prod consumer of the symbol itself (consumed via installation.workspace on the Installation type); no test pins."
+      "overturnOriginal": {
+        "from": "preserve",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Persisted enrollment workspace-identity shape. Declared installation.ts:26-34, composed into the persisted Installation record at installation.ts:47 (workspace field). Its fields ARE consumed field-level in production: packages/session/src/app-connector/index.ts:66 (workspace.worktreePath) and :99-104 (workspace.repoPathHash / worktreePathHash) build the connector Actor.Endpoint. Persisted enrollment identity contract survivor. No direct namespace-qualified prod consumer of the symbol itself (consumed via installation.workspace on the Installation type); no test pins. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.Detect",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:21 (const) + :22 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1222,14 +1258,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Connector-manifest detection sub-schema. Declared definition.ts:31-39, composed into the live Definition manifest at definition.ts:219 (Definition.detect, required). Definition is validated at enrollment, persisted inside Installation, and consumed cross-package (apps/server/src/connector/*, packages/openomni/src/dispatch/*, packages/session/src/app-connector/*). No direct namespace-qualified consumer (prod or test) and no field-level prod read of .detect, but it is a live constituent of the persisted connector manifest under the #499 AppConnector->Tier-2 Endpoint / adapter->Channel convergence (corpus docs/corpus/10-protocol.local.md:63 app-connector = retained+converged domain #497-#500; :66 #499 owns adapter->channel). #497 must freeze it as a handoff, not raw-remove it (removal would still leave the local const composing Definition; the convergence owns whether the manifest keeps/renames this sub-schema)."
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Connector-manifest detection sub-schema. Declared definition.ts:31-39, composed into the live Definition manifest at definition.ts:219 (Definition.detect, required). Definition is validated at enrollment, persisted inside Installation, and consumed cross-package (apps/server/src/connector/*, packages/openomni/src/dispatch/*, packages/session/src/app-connector/*). No direct namespace-qualified consumer (prod or test) and no field-level prod read of .detect, but it is a live constituent of the persisted connector manifest under the #499 AppConnector->Tier-2 Endpoint / adapter->Channel convergence (corpus docs/corpus/10-protocol.local.md:63 app-connector = retained+converged domain #497-#500; :66 #499 owns adapter->channel). #497 must freeze it as a handoff, not raw-remove it (removal would still leave the local const composing Definition; the convergence owns whether the manifest keeps/renames this sub-schema). SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.Evidence",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:36 (const) + :37 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1237,8 +1277,12 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Connector-manifest evidence/completion sub-schema (distinct from WorkItem.Evidence, which is a different live symbol). Declared definition.ts:163-169, composed into Definition at definition.ts:224 (Definition.evidence, required). Its field-shape IS read in production via definition.evidence: apps/server/src/connector/process-driver.ts:40 (evidence.completionReport.finalMessage) and apps/server/src/connector/read-back-builder.ts:22 (evidence.completionReport.readBackRequests). No direct namespace-qualified consumer of the AppConnector.Evidence symbol itself. Live constituent of the persisted connector manifest entangled with the #499 AppConnector convergence; #497 freezes as handoff. #499 must carry this shape (it is live), not drop it."
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Connector-manifest evidence/completion sub-schema (distinct from WorkItem.Evidence, which is a different live symbol). Declared definition.ts:163-169, composed into Definition at definition.ts:224 (Definition.evidence, required). Its field-shape IS read in production via definition.evidence: apps/server/src/connector/process-driver.ts:40 (evidence.completionReport.finalMessage) and apps/server/src/connector/read-back-builder.ts:22 (evidence.completionReport.readBackRequests). No direct namespace-qualified consumer of the AppConnector.Evidence symbol itself. Live constituent of the persisted connector manifest entangled with the #499 AppConnector convergence; #497 freezes as handoff. #499 must carry this shape (it is live), not drop it. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.Requires",
@@ -1261,8 +1305,8 @@
     {
       "symbol": "AppConnector.Profile",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:45 (const) + :46 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1270,14 +1314,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Connector-endpoint profile sub-schema — the literal Tier-2 Endpoint profile named by this family ('connector_endpoint' kind). Declared definition.ts:202-211, composed into Definition at definition.ts:226 (Definition.profile, required). Field-shape IS read in production: packages/openomni/src/dispatch/handlers/connector-endpoint-worker.ts:85 gates on definition.profile.kind === 'connector_endpoint'. No direct namespace-qualified consumer of the AppConnector.Profile symbol itself. Live constituent central to the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff. (apps/server/src/profile/resident.ts:188 '## Profile' is an unrelated markdown heading, not this symbol.)"
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Connector-endpoint profile sub-schema — the literal Tier-2 Endpoint profile named by this family ('connector_endpoint' kind). Declared definition.ts:202-211, composed into Definition at definition.ts:226 (Definition.profile, required). Field-shape IS read in production: packages/openomni/src/dispatch/handlers/connector-endpoint-worker.ts:85 gates on definition.profile.kind === 'connector_endpoint'. No direct namespace-qualified consumer of the AppConnector.Profile symbol itself. Live constituent central to the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff. (apps/server/src/profile/resident.ts:188 '## Profile' is an unrelated markdown heading, not this symbol.) SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.InitialAutonomy",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:9 (const) + :10 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1285,14 +1333,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Connector-endpoint autonomy-policy enum. Declared definition.ts:19-20, composed into Profile at definition.ts:208 (Profile.initialAutonomy, optional) -> Definition.profile. No direct namespace-qualified consumer (prod or test) and no field-level prod read of .initialAutonomy — only the intra-file schema composition. But it is a live constituent of the persisted connector endpoint profile under the #499 AppConnector->Tier-2 Endpoint convergence, which owns the endpoint autonomy contract. #497 freezes as handoff rather than raw-removing."
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Connector-endpoint autonomy-policy enum. Declared definition.ts:19-20, composed into Profile at definition.ts:208 (Profile.initialAutonomy, optional) -> Definition.profile. No direct namespace-qualified consumer (prod or test) and no field-level prod read of .initialAutonomy — only the intra-file schema composition. But it is a live constituent of the persisted connector endpoint profile under the #499 AppConnector->Tier-2 Endpoint convergence, which owns the endpoint autonomy contract. #497 freezes as handoff rather than raw-removing. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.DriverInstallScope",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:12 (const) + :13 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1300,14 +1352,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Driver install-scope enum (user/workspace/repository). Declared definition.ts:22-23, composed into Driver at definition.ts:185 (Driver.install.scopes) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of .scopes — only schema composition. Live constituent of the connector Driver sub-schema, which is exactly the surface the #499 AppConnector->Channel/Tier-2 convergence reshapes (corpus 10-protocol.local.md:66, #499 adapter->channel). #497 freezes as handoff."
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Driver install-scope enum (user/workspace/repository). Declared definition.ts:22-23, composed into Driver at definition.ts:185 (Driver.install.scopes) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of .scopes — only schema composition. Live constituent of the connector Driver sub-schema, which is exactly the surface the #499 AppConnector->Channel/Tier-2 convergence reshapes (corpus 10-protocol.local.md:66, #499 adapter->channel). #497 freezes as handoff. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.SubmitMode",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:15 (const) + :16 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1315,14 +1371,18 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Driver submit-mode enum (spawn/hook/plugin/api). Declared definition.ts:25-26, composed into Driver at definition.ts:192 (Driver.submit.mode) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of driver.submit.mode (the '.submit' hits in prod are unrelated dispatchRuntime.submit calls). Live constituent of the connector Driver contract under the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff."
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Driver submit-mode enum (spawn/hook/plugin/api). Declared definition.ts:25-26, composed into Driver at definition.ts:192 (Driver.submit.mode) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of driver.submit.mode (the '.submit' hits in prod are unrelated dispatchRuntime.submit calls). Live constituent of the connector Driver contract under the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "AppConnector.SubmitAck",
       "family": "appconnector",
-      "disposition": "defer",
-      "status": "pending",
+      "disposition": "unexport",
+      "status": "shipped",
       "exportSite": "packages/protocol/src/app-connector/index.ts:18 (const) + :19 (type)",
       "evidence": {
         "productionConsumers": [],
@@ -1330,8 +1390,12 @@
         "snapshotPin": null,
         "runtimeConsumer": "none"
       },
-      "overturnOriginal": null,
-      "reason": "Driver submit-ack enum (submitted/accepted/running). Declared definition.ts:28-29, composed into Driver at definition.ts:193 (Driver.submit.ack) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of driver.submit.ack. Live constituent of the connector Driver contract under the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff."
+      "overturnOriginal": {
+        "from": "defer",
+        "to": "unexport",
+        "reclassified": "#499-convergence"
+      },
+      "reason": "Driver submit-ack enum (submitted/accepted/running). Declared definition.ts:28-29, composed into Driver at definition.ts:193 (Driver.submit.ack) -> Definition.driver. No direct namespace-qualified consumer (prod or test) and no field-level prod read of driver.submit.ack. Live constituent of the connector Driver contract under the #499 AppConnector->Tier-2 Endpoint convergence; #497 freezes as handoff. SHIPPED by the #499 AppConnector export-diet slice (branch feat-499-convergence): unexported from the AppConnector namespace (made module-local in app-connector/definition.ts / installation.ts); Definition/Installation keep composing it, so the persisted manifest shape is unchanged."
     },
     {
       "symbol": "Extension.LifecycleState",

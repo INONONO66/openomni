@@ -1,4 +1,4 @@
-import { LedgerAppend, type Storage as ProtocolStorage, type WorkItem } from "@openomni/protocol";
+import { Ledger, type Storage as ProtocolStorage, type WorkItem } from "@openomni/protocol";
 import { isSqliteBusyError } from "../storage/sqlite-busy.js";
 
 /**
@@ -151,7 +151,7 @@ export function appendTransitionFactReceipt(
       data: { snapshot: existing, revision: existing.revision },
     });
   } catch (error) {
-    if (LedgerAppend.AdoptError.isInstance(error)) return false;
+    if (Ledger.AdoptError.isInstance(error)) return false;
     throw error;
   }
   return ledger.append(event, existing.revision).kind !== "cas_conflict";

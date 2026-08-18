@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
 import type { PublishPort } from "../../src/channel/types";
@@ -13,7 +13,7 @@ function createHandler(
   decisions: ChannelAuthnDecision[] = [],
   publish: PublishPort = noopPublish,
 ): WebSocketHandler {
-  const handler: Adapter.MessageHandler = async () => ({ text: "ok" });
+  const handler: Channel.MessageHandler = async () => ({ text: "ok" });
   return new WebSocketHandler(handler, publish, {
     token: "secret-token",
     onAuthDecision: (decision) => {
@@ -68,7 +68,7 @@ describe("WebSocketHandler authentication", () => {
   it("keeps query token fallback and publishes a deprecation warning", () => {
     const warnings: string[] = [];
     const collector: PublishPort = (event, data) => {
-      if (event.name === Operational.Warn.name) {
+      if (event.name === Operational.Events.Warn.name) {
         warnings.push((data as { msg: string }).msg);
       }
     };
@@ -109,7 +109,7 @@ describe("WebSocketHandler authentication", () => {
   });
 
   it("passes websocket authentication state through inbound message raw metadata", async () => {
-    let message: Adapter.InboundMessage | undefined;
+    let message: Channel.InboundMessage | undefined;
     const handler = new WebSocketHandler(async (inbound) => {
       message = inbound;
       return { text: "ok" };

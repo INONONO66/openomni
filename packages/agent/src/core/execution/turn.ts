@@ -687,7 +687,7 @@ export async function handleError(
  * source of truth for what enters history (#546). The empty-text fallback is
  * a TEST-STUB-ONLY path: every production processor exit emits a finished
  * snapshot (#557), so a missing snapshot means the configured llm run never
- * drove the sink. It is loud (Operational.Error) and deliberately does NOT
+ * drove the sink. It is loud (Operational.Events.Error) and deliberately does NOT
  * reuse lastAssistantText, which may still hold the PREVIOUS turn's text —
  * resurrecting it would forge history.
  */
@@ -698,7 +698,7 @@ function resolveTurnAssistant(
   agentBase: AgentRunBase,
 ): Message.WithParts {
   if (turn.turnAssistant.message !== undefined) return turn.turnAssistant.message;
-  events.publish(Operational.Error, {
+  events.publish(Operational.Events.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
     sessionId: agentBase.sessionId,

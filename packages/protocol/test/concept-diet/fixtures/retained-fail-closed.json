@@ -3,7 +3,14 @@
   "expect": "accept",
   "crossPackage": true,
   "removed": ["Ingress.ActorMetadata", "Message.RetryPart"],
-  "imports": ["Adapter.Capabilities", "Actor.Relationship", "Token.Usage"],
-  "retainsFailClosed": ["Adapter.Capabilities", "Actor.Relationship"],
-  "requiredOwners": ["Adapter.Capabilities", "Actor.Relationship"]
+  "imports": [
+    "AppConnector.InstallationStatus",
+    "Actor.Relationship",
+    "Token.Usage"
+  ],
+  "retainsFailClosed": [
+    "AppConnector.InstallationStatus",
+    "Actor.Relationship"
+  ],
+  "requiredOwners": ["AppConnector.InstallationStatus", "Actor.Relationship"]
 }

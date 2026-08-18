@@ -98,7 +98,7 @@ function warnCleanup(
   msg: string,
   context: Record<string, unknown>,
 ): void {
-  events.publish(Operational.Warn, {
+  events.publish(Operational.Events.Warn, {
     traceId,
     time: Date.now(),
     component: "coordinator.worker-manager",

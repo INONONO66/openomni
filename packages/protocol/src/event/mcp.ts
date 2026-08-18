@@ -8,44 +8,48 @@ const Base = z.object({
 });
 
 export namespace Mcp {
-  export const Connected = BusEvent.define(
-    "mcp.connected",
-    Base.extend({
-      transport: z.enum(["stdio", "sse", "streamable-http"]),
-      toolCount: z.number(),
-    }),
-    { visibility: "internal" },
-  );
+  export namespace Events {
+    export const Connected = BusEvent.define(
+      "mcp.connected",
+      Base.extend({
+        transport: z.enum(["stdio", "sse", "streamable-http"]),
+        toolCount: z.number(),
+      }),
+      { visibility: "internal" },
+    );
 
-  export const Disconnected = BusEvent.define("mcp.disconnected", Base, { visibility: "internal" });
+    export const Disconnected = BusEvent.define("mcp.disconnected", Base, {
+      visibility: "internal",
+    });
 
-  export const ToolCalled = BusEvent.define(
-    "mcp.tool.called",
-    Base.extend({
-      toolName: z.string(),
-      toolCallId: z.string(),
-    }),
-    { visibility: "ephemeral" },
-  );
+    export const ToolCalled = BusEvent.define(
+      "mcp.tool.called",
+      Base.extend({
+        toolName: z.string(),
+        toolCallId: z.string(),
+      }),
+      { visibility: "ephemeral" },
+    );
 
-  export const ToolCompleted = BusEvent.define(
-    "mcp.tool.completed",
-    Base.extend({
-      toolName: z.string(),
-      toolCallId: z.string(),
-      durationMs: z.number(),
-      resultSummary: z.string(),
-    }),
-    { visibility: "llm_reason" },
-  );
+    export const ToolCompleted = BusEvent.define(
+      "mcp.tool.completed",
+      Base.extend({
+        toolName: z.string(),
+        toolCallId: z.string(),
+        durationMs: z.number(),
+        resultSummary: z.string(),
+      }),
+      { visibility: "llm_reason" },
+    );
 
-  export const ToolFailed = BusEvent.define(
-    "mcp.tool.failed",
-    Base.extend({
-      toolName: z.string(),
-      toolCallId: z.string(),
-      error: z.string(),
-    }),
-    { visibility: "llm_reason" },
-  );
+    export const ToolFailed = BusEvent.define(
+      "mcp.tool.failed",
+      Base.extend({
+        toolName: z.string(),
+        toolCallId: z.string(),
+        error: z.string(),
+      }),
+      { visibility: "llm_reason" },
+    );
+  }
 }

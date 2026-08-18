@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ToolExecution } from "../src/event/tool.js";
+import { Tool } from "../src/tool/index.js";
 
-describe("ToolExecution BusEvents", () => {
+describe("Tool.Events BusEvents", () => {
   const base = {
     traceId: "test-trace-id",
     sessionId: "s1",
@@ -13,7 +13,7 @@ describe("ToolExecution BusEvents", () => {
   };
 
   test("Started parses actor and input summary", () => {
-    const parsed = ToolExecution.Started.schema.parse({
+    const parsed = Tool.Events.Started.schema.parse({
       ...base,
       inputSummary: "command: ls",
     });
@@ -23,12 +23,12 @@ describe("ToolExecution BusEvents", () => {
   });
 
   test("PermissionDenied parses actor and uses canonical event name", () => {
-    const parsed = ToolExecution.PermissionDenied.schema.parse({
+    const parsed = Tool.Events.PermissionDenied.schema.parse({
       ...base,
       reason: "denied by policy",
     });
 
-    expect(ToolExecution.PermissionDenied.name).toBe("tool.execution.permission_denied");
+    expect(Tool.Events.PermissionDenied.name).toBe("tool.execution.permission_denied");
     expect(parsed.actor).toEqual({ agentName: "researcher" });
     expect(parsed.reason).toBe("denied by policy");
   });

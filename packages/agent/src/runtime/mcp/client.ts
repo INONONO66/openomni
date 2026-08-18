@@ -69,7 +69,7 @@ export class McpClient {
 
       const toolCount = tools.tools.length;
 
-      this.publishLifecycle(Mcp.Connected, {
+      this.publishLifecycle(Mcp.Events.Connected, {
         serverName: this.config.name,
         transport: transportType,
         toolCount,
@@ -85,7 +85,7 @@ export class McpClient {
         context.cleanupError = String(cleanupError);
       }
 
-      this.publishLifecycle(Operational.Error, {
+      this.publishLifecycle(Operational.Events.Error, {
         time: Date.now(),
         component: "agent.mcp",
         msg: "MCP connection failed",
@@ -102,12 +102,12 @@ export class McpClient {
         await this.client.close();
         this.connected = false;
 
-        this.publishLifecycle(Mcp.Disconnected, {
+        this.publishLifecycle(Mcp.Events.Disconnected, {
           serverName: this.config.name,
           time: Date.now(),
         });
       } catch (err) {
-        this.publishLifecycle(Operational.Error, {
+        this.publishLifecycle(Operational.Events.Error, {
           time: Date.now(),
           component: "agent.mcp",
           msg: "MCP disconnection failed",
@@ -144,7 +144,7 @@ export class McpClient {
 
     const startTime = Date.now();
 
-    this.events.publish(Mcp.ToolCalled, {
+    this.events.publish(Mcp.Events.ToolCalled, {
       traceId,
       serverName: this.config.name,
       toolName: strippedName,
@@ -170,7 +170,7 @@ export class McpClient {
         toolCallId,
       );
     } catch (err) {
-      this.events.publish(Mcp.ToolFailed, {
+      this.events.publish(Mcp.Events.ToolFailed, {
         traceId,
         serverName: this.config.name,
         toolName: strippedName,

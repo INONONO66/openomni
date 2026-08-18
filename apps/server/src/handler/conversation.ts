@@ -1,7 +1,7 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
 import type { IngressEngine } from "@openomni/openomni";
 import type { Ingress } from "@openomni/protocol";
-import { Adapter, Operational, WorkItem } from "@openomni/protocol";
+import { Channel, Operational, WorkItem } from "@openomni/protocol";
 import { hasRetryExhaustionBlocker, WorkItemStore } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { resolveRuntimeModel } from "../agents/model-resolution";
@@ -41,8 +41,8 @@ function normalizeCommand(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function canReadTaskLedger(message: Adapter.InboundMessage): boolean {
-  const surface = Adapter.SurfaceKey.parse(message.surfaceKey).surface;
+function canReadTaskLedger(message: Channel.InboundMessage): boolean {
+  const surface = Channel.SurfaceKey.parse(message.surfaceKey).surface;
   if (surface !== "ws") return false;
   if (!isWebSocketRaw(message.raw)) return false;
   return message.raw.websocket.authenticated === true;
@@ -119,7 +119,7 @@ function listOpenTasks(): string {
 }
 
 async function processMessage(
-  message: Adapter.InboundMessage,
+  message: Channel.InboundMessage,
   deps: BridgeDeps,
   ingress: Pick<IngressEngine, "ingest">,
 ): Promise<string | null> {
@@ -137,7 +137,7 @@ async function processMessage(
     return toResponseText(await ingress.ingest(event));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       // D11: the failing ingest belongs to the inbound message's trace.
       traceId: message.traceId,
       time: Date.now(),
@@ -154,7 +154,7 @@ export interface MessageHandlerDeps extends BridgeDeps {
   readonly ingress: Pick<IngressEngine, "ingest">;
 }
 
-export function createMessageHandler(deps: MessageHandlerDeps): Adapter.MessageHandler {
+export function createMessageHandler(deps: MessageHandlerDeps): Channel.MessageHandler {
   const queues = new Map<string, Promise<void>>();
   return async (message) => {
     const key = message.surfaceKey;

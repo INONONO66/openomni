@@ -11,37 +11,34 @@ const Base = z.object({
   time: z.number(),
 });
 
-export namespace ToolExecution {
-  export const Started = BusEvent.define(
+export const Events = {
+  Started: BusEvent.define(
     "tool.execution.started",
     Base.extend({
       inputSummary: z.string().optional(),
     }),
     { visibility: "ephemeral" },
-  );
-
-  export const Completed = BusEvent.define(
+  ),
+  Completed: BusEvent.define(
     "tool.execution.completed",
     Base.extend({
       durationMs: z.number(),
       isError: z.boolean(),
     }),
     { visibility: "llm_reason" },
-  );
-
-  export const PermissionDenied = BusEvent.define(
+  ),
+  PermissionDenied: BusEvent.define(
     "tool.execution.permission_denied",
     Base.extend({
       reason: z.string(),
     }),
     { visibility: "llm_reason" },
-  );
-
-  export const TimedOut = BusEvent.define(
+  ),
+  TimedOut: BusEvent.define(
     "tool.execution.timed_out",
     Base.extend({
       timeoutMs: z.number(),
     }),
     { visibility: "llm_reason" },
-  );
-}
+  ),
+};

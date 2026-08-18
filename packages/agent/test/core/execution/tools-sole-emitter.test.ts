@@ -1,13 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { ToolExecution } from "@openomni/protocol";
-import type { Tool } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tools";
 import { PolicyEngine } from "../../../src/core/policy";
 
 // #522 defect 2 — sole-emitter pin. The worker-side executor
 // (packages/openomni execution-runtime/tool/executor.ts) is the SOLE
-// emitter of ToolExecution.Started/Completed. The agent-side wrapper keeps
+// emitter of Tool.Events.Started/Completed. The agent-side wrapper keeps
 // policy dispatch and effect application only; it must not re-emit. This
 // composes the agent wrapper over a base executor that emits the worker
 // executor's event pair and pins exactly ONE Started and ONE Completed per
@@ -17,7 +16,7 @@ function makeCall(id = "call-1", tool = "bash"): Tool.Call {
   return { id, tool, input: { command: "ls" } };
 }
 
-/** Emits the ToolExecution event pair exactly as the worker executor does. */
+/** Emits the Tool.Events event pair exactly as the worker executor does. */
 function emittingBaseExecutor(result: {
   output: string;
   isError?: boolean;
@@ -30,12 +29,12 @@ function emittingBaseExecutor(result: {
       time: Date.now(),
       actor: { kind: "agent" },
     };
-    Bus.publish(ToolExecution.Started, {
+    Bus.publish(Tool.Events.Started, {
       ...base,
       toolCallId: call.id,
       toolName: call.tool,
     });
-    Bus.publish(ToolExecution.Completed, {
+    Bus.publish(Tool.Events.Completed, {
       ...base,
       toolCallId: call.id,
       toolName: call.tool,
@@ -52,13 +51,13 @@ function emittingBaseExecutor(result: {
   };
 }
 
-describe("sole emitter — worker executor owns ToolExecution events", () => {
+describe("sole emitter — worker executor owns Tool.Events events", () => {
   it("one native tool call emits exactly one Started and one Completed", async () => {
     Bus.reset();
     const started: unknown[] = [];
     const completed: unknown[] = [];
-    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
-    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+    Bus.subscribe(Tool.Events.Started, (d) => started.push(d));
+    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
       events: Bus,
@@ -77,7 +76,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
   it("one erroring tool call emits exactly one Completed (isError)", async () => {
     Bus.reset();
     const completed: unknown[] = [];
-    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
       events: Bus,
@@ -96,7 +95,7 @@ describe("sole emitter — worker executor owns ToolExecution events", () => {
   it("a throwing execution emits exactly one Completed", async () => {
     Bus.reset();
     const completed: unknown[] = [];
-    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
       events: Bus,

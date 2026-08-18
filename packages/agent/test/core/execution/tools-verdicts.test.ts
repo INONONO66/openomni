@@ -1,11 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  Operational,
-  PolicyDecision,
-  ToolExecution,
-  type Policy,
-  type Tool,
-} from "@openomni/protocol";
+import { Operational, PolicyDecision, Tool, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { matchesToolPattern } from "../../../src/core/execution/effects";
 import { createToolExecutor, type BlockedToolResult } from "../../../src/core/execution/tools";
@@ -50,8 +44,8 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     let calls = 0;
     const denied: unknown[] = [];
     const started: unknown[] = [];
-    Bus.subscribe(ToolExecution.PermissionDenied, (event) => denied.push(event));
-    Bus.subscribe(ToolExecution.Started, (event) => started.push(event));
+    Bus.subscribe(Tool.Events.PermissionDenied, (event) => denied.push(event));
+    Bus.subscribe(Tool.Events.Started, (event) => started.push(event));
 
     const engine = engineWith(
       PolicyDecision.deny({
@@ -641,7 +635,7 @@ describe("createToolExecutor effect application", () => {
     it("isolates onDecision callback errors from tool execution", async () => {
       Bus.reset();
       const warnings: unknown[] = [];
-      const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+      const unsubscribe = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
       const engine = engineWithRegistrations([
         {
           kind: "point",
@@ -699,7 +693,7 @@ describe("createToolExecutor effect application", () => {
     it("isolates async onDecision callback rejections from tool execution", async () => {
       Bus.reset();
       const warnings: unknown[] = [];
-      const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+      const unsubscribe = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
       const engine = engineWithRegistrations([
         {
           kind: "point",

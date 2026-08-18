@@ -246,7 +246,7 @@ describe("WorkerSupervisor stop", () => {
     const warnings: Array<{ msg: string; context?: Record<string, unknown> }> = [];
     const collector: BusEvent.Sink = {
       publish(event, data) {
-        if (event.name === Operational.Warn.name) {
+        if (event.name === Operational.Events.Warn.name) {
           warnings.push(data as { msg: string; context?: Record<string, unknown> });
         }
       },

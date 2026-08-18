@@ -1,11 +1,4 @@
-import {
-  Actor,
-  IngressEvent,
-  Wait,
-  type Communication,
-  type Ingress,
-  type RoutingDecisionPayload,
-} from "@openomni/protocol";
+import { Actor, Ingress, Wait, type Communication } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import {
@@ -46,9 +39,13 @@ const ScopedCorrelationClaim = Wait.Correlation.refine(
 
 export class IngressRoutingError extends Error {
   readonly code: IngressRoutingErrorCode;
-  readonly decision: RoutingDecisionPayload;
+  readonly decision: Ingress.RoutingDecisionPayload;
 
-  constructor(code: IngressRoutingErrorCode, message: string, decision: RoutingDecisionPayload) {
+  constructor(
+    code: IngressRoutingErrorCode,
+    message: string,
+    decision: Ingress.RoutingDecisionPayload,
+  ) {
     super(message);
     this.name = "IngressRoutingError";
     this.code = code;
@@ -82,7 +79,7 @@ type KernelWaitExecution =
 
 export type KernelRouteResolution<Event extends Ingress.InboundEvent = Ingress.InboundEvent> =
   Readonly<{
-    decision: RoutingDecisionPayload;
+    decision: Ingress.RoutingDecisionPayload;
     event: Event;
     waitExecution: KernelWaitExecution;
     selectedTarget: Ingress.Target;
@@ -182,7 +179,7 @@ function kernelWaitExecution(
 }
 
 function selectedRouteTarget(
-  decision: RoutingDecisionPayload,
+  decision: Ingress.RoutingDecisionPayload,
   waitExecution: KernelWaitExecution,
   surfaceDefault: Ingress.Target,
 ): Ingress.Target {
@@ -284,10 +281,10 @@ function blacklistState(
 }
 
 function rejectUnsupportedPendingInteractionAction(
-  decision: RoutingDecisionPayload,
+  decision: Ingress.RoutingDecisionPayload,
   wait: RouteState["wait"],
   requestedAction: RequestedWaitAction,
-): RoutingDecisionPayload {
+): Ingress.RoutingDecisionPayload {
   if (
     decision.outcome !== "route" ||
     decision.stage !== "wait_correlation" ||
@@ -400,8 +397,8 @@ function routeStreamId(event: Ingress.InboundEvent): string {
 // like traceId/time/reason/factsUsed are delivery-local and deliberately
 // excluded.
 function routeDecisionsEquivalent(
-  recorded: RoutingDecisionPayload,
-  fresh: RoutingDecisionPayload,
+  recorded: Ingress.RoutingDecisionPayload,
+  fresh: Ingress.RoutingDecisionPayload,
 ): boolean {
   return (
     recorded.stage === fresh.stage &&
@@ -433,8 +430,8 @@ function routeDecisionsEquivalent(
 // or unparsable recorded fact) fails closed as route_record_failed.
 function recordRouteDecided(
   streamId: string,
-  decision: RoutingDecisionPayload,
-): RoutingDecisionPayload {
+  decision: Ingress.RoutingDecisionPayload,
+): Ingress.RoutingDecisionPayload {
   const ledger = Storage.get().ledger;
   if (!ledger) {
     throw new IngressRoutingError(
@@ -454,13 +451,13 @@ function recordRouteDecided(
     );
   }
   if (appended.kind === "appended") return decision;
-  let recorded: RoutingDecisionPayload;
+  let recorded: Ingress.RoutingDecisionPayload;
   try {
     const fact = ledger.headFact(streamId);
     if (fact === undefined || fact.type !== "route.decided") {
       throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
     }
-    recorded = IngressEvent.RoutingDecision.schema.parse(fact.data);
+    recorded = Ingress.Events.RoutingDecision.schema.parse(fact.data);
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
@@ -487,13 +484,13 @@ export function resolveAndRecordRoute<Event extends Ingress.InboundEvent>(
   traceId: string,
 ): KernelRouteResolution<Event> {
   const resolution = resolveKernelRoute(event, traceId);
-  const decision = IngressEvent.RoutingDecision.schema.parse(resolution.decision);
+  const decision = Ingress.Events.RoutingDecision.schema.parse(resolution.decision);
   // Redelivery passes the equivalence gate or fails closed — execution below
   // always uses the fresh decision with its own fresh resolution.
   const effective = recordRouteDecided(routeStreamId(event), decision);
   // Observe-only projection — strictly after the append (or after the gated
   // equivalent replay); lossy by contract. A divergent replay publishes
   // nothing (the gate throws above).
-  Bus.publish(IngressEvent.RoutingDecision, effective);
+  Bus.publish(Ingress.Events.RoutingDecision, effective);
   return { ...resolution, decision: effective };
 }

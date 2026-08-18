@@ -395,7 +395,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
 
   it("replacement persistence is fail-open when the store is unavailable (#702)", async () => {
     const warns: Array<{ component: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       warns.push(event as unknown as { component: string });
     });
     const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
@@ -485,7 +485,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
 
   it("replacement persistence refuses a cross-session anchor, visibly (#722 M4)", async () => {
     const warns: Array<{ component: string; msg: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       warns.push(event as unknown as { component: string; msg: string });
     });
     const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {

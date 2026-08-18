@@ -1,4 +1,4 @@
-import { Adapter, type Ingress, type Wait } from "@openomni/protocol";
+import { Channel, type Ingress, type Wait } from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
@@ -98,8 +98,8 @@ function rawCorrelationToken(raw: unknown): string | undefined {
 }
 
 function scopedCorrelation(
-  message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
+  message: Channel.InboundMessage,
+  descriptor: ReturnType<typeof Channel.SurfaceKey.parse>,
 ) {
   return {
     endpointId: descriptor.namespace || descriptor.surface,
@@ -108,8 +108,8 @@ function scopedCorrelation(
 }
 
 function actorMessageCorrelation(
-  message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
+  message: Channel.InboundMessage,
+  descriptor: ReturnType<typeof Channel.SurfaceKey.parse>,
   threadId: string | undefined,
 ): Wait.Correlation {
   const token = rawCorrelationToken(message.raw);
@@ -123,8 +123,8 @@ function actorMessageCorrelation(
 }
 
 function createBaseEvent(
-  message: Adapter.InboundMessage,
-  descriptor: ReturnType<typeof Adapter.SurfaceKey.parse>,
+  message: Channel.InboundMessage,
+  descriptor: ReturnType<typeof Channel.SurfaceKey.parse>,
   threadId: string | undefined,
 ): Omit<Ingress.DirectEvent, "mode" | "agent"> {
   return {
@@ -144,7 +144,6 @@ function createBaseEvent(
       surfaceKey: message.surfaceKey,
       kind: descriptor.kind,
       sender: message.sender,
-      media: message.media,
       replyToId: message.replyToId,
       threadId,
       raw: message.raw,
@@ -153,10 +152,10 @@ function createBaseEvent(
 }
 
 export function buildInboundEvent(
-  message: Adapter.InboundMessage,
+  message: Channel.InboundMessage,
   deps: BridgeDeps,
 ): Ingress.DirectEvent {
-  const descriptor = Adapter.SurfaceKey.parse(message.surfaceKey);
+  const descriptor = Channel.SurfaceKey.parse(message.surfaceKey);
   const threadId = message.threadId ?? descriptor.threadId;
   const base = createBaseEvent(message, descriptor, threadId);
   const agent = buildResidentAgentDef(deps);

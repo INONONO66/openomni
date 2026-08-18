@@ -63,14 +63,11 @@ const RoutingDecisionPayloadSchema = z.union([
 
 export type RoutingDecisionPayload = z.infer<typeof RoutingDecisionPayloadSchema>;
 
-export namespace IngressEvent {
-  export const RoutingDecision = BusEvent.define(
-    "ingress.routing.decision",
-    RoutingDecisionPayloadSchema,
-    { visibility: "user_audit" },
-  );
-
-  export const Received = BusEvent.define(
+export const Events = {
+  RoutingDecision: BusEvent.define("ingress.routing.decision", RoutingDecisionPayloadSchema, {
+    visibility: "user_audit",
+  }),
+  Received: BusEvent.define(
     "ingress.received",
     Base.extend({
       surface: z.string(),
@@ -79,9 +76,8 @@ export namespace IngressEvent {
       payloadLength: z.number(),
     }),
     { visibility: "user_audit" },
-  );
-
-  export const ModeDetected = BusEvent.define(
+  ),
+  ModeDetected: BusEvent.define(
     "ingress.mode.detected",
     Base.extend({
       sessionId: z.string(),
@@ -89,9 +85,8 @@ export namespace IngressEvent {
       target: IngressTargetLabel,
     }),
     { visibility: "ephemeral" },
-  );
-
-  export const SessionResolved = BusEvent.define(
+  ),
+  SessionResolved: BusEvent.define(
     "ingress.session.resolved",
     Base.extend({
       sessionId: z.string(),
@@ -99,9 +94,8 @@ export namespace IngressEvent {
       target: z.enum(["resident", "worker"]).optional(),
     }),
     { visibility: "ephemeral" },
-  );
-
-  export const Completed = BusEvent.define(
+  ),
+  Completed: BusEvent.define(
     "ingress.completed",
     Base.extend({
       sessionId: z.string(),
@@ -110,9 +104,8 @@ export namespace IngressEvent {
       durationMs: z.number(),
     }),
     { visibility: "user_audit" },
-  );
-
-  export const Failed = BusEvent.define(
+  ),
+  Failed: BusEvent.define(
     "ingress.failed",
     Base.extend({
       sessionId: z.string(),
@@ -122,5 +115,5 @@ export namespace IngressEvent {
       error: z.string(),
     }),
     { visibility: "llm_reason" },
-  );
-}
+  ),
+};

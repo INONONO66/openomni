@@ -29,7 +29,7 @@ delete process.env.OPENOMNI_WORKER_IPC_TOKEN;
 if (!socketPath) {
   // Pre-initialize there is no journal and no observer: stderr or nothing.
   process.stderr.write("worker-entry: missing --socket argument\n");
-  Bus.publish(Operational.Error, {
+  Bus.publish(Operational.Events.Error, {
     traceId: workerBootTraceId,
     time: Date.now(),
     component: "server",
@@ -41,7 +41,7 @@ if (!socketPath) {
 if (!ipcAuthToken) {
   // Pre-initialize there is no journal and no observer: stderr or nothing.
   process.stderr.write("worker-entry: missing IPC auth token\n");
-  Bus.publish(Operational.Error, {
+  Bus.publish(Operational.Events.Error, {
     traceId: workerBootTraceId,
     time: Date.now(),
     component: "server",
@@ -132,7 +132,7 @@ process.on("SIGTERM", async () => {
   await shutdownWorker(0);
 });
 
-Bus.publish(Operational.Info, {
+Bus.publish(Operational.Events.Info, {
   traceId: workerBootTraceId,
   time: Date.now(),
   component: "server",

@@ -61,7 +61,7 @@ const rules: readonly SideEffectRule[] = [
     sideEffect: /export function publishToolStarted\(args: \{/g,
     requiredBefore: [],
     requiredInScope: [
-      "Bus.publish(ToolExecution.Started, {",
+      "Bus.publish(Tool.Events.Started, {",
       "toolCallId: args.toolCallId",
       "toolName: args.toolName",
     ],
@@ -74,7 +74,7 @@ const rules: readonly SideEffectRule[] = [
       /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, (?:context|executionContext))?\)/g,
     scopeStart:
       /export async function executeMcpTool\(input: ExecuteMcpToolInput\): Promise<Tool\.Result> \{/g,
-    requiredBefore: ["Bus.publish(PolicyEvent.ActionRequested, {", "actionId", "tool.spec.name"],
+    requiredBefore: ["Bus.publish(Policy.Events.ActionRequested, {", "actionId", "tool.spec.name"],
     message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
   },
   {

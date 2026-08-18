@@ -4,14 +4,14 @@
  *
  * Storage semantics only — the pure string codec (parse/fromChannel/create
  * and the key-format documentation) lives in the protocol adapter domain
- * (`Adapter.SurfaceKey`, #499 precursor); this store imports it for format
+ * (`Channel.SurfaceKey`, #499 precursor); this store imports it for format
  * validation.
  *
  * Storage: uses Storage.Adapter.surfaceKey (SQLite); a missing sub-adapter
  * fails closed — routing must never fabricate ownership answers (#522).
  */
 
-import { Adapter } from "@openomni/protocol";
+import { Channel } from "@openomni/protocol";
 import { requireSubAdapter } from "../storage/timestamped-store";
 import { Storage } from "../storage/storage";
 
@@ -34,7 +34,7 @@ export namespace SurfaceKey {
    * Returns the session ID that owns the key after the claim attempt.
    */
   export function claim(key: string, sessionId: string, expectedSessionId?: string): string {
-    Adapter.SurfaceKey.assertWellFormed(key);
+    Channel.SurfaceKey.assertWellFormed(key);
     return subAdapter().claim(key, sessionId, expectedSessionId);
   }
 

@@ -149,7 +149,7 @@ describe("server recovery", () => {
     expect(PendingInteractionStore.get(pendingId)?.status).toBe("open");
   });
 
-  it("surfaces each failed WorkItem completion resume as its own loud Operational.Error", async () => {
+  it("surfaces each failed WorkItem completion resume as its own loud Operational.Events.Error", async () => {
     const errorPayloads: Array<Record<string, unknown>> = [];
     Bus.observe((event, payload) => {
       if (event.name === "operational.error") {
@@ -310,7 +310,7 @@ describe("server recovery", () => {
     expect(events).toContain("operational.recovery.completed");
   });
 
-  it("records a LOUD Operational.Error when the adapter lacks the ledger sub-adapter", async () => {
+  it("records a LOUD Operational.Events.Error when the adapter lacks the ledger sub-adapter", async () => {
     // AGENTS.md rule 7 pin: an optional sub-adapter is test-fake-only — its
     // absence in a boot path must surface as an error, never as a silent
     // empty verification result.

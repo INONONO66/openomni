@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { IngressEvent, type RoutingDecisionPayload } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { resolveRoute, type RouteInbound, type RouteState } from "../../src/ingress/index";
 
 const inbound = Object.freeze({
@@ -38,8 +38,8 @@ const registeredActor = Object.freeze({
 interface PrecedenceCase {
   readonly name: string;
   readonly state: RouteState;
-  readonly stage: RoutingDecisionPayload["stage"];
-  readonly outcome: RoutingDecisionPayload["outcome"];
+  readonly stage: Ingress.RoutingDecisionPayload["stage"];
+  readonly outcome: Ingress.RoutingDecisionPayload["outcome"];
 }
 
 const precedenceCases = Object.freeze([
@@ -119,7 +119,7 @@ describe("resolveRoute precedence", () => {
       const state = testCase.state;
 
       // When
-      const decision = IngressEvent.RoutingDecision.schema.parse(resolveRoute(inbound, state));
+      const decision = Ingress.Events.RoutingDecision.schema.parse(resolveRoute(inbound, state));
 
       // Then
       expect(decision.stage).toBe(testCase.stage);
@@ -143,7 +143,7 @@ describe("resolveRoute precedence", () => {
     }) satisfies RouteState;
 
     // When
-    const decision = IngressEvent.RoutingDecision.schema.parse(resolveRoute(inbound, state));
+    const decision = Ingress.Events.RoutingDecision.schema.parse(resolveRoute(inbound, state));
 
     // Then
     expect(decision).toMatchObject({
@@ -200,7 +200,7 @@ describe("resolveRoute precedence", () => {
     }) satisfies RouteState;
 
     // When
-    const decision = IngressEvent.RoutingDecision.schema.parse(resolveRoute(inbound, state));
+    const decision = Ingress.Events.RoutingDecision.schema.parse(resolveRoute(inbound, state));
 
     // Then
     expect(decision).toMatchObject({
@@ -228,7 +228,7 @@ describe("resolveRoute precedence", () => {
     }) satisfies RouteState;
 
     // When
-    const decision = IngressEvent.RoutingDecision.schema.parse(resolveRoute(inbound, state));
+    const decision = Ingress.Events.RoutingDecision.schema.parse(resolveRoute(inbound, state));
 
     // Then
     expect(decision.stage).toBe("actor_identity");

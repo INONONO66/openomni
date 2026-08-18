@@ -1,10 +1,10 @@
-import { Adapter } from "@openomni/protocol";
+import { Channel } from "@openomni/protocol";
 import { normalizeContent } from "../support/trigger";
 import type { GitHubEventContent } from "./types";
 
 export interface GitHubNormalizerContext {
   botUsername?: string;
-  triggers: Adapter.Config["triggers"];
+  triggers: Channel.Config["triggers"];
 }
 
 export class GitHubNormalizer {
@@ -15,8 +15,8 @@ export class GitHubNormalizer {
     eventKey: string,
     traceId: string,
     deliveryId?: string,
-  ): Adapter.InboundMessage | null {
-    const surfaceKey = Adapter.SurfaceKey.fromChannel({
+  ): Channel.InboundMessage | null {
+    const surfaceKey = Channel.SurfaceKey.fromChannel({
       surface: "github",
       namespace: content.repo,
       kind: "channel",

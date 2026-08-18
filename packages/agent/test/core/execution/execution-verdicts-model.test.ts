@@ -80,7 +80,7 @@ function observeInfoEvents(): {
   Bus.reset();
   const payloads: unknown[] = [];
   const unsubscribe = Bus.observe((event, payload) => {
-    if (event.name === Operational.Info.name) payloads.push(payload);
+    if (event.name === Operational.Events.Info.name) payloads.push(payload);
   });
   return { payloads, unsubscribe };
 }

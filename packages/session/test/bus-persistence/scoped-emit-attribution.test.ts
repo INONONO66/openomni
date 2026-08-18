@@ -22,8 +22,8 @@ import "../../src/storage/initialize.js";
  *   - A `sessionId` with no matching session row fails the `bus_event` foreign
  *     key, and the write is dropped with a warning rather than raised.
  *
- * Only descriptors that reach the journal are affected: `Operational.Debug`
- * and `Operational.Info` are `ephemeral` and never persist. The agent core's
+ * Only descriptors that reach the journal are affected: `Operational.Events.Debug`
+ * and `Operational.Events.Info` are `ephemeral` and never persist. The agent core's
  * budget and retry reporting uses `Warn`, which does.
  *
  * Nothing emits through `scope()` in production yet. This pins the
@@ -82,13 +82,13 @@ describe("scoped emit attribution", () => {
       busSinkForTest(),
     );
 
-    log.emit(Operational.Warn, { component: "test", msg: "persisted" });
+    log.emit(Operational.Events.Warn, { component: "test", msg: "persisted" });
     // Ephemeral descriptors never reach the journal, so they cannot re-bucket.
-    log.emit(Operational.Info, { component: "test", msg: "ephemeral" });
+    log.emit(Operational.Events.Info, { component: "test", msg: "ephemeral" });
     await settle();
 
     const persisted = rows().filter((row) => row.event_type.startsWith("operational."));
-    expect(persisted.map((row) => row.event_type)).toEqual([Operational.Warn.name]);
+    expect(persisted.map((row) => row.event_type)).toEqual([Operational.Events.Warn.name]);
     expect(persisted[0]?.trace_id).toBe(traceId);
     expect(persisted[0]?.session_id).toBe(session.id);
     expect(persisted[0]?.run_id).toBeNull();
@@ -103,7 +103,9 @@ describe("scoped emit attribution", () => {
       busSinkForTest(),
     );
 
-    expect(() => log.emit(Operational.Warn, { component: "test", msg: "orphan" })).not.toThrow();
+    expect(() =>
+      log.emit(Operational.Events.Warn, { component: "test", msg: "orphan" }),
+    ).not.toThrow();
     await settle();
 
     // The orphan write itself is gone, but the drop is not silent: the

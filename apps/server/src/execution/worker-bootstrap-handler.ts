@@ -75,7 +75,7 @@ export namespace WorkerBootstrapHandler {
         workerId: options.workerId,
         authToken: options.ipcAuthToken,
       });
-      Bus.publish(Operational.Info, {
+      Bus.publish(Operational.Events.Info, {
         traceId: newTraceId(),
         time: Date.now(),
         component: "server",
@@ -91,7 +91,7 @@ export namespace WorkerBootstrapHandler {
       const error = err instanceof Error ? err : new Error(String(err));
       options.state.rejectReady(error);
       options.respond({ ok: false, error: error.message });
-      Bus.publish(Operational.Error, {
+      Bus.publish(Operational.Events.Error, {
         traceId: newTraceId(),
         time: Date.now(),
         component: "server",

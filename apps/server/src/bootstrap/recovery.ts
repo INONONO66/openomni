@@ -1,4 +1,4 @@
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import {
   WaitService,
@@ -12,10 +12,10 @@ import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
   queue: RecoveryItem[],
-  handler: Adapter.MessageHandler,
+  handler: Channel.MessageHandler,
   traceId: string,
 ): Promise<void> {
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId,
     time: Date.now(),
     component: "server",
@@ -35,7 +35,7 @@ async function processRetryQueue(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      Bus.publish(Operational.Error, {
+      Bus.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -45,7 +45,7 @@ async function processRetryQueue(
     }
   }
 
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId,
     time: Date.now(),
     component: "server",
@@ -54,7 +54,7 @@ async function processRetryQueue(
 }
 
 export type BootstrapRecoveryInput = Readonly<{
-  handler: Adapter.MessageHandler | undefined;
+  handler: Channel.MessageHandler | undefined;
   coordinator?: {
     recoverInterruptedRuns(traceId: string): Promise<{ recovered: number; sessions: string[] }>;
   };
@@ -83,7 +83,7 @@ export async function startInboundSurfacesAfterRecovery<T>(
 
 /**
  * Boot ledger tail verification (#510 D1): records every chain-break as an
- * observe-only Operational event PLUS one `Operational.GovernorIncident`
+ * observe-only Operational event PLUS one `Operational.Events.GovernorIncident`
  * (the #510 contract: "a corrupted tail emits a chain-break event plus
  * Governor incident without refusing boot") and RETURNS — a broken tail
  * never refuses boot (full-chain verification is the #226 offline restore
@@ -103,7 +103,7 @@ function recordLedgerChainBreaks(traceId: string): void {
     }
     const breaks = ledger.verifyTail();
     for (const chainBreak of breaks) {
-      Bus.publish(Operational.Error, {
+      Bus.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -114,7 +114,7 @@ function recordLedgerChainBreaks(traceId: string): void {
       // (NORMAL-durability telemetry) record for the Governor role's
       // post-hoc analysis. Observe-only — it never refuses boot and never
       // authorizes anything.
-      Bus.publish(Operational.GovernorIncident, {
+      Bus.publish(Operational.Events.GovernorIncident, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -126,7 +126,7 @@ function recordLedgerChainBreaks(traceId: string): void {
   } catch (error) {
     // Observe-only surface: a verification failure is itself recorded and
     // must not refuse boot any more than a chain-break does.
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -151,7 +151,7 @@ async function reconcileOutstandingEffects(
 ): Promise<void> {
   try {
     const summary = await effects.reconcile(traceId);
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -159,7 +159,7 @@ async function reconcileOutstandingEffects(
       context: { ...summary },
     });
   } catch (error) {
-    Bus.publish(Operational.Error, {
+    Bus.publish(Operational.Events.Error, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -174,7 +174,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
   const startTime = Date.now();
   const id = traceId ?? newTraceId();
 
-  Bus.publish(Operational.RecoveryStarted, {
+  Bus.publish(Operational.Events.RecoveryStarted, {
     traceId: id,
     time: startTime,
   });
@@ -192,10 +192,10 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
         const receipt = await completionRecovery.recoverRecordedWorkItemCompletions(id);
         // Loud per-failure surfacing (#510 review fix F4): a completion
         // resume that fails (e.g. a staleHead against a 0014-shifted
-        // recorded head) names its work item in its own Operational.Error —
+        // recorded head) names its work item in its own Operational.Events.Error —
         // never buried in an aggregate context blob. Boot stays alive.
         for (const failure of receipt.failures) {
-          Bus.publish(Operational.Error, {
+          Bus.publish(Operational.Events.Error, {
             traceId: id,
             time: Date.now(),
             component: "server",
@@ -207,7 +207,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
             },
           });
         }
-        Bus.publish(Operational.Info, {
+        Bus.publish(Operational.Events.Info, {
           traceId: id,
           time: Date.now(),
           component: "server",
@@ -218,7 +218,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
           },
         });
       } catch (error) {
-        Bus.publish(Operational.Error, {
+        Bus.publish(Operational.Events.Error, {
           traceId: id,
           time: Date.now(),
           component: "server",
@@ -232,7 +232,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     // findByCorrelation) gates frozen rows; this receipt records the
     // intentional no-op so recovery stays auditable. Boot-restoration
     // semantics are #217's scope and are untouched here.
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId: id,
       time: Date.now(),
       component: "server",
@@ -240,7 +240,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     });
     const expiredWaits = WaitService.sweepExpired(id);
     if (expiredWaits.length > 0) {
-      Bus.publish(Operational.Info, {
+      Bus.publish(Operational.Events.Info, {
         traceId: id,
         time: Date.now(),
         component: "server",
@@ -252,7 +252,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     // sweep above — boot-time only until a periodic scheduler exists).
     const expiredSessions = Session.sweepExpired(id);
     if (expiredSessions.length > 0) {
-      Bus.publish(Operational.Info, {
+      Bus.publish(Operational.Events.Info, {
         traceId: id,
         time: Date.now(),
         component: "server",
@@ -264,7 +264,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     if (handler && retryQueue.length > 0) {
       await processRetryQueue(retryQueue, handler, id);
     } else if (retryQueue.length > 0) {
-      Bus.publish(Operational.Warn, {
+      Bus.publish(Operational.Events.Warn, {
         traceId: id,
         time: Date.now(),
         component: "server",
@@ -273,7 +273,7 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     }
   } finally {
     const durationMs = Date.now() - startTime;
-    Bus.publish(Operational.RecoveryCompleted, {
+    Bus.publish(Operational.Events.RecoveryCompleted, {
       traceId: id,
       sessionsRecovered,
       durationMs,

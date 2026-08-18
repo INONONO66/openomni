@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { Bus, BusEvent } from "../../src/index";
+import { BusEvent } from "@openomni/protocol";
+import { Bus } from "../../src/index";
 
 const TestEvent = BusEvent.define(
   "test.observe.delivery",

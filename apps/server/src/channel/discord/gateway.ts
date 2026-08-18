@@ -68,7 +68,7 @@ export class DiscordGateway {
         const backoffMs = calculateBackoff(this.reconnectAttempt);
         // Inherits the close-handler's trace: every retry of THIS reconnect is
         // one causal chain (same id per reconnect() call, not per attempt).
-        this.publish(Operational.Error, {
+        this.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
           component: "server",
@@ -106,7 +106,7 @@ export class DiscordGateway {
         }
         if (FATAL_CLOSE_CODES.has(event.code)) {
           this.running = false;
-          this.publish(Operational.Error, {
+          this.publish(Operational.Events.Error, {
             traceId: newTraceId(),
             time: Date.now(),
             component: "server",
@@ -122,7 +122,7 @@ export class DiscordGateway {
           // notice, every url-fetch retry inside reconnect(), and a terminal
           // reconnect failure all read back as a single causal sequence.
           const traceId = newTraceId();
-          this.publish(Operational.Warn, {
+          this.publish(Operational.Events.Warn, {
             traceId,
             time: Date.now(),
             component: "server",
@@ -135,7 +135,7 @@ export class DiscordGateway {
           await sleep(backoffMs);
           if (this.running)
             this.reconnect(traceId).catch((err) =>
-              this.publish(Operational.Error, {
+              this.publish(Operational.Events.Error, {
                 traceId,
                 time: Date.now(),
                 component: "server",
@@ -147,7 +147,7 @@ export class DiscordGateway {
       });
 
       ws.addEventListener("error", (err) =>
-        this.publish(Operational.Error, {
+        this.publish(Operational.Events.Error, {
           traceId: newTraceId(),
           time: Date.now(),
           component: "server",
@@ -198,7 +198,7 @@ export class DiscordGateway {
       // could leak it across UNRELATED close events, which is worse than an
       // orphaned chain head (#653 review).
       case GatewayOp.RECONNECT:
-        this.publish(Operational.Info, {
+        this.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),
           component: "server",
@@ -208,7 +208,7 @@ export class DiscordGateway {
         return false;
       case GatewayOp.INVALID_SESSION: {
         const resumable = payload.d as boolean;
-        this.publish(Operational.Warn, {
+        this.publish(Operational.Events.Warn, {
           traceId: newTraceId(),
           time: Date.now(),
           component: "server",
@@ -240,7 +240,7 @@ export class DiscordGateway {
     }
     if (event === "RESUMED") {
       this.reconnectAttempt = 0;
-      this.publish(Operational.Info, {
+      this.publish(Operational.Events.Info, {
         traceId: newTraceId(),
         time: Date.now(),
         component: "server",
@@ -254,7 +254,7 @@ export class DiscordGateway {
     try {
       this.callbacks.onDispatch(event, data, traceId);
     } catch (err) {
-      this.publish(Operational.Error, {
+      this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",

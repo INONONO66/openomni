@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyEvent, type Policy } from "@openomni/protocol";
+import { Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
 import { deny } from "../../helpers/policy-decision";
 
-type PolicyEvaluatedEvent = z.infer<typeof PolicyEvent.Evaluated.schema>;
-type PolicyDecisionComposedEvent = z.infer<typeof PolicyEvent.DecisionComposed.schema>;
+type PolicyEvaluatedEvent = z.infer<typeof Policy.Events.Evaluated.schema>;
+type PolicyDecisionComposedEvent = z.infer<typeof Policy.Events.DecisionComposed.schema>;
 
 function baseCtx(): Omit<PolicyContext, "timing"> {
   return {
@@ -39,7 +39,7 @@ describe("PolicyEngine audit emission", () => {
   it("emits policy.evaluated with canonical audit context for blocking dispatch", async () => {
     const descriptor = nativeToolDescriptor("shell");
     const evaluated: PolicyEvaluatedEvent[] = [];
-    const unsub = Bus.subscribe(PolicyEvent.Evaluated, (event) => {
+    const unsub = Bus.subscribe(Policy.Events.Evaluated, (event) => {
       evaluated.push(event);
     });
 
@@ -111,10 +111,10 @@ describe("PolicyEngine audit emission", () => {
     const descriptor = nativeToolDescriptor("shell");
     const evaluated: PolicyEvaluatedEvent[] = [];
     const composed: PolicyDecisionComposedEvent[] = [];
-    const unsubEvaluated = Bus.subscribe(PolicyEvent.Evaluated, (event) => {
+    const unsubEvaluated = Bus.subscribe(Policy.Events.Evaluated, (event) => {
       evaluated.push(event);
     });
-    const unsubComposed = Bus.subscribe(PolicyEvent.DecisionComposed, (event) => {
+    const unsubComposed = Bus.subscribe(Policy.Events.DecisionComposed, (event) => {
       composed.push(event);
     });
 

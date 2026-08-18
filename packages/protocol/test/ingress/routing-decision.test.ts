@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
-import { IngressEvent } from "../../src/event/ingress.js";
+import { Ingress } from "../../src/ingress/index.js";
 
-const RoutingDecision = IngressEvent.RoutingDecision;
+const RoutingDecision = Ingress.Events.RoutingDecision;
 const routingDecisionSchema = RoutingDecision.schema;
 
 type RoutingDecisionInput = z.input<typeof routingDecisionSchema>;
@@ -77,7 +77,7 @@ const invalidTerminalPairs = [
   ["surface_default", "ambiguous"],
 ];
 
-describe("IngressEvent.RoutingDecision", () => {
+describe("Ingress.Events.RoutingDecision", () => {
   test("uses the durable routing decision descriptor", () => {
     // Given / When: the exported routing decision descriptor
     // Then

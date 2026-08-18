@@ -66,7 +66,7 @@ function publishInvalidMcpConfigWarning(
     readonly error: string;
   }>,
 ): void {
-  Bus.publish(Operational.Warn, {
+  Bus.publish(Operational.Events.Warn, {
     traceId: options.traceId,
     time: Date.now(),
     component: "server",

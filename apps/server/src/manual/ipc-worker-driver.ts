@@ -27,7 +27,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { connectIpcClient, createIpcServer, encode } from "@openomni/ipc";
 import type { Execution } from "@openomni/protocol";
-import { WorkerDriver } from "@openomni/protocol";
+import { Worker } from "@openomni/protocol";
 import { createWorkerManager } from "@openomni/coordinator";
 import { Storage } from "@openomni/session";
 import { createExecutionCoordinator } from "../execution/coordinator";
@@ -167,7 +167,7 @@ async function runAuthenticatedRequest(json: boolean): Promise<void> {
         ...ports,
         events: {
           publish: (def, payload) => {
-            if (def === WorkerDriver.RunSettled) ledgerCompletionRows += 1;
+            if (def === Worker.Events.RunSettled) ledgerCompletionRows += 1;
             ports.events.publish(def, payload);
           },
         },

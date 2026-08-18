@@ -16,10 +16,10 @@ const TEST_RUN = { traceId: "trace-budget-test", sessionId: "session-budget-test
 async function countOperationalEmits(run: () => void): Promise<number> {
   Bus.reset();
   let count = 0;
-  const unsubWarn = Bus.subscribe(Operational.Warn, () => {
+  const unsubWarn = Bus.subscribe(Operational.Events.Warn, () => {
     count += 1;
   });
-  const unsubInfo = Bus.subscribe(Operational.Info, () => {
+  const unsubInfo = Bus.subscribe(Operational.Events.Info, () => {
     count += 1;
   });
   run();
@@ -124,7 +124,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
    */
   it("files the budget event under the run's trace", async () => {
     const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       seen.push(event as unknown as { traceId: string; sessionId?: string });
     });
 
@@ -144,7 +144,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
   /** The only branch that emits `Info` rather than `Warn`. */
   it("files the reassurance event under the run's trace", async () => {
     const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Info, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Info, (event) => {
       seen.push(event as unknown as { traceId: string; sessionId?: string });
     });
 
@@ -166,7 +166,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
   /** The branch `dispatchBudgetCheck` acts on to end the run. */
   it("files the exceeded event under the run's trace", async () => {
     const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       seen.push(event as unknown as { traceId: string; sessionId?: string });
     });
 
