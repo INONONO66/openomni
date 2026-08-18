@@ -44,7 +44,9 @@ interface DirectMessage {
   readonly partMetadata?: Record<string, unknown>;
 }
 
-function isKeptEntry(value: unknown): value is DirectMessage {
+function isKeptEntry(
+  value: unknown,
+): value is { role: "user" | "assistant"; text: string; policyInjected?: boolean } {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as { role?: unknown; text?: unknown };
   return (
@@ -59,9 +61,11 @@ function anchorKeptWindow(entry: StoredMessage): DirectMessage[] | undefined {
     if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
     const kept = part.metadata?.keptWindow;
     if (!Array.isArray(kept)) continue;
-    return kept
-      .filter(isKeptEntry)
-      .map((item) => ({ role: item.role, content: (item as unknown as { text: string }).text }));
+    return kept.filter(isKeptEntry).map((item) => ({
+      role: item.role,
+      content: item.text,
+      ...(item.policyInjected === true ? { partMetadata: { policyInjected: true } } : {}),
+    }));
   }
   return undefined;
 }

@@ -212,6 +212,25 @@ describe("planDecoration + decorateAnchorRender", () => {
     expect(decoration.droppedQuotes).toEqual(["yes"]);
   });
 
+  it("rendered growth stays within the budget under heavy table + newline quotes (#727 R2)", () => {
+    // The reviewer's probe C: raw-char budgeting missed "> " prefixes,
+    // headers, and the (uncharged) table. This pins RENDERED cost.
+    for (let index = 0; index < 40; index += 1) {
+      storeToolPart("read", `/very/long/path/segment/${"p".repeat(60)}/${index}.ts`);
+    }
+    const newlineHeavy = user(Array.from({ length: 120 }, (_u, i) => `l${i}`).join("\n"));
+    const goal = user("the goal");
+    const before = [newlineHeavy, assistantText(`w ${"x".repeat(2000)}`), goal];
+    const after = [anchorMessage("body"), goal];
+    const reclaimed = contentChars(before) - contentChars(after);
+    const decoration = planDecoration(sessionId, before, after);
+    if (decoration === undefined) throw new Error("expected decoration");
+    const base = "[Conversation Summary]\nbody";
+    const grown = decorateAnchorRender(base, decoration).length - base.length;
+    expect(grown).toBeLessThanOrEqual(decoration.budgetChars);
+    expect(decoration.budgetChars * 2).toBeLessThanOrEqual(reclaimed);
+  });
+
   it("caps the goal to an excerpt — recitation is positional, not a second copy", () => {
     const goal = user(`goal ${"g".repeat(10000)}`);
     const before = [bulk, goal];

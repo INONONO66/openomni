@@ -127,6 +127,15 @@ export interface AnchorDecoration {
   readonly droppedBeyondQuoteBudget: number;
   /** The newest surviving user text — restated verbatim at the render tail. */
   readonly goal: string | undefined;
+  /**
+   * The RENDERED growth allowance (#727 review round 2): quote/goal caps
+   * bound raw text, but "> " prefixes, headers, joiners, and the table are
+   * rendered bytes too — what the window actually pays. The render enforces
+   * this against actual section sizes, dropping whole sections in reverse
+   * priority order (quotes > goal > table) when they do not fit.
+   * All-or-nothing per section, like the reclaim floor: bounded-by-payment.
+   */
+  readonly budgetChars: number;
 }
 
 /**
@@ -190,6 +199,7 @@ export function planDecoration(
     droppedQuotes: quotes,
     droppedBeyondQuoteBudget: beyond,
     goal,
+    budgetChars: budget,
   };
 }
 
@@ -200,9 +210,30 @@ function quoteBlock(text: string): string {
     .join("\n");
 }
 
-/** Appends the deterministic sections to the anchor's model-facing render. */
+/**
+ * Appends the deterministic sections to the anchor's model-facing render,
+ * charging RENDERED section sizes (headers, "> " prefixes, joiners — the
+ * bytes the window actually pays) against the reclaim-bound budget. A
+ * section that does not fit is dropped whole, in reverse priority order:
+ * quotes carry irreplaceable user text, the goal is positional aid, the
+ * table returns at the next cut.
+ */
 export function decorateAnchorRender(render: string, decoration: AnchorDecoration): string {
-  const sections: string[] = [render];
+  const candidates: string[] = [];
+
+  if (decoration.droppedQuotes.length > 0 || decoration.droppedBeyondQuoteBudget > 0) {
+    const lines = ["## Earlier user messages no longer in the window (verbatim)"];
+    for (const quote of decoration.droppedQuotes) lines.push(quoteBlock(quote));
+    if (decoration.droppedBeyondQuoteBudget > 0) {
+      lines.push(`(${decoration.droppedBeyondQuoteBudget} more not quoted — quote budget)`);
+    }
+    candidates.push(lines.join("\n"));
+  }
+  if (decoration.goal !== undefined) {
+    candidates.push(
+      `## Current goal (latest user message; full text is in the window)\n${quoteBlock(decoration.goal)}`,
+    );
+  }
   const { artifacts } = decoration;
   if (artifacts.read.length > 0 || artifacts.modified.length > 0) {
     const lines = [
@@ -212,24 +243,20 @@ export function decorateAnchorRender(render: string, decoration: AnchorDecoratio
     if (artifacts.read.length > 0) lines.push(`read: ${artifacts.read.join(", ")}`);
     if (artifacts.truncated) lines.push("(list truncated)");
     const block = lines.join("\n");
-    sections.push(
+    candidates.push(
       block.length > MAX_TABLE_CHARS
         ? `${block.slice(0, MAX_TABLE_CHARS)}\n(table truncated)`
         : block,
     );
   }
-  if (decoration.droppedQuotes.length > 0 || decoration.droppedBeyondQuoteBudget > 0) {
-    const lines = ["## Earlier user messages no longer in the window (verbatim)"];
-    for (const quote of decoration.droppedQuotes) lines.push(quoteBlock(quote));
-    if (decoration.droppedBeyondQuoteBudget > 0) {
-      lines.push(`(${decoration.droppedBeyondQuoteBudget} more not quoted — quote budget)`);
-    }
-    sections.push(lines.join("\n"));
-  }
-  if (decoration.goal !== undefined) {
-    sections.push(
-      `## Current goal (latest user message; full text is in the window)\n${quoteBlock(decoration.goal)}`,
-    );
+
+  const sections: string[] = [render];
+  let grown = 0;
+  for (const candidate of candidates) {
+    const renderedCost = candidate.length + 2; // the "\n\n" joiner is paid too
+    if (grown + renderedCost > decoration.budgetChars) continue;
+    sections.push(candidate);
+    grown += renderedCost;
   }
   return sections.join("\n\n");
 }

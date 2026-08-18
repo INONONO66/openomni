@@ -45,7 +45,7 @@ export namespace PolicyEffectApplier {
         messages.push(message);
         assistantParentID = message.info.id;
       } else if (effect.type === "run.continue_with_prompt") {
-        messages.push(createUserMessage(effect.prompt, sessionId));
+        messages.push(createUserMessage(effect.prompt, sessionId, { policyInjected: true }));
       }
     }
     return messages;
@@ -79,7 +79,9 @@ export namespace PolicyEffectApplier {
         messages.push(message);
         parentID = message.info.id;
       } else if (effect.type === "prompt.append_context") {
-        const message = createUserMessage(effect.context, state.sessionId);
+        const message = createUserMessage(effect.context, state.sessionId, {
+          policyInjected: true,
+        });
         messages.push(message);
         parentID = message.info.id;
       }
