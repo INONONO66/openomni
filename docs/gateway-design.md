@@ -1,7 +1,7 @@
 # Gateway architecture — final design (v2)
 
 Status: Owner-directed, finalized 2026-08-19. Supersedes v1 (2026-08-18) and
-three locked clauses (§8). Reference structure: clawhip
+five locked clauses (§8). Reference structure: clawhip
 (https://github.com/Yeachan-Heo/clawhip) — routing/normalization/delivery
 layer with the brain outside it. Issue reconciliation (§9) is the only
 remaining pre-implementation step.
