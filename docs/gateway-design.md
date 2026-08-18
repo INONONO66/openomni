@@ -27,9 +27,13 @@ context-resident).
 
 The package keeps the name `channels` (renaming to "gateway" is churn; the
 role name lives in docs and AGENTS.md). Dependency whitelist: channels =
-{protocol, ipc, ledger}. openomni may not import channels; channels may
-not import openomni — **both sides meet only in protocol contracts, wired by
-apps/server through injected ports.** Ledger is a lower band both may import.
+{protocol, ipc, policy, ledger} — policy because the router evaluates
+perimeter rules through the shared engine (§3), ledger for its store
+surfaces. The `drivers/` sub-band inside channels stays at {protocol, ipc}
+(S8). Observation events publish through an injected `BusEvent.Sink` port —
+channels does not import telemetry (the llm/agent precedent). openomni may
+not import channels; channels may not import openomni — **both sides meet
+only in protocol contracts, wired by apps/server through injected ports.**
 
 ## 2. Contracts (protocol-owned, the only seam)
 
@@ -63,12 +67,26 @@ Brain-side consumption rules (normative, closes the known gap):
 - `origin` taints all content derived from it; taint survives into subagent
   prompts (external text is quoted material, not instruction).
 
+Grant-write validation (perimeter): a channel grant whose `defaultTier`
+materializes strangers may never carry `inboundTreatment: "full_access"` —
+rejected at grant write, not at delivery time. Accepted residual: the
+unconditional recency window (§5) means admitted external text enters run
+context regardless of engagement match; the mitigation is taint framing plus
+the evidence tier, not exclusion.
+
 ### 2a-1. Context resolution — physical vs semantic (normative)
 
 The gateway resolves **physical context** only, by deterministic precedence:
 
 1. **Wait correlation** (strongest): reply/thread/message ids match an open
-   Wait → that Wait's owner session, with `waitContext` attached.
+   Wait **and the resolved sender is one of the Wait's
+   `expectedResponders`** → that Wait's owner session, with `waitContext`
+   attached. The responder gate is perimeter-side and runs BEFORE
+   `waitContext` attachment (preserves the current
+   `wait/matcher.ts` pinned-target invariant): a correlated message from a
+   non-responder never carries `waitContext` — it degrades to an ordinary
+   delivery on the container session (rule 3) so a third party replying into
+   an awaited thread cannot hijack the wait.
 2. **Thread inheritance**: a new thread container inherits the session (and
    engagement linkage, if any) of its origin message — the parent message id
    is platform fact, not judgment. The thread's own surfaceKey is then bound
@@ -102,12 +120,27 @@ delivery effect), platform-id re-key after delivery.
   ownerRef is the calling engagement (§5) or session.
 - **Reply-scoped grant** (case-discovered 2026-08-19): `SenderTargetGrant`
   requires a known `targetActorId`, which cannot be pre-written for unknown
-  initiators (marketplace inquiries). A standing delegation may therefore
-  carry a *reply-grant rule*: when the gateway admits a first-contact actor
-  on a covered channel (defaultTier materialization), it also issues a grant
-  `persona → that actor`, scoped to the engagement/thread with an expiry.
-  Replying to initiators stays grant-gated and ledgered; cold outreach to
-  never-contacted actors still requires an explicit Owner grant.
+  initiators (marketplace inquiries). Provenance stays Owner: the Owner
+  writes a *reply-grant rule row* (channel-scoped, part of a standing
+  delegation); the gateway then materializes grant **instances** from it
+  mechanically when it admits a first-contact actor on the covered channel.
+  Instances are scoped by **perimeter facts only** — initiator actorId +
+  originating thread/surfaceKey + expiry — never by engagement id (§5
+  guarantees authority is independent of engagement matching). Each rule
+  carries a **cap on live instances** so an attacker cannot farm standing
+  outbound grants by mass first contact. Replying to initiators stays
+  grant-gated and ledgered; cold outreach to never-contacted actors still
+  requires an explicit Owner grant.
+
+### 2b-1. Wait control — `Gateway.WaitControl` (brain → gateway)
+
+The brain owns *when* a wait should stop mattering (engagement transitions:
+abort, term-crossing, satisfied-early); the gateway owns the wait rows. The
+third contract closes that loop without violating S2:
+`waitControl(waitId, action: "cancel" | "expire_now", reason)` → typed
+receipt. Writes stay gateway-side; the brain never touches the surface
+directly. Extension/narrowing beyond cancel/expire is out of scope until a
+consumer exists.
 
 ### 2c. Egress semantics (#219) — gateway router policy
 
@@ -166,7 +199,9 @@ The machine owns **authority and resumption, never dialogue content**:
 - the delegation terms (spend ceiling, auto-approve criteria, deadline) —
   crossing a term forces `awaiting_user_approval`;
 - the set of open waits and what each may resume (whose reply is a valid
-  input in the current state — everyone else degrades to evidence);
+  input in the current state — everyone else degrades to evidence). This is
+  the **second** filter: the perimeter expected-responder gate (§2a-1) has
+  already run before `waitContext` ever reaches the brain;
 - timeout/expiry behavior per state;
 - the rehydration point after crash (state + open waits + terms rebuild the
   resident's working context; the LLM re-reasons the content).
@@ -198,12 +233,16 @@ stays brain-side outside the loop — the harness never self-grades.
 
 ## 6. Migration inventory (measured at main 5a0610b7; re-verify at cut)
 
-Move `openomni → channels`: `ingress/` (resolve-route, routing-resolution,
-authority middleware, actor-resolver, event-projector, routing half of
-handlers), `messaging/`, `wait/` service (correlation/matcher/lifecycle/
-requested-action/upcast), perimeter half of `dispatch/actor.ts` (the
-trustTier passthrough; `assigned_worker` derivation from WorkItem attempt
-facts stays brain-side).
+Move `openomni → channels`: the **routing plane of `ingress/`**
+(resolve-route, routing-resolution, authority middleware, actor-resolver,
+event-projector), `messaging/`, `wait/` service (correlation/matcher/
+lifecycle/requested-action/upcast), perimeter half of `dispatch/actor.ts`
+(the trustTier passthrough; `assigned_worker` derivation from WorkItem
+attempt facts stays brain-side). The **session plane of `ingress/` stays
+brain-side** — `session-bridge.ts` (reads session content and builds LLM
+messages: moving it would be the S1 violation), `session-resolver.ts`,
+`audit-envelope.ts`, and the execution half of `engine.ts`/`handlers.ts`.
+The exact per-file map is a stage-2 deliverable, re-measured at cut time.
 
 Perimeter stores do NOT move to channels (§4 SSOT): `actor/`, `blacklist/`,
 `channel-grant/`, `wait/` store, `surface-key/`, `pending-ask/`,
@@ -219,7 +258,7 @@ Stays in openomni: `resident/`, `agents/`, `execution-runtime/`,
 `ledger/`, conduct policy glue.
 
 Stays in session: `session/`, `work-item/`, `worker-run/`, `worker-grant/`,
-`artifact/`, message/part/transcript adapters, `ledger-core/`,
+`artifact/`, `effect/`, message/part/transcript adapters, `ledger-core/`,
 `bus-persistence/`, `app-connector/`.
 
 ## 7. Slop guards (normative)
@@ -244,8 +283,11 @@ Stays in session: `session/`, `work-item/`, `worker-run/`, `worker-grant/`,
   daemonizing channels is a separate later decision. ipc stays only for what
   drivers need.
 - **S8 driver banding** — inside channels, `drivers/` may not import
-  `router/` or stores (check-deps enforced). Adding a platform = one driver
-  file + one server registration line, zero security review of the router.
+  `router/` or store surfaces. check-deps today enforces package-level
+  whitelists only; the intra-package banding check is **new machinery, a
+  stage-1 deliverable** added to `script/check-deps.ts`. Adding a platform =
+  one driver file + one server registration line, zero security review of
+  the router.
 - **S9 gateway never rewrites content** — persona/voice rendering is
   brain-side; the gateway delivers bytes it was given (routing ≠ rendering).
 
@@ -258,6 +300,20 @@ Stays in session: `session/`, `work-item/`, `worker-run/`, `worker-grant/`,
    policy engine. No brain import either way.
 3. #551 "pure move" scope → becomes stage 1 unchanged; gateway promotion is
    a new stacked issue (stage 2).
+4. `docs/architecture.md` "Inbound routing (`resolveRoute`) is a kernel gate
+   concern and stays in the kernel" and the mailroom's "zero authority"
+   framing → superseded: the resolveRoute pipeline moves into the channels
+   gateway, which owns perimeter authority; the mailroom's zero-authority
+   property survives only for the `drivers/` sub-band (S8). Normative text
+   amended in this PR.
+5. `docs/kernel-contract.md` "ingress submits, **dispatch decides**; the
+   ingress-resolved session is only a default candidate that dispatch may
+   override" → superseded for delivery: the gateway's routing decision
+   (wait/thread/container precedence, §2a-1) is authoritative for which
+   session receives the message, and PendingInteraction elevation transfers
+   to gateway `waitContext` attachment. Dispatch keeps deciding brain-side
+   work placement (worker spawn/target), never delivery re-routing.
+   Normative text amended in this PR.
 
 Still valid: core-package rejection (J5) — this is a role expansion of an
 already-planned package, not a new core.

@@ -215,8 +215,9 @@ a satellite split) to violations of each one.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
 - Do not add provider behavior outside `packages/llm`.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
-- Driver-band packages (approved target: `channels` channel drivers, `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
-- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) stays in the kernel.
+- Driver-band packages (approved target: `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
+- `channels` is promoted from driver band to **gateway** (Owner 2026-08-18/19, [docs/gateway-design.md](docs/gateway-design.md)): package whitelist {protocol, ipc, policy, ledger}, with its `drivers/` sub-band held to {protocol, ipc}. Perimeter routing/authority (the resolveRoute pipeline) moves there at gateway stage 2; until then it remains in `packages/openomni`.
+- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (pre-stage-2: still in the kernel).
 
 ## EXECUTION DISCIPLINE
 
