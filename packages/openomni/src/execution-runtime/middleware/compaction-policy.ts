@@ -117,6 +117,33 @@ function wrapCreated(
         warn(ctx, "replacement record not persisted: effect messages failed to parse");
         return decision;
       }
+      // L7 byte guard (#717, compaction-design principle 2): every user-roled
+      // text in the rebuilt window must be byte-identical to a user text the
+      // seam received — anchors and policy-injected messages excluded on both
+      // sides. A violation means something between the cut and here rewrote
+      // user speech; committing that window would launder a paraphrase as the
+      // user's words, so the effect is REFUSED (window unchanged, run intact)
+      // and the violation is a hard, visible finding. Decoration cannot
+      // introduce a violation afterwards: it rewrites only the anchor render,
+      // which the guard excludes by identity.
+      const violation = userByteViolation((ctx.messages ?? []) as Message.WithParts[], parsed.data);
+      if (violation !== undefined) {
+        events.publish(Operational.Error, {
+          traceId: ctx.traceContext?.traceId ?? "",
+          time: Date.now(),
+          ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),
+          component: "compaction-user-byte-guard",
+          msg: "user text in the rebuilt window is not byte-identical to the seam's input — effect refused",
+          context: { sample: violation.slice(0, 200) },
+        });
+        return {
+          ...decision,
+          reasonCodes: [...(decision.reasonCodes ?? []), "compaction_user_byte_guard_refused"],
+          effects: (decision.effects ?? []).filter(
+            (entry) => entry.type !== "run.replace_messages",
+          ),
+        };
+      }
       const anchor = parsed.data.find((message) =>
         message.parts.some(
           (part) => part.type === "text" && part.metadata?.compactionAnchor === true,
@@ -191,4 +218,41 @@ function wrapCreated(
       };
     },
   };
+}
+
+/**
+ * Multiset containment of user speech: every user-roled text part in the
+ * window (anchor renders and policy-injected texts excluded) must consume
+ * one byte-identical occurrence from the pre-cut history. Returns the first
+ * violating text, or undefined when the window is clean.
+ */
+function userByteViolation(
+  before: readonly Message.WithParts[],
+  window: readonly Message.WithParts[],
+): string | undefined {
+  const counts = new Map<string, number>();
+  for (const text of plainUserTexts(before)) {
+    counts.set(text, (counts.get(text) ?? 0) + 1);
+  }
+  for (const text of plainUserTexts(window)) {
+    const remaining = counts.get(text) ?? 0;
+    if (remaining <= 0) return text;
+    counts.set(text, remaining - 1);
+  }
+  return undefined;
+}
+
+function plainUserTexts(messages: readonly Message.WithParts[]): string[] {
+  const texts: string[] = [];
+  for (const message of messages) {
+    if (message.info.role !== "user") continue;
+    for (const part of message.parts) {
+      if (part.type !== "text") continue;
+      if (part.metadata?.compactionAnchor === true || part.metadata?.policyInjected === true) {
+        continue;
+      }
+      texts.push(part.text);
+    }
+  }
+  return texts;
 }
