@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787090138132,
+  "lastUpdate": 1787094973951,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57089,6 +57089,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 520624,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b0adb387dd6093a50dc051c37e3f0cd3f1334601",
+          "message": "feat(openomni,server): summarization on by default (Owner ruling) (#734)\n\n* feat(openomni,server): summarization on by default (Owner ruling)\n\nOwner ruling 2026-08-19: enable the anchored summarizer in production and\niterate from live data — supersedes #649's elision-only default.\n\ncreateAnchorCompletion (openomni): a one-shot, tool-less, single-step llm\ncall on the run's OWN model and auth (D7), under the run's trace with an\n:anchor-summary runId suffix — cost and telemetry attributable to the run\nthat paid for it, distinguishable from the conversation's own calls. An\nerror outcome throws, so the L4 speculator's failure streak and the seam's\nfail-closed bracket engage exactly as designed.\n\nWired at both hosts: worker-runner (request model + resolveAuth, fallback\noff) and the resident runtime (agent model, session trace). Partial\ncompaction configs now MERGE over the elision defaults instead of\nreplacing them — a host wiring only a summarizer keeps the elision knobs.\n\nWith this, the full L1-L7 pipeline is live: background prepare at 65%,\nzero-call promote at the seam, anchored merge with user-verbatim cuts,\ncontent-borne resume records, overflow recovery, deterministic render\nenrichment, and the byte guard — all previously reachable only in tests.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,openomni,server): summarizer failure never kills a run\n\nAdversarial review returned FAIL: with summarization on by default, a\nsummarizer throw at the SYNCHRONOUS seam merge propagated through the\nfail-closed run.completion.pre as deny+run.abort, and the worker boundary\nreported the guard-aborted result upstream as status succeeded — a partial\nanswer shipped as success, on a path that had zero production reachers\nbefore the flip. The codebase's own comments name this the forbidden\nfailure mode; the flip made it live.\n\nF1 — the seam merge now degrades on summarizer failure instead of\nthrowing: the previous anchor carries when present, otherwise the cut\ncommits unanchored or refuses as a recorded non-action; the bracket\ncompletes with the error named, the result carries summarizerFailed, and\nthe policy surfaces compaction_summarizer_failed. The run always lives;\nlater overflow ends honestly. Old bracket pin (throw propagates) replaced\nby the new contract pin.\n\nF2 — providerOptions thread into the summary call at both hosts: a proxy/\nbeta-header model config no longer fails deterministically on summaries\nalone (which, pre-F1, killed every long run of that config as succeeded).\n\nF3 — the run's AbortSignal threads into the summary call: cancelled runs\ncancel their summaries; in-flight background prepares stop billing at\nabort.\n\nF5 — a rejected model-resolution promise is no longer cached for the run's\nlifetime.\n\nF4/F6 — implementation-status scopes the both-hosts claim (policy-plan\nruns stay elision-only, no producer today); the design doc carries the\n2026-08-19 supersession note the PR body already claimed.\n\nF7 — merge semantics pinned: summarizer-only config keeps elision defaults\n(observed through a real seam dispatch), speculate:false still disables\nturn.post, explicitly-undefined keys no longer clobber defaults.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): warn on unanchored degraded-cut persistence skip\n\nReview round 2 note 1: an unanchored cut produced by a summarizer failure\nleaves no resume record — the skip now warns in the same channel as the\nother resumability degradations. The pre-existing worker-boundary\nguard-abort dishonesty is filed as #735.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T23:14:53Z",
+          "tree_id": "683be11c945d13596448f7dc01f53677755b54f1",
+          "url": "https://github.com/INONONO66/openomni/commit/b0adb387dd6093a50dc051c37e3f0cd3f1334601"
+        },
+        "date": 1787094972834,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5861,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2495,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2741,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15045,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1028,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 922,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1419,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46087,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2327,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513196,
             "unit": "ns/op"
           }
         ]
