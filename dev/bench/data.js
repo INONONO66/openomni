@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787061174610,
+  "lastUpdate": 1787061507608,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55265,6 +55265,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 510014,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a84f0c9748209d4f48e266b54634b13812111fd",
+          "message": "docs: gateway architecture final design (channels perimeter, SSOT ledger) (#705)\n\n* docs: add gateway architecture final design\n\nOwner-directed pivot 2026-08-18/19: channels becomes the gateway\n(perimeter judgment, clawhip reference), openomni the brain, agent the\nloop. Contracts (Gateway.Deliver/Send), trust split, engagement machine,\ncontext resolution, SSOT single-ledger storage, slop guards S1-S9,\nstaging 0-4, superseded-ruling receipts.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: refresh AGENTS.md verification stamps + gateway pointers\n\n* docs: fix adversarial review findings on gateway design\n\nB1 policy in channels whitelist + injected sink; B2/B3 supersede and\namend architecture.md resolveRoute clause and kernel-contract dispatch\noverride (rulings 8.4/8.5); M1 perimeter expected-responder gate before\nwaitContext; M2 reply-grant rule rows (Owner provenance, perimeter-fact\nscope, live-instance cap); M3 Gateway.WaitControl contract; M4 S8 banding\nmarked as new check-deps machinery; M5 ingress routing/session plane\nsplit (session-bridge stays brain-side); NITs (effect/ inventory,\ndefaultTier full_access write validation, recency-window residual).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: fix superseded-clause count in status header\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T13:57:05Z",
+          "tree_id": "16bc43d931849f1313c77af686fe08325715e7e0",
+          "url": "https://github.com/INONONO66/openomni/commit/8a84f0c9748209d4f48e266b54634b13812111fd"
+        },
+        "date": 1787061506298,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5937,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2809,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2386,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15302,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 957,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 848,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1415,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 707,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45288,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2292,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511283,
             "unit": "ns/op"
           }
         ]
