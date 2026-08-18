@@ -62,7 +62,7 @@ Run memory (volatile):
 | --- | --- | --- | --- |
 | L1 | Elision marker gains recall pointer (`reduce.ts`); the `recall.output` tool reads the original from the session store (scoped to fact-recorded turns — resident-direct and child streams persist no tool parts and refuse loudly) | agent, openomni | — |
 | L2 | `onSummarize(cutSpan, previousAnchor?)` contract; prior-summary and user-message exclusion from summarizer input; `[anchor, verbatim users, tail]` rebuild; senpi-template summarizer injected as openomni config (domain strings stay out of core) | agent, openomni | — |
-| L3 | CompactionRecord in protocol + session persistence; resume rehydration = projection recomputation (#702). Protocol schema growth — `lint:tools` snapshot diff is the Owner sign-off surface | protocol, session, openomni | L2 (anchor version) |
+| L3 | Replacement record rides on the anchor message's part metadata as ordered kept CONTENT (role/text — ids do not survive the hydration seam, which flattens to strings and re-mints ids); the openomni seam wrapper persists the anchor record-before-act with visible fail-open, and `SessionBridge.buildDirectMessages` (the single seam both hydration readers share) consumes it (#702). Shipped WITHOUT protocol schema growth — the anticipated snapshot surface was routed around by the metadata disposition, noted here explicitly as the sign-off record | agent, session, openomni | L2 (anchor) |
 | L4 | `compaction/speculate.ts`: prepare/promote, single-flight, abort-linked, freshness guard, discard-rate skip events | agent | L2 |
 | L5 | Context-overflow error classification + blocking compact + one retry | llm, agent | — |
 | L6 | Anchor render: ledger-derived artifact table + goal recitation | openomni | L2 |

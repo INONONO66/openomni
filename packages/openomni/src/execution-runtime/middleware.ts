@@ -6,7 +6,11 @@ import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "./middleware/injection-queue-policy.js";
 import { createIdleNudgePolicy, registerIdleNudge } from "./middleware/idle-nudge-policy.js";
-import { COMPACTION_PRIORITY, registerCompaction } from "./middleware/compaction-policy.js";
+import {
+  COMPACTION_PRIORITY,
+  registerCompaction,
+  withReplacementPersistence,
+} from "./middleware/compaction-policy.js";
 import { anchorSummarizer, type CompletionFn } from "./middleware/anchor-summarizer.js";
 import {
   createBudgetReassurancePolicy,
@@ -105,12 +109,15 @@ function buildAgentLifecycleMiddleware(
   return [
     createBudgetReassurancePolicy(),
     createBudgetWarningPolicy(),
-    createCompactionPolicy({
-      ...rest,
-      ...(summarizer === undefined ? {} : { onSummarize: summarizer }),
-      events: Bus,
-      priority: COMPACTION_PRIORITY,
-    }),
+    withReplacementPersistence(
+      createCompactionPolicy({
+        ...rest,
+        ...(summarizer === undefined ? {} : { onSummarize: summarizer }),
+        events: Bus,
+        priority: COMPACTION_PRIORITY,
+      }),
+      Bus,
+    ),
   ];
 }
 

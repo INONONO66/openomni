@@ -312,10 +312,7 @@ export class ResidentRuntime {
       if (activation.idleTimer) clearTimeout(activation.idleTimer);
       activation.lifecycle = "hydrating";
       const messages = SessionBridge.buildDirectMessages(ctx.sessionId).filter(
-        (
-          message,
-        ): message is { role: "user"; content: string } | { role: "assistant"; content: string } =>
-          message.role === "user" || message.role === "assistant",
+        (message) => message.role === "user" || message.role === "assistant",
       );
       activation.lifecycle = "active";
       const agentConfig = buildResidentAgentConfig(ctx, runId);

@@ -68,14 +68,18 @@ export function createCompactionPolicy(config: CompactionConfig): CanonicalPolic
           reasonCodes: ["compaction_skipped_no_session"],
         });
       }
+      // Riders from the #701 reviews (#702): the bracket records the run when
+      // the lifecycle supplies one, and the measuredTokens spread was dead —
+      // ctx.contextTokens is guarded at the top of this function.
+      const runId = ctx.traceContext?.runId;
       const result = await Compaction.compact(
         ctx.messages,
         resolved,
-        { traceId, sessionId },
+        { traceId, sessionId, ...(runId === undefined ? {} : { runId }) },
         events,
         {
           trigger: ctx.contextYielded ? "yield" : "threshold",
-          ...(ctx.contextTokens === undefined ? {} : { measuredTokens: ctx.contextTokens }),
+          measuredTokens: ctx.contextTokens,
         },
       );
       if (!result.compacted) {

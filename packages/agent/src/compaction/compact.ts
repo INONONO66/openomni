@@ -260,10 +260,32 @@ export namespace Compaction {
         toRemove,
         options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS,
       );
+      // The replacement record rides ON the anchor (compaction-design L3,
+      // #702): the ordered CONTENT kept after the anchor, not ids — message
+      // ids do not survive the hydration seam (resume flattens to
+      // role/content strings and the run re-mints ids; #722 review finding
+      // 1 proved an id record resolves to nothing on every production
+      // path). Size is bounded by the preserve budget plus the protected
+      // tail. A product-side observer persisting the anchor message thereby
+      // persists the whole window selection — hydration rebuilds
+      // [anchor render, kept content, everything stored after] with no
+      // re-summarization and no id resolution.
+      const keptWindow = [...preservedUsers, ...toKeep].flatMap((message) =>
+        message.parts
+          .filter((part): part is Message.TextPart => part.type === "text")
+          .map((part) => ({ role: message.info.role, text: part.text })),
+      );
       const anchorMessages =
         anchorText === undefined
           ? []
-          : [buildAnchorMessage(anchorText, firstRemoved.info.sessionID, firstRemoved.info.agent)];
+          : [
+              buildAnchorMessage(
+                anchorText,
+                firstRemoved.info.sessionID,
+                firstRemoved.info.agent,
+                keptWindow,
+              ),
+            ];
       if (anchorMessages.length === 0 && preservedUsers.length === 0) {
         // Nothing user-roled can head the kept window (summarizer yielded
         // nothing, no prior anchor, no user in the span): committing would
@@ -435,6 +457,7 @@ function buildAnchorMessage(
   anchorBody: string,
   sessionID: string,
   agent: string,
+  keptWindow: ReadonlyArray<{ role: "user" | "assistant"; text: string }>,
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -454,7 +477,19 @@ function buildAnchorMessage(
     messageID: id,
     type: "text",
     text: render,
-    metadata: { compactionAnchor: true, anchorBody },
+    metadata: {
+      compactionAnchor: true,
+      anchorBody,
+      // Ordered window selection after this anchor — the durable
+      // replacement record (#702). Content-borne: hydration flattens to
+      // role/content and re-mints ids, so an id record would resolve to
+      // nothing (#722 review). Size expectation: one copy of the preserve
+      // budget (default 80k chars) plus the protected tail per cut, in an
+      // append-only store — linear per record, and the newest-user
+      // unconditional rule means one oversized user message can ride into
+      // every subsequent record by design (user tokens are irreplaceable).
+      keptWindow: keptWindow.map((entry) => ({ ...entry })),
+    },
   };
   return { info, parts: [textPart] };
 }

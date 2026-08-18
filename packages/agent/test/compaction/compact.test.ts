@@ -535,6 +535,21 @@ describe("Compaction", () => {
       const anchorPart = anchors[0]?.parts[0];
       if (anchorPart?.type !== "text") throw new Error("shape");
       expect(anchorPart.metadata?.anchorBody).toBe("anchor-v1+v2");
+      // #702 (L3): the anchor carries the ordered window selection as
+      // CONTENT (role/text) — ids do not survive the hydration seam (#722
+      // review) — so a product-side observer can persist the whole
+      // replacement record by persisting this message.
+      const kept = anchorPart.metadata?.keptWindow;
+      if (!Array.isArray(kept)) throw new Error("expected keptWindow");
+      expect(kept).toEqual(
+        second.messages
+          .slice(1)
+          .flatMap((m) =>
+            m.parts
+              .filter((part): part is Message.TextPart => part.type === "text")
+              .map((part) => ({ role: m.info.role, text: part.text })),
+          ),
+      );
     });
 
     it("skips the model call when the cut span holds nothing summarizable", async () => {
