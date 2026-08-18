@@ -9,6 +9,13 @@ import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 
+/**
+ * #500 A6: every production-written actor key is declared (`runId` and
+ * `agentName` land from the dispatch resident seam; the rest were already
+ * typed). The catchall stays as the historical inbound-tolerance seam for
+ * external events — no production producer writes undeclared keys today, and
+ * the actor vocabulary reshape itself is deferred to gateway stage 2 (#707).
+ */
 const ActorSchemaImpl = z
   .object({
     id: z.string().optional(),
@@ -20,6 +27,8 @@ const ActorSchemaImpl = z
     endpointId: z.string().optional(),
     endpoint: Actor.Endpoint.optional(),
     sessionId: z.string().optional(),
+    runId: z.string().optional(),
+    agentName: z.string().optional(),
     workerId: z.string().optional(),
     isResident: z.boolean().optional(),
     isMain: z.boolean().optional(),
@@ -58,25 +67,26 @@ const TargetSchemaImpl = z.preprocess((input) => {
   return input;
 }, RawTargetSchema);
 
+/**
+ * #500 A3: the one lifecycle that rides an inbound event is the WORKER axis
+ * (cancel requests read "stopping"). The resident axis (sleeping / hydrating /
+ * active / idle / releasing) is in-process ResidentRuntime activation state
+ * and has zero writers and zero readers on this field — it never rides the
+ * event, so it is not part of this vocabulary.
+ */
+const WorkerLifecycleSchema = z.enum(["starting", "ready", "busy", "stopping", "exited"]);
+
 const ActivationMetadataSchemaImpl = z
   .object({
     durableSessionId: z.string().optional(),
     activationId: z.string().optional(),
     runId: z.string().optional(),
-    lifecycle: z
-      .enum([
-        "sleeping",
-        "hydrating",
-        "active",
-        "idle",
-        "releasing",
-        "starting",
-        "ready",
-        "busy",
-        "stopping",
-        "exited",
-      ])
-      .optional(),
+    lifecycle: WorkerLifecycleSchema.optional(),
+    /**
+     * #500 A2: background worker dispatch flag — a declared, serializable
+     * field (previously smuggled through the catchall).
+     */
+    background: z.boolean().optional(),
     trigger: z
       .object({
         kind: z.enum(["cron", "webhook", "manual", "internal"]),
@@ -106,6 +116,9 @@ export namespace Ingress {
 
   export const MetaSchema = MetaSchemaImpl;
   export type Meta = z.infer<typeof MetaSchema>;
+
+  export const WorkerLifecycle = WorkerLifecycleSchema;
+  export type WorkerLifecycle = z.infer<typeof WorkerLifecycleSchema>;
 
   export type ActivationMetadata = z.infer<typeof ActivationMetadataSchemaImpl>;
 
@@ -142,7 +155,8 @@ export namespace Ingress {
     payload: z.unknown(),
     target: TargetSchemaImpl.optional(),
     meta: MetaSchemaImpl.optional(),
-    runtime: ActivationMetadataSchemaImpl.optional(),
+    /** #500 A1: activation-scoped metadata (in-process only, never persisted). */
+    activation: ActivationMetadataSchemaImpl.optional(),
   };
 
   export const DirectEventSchema = z.object({

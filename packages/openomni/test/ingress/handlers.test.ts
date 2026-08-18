@@ -340,7 +340,7 @@ describe("IngressHandlers", () => {
       mode: "direct",
       payload: "start in background",
       target: { kind: "worker", sessionId },
-      runtime: { lifecycle: "starting", background: true },
+      activation: { lifecycle: "starting", background: true },
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },

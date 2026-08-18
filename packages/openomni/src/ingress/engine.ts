@@ -45,9 +45,14 @@ export interface IngressEngine {
   ingest(event: unknown): Promise<Ingress.IngressResult>;
   ingestInternal(
     event: Ingress.InternalEvent,
-    runtime?: Readonly<{
+    options?: Readonly<{
       residentRuntime?: Pick<ResidentRuntime, "run">;
       agentResolver?: AgentResolver;
+      /**
+       * #500 A2: live in-process abort for the resident run — an AbortSignal
+       * is not serializable, so it rides the call path, never the event.
+       */
+      signal?: AbortSignal;
     }>,
   ): Promise<Ingress.IngressResult>;
 }
@@ -59,6 +64,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
     trace: TraceContextProtocol.Type,
     coordinator: CoordinatorLike | undefined,
     residentRuntime: Pick<ResidentRuntime, "run"> | undefined = deps.residentRuntime,
+    signal?: AbortSignal,
   ): Promise<Ingress.IngressResult> {
     const targetLabel = targetKey(target);
 
@@ -97,6 +103,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       coordinator,
       residentRuntime,
       traceContext: activeTrace,
+      signal,
     };
 
     if (target.kind === "resident") {
@@ -142,9 +149,10 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
 
     async ingestInternal(
       event: Ingress.InternalEvent,
-      runtime?: Readonly<{
+      options?: Readonly<{
         residentRuntime?: Pick<ResidentRuntime, "run">;
         agentResolver?: AgentResolver;
+        signal?: AbortSignal;
       }>,
     ): Promise<Ingress.IngressResult> {
       // D11: inherit the producer's trace (cron fire, dispatch command) — ingress never re-mints.
@@ -156,7 +164,7 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
       if (waitExecution.event.mode !== "internal") {
         throw new TypeError("internal ingress wait execution changed event mode");
       }
-      const agentResolver = runtime?.agentResolver ?? deps.agentResolver;
+      const agentResolver = options?.agentResolver ?? deps.agentResolver;
       if (!agentResolver) {
         throw new Error("agent resolver not configured");
       }
@@ -170,7 +178,8 @@ export function createIngressEngine(deps: IngressEngineDeps = {}): IngressEngine
         route.selectedTarget,
         trace,
         deps.coordinator,
-        runtime?.residentRuntime ?? deps.residentRuntime,
+        options?.residentRuntime ?? deps.residentRuntime,
+        options?.signal,
       );
     },
   };

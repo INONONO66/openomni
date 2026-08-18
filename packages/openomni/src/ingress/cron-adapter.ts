@@ -25,7 +25,7 @@ export namespace CronAdapter {
       payload: job.payload,
       target: job.target ?? { kind: "resident" },
       meta: { actor: { role: "system", id: `cron:${job.id}` } },
-      runtime: {
+      activation: {
         trigger: { kind: "cron", id: job.id, scheduledAt: Date.now(), firedAt: Date.now() },
       },
     });

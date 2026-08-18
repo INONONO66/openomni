@@ -9,7 +9,7 @@ interface ResolvableEvent {
   workspace?: string;
   channel?: string;
   target?: Ingress.Target;
-  runtime?: { durableSessionId?: string };
+  activation?: { durableSessionId?: string };
   meta?: Ingress.Meta;
 }
 
@@ -52,7 +52,7 @@ export namespace IngressSessionResolver {
     let isNew: boolean;
 
     if (target.kind === "worker") {
-      const durableSessionId = event.runtime?.durableSessionId ?? target.sessionId;
+      const durableSessionId = event.activation?.durableSessionId ?? target.sessionId;
       if (durableSessionId) {
         const existing = Session.get(durableSessionId);
         if (!existing) {
@@ -83,7 +83,7 @@ export namespace IngressSessionResolver {
         isNew = true;
       }
     } else {
-      const durableSessionId = event.runtime?.durableSessionId;
+      const durableSessionId = event.activation?.durableSessionId;
       if (durableSessionId) {
         const existing = Session.get(durableSessionId);
         if (!existing) {

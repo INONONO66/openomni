@@ -314,6 +314,7 @@
   "Gateway.WaitControl": ["action", "reason", "waitId"],
   "Ingress.ActorSchema": [
     "actorId",
+    "agentName",
     "endpoint",
     "endpointId",
     "id",
@@ -321,6 +322,7 @@
     "isResident",
     "kind",
     "role",
+    "runId",
     "sessionId",
     "trustTier",
     "type",
@@ -336,13 +338,13 @@
     "tools"
   ],
   "Ingress.DirectEventSchema": [
+    "activation",
     "agent",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -350,13 +352,13 @@
     "workspace"
   ],
   "Ingress.InboundEventSchema#0": [
+    "activation",
     "agent",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -364,13 +366,13 @@
     "workspace"
   ],
   "Ingress.InboundEventSchema#1": [
+    "activation",
     "agentName",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",
@@ -378,13 +380,13 @@
     "workspace"
   ],
   "Ingress.InternalEventSchema": [
+    "activation",
     "agentName",
     "channel",
     "id",
     "meta",
     "mode",
     "payload",
-    "runtime",
     "surface",
     "target",
     "traceId",

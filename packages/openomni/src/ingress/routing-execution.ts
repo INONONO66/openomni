@@ -57,8 +57,8 @@ export function pinRouteSession(
   if (decision.sessionId === undefined) return event;
   return {
     ...event,
-    runtime: {
-      ...event.runtime,
+    activation: {
+      ...event.activation,
       durableSessionId: decision.sessionId,
     },
   };
@@ -88,11 +88,11 @@ function projectWaitOwnerEvent<Event extends Ingress.InboundEvent>(
 ): Omit<Event, "target"> & { readonly target?: never } {
   const { target: _target, ...withoutTarget } = event;
   const { target: _metaTarget, ...meta } = event.meta ?? {};
-  const { runId: _runId, ...runtime } = event.runtime ?? {};
+  const { runId: _runId, ...activation } = event.activation ?? {};
   return {
     ...withoutTarget,
     meta,
-    runtime: { ...runtime, durableSessionId: ownerSessionId },
+    activation: { ...activation, durableSessionId: ownerSessionId },
   } as Omit<Event, "target"> & { readonly target?: never };
 }
 
@@ -102,7 +102,7 @@ function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
 ): Omit<Event, "target"> & { readonly target?: never } {
   const { target: _target, ...withoutTarget } = event;
   const { target: _metaTarget, ...meta } = event.meta ?? {};
-  const { runId: _runId, ...runtime } = event.runtime ?? {};
+  const { runId: _runId, ...activation } = event.activation ?? {};
   const record = resolution.record;
   return {
     ...withoutTarget,
@@ -118,8 +118,8 @@ function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
         ambiguous: false,
       },
     },
-    runtime: {
-      ...runtime,
+    activation: {
+      ...activation,
       durableSessionId: record.originSessionId,
       ...(record.originRunId === undefined ? {} : { runId: record.originRunId }),
     },

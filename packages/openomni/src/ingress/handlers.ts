@@ -45,6 +45,11 @@ export namespace IngressHandlers {
     coordinator?: CoordinatorLike;
     residentRuntime?: Pick<ResidentRuntime, "run">;
     traceContext?: TraceContextProtocol.Type;
+    /**
+     * #500 A2: live in-process abort for the resident run. An AbortSignal is
+     * not serializable, so it travels the call path, never the event.
+     */
+    signal?: AbortSignal;
   }
 
   // ---- observe-only ingress lifecycle events ----
@@ -217,18 +222,18 @@ export namespace IngressHandlers {
   // ---- worker cancel / delivery / background dispatch ----
 
   function isBackgroundWorkerIngress(ctx: HandlerContext): boolean {
-    return (ctx.event.runtime as { background?: unknown } | undefined)?.background === true;
+    return ctx.event.activation?.background === true;
   }
 
   async function handleCancelRequest(
     ctx: HandlerContext,
   ): Promise<Ingress.IngressResult | undefined> {
-    if (ctx.event.runtime?.lifecycle !== "stopping") return undefined;
+    if (ctx.event.activation?.lifecycle !== "stopping") return undefined;
     if (!ctx.coordinator?.cancelRun) {
       throw new Error("coordinator cancellation is required for worker cancellation");
     }
 
-    const requestedRunId = ctx.event.runtime?.runId;
+    const requestedRunId = ctx.event.activation?.runId;
     const active = WorkItemAttemptRun.listActive(ctx.sessionId).filter(
       (run) => !requestedRunId || run.runId === requestedRunId,
     );
@@ -282,7 +287,7 @@ export namespace IngressHandlers {
       ctx.sessionId,
       extractText(ctx.event.payload),
       requireTraceId(ctx),
-      ctx.event.runtime?.runId,
+      ctx.event.activation?.runId,
     );
     const accepted =
       raw !== null && typeof raw === "object" && (raw as { accepted?: unknown }).accepted === true;
@@ -291,7 +296,7 @@ export namespace IngressHandlers {
     const output = JSON.stringify({
       delivered: true,
       sessionId: ctx.sessionId,
-      runId: ctx.event.runtime?.runId,
+      runId: ctx.event.activation?.runId,
     });
     SessionBridge.storeDirectResult(
       requireTraceId(ctx),
@@ -391,7 +396,7 @@ export namespace IngressHandlers {
       sessionId: ctx.sessionId,
       event: ctx.event,
       traceContext: ctx.traceContext,
-      signal: (ctx.event.runtime as { signal?: AbortSignal } | undefined)?.signal,
+      signal: ctx.signal,
     });
     const output = residentResult.output;
     SessionBridge.storeDirectResult(traceId, ctx.sessionId, output, ctx.event.agent.model);

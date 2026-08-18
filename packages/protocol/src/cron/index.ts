@@ -4,7 +4,6 @@ import { BusEvent } from "../bus/index.js";
 const BaseEvent = z.object({
   traceId: z.string(),
   runId: z.string().optional(),
-  taskId: z.string().optional(),
   sessionId: z.string().optional(),
   time: z.number(),
 });

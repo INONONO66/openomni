@@ -48,11 +48,10 @@ function eventFromCommand(
     },
     payload: command.payload,
     ...(context?.workspaceRoot ? { workspace: context.workspaceRoot } : {}),
-    runtime: {
+    activation: {
       ...((command.target.sessionId ?? command.sessionId ?? context?.sessionId)
         ? { durableSessionId: command.target.sessionId ?? command.sessionId ?? context?.sessionId }
         : {}),
-      ...(context?.signal ? { signal: context.signal } : {}),
     },
     meta: {
       actor: {
@@ -106,6 +105,8 @@ export function createResidentDispatchHandlers(
         const result = await ingress.ingestInternal(eventFromCommand(command, context), {
           residentRuntime,
           ...(agentResolver ? { agentResolver } : {}),
+          // #500 A2: the live AbortSignal rides the call path, not the event.
+          ...(context?.signal ? { signal: context.signal } : {}),
         });
         if (result.kind === "dropped") {
           throw new Error(`resident.ask ingress was dropped: ${result.reason}`);

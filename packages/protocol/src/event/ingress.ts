@@ -71,7 +71,7 @@ export const Events = {
     "ingress.received",
     Base.extend({
       surface: z.string(),
-      mode: z.enum(["plan", "direct", "internal"]),
+      mode: z.enum(["direct", "internal"]),
       target: IngressTargetLabel,
       payloadLength: z.number(),
     }),
@@ -81,7 +81,7 @@ export const Events = {
     "ingress.mode.detected",
     Base.extend({
       sessionId: z.string(),
-      mode: z.enum(["plan", "direct", "internal"]),
+      mode: z.enum(["direct", "internal"]),
       target: IngressTargetLabel,
     }),
     { visibility: "ephemeral" },
@@ -99,7 +99,7 @@ export const Events = {
     "ingress.completed",
     Base.extend({
       sessionId: z.string(),
-      mode: z.enum(["plan", "direct", "internal"]),
+      mode: z.enum(["direct", "internal"]),
       target: IngressTargetLabel,
       durationMs: z.number(),
     }),
@@ -109,7 +109,7 @@ export const Events = {
     "ingress.failed",
     Base.extend({
       sessionId: z.string(),
-      mode: z.enum(["plan", "direct", "internal"]),
+      mode: z.enum(["direct", "internal"]),
       target: IngressTargetLabel,
       durationMs: z.number(),
       error: z.string(),
