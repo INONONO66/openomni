@@ -1,0 +1,15 @@
+{
+  "root": "valid",
+  "base": "tsconfig.base.json",
+  "projects": ["tsconfig.json"],
+  "emitPolicy": {
+    "tsconfig.json": {
+      "declaration": true,
+      "noEmit": false,
+      "forbidComposite": true,
+      "forbidProjectReferences": true
+    }
+  },
+  "sourceRoots": ["src"],
+  "declarationProject": "tsconfig.json"
+}

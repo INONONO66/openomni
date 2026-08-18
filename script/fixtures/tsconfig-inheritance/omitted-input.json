@@ -1,0 +1,6 @@
+{
+  "root": "omitted-input",
+  "base": "tsconfig.base.json",
+  "projects": ["tsconfig.json"],
+  "sourceRoots": ["src", "lib"]
+}

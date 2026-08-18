@@ -1,0 +1,5 @@
+{
+  "root": "missing-base",
+  "base": "tsconfig.base.json",
+  "projects": ["tsconfig.json"]
+}
