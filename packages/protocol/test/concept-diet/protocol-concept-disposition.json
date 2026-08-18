@@ -228,9 +228,7 @@
       "exportSite": "packages/protocol/src/ingress/index.ts:157",
       "evidence": {
         "productionConsumers": [],
-        "testPins": [
-          "packages/protocol/test/ingress-internal.test.ts:52"
-        ],
+        "testPins": ["packages/protocol/test/ingress-internal.test.ts:52"],
         "snapshotPin": "script/conformance/schema-snapshot.json:389",
         "runtimeConsumer": "none"
       },
@@ -517,9 +515,7 @@
           "packages/session/src/worker-run/state-store.ts:23 (WriteMethod param of frozenWrite)",
           "apps/server/src/execution/worker-runner-events.ts:10,24,38,53 (Events published via Bus.publish)"
         ],
-        "testPins": [
-          "packages/protocol/test/worker-run.test.ts:73-98"
-        ],
+        "testPins": ["packages/protocol/test/worker-run.test.ts:73-98"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
@@ -931,9 +927,7 @@
       "exportSite": "packages/protocol/src/tool/index.ts:33 (const), :37 (type)",
       "evidence": {
         "productionConsumers": [],
-        "testPins": [
-          "packages/protocol/test/tool.test.ts:35,37,47,51,56"
-        ],
+        "testPins": ["packages/protocol/test/tool.test.ts:35,37,47,51,56"],
         "snapshotPin": "script/conformance/schema-snapshot.json:842",
         "runtimeConsumer": "none"
       },
@@ -953,9 +947,7 @@
       "exportSite": "packages/protocol/src/tool/index.ts:39 (const), :46 (type)",
       "evidence": {
         "productionConsumers": [],
-        "testPins": [
-          "packages/protocol/test/tool.test.ts:64,66,78,87"
-        ],
+        "testPins": ["packages/protocol/test/tool.test.ts:64,66,78,87"],
         "snapshotPin": "script/conformance/schema-snapshot.json:843",
         "runtimeConsumer": "none"
       },
@@ -975,9 +967,7 @@
       "exportSite": "packages/protocol/src/tool/index.ts:48 (const), :59 (type)",
       "evidence": {
         "productionConsumers": [],
-        "testPins": [
-          "packages/protocol/test/tool.test.ts:95,97,113,125,137"
-        ],
+        "testPins": ["packages/protocol/test/tool.test.ts:95,97,113,125,137"],
         "snapshotPin": "script/conformance/schema-snapshot.json:833",
         "runtimeConsumer": "none"
       },
@@ -993,9 +983,7 @@
       "exportSite": "packages/protocol/src/tool/index.ts:61 (const), :70 (type)",
       "evidence": {
         "productionConsumers": [],
-        "testPins": [
-          "packages/protocol/test/tool.test.ts:148,150,163,173"
-        ],
+        "testPins": ["packages/protocol/test/tool.test.ts:148,150,163,173"],
         "snapshotPin": "script/conformance/schema-snapshot.json:841",
         "runtimeConsumer": "none"
       },
@@ -1860,9 +1848,7 @@
           "apps/server/src/config/mcp-server-config.ts:5 (type alias), :36 (McpConfig.ServerConfig.safeParse — fail-closed parse of persisted server/project MCP config)",
           "packages/protocol/src/extension/index.ts:34 (z.array(McpConfig.ServerConfig) inside the Extension/bundled manifest schema)"
         ],
-        "testPins": [
-          "packages/protocol/test/mcp.test.ts:6,34,43,50,57,74"
-        ],
+        "testPins": ["packages/protocol/test/mcp.test.ts:6,34,43,50,57,74"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
@@ -1880,9 +1866,7 @@
           "apps/server/src/config/mcp-server-config.ts:1,5,36",
           "packages/protocol/src/extension/index.ts:5,34"
         ],
-        "testPins": [
-          "packages/protocol/test/mcp.test.ts:2,4,6,34,43,50,57,74"
-        ],
+        "testPins": ["packages/protocol/test/mcp.test.ts:2,4,6,34,43,50,57,74"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
@@ -2038,9 +2022,7 @@
           "packages/ipc/src/server.ts:211",
           "packages/ipc/src/client.ts:151"
         ],
-        "testPins": [
-          "packages/protocol/test/ipc/schema.test.ts:92,101"
-        ],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:92,101"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
@@ -2058,9 +2040,7 @@
           "packages/ipc/src/server.ts:154",
           "packages/ipc/src/client.ts:98"
         ],
-        "testPins": [
-          "packages/protocol/test/ipc/schema.test.ts:107"
-        ],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:107"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
@@ -2078,9 +2058,7 @@
           "packages/ipc/src/server.ts:117,133,164",
           "packages/ipc/src/client.ts:108"
         ],
-        "testPins": [
-          "packages/protocol/test/ipc/schema.test.ts:115"
-        ],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:115"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
@@ -2094,12 +2072,8 @@
       "status": "pending",
       "exportSite": "packages/protocol/src/ipc/index.ts:184",
       "evidence": {
-        "productionConsumers": [
-          "packages/ipc/src/server.ts:157,223"
-        ],
-        "testPins": [
-          "packages/protocol/test/ipc/schema.test.ts:123,133"
-        ],
+        "productionConsumers": ["packages/ipc/src/server.ts:157,223"],
+        "testPins": ["packages/protocol/test/ipc/schema.test.ts:123,133"],
         "snapshotPin": null,
         "runtimeConsumer": "see productionConsumers"
       },
