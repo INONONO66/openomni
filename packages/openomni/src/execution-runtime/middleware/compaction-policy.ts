@@ -139,23 +139,33 @@ function wrapCreated(
       // and store see the same decorated render. Decoration failure is the
       // same fail-open class as persistence failure: the undecorated cut is
       // still a correct cut.
-      let outgoing = parsed.data;
+      let outgoing: unknown[] | undefined;
       let persistAnchor = anchor;
       try {
+        // Reclaim-bound (#727 review F1): planDecoration returns undefined
+        // when the cut reclaimed too little to pay for any decoration — the
+        // applied window must stay strictly smaller than the pre-cut one.
         const decoration = planDecoration(
           anchor.info.sessionID,
           (ctx.messages ?? []) as Message.WithParts[],
           parsed.data,
         );
-        const decoratedParts = anchor.parts.map((part) =>
-          part.type === "text" && part.metadata?.compactionAnchor === true
-            ? { ...part, text: decorateAnchorRender(part.text, decoration) }
-            : part,
-        );
-        persistAnchor = { info: anchor.info, parts: decoratedParts };
-        outgoing = parsed.data.map((message) =>
-          message.info.id === anchor.info.id ? persistAnchor : message,
-        );
+        if (decoration !== undefined) {
+          const decoratedParts = anchor.parts.map((part) =>
+            part.type === "text" && part.metadata?.compactionAnchor === true
+              ? { ...part, text: decorateAnchorRender(part.text, decoration) }
+              : part,
+          );
+          persistAnchor = { info: anchor.info, parts: decoratedParts };
+          // Only the anchor slot is replaced; every other message rides
+          // through as the exact object the core produced (#727 review F8 —
+          // no blanket zod-normalized clones).
+          const anchorIndex = parsed.data.findIndex(
+            (message) => message.info.id === anchor.info.id,
+          );
+          outgoing = [...effect.messages];
+          if (anchorIndex >= 0) outgoing[anchorIndex] = persistAnchor;
+        }
       } catch (error) {
         warn(ctx, "anchor render not decorated: derivation failed", {
           error: error instanceof Error ? error.message : String(error),
@@ -171,10 +181,12 @@ function wrapCreated(
           error: error instanceof Error ? error.message : String(error),
         });
       }
+      if (outgoing === undefined) return decision;
+      const rewritten = outgoing;
       return {
         ...decision,
         effects: (decision.effects ?? []).map((entry) =>
-          entry.type === "run.replace_messages" ? { ...entry, messages: outgoing } : entry,
+          entry.type === "run.replace_messages" ? { ...entry, messages: rewritten } : entry,
         ),
       };
     },

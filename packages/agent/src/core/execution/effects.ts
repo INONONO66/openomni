@@ -41,7 +41,7 @@ export namespace PolicyEffectApplier {
         const message =
           effect.role === "assistant"
             ? createAssistantMessage(effect.message, assistantParentID, sessionId)
-            : createUserMessage(effect.message, sessionId);
+            : createUserMessage(effect.message, sessionId, { policyInjected: true });
         messages.push(message);
         assistantParentID = message.info.id;
       } else if (effect.type === "run.continue_with_prompt") {
@@ -75,7 +75,7 @@ export namespace PolicyEffectApplier {
         const message =
           effect.role === "assistant"
             ? createAssistantMessage(effect.message, parentID, state.sessionId)
-            : createUserMessage(effect.message, state.sessionId);
+            : createUserMessage(effect.message, state.sessionId, { policyInjected: true });
         messages.push(message);
         parentID = message.info.id;
       } else if (effect.type === "prompt.append_context") {
