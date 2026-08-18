@@ -1,6 +1,7 @@
 import type { BusEvent } from "@openomni/protocol";
 import { AgentExecution, type Message } from "@openomni/protocol";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
+import type { CompactionCandidate } from "./speculate";
 
 export interface CompactionOptions {
   /**
@@ -106,7 +107,7 @@ export namespace Compaction {
       /** A speculative candidate (L4): promoted with zero model calls when
        * its span is still a live id-prefix of the history; otherwise the
        * synchronous merge runs and the result reports the discard. */
-      readonly candidate?: { readonly spanIds: readonly string[]; readonly anchorBody: string };
+      readonly candidate?: CompactionCandidate;
     },
   ): Promise<CompactionResult> {
     const messagesBefore = messages.length;
@@ -168,7 +169,7 @@ export namespace Compaction {
     messages: Message.WithParts[],
     options: ResolvedCompactionOptions,
     measuredContextTokens: number | undefined,
-    candidate: { readonly spanIds: readonly string[]; readonly anchorBody: string } | undefined,
+    candidate: CompactionCandidate | undefined,
     finish: (
       result: CompactionResult,
       outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
