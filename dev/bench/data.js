@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787061507608,
+  "lastUpdate": 1787063124798,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -55379,6 +55379,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511283,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6a852c884b77e05255cad12d098500f91d20b3b",
+          "message": "feat(protocol): gateway stage 0 contracts (#718)\n\n* feat(protocol): gateway stage 0 contracts (#706)\n\nAdds protocol/src/gateway: Gateway.Deliver (InboundMessage, ActorContext\nwith origin taint root, WaitContext), the re-homed #215 Send vocabulary\n(SendInput/SendReceipt/grants/denials), ReplyGrantRule (Owner-written\nrule rows with live-instance cap), and Gateway.WaitControl\n(cancel/expire_now). openomni/messaging/schema.ts re-exports the moved\nschemas; resolveSenderTargetGrant stays kernel-side (grant evaluation is\nforbidden in protocol). Gateway added to core-model Tier 2 (Owner\naddition per docs/gateway-design.md). Zero behavior change; no wiring.\n\nCloses #706\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(protocol): gateway review fixes — treatment, grant instances\n\nM1: ActorContext.inboundTreatment narrowed to full_access|evidence_only\n(a dropped message is never delivered — drop is unrepresentable at the\nseam). M2: SenderTargetGrant gains optional ruleId+replyScope with\ncoherence refinement — rule-materialized instances require containment\nand expiry, making maxLiveInstances countable. NITs: media refs need\nurl|filename, nested-strictness and AwaitSpec non-refinement pinned by\ntests, doc wording (surface- or channel-scoped; Envelope demotion).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(messaging): fail-closed guard for scope-carrying grant instances\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T14:23:58Z",
+          "tree_id": "61ceb81a3ef1df91c3f59ef8e5884e3138a063d7",
+          "url": "https://github.com/INONONO66/openomni/commit/f6a852c884b77e05255cad12d098500f91d20b3b"
+        },
+        "date": 1787063123458,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5871,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2831,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2378,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15412,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8040,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 962,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1388,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1593,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45368,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2348,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512910,
             "unit": "ns/op"
           }
         ]
