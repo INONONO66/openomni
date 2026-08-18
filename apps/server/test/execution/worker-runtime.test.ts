@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { SystemToolProvider } from "@openomni/openomni";
-import { Session, Storage, initialize } from "@openomni/session";
+import { Session, Storage, initialize } from "@openomni/ledger";
 import {
   buildWorkerInputMessages,
   createExecutionToolContext,

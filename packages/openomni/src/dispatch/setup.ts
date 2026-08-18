@@ -1,6 +1,6 @@
 import { PolicyEngine } from "@openomni/policy";
 import { WorkItem } from "@openomni/protocol";
-import type { Storage } from "@openomni/session";
+import type { Storage } from "@openomni/ledger";
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
 import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
 import { VerifierRegistry } from "../evidence/verifier-registry.js";

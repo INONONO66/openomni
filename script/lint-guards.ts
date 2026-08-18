@@ -104,7 +104,7 @@ const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
 const agentRegistryAssemblyPattern = /\bPolicyRegistry\s*\.\s*create\b|\bdefaultRegistry\s*\(/g;
 
 const policyPackageBoundaryPattern =
-  /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;
+  /(?:from\s+|import\s+)["'](@openomni\/(?:agent|ledger))[^"']*["']/g;
 
 async function main(): Promise<void> {
   const files = await collectSourceFiles();
@@ -236,7 +236,7 @@ function validatePolicyPackageBoundary(filePath: string, source: string): GuardV
     ruleId: "policy-package-boundary",
     filePath,
     line: lineNumberForOffset(source, match.index),
-    message: "packages/policy must not import from @openomni/agent or @openomni/session",
+    message: "packages/policy must not import from @openomni/agent or @openomni/ledger",
   }));
 }
 

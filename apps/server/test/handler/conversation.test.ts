@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
 import type { Channel, Ingress, Tool } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createMessageHandler } from "../../src/handler/conversation";
 import type { BridgeDeps } from "../../src/ingress/bridge";

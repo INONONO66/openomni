@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { Operational } from "@openomni/protocol";
-import { BusPersistence, Storage } from "@openomni/session";
+import { BusPersistence, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 function journalRows(): Array<{ event_type: string; trace_id: string }> {

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Execution, Message, Ingress } from "@openomni/protocol";
-import { Session, Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { Session, Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";

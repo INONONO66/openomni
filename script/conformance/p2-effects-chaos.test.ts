@@ -27,7 +27,7 @@ import {
   type EffectDriver,
   type EffectExecution,
 } from "../../packages/openomni/src/effect/index";
-import { EffectStore, SqliteStorageAdapter, Storage } from "../../packages/session/src/index";
+import { EffectStore, SqliteStorageAdapter, Storage } from "../../packages/ledger/src/index";
 
 const DEFAULT_SEED = 20260819;
 const ITERATIONS = 200;

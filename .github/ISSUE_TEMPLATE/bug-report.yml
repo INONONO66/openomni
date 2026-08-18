@@ -32,12 +32,12 @@ body:
         Issues without reproduction steps may be closed without investigation.
       placeholder: |
         ```ts
-        import { Storage } from "@openomni/session";
+        import { Storage } from "@openomni/ledger";
         Storage.get(); // Expected: returns adapter, Actual: throws
         ```
 
         Or steps:
-        1. Run `bun test` in packages/session
+        1. Run `bun test` in packages/ledger
         2. See error in test X
     validations:
       required: true

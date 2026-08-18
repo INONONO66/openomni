@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Command, Execution } from "@openomni/protocol";
-import { AppConnectorInstallationStore, Artifact, Storage, WorkItemStore } from "@openomni/session";
+import { AppConnectorInstallationStore, Artifact, Storage, WorkItemStore } from "@openomni/ledger";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
 import { resolveConnectorLogPath } from "../../src/connector/log-path.js";

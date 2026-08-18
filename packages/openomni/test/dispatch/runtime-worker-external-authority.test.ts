@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Storage, WorkerGrantStore } from "@openomni/session";
+import { Storage, WorkerGrantStore } from "@openomni/ledger";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createWorkerRunFixture, resetDispatchTestState } from "./runtime-test-fixtures";
 

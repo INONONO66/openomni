@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import {
   contentChars,
   decorateAnchorRender,

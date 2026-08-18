@@ -99,7 +99,7 @@ type RuntimeAgentDef = Ingress.AgentDef & {
  * residents therefore rides a redesign of the commit seam (record the
  * committed output as the fact), not a sink here. Resident sessions stay
  * all-projection — see the writer census in
- * packages/session/src/session/transcript.ts.
+ * packages/ledger/src/session/transcript.ts.
  */
 function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
   return ChatAgent.create(config).run(input);

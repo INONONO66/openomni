@@ -1,7 +1,7 @@
 import type { InboundWaitParams, InboundWaitResult } from "@openomni/coordinator";
 import type { DispatchRuntime } from "@openomni/openomni";
 import { Operational } from "@openomni/protocol";
-import { WorkItemAttemptRun } from "@openomni/session";
+import { WorkItemAttemptRun } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import type { ServerConfig } from "../config";

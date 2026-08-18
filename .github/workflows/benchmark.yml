@@ -54,12 +54,12 @@ jobs:
             echo "Benchmark run $run/$BENCHMARK_RUNS"
             rm -rf packages/*/bench-results
 
-            bun run --cwd packages/session bench
+            bun run --cwd packages/ledger bench
             bun run --cwd packages/agent bench
             bun run --cwd packages/openomni bench
 
             mkdir -p "bench-results/runs/$run"
-            cp packages/session/bench-results/session.json "bench-results/runs/$run/session.json"
+            cp packages/ledger/bench-results/session.json "bench-results/runs/$run/session.json"
             cp packages/agent/bench-results/agent.json "bench-results/runs/$run/agent.json"
             cp packages/openomni/bench-results/openomni.json "bench-results/runs/$run/openomni.json"
           done

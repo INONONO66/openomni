@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemAttemptRun, WorkItemStore } from "@openomni/ledger";
 import { recoverInterruptedRuns } from "../../src/execution/recovery";
 
 /**

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ActorRegistry, Storage } from "@openomni/session";
+import { ActorRegistry, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { registerServerMessaging, serverMessaging } from "../../src/bootstrap/messaging";
 import type { ChannelDeliveryRoute } from "../../src/bootstrap/messaging";

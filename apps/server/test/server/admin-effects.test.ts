@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { EffectStore, Storage } from "@openomni/session";
+import { EffectStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { assembleEffectRuntime } from "../../src/bootstrap/effects";
 import { createRouter } from "../../src/server/routes";
@@ -179,7 +179,7 @@ describe("admin effect routes", () => {
   });
 
   test("storage-level failures surface as 503, never as a crash or a leak", async () => {
-    const { EffectStoreError } = await import("@openomni/session");
+    const { EffectStoreError } = await import("@openomni/ledger");
     const throwing = {
       service: {
         run: () => {

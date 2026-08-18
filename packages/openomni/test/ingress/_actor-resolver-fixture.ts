@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, mock } from "bun:test";
 import { Ingress as IngressNamespace, Operational, type Ingress } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/session";
+import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import {

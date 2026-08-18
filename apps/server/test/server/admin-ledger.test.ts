@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createRouter } from "../../src/server/routes";
 

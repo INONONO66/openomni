@@ -1,5 +1,5 @@
 import type { Execution } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { WorkItemStore } from "@openomni/ledger";
 import {
   reflectCoordinatorResult,
   requireWorkerCompletionIdentity,

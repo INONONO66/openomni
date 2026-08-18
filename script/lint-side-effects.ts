@@ -41,7 +41,7 @@ const hotFiles = [
   "packages/llm/src/processor/index.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/openomni/src/ingress/session-bridge.ts",
-  "packages/session/src/session/messages.ts",
+  "packages/ledger/src/session/messages.ts",
 ];
 
 const rules: readonly SideEffectRule[] = [
@@ -124,7 +124,7 @@ const rules: readonly SideEffectRule[] = [
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/messages.ts",
+    filePath: "packages/ledger/src/session/messages.ts",
     sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
     scopeStart: /export function addMessage\(/g,
     scopeEnd: /\nexport function /g,
@@ -134,7 +134,7 @@ const rules: readonly SideEffectRule[] = [
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/messages.ts",
+    filePath: "packages/ledger/src/session/messages.ts",
     sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
     scopeStart: /export function addMessage\(/g,
     scopeEnd: /\nexport function /g,
@@ -144,7 +144,7 @@ const rules: readonly SideEffectRule[] = [
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/messages.ts",
+    filePath: "packages/ledger/src/session/messages.ts",
     sideEffect: /adapter\.part\.set\(messageID, part\)/g,
     scopeStart: /export function addPart\(/g,
     scopeEnd: /\nexport function /g,

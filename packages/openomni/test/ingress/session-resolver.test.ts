@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { SurfaceKey, Storage, Session } from "@openomni/session";
+import { SurfaceKey, Storage, Session } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressSessionResolver } from "../../src/ingress";
 

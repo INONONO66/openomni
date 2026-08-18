@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore } from "@openomni/session";
+import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
 import {
   flushBusObservers,
   kernelEngine,

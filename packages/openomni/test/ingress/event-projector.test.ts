@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { Ingress, Message } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 import { newTraceId } from "@openomni/telemetry";
 

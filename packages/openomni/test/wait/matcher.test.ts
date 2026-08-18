@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Command, Ingress, Wait } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/session";
+import { ActorRegistry, Storage } from "@openomni/ledger";
 import {
   dispatchEvidence,
   ingressEvidence,

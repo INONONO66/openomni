@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { BusPersistence, Storage } from "@openomni/session";
+import { BusPersistence, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { reportFatalAndExit } from "../../src/bootstrap/fatal";
 

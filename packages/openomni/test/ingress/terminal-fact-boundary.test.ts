@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Operational, type Ingress } from "@openomni/protocol";
-import { Session, Storage, WorkItemAttemptRun } from "@openomni/session";
+import { Session, Storage, WorkItemAttemptRun } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressHandlers } from "../../src/ingress/handlers";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";

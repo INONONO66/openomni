@@ -22,7 +22,7 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
 │   ├── telemetry/       # The observation channel: Bus pub/sub, trace-owning scoped emitter, span pairing, sink combinators — protocol-only deps (#606)
-│   ├── session/         # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, frozen worker-run archive, WorkItemStore (universal work state)
+│   ├── ledger/          # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, frozen worker-run archive, WorkItemStore (universal work state)
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
 │   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + MCP client runtime — depends on telemetry for observation
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
@@ -42,8 +42,8 @@ openomni/
 
 ```
 protocol  ←  policy, telemetry, ipc          (ring 0 → 1)
-telemetry ←  session, llm                     session adds durability
-ipc       ←  coordinator                      process driver, session-free
+telemetry ←  ledger, llm                      ledger adds durability
+ipc       ←  coordinator                      process driver, ledger-free
 protocol, ipc, policy            ←  channels  gateway drivers + authn (#551)
 policy, llm, telemetry           ←  agent     the loop
 everything                       ←  openomni  ←  server
@@ -61,7 +61,7 @@ package's tests may reach further than its runtime code, and the gate holds
 | `policy` | protocol |
 | `telemetry` | protocol |
 | `ipc` | protocol |
-| `session` | protocol, telemetry |
+| `ledger` | protocol, telemetry |
 | `llm` | protocol, telemetry — `src/` protocol only |
 | `coordinator` | protocol, ipc |
 | `channels` | protocol, ipc, policy — policy confined to `src/authn/` (S8 banding) |
@@ -71,7 +71,7 @@ package's tests may reach further than its runtime code, and the gate holds
 
 `llm` and `agent` no longer reach the ledger at all: `Bus` moved to `telemetry` and the allowlists closed behind it (#606).
 
-`policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is session-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `channels` is the gateway band at stage 1 (#551, [docs/gateway-design.md](docs/gateway-design.md) §1/§9): platform drivers + channel authn, whitelist {protocol, ipc, policy} with policy confined to `src/authn/` by the S8 intra-package banding check (ledger joins at stage 2); it observes through an injected publish port and never imports the kernel or telemetry. `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
+`policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is ledger-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `channels` is the gateway band at stage 1 (#551, [docs/gateway-design.md](docs/gateway-design.md) §1/§9): platform drivers + channel authn, whitelist {protocol, ipc, policy} with policy confined to `src/authn/` by the S8 intra-package banding check (ledger joins at stage 2); it observes through an injected publish port and never imports the kernel or telemetry. `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
 
 ## PACKAGE OWNERSHIP
 
@@ -81,7 +81,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | --- | --- | --- |
 | `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
 | `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
-| `packages/session` | Durable state substrate: session/message/part CRUD, Bus persistence (the journal writer; `Bus` itself is `packages/telemetry`), storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
+| `packages/ledger` | Durable state substrate: session/message/part CRUD, Bus persistence (the journal writer; `Bus` itself is `packages/telemetry`), storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
 | `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
 | `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
@@ -102,7 +102,7 @@ raw channel event
   -> kernel projects messages/events and returns response/writeback instructions
 ```
 
-`apps/server` must not decide whether an inbound message is a PendingInteraction/PendingAsk reply versus a normal conversation; it should pass normalized transport facts to `openomni`. `session` may expose indexed lookups such as correlation queries, but match precedence and lifecycle transitions are kernel decisions. `coordinator` may deliver an input frame to a live run, but it must not decide why that run is the target.
+`apps/server` must not decide whether an inbound message is a PendingInteraction/PendingAsk reply versus a normal conversation; it should pass normalized transport facts to `openomni`. `ledger` may expose indexed lookups such as correlation queries, but match precedence and lifecycle transitions are kernel decisions. `coordinator` may deliver an input frame to a live run, but it must not decide why that run is the target.
 
 ## WHERE TO LOOK
 
@@ -112,18 +112,18 @@ raw channel event
 | Add/modify bus events | legacy families in `packages/protocol/src/event/`; new domains colocate `events.ts` beside their schema (e.g. `packages/protocol/src/wait/events.ts`) | `BusEvent.define()` pattern |
 | Add policy point | `packages/protocol/src/policy/point-registry.ts` | 18 registered points (`dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
-| Session CRUD | `packages/session/src/session/` | Namespace-based API |
-| Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `workItem`, `workerRunState`) |
-| Bus persistence observer | `packages/session/src/bus-persistence/` | Bus.observe() handler that persists non-ephemeral events to bus_event table |
-| Bus query API | `packages/session/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
-| Surface → session mapping | `packages/session/src/surface-key/` | N:1 SurfaceKey registry |
+| Session CRUD | `packages/ledger/src/session/` | Namespace-based API |
+| Storage backend | `packages/ledger/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `workItem`, `workerRunState`) |
+| Bus persistence observer | `packages/ledger/src/bus-persistence/` | Bus.observe() handler that persists non-ephemeral events to bus_event table |
+| Bus query API | `packages/ledger/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
+| Surface → session mapping | `packages/ledger/src/surface-key/` | N:1 SurfaceKey registry |
 | WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade (`VerificationGate` deleted in #498 — zero writers/readers) |
 | WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/create/compareAndSet/list/remove) |
-| WorkItemStore substrate | `packages/session/src/work-item/index.ts` | CRUD + non-completion lifecycle + blockers + evidence + dependency readiness + cycle detection; raw `complete()` is a typed refusal because product completion authority belongs in OpenOmni |
+| WorkItemStore substrate | `packages/ledger/src/work-item/index.ts` | CRUD + non-completion lifecycle + blockers + evidence + dependency readiness + cycle detection; raw `complete()` is a typed refusal because product completion authority belongs in OpenOmni |
 | WorkItem completion authority | `packages/openomni/src/work-item/` | Pure durable+proposed fact fold, trusted Policy/Stakes/result/Owner authority resolver, origin projector, atomic record-before-terminal admission service (six-scenario Manual QA driver lives in `packages/openomni/test/harness/`) |
 | Windowed Stakes primitive | `packages/openomni/src/ledger/` | Deterministic consequence calculator, criterion treatment, and per-host capability seams (replay driver lives in `packages/openomni/test/harness/`); WorkItem completion now consumes the Stakes resolver seam while authorized Voice remains unwired |
-| Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
-| Worker-run frozen archive | `packages/session/src/worker-run/state-store.ts` | Session-internal read-only archive of `worker_run_state`; writes throw `worker_run_frozen` (#510 D2b), vocabulary owned here since #498 |
+| Worker run records | `packages/ledger/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
+| Worker-run frozen archive | `packages/ledger/src/worker-run/state-store.ts` | Session-internal read-only archive of `worker_run_state`; writes throw `worker_run_frozen` (#510 D2b), vocabulary owned here since #498 |
 | Add LLM provider | `packages/llm/src/provider/` (`index.ts` + `sdk.ts`) + auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
@@ -139,9 +139,9 @@ raw channel event
 | Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
-| Principal / actor identity | `packages/protocol/src/actor/` + `packages/session/src/actor/` + `packages/openomni/src/ingress/actor-resolver.ts` | Schemas/storage are lower-level; principal resolution and access semantics belong in `openomni` |
-| ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/session/src/{channel-grant,blacklist}/` | Storage lives in `session`; evaluation and precedence belong in `openomni` access |
-| PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/session/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Frozen legacy external-response correlation (#548): the store is read-only (writes throw the typed FrozenError), kernel owns match precedence via the upcast-on-read Wait view, and lifecycle transitions belong to the durable Wait primitive |
+| Principal / actor identity | `packages/protocol/src/actor/` + `packages/ledger/src/actor/` + `packages/openomni/src/ingress/actor-resolver.ts` | Schemas/storage are lower-level; principal resolution and access semantics belong in `openomni` |
+| ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/ledger/src/{channel-grant,blacklist}/` | Storage lives in `ledger`; evaluation and precedence belong in `openomni` access |
+| PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/ledger/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Frozen legacy external-response correlation (#548): the store is read-only (writes throw the typed FrozenError), kernel owns match precedence via the upcast-on-read Wait view, and lifecycle transitions belong to the durable Wait primitive |
 | Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/worker-pool.ts` | `createWorkerManager(config, ports)` — spawn on demand, idle shutdown, max-active cap; verbs are `deliver`/`send`/`cancel`/`stats` (never `dispatch`), typed failures via `WorkerDeliveryError` codes |
 | Coordinator supervision | `packages/coordinator/src/worker-supervision/` | Process supervisor (`WorkerSupervisorOptions` config object; `events` sink required) |
 | Worker IPC transport | `packages/ipc/src/` | Unix socket transport, request/response framing — wire method names are frozen (Greg Young rule); standalone `@openomni/ipc` since #496, driver-band consumable |
@@ -213,7 +213,7 @@ a satellite split) to violations of each one.
 ## CODING BOUNDARY RULES
 
 - Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WaitStore`, `WorkerGrantStore`, `ChannelGrantStore`, `BlacklistStore`, or choose worker/resident targets except through an OpenOmni kernel API.
-- Do not add authority decisions to `packages/session`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
+- Do not add authority decisions to `packages/ledger`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
 - Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Session-backed worker/background execution belongs in `packages/openomni`.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
 - Do not add provider behavior outside `packages/llm`.
@@ -315,4 +315,4 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - `packages/agent` is organized as `src/core/` (ChatAgent + policy facade/built-ins) and `src/runtime/` (mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`.
 - `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, ledger/evidence gates, and execution runtime tooling.
 - `packages/coordinator` owns multiprocess execution: on-demand worker pool (`worker-pool.ts`), supervision, and IPC transport (Unix socket). It depends **only on `@openomni/protocol`** — event sink / tool relay / inbound-wait ports are injected by the composition root, and boot recovery lives in `apps/server/src/execution/recovery.ts`. See `packages/coordinator/AGENTS.md` for its module map.
-- Worker-run lifecycle is WorkItem attempt facts (`work_item.attempt_*`); the protocol `worker-run` namespace and its telemetry events were retired in #498 (the frozen archive vocabulary lives session-internally in `packages/session/src/worker-run/state-store.ts`).
+- Worker-run lifecycle is WorkItem attempt facts (`work_item.attempt_*`); the protocol `worker-run` namespace and its telemetry events were retired in #498 (the frozen archive vocabulary lives ledger-internally in `packages/ledger/src/worker-run/state-store.ts`).

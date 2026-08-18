@@ -1,4 +1,4 @@
-import { WorkItemAttemptRun } from "@openomni/session";
+import { WorkItemAttemptRun } from "@openomni/ledger";
 
 export type RecoveryResult = {
   recovered: number;

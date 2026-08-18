@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, Policy } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createIngressEngine } from "../../src/ingress/engine";
 import {

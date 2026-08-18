@@ -7,7 +7,7 @@
  * computes each package's line coverage over its OWN `src/` files, and
  * compares against the grandfathered baseline. Only `src/` records count:
  * bun's lcov also lists cross-package files loaded through workspace imports
- * (`../protocol/src/...` — session tests must not get credit for protocol
+ * (`../protocol/src/...` — ledger tests must not get credit for protocol
  * lines), compiled `dist/` duplicates (which would tie the number to build
  * staleness), and `test/` harness files.
  *

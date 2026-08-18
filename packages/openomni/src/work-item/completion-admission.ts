@@ -1,7 +1,7 @@
 import type { PolicyEngine } from "@openomni/policy";
 import { WorkItem, type Policy } from "@openomni/protocol";
 import { createDurableCompletionResultAuthorityPort } from "../evidence/verifier-recorded-input.js";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import type { CompletionStakesInjection } from "../ledger/index.js";
 import {

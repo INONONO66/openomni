@@ -1,7 +1,7 @@
 import { createDefaultDispatchRuntime } from "@openomni/openomni";
 import { PolicyEngine } from "@openomni/policy";
 import type { WorkItem } from "@openomni/protocol";
-import { type Storage, WorkItemStore } from "@openomni/session";
+import { type Storage, WorkItemStore } from "@openomni/ledger";
 import { createCompletionAdmissionService } from "../../../packages/openomni/src/work-item/completion-admission";
 
 export async function completeWorkItem(

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
-import { Storage, WaitStore } from "@openomni/session";
+import { Storage, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { WaitService } from "../../src/wait/index";
 import { buildWaitCreate } from "../helpers/wait";

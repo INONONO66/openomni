@@ -14,7 +14,7 @@ import {
   SurfaceKey,
   WorkItemAttemptRun,
   WorkItemStore,
-} from "@openomni/session";
+} from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createResidentInboundWaitHandler } from "../../src/bootstrap/resident-inbound-wait";
 import type { ServerConfig } from "../../src/config";

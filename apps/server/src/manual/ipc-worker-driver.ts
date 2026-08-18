@@ -29,7 +29,7 @@ import { connectIpcClient, createIpcServer, encode } from "@openomni/ipc";
 import type { Execution } from "@openomni/protocol";
 import { Worker } from "@openomni/protocol";
 import { createWorkerManager } from "@openomni/coordinator";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { createExecutionCoordinator } from "../execution/coordinator";
 import { newTraceId } from "@openomni/telemetry";
 

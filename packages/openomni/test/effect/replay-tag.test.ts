@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { EffectStore, SqliteStorageAdapter, Storage } from "@openomni/session";
+import { EffectStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import {
   EffectManifest,
   EffectService,

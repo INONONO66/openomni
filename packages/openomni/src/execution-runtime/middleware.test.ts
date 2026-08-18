@@ -1,7 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine } from "@openomni/agent";
 import { Operational } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { SessionBridge } from "../ingress/session-bridge";
 import { InjectionQueue } from "./injection-queue";

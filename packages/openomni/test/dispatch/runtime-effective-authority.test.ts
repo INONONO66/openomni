@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { PolicyDecision } from "@openomni/protocol";
-import { BlacklistStore, Storage, WorkerGrantStore } from "@openomni/session";
+import { BlacklistStore, Storage, WorkerGrantStore } from "@openomni/ledger";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { createWorkerRunFixture, input, resetDispatchTestState } from "./runtime-test-fixtures";
 

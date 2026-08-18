@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CronJob } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 
 function tempDbPath(): { readonly dir: string; readonly dbPath: string } {

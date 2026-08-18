@@ -15,7 +15,7 @@ src/
 
 ## DEPENDENCIES
 
-Depends on `@openomni/protocol` and `@openomni/ipc` **only** — a ring-2 process driver (#462; IPC transport extracted in #496). Every environment edge (ledger event sink, tool relay, inbound-wait bridge) is injected as a `WorkerPorts` object by the composition root (`apps/server/src/bootstrap`); the CI dep ratchet (`script/check-deps.ts`) enforces protocol+ipc-only. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/session`, `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
+Depends on `@openomni/protocol` and `@openomni/ipc` **only** — a ring-2 process driver (#462; IPC transport extracted in #496). Every environment edge (ledger event sink, tool relay, inbound-wait bridge) is injected as a `WorkerPorts` object by the composition root (`apps/server/src/bootstrap`); the CI dep ratchet (`script/check-deps.ts`) enforces protocol+ipc-only. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/ledger`, `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
 
 ## MODULES
 

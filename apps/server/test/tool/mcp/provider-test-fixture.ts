@@ -2,7 +2,7 @@ import { afterEach, beforeEach, mock } from "bun:test";
 
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import type { McpToolProvider } from "../../../src/tool/mcp";
 

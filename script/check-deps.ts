@@ -5,7 +5,7 @@ type PackageKey =
   | "ipc"
   | "telemetry"
   | "policy"
-  | "session"
+  | "ledger"
   | "llm"
   | "agent"
   | "openomni"
@@ -67,10 +67,10 @@ const RULES: Record<PackageKey, PackageRule> = {
     // published contract — it must never grow a kernel/ledger/policy import.
     allowedDeps: new Set(["@openomni/protocol"]),
   },
-  session: {
-    displayName: "session",
-    packageJsonPath: "packages/session/package.json",
-    packageName: "@openomni/session",
+  ledger: {
+    displayName: "ledger",
+    packageJsonPath: "packages/ledger/package.json",
+    packageName: "@openomni/ledger",
     allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
   },
   policy: {
@@ -117,7 +117,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageJsonPath: "packages/coordinator/package.json",
     packageName: "@openomni/coordinator",
     // Ring-2 process driver: protocol + ipc only (#462 step 1 made it
-    // session-free; #496 moved the IPC transport into @openomni/ipc; this
+    // ledger-free; #496 moved the IPC transport into @openomni/ipc; this
     // ratchet keeps it that way — widening requires Owner sign-off).
     allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
   },
@@ -285,7 +285,7 @@ function packageDirOf(rule: PackageRule): string {
 
 /**
  * Layer-order check at the source level. package.json manifests cannot see
- * phantom imports (a bare `import "@openomni/session"` resolves through the
+ * phantom imports (a bare `import "@openomni/ledger"` resolves through the
  * hoisted node_modules even when the manifest never declares it), so the
  * dependency-direction rules are enforced against actual import specifiers.
  */
@@ -566,7 +566,7 @@ const TRACKED_DOCS = [
   "packages/protocol/AGENTS.md",
   "packages/ipc/AGENTS.md",
   "packages/telemetry/AGENTS.md",
-  "packages/session/AGENTS.md",
+  "packages/ledger/AGENTS.md",
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",
   "packages/openomni/AGENTS.md",
@@ -663,7 +663,7 @@ function selfTest(): void {
       !isAllowedSourceDep(twoTier, "@openomni/telemetry"),
     ],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
-    ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/session")],
+    ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/ledger")],
     [
       "no srcAllowedDeps falls back to the manifest",
       isAllowedSourceDep(oneTier, "@openomni/telemetry"),

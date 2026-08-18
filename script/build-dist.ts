@@ -5,7 +5,7 @@
  * - dist/bin/cli.js          — bin entry (serve/onboard), self-contained bundle
  * - dist/bin/worker-entry.js — worker subprocess bundle, injected via
  *                              OPENOMNI_CLI_BUNDLE (see apps/server/src/cli.ts)
- * - migration/               — copy of packages/session/migration; the session
+ * - migration/               — copy of packages/ledger/migration; the session
  *   package resolves `import.meta.dir/../../migration` at runtime, so the
  *   bundles MUST live exactly two directories below the package root.
  */
@@ -57,7 +57,7 @@ if (!result.success) {
   process.exit(1);
 }
 
-cpSync(join(root, "packages/session/migration"), join(root, "migration"), { recursive: true });
+cpSync(join(root, "packages/ledger/migration"), join(root, "migration"), { recursive: true });
 
 const cliPath = join(outDir, "cli.js");
 const workerPath = join(outDir, "worker-entry.js");

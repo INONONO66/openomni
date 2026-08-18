@@ -29,7 +29,7 @@ export function summarizeText(text: string): TextSummary {
  * `Math.random()` strings, so an exporter can reconstruct it.
  *
  * This lives in `openomni` rather than the storage package because it always
- * belonged here: `AuditLog` sat in `packages/session` under a name promising
+ * belonged here: `AuditLog` sat in `packages/ledger` under a name promising
  * the ledger while publishing to the lossy observation bus (#606). The trail
  * is ingress's own, and the honest name says so.
  *

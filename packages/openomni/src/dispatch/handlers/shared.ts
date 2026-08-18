@@ -1,5 +1,5 @@
 import type { Command, Model } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session } from "@openomni/ledger";
 
 // Inbound payload-text parsing is owned by ingress (the boundary that mints
 // the payload shape): import extractText from ../../ingress/handlers.js.

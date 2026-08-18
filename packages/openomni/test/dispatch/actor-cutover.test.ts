@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { Session, Storage, WorkItemStore } from "@openomni/session";
+import { Session, Storage, WorkItemStore } from "@openomni/ledger";
 import { deriveActorContext } from "../../src/dispatch/actor";
 
 /**

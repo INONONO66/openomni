@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { ChannelGrantStore, Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { ZodError } from "zod";
 import {

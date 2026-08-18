@@ -41,7 +41,7 @@ import {
   SqliteStorageAdapter,
   Storage,
   WorkItemStore,
-} from "../../packages/session/src/index";
+} from "../../packages/ledger/src/index";
 import { Bus } from "../../packages/telemetry/src/index";
 import { assembleEffectRuntime } from "../../apps/server/src/bootstrap/effects";
 

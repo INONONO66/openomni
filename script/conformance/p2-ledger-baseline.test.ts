@@ -30,14 +30,14 @@ import {
   WaitStore,
   WorkItemAttemptRun,
   WorkItemStore,
-} from "../../packages/session/src/index";
+} from "../../packages/ledger/src/index";
 import { Bus } from "../../packages/telemetry/src/index";
-import { Ledger } from "../../packages/session/src/ledger-core/index";
-import { WorkerRunStateStore } from "../../packages/session/src/worker-run/state-store";
+import { Ledger } from "../../packages/ledger/src/ledger-core/index";
+import { WorkerRunStateStore } from "../../packages/ledger/src/worker-run/state-store";
 import {
   hasRetryExhaustionBlocker,
   isRetryExhausted,
-} from "../../packages/session/src/work-item/retry-policy";
+} from "../../packages/ledger/src/work-item/retry-policy";
 import {
   waitViewOfPendingAsk,
   waitViewOfPendingInteraction,
@@ -46,7 +46,7 @@ import {
   buildReplyInput,
   buildWaitCreate as buildSessionWaitCreate,
   captureStoreError,
-} from "../../packages/session/test/helpers/wait";
+} from "../../packages/ledger/test/helpers/wait";
 import { EffectService } from "../../packages/openomni/src/effect/lifecycle";
 import { EffectManifest } from "../../packages/openomni/src/effect/manifest";
 import { runRecovery } from "../../apps/server/src/bootstrap/recovery";
@@ -2134,7 +2134,7 @@ describe("p2 ledger baseline — boot tail verification and the Governor inciden
 
 describe("p2 ledger baseline — exact producer manifest", () => {
   const repoRoot = join(import.meta.dir, "..", "..");
-  const adapterBinding = "packages/session/src/storage/sqlite-storage.ts";
+  const adapterBinding = "packages/ledger/src/storage/sqlite-storage.ts";
 
   test("the observed ledger write surface equals the manifest in BOTH directions", async () => {
     const scan = await scanLedgerProducers(repoRoot);

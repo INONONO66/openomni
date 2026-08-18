@@ -1,4 +1,4 @@
-import { ActorRegistry } from "@openomni/session";
+import { ActorRegistry } from "@openomni/ledger";
 import type { SendInput, SenderTargetGrant } from "../../src/messaging/index.js";
 
 /** Shared messaging-domain fixture builders for openomni tests (#215). */

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Command, Execution } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 import { startConnectorQuestionBridgeServer } from "../../src/connector/question-bridge.js";
 

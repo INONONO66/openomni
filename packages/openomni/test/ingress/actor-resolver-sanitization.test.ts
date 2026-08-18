@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import {
   flushBusObservers,
   getIngressEngine,

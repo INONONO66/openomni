@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine, type ChatAgentConfig } from "@openomni/agent";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/ledger";
 import { ResidentRuntime } from "../../src/resident/runtime";
 import { newTraceId } from "@openomni/telemetry";
 

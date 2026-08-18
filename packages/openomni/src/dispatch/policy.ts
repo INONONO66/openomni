@@ -1,6 +1,6 @@
 import { Command, PolicyDecision, type Policy } from "@openomni/protocol";
 import type { GenericPolicyContext } from "@openomni/policy";
-import { BlacklistStore, PendingInteractionStore, WorkerGrantStore } from "@openomni/session";
+import { BlacklistStore, PendingInteractionStore, WorkerGrantStore } from "@openomni/ledger";
 import { EffectiveAuthority } from "./effective-authority.js";
 import type { DispatchPolicyRegistration } from "./policy-registration.js";
 

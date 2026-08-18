@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createIngressEngine, type IngressEngine } from "@openomni/openomni";
 import type { Execution, Ingress } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 type CoordinatorLike = {

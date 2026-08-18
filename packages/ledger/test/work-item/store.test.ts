@@ -59,7 +59,7 @@ async function addPassingEvidence(hash: string): Promise<string> {
       kind: "test_result",
       description: "targeted lifecycle test passed",
       passed: true,
-      detail: "bun test packages/session/test/work-item/",
+      detail: "bun test packages/ledger/test/work-item/",
     },
     "trace-test",
   );

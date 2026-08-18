@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Storage, WorkItemStore } from "@openomni/session";
+import { Storage, WorkItemStore } from "@openomni/ledger";
 import { ReadBackExecutor } from "../../src/evidence/read-back-executor";
 import { cleanupReadBackFixtures, LOCAL_READ_BACK, startFixtureServer } from "./read-back-fixture";
 

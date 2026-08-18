@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { BusPersistence } from "@openomni/session";
+import { BusPersistence } from "@openomni/ledger";
 import { Bus, newTraceId } from "@openomni/telemetry";
 
 /**

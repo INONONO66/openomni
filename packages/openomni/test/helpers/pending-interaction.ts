@@ -1,5 +1,5 @@
 import { Communication } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 
 /**
  * PendingInteractionStore writes are frozen (#548) — historical rows are

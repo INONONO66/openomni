@@ -95,9 +95,9 @@ jobs:
       - name: Test (telemetry)
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/telemetry
-      - name: Test (session)
+      - name: Test (ledger)
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/session
+        working-directory: packages/ledger
       - name: Test (llm)
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/llm
@@ -184,6 +184,7 @@ jobs:
       - run: bun run script/check-dead-exports.ts
       - run: bun run script/check-import-cycles.ts
       - run: bun run script/verify-tsconfig-inheritance.ts
+      - run: bun run script/verify-ledger-rename.ts
       - run: bun run script/check-ledger-schema-drift.ts
       - run: bun run script/report-source-metrics.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

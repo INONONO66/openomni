@@ -1,7 +1,7 @@
 import type { AgentResult } from "@openomni/agent";
 import type { TraceContext } from "@openomni/protocol";
 import { InjectionQueue } from "@openomni/openomni";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 
 import type { ActiveRunHandle } from "../../src/execution/worker-runner-types";
 import type { WorkerRunner } from "../../src/execution/worker-runner";

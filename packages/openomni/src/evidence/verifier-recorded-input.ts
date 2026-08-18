@@ -1,5 +1,5 @@
 import type { WorkItem } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import { WorkItemStore } from "@openomni/ledger";
 import { z } from "zod";
 import type {
   CompletionResultAuthorityCandidate,

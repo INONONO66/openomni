@@ -1,6 +1,8 @@
-# packages/session
+# packages/ledger
 
 Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+
+SSOT directive ([docs/gateway-design.md](../../docs/gateway-design.md) §4, Owner 2026-08-19): "exactly one database, owned by `@openomni/ledger` (the #502 rename of session's storage). No package other than ledger touches the storage engine — every read/write goes through ledger's typed store surfaces." This package is the single storage engine owner; row schemas stay in `protocol`.
 
 `Bus` itself lives in `@openomni/telemetry` (#606) — every consumer imports it from there directly; this package keeps the durable journal that subscribes to it.
 
@@ -97,10 +99,10 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 ## ANTI-PATTERNS
 
 - **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
-- Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
+- Do NOT import internal paths from other packages — import from `@openomni/ledger` (index re-exports).
 - Do NOT persist ad-hoc delegated execution state alongside `Session`. `worker_run_state` is a frozen read-only archive; new writes use the canonical WorkItem attempt contract rather than reviving the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.
-- Do NOT add communication routing or authority evaluation here. Session is the durable substrate; OpenOmni is the kernel.
+- Do NOT add communication routing or authority evaluation here. The ledger is the durable substrate; OpenOmni is the kernel.
 - Do NOT add a second completion-admission append or terminal method here. The only product completion boundary is `packages/openomni/src/work-item/`.
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._

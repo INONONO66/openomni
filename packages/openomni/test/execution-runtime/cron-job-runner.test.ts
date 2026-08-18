@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ingress, type CronJob, type Command } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { DispatchRegistry, registerBuiltInDispatchHandlers } from "../../src/dispatch";
 import { CronJobRegistry, CronJobRunner } from "../../src/execution-runtime";

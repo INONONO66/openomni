@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Channel, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, BusPersistence } from "@openomni/session";
+import { initialize, BusPersistence } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import {

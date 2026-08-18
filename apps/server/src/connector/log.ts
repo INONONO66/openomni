@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { AppConnector, Execution } from "@openomni/protocol";
-import { Artifact } from "@openomni/session";
+import { Artifact } from "@openomni/ledger";
 import { type ConnectorTemplateValues, redactConnectorCredentialValues } from "./env.js";
 import { newestConnectorGlobMatch, resolveConnectorLogPath } from "./log-path.js";
 import { aggregateConnectorLogUsage, buildConnectorLogEvent } from "./log-telemetry.js";

@@ -161,15 +161,15 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
   );
   itSkip("UNGOVERNED: Direct LLM run packages/llm/src/run.ts — no policy check", documentedSkip);
   itSkip(
-    "UNGOVERNED: Session direct writes packages/session/src/session/index.ts — no policy gate",
+    "UNGOVERNED: Session direct writes packages/ledger/src/session/index.ts — no policy gate",
     documentedSkip,
   );
   itSkip(
-    "UNGOVERNED: Artifact writes packages/session/src/artifact/index.ts — no policy gate",
+    "UNGOVERNED: Artifact writes packages/ledger/src/artifact/index.ts — no policy gate",
     documentedSkip,
   );
   itSkip(
-    "UNGOVERNED: WorkItem writes packages/session/src/work-item/index.ts — no policy gate",
+    "UNGOVERNED: WorkItem writes packages/ledger/src/work-item/index.ts — no policy gate",
     documentedSkip,
   );
 });

@@ -2,7 +2,7 @@
 import type { IngressEngine } from "@openomni/openomni";
 import type { Ingress } from "@openomni/protocol";
 import { Channel, Operational, WorkItem } from "@openomni/protocol";
-import { hasRetryExhaustionBlocker, WorkItemStore } from "@openomni/session";
+import { hasRetryExhaustionBlocker, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";

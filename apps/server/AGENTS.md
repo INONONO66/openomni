@@ -4,7 +4,7 @@ Hono/Bun runtime host that exposes OpenOmni through external channels (Discord /
 
 Inbound messages should flow as: raw channel payload -> channels gateway driver transport/auth/dedupe (`packages/channels`) -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback.
 
-Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, `@openomni/channels`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
+Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/ledger`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, `@openomni/channels`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
 
 ## STRUCTURE
 
@@ -65,7 +65,7 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 
 **Coordinator mode**:
 1. `loadConfig()` — read env + config files.
-2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
+2. `initialize({ dbPath })` — bootstrap `@openomni/ledger` SQLite storage.
 3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`.
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
 5. `resolveModel()` (in `bootstrap/index.ts`) — pick a default model from stored credentials (if any); kernel-side fallback is `DEFAULT_DISPATCH_MODEL` from `@openomni/openomni` (#471).

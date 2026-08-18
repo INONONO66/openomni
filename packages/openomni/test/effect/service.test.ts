@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { WorkItem } from "@openomni/protocol";
-import { EffectStore, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { EffectStore, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ledger";
 import {
   EffectManifest,
   EffectRefusal,

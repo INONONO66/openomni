@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
-import { SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/session";
+import { SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { runCompletionAdmissionDriver } from "../harness/completion-admission-driver.js";
 import {

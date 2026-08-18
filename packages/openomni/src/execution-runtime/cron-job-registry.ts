@@ -1,5 +1,5 @@
 import { CronJob, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 // #522/#547: a cron job is durable by definition — a scheduled job that does

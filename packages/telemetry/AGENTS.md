@@ -50,7 +50,7 @@ First `settle()` wins, so an inner guard is not overwritten by an outer one on t
 
 ## WHAT IS WIRED TODAY
 
-`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `span`, `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, the span status helpers (`spanStatus`, `spanStatusMessage`), and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`, `InvalidTraceScopeError`) — has zero PRODUCTION consumers, but its test/bench consumers span packages: `collector` is imported by llm, agent, and openomni tests (not just this package's own), `noopSink` by `packages/agent/bench/index.ts`, and `scope` by a `packages/session` test fixture. `createSpanHandle` and `failedOutcome` are not exported from the barrel at all: `scope.ts` is their only consumer, and an export with no reader is the thing this rule exists to catch. The reader-less *type* re-exports that used to ride the barrel (`Emitter`,
+`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `span`, `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, the span status helpers (`spanStatus`, `spanStatusMessage`), and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`, `InvalidTraceScopeError`) — has zero PRODUCTION consumers, but its test/bench consumers span packages: `collector` is imported by llm, agent, and openomni tests (not just this package's own), `noopSink` by `packages/agent/bench/index.ts`, and `scope` by a `packages/ledger` test fixture. `createSpanHandle` and `failedOutcome` are not exported from the barrel at all: `scope.ts` is their only consumer, and an export with no reader is the thing this rule exists to catch. The reader-less *type* re-exports that used to ride the barrel (`Emitter`,
 `CollectingSink`, `SpanHandle`, …) were deleted in #647, which supersedes the
 earlier stand-or-fall doctrine here: Phase 1b shipped its consumers (they use
 `Bus` and the id mints, and hold everything else structurally), so the types
@@ -65,7 +65,7 @@ exports are exempt, and tests count as consumers — so re-check with
 
 - **No singletons beyond `Bus`.** An emitter is a value you hold, not a global you reach for. Consumers receive a `BusEvent.Sink` (declared in `@openomni/protocol`), and the composition root decides what is behind it.
 - **Event descriptors live in `@openomni/protocol`**, not here. This package moves events; it does not define the vocabulary.
-- **Storage lives in `@openomni/session`.** `BusPersistence` subscribes through `Bus.observe` and owns the durable journal. It stays there because it resolves a SQLite handle through the storage adapter and reads the `work_item` projection for session attribution — untangling that is a separate change.
+- **Storage lives in `@openomni/ledger`.** `BusPersistence` subscribes through `Bus.observe` and owns the durable journal. It stays there because it resolves a SQLite handle through the storage adapter and reads the `work_item` projection for session attribution — untangling that is a separate change.
 
 ## ANTI-PATTERNS
 

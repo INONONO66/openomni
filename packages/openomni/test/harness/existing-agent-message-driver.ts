@@ -9,7 +9,7 @@ import {
   Storage,
   WaitStore,
   WorkItemStore,
-} from "@openomni/session";
+} from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   WaitService,
