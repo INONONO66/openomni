@@ -13,7 +13,6 @@ export function registerAgentFixture(
     id: actorId,
     kind: "ai_agent",
     trustTier: "collaborator",
-    relationship: "collaborator",
     createdAt: messagingNow,
     updatedAt: messagingNow,
   });

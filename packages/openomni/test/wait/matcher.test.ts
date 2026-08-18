@@ -161,7 +161,6 @@ describe("wait matcher — ingress evidence", () => {
       id: "actor-target",
       kind: "ai_agent",
       trustTier: "collaborator",
-      relationship: "collaborator",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-target",
@@ -173,7 +172,6 @@ describe("wait matcher — ingress evidence", () => {
       id: "actor-r2",
       kind: "ai_agent",
       trustTier: "collaborator",
-      relationship: "collaborator",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-r2",
@@ -292,11 +290,11 @@ describe("wait matcher — dispatch evidence", () => {
     });
     const fromPinned = command({
       correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "worker", actorId: "actor-a" },
+      actor: { kind: "internal_worker", actorId: "actor-a" },
     });
     const fromOther = command({
       correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "worker", actorId: "actor-b" },
+      actor: { kind: "internal_worker", actorId: "actor-b" },
     });
 
     expect(

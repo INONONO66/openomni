@@ -95,7 +95,6 @@ function registerAgent(actorId: string, endpoints: readonly { id: string; extern
     id: actorId,
     kind: "ai_agent",
     trustTier: "collaborator",
-    relationship: "collaborator",
     createdAt: DriverNow,
     updatedAt: DriverNow,
   });
@@ -162,7 +161,7 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     correlation,
     dispatchId: `dispatch:${input.replyKey}`,
     traceId: `trace:${input.replyKey}`,
-    actor: { kind: "user", actorId: input.actorId },
+    actor: { kind: "human", actorId: input.actorId },
     submittedAt: input.at,
   });
   const candidates = responderCandidates(

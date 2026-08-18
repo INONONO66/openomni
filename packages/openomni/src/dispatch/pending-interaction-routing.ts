@@ -116,14 +116,14 @@ export function routePendingInteraction(
       runId: match.workerRunId,
       wait: true,
       actor: {
-        kind: "worker",
+        kind: "internal_worker",
         actorId: match.targetActorId ?? match.endpointId,
         sessionId: match.sessionId,
         runId: match.workerRunId,
         workerRunId: match.workerRunId,
         trustTier: "assigned_worker",
         labels: [
-          "actor.worker",
+          "actor.internal_worker",
           "actor.assigned_worker",
           `pending_interaction.${match.id}`,
           `endpoint.${match.endpointId}`,
@@ -148,14 +148,14 @@ export function routePendingInteraction(
     sessionId: match.sessionId,
     runId: match.workerRunId,
     actor: {
-      kind: "worker",
+      kind: "internal_worker",
       actorId: match.targetActorId ?? match.endpointId,
       sessionId: match.sessionId,
       runId: match.workerRunId,
       workerRunId: match.workerRunId,
       trustTier: "assigned_worker",
       labels: [
-        "actor.worker",
+        "actor.internal_worker",
         "actor.assigned_worker",
         `pending_interaction.${match.id}`,
         `endpoint.${match.endpointId}`,

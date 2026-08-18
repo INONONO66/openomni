@@ -95,18 +95,18 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
 
       if (action === "worker.spawn" && actor.kind !== "resident") {
         return decide(
-          actor.kind === "worker"
+          actor.kind === "internal_worker"
             ? EffectiveAuthority.workerDenied("dispatch.worker.spawn.denied")
             : EffectiveAuthority.actorDenied("dispatch.worker.spawn.resident_required"),
         );
       }
 
-      if (actor.kind === "worker" && action.startsWith("schedule.")) {
+      if (actor.kind === "internal_worker" && action.startsWith("schedule.")) {
         const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.schedule.denied"));
       }
 
-      if (actor.kind === "worker" && action === "resident.ask") {
+      if (actor.kind === "internal_worker" && action === "resident.ask") {
         if (target?.kind !== "resident") {
           return decide(
             EffectiveAuthority.workerDenied("dispatch.worker.resident_ask.target.denied"),
@@ -122,7 +122,7 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
       }
 
       if (
-        actor.kind === "worker" &&
+        actor.kind === "internal_worker" &&
         (action === Command.Actions.ActorReply || action === Command.Actions.WorkerComplete) &&
         actor.trustTier === "assigned_worker"
       ) {
@@ -138,12 +138,12 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
         return decide(EffectiveAuthority.pendingInteractionDenied(pendingInteraction.reason));
       }
 
-      if (actor.kind === "worker" && isWorkerScopedEgress(action)) {
+      if (actor.kind === "internal_worker" && isWorkerScopedEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.scope.denied"));
       }
 
-      if (actor.kind === "worker" && isExternalEgress(action)) {
+      if (actor.kind === "internal_worker" && isExternalEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target, requireDispatchTraceId(ctx));
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.external.denied"));
       }
@@ -152,7 +152,7 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
         return decide(EffectiveAuthority.nonWorker("dispatch.system.schedule.allowed"));
       }
 
-      if (actor.kind === "worker") {
+      if (actor.kind === "internal_worker") {
         return decide(EffectiveAuthority.workerDenied("dispatch.worker.action.denied"));
       }
 

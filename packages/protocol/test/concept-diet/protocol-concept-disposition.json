@@ -64,7 +64,7 @@
       "family": "actor",
       "disposition": "defer",
       "handoff": "#498",
-      "status": "pending",
+      "status": "shipped",
       "deviatesFromIssueKillList": true,
       "exportSite": "packages/protocol/src/actor/index.ts:24 (const Relationship = z.enum([\"owner\",\"co_owner\",\"collaborator\",\"observer\",\"contractor\",\"external_agent\",\"worker\"])), :33 (type)",
       "evidence": {
@@ -85,7 +85,7 @@
         "to": "preserve",
         "reclassified": "reviewer-reconciled"
       },
-      "reason": "REAL consumer: `relationship: Relationship` is a REQUIRED field of the live, cross-package, persisted Actor.Identity (actor/index.ts:41; stored in sqlite-actor-registry-adapter `data` blob; NOT NULL migration 0006; parsed on every DB read via Actor.Identity.parse). Deleting is a persistence-schema migration, which #497 non-goal forbids ('do not delete persisted surfaces without regenerated proof'). Concept removal belongs to #498 actor->Actor convergence."
+      "reason": "REAL consumer: `relationship: Relationship` is a REQUIRED field of the live, cross-package, persisted Actor.Identity (actor/index.ts:41; stored in sqlite-actor-registry-adapter `data` blob; NOT NULL migration 0006; parsed on every DB read via Actor.Identity.parse). Deleting is a persistence-schema migration, which #497 non-goal forbids ('do not delete persisted surfaces without regenerated proof'). Concept removal belongs to #498 actor->Actor convergence. SHIPPED by the #498 actor-convergence slice (branch feat-498-convergence): Actor.Relationship + Identity.relationship deleted, Ingress.ActorSchema.relationship + actor-resolver echo + app-connector writer removed, migration 0018_drop_actor_relationship dropped the NOT NULL column, and old data blobs round-trip via the non-strict Identity parse (pass-through test in session test/actor/persistence.test.ts)."
     },
     {
       "symbol": "Message.StepStartPart",

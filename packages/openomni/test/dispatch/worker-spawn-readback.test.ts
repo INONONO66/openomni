@@ -320,7 +320,7 @@ describe("worker.spawn read-back completion gate", () => {
         },
       ),
       actor: {
-        kind: "worker",
+        kind: "internal_worker",
         actorId: "session:connector-read-back:run:connector-read-back",
         sessionId: "session:connector-read-back",
         runId: "run:connector-read-back",

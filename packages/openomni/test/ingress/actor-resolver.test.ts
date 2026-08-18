@@ -46,7 +46,6 @@ describe("Ingress actor resolver", () => {
       actorId: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
       endpointId: "ep_discord_user_1",
     });
     expect(capturedActor).not.toHaveProperty("type");
@@ -79,7 +78,6 @@ describe("Ingress actor resolver", () => {
       actorId: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
       endpointId: "ep_discord_user_1",
     });
   });
@@ -142,7 +140,6 @@ describe("Ingress actor resolver", () => {
       actorId: "act_owner",
       endpointId: "ep_discord_user_1",
       trustTier: "owner",
-      relationship: "owner",
     });
   });
 });

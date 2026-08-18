@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { AgentProfile } from "../agent/index.js";
 import { Actor } from "../actor/index.js";
 import { CommandSchemas } from "../command/schemas.js";
 import { Model } from "../model/index.js";
@@ -14,7 +13,6 @@ const ActorSchemaImpl = z
     kind: z.string().optional(),
     type: z.string().optional(),
     trustTier: Actor.TrustTier.optional(),
-    relationship: Actor.Relationship.optional(),
     endpointId: z.string().optional(),
     endpoint: Actor.Endpoint.optional(),
     sessionId: z.string().optional(),
@@ -112,7 +110,7 @@ export namespace Ingress {
       model: Model.Ref,
       systemPrompt: z.string().optional(),
       tools: z.array(Tool.Spec).optional(),
-      budget: AgentProfile.AgentBudget.optional(),
+      budget: Actor.Profile.Budget.optional(),
       permissions: Policy.Permission.optional(),
       policyPlan: Policy.PolicyPlan.optional(),
       toolConfig: Tool.Config.optional(),

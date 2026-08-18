@@ -137,7 +137,7 @@ function command(): Command.Request {
       prompt: "ship it",
       acceptanceCriteria: ["archived source contains the recorded quote exactly"],
     },
-    actor: { kind: "user", actorId: "act_owner" },
+    actor: { kind: "human", actorId: "act_owner" },
     submittedAt: 1,
   };
 }

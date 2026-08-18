@@ -20,20 +20,18 @@ export function createSqliteActorRegistryAdapter(
       const now = Date.now();
       db.query(
         `INSERT INTO actor_identity (
-           id, data, kind, trust_tier, relationship, time_created, time_updated
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           id, data, kind, trust_tier, time_created, time_updated
+         ) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            data = excluded.data,
            kind = excluded.kind,
            trust_tier = excluded.trust_tier,
-           relationship = excluded.relationship,
            time_updated = excluded.time_updated`,
       ).run(
         identity.id,
         JSON.stringify(identity),
         identity.kind,
         identity.trustTier,
-        identity.relationship,
         identity.createdAt ?? now,
         identity.updatedAt ?? now,
       );

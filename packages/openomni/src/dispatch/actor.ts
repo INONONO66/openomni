@@ -7,18 +7,20 @@ export interface DispatchRuntimeContext {
   readonly agentName?: string;
   readonly workspaceRoot?: string;
   readonly traceId?: string;
-  readonly actorKind?: Command.ActorKind;
+  readonly actorKind?: Actor.Kind;
   readonly actorId?: string;
   readonly trustTier?: Actor.TrustTier;
   readonly labels?: readonly string[];
 }
 
-function actorKindFromAgent(agentName: string | undefined): Command.ActorKind {
+// #498 A2 — derivation speaks THE canonical Actor.Kind: an agent-run actor is
+// an "internal_worker" (the retired command-local "worker" value).
+function actorKindFromAgent(agentName: string | undefined): Actor.Kind {
   if (!agentName) return "unknown";
   const normalized = agentName.trim().toLowerCase();
   if (normalized === "resident") return "resident";
   if (normalized === "system" || normalized === "scheduler") return "system";
-  return "worker";
+  return "internal_worker";
 }
 
 // #510 D2b — run existence derives from WorkItem attempt facts; frozen
@@ -42,7 +44,8 @@ function deriveTrustTier(
 
 export function deriveActorContext(context: DispatchRuntimeContext = {}): Command.ActorContext {
   const workerRun = lookupWorkerRun(context.sessionId, context.runId);
-  const kind = context.actorKind ?? (workerRun ? "worker" : actorKindFromAgent(context.agentName));
+  const kind =
+    context.actorKind ?? (workerRun ? "internal_worker" : actorKindFromAgent(context.agentName));
   const trustTier = deriveTrustTier(context, Boolean(workerRun));
   const actorId =
     context.actorId ??
@@ -58,7 +61,7 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Comman
     ...(context.agentName ? { agentName: context.agentName } : {}),
     ...(context.sessionId ? { sessionId: context.sessionId } : {}),
     ...(context.runId ? { runId: context.runId } : {}),
-    ...(context.runId && kind === "worker" ? { workerRunId: context.runId } : {}),
+    ...(context.runId && kind === "internal_worker" ? { workerRunId: context.runId } : {}),
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
     ...(trustTier ? { trustTier } : {}),
     labels: [...(context.labels ?? []), `actor.${kind}`],

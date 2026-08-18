@@ -75,7 +75,6 @@ async function seedFrozenPending(
       id: targetActorId,
       kind: "human",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: correlation.endpointId,
@@ -738,7 +737,6 @@ describe("IngressEngine wait routing", () => {
       id: "actor-shared-channel-intruder",
       kind: "human",
       trustTier: "observer",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-shared-channel-intruder",
@@ -781,7 +779,6 @@ describe("IngressEngine wait routing", () => {
       id: "actor-seller-resolved",
       kind: "human",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: "endpoint-seller-resolved",
@@ -1008,7 +1005,6 @@ describe("IngressEngine durable wait routing", () => {
       id: actorId,
       kind: "human",
       trustTier: "assigned_worker",
-      relationship: "external_agent",
     });
     ActorRegistry.registerEndpoint({
       id: `telegram:${externalId}`,

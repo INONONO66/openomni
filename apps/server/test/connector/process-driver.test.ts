@@ -134,7 +134,7 @@ function command(): Command.Request {
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
-    actor: { kind: "user", actorId: "act_owner" },
+    actor: { kind: "human", actorId: "act_owner" },
     submittedAt: 1,
   };
 }

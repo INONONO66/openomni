@@ -190,7 +190,7 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
     wait.record,
     {
       traceId: trace.traceId,
-      actorKind: typeof event.meta?.actor?.actorId === "string" ? "user" : "unknown",
+      actorKind: typeof event.meta?.actor?.actorId === "string" ? "human" : "unknown",
       actorId: event.meta?.actor?.actorId ?? wait.correlation.endpointId,
       sessionId: wait.record.sessionId,
       runId: wait.record.workerRunId,

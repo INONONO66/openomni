@@ -17,9 +17,6 @@ const ScopedCorrelation = Wait.Correlation.refine(
 );
 
 export namespace Command {
-  export const ActorKind = CommandSchemas.ActorKind;
-  export type ActorKind = CommandSchemas.ActorKind;
-
   export const Target = CommandSchemas.Target;
   export type Target = CommandSchemas.Target;
 

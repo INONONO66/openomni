@@ -2,9 +2,6 @@ import { z } from "zod";
 import { Actor } from "../actor/index.js";
 
 export namespace CommandSchemas {
-  export const ActorKind = z.enum(["worker", "resident", "system", "user", "unknown"]);
-  export type ActorKind = z.infer<typeof ActorKind>;
-
   export const TargetKind = z.enum([
     "worker",
     "resident",
@@ -31,9 +28,11 @@ export namespace CommandSchemas {
     .strict();
   export type Target = z.infer<typeof Target>;
 
+  // #498 A2 — the actor-kind axis is THE one Actor.Kind vocabulary; the
+  // command seam no longer owns a second enum.
   export const ActorContext = z
     .object({
-      kind: ActorKind,
+      kind: Actor.Kind,
       actorId: z.string().min(1),
       agentName: z.string().min(1).optional(),
       sessionId: z.string().min(1).optional(),

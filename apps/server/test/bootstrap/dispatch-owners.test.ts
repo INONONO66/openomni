@@ -111,7 +111,7 @@ function command(): Command.Request {
     action: "worker.spawn",
     target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
-    actor: { kind: "user", actorId: "act_owner" },
+    actor: { kind: "human", actorId: "act_owner" },
     submittedAt: 1,
   };
 }
@@ -327,7 +327,7 @@ describe("createServerDispatchOwners", () => {
         {
           sessionId: "ses_resident",
           payload: "Connector worker run run_fake asks Resident:\n\nMay I edit the file?",
-          actorRole: "worker",
+          actorRole: "internal_worker",
           actorSessionId: "ses_fake",
           actorRunId: "run_fake",
         },

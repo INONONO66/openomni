@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentProfile } from "../agent/index.js";
+import { Actor } from "../actor/index.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
@@ -14,7 +14,7 @@ export namespace WorkerBootstrap {
     tools: ToolSelection.Selection,
     permissions: Policy.Permission.optional(),
     policyPlan: Policy.PolicyPlan.optional(),
-    budget: AgentProfile.AgentBudget.optional(),
+    budget: Actor.Profile.Budget.optional(),
   });
   export type RuntimeAgentDefinition = z.infer<typeof RuntimeAgentDefinition>;
 

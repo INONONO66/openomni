@@ -43,7 +43,7 @@ function command(): Command.Request {
       endpointId: "endpoint:install:telemetry-cli",
     },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
-    actor: { kind: "user", actorId: "act_owner" },
+    actor: { kind: "human", actorId: "act_owner" },
     submittedAt: 1,
   };
 }

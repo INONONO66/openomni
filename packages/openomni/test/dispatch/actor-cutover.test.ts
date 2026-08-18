@@ -86,7 +86,7 @@ describe("dispatch actor trustTier (#510 D2b)", () => {
     expect(WorkerRunStateStore.get(session.id, runId)).toBeUndefined();
 
     const actor = deriveActorContext({ sessionId: session.id, runId });
-    expect(actor.kind).toBe("worker");
+    expect(actor.kind).toBe("internal_worker");
     expect(actor.trustTier).toBe("assigned_worker");
     expect(actor.workerRunId).toBe(runId);
   });
@@ -111,7 +111,7 @@ describe("dispatch actor trustTier (#510 D2b)", () => {
     });
 
     const actor = deriveActorContext({ sessionId: session.id, runId: "run-legacy-actor" });
-    expect(actor.kind).toBe("worker");
+    expect(actor.kind).toBe("internal_worker");
     expect(actor.trustTier).toBe("assigned_worker");
     expect(actor.workerRunId).toBe("run-legacy-actor");
   });

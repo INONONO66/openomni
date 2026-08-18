@@ -137,7 +137,6 @@ export function registerOwnerEndpoint(workspace?: string): void {
     id: "act_owner",
     kind: "human",
     trustTier: "owner",
-    relationship: "owner",
   });
   ActorRegistry.registerEndpoint({
     id: "ep_discord_user_1",

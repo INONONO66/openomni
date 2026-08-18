@@ -129,7 +129,7 @@ function assertWorkerCompletionActorAuthority(
 ): void {
   const actor = command.actor;
   if (
-    actor.kind !== "worker" ||
+    actor.kind !== "internal_worker" ||
     actor.trustTier !== "assigned_worker" ||
     actor.workerRunId !== payload.result.runId ||
     actor.sessionId !== payload.result.sessionId

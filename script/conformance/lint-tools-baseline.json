@@ -3,7 +3,6 @@
   "vocab": {
     "unmappedNamespaces": [
       "adapter",
-      "agent",
       "app-connector",
       "artifact",
       "bus",

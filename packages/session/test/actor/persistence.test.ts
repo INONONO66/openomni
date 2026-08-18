@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,7 +27,6 @@ describe("ActorRegistry SQLite persistence", () => {
       id: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
     });
     ActorRegistry.registerEndpoint({
       id: "ep_discord_user_1",
@@ -52,7 +52,6 @@ describe("ActorRegistry SQLite persistence", () => {
       id: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
     });
 
     // When
@@ -69,7 +68,6 @@ describe("ActorRegistry SQLite persistence", () => {
       id: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
       createdAt,
       updatedAt: createdAt,
     });
@@ -79,7 +77,6 @@ describe("ActorRegistry SQLite persistence", () => {
       id: "act_owner",
       kind: "human",
       trustTier: "manager",
-      relationship: "owner",
       createdAt,
       updatedAt: createdAt,
     });
@@ -108,7 +105,6 @@ describe("ActorRegistry SQLite persistence", () => {
       id: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
     });
     ActorRegistry.registerEndpoint({
       id: "ep_discord_user_1",
@@ -136,13 +132,11 @@ describe("ActorRegistry SQLite persistence", () => {
       id: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
     });
     ActorRegistry.registerIdentity({
       id: "act_collaborator",
       kind: "human",
       trustTier: "collaborator",
-      relationship: "collaborator",
     });
     ActorRegistry.registerEndpoint({
       id: "ep_discord_user_1_guild_a",
@@ -171,13 +165,50 @@ describe("ActorRegistry SQLite persistence", () => {
     expect(ActorRegistry.resolveEndpoint("discord", "user-1", "guild-c")).toBeUndefined();
   });
 
+  test("an old-format row whose data blob carries relationship parses and round-trips (#498 A1)", () => {
+    // Given — a row persisted BEFORE the relationship removal: migration 0018
+    // dropped the column, but the JSON blob keeps the retired key forever.
+    const db = new Database(dbPath);
+    db.query(
+      `INSERT INTO actor_identity (id, data, kind, trust_tier, time_created, time_updated)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "act_legacy",
+      JSON.stringify({
+        id: "act_legacy",
+        kind: "human",
+        trustTier: "owner",
+        relationship: "owner",
+        createdAt: 100,
+        updatedAt: 100,
+      }),
+      "human",
+      "owner",
+      100,
+      100,
+    );
+    db.close();
+    Storage.configure(new SqliteStorageAdapter(dbPath));
+
+    // When — read the legacy blob, then write it back through the registry.
+    const identity = ActorRegistry.getIdentity("act_legacy");
+    if (!identity) throw new Error("legacy identity not found");
+    const roundTripped = ActorRegistry.registerIdentity({ ...identity, trustTier: "manager" });
+
+    // Then — the retired key is stripped on read and stays gone after re-write.
+    expect("relationship" in identity).toBe(false);
+    expect(identity.trustTier).toBe("owner");
+    expect(identity.createdAt).toBe(100);
+    expect("relationship" in roundTripped).toBe(false);
+    expect(ActorRegistry.getIdentity("act_legacy")?.trustTier).toBe("manager");
+  });
+
   test("removing an identity removes its endpoints through SQLite cascade", () => {
     // Given
     ActorRegistry.registerIdentity({
       id: "act_owner",
       kind: "human",
       trustTier: "owner",
-      relationship: "owner",
     });
     ActorRegistry.registerEndpoint({
       id: "ep_discord_user_1",

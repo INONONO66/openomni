@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Actor } from "../actor/index.js";
 import { CommandSchemas } from "../command/schemas.js";
 import { IngressEvent, type RoutingDecisionPayload } from "../event/ingress.js";
 
@@ -108,10 +109,34 @@ export const StreamRegistry = {
 export const RouteDecided: z.ZodType<RoutingDecisionPayload> = IngressEvent.RoutingDecision.schema;
 export type RouteDecided = RoutingDecisionPayload;
 
+/**
+ * #498 A2 historical upcast — command verdict facts recorded before the
+ * actor-kind convergence carry the retired Command.ActorKind values. The
+ * persisted bytes never change; a consumer that parses a fact through this
+ * schema reads the canonical vocabulary. NOTE the current read paths: the
+ * production writer (openomni dispatch runtime) appends raw fact data and
+ * nothing in production re-parses it yet — these schemas are the write-side
+ * vocabulary descriptors, and the p2-ledger-baseline conformance suite is the
+ * one consumer that parses facts back. The upcast lives here so every future
+ * reader inherits it.
+ */
+const LEGACY_ACTOR_KIND_UPCAST: Readonly<Record<string, Actor.Kind>> = {
+  user: "human",
+  worker: "internal_worker",
+};
+
+const CommandActorKind = z.preprocess(
+  (value) =>
+    typeof value === "string" && value in LEGACY_ACTOR_KIND_UPCAST
+      ? LEGACY_ACTOR_KIND_UPCAST[value]
+      : value,
+  Actor.Kind,
+);
+
 const CommandVerdictBase = z.object({
   policyId: z.string().min(1),
   reason: z.string().min(1),
-  actorKind: CommandSchemas.ActorKind,
+  actorKind: CommandActorKind,
   action: z.string().min(1),
   targetKind: CommandSchemas.TargetKind,
 });

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { Command, Policy } from "../../src/index.js";
+import { Command, LedgerAppend, Policy } from "../../src/index.js";
 
 const actor: Command.ActorContext = {
-  kind: "worker",
+  kind: "internal_worker",
   actorId: "worker-1",
   agentName: "agent",
   sessionId: "session-1",
@@ -96,7 +96,7 @@ describe("Command protocol schemas", () => {
   });
 
   test("ActorContext accepts runtime-derived actor shapes", () => {
-    expect(Command.ActorContext.parse(actor).kind).toBe("worker");
+    expect(Command.ActorContext.parse(actor).kind).toBe("internal_worker");
     expect(Command.ActorContext.parse({ kind: "resident", actorId: "resident-main" }).kind).toBe(
       "resident",
     );
@@ -106,6 +106,46 @@ describe("Command protocol schemas", () => {
     expect(
       Command.ActorContext.parse({ kind: "unknown", actorId: "unknown", reason: "missing" }).kind,
     ).toBe("unknown");
+  });
+
+  test("ActorContext refuses the retired command-local kind values (#498 A2)", () => {
+    // "worker"/"user" left the wire vocabulary: new writes are canonical
+    // Actor.Kind only; the historical values survive solely as the persisted
+    // verdict-fact upcast below.
+    for (const kind of ["worker", "user"]) {
+      expect(Command.ActorContext.safeParse({ kind, actorId: "actor-1" }).success).toBe(false);
+    }
+  });
+
+  test("persisted command verdict facts upcast retired actor kinds on read (#498 A2)", () => {
+    const base = {
+      policyId: "dispatch.default",
+      reason: "ok",
+      action: "worker.spawn",
+      targetKind: "worker",
+    };
+
+    // Old persisted bytes decode to the canonical vocabulary…
+    expect(
+      LedgerAppend.CommandAuthorized.parse({ ...base, verdict: "allow", actorKind: "worker" })
+        .actorKind,
+    ).toBe("internal_worker");
+    expect(
+      LedgerAppend.CommandDenied.parse({ ...base, verdict: "deny", actorKind: "user" }).actorKind,
+    ).toBe("human");
+
+    // …and canonical values pass through unchanged.
+    expect(
+      LedgerAppend.CommandAuthorized.parse({ ...base, verdict: "allow", actorKind: "resident" })
+        .actorKind,
+    ).toBe("resident");
+    expect(
+      LedgerAppend.CommandAuthorized.parse({
+        ...base,
+        verdict: "allow",
+        actorKind: "internal_worker",
+      }).actorKind,
+    ).toBe("internal_worker");
   });
 
   test("Request and Result carry canonical runtime metadata", () => {

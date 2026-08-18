@@ -230,7 +230,7 @@ describe("resident inbound wait kernel dispatch", () => {
       traceId: "trace-inbound-wait",
       sessionId: run.workerSessionId,
       runId: run.runId,
-      actorKind: "worker",
+      actorKind: "internal_worker",
       actorId: `${run.workerSessionId}:${run.runId}`,
       agentName: "worker",
       trustTier: "assigned_worker",

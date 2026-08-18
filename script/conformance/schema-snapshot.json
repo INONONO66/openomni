@@ -39,34 +39,20 @@
     "id",
     "kind",
     "metadata",
-    "relationship",
     "trustTier",
     "updatedAt"
   ],
-  "Actor.ResolvedEndpoint": ["endpoint", "identity"],
-  "AgentProfile.AgentBudget": [
-    "maxToolCalls",
-    "maxToolRuntimeMs",
-    "maxTurns",
-    "maxWallTimeMs",
-    "reassuranceThreshold",
-    "warningThreshold"
-  ],
-  "AgentProfile.BudgetThresholdInput": [
-    "reassuranceThreshold",
-    "warningThreshold"
-  ],
-  "AgentProfile.Definition": [
+  "Actor.Profile": [
+    "blacklistEntryId",
     "budget",
-    "description",
+    "channelGrantIds",
     "model",
-    "name",
-    "policyPlan",
     "systemPrompt",
-    "temperature",
     "tools",
-    "variant"
+    "trustTier",
+    "workerGrantIds"
   ],
+  "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "AppConnector.CompletionReport": [
     "artifactGlobs",
     "finalMessage",
@@ -361,7 +347,6 @@
     "isMain",
     "isResident",
     "kind",
-    "relationship",
     "role",
     "sessionId",
     "trustTier",

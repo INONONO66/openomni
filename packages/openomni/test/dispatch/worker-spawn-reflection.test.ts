@@ -77,7 +77,7 @@ function assignedWorkerCommand(
   return {
     ...command("worker.complete", target, payload),
     actor: {
-      kind: "worker" as const,
+      kind: "internal_worker" as const,
       actorId: `${sessionId}:${runId}`,
       sessionId,
       runId,
@@ -816,7 +816,7 @@ describe("worker.spawn result reflection", () => {
             "run:authorized",
           ),
           actor: {
-            kind: "worker" as const,
+            kind: "internal_worker" as const,
             actorId: "session:authorized:run:forged",
             sessionId: "session:authorized",
             runId: "run:forged",

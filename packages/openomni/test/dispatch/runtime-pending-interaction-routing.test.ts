@@ -421,7 +421,7 @@ describe("DispatchRuntime", () => {
       pinned,
       {
         traceId: TEST_DISPATCH_TRACE_ID,
-        actorKind: "user",
+        actorKind: "human",
         actorId: "worker:original",
       },
     );

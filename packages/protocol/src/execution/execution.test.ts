@@ -226,7 +226,7 @@ describe("Execution", () => {
     expect(inputRule.toolPattern).toBe("write_file");
   });
 
-  test("ExecutionRequest with full AgentProfile.AgentBudget", () => {
+  test("ExecutionRequest with full Actor.Profile.Budget", () => {
     const request: Execution.Request = {
       runId: "run-budget",
       sessionId: "session-budget",
