@@ -37,10 +37,9 @@ const INVALID_SPAN_ID = "0".repeat(16);
 const TRACEPARENT_PATTERN = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/;
 const FORBIDDEN_TRACEPARENT_VERSION = "ff";
 
-/** A W3C trace id. `crypto.randomUUID()` is already 32 hex once the dashes go. */
-export function newTraceId(): TraceId {
-  return crypto.randomUUID().split("-").join("");
-}
+/** A W3C trace id — the mint moved to protocol (gateway stage-1 seam prep, #551); re-exported here unchanged. */
+import { newTraceId } from "@openomni/protocol";
+export { newTraceId };
 
 export function newSpanId(): SpanId {
   for (;;) {

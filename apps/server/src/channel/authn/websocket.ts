@@ -1,6 +1,6 @@
 import { Operational } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "@openomni/protocol";
 import { WebSocketToken } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver, WebSocketAuthResult } from "./types";
