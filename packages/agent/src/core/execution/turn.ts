@@ -606,6 +606,49 @@ export async function handleError(
     };
   }
 
+  // L5 (compaction-design, #715): a provider context-overflow re-enters the
+  // existing compaction seam — the overflow handler never rewrites history
+  // itself; contextYielded=true because the provider refusing IS the trigger
+  // (the same argument as #651's yield). Exactly one recovery per run: if
+  // the seam reclaimed anything, retry the call immediately; otherwise, or
+  // on a second overflow, end honestly — a blind retry of the same prompt
+  // fails the same way. Deliberate divergence from pss-runtime's mid-loop
+  // apply: history rewrites stay locked to run.completion.pre (D8).
+  if (Retry.isContextOverflow(normalizedError)) {
+    if (state.overflowCompactionAttempted !== true) {
+      state.overflowCompactionAttempted = true;
+      const compactionsBefore = state.compactionCount;
+      const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);
+      if (blocked === null && state.compactionCount > compactionsBefore) {
+        emitErrorRetry(config.events, agentBase, {
+          attempt,
+          maxAttempts: effectiveRetryPolicy.maxAttempts,
+          error: lastError,
+          reason: "context_overflow",
+          backoffMs: 0,
+        });
+        return {
+          action: "retry",
+          backoffMs: 0,
+          failure: {
+            reason: "context_overflow",
+            attempt,
+            maxAttempts: effectiveRetryPolicy.maxAttempts,
+          },
+        };
+      }
+    }
+    return {
+      action: "throw",
+      error: normalizedError,
+      failure: {
+        reason: "context_overflow",
+        attempt,
+        maxAttempts: effectiveRetryPolicy.maxAttempts,
+      },
+    };
+  }
+
   const retryReason = Retry.classifyRetryReason(lastError);
   if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
     const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
