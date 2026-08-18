@@ -2,6 +2,7 @@ import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/
 import { Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
+import { createAnchorCompletion } from "../execution-runtime/middleware/anchor-completion";
 import { SessionBridge } from "../ingress/session-bridge";
 
 export type ResidentLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "releasing";
@@ -132,6 +133,17 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
       traceId: ctx.traceContext?.traceId,
       permissions: ctx.event.agent.permissions,
       ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
+      compaction: {
+        summarizeWith: createAnchorCompletion({
+          model: ctx.event.agent.model,
+          trace: {
+            traceId: ctx.traceContext?.traceId ?? "",
+            sessionId: ctx.sessionId,
+            runId,
+          },
+          events: Bus,
+        }),
+      },
     }),
   };
 }

@@ -67,6 +67,7 @@ export {
   WorkspaceLock,
   buildToolCatalog,
   buildWorkerMiddleware,
+  createAnchorCompletion,
   createChildAgentRuntime,
   createChildAgentTool,
   createDispatchTool,
