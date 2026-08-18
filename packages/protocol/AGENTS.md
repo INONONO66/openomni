@@ -113,3 +113,5 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 - This package builds to `dist/` — run `bun run build` after changes.
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
+
+_2026-08-19: gateway stage 0 (docs/gateway-design.md §2) will add `Gateway.Deliver` / `Gateway.Send` contract schemas and the perimeter/conduct trust vocabulary here; perimeter store row schemas migrate here under the SSOT directive. Target only — not yet wired._
