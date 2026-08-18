@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-13 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
+Last verified against `origin/main`: 2026-08-19 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
 
 ## OVERVIEW
 
@@ -8,7 +8,7 @@ OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not
 
 The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 9 packages and 1 app (Server).
 
-The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). The Owner-directed gateway pivot (channels = perimeter gateway, openomni = brain, SSOT single-ledger storage, engagement machine) is specified in [`docs/gateway-design.md`](docs/gateway-design.md) — a target design; nothing from it is wired yet. ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
 Live delivery state, ordering, and checkpoints belong only in [GitHub #459](https://github.com/INONONO66/openomni/issues/459). Its milestones group work, dependency links define order, and leaf issues are the executable work; do not copy that inventory into this guide.
 
@@ -215,8 +215,9 @@ a satellite split) to violations of each one.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
 - Do not add provider behavior outside `packages/llm`.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
-- Driver-band packages (approved target: `channels` channel drivers, `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
-- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) stays in the kernel.
+- Driver-band packages (approved target: `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
+- `channels` is promoted from driver band to **gateway** (Owner 2026-08-18/19, [docs/gateway-design.md](docs/gateway-design.md)): package whitelist {protocol, ipc, policy, ledger}, with its `drivers/` sub-band held to {protocol, ipc}. Perimeter routing/authority (the resolveRoute pipeline) moves there at gateway stage 2; until then it remains in `packages/openomni`.
+- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (pre-stage-2: still in the kernel).
 
 ## EXECUTION DISCIPLINE
 
