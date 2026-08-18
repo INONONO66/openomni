@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787072698895,
+  "lastUpdate": 1787074181309,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56063,6 +56063,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 401138,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "70643969ccd9643ad3b8bfda923a57668a2c9133",
+          "message": "refactor: converge Actor/Command/Wait/WorkItem/Policy vocabulary (#725)\n\n* refactor(policy): move evaluation engine to its owner (#498 W1-W4)\n\nW1 — evaluation engine moved to packages/policy:\n- Policy.evaluate + PolicyDecision.fromEvaluation moved out of protocol into\n  packages/policy/src/permission-evaluate.ts as evaluatePermission /\n  decisionFromEvaluation (same signatures/behavior). Protocol keeps the zod\n  vocabulary and the ReDoS-safety chain; isSafeInputPattern and\n  MAX_INPUT_LENGTH are exported from PolicyPermission (no duplication) and\n  the PolicyPermission namespace now rides the policy barrel.\n- Rewired production callers: 4, not the inventoried 2 — gateway stage 0\n  (#718) added apps/server/src/channel/authn/decision.ts and\n  apps/server/src/tool/mcp/mcp-prefix-guard.ts since the inventory head, so\n  they are rewired alongside ingress-authority and tool-permission-policy.\n- Evaluate-behavior tests moved to packages/policy/test/\n  permission-evaluate.test.ts (+ decisionFromEvaluation mapping pins);\n  schema-only tests stay in protocol; the module-surface pin update is the\n  zero-old-family receipt.\n- lint-guards canonical-evaluator rule now points at the new leaf and\n  requires evaluatePermission(); fixed the stale\n  ingress-authority-evaluation.ts entry and added tool-permission-policy.\n\nW2 — agent facade collapsed:\n- Deleted the do-nothing PolicyEngine.create wrapper in\n  agent/core/policy/index.ts. PolicyEngine there is now a typed const\n  binding of the same generic engine object from @openomni/policy (a type\n  application, not a wrapper function or a new object), so the ~40 existing\n  value consumers keep compiling against the generic engine directly. The\n  PolicyEngineInstance alias collapsed to\n  PolicyEngineInstanceGeneric<PolicyContext>; the Omit hack existed only\n  for the wrapper.\n\nW3 — RuntimeResource folded into Policy.Resource:\n- Namespace renamed to PolicyResource, exposed as Policy.Resource via\n  export import; the sibling export is gone. Zero field/shape changes\n  (descriptor rides bus events; wire-frozen). 29 consumer files rewired;\n  zero RuntimeResource imports/exports remain (rg-verified).\n\nW4 — dead vocabulary removed (proofs in #498):\n- PolicyPoint.MigrationMapping (test-only) deleted; migration-mapping.test\n  deleted and point-registry/point-audit/point-dispatch/dispatch-schema/\n  module-surface tests pruned.\n- Policy.Definition.timing removed; both .omit({ timing: true }) call sites\n  simplified (policy registration-validation, openomni policy-registration);\n  channel-authn definitions no longer stamp it. Policy.Timing alias and its\n  engine/agent consumers untouched.\n- Dispatch.ActorContext.permissions and its point-input-schemas\n  dispatchActor clone removed in lockstep; input-schema-parity fixture\n  fixed. Ingress.AgentDef/ExecutionRequest wire permissions untouched.\n\nSchema snapshot regenerated via lint-tools --update (the sign-off surface):\nRuntimeResource.* -> Policy.Resource.*, Policy.Definition -timing,\nDispatch.ActorContext -permissions; the regen also records previously\nunsnapshotted additive types (Gateway.*, LedgerAppend.*, Ipc.*) and\nnormalizes serializer formatting.\n\nVerification: build green, check-types 14/14, lint-tools clean after\nupdate, lint-guards + check-deps clean, protocol 610 pass, policy 110\npass, agent 416 pass, openomni ingress/dispatch/messaging 331 pass and\nexecution-runtime/policy/tool 345 pass, apps/server channel-authn + mcp\n29 pass, #498 verification suite 22 pass.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol): converge dispatch to Command vocabulary (#498)\n\nC1 — namespace rename: protocol `Dispatch` -> `Command`\n(src/dispatch/ -> src/command/, test/dispatch/ -> test/command/).\nInner renames: Dispatch.Command -> Command.Request, Dispatch.Input ->\nCommand.Input; Target/ActorContext/ActorKind/Result/Events/Actions keep\ntheir names. DispatchSchemas -> CommandSchemas (intra-package). Zero\naliases: the old Dispatch namespace is gone everywhere (protocol,\nopenomni, session, apps/server, script).\n\nC2 — ONE Target superset: Command.Target owns the target vocabulary.\nIngress.Target is now a narrowed reference (pick sessionId/\nparentSessionId from Command.Target + TargetKind.extract([\"resident\",\n\"worker\"])); the string-form preprocess and the ingress-owned `workerId`\nartifact are unchanged. Communication.PendingAsk.TargetKind (frozen read\nvocabulary with drifted scheduler/service values) stays local to\npending-ask.ts and is no longer exported.\n\nC3 — ONE Correlation shape: Dispatch.Correlation deleted; consumers\nre-point to Wait.Correlation. The required endpoint+channel scope pins\nare preserved by local call-site refines (Command.Input/EventBase,\ningress claim parse) and presence checks (wait/correlation.ts tier\nlogic) — no second correlation shape is exported.\nPendingInteraction.Correlation folded inline into its frozen Record.\n\nC4 — Communication export diet: PendingAsk/PendingInteraction bus event\ndescriptors deleted (zero production emitters; write paths frozen),\nCreate/WriteMethod exports removed. Kept read surface: Record, Status,\nCorrelationQuery, FrozenError (+ AllowedAction for interaction). Frozen\nstores derive the write-method type from FrozenError data.\n\nWire invariants byte-identical: bus event names dispatch.submitted/\nauthorized/denied/routed/completed/failed, ledger facts\ncommand.authorized/command.denied, all 14 Actions constants,\nResult.status values, route.decided target labels, candidateInteraction\nprefixes, and every persisted row shape (pending_ask 0002 /\npending_interaction 0009 Records, upcast views) are unchanged — only\nTypeScript names moved.\n\nSchema snapshot regenerated (--update): Dispatch.* -> Command.*\nrenames + Dispatch.Correlation removal only. Vocab ratchet baseline\nshrunk (dispatch namespace now maps). #498 verification paths: the\ndispatch schema test now lives at packages/protocol/test/command/\nschema.test.ts.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): band gate — authn judgment may import policy engine\n\n* refactor(protocol): converge actor vocabulary — Kind, Profile (#498)\n\nA1 — Actor.Relationship removed. Zero value-branching readers ever\nexisted: dropped the enum + Identity.relationship, the optional\nIngress.ActorSchema field, the actor-resolver echo, the app-connector\nwriter field, and the sqlite column writes. Migration\n0018_drop_actor_relationship does ALTER TABLE actor_identity DROP\nCOLUMN relationship (sqlite 3.51; column is unindexed and expression-\nfree — proven against a seeded 0006 database). Old data blobs keep the\nkey; the non-strict Identity parse strips it on read — pass-through +\nround-trip test added to session actor persistence tests. Disposition\nrow Actor.Relationship flipped pending→shipped (defer + #498 handoff\nkept: the #497 fixtures pin them).\n\nA2 — ONE actor-kind vocabulary. Actor.Kind is exported and gains\n\"unknown\" (canonical: human|ai_agent|service|resident|internal_worker|\nsystem|unknown). Command.ActorKind deleted; Command.ActorContext.kind\nis Actor.Kind. Write-side mapping at every derivation/construction\nsite: \"worker\"→\"internal_worker\" (dispatch/actor.ts,\npending-interaction-routing, server dispatch-owners /\nresident-inbound-wait / worker-runner-ipc) and \"user\"→\"human\"\n(ingress routing-execution). Read-side upcast for persisted\ncommand.authorized/denied facts lives in\nLedgerAppend.CommandAuthorized/CommandDenied as a z.preprocess\n(user→human, worker→internal_worker): verified that the production\nwriter appends raw fact data and NO production reader parses these\nfacts today — the schemas are write-side vocabulary descriptors and\nthe p2 conformance suite is the one parsing consumer, so the upcast\nsits on the schema where every future reader inherits it (tested in\nprotocol command schema tests). Frozen PendingAsk.originActorKind\nuntouched. The policy authority's owned literal copy of the dispatch\nactor shape (point-input-schemas.ts) now lists the canonical kinds —\nit runtime-validates dispatch.action.pre input, so leaving it would\nfail-close every dispatch. actor.<kind> labels derive from the new\ncanonical kind; old persisted label rows are telemetry-tier.\n\nA3 — canonical Actor.Profile. New Actor.Profile: authority half\n(trustTier, optional blacklistEntryId / channelGrantIds /\nworkerGrantIds id-refs only) + executable half (systemPrompt?, tools?,\nmodel?, budget). AgentBudget + BudgetThresholdInput + threshold\ndefaults moved to Actor.Profile.Budget/*; AgentProfile namespace\ndeleted (Definition had zero production consumers; its tests die,\nModel.Ref/Status coverage moved to protocol/test/model.test.ts). The 5\nAgentBudget consumers rewired (agent core types/budget, protocol\ningress/execution/worker-bootstrap); Ingress.AgentDef.budget re-points\nto Actor.Profile.Budget, AgentDef otherwise untouched. vocab baseline\nshrunk (\"agent\" namespace gone).\n\nReceipt (schema-snapshot regenerated with --update): Actor.Identity\nand Ingress.ActorSchema lose \"relationship\"; AgentProfile.AgentBudget/\nBudgetThresholdInput/Definition removed; Actor.Profile added.\n\nVerified: bun run build, check-types, lint-tools, lint-guards,\ncheck-deps, check-import-cycles, check-protocol-disposition all green;\nfull bun test green in protocol(603)/session(399)/openomni(1136)/\nagent(416)/policy/telemetry/coordinator/llm/ipc; p2-ledger-baseline\n46/46 (archive manifest sourceSchemaVersion pin advanced to 0018);\napps/server full 471 + channel/band-boundary 37.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol): absorb worker-run into WorkItem attempts (#498)\n\nK1 — WorkerRun family to zero (absorption already live via #510 D2b):\n- protocol worker-run namespace DELETED (barrel line included). The frozen\n  vocabulary (Status/WriteMethod/FrozenError) moved into its one owner,\n  packages/session/src/worker-run/state-store.ts — the typed freeze behavior\n  is byte-identical (`WorkerRunFrozenError`, code `worker_run_frozen`,\n  throwing writes; p2-ledger-baseline pins updated imports only).\n- WorkerRun.Events.* (worker.run.started/completed/failed/cancelled) DELETED\n  with their only publishers (apps/server worker-runner-events.ts + 5 call\n  sites in worker-runner.ts): telemetry-only, zero subscribers; bus_event\n  replay unaffected (flat-event never reads worker.run.*, categoryOf is\n  prefix-derived, no new rows after deletion).\n- WorkerRunStateStore removed from the session public barrel; module stays\n  session-internal for the archive reads that still serve (attempt-run upcast\n  view, worker-run-history-query, session-id fallback). External tests moved\n  to adapter-level reads / deep imports.\n- sqlite worker-run adapter: update branches (updateStatus /\n  updateStatusIfCurrent) deleted — rg-proven unreachable (store throws\n  before the adapter; no direct callers in src/tests/scripts). The low-level\n  `create` insert stays for archive seeding. StatusExtra/StatusPrecondition\n  un-exported (last external consumers died with the update branches).\n- Naming stragglers: apps/server WorkerRunState (in-process AbortController\n  registry) renamed to ActiveRunHandle; coordinator worker-run-trace.ts kept\n  (no exported symbol carries the WorkerRun prefix). `rg -w WorkerRun` over\n  src returns zero matches.\n- Table `worker_run_state` untouched (FROZEN_TABLES pins, archive manifest,\n  no migration).\n\nK2 — identifier rename with read upcast:\n- WorkItem.Info.hash -> workItemId; relations.parentHash/childHashes ->\n  parentId/childIds. VALUES byte-identical: generateHash stays `wi_<12\n  base36>`, criterionId strings embed the same value, stream keys\n  `work:<id>` and loop_key digests unchanged.\n- Read upcast (z.preprocess on Info, mirroring the ledger-append actor-kind\n  upcast): persisted work_item data blobs and pre-rename work_item.adopted\n  snapshots parse with old keys mapped to new; new keys win when both are\n  present; writers emit new keys only. criterionId revalidation keeps\n  passing for upcast rows. Pinned by new protocol tests plus a session\n  adapter test reading a raw legacy-blob sqlite row end to end.\n- sqlite columns KEEP their names (`hash`, `parent_hash`) — persisted\n  surface; the adapter maps column<->field.\n- Bus event payload key `hash` -> `workItemId` on the WorkItem.Events.*\n  schemas + publishers (telemetry-tier; nothing re-parses old rows through\n  these schemas). CompletedV2 payload untouched (receipt shape).\n- New `work_item.created` facts carry `parentId` (writers emit new keys;\n  old fact rows keep old keys and have no schema-bound reader).\n- CreateWorkItemInput.parentHash and Storage.WorkItemListFilter.parentHash\n  renamed to parentId (API surfaces, not persisted).\n\nK3 — dead + dictionary items:\n- VerificationGate deleted (schema const + Info.verificationGate field):\n  zero writers/readers/tests repo-wide, re-verified; being write-never it\n  can appear in no persisted row.\n- AppConnector.CompletionReport -> AppConnector.ReportSource (TS symbol\n  only). Finding: Evidence.completionReport is a persisted/wire key — it is\n  read from installed connector definitions (app_connector_installation\n  rows: process-driver finalMessage, read-back builder) and from authored\n  manifests, so the JSON field name stays `completionReport`; documented at\n  the schema. Both deliberate non-unification comments kept.\n- WorkItem.Outcome stays (dormant by scope).\n\nK4 — dead-export ratchet back to zero (all 3 rooted in the #498 W1/W3 moves):\n- PolicyPointContractModule.Timing: un-exported (module-internal alias) —\n  the engine consumers moved to packages/policy and read Policy.Timing;\n  zero qualified references remained repo-wide.\n- PolicyResource.Source/Descriptor: `export import Resource = PolicyResource`\n  hid every cross-package `Policy.Resource.*` consumer from knip's member\n  tracking. Replaced with an explicit nested `Policy.Resource` namespace\n  re-exporting Source/Descriptor — identical consumer surface, direct\n  references the ratchet can see. No baseline growth.\n\nRatchets/snapshots: schema snapshot regenerated (--update; diff =\nCompletionReport->ReportSource, Info hash->workItemId, -verificationGate);\nlint-tools vocab baseline shrunk (worker-run namespace gone) + stale\nRuntimeResource naming grandfather dropped; docs (AGENTS.md,\nimplementation-status.md) synced off the deleted namespace.\n\nExplicit non-goals (runId/receipt vocabulary is not this slice):\n- Persisted columns worker_grant.worker_run_id and frozen\n  pending_interaction.worker_run_id KEPT; WorkItem.Info.workerRunId field\n  name KEPT.\n- CompletionTerminalReceipt.hash and *.workItemHash persisted keys KEPT\n  (own upcast would be needed; out of scope).\n\nVerification: turbo build 5/5, check-types 14/14 + script tsconfig, lint\n(guards/side-effects/ultracite), lint-tools + self-test, check-deps,\ncheck-import-cycles, check-dead-exports + self-test, check-ledger-schema-\ndrift, check-protocol-disposition; full bun test green: protocol 602,\nsession 400, openomni 1136, agent 416, policy 110, coordinator 71,\napps/server 471, conformance p2 suites 54.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(protocol): assemble ReDoS fixture so scanners skip the literal\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T17:28:30Z",
+          "tree_id": "151ce1035c7a20c5a536e47dc6c1c36240a0c47f",
+          "url": "https://github.com/INONONO66/openomni/commit/70643969ccd9643ad3b8bfda923a57668a2c9133"
+        },
+        "date": 1787074180059,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6219,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11440,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2570,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16483,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8637,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1068,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1775,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 49896,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 528535,
             "unit": "ns/op"
           }
         ]
