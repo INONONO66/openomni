@@ -308,7 +308,14 @@ export namespace Compaction {
         const keptWindow = [...preservedUsers, ...keepSpan].flatMap((message) =>
           message.parts
             .filter((part): part is Message.TextPart => part.type === "text")
-            .map((part) => ({ role: message.info.role, text: part.text })),
+            .map((part) => ({
+              role: message.info.role,
+              text: part.text,
+              // Provenance survives resume (#727 review): a policy-injected
+              // nudge replayed from the record must not become "the user's
+              // goal" in a later epoch's decoration.
+              ...(part.metadata?.policyInjected === true ? { policyInjected: true } : {}),
+            })),
         );
         const anchorMessages =
           anchorText === undefined

@@ -55,8 +55,12 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
       // The trigger reads the provider-measured context of the last call —
       // cumulative run spend re-counts every prior turn's input and would fire
       // on long runs whose window is nowhere near full. No call yet means
-      // nothing measured, and an unmeasured skip is itself recorded.
-      if (ctx.contextTokens === undefined) {
+      // nothing measured, and an unmeasured skip is itself recorded — UNLESS
+      // the dispatch is yield-borne (#726 review F2): a loop yield or a
+      // provider overflow IS a measurement ("the window is full"), and the
+      // first-call overflow of a fat hydrated history is exactly the case
+      // that has no step-finish to read.
+      if (ctx.contextTokens === undefined && !ctx.contextYielded) {
         return PolicyDecision.allow({
           policyId: "builtin.compaction",
           reasonCodes: ["compaction_skipped_no_measurement"],
@@ -78,6 +82,10 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
       // what a background summarize wants: content it can read while the
       // run moves on.
       if (ctx.pointId === "run.turn.post") {
+        // turn.post is never yield-borne: no measurement means no prepare.
+        if (ctx.contextTokens === undefined) {
+          return PolicyDecision.allow({ policyId: "builtin.compaction" });
+        }
         speculator?.maybePrepare(
           ctx.messages,
           ctx.contextTokens,
@@ -105,7 +113,10 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
       // A yield-borne dispatch skips the threshold gate: the loop already
       // measured and stopped. Gating it again lets a config ratio above the
       // loop's arm point refuse runs the seam never tried to reclaim.
-      if (!ctx.contextYielded && !Compaction.shouldCompact(ctx.contextTokens, resolved)) {
+      if (
+        !ctx.contextYielded &&
+        (ctx.contextTokens === undefined || !Compaction.shouldCompact(ctx.contextTokens, resolved))
+      ) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
@@ -140,7 +151,7 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
         events,
         {
           trigger: ctx.contextYielded ? "yield" : "threshold",
-          measuredTokens: ctx.contextTokens,
+          ...(ctx.contextTokens === undefined ? {} : { measuredTokens: ctx.contextTokens }),
           ...(candidate === undefined ? {} : { candidate }),
         },
       );

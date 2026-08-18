@@ -99,7 +99,13 @@ export const Events = {
       maxAttempts: z.number(),
       error: z.string(),
       /** Why the error was judged retryable — see `Retry.classifyRetryReason`. */
-      reason: z.enum(["timeout", "tool_error", "transient_error", "validation_error"]),
+      reason: z.enum([
+        "timeout",
+        "tool_error",
+        "transient_error",
+        "validation_error",
+        "context_overflow",
+      ]),
       /** How long the run waits before the next attempt. */
       backoffMs: z.number(),
     }),

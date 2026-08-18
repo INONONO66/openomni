@@ -3,6 +3,7 @@ import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@
 import type { BusEvent } from "@openomni/protocol";
 import { Message, Operational } from "@openomni/protocol";
 import { Session } from "@openomni/session";
+import { decorateAnchorRender, planDecoration } from "./anchor-render.js";
 import { z } from "zod";
 
 const MessageSummarizerSchema = z.custom<
@@ -131,17 +132,63 @@ function wrapCreated(
         });
         return decision;
       }
+      // L6 (#716): decorate the anchor's model-facing render with the
+      // deterministic sections — ledger-derived artifact table, verbatim
+      // quotes of budget-dropped user text, goal recitation. Metadata (the
+      // record, the merge state, hydration identity) is untouched; window
+      // and store see the same decorated render. Decoration failure is the
+      // same fail-open class as persistence failure: the undecorated cut is
+      // still a correct cut.
+      let outgoing: unknown[] | undefined;
+      let persistAnchor = anchor;
       try {
-        Session.addMessage(anchor.info.sessionID, anchor.info);
-        for (const part of anchor.parts) {
-          Session.addPart(anchor.info.id, part);
+        // Reclaim-bound (#727 review F1): planDecoration returns undefined
+        // when the cut reclaimed too little to pay for any decoration — the
+        // applied window must stay strictly smaller than the pre-cut one.
+        const decoration = planDecoration(
+          anchor.info.sessionID,
+          (ctx.messages ?? []) as Message.WithParts[],
+          parsed.data,
+        );
+        if (decoration !== undefined) {
+          const decoratedParts = anchor.parts.map((part) =>
+            part.type === "text" && part.metadata?.compactionAnchor === true
+              ? { ...part, text: decorateAnchorRender(part.text, decoration) }
+              : part,
+          );
+          persistAnchor = { info: anchor.info, parts: decoratedParts };
+          // Only the anchor slot is replaced; every other message rides
+          // through as the exact object the core produced (#727 review F8 —
+          // no blanket zod-normalized clones).
+          const anchorIndex = parsed.data.findIndex(
+            (message) => message.info.id === anchor.info.id,
+          );
+          outgoing = [...effect.messages];
+          if (anchorIndex >= 0) outgoing[anchorIndex] = persistAnchor;
+        }
+      } catch (error) {
+        warn(ctx, "anchor render not decorated: derivation failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      try {
+        Session.addMessage(persistAnchor.info.sessionID, persistAnchor.info);
+        for (const part of persistAnchor.parts) {
+          Session.addPart(persistAnchor.info.id, part);
         }
       } catch (error) {
         warn(ctx, "replacement record not persisted: session store write failed", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
-      return decision;
+      if (outgoing === undefined) return decision;
+      const rewritten = outgoing;
+      return {
+        ...decision,
+        effects: (decision.effects ?? []).map((entry) =>
+          entry.type === "run.replace_messages" ? { ...entry, messages: rewritten } : entry,
+        ),
+      };
     },
   };
 }

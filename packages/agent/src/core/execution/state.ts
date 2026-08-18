@@ -105,6 +105,12 @@ export interface RunState {
    */
   lastCallContextTokens?: number;
   /**
+   * L5: the one-shot overflow recovery. A provider context-overflow may
+   * re-enter the compaction seam and retry exactly once per run; a second
+   * overflow ends the run honestly.
+   */
+  overflowCompactionAttempted?: boolean;
+  /**
    * The resolved model's context window — a fact of the model, recorded when
    * the loop resolves it, so strategy config never has to re-derive it.
    * Undefined when the catalog does not know (proxy models report 0).
