@@ -144,6 +144,29 @@ describe("recall.output", () => {
     expect(result.output).toContain(`no tool call ${CALL_ID}`);
   });
 
+  it("refuses a duplicated callId instead of guessing between calls", async () => {
+    // Providers mint per-turn ids (call_0, call_1) that can repeat across
+    // turns — returning the oldest match would be byte-exact and wrong
+    // (PR #719 review M3).
+    const dup = "call_0";
+    const m1 = assistantMessage("recall-dup-1", sessionId);
+    Session.addMessage(sessionId, m1);
+    Session.addPart(m1.id, toolPart("recall-dup-part-1", m1.id, sessionId, dup));
+    const m2 = assistantMessage("recall-dup-2", sessionId);
+    Session.addMessage(sessionId, m2);
+    Session.addPart(m2.id, toolPart("recall-dup-part-2", m2.id, sessionId, dup));
+
+    const tool = createRecallTool();
+    const result = await tool.execute({
+      id: "c6",
+      tool: "recall.output",
+      input: { callId: dup, sessionId },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("ambiguous callId call_0: 2 recorded tool calls");
+  });
+
   it("declares session scoping to the executor via implicit inputs", () => {
     const tool = createRecallTool();
     expect(tool.implicitInputs).toEqual({ sessionId: "sessionId" });

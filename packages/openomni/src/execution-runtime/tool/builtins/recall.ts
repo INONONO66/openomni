@@ -1,15 +1,24 @@
+import type { Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { defineTool, errorResult, fromError, requireString, successResult } from "../define.js";
 
 /**
  * Resolves a compaction elision marker back to the recorded original
  * (compaction-design L1). Compaction rewrites only the in-run history via
- * `run.replace_messages`; the session store keeps the part as it was
- * recorded at tool completion, so recall is a read, never a re-execution.
+ * `run.replace_messages`; for fact-recorded worker turns the session store
+ * keeps the part as it was recorded at tool completion, so recall is a
+ * read, never a re-execution.
  *
- * Scope: the tool reads exactly the run's own session — `sessionId` arrives
- * as an executor-injected implicit input, so a model cannot point it at
- * another session's outputs.
+ * Recording coverage (transcript.ts writer census): resident direct runs
+ * and child-agent streams persist no tool parts — on those paths recall
+ * answers "not recorded", loudly, rather than returning anything wrong.
+ *
+ * Scope: the tool reads exactly the run's own session — `sessionId` is an
+ * executor-owned implicit slot (override-or-strip, never pass-through), so
+ * a model cannot point it at another session's outputs. Duplicate callIDs
+ * (providers mint per-turn ids like call_0 that can repeat across turns)
+ * are refused rather than guessed: returning the oldest match's bytes for
+ * a newer call's marker would be byte-exact and wrong.
  */
 export function createRecallTool() {
   return defineTool<{ callId: string; sessionId?: string }>({
@@ -51,19 +60,30 @@ export function createRecallTool() {
             "recall.output requires a session-bound executor runtime — no sessionId was injected",
           );
         }
+        const matches: Message.ToolPart[] = [];
         for (const message of Session.getMessages(sessionId)) {
           for (const part of Session.getParts(message.id)) {
             if (part.type !== "tool" || part.callID !== callId) continue;
-            if (part.state.status !== "completed") {
-              return errorResult(
-                call,
-                `tool call ${callId} is recorded with status "${part.state.status}" — only completed outputs can be recalled`,
-              );
-            }
-            return successResult(call, part.state.output);
+            matches.push(part);
           }
         }
-        return errorResult(call, `no tool call ${callId} is recorded in this session`);
+        if (matches.length === 0) {
+          return errorResult(call, `no tool call ${callId} is recorded in this session`);
+        }
+        if (matches.length > 1) {
+          return errorResult(
+            call,
+            `ambiguous callId ${callId}: ${matches.length} recorded tool calls share this id — refusing to guess which output the marker meant`,
+          );
+        }
+        const part = matches[0];
+        if (part === undefined || part.state.status !== "completed") {
+          return errorResult(
+            call,
+            `tool call ${callId} is recorded with status "${part?.state.status ?? "unknown"}" — only completed outputs can be recalled`,
+          );
+        }
+        return successResult(call, part.state.output);
       } catch (err) {
         return fromError(call, err);
       }
