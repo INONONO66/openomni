@@ -26,18 +26,63 @@ function createAssistantMessage(sessionId: string, model: Model.Ref): Message.As
   };
 }
 
+interface StoredMessage {
+  readonly info: Message.Info;
+  readonly parts: Message.Part[];
+}
+
+function anchorKeptIds(entry: StoredMessage): string[] | undefined {
+  if (entry.info.role !== "user") return undefined;
+  for (const part of entry.parts) {
+    if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
+    const kept = part.metadata?.keptMessageIds;
+    if (!Array.isArray(kept)) continue;
+    return kept.filter((id): id is string => typeof id === "string");
+  }
+  return undefined;
+}
+
+/**
+ * #702: consume the latest replacement record. Compaction persists its
+ * anchor message (metadata: ordered kept-message ids) at the apply seam;
+ * every hydration path funnels through here, so the model window resumes as
+ * [anchor, kept ids in recorded order, everything stored after the anchor]
+ * instead of re-inflating the full pre-compaction history. Kept ids that no
+ * longer resolve are skipped — a message that never reached the store
+ * (resident intermediates) was never resumable to begin with. Absent a
+ * record, behavior is unchanged.
+ */
+function selectWindow(stored: StoredMessage[]): StoredMessage[] {
+  for (let index = stored.length - 1; index >= 0; index -= 1) {
+    const entry = stored[index];
+    if (entry === undefined) continue;
+    const keptIds = anchorKeptIds(entry);
+    if (keptIds === undefined) continue;
+    const byId = new Map(stored.map((candidate) => [candidate.info.id, candidate]));
+    const keptSet = new Set(keptIds);
+    const kept = keptIds
+      .map((id) => byId.get(id))
+      .filter((candidate): candidate is StoredMessage => candidate !== undefined);
+    const after = stored.slice(index + 1).filter((candidate) => !keptSet.has(candidate.info.id));
+    return [entry, ...kept, ...after];
+  }
+  return stored;
+}
+
 export namespace SessionBridge {
   export function buildDirectMessages(
     sessionId: string,
   ): Array<{ role: "user" | "assistant"; content: string }> {
-    const messages = Session.getMessages(sessionId);
+    const stored: StoredMessage[] = Session.getMessages(sessionId).map((info) => ({
+      info,
+      parts: Session.getParts(info.id),
+    }));
     const result: Array<{ role: "user" | "assistant"; content: string }> = [];
 
-    for (const message of messages) {
-      const parts = Session.getParts(message.id);
-      for (const part of parts) {
+    for (const message of selectWindow(stored)) {
+      for (const part of message.parts) {
         if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
-          result.push({ role: message.role, content: part.text });
+          result.push({ role: message.info.role, content: part.text });
         }
       }
     }

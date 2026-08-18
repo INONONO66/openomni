@@ -260,10 +260,26 @@ export namespace Compaction {
         toRemove,
         options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS,
       );
+      // The replacement record rides ON the anchor (compaction-design L3,
+      // #702): the ordered ids of everything kept after the anchor. A
+      // product-side observer persisting the anchor message thereby persists
+      // the whole window selection — hydration rebuilds [anchor, kept ids
+      // forward] with no re-summarization.
+      const keptMessageIds = [
+        ...preservedUsers.map((message) => message.info.id),
+        ...toKeep.map((message) => message.info.id),
+      ];
       const anchorMessages =
         anchorText === undefined
           ? []
-          : [buildAnchorMessage(anchorText, firstRemoved.info.sessionID, firstRemoved.info.agent)];
+          : [
+              buildAnchorMessage(
+                anchorText,
+                firstRemoved.info.sessionID,
+                firstRemoved.info.agent,
+                keptMessageIds,
+              ),
+            ];
       if (anchorMessages.length === 0 && preservedUsers.length === 0) {
         // Nothing user-roled can head the kept window (summarizer yielded
         // nothing, no prior anchor, no user in the span): committing would
@@ -435,6 +451,7 @@ function buildAnchorMessage(
   anchorBody: string,
   sessionID: string,
   agent: string,
+  keptMessageIds: readonly string[],
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -454,7 +471,15 @@ function buildAnchorMessage(
     messageID: id,
     type: "text",
     text: render,
-    metadata: { compactionAnchor: true, anchorBody },
+    metadata: {
+      compactionAnchor: true,
+      anchorBody,
+      // Ordered window selection after this anchor — the durable
+      // replacement record (#702). Ids, not content: the store already
+      // holds the messages; the record only says which ones the window
+      // kept, in what order.
+      keptMessageIds: [...keptMessageIds],
+    },
   };
   return { info, parts: [textPart] };
 }

@@ -535,6 +535,12 @@ describe("Compaction", () => {
       const anchorPart = anchors[0]?.parts[0];
       if (anchorPart?.type !== "text") throw new Error("shape");
       expect(anchorPart.metadata?.anchorBody).toBe("anchor-v1+v2");
+      // #702 (L3): the anchor carries the ordered window selection — every
+      // message that follows it, by id — so a product-side observer can
+      // persist the whole replacement record by persisting this message.
+      const kept = anchorPart.metadata?.keptMessageIds;
+      if (!Array.isArray(kept)) throw new Error("expected keptMessageIds");
+      expect(kept).toEqual(second.messages.slice(1).map((m) => m.info.id));
     });
 
     it("skips the model call when the cut span holds nothing summarizable", async () => {

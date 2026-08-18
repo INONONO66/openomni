@@ -1,6 +1,8 @@
 import { createCompactionPolicy } from "@openomni/agent";
 import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@openomni/agent";
-import type { BusEvent, Message } from "@openomni/protocol";
+import type { BusEvent } from "@openomni/protocol";
+import { Message } from "@openomni/protocol";
+import { Session } from "@openomni/session";
 import { z } from "zod";
 
 const MessageSummarizerSchema = z.custom<
@@ -42,10 +44,57 @@ export function registerCompaction(
   events: BusEvent.Sink,
 ): void {
   registry.register("builtin:compaction", (config) =>
-    createCompactionPolicy({
-      ...CompactionConfigSchema.parse(config),
-      events,
-      priority: COMPACTION_PRIORITY,
-    }),
+    withReplacementPersistence(
+      createCompactionPolicy({
+        ...CompactionConfigSchema.parse(config),
+        events,
+        priority: COMPACTION_PRIORITY,
+      }),
+    ),
   );
+}
+
+/**
+ * #702: the replacement window must survive resume. The core seam rewrites
+ * only the in-run history; this wrapper persists the anchor message — whose
+ * part metadata carries the ordered kept-message ids, i.e. the whole window
+ * selection — into the session store BEFORE the decision returns, so the
+ * record exists before the effect applies (record-before-act). Both
+ * hydration readers (resident re-activation and worker resume) funnel
+ * through SessionBridge.buildDirectMessages, which consumes it.
+ *
+ * Persistence failure is fail-open by design: the seam is fail-closed, so a
+ * throw here would kill a live run over bookkeeping. The run keeps its
+ * compacted window; only resumability degrades to pre-#702 behavior for
+ * this cut. (Sessions outside the store — tests, ad-hoc engines — land in
+ * the same branch.)
+ */
+export function withReplacementPersistence(
+  registration: ReturnType<typeof createCompactionPolicy>,
+): ReturnType<typeof createCompactionPolicy> {
+  return {
+    ...registration,
+    fn: async (ctx) => {
+      const decision = await registration.fn(ctx);
+      const effect = decision.effects?.find((entry) => entry.type === "run.replace_messages");
+      if (effect?.type !== "run.replace_messages") return decision;
+      const parsed = Message.WithParts.array().safeParse(effect.messages);
+      if (!parsed.success) return decision;
+      const anchor = parsed.data.find((message) =>
+        message.parts.some(
+          (part) => part.type === "text" && part.metadata?.compactionAnchor === true,
+        ),
+      );
+      if (anchor === undefined) return decision;
+      try {
+        Session.addMessage(anchor.info.sessionID, anchor.info);
+        for (const part of anchor.parts) {
+          Session.addPart(anchor.info.id, part);
+        }
+      } catch {
+        // Fail-open: see the contract above.
+      }
+      return decision;
+    },
+  };
 }

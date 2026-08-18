@@ -1,6 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine } from "@openomni/agent";
-import { Session } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
+import { SessionBridge } from "../ingress/session-bridge";
 import { InjectionQueue } from "./injection-queue";
 import { buildWorkerMiddleware } from "./middleware";
 import { findRegistration, invokeTool } from "./middleware-test-fixture";
@@ -185,5 +186,181 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     if (effect?.type !== "run.replace_messages") throw new Error("expected replace effect");
     const first = (effect.messages as Array<{ parts: Array<{ text?: string }> }>)[0];
     expect(first?.parts[0]?.text).toContain("merged checkpoint");
+  });
+
+  it("compaction survives resume: the seam persists the record and hydration consumes it (#702)", async () => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = Session.create({
+      traceId: "trace-702",
+      title: "702 repro",
+      model: { providerID: "p", modelID: "m" },
+    });
+    const sessionID = session.id;
+
+    const store = (role: "user" | "assistant", text: string) => {
+      const id = crypto.randomUUID();
+      const info =
+        role === "user"
+          ? ({
+              id,
+              sessionID,
+              role,
+              time: { created: Date.now() },
+              agent: "t",
+              model: { providerID: "", modelID: "" },
+            } as const)
+          : ({
+              id,
+              sessionID,
+              role,
+              time: { created: Date.now() },
+              parentID: "",
+              modelID: "m",
+              providerID: "p",
+              agent: "t",
+              path: { cwd: "/", root: "/" },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            } as const);
+      Session.addMessage(sessionID, info);
+      const part = {
+        id: crypto.randomUUID(),
+        sessionID,
+        messageID: id,
+        type: "text" as const,
+        text,
+      };
+      Session.addPart(id, part);
+      return { info, parts: [part] };
+    };
+
+    // The full pre-compaction history, persisted the way production writes it.
+    const u0 = store("user", "the original goal");
+    const a1 = store("assistant", `old work\n${"filler ".repeat(60)}`);
+    const a2 = store("assistant", `more old work\n${"filler ".repeat(60)}`);
+    const u3 = store("user", "recent question");
+    const a4 = store("assistant", "recent answer");
+
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        compaction: {
+          contextWindowTokens: 100,
+          protectRecentMessages: 2,
+          summarizeWith: async () => "checkpoint after cut",
+        },
+      }),
+      "builtin:compaction",
+    );
+    if (registration === undefined) throw new Error("expected compaction registration");
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(registration);
+
+    const decision = await engine.dispatchPoint("run.completion.pre", {
+      sessionId: sessionID,
+      runId: "run-702",
+      completionCandidate: { type: "stop" },
+      traceContext: { traceId: "trace-702", sessionId: sessionID },
+      messages: [u0, a1, a2, u3, a4],
+      contextTokens: 99,
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 1,
+      isCompletion: true,
+      continuationCount: 0,
+      elapsedMs: 0,
+    });
+    const applied = decision.effects.some((entry) => entry.type === "run.replace_messages");
+    expect(applied).toBe(true);
+
+    // Resume: hydration returns the compacted window, not the full history.
+    const window = SessionBridge.buildDirectMessages(sessionID);
+    expect(window[0]?.content).toContain("checkpoint after cut");
+    expect(window.some((m) => m.content === "the original goal")).toBe(true); // preserved user, byte-exact
+    expect(window.some((m) => m.content === "recent question")).toBe(true); // kept tail
+    expect(window.some((m) => m.content.includes("old work"))).toBe(false); // cut span gone
+    expect(window.length).toBeLessThan(6);
+  });
+
+  it("replacement persistence is fail-open when the store is unavailable (#702)", async () => {
+    const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
+      throw new Error("store down");
+    });
+    try {
+      const registration = findRegistration(
+        buildWorkerMiddleware({
+          compaction: {
+            contextWindowTokens: 100,
+            protectRecentMessages: 2,
+            summarizeWith: async () => "checkpoint",
+          },
+        }),
+        "builtin:compaction",
+      );
+      if (registration === undefined) throw new Error("expected compaction registration");
+      const engine = PolicyEngine.create({ audit: false });
+      engine.register(registration);
+      const sessionID = "session-702-failopen";
+      const mk = (role: "user" | "assistant", id: string, text: string) => ({
+        info:
+          role === "user"
+            ? {
+                id,
+                sessionID,
+                role: "user" as const,
+                time: { created: 1 },
+                agent: "t",
+                model: { providerID: "", modelID: "" },
+              }
+            : {
+                id,
+                sessionID,
+                role: "assistant" as const,
+                time: { created: 1 },
+                parentID: "",
+                modelID: "m",
+                providerID: "p",
+                agent: "t",
+                path: { cwd: "/", root: "/" },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              },
+        parts: [
+          {
+            id: `${id}-t`,
+            sessionID,
+            messageID: id,
+            type: "text" as const,
+            text,
+          },
+        ],
+      });
+
+      const decision = await engine.dispatchPoint("run.completion.pre", {
+        sessionId: sessionID,
+        runId: "run-702-failopen",
+        completionCandidate: { type: "stop" },
+        traceContext: { traceId: "trace-702-fo", sessionId: sessionID },
+        messages: [
+          mk("user", "u0", "goal"),
+          mk("assistant", "a1", `w1\n${"filler ".repeat(60)}`),
+          mk("assistant", "a2", `w2\n${"filler ".repeat(60)}`),
+          mk("user", "u3", "tail"),
+          mk("assistant", "a4", "ta"),
+        ],
+        contextTokens: 99,
+        steps: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        turnCount: 1,
+        isCompletion: true,
+        continuationCount: 0,
+        elapsedMs: 0,
+      });
+
+      // The run keeps its compacted window; only resumability degrades.
+      expect(decision.effects.some((entry) => entry.type === "run.replace_messages")).toBe(true);
+    } finally {
+      addMessageSpy.mockRestore();
+    }
   });
 });

@@ -115,4 +115,102 @@ describe("SessionBridge", () => {
       expect((parts[0] as Message.TextPart).text).toBe(output);
     });
   });
+
+  describe("replacement-record hydration (#702, compaction-design L3)", () => {
+    function addAnchor(target: string, body: string, keptMessageIds: string[]): string {
+      const message: Message.UserMessage = {
+        id: crypto.randomUUID(),
+        sessionID: target,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "compaction",
+        model: { providerID: "", modelID: "" },
+      };
+      Session.addMessage(target, message);
+      const part: Message.TextPart = {
+        id: crypto.randomUUID(),
+        sessionID: target,
+        messageID: message.id,
+        type: "text",
+        text: `[Conversation Summary]\n${body}`,
+        metadata: { compactionAnchor: true, anchorBody: body, keptMessageIds },
+      };
+      Session.addPart(message.id, part);
+      return message.id;
+    }
+
+    function addUser(target: string, text: string): string {
+      const message: Message.UserMessage = {
+        id: crypto.randomUUID(),
+        sessionID: target,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "test",
+        model: { providerID: "anthropic", modelID: "claude-3-haiku" },
+      };
+      Session.addMessage(target, message);
+      Session.addPart(message.id, {
+        id: crypto.randomUUID(),
+        sessionID: target,
+        messageID: message.id,
+        type: "text",
+        text,
+      });
+      return message.id;
+    }
+
+    it("hydrates [anchor, kept forward] instead of the full history", () => {
+      addUserMessage(sessionId, "old question");
+      addAssistantMessage(sessionId, "old answer");
+      const keptUser = addUser(sessionId, "recent question");
+      addAnchor(sessionId, "checkpoint body", [keptUser]);
+
+      const window = SessionBridge.buildDirectMessages(sessionId);
+
+      expect(window).toHaveLength(2);
+      expect(window[0]?.content).toContain("checkpoint body");
+      expect(window[0]?.role).toBe("user");
+      expect(window[1]?.content).toBe("recent question");
+      // The pre-compaction history did not re-inflate.
+      expect(window.some((m) => m.content === "old question")).toBe(false);
+    });
+
+    it("includes messages stored after the anchor (post-resume turns)", () => {
+      const keptUser = addUser(sessionId, "kept");
+      addAnchor(sessionId, "body", [keptUser]);
+      addAssistantMessage(sessionId, "post-compaction turn");
+
+      const window = SessionBridge.buildDirectMessages(sessionId);
+      expect(window.map((m) => m.content).at(-1)).toBe("post-compaction turn");
+      expect(window).toHaveLength(3);
+    });
+
+    it("the latest record wins when compaction ran more than once", () => {
+      const keptA = addUser(sessionId, "kept-by-first");
+      addAnchor(sessionId, "first", [keptA]);
+      const keptB = addUser(sessionId, "kept-by-second");
+      addAnchor(sessionId, "second", [keptB]);
+
+      const window = SessionBridge.buildDirectMessages(sessionId);
+      expect(window[0]?.content).toContain("second");
+      expect(window.some((m) => m.content.includes("[Conversation Summary]\nfirst"))).toBe(false);
+      expect(window.some((m) => m.content === "kept-by-second")).toBe(true);
+      expect(window.some((m) => m.content === "kept-by-first")).toBe(false);
+    });
+
+    it("skips kept ids that never reached the store", () => {
+      const keptUser = addUser(sessionId, "resolvable");
+      addAnchor(sessionId, "body", ["ghost-message-id", keptUser]);
+
+      const window = SessionBridge.buildDirectMessages(sessionId);
+      expect(window).toHaveLength(2);
+      expect(window[1]?.content).toBe("resolvable");
+    });
+
+    it("without a record the full history is unchanged", () => {
+      addUserMessage(sessionId, "a");
+      addAssistantMessage(sessionId, "b");
+      expect(SessionBridge.buildDirectMessages(sessionId)).toHaveLength(2);
+    });
+  });
 });
