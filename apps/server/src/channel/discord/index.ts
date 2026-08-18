@@ -1,1 +1,0 @@
-export { DiscordAdapter } from "./surface";

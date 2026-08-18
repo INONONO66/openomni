@@ -1,10 +1,10 @@
 # apps/server
 
-Hono/Bun runtime host that exposes OpenOmni through external channels (Discord / Telegram / GitHub / WebSocket), connector processes, MCP/custom tools, and worker entrypoints. The server owns transport and bootstrap, not product messaging/access semantics.
+Hono/Bun runtime host that exposes OpenOmni through external channels (Discord / Telegram / GitHub / WebSocket — adapter implementations live in `packages/channels` since #551; the server registers them), connector processes, MCP/custom tools, and worker entrypoints. The server owns transport wiring and bootstrap, not product messaging/access semantics.
 
-Inbound messages should flow as: raw channel payload -> channel adapter transport/auth/dedupe -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback.
+Inbound messages should flow as: raw channel payload -> channels gateway driver transport/auth/dedupe (`packages/channels`) -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback.
 
-Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
+Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, `@openomni/channels`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
 
 ## STRUCTURE
 
@@ -15,20 +15,13 @@ src/
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
 │   ├── index.ts          # main() — wires storage, tool providers, resolveModel() (providers.ts merged here, #476), channels, server, recovery, shutdown
-│   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
+│   ├── channels.ts       # createChannelAdapters() — registers @openomni/channels adapters (Discord / Telegram / GitHub / WebSocket) + triggers, binds the publish port
 │   ├── dispatch-owners.ts # wires dispatch handler owners (connector driver, outbound, device)
 │   ├── resident-inbound-wait.ts # resident-side inbound-wait bridge for worker resident.ask
 │   ├── worker-bootstrap.ts # builds the WorkerBootstrap payload (configEpoch, agents, tool catalog, credentials); per-run policyPlan travels on Execution.Request, not here
 │   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
 │   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
 │   └── shutdown.ts       # installShutdownHandlers() — graceful stop for server / channels / MCP
-├── channel/
-│   ├── index.ts          # Re-exports adapters + WebSocketHandler
-│   ├── types.ts          # Shared channel config helpers
-│   ├── websocket.ts      # In-process WebSocket surface (token-gated)
-│   ├── discord/          # Discord gateway client + surface (mention-trigger by default)
-│   ├── telegram/         # Telegram polling surface
-│   └── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
 ├── connector/            # Server-owned connector process driver, log ingestion/telemetry, question bridge, read-back builder, env (definitions/discovery/registry were deleted in #473 — installations resolve from SQLite records)
 ├── context/
 │   ├── index.ts          # Barrel re-exports
@@ -60,10 +53,11 @@ src/
 ├── tool/
 │   ├── custom/           # CustomToolProvider — user-defined tool provider
 │   └── mcp/              # McpToolProvider — MCP-backed tool provider
-├── server/
-│   └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
-└── shared/               # Cross-module helpers (chunk-text, dedupe, fetch-retry, sleep, trigger)
+└── server/
+    └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
 ```
+
+Channel adapter implementations (discord/, telegram/, github/, websocket, authn, support helpers) moved to `packages/channels` (#551, gateway stage 1); this app keeps only the registration/composition in `bootstrap/channels.ts`.
 
 ## BOOT SEQUENCE (`bootstrap/index.ts`)
 
@@ -130,7 +124,7 @@ The current server connector surface hosts the process driver and provider-neutr
 | WebSocket | built-in (token-gated via `config.server.wsToken`) | streaming |
 
 Add a new channel by:
-1. Creating an adapter under `src/channel/{name}/` implementing `Adapter.Surface` (or wrap an existing SDK).
+1. Creating a driver under `packages/channels/src/{name}/` implementing `Adapter.Surface` (or wrap an existing SDK) — it must stay on the band import contract (`packages/channels/AGENTS.md`).
 2. Registering it in `bootstrap/channels.ts` behind a config flag.
 3. Surfacing it over HTTP in `server/routes.ts` if it needs a webhook endpoint.
 
@@ -174,7 +168,7 @@ This registry is transitional runtime configuration. Product routing is OpenOmni
 ## ANTI-PATTERNS
 
 - **Bypassing `createMessageHandler`**: all message handling should flow through the per-surface FIFO queue so one surface cannot interleave runs.
-- **Channel logic outside server**: all channel work lives here. Do not add channel adapters to scripts or tooling packages.
+- **Channel logic outside its band**: channel adapter implementations live in `packages/channels`; the server only registers and composes them. Do not add adapter code here or to scripts/tooling packages.
 - **Ad-hoc tool permission logic**: if a new policy is needed, extend `Policy.Permission` and enforce it inside `createToolExecutor` (from `@openomni/openomni`), not inside individual tools.
 - **Server-side product routing**: do not add PendingInteraction/PendingAsk matching, SurfaceKey session routing, worker grant checks, channel grant checks, or actor trust decisions here. Move that to `packages/openomni`.
 

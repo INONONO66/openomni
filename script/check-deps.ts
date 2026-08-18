@@ -10,6 +10,7 @@ type PackageKey =
   | "agent"
   | "openomni"
   | "coordinator"
+  | "channels"
   | "server";
 
 type PackageRule = {
@@ -119,6 +120,18 @@ const RULES: Record<PackageKey, PackageRule> = {
     // session-free; #496 moved the IPC transport into @openomni/ipc; this
     // ratchet keeps it that way — widening requires Owner sign-off).
     allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
+  },
+  channels: {
+    displayName: "channels",
+    packageJsonPath: "packages/channels/package.json",
+    packageName: "@openomni/channels",
+    // Gateway band at stage 1 (#551, docs/gateway-design.md §1/§9): protocol
+    // for the Channel contract, ipc as the driver-band transport contract,
+    // policy for the authn judgment sites (S8 confines it to src/authn/ —
+    // see validateChannelsIntraPackageBanding). ledger joins at stage 2 when
+    // the perimeter store surfaces move in (#707). No kernel, no telemetry —
+    // observation goes through the injected publish port.
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc", "@openomni/policy"]),
   },
   server: {
     displayName: "server",
@@ -315,6 +328,63 @@ async function validateSourceImportDirection(): Promise<string[]> {
   return violations;
 }
 
+const CHANNELS_SRC_PREFIX = "packages/channels/src/";
+const CHANNELS_JUDGMENT_PREFIX = "packages/channels/src/authn/";
+const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy"]);
+
+/**
+ * S8 intra-package banding for the channels gateway (docs/gateway-design.md
+ * §7 S8, stage-1 deliverable of #551). The package-level whitelist admits
+ * @openomni/policy, but only the perimeter JUDGMENT sites under `src/authn/`
+ * may use it — the driver sub-band (discord/, github/, telegram/, support/,
+ * websocket.ts) stays on the dumb-driver contract {protocol, ipc}.
+ *
+ * S8's full text ("drivers/ may not import router/ or store surfaces") names
+ * bands that do not exist at stage 1: there is no `router/` and no store
+ * surface in the package yet, and drivers legitimately invoke the authn
+ * middleware today (surface.ts → ../channel-authn → authn/) — that edge IS
+ * the stage-2 seam, cut when authn is promoted to the router band (#707).
+ * TODO(stage 2): when `router/` and the gateway store surfaces move in,
+ * extend this check to forbid driver→router and driver→store relative edges.
+ */
+function isChannelsBandingViolation(filePath: string, dep: string): boolean {
+  if (!filePath.startsWith(CHANNELS_SRC_PREFIX)) return false;
+  if (!CHANNELS_JUDGMENT_ONLY_DEPS.has(dep)) return false;
+  return !filePath.startsWith(CHANNELS_JUDGMENT_PREFIX);
+}
+
+async function validateChannelsIntraPackageBanding(): Promise<string[]> {
+  const violations: string[] = [];
+  const importPattern =
+    /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
+  const sourceGlob = new Glob(`${CHANNELS_SRC_PREFIX}**/*.ts`);
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (isExcludedFromScan(filePath)) {
+      continue;
+    }
+
+    const source = await Bun.file(filePath).text();
+    for (const match of source.matchAll(importPattern)) {
+      const dep = match[1];
+      if (dep && isChannelsBandingViolation(filePath, dep)) {
+        const line = lineNumberForOffset(source, match.index);
+        violations.push(
+          `VIOLATION: ${filePath}:${line} imports ${dep} — S8 banding: only channels src/authn/ (perimeter judgment) may import the policy engine; drivers stay on {protocol, ipc}`,
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
@@ -501,6 +571,7 @@ const TRACKED_DOCS = [
   "packages/agent/AGENTS.md",
   "packages/openomni/AGENTS.md",
   "packages/coordinator/AGENTS.md",
+  "packages/channels/AGENTS.md",
   "apps/server/AGENTS.md",
 ];
 
@@ -598,6 +669,22 @@ function selfTest(): void {
       isAllowedSourceDep(oneTier, "@openomni/telemetry"),
     ],
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
+    [
+      "S8: a channels driver may not import the policy engine",
+      isChannelsBandingViolation("packages/channels/src/discord/surface.ts", "@openomni/policy"),
+    ],
+    [
+      "S8: channels authn (perimeter judgment) may import the policy engine",
+      !isChannelsBandingViolation("packages/channels/src/authn/decision.ts", "@openomni/policy"),
+    ],
+    [
+      "S8: drivers keep the whitelisted contract deps",
+      !isChannelsBandingViolation("packages/channels/src/discord/surface.ts", "@openomni/protocol"),
+    ],
+    [
+      "S8: the banding rule scopes to the channels package only",
+      !isChannelsBandingViolation("packages/openomni/src/ingress/engine.ts", "@openomni/policy"),
+    ],
   ];
 
   const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
@@ -613,6 +700,7 @@ async function main(): Promise<void> {
   if (Bun.argv.includes("--self-test")) selfTest();
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();
+  const channelsBandingViolations = await validateChannelsIntraPackageBanding();
   const deepImportViolations = await validateDeepImports();
   const deepRelativeImportViolations = await validateDeepRelativeImports();
   const goldenViolations = await validateGoldenPrinciples();
@@ -620,6 +708,7 @@ async function main(): Promise<void> {
   const violations = [
     ...depViolations,
     ...sourceImportViolations,
+    ...channelsBandingViolations,
     ...deepImportViolations,
     ...deepRelativeImportViolations,
     ...goldenViolations,
