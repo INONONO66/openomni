@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787077832923,
+  "lastUpdate": 1787078939663,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56405,6 +56405,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518641,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79fb72d4c7fedbc2b310dc283068c9df9ac04180",
+          "message": "refactor: converge Ledger authority, Noun.Events, Channel contract (#728)\n\n* refactor(protocol): converge Ledger authority + Noun.Events descriptors\n\n#499 Ledger/Event slice. TS names only — every persisted/wire string is\nbyte-identical: event names (BusEvent.define first args), visibility\nvalues, category derivation (first name segment), fact type names, and\nthe operational.<level> stdout contract all verified unchanged.\n\nAuthority/observation receipt: `Ledger` is the authority vocabulary —\nthe protocol namespace carries the append-boundary types and stream\nregistry, and @openomni/session ledger-core keeps the runtime verbs\n(append, adoptStream, headFact, factsByType, verifyTail) under the same\nname. Observation stays OUT of that namespace: descriptors are\n`Noun.Events` published via Bus — renaming them into `Ledger.*` would\nalias observation into the append namespace (the issue's collision\nrule).\n\nL1 — LedgerAppend -> Ledger: dir ledger-append/ -> ledger/, namespace\nrenamed (its header reserved the name for #499). 16 consumer files\nmigrated; session ledger-core implementation files alias the protocol\nimport as `Ledger as LedgerTypes` (implementation-internal alias, not a\nre-export) because they sit under the runtime `Ledger` namespace.\n`ledger-append` removed from the vocab-ratchet baseline (ledger maps to\nthe Tier-1 noun).\n\nL2 — flat event namespaces -> Noun.Events (strings frozen):\n  IngressEvent    -> Ingress.Events   (+ RoutingDecisionPayload moved\n                                        into the Ingress namespace)\n  PolicyEvent     -> Policy.Events    (event module now deep-imports\n                                        policy/effects + policy/resource\n                                        to avoid a barrel cycle)\n  ToolExecution   -> Tool.Events\n  AgentExecution  -> Run.Events       (loop-run events; strings stay\n                                        agent.*)\n  Operational     -> Operational.Events (nested; operational.<level>\n                                        stdout level derivation reads\n                                        the unchanged name strings)\n  LlmCall         -> LlmCall.Events\n  Mcp             -> Mcp.Events       (no clash with McpConfig)\n  WorkerDriver    -> Worker.Events    (new Tier-1 noun namespace;\n                                        strings stay the persisted mixed\n                                        worker.*/run.* categories)\nMerged-noun descriptors attach via `export const Events` on the noun\nnamespace (the Wait/WorkItem pattern); their per-file barrels left\nprotocol/src/index.ts. Schema snapshot regenerated with --update: the\nsemantic diff is exactly LedgerAppend.* -> Ledger.* key moves, zero\nfield changes.\n\nL3 — TraceContext: dropped dead `taskId` (only forwarder was\npolicy/engine/audit.ts pass-through; no production writer populates\nit). Kept {traceId, parentSpanId?, sessionId?, runId?, agentName?} —\nagentName is load-bearing at the ingress/dispatch/run seams. Header now\ndocuments the traceparent correspondence; deliberately NOT merged with\ntelemetry TraceScope (different owner package).\n\nL4 — visibility hygiene: session bus-persistence EventVisibility now\nreuses BusEvent.Visibility (one vocabulary, no copy). BusEvent imports\nrepointed from @openomni/telemetry to @openomni/protocol (vocabulary\norigin) in all consumers; telemetry's BusEvent re-export removed.\nIngress audit trail stays ephemeral by design: routing decisions\nalready land as user_audit events + route.decided facts; the span tree\nis stdout debugging.\n\nVerified: build 5/5, check-types 14/14, lint (guards, side-effects,\nultracite), lint-tools (vocab ratchet, naming, earned, schema\nsnapshot), check-deps, check-import-cycles, check-dead-exports, full\nturbo test 14/14 (protocol 602, session 400, openomni 1159, agent 442,\npolicy 110, telemetry 55, coordinator 71, llm 260, server 472), and\nthe p2-ledger-baseline conformance suite (46).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(protocol): converge adapter to Channel driver contract (#499)\n\nFinal #499 slice: C1 Adapter->Channel rename + dead-member kill, C2\nAppConnector export diet. Zero persisted/wire impact: Surface and its\nmessages are in-process TS interfaces; SurfaceKey strings persist but only\nTS symbols renamed; evidence.completionReport JSON key and the persisted\nDefinition/Installation shapes are untouched.\n\nC1 — protocol/src/adapter/ -> protocol/src/channel/ (namespace Channel)\n- Kept, zero shape changes: Surface{id, config, start, stop, onMessage},\n  InboundMessage, OutboundMessage, MessageHandler, TriggerRule,\n  TriggerContext, Config (shrunk to {triggers}), SurfaceKey codec verbatim.\n- New header: Channel is the band-facing DRIVER contract\n  ({protocol, ipc}-implementable, import-free), distinct from the\n  gateway<->brain seam (Gateway.Deliver/Send). Disambiguation receipt:\n  Channel.InboundMessage = driver in-process envelope;\n  Gateway.InboundMessage = gateway->brain zod delivery schema — both are\n  wire-format words, the namespaces disambiguate.\n- Deleted with re-verified zero-reader proofs (rg at this head):\n  * Command/CommandContext/CommandHandler/registerCommands/onCommand —\n    zero refs outside adapter/index.ts.\n  * StreamSink/StreamingHandler/onStreamingMessage — zero refs.\n  * MediaAttachment + InboundMessage.media + OutboundMessage.media — zero\n    producers (all 3 drivers declared media send/receive false); the one\n    dead pass-through (ingress/bridge.ts copied always-undefined media\n    into catchall meta, never read) deleted too; ingress-bridge.test.ts\n    fixtures fixed. Ingress.Meta catchall shape itself untouched.\n  * DeliveryPolicy + Config.deliveryPolicy — 3 constant writes\n    (bootstrap/channels.ts), zero reads; github-authn.test.ts fixtures fixed.\n  * Capabilities + Surface.capabilities — 3 constant type-position driver\n    declarations, zero reads.\n  * Surface.send(surfaceKey, message) — ZERO callers anywhere; outbound\n    goes through the drivers' non-interface deliver(externalId, body);\n    Gateway.Send is the stage-3 successor. Ruled: deleted (recorded here).\n- Consumers renamed (18 src + 9 test files), incl. the literal import\n  fixture string in channel-band-boundary.test.ts:182 and\n  adapter-surface-key.test.ts -> channel-surface-key.test.ts.\n- Concept-diet tax, atomic with the deletions: 8 adapter rows flipped\n  preserve -> delete/shipped in protocol-concept-disposition.json (tally\n  rebalanced, total stays 124); guard fixtures repointed to still-live\n  owners (retained-fail-closed: Adapter.Capabilities ->\n  AppConnector.InstallationStatus; retained-recovery: Adapter.DeliveryPolicy\n  -> Token.Count); dead-surface.test.ts expectations updated.\n  lint-tools vocab baseline shrunk: \"adapter\" no longer unmapped (Channel\n  is a core-model Tier-2 noun).\n\nC2 — AppConnector export diet\n- Unexported (zero consumers anywhere incl. tests; all structural,\n  composed into Definition/Installation, now module-local):\n  EvidenceEmitter, InitialAutonomy, DriverInstallScope, SubmitMode,\n  SubmitAck, Detect, Driver, Profile, Evidence, WorkspaceIdentity.\n- Deleted dead: AppConnector.Events.VerificationFailed (app-connector/\n  events.ts; zero production publishers — the session store sets\n  status:\"verification_failed\" without publishing; only\n  protocol/test/app-connector.test.ts touched it, tests pruned) and the\n  thereby-orphaned VerificationFailureReason enum.\n- Kept exported (live consumers, test-consumers count): Installation,\n  Definition, Consent, Logs, QuestionBridge, Spawn, ReportSource,\n  InstallationStatus, Requires.\n- Disposition rows flipped -> unexport/shipped (7 defer + WorkspaceIdentity\n  preserve); EvidenceEmitter/Driver/VerificationFailed have no census rows\n  and are recorded in the reconciliationNote per file precedent.\n\nDEVIATION from the issue text: the readBack-template unification bullet\nwas NOT executed. The recorded in-code ruling (app-connector/definition.ts\nReportSource.readBackRequests + work-item/schemas.ts:44) stands:\nconnector-side targets are placeholder templates the server-side read-back\nbuilder renders, while WorkItem.ReadBackRequest validates resolved http(s)\nURLs — unifying would validate placeholders as URLs. The deliberate\nnon-unification comments are untouched.\n\nSnapshot regen (lint-tools --update): -5 keys, all AppConnector unexports\n(Detect, Driver, Evidence, Profile, WorkspaceIdentity). No Adapter.* ->\nChannel.* snapshot moves exist because the snapshot tracks zod schemas\nonly and the adapter namespace had none (TS interfaces).\n\nVerified green: turbo build, check-types (14/14), lint (guards,\nside-effects, ultracite), lint-tools (vocab/naming/earned/schema-snapshot),\ncheck-deps, check-import-cycles, check-dead-exports (no new), full turbo\ntest (14/14 incl. apps/server 471 pass), p2-ledger-baseline (46 pass),\nchannel-band-boundary (12 pass).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T18:47:52Z",
+          "tree_id": "1e323163ee5369a2c0850c263c1c2852c235d637",
+          "url": "https://github.com/INONONO66/openomni/commit/79fb72d4c7fedbc2b310dc283068c9df9ac04180"
+        },
+        "date": 1787078938738,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6272,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3243,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16365,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8490,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1059,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 930,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1551,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 800,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47673,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2398,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524468,
             "unit": "ns/op"
           }
         ]
