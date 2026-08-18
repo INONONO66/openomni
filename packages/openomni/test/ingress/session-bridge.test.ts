@@ -117,7 +117,11 @@ describe("SessionBridge", () => {
   });
 
   describe("replacement-record hydration (#702, compaction-design L3)", () => {
-    function addAnchor(target: string, body: string, keptMessageIds: string[]): string {
+    function addAnchor(
+      target: string,
+      body: string,
+      keptWindow: Array<{ role: "user" | "assistant"; text: string }>,
+    ): string {
       const message: Message.UserMessage = {
         id: crypto.randomUUID(),
         sessionID: target,
@@ -133,7 +137,7 @@ describe("SessionBridge", () => {
         messageID: message.id,
         type: "text",
         text: `[Conversation Summary]\n${body}`,
-        metadata: { compactionAnchor: true, anchorBody: body, keptMessageIds },
+        metadata: { compactionAnchor: true, anchorBody: body, keptWindow },
       };
       Session.addPart(message.id, part);
       return message.id;
@@ -159,11 +163,11 @@ describe("SessionBridge", () => {
       return message.id;
     }
 
-    it("hydrates [anchor, kept forward] instead of the full history", () => {
+    it("hydrates [anchor, kept content] instead of the full history", () => {
       addUserMessage(sessionId, "old question");
       addAssistantMessage(sessionId, "old answer");
-      const keptUser = addUser(sessionId, "recent question");
-      addAnchor(sessionId, "checkpoint body", [keptUser]);
+      addUser(sessionId, "recent question");
+      addAnchor(sessionId, "checkpoint body", [{ role: "user", text: "recent question" }]);
 
       const window = SessionBridge.buildDirectMessages(sessionId);
 
@@ -176,8 +180,8 @@ describe("SessionBridge", () => {
     });
 
     it("includes messages stored after the anchor (post-resume turns)", () => {
-      const keptUser = addUser(sessionId, "kept");
-      addAnchor(sessionId, "body", [keptUser]);
+      addUser(sessionId, "kept");
+      addAnchor(sessionId, "body", [{ role: "user", text: "kept" }]);
       addAssistantMessage(sessionId, "post-compaction turn");
 
       const window = SessionBridge.buildDirectMessages(sessionId);
@@ -186,10 +190,10 @@ describe("SessionBridge", () => {
     });
 
     it("the latest record wins when compaction ran more than once", () => {
-      const keptA = addUser(sessionId, "kept-by-first");
-      addAnchor(sessionId, "first", [keptA]);
-      const keptB = addUser(sessionId, "kept-by-second");
-      addAnchor(sessionId, "second", [keptB]);
+      addUser(sessionId, "kept-by-first");
+      addAnchor(sessionId, "first", [{ role: "user", text: "kept-by-first" }]);
+      addUser(sessionId, "kept-by-second");
+      addAnchor(sessionId, "second", [{ role: "user", text: "kept-by-second" }]);
 
       const window = SessionBridge.buildDirectMessages(sessionId);
       expect(window[0]?.content).toContain("second");
@@ -198,13 +202,46 @@ describe("SessionBridge", () => {
       expect(window.some((m) => m.content === "kept-by-first")).toBe(false);
     });
 
-    it("skips kept ids that never reached the store", () => {
-      const keptUser = addUser(sessionId, "resolvable");
-      addAnchor(sessionId, "body", ["ghost-message-id", keptUser]);
+    it("the record is content-borne: kept text needs no store resolution", () => {
+      // Ids are useless across the hydration seam (#722 review finding 1) —
+      // the record must carry the content itself, byte-exact.
+      addAnchor(sessionId, "body", [
+        { role: "user", text: "제약: 절대 요약하지 마라 🧭" },
+        { role: "assistant", text: "tail answer" },
+      ]);
+
+      const window = SessionBridge.buildDirectMessages(sessionId);
+      expect(window).toHaveLength(3);
+      expect(window[1]).toEqual({ role: "user", content: "제약: 절대 요약하지 마라 🧭" });
+      expect(window[2]).toEqual({ role: "assistant", content: "tail answer" });
+    });
+
+    it("malformed kept entries are dropped, well-formed ones survive", () => {
+      const message: Message.UserMessage = {
+        id: crypto.randomUUID(),
+        sessionID: sessionId,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "compaction",
+        model: { providerID: "", modelID: "" },
+      };
+      Session.addMessage(sessionId, message);
+      Session.addPart(message.id, {
+        id: crypto.randomUUID(),
+        sessionID: sessionId,
+        messageID: message.id,
+        type: "text",
+        text: "[Conversation Summary]\nbody",
+        metadata: {
+          compactionAnchor: true,
+          anchorBody: "body",
+          keptWindow: [{ role: "tool", text: 1 }, { role: "user", text: "good" }, "junk"],
+        },
+      });
 
       const window = SessionBridge.buildDirectMessages(sessionId);
       expect(window).toHaveLength(2);
-      expect(window[1]?.content).toBe("resolvable");
+      expect(window[1]).toEqual({ role: "user", content: "good" });
     });
 
     it("without a record the full history is unchanged", () => {

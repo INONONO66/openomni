@@ -1,7 +1,7 @@
 import { createCompactionPolicy } from "@openomni/agent";
 import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@openomni/agent";
 import type { BusEvent } from "@openomni/protocol";
-import { Message } from "@openomni/protocol";
+import { Message, Operational } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { z } from "zod";
 
@@ -50,6 +50,7 @@ export function registerCompaction(
         events,
         priority: COMPACTION_PRIORITY,
       }),
+      events,
     ),
   );
 }
@@ -71,7 +72,22 @@ export function registerCompaction(
  */
 export function withReplacementPersistence(
   registration: ReturnType<typeof createCompactionPolicy>,
+  events: BusEvent.Sink,
 ): ReturnType<typeof createCompactionPolicy> {
+  const warn = (
+    ctx: { traceContext?: { traceId?: string }; sessionId?: string },
+    msg: string,
+    context?: Record<string, unknown>,
+  ): void => {
+    events.publish(Operational.Warn, {
+      traceId: ctx.traceContext?.traceId ?? "",
+      time: Date.now(),
+      ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),
+      component: "compaction-replacement-persistence",
+      msg,
+      ...(context === undefined ? {} : { context }),
+    });
+  };
   return {
     ...registration,
     fn: async (ctx) => {
@@ -79,20 +95,35 @@ export function withReplacementPersistence(
       const effect = decision.effects?.find((entry) => entry.type === "run.replace_messages");
       if (effect?.type !== "run.replace_messages") return decision;
       const parsed = Message.WithParts.array().safeParse(effect.messages);
-      if (!parsed.success) return decision;
+      if (!parsed.success) {
+        // Visible fail-open (#722 review M3): resumability degraded, run intact.
+        warn(ctx, "replacement record not persisted: effect messages failed to parse");
+        return decision;
+      }
       const anchor = parsed.data.find((message) =>
         message.parts.some(
           (part) => part.type === "text" && part.metadata?.compactionAnchor === true,
         ),
       );
       if (anchor === undefined) return decision;
+      // #722 review M4: the anchor's session is copied from whatever history
+      // the seam received — never write across sessions, even if a future
+      // upstream policy rewrites it.
+      if (ctx.sessionId !== undefined && anchor.info.sessionID !== ctx.sessionId) {
+        warn(ctx, "replacement record not persisted: anchor session mismatch", {
+          anchorSessionId: anchor.info.sessionID,
+        });
+        return decision;
+      }
       try {
         Session.addMessage(anchor.info.sessionID, anchor.info);
         for (const part of anchor.parts) {
           Session.addPart(anchor.info.id, part);
         }
-      } catch {
-        // Fail-open: see the contract above.
+      } catch (error) {
+        warn(ctx, "replacement record not persisted: session store write failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
       return decision;
     },

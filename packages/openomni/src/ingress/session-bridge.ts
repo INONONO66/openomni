@@ -31,62 +31,84 @@ interface StoredMessage {
   readonly parts: Message.Part[];
 }
 
-function anchorKeptIds(entry: StoredMessage): string[] | undefined {
+interface DirectMessage {
+  readonly role: "user" | "assistant";
+  readonly content: string;
+}
+
+function isKeptEntry(value: unknown): value is DirectMessage {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as { role?: unknown; text?: unknown };
+  return (
+    (entry.role === "user" || entry.role === "assistant") &&
+    typeof (entry as { text?: unknown }).text === "string"
+  );
+}
+
+function anchorKeptWindow(entry: StoredMessage): DirectMessage[] | undefined {
   if (entry.info.role !== "user") return undefined;
   for (const part of entry.parts) {
     if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
-    const kept = part.metadata?.keptMessageIds;
+    const kept = part.metadata?.keptWindow;
     if (!Array.isArray(kept)) continue;
-    return kept.filter((id): id is string => typeof id === "string");
+    return kept
+      .filter(isKeptEntry)
+      .map((item) => ({ role: item.role, content: (item as unknown as { text: string }).text }));
   }
   return undefined;
 }
 
+function pushTextParts(target: DirectMessage[], message: StoredMessage): void {
+  for (const part of message.parts) {
+    if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
+      target.push({ role: message.info.role, content: part.text });
+    }
+  }
+}
+
 /**
  * #702: consume the latest replacement record. Compaction persists its
- * anchor message (metadata: ordered kept-message ids) at the apply seam;
- * every hydration path funnels through here, so the model window resumes as
- * [anchor, kept ids in recorded order, everything stored after the anchor]
- * instead of re-inflating the full pre-compaction history. Kept ids that no
- * longer resolve are skipped — a message that never reached the store
- * (resident intermediates) was never resumable to begin with. Absent a
- * record, behavior is unchanged.
+ * anchor message — whose part metadata carries the ordered kept CONTENT
+ * (role/content, not ids: hydration flattens to strings and the run
+ * re-mints ids, so an id record resolves to nothing; #722 review) — and
+ * every hydration path funnels through here. The window resumes as
+ * [anchor render, kept content in recorded order, everything stored after
+ * the anchor] instead of re-inflating the full pre-compaction history.
+ * Absent a record, behavior is unchanged.
  */
-function selectWindow(stored: StoredMessage[]): StoredMessage[] {
+function buildFromRecord(stored: StoredMessage[]): DirectMessage[] | undefined {
   for (let index = stored.length - 1; index >= 0; index -= 1) {
     const entry = stored[index];
     if (entry === undefined) continue;
-    const keptIds = anchorKeptIds(entry);
-    if (keptIds === undefined) continue;
-    const byId = new Map(stored.map((candidate) => [candidate.info.id, candidate]));
-    const keptSet = new Set(keptIds);
-    const kept = keptIds
-      .map((id) => byId.get(id))
-      .filter((candidate): candidate is StoredMessage => candidate !== undefined);
-    const after = stored.slice(index + 1).filter((candidate) => !keptSet.has(candidate.info.id));
-    return [entry, ...kept, ...after];
+    const kept = anchorKeptWindow(entry);
+    if (kept === undefined) continue;
+    const result: DirectMessage[] = [];
+    pushTextParts(result, entry);
+    for (const item of kept) {
+      if (!item.content.startsWith(LEGACY_PLAN_MARKER)) result.push(item);
+    }
+    for (const later of stored.slice(index + 1)) {
+      pushTextParts(result, later);
+    }
+    return result;
   }
-  return stored;
+  return undefined;
 }
 
 export namespace SessionBridge {
-  export function buildDirectMessages(
-    sessionId: string,
-  ): Array<{ role: "user" | "assistant"; content: string }> {
+  export function buildDirectMessages(sessionId: string): DirectMessage[] {
     const stored: StoredMessage[] = Session.getMessages(sessionId).map((info) => ({
       info,
       parts: Session.getParts(info.id),
     }));
-    const result: Array<{ role: "user" | "assistant"; content: string }> = [];
 
-    for (const message of selectWindow(stored)) {
-      for (const part of message.parts) {
-        if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
-          result.push({ role: message.info.role, content: part.text });
-        }
-      }
+    const fromRecord = buildFromRecord(stored);
+    if (fromRecord !== undefined) return fromRecord;
+
+    const result: DirectMessage[] = [];
+    for (const message of stored) {
+      pushTextParts(result, message);
     }
-
     return result;
   }
 

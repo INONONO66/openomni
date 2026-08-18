@@ -116,6 +116,7 @@ function buildAgentLifecycleMiddleware(
         events: Bus,
         priority: COMPACTION_PRIORITY,
       }),
+      Bus,
     ),
   ];
 }

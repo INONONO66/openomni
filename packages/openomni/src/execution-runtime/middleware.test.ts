@@ -1,6 +1,8 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine } from "@openomni/agent";
+import { Operational } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
+import { Bus } from "@openomni/telemetry";
 import { SessionBridge } from "../ingress/session-bridge";
 import { InjectionQueue } from "./injection-queue";
 import { buildWorkerMiddleware } from "./middleware";
@@ -188,7 +190,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     expect(first?.parts[0]?.text).toContain("merged checkpoint");
   });
 
-  it("compaction survives resume: the seam persists the record and hydration consumes it (#702)", async () => {
+  it("compaction survives a production-shaped resume: ids are re-minted, content survives (#702)", async () => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
     const session = Session.create({
@@ -224,23 +226,64 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             } as const);
       Session.addMessage(sessionID, info);
-      const part = {
+      Session.addPart(id, {
         id: crypto.randomUUID(),
         sessionID,
         messageID: id,
         type: "text" as const,
         text,
-      };
-      Session.addPart(id, part);
-      return { info, parts: [part] };
+      });
     };
 
     // The full pre-compaction history, persisted the way production writes it.
-    const u0 = store("user", "the original goal");
-    const a1 = store("assistant", `old work\n${"filler ".repeat(60)}`);
-    const a2 = store("assistant", `more old work\n${"filler ".repeat(60)}`);
-    const u3 = store("user", "recent question");
-    const a4 = store("assistant", "recent answer");
+    store("user", "the original goal");
+    store("assistant", `old work\n${"filler ".repeat(60)}`);
+    store("assistant", `more old work\n${"filler ".repeat(60)}`);
+    store("user", "recent question");
+    store("assistant", "recent answer");
+
+    // Production-shaped hydration (#722 review finding 1): the run receives
+    // role/content strings and re-mints message ids — store ids are erased
+    // at this seam. Any record keyed on ids would resolve to nothing.
+    const rehydrate = () =>
+      SessionBridge.buildDirectMessages(sessionID).map(({ role, content }) => {
+        const id = crypto.randomUUID();
+        const info =
+          role === "user"
+            ? ({
+                id,
+                sessionID,
+                role,
+                time: { created: Date.now() },
+                agent: "t",
+                model: { providerID: "", modelID: "" },
+              } as const)
+            : ({
+                id,
+                sessionID,
+                role,
+                time: { created: Date.now() },
+                parentID: "",
+                modelID: "m",
+                providerID: "p",
+                agent: "t",
+                path: { cwd: "/", root: "/" },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              } as const);
+        return {
+          info,
+          parts: [
+            {
+              id: crypto.randomUUID(),
+              sessionID,
+              messageID: id,
+              type: "text" as const,
+              text: content,
+            },
+          ],
+        };
+      });
 
     const registration = findRegistration(
       buildWorkerMiddleware({
@@ -261,7 +304,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
       runId: "run-702",
       completionCandidate: { type: "stop" },
       traceContext: { traceId: "trace-702", sessionId: sessionID },
-      messages: [u0, a1, a2, u3, a4],
+      messages: rehydrate(),
       contextTokens: 99,
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -273,16 +316,27 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     const applied = decision.effects.some((entry) => entry.type === "run.replace_messages");
     expect(applied).toBe(true);
 
-    // Resume: hydration returns the compacted window, not the full history.
+    // Resume AGAIN through the same production-shaped seam: the compacted
+    // window must carry the preserved user content byte-exact — not collapse
+    // to the summary line.
     const window = SessionBridge.buildDirectMessages(sessionID);
     expect(window[0]?.content).toContain("checkpoint after cut");
-    expect(window.some((m) => m.content === "the original goal")).toBe(true); // preserved user, byte-exact
-    expect(window.some((m) => m.content === "recent question")).toBe(true); // kept tail
-    expect(window.some((m) => m.content.includes("old work"))).toBe(false); // cut span gone
+    expect(window.some((m) => m.content === "the original goal")).toBe(true);
+    expect(window.some((m) => m.content === "recent question")).toBe(true);
+    expect(window.some((m) => m.content === "recent answer")).toBe(true);
+    expect(window.some((m) => m.content.includes("old work"))).toBe(false);
     expect(window.length).toBeLessThan(6);
+
+    // And the re-hydrated run is itself compact and coherent.
+    const secondRun = rehydrate();
+    expect(secondRun.length).toBe(window.length);
   });
 
   it("replacement persistence is fail-open when the store is unavailable (#702)", async () => {
+    const warns: Array<{ component: string }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      warns.push(event as unknown as { component: string });
+    });
     const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
       throw new Error("store down");
     });
@@ -357,9 +411,13 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
         elapsedMs: 0,
       });
 
-      // The run keeps its compacted window; only resumability degrades.
+      // The run keeps its compacted window; only resumability degrades —
+      // VISIBLY (#722 review M3): the skip publishes an operational warn.
       expect(decision.effects.some((entry) => entry.type === "run.replace_messages")).toBe(true);
+      await Bun.sleep(0);
+      expect(warns.some((w) => w.component === "compaction-replacement-persistence")).toBe(true);
     } finally {
+      unsubscribe();
       addMessageSpy.mockRestore();
     }
   });

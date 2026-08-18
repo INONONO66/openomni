@@ -261,14 +261,20 @@ export namespace Compaction {
         options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS,
       );
       // The replacement record rides ON the anchor (compaction-design L3,
-      // #702): the ordered ids of everything kept after the anchor. A
-      // product-side observer persisting the anchor message thereby persists
-      // the whole window selection — hydration rebuilds [anchor, kept ids
-      // forward] with no re-summarization.
-      const keptMessageIds = [
-        ...preservedUsers.map((message) => message.info.id),
-        ...toKeep.map((message) => message.info.id),
-      ];
+      // #702): the ordered CONTENT kept after the anchor, not ids — message
+      // ids do not survive the hydration seam (resume flattens to
+      // role/content strings and the run re-mints ids; #722 review finding
+      // 1 proved an id record resolves to nothing on every production
+      // path). Size is bounded by the preserve budget plus the protected
+      // tail. A product-side observer persisting the anchor message thereby
+      // persists the whole window selection — hydration rebuilds
+      // [anchor render, kept content, everything stored after] with no
+      // re-summarization and no id resolution.
+      const keptWindow = [...preservedUsers, ...toKeep].flatMap((message) =>
+        message.parts
+          .filter((part): part is Message.TextPart => part.type === "text")
+          .map((part) => ({ role: message.info.role, text: part.text })),
+      );
       const anchorMessages =
         anchorText === undefined
           ? []
@@ -277,7 +283,7 @@ export namespace Compaction {
                 anchorText,
                 firstRemoved.info.sessionID,
                 firstRemoved.info.agent,
-                keptMessageIds,
+                keptWindow,
               ),
             ];
       if (anchorMessages.length === 0 && preservedUsers.length === 0) {
@@ -451,7 +457,7 @@ function buildAnchorMessage(
   anchorBody: string,
   sessionID: string,
   agent: string,
-  keptMessageIds: readonly string[],
+  keptWindow: ReadonlyArray<{ role: "user" | "assistant"; text: string }>,
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -475,10 +481,10 @@ function buildAnchorMessage(
       compactionAnchor: true,
       anchorBody,
       // Ordered window selection after this anchor — the durable
-      // replacement record (#702). Ids, not content: the store already
-      // holds the messages; the record only says which ones the window
-      // kept, in what order.
-      keptMessageIds: [...keptMessageIds],
+      // replacement record (#702). Content-borne: hydration flattens to
+      // role/content and re-mints ids, so an id record would resolve to
+      // nothing (#722 review). Bounded by preserve budget + protected tail.
+      keptWindow: keptWindow.map((entry) => ({ ...entry })),
     },
   };
   return { info, parts: [textPart] };
