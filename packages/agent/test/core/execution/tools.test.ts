@@ -1,9 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/telemetry";
-import { ToolExecution } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tools";
-import type { Tool } from "@openomni/protocol";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import { abortRun } from "../../helpers/policy-decision";
 
@@ -32,10 +31,10 @@ async function flushBus(): Promise<void> {
 
 describe("createToolExecutor bus events", () => {
   // #522 defect 2: the worker-side executor beneath this wrapper is the sole
-  // emitter of ToolExecution.Started/Completed. This layer delegates with
+  // emitter of Tool.Events.Started/Completed. This layer delegates with
   // trace context and emits no execution events of its own; the composed
   // one-pair-per-call pin lives in tool-executor-sole-emitter.test.ts.
-  it("emits no ToolExecution events and delegates with trace context", async () => {
+  it("emits no Tool.Events events and delegates with trace context", async () => {
     Bus.reset();
     const publishedNames: string[] = [];
     const stopObserve = Bus.observe((event) => {
@@ -72,7 +71,7 @@ describe("createToolExecutor bus events", () => {
   it("emits no Completed itself when tool result has error", async () => {
     Bus.reset();
     const completed: unknown[] = [];
-    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
       events: Bus,
@@ -103,8 +102,8 @@ describe("createToolExecutor bus events", () => {
         publishedNames.push(event.name);
       }
     });
-    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
-    Bus.subscribe(ToolExecution.PermissionDenied, (d) => denied.push(d));
+    Bus.subscribe(Tool.Events.Started, (d) => started.push(d));
+    Bus.subscribe(Tool.Events.PermissionDenied, (d) => denied.push(d));
 
     const engine = makeEngine();
     engine.register(abortMiddleware("Blocked: test rule"));
@@ -133,12 +132,12 @@ describe("createToolExecutor bus events", () => {
     expect(d.toolCallId).toBe("call-deny");
   });
 
-  it("rethrows and emits no ToolExecution events when toolExecutor throws", async () => {
+  it("rethrows and emits no Tool.Events events when toolExecutor throws", async () => {
     Bus.reset();
     const started: unknown[] = [];
     const completed: unknown[] = [];
-    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
-    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+    Bus.subscribe(Tool.Events.Started, (d) => started.push(d));
+    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
 
     const executor = createToolExecutor({
       events: Bus,
@@ -201,7 +200,7 @@ describe("createToolExecutor bus events", () => {
   it("publishes actor from trace context on PermissionDenied", async () => {
     Bus.reset();
     const denied: unknown[] = [];
-    Bus.subscribe(ToolExecution.PermissionDenied, (d) => denied.push(d));
+    Bus.subscribe(Tool.Events.PermissionDenied, (d) => denied.push(d));
 
     const denyEngine = makeEngine();
     denyEngine.register(abortMiddleware("Blocked: actor rule"));

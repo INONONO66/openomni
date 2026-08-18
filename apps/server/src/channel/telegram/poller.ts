@@ -51,7 +51,7 @@ export class TelegramPoller {
         }
       } catch (err) {
         if (!this.running) break;
-        this.publish(Operational.Warn, {
+        this.publish(Operational.Events.Warn, {
           traceId: pollTraceId,
           time: Date.now(),
           component: "server",

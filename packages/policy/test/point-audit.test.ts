@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Policy, PolicyDecision, PolicyEvent } from "@openomni/protocol";
+import { Policy, PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "@openomni/policy";
 
 describe("PolicyEngine canonical point audit", () => {
@@ -36,11 +36,11 @@ describe("PolicyEngine canonical point audit", () => {
     });
 
     // Then
-    const evaluated = PolicyEvent.Evaluated.schema.parse(
-      events.find(({ name }) => name === PolicyEvent.Evaluated.name)?.data,
+    const evaluated = Policy.Events.Evaluated.schema.parse(
+      events.find(({ name }) => name === Policy.Events.Evaluated.name)?.data,
     );
-    const composed = PolicyEvent.DecisionComposed.schema.parse(
-      events.find(({ name }) => name === PolicyEvent.DecisionComposed.name)?.data,
+    const composed = Policy.Events.DecisionComposed.schema.parse(
+      events.find(({ name }) => name === Policy.Events.DecisionComposed.name)?.data,
     );
     const pointVersion = Policy.PolicyPoint.Registry[pointId].version;
 
@@ -52,7 +52,7 @@ describe("PolicyEngine canonical point audit", () => {
     const engine = PolicyEngine.create({
       // A trace but no session: the audit record cannot be filed (an audit
       // row without its session names nothing queryable), but the drop must
-      // be visible as an Operational.Warn under the real trace.
+      // be visible as an Operational.Events.Warn under the real trace.
       traceContext: { traceId: "trace-audit-drop" },
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
@@ -75,7 +75,7 @@ describe("PolicyEngine canonical point audit", () => {
     });
 
     const auditRecords = events.filter(({ name }) =>
-      [PolicyEvent.Evaluated.name, PolicyEvent.DecisionComposed.name].includes(name),
+      [Policy.Events.Evaluated.name, Policy.Events.DecisionComposed.name].includes(name),
     );
     expect(auditRecords).toHaveLength(0);
 
@@ -93,7 +93,7 @@ describe("PolicyEngine canonical point audit", () => {
     });
     expect(
       dropWarnings.map(({ data }) => (data as { context: { event: string } }).context.event).sort(),
-    ).toEqual([PolicyEvent.DecisionComposed.name, PolicyEvent.Evaluated.name].sort());
+    ).toEqual([Policy.Events.DecisionComposed.name, Policy.Events.Evaluated.name].sort());
   });
 
   test("preserves safe correlation when canonical context snapshot fails", async () => {

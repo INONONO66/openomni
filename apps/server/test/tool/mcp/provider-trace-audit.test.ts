@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { McpClient } from "@openomni/agent";
 import type { TraceContext } from "@openomni/protocol";
-import { Mcp, Operational, PolicyEvent, ToolExecution } from "@openomni/protocol";
+import { Mcp, Operational, Policy, Tool } from "@openomni/protocol";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import { refreshMcpTools } from "../../../src/tool/mcp/provider-tool-listing";
 import {
@@ -55,7 +55,6 @@ describe("McpToolProvider canonical policy trace", () => {
       traceId: "trace-mcp-execution",
       sessionId: "session-mcp-execution",
       runId: "run-mcp-execution",
-      taskId: "task-mcp-execution",
       agentName: "agent-mcp-execution",
       parentSpanId: "span-mcp-execution",
     };
@@ -72,18 +71,18 @@ describe("McpToolProvider canonical policy trace", () => {
         executionContext,
       );
 
-      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
-      // #522 defect 2: ToolExecution.Completed is emitted solely by the
+      const auditEvents = events.filter((event) => event.name !== Operational.Events.Debug.name);
+      // #522 defect 2: Tool.Events.Completed is emitted solely by the
       // worker-side executor dispatching this provider — not by this layer.
       expect(auditEvents.map((event) => event.name)).toEqual([
-        PolicyEvent.Evaluated.name,
-        PolicyEvent.DecisionComposed.name,
-        PolicyEvent.ActionRequested.name,
-        Mcp.ToolCompleted.name,
+        Policy.Events.Evaluated.name,
+        Policy.Events.DecisionComposed.name,
+        Policy.Events.ActionRequested.name,
+        Mcp.Events.ToolCompleted.name,
       ]);
       for (const event of auditEvents) {
         expect(event.payload.traceId).toBe(traceContext.traceId);
-        if (event.name !== Mcp.ToolCompleted.name) {
+        if (event.name !== Mcp.Events.ToolCompleted.name) {
           expect(event.payload).toMatchObject({
             sessionId: traceContext.sessionId,
             runId: traceContext.runId,
@@ -128,11 +127,11 @@ describe("McpToolProvider canonical policy trace", () => {
       );
 
       expect(result.output).toBe("MCP server not found: search");
-      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      const auditEvents = events.filter((event) => event.name !== Operational.Events.Debug.name);
       expect(auditEvents.map((event) => event.name)).toEqual([
-        PolicyEvent.Evaluated.name,
-        PolicyEvent.DecisionComposed.name,
-        PolicyEvent.ActionBlocked.name,
+        Policy.Events.Evaluated.name,
+        Policy.Events.DecisionComposed.name,
+        Policy.Events.ActionBlocked.name,
       ]);
       for (const event of auditEvents) {
         expect(event.payload).toMatchObject(traceContext);
@@ -186,12 +185,12 @@ describe("McpToolProvider canonical policy trace", () => {
         executionContext(),
       );
 
-      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      const auditEvents = events.filter((event) => event.name !== Operational.Events.Debug.name);
       expect(auditEvents.map((event) => event.name)).toEqual([
-        PolicyEvent.Evaluated.name,
-        PolicyEvent.DecisionComposed.name,
-        PolicyEvent.ActionRequested.name,
-        Mcp.ToolCompleted.name,
+        Policy.Events.Evaluated.name,
+        Policy.Events.DecisionComposed.name,
+        Policy.Events.ActionRequested.name,
+        Mcp.Events.ToolCompleted.name,
       ]);
       expectInheritedAuditIdentity(auditEvents, "spoofed-session");
     } finally {
@@ -245,20 +244,20 @@ describe("McpToolProvider canonical policy trace", () => {
 
       // Then
       expect(result.output).toBe("search ok");
-      // #522 defect 2: no ToolExecution.Completed at this layer — the
+      // #522 defect 2: no Tool.Events.Completed at this layer — the
       // worker-side executor owns it. The provider's own audit trail keeps
       // one inherited trace across policy and MCP-domain events.
       const relevantNames = new Set([
-        PolicyEvent.ActionRequested.name,
-        Mcp.ToolCalled.name,
-        ToolExecution.Completed.name,
-        Mcp.ToolCompleted.name,
+        Policy.Events.ActionRequested.name,
+        Mcp.Events.ToolCalled.name,
+        Tool.Events.Completed.name,
+        Mcp.Events.ToolCompleted.name,
       ]);
       const relevantEvents = events.filter((event) => relevantNames.has(event.name));
       expect(relevantEvents.map((event) => event.name)).toEqual([
-        PolicyEvent.ActionRequested.name,
-        Mcp.ToolCalled.name,
-        Mcp.ToolCompleted.name,
+        Policy.Events.ActionRequested.name,
+        Mcp.Events.ToolCalled.name,
+        Mcp.Events.ToolCompleted.name,
       ]);
       expectInheritedAuditIdentity(relevantEvents, "spoofed-session");
     } finally {
@@ -282,11 +281,11 @@ describe("McpToolProvider canonical policy trace", () => {
         executionContext(),
       );
 
-      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      const auditEvents = events.filter((event) => event.name !== Operational.Events.Debug.name);
       expect(auditEvents.map((event) => event.name)).toEqual([
-        PolicyEvent.Evaluated.name,
-        PolicyEvent.DecisionComposed.name,
-        PolicyEvent.ActionBlocked.name,
+        Policy.Events.Evaluated.name,
+        Policy.Events.DecisionComposed.name,
+        Policy.Events.ActionBlocked.name,
       ]);
       expectInheritedAuditIdentity(auditEvents, "spoofed-session");
       expect(execute).not.toHaveBeenCalled();

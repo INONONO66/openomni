@@ -74,20 +74,6 @@
     "spawn",
     "version"
   ],
-  "AppConnector.Detect": [
-    "args",
-    "command",
-    "testedVersions",
-    "versionPattern"
-  ],
-  "AppConnector.Driver": [
-    "emits",
-    "install",
-    "observedEvents",
-    "provider",
-    "submit"
-  ],
-  "AppConnector.Evidence": ["completionReport", "emits"],
   "AppConnector.Installation": [
     "connectorId",
     "connectorVersion",
@@ -122,13 +108,6 @@
     "toolCallField"
   ],
   "AppConnector.Logs#2": ["kind", "path"],
-  "AppConnector.Profile": [
-    "defaultMaxAttempts",
-    "defaultTimeoutMs",
-    "initialAutonomy",
-    "kind",
-    "taskTypes"
-  ],
   "AppConnector.QuestionBridge#0": [
     "args",
     "command",
@@ -152,12 +131,6 @@
     "promptArgument",
     "stallTimeoutMs",
     "timeoutMs"
-  ],
-  "AppConnector.WorkspaceIdentity": [
-    "repoPath",
-    "repoPathHash",
-    "worktreePath",
-    "worktreePathHash"
   ],
   "Artifact.Meta": [
     "createdAt",
@@ -423,8 +396,8 @@
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
-  "LedgerAppend.AdoptGenesis": ["data", "timeCreated", "type"],
-  "LedgerAppend.ChainBreak": [
+  "Ledger.AdoptGenesis": ["data", "timeCreated", "type"],
+  "Ledger.ChainBreak": [
     "actual",
     "code",
     "detectedAt",
@@ -432,7 +405,7 @@
     "seq",
     "streamId"
   ],
-  "LedgerAppend.CommandAuthorized": [
+  "Ledger.CommandAuthorized": [
     "action",
     "actorKind",
     "policyId",
@@ -440,7 +413,7 @@
     "targetKind",
     "verdict"
   ],
-  "LedgerAppend.CommandDenied": [
+  "Ledger.CommandDenied": [
     "action",
     "actorKind",
     "policyId",
@@ -448,9 +421,9 @@
     "targetKind",
     "verdict"
   ],
-  "LedgerAppend.EffectConfirmed": ["effectId", "receipt"],
-  "LedgerAppend.EffectFailed": ["effectId", "reason"],
-  "LedgerAppend.EffectIntended": [
+  "Ledger.EffectConfirmed": ["effectId", "receipt"],
+  "Ledger.EffectFailed": ["effectId", "reason"],
+  "Ledger.EffectIntended": [
     "attemptId",
     "effectId",
     "kind",
@@ -458,17 +431,11 @@
     "target",
     "workItemHash"
   ],
-  "LedgerAppend.Input": ["data", "streamId", "timeCreated", "type"],
-  "LedgerAppend.Outcome#0": ["eventHash", "kind", "seq"],
-  "LedgerAppend.Outcome#1": ["currentHead", "kind"],
-  "LedgerAppend.RecordedFact": [
-    "data",
-    "seq",
-    "streamId",
-    "timeCreated",
-    "type"
-  ],
-  "LedgerAppend.RouteDecided#0": [
+  "Ledger.Input": ["data", "streamId", "timeCreated", "type"],
+  "Ledger.Outcome#0": ["eventHash", "kind", "seq"],
+  "Ledger.Outcome#1": ["currentHead", "kind"],
+  "Ledger.RecordedFact": ["data", "seq", "streamId", "timeCreated", "type"],
+  "Ledger.RouteDecided#0": [
     "actorId",
     "factsUsed",
     "inboundId",
@@ -486,7 +453,7 @@
     "traceId",
     "trustTier"
   ],
-  "LedgerAppend.RouteDecided#1": [
+  "Ledger.RouteDecided#1": [
     "actorId",
     "factsUsed",
     "inboundId",
@@ -504,7 +471,7 @@
     "traceId",
     "trustTier"
   ],
-  "LedgerAppend.RouteDecided#2": [
+  "Ledger.RouteDecided#2": [
     "actorId",
     "candidateInteractionIds",
     "factsUsed",
@@ -523,7 +490,7 @@
     "traceId",
     "trustTier"
   ],
-  "LedgerAppend.RouteDecided#3": [
+  "Ledger.RouteDecided#3": [
     "actorId",
     "factsUsed",
     "inboundId",
@@ -541,7 +508,7 @@
     "traceId",
     "trustTier"
   ],
-  "LedgerAppend.RouteDecided#4": [
+  "Ledger.RouteDecided#4": [
     "actorId",
     "factsUsed",
     "inboundId",
@@ -559,7 +526,7 @@
     "traceId",
     "trustTier"
   ],
-  "LedgerAppend.RouteDecided#5": [
+  "Ledger.RouteDecided#5": [
     "actorId",
     "factsUsed",
     "inboundId",
@@ -577,7 +544,7 @@
     "traceId",
     "trustTier"
   ],
-  "LedgerAppend.RouteDecided#6": [
+  "Ledger.RouteDecided#6": [
     "actorId",
     "factsUsed",
     "inboundId",

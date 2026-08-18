@@ -42,7 +42,7 @@ describe("worker pool internals", () => {
     expect(manager.stats().maxActiveWorkers).toBe(10);
     const warn = ports.collected.find(
       (entry) =>
-        entry.event.name === Operational.Warn.name &&
+        entry.event.name === Operational.Events.Warn.name &&
         (entry.data as { msg: string }).msg === "maxActiveWorkers clamped",
     )?.data as { context: { requested: number; effective: number } };
     expect(warn).toBeDefined();

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { CommandSchemas } from "../command/schemas.js";
+import {
+  Events as EventDescriptors,
+  type RoutingDecisionPayload as RoutingDecisionPayloadType,
+} from "../event/ingress.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
@@ -183,4 +187,8 @@ export namespace Ingress {
   };
 
   export type IngressResult = ExecutedIngressResult | DroppedIngressResult;
+
+  /** #499 observation descriptors — published via Bus; event name strings frozen. */
+  export const Events = EventDescriptors;
+  export type RoutingDecisionPayload = RoutingDecisionPayloadType;
 }

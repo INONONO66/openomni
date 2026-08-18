@@ -5,7 +5,7 @@ describe("LlmCall BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
 
   function parseCompleted(input: unknown): unknown {
-    return LlmCall.Completed.schema.parse(input);
+    return LlmCall.Events.Completed.schema.parse(input);
   }
 
   function completedParseFails(input: unknown): boolean {
@@ -30,7 +30,7 @@ describe("LlmCall BusEvents", () => {
       cacheWriteTokens: 3,
       finishReason: "stop",
     };
-    expect(LlmCall.Completed.schema.parse(completed)).toMatchObject({
+    expect(LlmCall.Events.Completed.schema.parse(completed)).toMatchObject({
       reasoningTokens: 7,
       cacheReadTokens: 90,
       cacheWriteTokens: 3,
@@ -38,8 +38,8 @@ describe("LlmCall BusEvents", () => {
     // Pin: a defaulted zero is indistinguishable from "provider reported no
     // reasoning tokens" — a producer that drops a lane must fail, not zero.
     const { reasoningTokens: _r, ...missing } = completed;
-    expect(LlmCall.Completed.schema.safeParse(missing).success).toBe(false);
-    expect(LlmCall.Completed.name).toBe("llm.call.completed");
+    expect(LlmCall.Events.Completed.schema.safeParse(missing).success).toBe(false);
+    expect(LlmCall.Events.Completed.name).toBe("llm.call.completed");
   });
 
   test("Failed refuses a missing aborted flag — false is load-bearing", () => {
@@ -51,11 +51,11 @@ describe("LlmCall BusEvents", () => {
       error: "No authentication found",
     };
     // Pin: a dropped field must not silently read as "genuine error".
-    expect(LlmCall.Failed.schema.safeParse(failed).success).toBe(false);
-    expect(LlmCall.Failed.schema.parse({ ...failed, aborted: true })).toMatchObject({
+    expect(LlmCall.Events.Failed.schema.safeParse(failed).success).toBe(false);
+    expect(LlmCall.Events.Failed.schema.parse({ ...failed, aborted: true })).toMatchObject({
       aborted: true,
     });
-    expect(LlmCall.Failed.name).toBe("llm.call.failed");
+    expect(LlmCall.Events.Failed.name).toBe("llm.call.failed");
   });
 
   test("Completed rejects negative and fractional token counts", () => {

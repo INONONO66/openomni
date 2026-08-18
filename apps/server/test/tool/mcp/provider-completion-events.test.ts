@@ -16,13 +16,13 @@ import {
 installStorageFixture();
 
 describe("McpToolProvider", () => {
-  it("emits Mcp.ToolCompleted event on successful tool execution", async () => {
+  it("emits Mcp.Events.ToolCompleted event on successful tool execution", async () => {
     const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
     const publishedEvents: Array<{ name: string; payload: unknown }> = [];
-    const unsubscribe = Bus.subscribe(Mcp.ToolCompleted, (payload) => {
+    const unsubscribe = Bus.subscribe(Mcp.Events.ToolCompleted, (payload) => {
       publishedEvents.push({ name: "mcp.tool.completed", payload });
     });
 
@@ -58,13 +58,13 @@ describe("McpToolProvider", () => {
     }
   });
 
-  it("does not emit Mcp.ToolCompleted on guard-denied execution", async () => {
+  it("does not emit Mcp.Events.ToolCompleted on guard-denied execution", async () => {
     const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
     const publishedEvents: Array<{ name: string; payload: unknown }> = [];
-    const unsubscribe = Bus.subscribe(Mcp.ToolCompleted, (payload) => {
+    const unsubscribe = Bus.subscribe(Mcp.Events.ToolCompleted, (payload) => {
       publishedEvents.push({ name: "mcp.tool.completed", payload });
     });
 
@@ -85,7 +85,7 @@ describe("McpToolProvider", () => {
     }
   });
 
-  it("does not emit Mcp.ToolCompleted on error result", async () => {
+  it("does not emit Mcp.Events.ToolCompleted on error result", async () => {
     const provider = new McpToolProvider({ traceId: TEST_BOOT_TRACE_ID });
     const execute = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
@@ -107,7 +107,7 @@ describe("McpToolProvider", () => {
     seedProvider(provider, [tool], ["search"]);
 
     const publishedEvents: Array<{ name: string; payload: unknown }> = [];
-    const unsubscribe = Bus.subscribe(Mcp.ToolCompleted, (payload) => {
+    const unsubscribe = Bus.subscribe(Mcp.Events.ToolCompleted, (payload) => {
       publishedEvents.push({ name: "mcp.tool.completed", payload });
     });
 

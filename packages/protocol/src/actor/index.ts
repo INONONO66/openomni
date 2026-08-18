@@ -10,7 +10,7 @@ export namespace Actor {
    * default). The retired Command.ActorKind values map onto this vocabulary
    * at the write side ("user"→"human", "worker"→"internal_worker"); persisted
    * command.authorized/denied facts carrying the old values upcast on read in
-   * LedgerAppend.CommandAuthorized/CommandDenied.
+   * Ledger.CommandAuthorized/CommandDenied.
    */
   export const Kind = z.enum([
     "human",

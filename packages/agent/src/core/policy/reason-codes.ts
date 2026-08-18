@@ -17,8 +17,8 @@
 export const RunReasonCode = {
   /** The run made no progress; the loop reports `stalled`, not a guard abort. */
   Stalled: "stalled",
-  /** Budget is nearly spent; the loop emits `AgentExecution.BudgetWarning`. */
+  /** Budget is nearly spent; the loop emits `Run.Events.BudgetWarning`. */
   BudgetWarning: "budget_warning",
-  /** Budget is ample; the loop emits `AgentExecution.BudgetReassurance`. */
+  /** Budget is ample; the loop emits `Run.Events.BudgetReassurance`. */
   BudgetReassurance: "budget_reassurance",
 } as const;

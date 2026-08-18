@@ -36,7 +36,7 @@ export async function refreshMcpTools(
         });
       }
     } catch (err) {
-      Bus.publish(Operational.Warn, {
+      Bus.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "server",

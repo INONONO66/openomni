@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { WorkerDeliveryError, WorkerDriver } from "../src/index.js";
+import { WorkerDeliveryError, Worker } from "../src/index.js";
 
 const settledBase = {
   traceId: "trace-1",
@@ -10,21 +10,21 @@ const settledBase = {
   durationMs: 5,
 };
 
-describe("WorkerDriver.RunSettled outcome", () => {
+describe("Worker.Events.RunSettled outcome", () => {
   test.each([
     "completed",
     "interrupted",
     "error",
     "cancelled",
   ] as const)("accepts outcome %s", (outcome) => {
-    expect(WorkerDriver.RunSettled.schema.safeParse({ ...settledBase, outcome }).success).toBe(
+    expect(Worker.Events.RunSettled.schema.safeParse({ ...settledBase, outcome }).success).toBe(
       true,
     );
   });
 
   test("rejects outcomes outside the enum", () => {
     expect(
-      WorkerDriver.RunSettled.schema.safeParse({ ...settledBase, outcome: "aborted" }).success,
+      Worker.Events.RunSettled.schema.safeParse({ ...settledBase, outcome: "aborted" }).success,
     ).toBe(false);
   });
 });

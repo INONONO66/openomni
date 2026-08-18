@@ -38,7 +38,7 @@ describe("McpToolProvider", () => {
 
       expect(result.isError).toBeFalsy();
       // #522 defect 2: this layer keeps authorization audit and MCP-domain
-      // events only; ToolExecution.Completed comes solely from the
+      // events only; Tool.Events.Completed comes solely from the
       // worker-side executor dispatching these tools.
       const auditEvents = events.filter(
         (event) =>
@@ -99,7 +99,7 @@ describe("McpToolProvider", () => {
       expect(result.isError).toBeTruthy();
       const mcpCompleted = events.find((event) => event.name === "mcp.tool.completed");
       expect(mcpCompleted).toBeUndefined();
-      // #522 defect 2: no provider-layer ToolExecution.Completed — the
+      // #522 defect 2: no provider-layer Tool.Events.Completed — the
       // worker-side executor is the sole emitter.
       const toolCompleted = events.find((event) => event.name === "tool.execution.completed");
       expect(toolCompleted).toBeUndefined();

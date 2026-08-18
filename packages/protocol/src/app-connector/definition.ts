@@ -5,7 +5,7 @@ export const nonEmptyString = z.string().min(1);
 const commandArgs = z.array(nonEmptyString);
 export const positiveInteger = z.number().int().positive();
 
-export const EvidenceEmitter = z.enum([
+const EvidenceEmitter = z.enum([
   "exit_code",
   "diff",
   "test_result",
@@ -14,21 +14,16 @@ export const EvidenceEmitter = z.enum([
   "artifact",
   "log_event",
 ]);
-export type EvidenceEmitter = z.infer<typeof EvidenceEmitter>;
 
-export const InitialAutonomy = z.enum(["approval_required", "supervised", "autonomous"]);
-export type InitialAutonomy = z.infer<typeof InitialAutonomy>;
+const InitialAutonomy = z.enum(["approval_required", "supervised", "autonomous"]);
 
-export const DriverInstallScope = z.enum(["user", "workspace", "repository"]);
-export type DriverInstallScope = z.infer<typeof DriverInstallScope>;
+const DriverInstallScope = z.enum(["user", "workspace", "repository"]);
 
-export const SubmitMode = z.enum(["spawn", "hook", "plugin", "api"]);
-export type SubmitMode = z.infer<typeof SubmitMode>;
+const SubmitMode = z.enum(["spawn", "hook", "plugin", "api"]);
 
-export const SubmitAck = z.enum(["submitted", "accepted", "running"]);
-export type SubmitAck = z.infer<typeof SubmitAck>;
+const SubmitAck = z.enum(["submitted", "accepted", "running"]);
 
-export const Detect = z
+const Detect = z
   .object({
     command: nonEmptyString,
     args: commandArgs.optional(),
@@ -36,7 +31,6 @@ export const Detect = z
     testedVersions: nonEmptyString,
   })
   .strict();
-export type Detect = z.infer<typeof Detect>;
 
 export const Spawn = z
   .object({
@@ -167,7 +161,7 @@ export const ReportSource = z
   .strict();
 export type ReportSource = z.infer<typeof ReportSource>;
 
-export const Evidence = z
+const Evidence = z
   .object({
     emits: z.array(EvidenceEmitter).min(1),
     // JSON key deliberately stays `completionReport`: it is the persisted
@@ -177,7 +171,6 @@ export const Evidence = z
     completionReport: ReportSource.optional(),
   })
   .strict();
-export type Evidence = z.infer<typeof Evidence>;
 
 export const Requires = z
   .object({
@@ -188,7 +181,7 @@ export const Requires = z
   .strict();
 export type Requires = z.infer<typeof Requires>;
 
-export const Driver = z
+const Driver = z
   .object({
     provider: nonEmptyString,
     install: z
@@ -208,9 +201,8 @@ export const Driver = z
     emits: z.array(EvidenceEmitter).default([]),
   })
   .strict();
-export type Driver = z.infer<typeof Driver>;
 
-export const Profile = z
+const Profile = z
   .object({
     kind: z.literal("connector_endpoint"),
     taskTypes: z.array(nonEmptyString).min(1),
@@ -219,7 +211,6 @@ export const Profile = z
     initialAutonomy: InitialAutonomy.optional(),
   })
   .strict();
-export type Profile = z.infer<typeof Profile>;
 
 export const Definition = z
   .object({

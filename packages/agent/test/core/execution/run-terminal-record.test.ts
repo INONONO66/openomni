@@ -25,7 +25,7 @@ async function runWith(
 ): Promise<string[]> {
   const seen: string[] = [];
   const stop = Bus.observe((event, payload) => {
-    if (event.name !== Operational.Info.name) return;
+    if (event.name !== Operational.Events.Info.name) return;
     const msg = (payload as { msg?: string }).msg;
     if (msg === "agent.run.started" || msg === "agent.run.completed") seen.push(msg);
   });
@@ -126,7 +126,7 @@ describe("a started run always records a terminal", () => {
   it("when a guard aborts the run on error", async () => {
     const seen: string[] = [];
     const stop = Bus.observe((event, payload) => {
-      if (event.name !== Operational.Info.name) return;
+      if (event.name !== Operational.Events.Info.name) return;
       const msg = (payload as { msg?: string }).msg;
       if (msg === "agent.run.started" || msg === "agent.run.completed") seen.push(msg);
     });
@@ -185,7 +185,7 @@ describe("a started run always records a terminal", () => {
     const stop = Bus.observe((event, payload) => {
       const msg = (payload as { msg?: string }).msg;
       if (msg === "agent.run.started") seen.push(msg);
-      if (event.name === Operational.Error.name && msg === "agent.run.failed") {
+      if (event.name === Operational.Events.Error.name && msg === "agent.run.failed") {
         seen.push(msg);
         failures.push(payload as { context?: Record<string, unknown> });
       }

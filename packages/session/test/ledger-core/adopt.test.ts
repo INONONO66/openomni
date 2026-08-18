@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { LedgerAppend } from "@openomni/protocol";
+import { Ledger as LedgerTypes } from "@openomni/protocol";
 import { GENESIS_SEED } from "../../src/bus-persistence/hash";
 import { Ledger } from "../../src/ledger-core/index";
 import { appendChain, openLedgerDatabase } from "../helpers/ledger";
@@ -67,7 +67,7 @@ describe("Ledger.adoptStream", () => {
       thrown = error;
     }
 
-    if (!LedgerAppend.AdoptError.isInstance(thrown)) {
+    if (!LedgerTypes.AdoptError.isInstance(thrown)) {
       throw new Error("expected the typed LedgerAdoptError");
     }
     expect(thrown.data.streamId).toBe("work:occupied");
@@ -86,7 +86,7 @@ describe("Ledger.adoptStream", () => {
       thrown = error;
     }
 
-    if (!LedgerAppend.AdoptError.isInstance(thrown)) {
+    if (!LedgerTypes.AdoptError.isInstance(thrown)) {
       throw new Error("expected the typed LedgerAdoptError");
     }
     expect(readEvents("wait:once")).toHaveLength(1);

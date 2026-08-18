@@ -52,7 +52,7 @@ export namespace InstructionLoader {
           results.push({ path: join(rulesDir, entry), priority: 15, label: `Rules: ${entry}` });
         }
       } catch {
-        Bus.publish(Operational.Warn, {
+        Bus.publish(Operational.Events.Warn, {
           traceId,
           time: Date.now(),
           component: "server",
@@ -86,7 +86,7 @@ export namespace InstructionLoader {
       try {
         content = readFileSync(file.path, "utf-8");
       } catch {
-        Bus.publish(Operational.Warn, {
+        Bus.publish(Operational.Events.Warn, {
           traceId,
           time: Date.now(),
           component: "server",

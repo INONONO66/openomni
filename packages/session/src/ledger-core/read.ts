@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { LedgerAppend } from "@openomni/protocol";
+import { Ledger as LedgerTypes } from "@openomni/protocol";
 
 /**
  * Minimal read API of the append core (#510 C3): the newest recorded fact of
@@ -10,7 +10,7 @@ import { LedgerAppend } from "@openomni/protocol";
  * outcome (accepted routes re-run idempotently, terminal decisions repeat
  * their typed rejection). Returns undefined for an empty stream.
  */
-export function headFact(db: Database, streamId: string): LedgerAppend.RecordedFact | undefined {
+export function headFact(db: Database, streamId: string): LedgerTypes.RecordedFact | undefined {
   const row = db
     .query(
       "SELECT seq, type, data, time_created FROM ledger_event WHERE stream_id = ? ORDER BY seq DESC LIMIT 1",
@@ -19,7 +19,7 @@ export function headFact(db: Database, streamId: string): LedgerAppend.RecordedF
   if (!row) return undefined;
   // Service-entry enforcement layer: the stored row must round-trip the
   // RecordedFact shape — a foreign or corrupt row fails loudly here.
-  return LedgerAppend.RecordedFact.parse({
+  return LedgerTypes.RecordedFact.parse({
     streamId,
     seq: row.seq,
     type: row.type,
@@ -33,7 +33,7 @@ export function headFact(db: Database, streamId: string): LedgerAppend.RecordedF
  * (streamId, seq) — the #510 D3 admin inspection read (`/admin/ledger/*`).
  * Read-only: same prepared-SELECT discipline as {@link headFact}.
  */
-export function factsByType(db: Database, type: string): LedgerAppend.RecordedFact[] {
+export function factsByType(db: Database, type: string): LedgerTypes.RecordedFact[] {
   const rows = db
     .query(
       "SELECT stream_id, seq, type, data, time_created FROM ledger_event WHERE type = ? ORDER BY stream_id ASC, seq ASC",
@@ -46,7 +46,7 @@ export function factsByType(db: Database, type: string): LedgerAppend.RecordedFa
     time_created: number;
   }[];
   return rows.map((row) =>
-    LedgerAppend.RecordedFact.parse({
+    LedgerTypes.RecordedFact.parse({
       streamId: row.stream_id,
       seq: row.seq,
       type: row.type,

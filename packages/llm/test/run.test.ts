@@ -144,9 +144,9 @@ describe("run", () => {
     expect(capturedToolCalls.length).toBe(0);
   });
 
-  test("publishes LlmCall.Failed on error so every Started call terminates", async () => {
+  test("publishes LlmCall.Events.Failed on error so every Started call terminates", async () => {
     const failures: Array<{ readonly error: string; readonly traceId: string }> = [];
-    const unsub = Bus.subscribe(LlmCall.Failed, (event) => {
+    const unsub = Bus.subscribe(LlmCall.Events.Failed, (event) => {
       failures.push(event);
     });
 
@@ -281,7 +281,7 @@ describe("run", () => {
     expect(textParts.some((part) => part.text === "")).toBe(false);
   });
 
-  test("LlmCall.Completed reports usage summed across retried attempts", async () => {
+  test("LlmCall.Events.Completed reports usage summed across retried attempts", async () => {
     // Regression (#audit M3): Completed read processor.message.tokens — the
     // final attempt's fold — so a retried attempt's billed usage vanished
     // from telemetry.
@@ -339,7 +339,7 @@ describe("run", () => {
 
     expect(outcome.type).toBe("stop");
     expect(call).toBe(2);
-    const completed = collected.named(LlmCall.Completed.name) as Array<{
+    const completed = collected.named(LlmCall.Events.Completed.name) as Array<{
       inputTokens: number;
       outputTokens: number;
     }>;
@@ -375,10 +375,10 @@ describe("run", () => {
       unsubscribe();
     }
 
-    expect(collected.named(LlmCall.Started.name)).toHaveLength(1);
+    expect(collected.named(LlmCall.Events.Started.name)).toHaveLength(1);
     // Every `Started` gets a terminal event — the success half of the pair the
     // failure test covers.
-    expect(collected.named(LlmCall.Completed.name)).toHaveLength(1);
+    expect(collected.named(LlmCall.Events.Completed.name)).toHaveLength(1);
     // Not filtered to `llm.*`: an `operational.*` record routed back through
     // the global bus is the same defect, and the filter hid six of the eight
     // publish sites from this assertion.
@@ -416,8 +416,8 @@ describe("run", () => {
       unsubscribe();
     }
 
-    expect(collected.named(LlmCall.Started.name)).toHaveLength(1);
-    expect(collected.named(LlmCall.Failed.name)).toHaveLength(1);
+    expect(collected.named(LlmCall.Events.Started.name)).toHaveLength(1);
+    expect(collected.named(LlmCall.Events.Failed.name)).toHaveLength(1);
     expect(busSaw).toEqual([]);
   });
 

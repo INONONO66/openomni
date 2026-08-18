@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { AgentExecution, type Message } from "@openomni/protocol";
+import { Run, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Compaction } from "../../src/compaction/compact";
 
@@ -92,10 +92,10 @@ describe("Compaction", () => {
    */
   it("files the compaction record under the run's trace", async () => {
     const seen: Array<{ traceId: string }> = [];
-    const unsubStarted = Bus.subscribe(AgentExecution.CompactionStarted, (event) => {
+    const unsubStarted = Bus.subscribe(Run.Events.CompactionStarted, (event) => {
       seen.push(event as unknown as { traceId: string });
     });
-    const unsubCompleted = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
+    const unsubCompleted = Bus.subscribe(Run.Events.CompactionCompleted, (event) => {
       seen.push(event as unknown as { traceId: string });
     });
 
@@ -669,7 +669,7 @@ describe("Compaction", () => {
 
     it("records anchored=false when a cut commits without an anchor render", async () => {
       const completed: Array<{ outcome: string; anchored?: boolean }> = [];
-      const unsubscribe = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
+      const unsubscribe = Bus.subscribe(Run.Events.CompactionCompleted, (event) => {
         completed.push(event as unknown as { outcome: string; anchored?: boolean });
       });
       try {
@@ -700,7 +700,7 @@ describe("Compaction", () => {
 
     it("records anchored=true when the anchor render heads the kept window", async () => {
       const completed: Array<{ outcome: string; anchored?: boolean }> = [];
-      const unsubscribe = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
+      const unsubscribe = Bus.subscribe(Run.Events.CompactionCompleted, (event) => {
         completed.push(event as unknown as { outcome: string; anchored?: boolean });
       });
       try {

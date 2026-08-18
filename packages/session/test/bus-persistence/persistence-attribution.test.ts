@@ -161,7 +161,7 @@ describe("persistence failure is loud and contained", () => {
         event.name === "session.created" ? "session-that-does-not-exist" : undefined,
     });
     const warns: Array<Record<string, unknown>> = [];
-    Bus.subscribe(Operational.Warn, (payload) => {
+    Bus.subscribe(Operational.Events.Warn, (payload) => {
       warns.push(payload as unknown as Record<string, unknown>);
     });
     const dropsBefore = BusPersistence.stats().droppedEventCount;
@@ -181,7 +181,7 @@ describe("persistence failure is loud and contained", () => {
     expect(rows("session.created")).toEqual([]);
     expect(rows("wait.opened")).toHaveLength(1);
 
-    // The drop is LOUD: counter incremented and one Operational.Warn
+    // The drop is LOUD: counter incremented and one Operational.Events.Warn
     // published (which itself persists as a bus event).
     expect(BusPersistence.stats().droppedEventCount).toBe(dropsBefore + 1);
     expect(warns).toHaveLength(1);
@@ -201,12 +201,12 @@ describe("persistence failure is loud and contained", () => {
     // whisper. Pin: the warn rides the sessionless chain and persists.
     BusPersistence.start();
     const warns: Array<Record<string, unknown>> = [];
-    Bus.subscribe(Operational.Warn, (payload) => {
+    Bus.subscribe(Operational.Events.Warn, (payload) => {
       warns.push(payload as unknown as Record<string, unknown>);
     });
     const dropsBefore = BusPersistence.stats().droppedEventCount;
 
-    Bus.publish(Operational.Warn, {
+    Bus.publish(Operational.Events.Warn, {
       traceId: "trace-fk-dead",
       time: Date.now(),
       sessionId: "session-that-does-not-exist",

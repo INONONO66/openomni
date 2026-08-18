@@ -138,7 +138,7 @@ export function normalizePointDecision(
   // duration itself. `policyId` in particular is a trust boundary — conflict
   // detection exempts same-policyId writes and audit attributes decisions by
   // it, so a decision returning another policy's id could evade fail-closed
-  // conflicts and spoof PolicyEvent.Evaluated attribution.
+  // conflicts and spoof Policy.Events.Evaluated attribution.
   return {
     decision: { ...parsed.data, policyId: reg.name, durationMs, priority: reg.priority },
     parsed: parsed.data,

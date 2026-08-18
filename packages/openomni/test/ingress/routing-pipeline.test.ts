@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { IngressEvent } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { resolveRoute, type RouteInbound, type RouteState } from "../../src/ingress/index";
 
 function parseDecision(inbound: RouteInbound, state: RouteState) {
   const decision = resolveRoute(inbound, state);
-  return IngressEvent.RoutingDecision.schema.parse(decision);
+  return Ingress.Events.RoutingDecision.schema.parse(decision);
 }
 
 describe("resolveRoute", () => {

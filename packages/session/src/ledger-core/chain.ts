@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { LedgerAppend } from "@openomni/protocol";
+import type { Ledger as LedgerTypes } from "@openomni/protocol";
 import { GENESIS_SEED } from "../bus-persistence/hash";
 import { computeLedgerEventHash } from "./hash";
 
@@ -28,10 +28,10 @@ interface EventRow {
 export function verifyTail(
   db: Database,
   options: { depth?: number; now?: number } = {},
-): LedgerAppend.ChainBreak[] {
+): LedgerTypes.ChainBreak[] {
   const depth = options.depth ?? TAIL_DEPTH;
   const detectedAt = options.now ?? Date.now();
-  const breaks: LedgerAppend.ChainBreak[] = [];
+  const breaks: LedgerTypes.ChainBreak[] = [];
 
   const streams = db
     .query("SELECT stream_id FROM ledger_head UNION SELECT DISTINCT stream_id FROM ledger_event")
@@ -48,7 +48,7 @@ function verifyStreamTail(input: {
   streamId: string;
   depth: number;
   detectedAt: number;
-  breaks: LedgerAppend.ChainBreak[];
+  breaks: LedgerTypes.ChainBreak[];
 }): void {
   const { db, streamId, depth, detectedAt, breaks } = input;
 

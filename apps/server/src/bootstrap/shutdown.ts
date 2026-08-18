@@ -32,14 +32,14 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
     shuttingDown = true;
 
     const traceId = deps.traceId ?? newTraceId();
-    Bus.publish(Operational.Info, {
+    Bus.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
       msg: "server shutting down",
     });
 
-    Bus.publish(Operational.ShutdownInitiated, {
+    Bus.publish(Operational.Events.ShutdownInitiated, {
       traceId,
       reason,
       time: Date.now(),
@@ -78,7 +78,7 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
         storage.close();
       }
     } catch (err) {
-      Bus.publish(Operational.Error, {
+      Bus.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",

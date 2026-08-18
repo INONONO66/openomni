@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { WorkerDeliveryError, WorkerDriver } from "@openomni/protocol";
+import { WorkerDeliveryError, Worker } from "@openomni/protocol";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
@@ -66,10 +66,10 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     });
 
     const names = ports.collected.map((entry) => entry.event.name);
-    const spawnedIndex = names.indexOf(WorkerDriver.Spawned.name);
-    const readyIndex = names.indexOf(WorkerDriver.Ready.name);
-    const deliveredIndex = names.indexOf(WorkerDriver.RunDelivered.name);
-    const settledIndex = names.indexOf(WorkerDriver.RunSettled.name);
+    const spawnedIndex = names.indexOf(Worker.Events.Spawned.name);
+    const readyIndex = names.indexOf(Worker.Events.Ready.name);
+    const deliveredIndex = names.indexOf(Worker.Events.RunDelivered.name);
+    const settledIndex = names.indexOf(Worker.Events.RunSettled.name);
     expect(spawnedIndex).toBeGreaterThanOrEqual(0);
     expect(readyIndex).toBeGreaterThan(spawnedIndex);
     expect(deliveredIndex).toBeGreaterThan(readyIndex);
@@ -108,7 +108,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     );
 
     const settled = ports.collected.find(
-      (entry) => entry.event.name === WorkerDriver.RunSettled.name,
+      (entry) => entry.event.name === Worker.Events.RunSettled.name,
     )?.data as { outcome: string; runId: string };
     expect(settled).toMatchObject({ runId: "run-le-wall", outcome: "interrupted" });
 
@@ -117,12 +117,12 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     await waitFor(() =>
       ports.collected.some(
         (entry) =>
-          entry.event.name === WorkerDriver.Exited.name &&
+          entry.event.name === Worker.Events.Exited.name &&
           (entry.data as { planned: boolean }).planned === false,
       ),
     );
     await waitFor(() =>
-      ports.collected.some((entry) => entry.event.name === WorkerDriver.Restarted.name),
+      ports.collected.some((entry) => entry.event.name === Worker.Events.Restarted.name),
     );
   });
 
@@ -156,7 +156,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
       "queue_full",
     );
     const saturated = ports.collected.find(
-      (entry) => entry.event.name === WorkerDriver.QueueSaturated.name,
+      (entry) => entry.event.name === Worker.Events.QueueSaturated.name,
     )?.data as { queued: number; maxQueuedDeliveries: number };
     expect(saturated).toMatchObject({ queued: 0, maxQueuedDeliveries: 0 });
 
@@ -231,7 +231,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
 
     const settled = ports.collected.find(
       (entry) =>
-        entry.event.name === WorkerDriver.RunSettled.name &&
+        entry.event.name === Worker.Events.RunSettled.name &&
         (entry.data as { runId: string }).runId === "run-cq-2",
     )?.data;
     expect(settled).toMatchObject({
@@ -267,7 +267,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     await expect(dispatch).resolves.toMatchObject({ status: "cancelled", runId: "run-cs-1" });
 
     const settled = ports.collected.find(
-      (entry) => entry.event.name === WorkerDriver.RunSettled.name,
+      (entry) => entry.event.name === Worker.Events.RunSettled.name,
     )?.data;
     expect(settled).toMatchObject({ runId: "run-cs-1", outcome: "cancelled" });
   });
@@ -287,13 +287,13 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     });
     // Cancel only after the run is actually in flight on a worker.
     await waitFor(() =>
-      ports.collected.some((entry) => entry.event.name === WorkerDriver.RunDelivered.name),
+      ports.collected.some((entry) => entry.event.name === Worker.Events.RunDelivered.name),
     );
     await expect(manager.cancel("run-cm-1")).resolves.toMatchObject({ cancelled: true });
     await dispatch;
 
     const settled = ports.collected.find(
-      (entry) => entry.event.name === WorkerDriver.RunSettled.name,
+      (entry) => entry.event.name === Worker.Events.RunSettled.name,
     )?.data;
     expect(settled).toMatchObject({ runId: "run-cm-1", outcome: "cancelled" });
   });
@@ -317,7 +317,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
       prompt: "t",
     });
     await waitFor(() =>
-      ports.collected.some((entry) => entry.event.name === WorkerDriver.RunDelivered.name),
+      ports.collected.some((entry) => entry.event.name === Worker.Events.RunDelivered.name),
     );
 
     // White-box: capture the slot objects before shutdown clears the map, so

@@ -216,7 +216,7 @@ const InfoShape = z.object({
  * `relations.childHashes`. The VALUES are byte-identical (`wi_…` ids,
  * `criterion:` ids, `work:<id>` stream keys all embed the same strings);
  * only the keys map on read. Writers emit the new keys only. Mirrors the
- * ledger actor-kind upcast in ledger-append/streams.ts.
+ * ledger actor-kind upcast in ledger/streams.ts.
  */
 function upcastInfoKeys(value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return value;

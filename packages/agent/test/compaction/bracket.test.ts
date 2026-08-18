@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { AgentExecution, type Message } from "@openomni/protocol";
+import { Run, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Compaction } from "../../src/compaction/compact";
 
@@ -101,11 +101,11 @@ function captureBracket(): {
   const started: StartedEvent[] = [];
   const completed: CompletedEvent[] = [];
   const order: string[] = [];
-  const unsubStarted = Bus.subscribe(AgentExecution.CompactionStarted, (event) => {
+  const unsubStarted = Bus.subscribe(Run.Events.CompactionStarted, (event) => {
     started.push(event as unknown as StartedEvent);
     order.push("started");
   });
-  const unsubCompleted = Bus.subscribe(AgentExecution.CompactionCompleted, (event) => {
+  const unsubCompleted = Bus.subscribe(Run.Events.CompactionCompleted, (event) => {
     completed.push(event as unknown as CompletedEvent);
     order.push("completed");
   });

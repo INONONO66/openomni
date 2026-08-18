@@ -121,8 +121,8 @@ export function observeResolvedActor(
   onActor: (actor: Ingress.Actor) => void,
 ): () => void {
   return Bus.observe((event, data) => {
-    if (event.name !== Operational.Info.name) return;
-    const parsed = Operational.Info.schema.safeParse(data);
+    if (event.name !== Operational.Events.Info.name) return;
+    const parsed = Operational.Events.Info.schema.safeParse(data);
     if (!parsed.success) return;
     const audit = AuditActorSchema.safeParse(parsed.data.context);
     if (!audit.success) return;

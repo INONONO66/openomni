@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { Adapter } from "../src/adapter/index.js";
+import { Channel } from "../src/channel/index.js";
 
-const SurfaceKey = Adapter.SurfaceKey;
+const SurfaceKey = Channel.SurfaceKey;
 
-describe("Adapter.SurfaceKey codec", () => {
+describe("Channel.SurfaceKey codec", () => {
   describe("create", () => {
     test("creates a valid surfaceKey from parts", () => {
       const key = SurfaceKey.create(["slack", "workspaceA", "channel", "C123"]);
@@ -176,7 +176,7 @@ describe("Adapter.SurfaceKey codec", () => {
     });
 
     test("roundtrips fromChannel → parse correctly", () => {
-      const descriptor: Adapter.SurfaceKey.ChannelDescriptor = {
+      const descriptor: Channel.SurfaceKey.ChannelDescriptor = {
         surface: "slack",
         namespace: "ws1",
         kind: "group",

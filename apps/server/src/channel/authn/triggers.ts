@@ -1,4 +1,4 @@
-import type { Adapter, Policy } from "@openomni/protocol";
+import type { Channel, Policy } from "@openomni/protocol";
 import { evaluateTriggers } from "../support/trigger";
 import { DiscordTriggers, GitHubTriggers, TelegramTriggers } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
@@ -11,8 +11,8 @@ import type {
 
 function triggerMetadata(input: {
   readonly surface: string;
-  readonly rules: Adapter.TriggerRule[];
-  readonly ctx: Adapter.TriggerContext;
+  readonly rules: Channel.TriggerRule[];
+  readonly ctx: Channel.TriggerContext;
 }): Record<string, unknown> {
   return {
     surface: input.surface,
@@ -31,8 +31,8 @@ function evaluateChannelTriggers(input: {
   readonly policyId: ChannelAuthnPolicyId;
   readonly surface: string;
   readonly resource: string;
-  readonly rules: Adapter.TriggerRule[];
-  readonly ctx: Adapter.TriggerContext;
+  readonly rules: Channel.TriggerRule[];
+  readonly ctx: Channel.TriggerContext;
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }): ChannelTriggerAuthResult {
   const startedAt = Date.now();

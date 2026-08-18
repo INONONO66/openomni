@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
-import { LedgerAppend } from "@openomni/protocol";
+import { Ledger as LedgerTypes } from "@openomni/protocol";
 import { GENESIS_SEED } from "../bus-persistence/hash";
 import { computeLedgerEventHash } from "./hash";
 
@@ -18,17 +18,17 @@ const HeadRevision = z.number().int().positive();
  * adopted stream verifies clean.
  *
  * Adoption is legal ONLY while the stream is empty (no events AND head 0 or
- * missing). A non-empty stream throws the typed `LedgerAppend.AdoptError` —
+ * missing). A non-empty stream throws the typed `LedgerTypes.AdoptError` —
  * a stream with history must never receive a second genesis.
  */
 export function adoptStream(
   db: Database,
   streamId: string,
   headRevision: number,
-  genesis: LedgerAppend.AdoptGenesis,
+  genesis: LedgerTypes.AdoptGenesis,
 ): void {
   // Service-entry enforcement layer (the one owner of input validity).
-  const parsed = LedgerAppend.AdoptGenesis.parse(genesis);
+  const parsed = LedgerTypes.AdoptGenesis.parse(genesis);
   const seq = HeadRevision.parse(headRevision);
   const stream = z.string().min(1).parse(streamId);
 
@@ -40,7 +40,7 @@ export function adoptStream(
       .query("SELECT seq FROM ledger_event WHERE stream_id = ? ORDER BY seq DESC LIMIT 1")
       .get(stream) as { seq: number } | null;
     if ((head !== null && head.head !== 0) || tip !== null) {
-      throw new LedgerAppend.AdoptError({
+      throw new LedgerTypes.AdoptError({
         message: `stream ${stream} is not empty — adoption would fabricate a second genesis`,
         streamId: stream,
         currentHead: Math.max(head?.head ?? 0, tip?.seq ?? 0),

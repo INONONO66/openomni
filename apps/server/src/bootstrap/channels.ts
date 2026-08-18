@@ -1,4 +1,4 @@
-import type { Adapter } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "../channel";
 import type { PublishPort } from "../channel/types";
@@ -26,7 +26,7 @@ export interface ChannelSetup {
 
 export function createChannelAdapters(
   config: ServerConfig,
-  routingHandler: Adapter.MessageHandler | undefined,
+  routingHandler: Channel.MessageHandler | undefined,
 ): ChannelSetup {
   const channels: Surface[] = [];
   const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
@@ -50,7 +50,6 @@ export function createChannelAdapters(
             ? [{ type: "sender" as const, allow: config.telegram.allowedUsers }]
             : []),
         ],
-        deliveryPolicy: "final",
       },
       publish,
     );
@@ -69,7 +68,6 @@ export function createChannelAdapters(
             ? [{ type: "sender" as const, allow: config.github.allowedUsers }]
             : []),
         ],
-        deliveryPolicy: "final",
       },
       publish,
       config.github.token,
@@ -90,7 +88,6 @@ export function createChannelAdapters(
             ? [{ type: "sender" as const, allow: config.discord.allowedUsers }]
             : []),
         ],
-        deliveryPolicy: "final",
       },
       publish,
     );

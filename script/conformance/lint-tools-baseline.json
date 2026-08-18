@@ -2,7 +2,6 @@
   "_comment": "Grandfathered conformance violations (#467). Ratchet: shrinking this file is autonomous and encouraged; any growth requires Owner sign-off in review. Strict vocab 1:1 (13 namespaces) is #465's P3 exit criterion.",
   "vocab": {
     "unmappedNamespaces": [
-      "adapter",
       "app-connector",
       "artifact",
       "bus",
@@ -12,7 +11,6 @@
       "execution",
       "ingress",
       "ipc",
-      "ledger-append",
       "mcp",
       "message",
       "model",

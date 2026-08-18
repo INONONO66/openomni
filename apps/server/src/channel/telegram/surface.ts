@@ -1,4 +1,4 @@
-import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
+import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
 import { Dedupe } from "../support/dedupe";
 import { splitText } from "../support/chunk-text";
@@ -15,32 +15,26 @@ export interface TelegramAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
-export class TelegramAdapter implements Adapter.Surface {
+export class TelegramAdapter implements Channel.Surface {
   readonly id = "telegram";
-  readonly capabilities: Adapter.Capabilities = {
-    streaming: false,
-    media: { send: false, receive: false },
-    commands: false,
-    threads: false,
-  };
 
   private readonly client: TelegramClient;
   private readonly dedupe = new Dedupe();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
   private botUsername = "";
-  private handler: Adapter.MessageHandler | null = null;
+  private handler: Channel.MessageHandler | null = null;
 
   constructor(
     token: string,
-    readonly config: Adapter.Config,
+    readonly config: Channel.Config,
     private readonly publish: PublishPort,
     private readonly authOptions: TelegramAuthOptions = {},
   ) {
     this.client = new TelegramClient(token, publish);
   }
 
-  onMessage(handler: Adapter.MessageHandler): void {
+  onMessage(handler: Channel.MessageHandler): void {
     this.handler = handler;
   }
 
@@ -53,7 +47,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const botId = String(me.id);
     const botUsername = me.username ?? "";
     this.botUsername = botUsername;
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -76,7 +70,7 @@ export class TelegramAdapter implements Adapter.Surface {
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();
           this.handleMessage(message, messageTraceId).catch((err) => {
-            this.publish(Operational.Error, {
+            this.publish(Operational.Events.Error, {
               traceId: messageTraceId,
               time: Date.now(),
               component: "server",
@@ -94,21 +88,12 @@ export class TelegramAdapter implements Adapter.Surface {
 
   stop(traceId: string): void {
     this.poller?.stop();
-    this.publish(Operational.Info, {
+    this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
       component: "server",
       msg: "telegram bot stopped",
     });
-  }
-
-  async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
-    // Origin: outbound send-as-surface carries no inbound trace to inherit
-    // until Wait/#215 threading lands — this send is its own causal chain.
-    const traceId = newTraceId();
-    const parsed = Adapter.SurfaceKey.parse(surfaceKey);
-    const chatId = parsed.id ?? "";
-    await this.sendOutbound(chatId, message, traceId);
   }
 
   /**
@@ -150,7 +135,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(message, traceId);
     if (!inbound) return;
 
-    this.publish(Operational.Debug, {
+    this.publish(Operational.Events.Debug, {
       traceId,
       time: Date.now(),
       component: "server",
@@ -167,7 +152,7 @@ export class TelegramAdapter implements Adapter.Surface {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound, traceId);
     } catch (err) {
-      this.publish(Operational.Error, {
+      this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),
         component: "server",
@@ -180,7 +165,7 @@ export class TelegramAdapter implements Adapter.Surface {
     }
   }
 
-  private getHandler(): Adapter.MessageHandler {
+  private getHandler(): Channel.MessageHandler {
     if (!this.handler) {
       throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
     }
@@ -189,7 +174,7 @@ export class TelegramAdapter implements Adapter.Surface {
 
   private async sendOutbound(
     chatId: string,
-    message: Adapter.OutboundMessage,
+    message: Channel.OutboundMessage,
     traceId: string,
   ): Promise<string | undefined> {
     if (!message.text) return undefined;

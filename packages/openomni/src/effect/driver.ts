@@ -1,4 +1,4 @@
-import type { LedgerAppend } from "@openomni/protocol";
+import type { Ledger } from "@openomni/protocol";
 
 /**
  * #492 effect driver port. A driver owns ONE effect kind and reaches the
@@ -20,7 +20,7 @@ import type { LedgerAppend } from "@openomni/protocol";
  *     probing, which the reconciler escalates by Stakes rather than
  *     silently terminalizing.
  */
-export type EffectIntent = LedgerAppend.EffectIntended;
+export type EffectIntent = Ledger.EffectIntended;
 
 export type EffectExecution =
   | Readonly<{ kind: "confirmed"; receipt?: string }>

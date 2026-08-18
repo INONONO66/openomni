@@ -16,7 +16,7 @@ export async function connectMcpServers(
   }
 
   await provider.refreshTools();
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId,
     time: Date.now(),
     component: "server",

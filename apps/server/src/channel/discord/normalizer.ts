@@ -1,17 +1,17 @@
-import { Adapter } from "@openomni/protocol";
+import { Channel } from "@openomni/protocol";
 import { normalizeContent } from "../support/trigger";
 import type { InboundNormalizer } from "../types";
 import type { DiscordMessage } from "./types";
 
 export interface DiscordNormalizerContext {
   botId: string;
-  triggers: Adapter.Config["triggers"];
+  triggers: Channel.Config["triggers"];
 }
 
 export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
   constructor(private readonly ctx: DiscordNormalizerContext) {}
 
-  normalize(message: DiscordMessage, traceId: string): Adapter.InboundMessage | null {
+  normalize(message: DiscordMessage, traceId: string): Channel.InboundMessage | null {
     if (message.author.bot) return null;
     if (!message.content) return null;
 
@@ -25,7 +25,7 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
     content = normalizeContent(content, this.ctx.triggers);
     if (!content) return null;
 
-    const surfaceKey = Adapter.SurfaceKey.fromChannel({
+    const surfaceKey = Channel.SurfaceKey.fromChannel({
       surface: "discord",
       namespace: this.ctx.botId,
       kind: isDM ? "dm" : "channel",

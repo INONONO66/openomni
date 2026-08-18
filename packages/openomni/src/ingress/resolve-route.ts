@@ -1,4 +1,4 @@
-import type { Actor, RoutingDecisionPayload, Wait } from "@openomni/protocol";
+import type { Actor, Ingress, Wait } from "@openomni/protocol";
 
 export type RouteInbound = {
   readonly traceId: string;
@@ -85,7 +85,10 @@ function unreachable(_value: never): never {
   throw new TypeError("Unreachable routing state");
 }
 
-export function resolveRoute(inbound: RouteInbound, state: RouteState): RoutingDecisionPayload {
+export function resolveRoute(
+  inbound: RouteInbound,
+  state: RouteState,
+): Ingress.RoutingDecisionPayload {
   const common = {
     traceId: inbound.traceId,
     time: inbound.time,

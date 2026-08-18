@@ -74,7 +74,8 @@ describe("terminal-fact failures record, never kill (#606 review)", () => {
     const sessionId = createSession();
     const errors: Array<Record<string, unknown>> = [];
     Bus.observe((event, data) => {
-      if (event.name === Operational.Error.name) errors.push(data as Record<string, unknown>);
+      if (event.name === Operational.Events.Error.name)
+        errors.push(data as Record<string, unknown>);
     });
     // The dispatch waits for the test's signal so the busy arm is in place
     // BEFORE the IIFE's failure path runs its terminal fact write.
@@ -118,7 +119,7 @@ describe("terminal-fact failures record, never kill (#606 review)", () => {
     const sessionId = createSession();
     const errors: string[] = [];
     Bus.observe((event, data) => {
-      if (event.name === Operational.Error.name) {
+      if (event.name === Operational.Events.Error.name) {
         errors.push(String((data as { msg?: unknown }).msg));
       }
     });

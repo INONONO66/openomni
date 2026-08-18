@@ -1,7 +1,5 @@
-import { BusEvent } from "@openomni/protocol";
+import type { BusEvent } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
-
-export { BusEvent };
 
 type Handler = (data: unknown) => void;
 type Observer = (event: Bus.PublishedDescriptor, data: unknown) => void;

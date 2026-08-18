@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { IngressEvent } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 import { ResidentRuntime } from "../../src/resident/runtime";
@@ -65,7 +65,7 @@ test("ResidentRuntime carries the inbound traceId into agent input and the compl
   const inbound = newTraceId();
   let inputTraceId: string | undefined;
   const completedTraceIds: string[] = [];
-  const unsubscribe = Bus.subscribe(IngressEvent.Completed, (event) => {
+  const unsubscribe = Bus.subscribe(Ingress.Events.Completed, (event) => {
     completedTraceIds.push(event.traceId);
   });
 

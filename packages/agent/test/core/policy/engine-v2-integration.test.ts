@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { PolicyEvent, type Policy } from "@openomni/protocol";
+import { Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
@@ -217,10 +217,10 @@ describe("PolicyEngine.dispatchPoint", () => {
     const descriptor = systemToolDescriptor("shell");
     const evaluated: unknown[] = [];
     const composed: unknown[] = [];
-    const unsubEvaluated = Bus.subscribe(PolicyEvent.Evaluated, (event) => {
+    const unsubEvaluated = Bus.subscribe(Policy.Events.Evaluated, (event) => {
       evaluated.push(event);
     });
-    const unsubComposed = Bus.subscribe(PolicyEvent.DecisionComposed, (event) => {
+    const unsubComposed = Bus.subscribe(Policy.Events.DecisionComposed, (event) => {
       composed.push(event);
     });
 

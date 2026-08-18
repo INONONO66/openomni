@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { LedgerAppend } from "@openomni/protocol";
+import { Ledger as LedgerTypes } from "@openomni/protocol";
 import { GENESIS_SEED } from "../bus-persistence/hash";
 import { computeLedgerEventHash } from "./hash";
 
@@ -21,14 +21,14 @@ import { computeLedgerEventHash } from "./hash";
  */
 export function append(
   db: Database,
-  event: LedgerAppend.Input,
-  expectedHead: LedgerAppend.ExpectedHead,
-): LedgerAppend.Outcome {
+  event: LedgerTypes.Input,
+  expectedHead: LedgerTypes.ExpectedHead,
+): LedgerTypes.Outcome {
   // Service-entry enforcement layer (the one owner of input validity).
-  const parsed = LedgerAppend.Input.parse(event);
-  const head = LedgerAppend.ExpectedHead.parse(expectedHead);
+  const parsed = LedgerTypes.Input.parse(event);
+  const head = LedgerTypes.ExpectedHead.parse(expectedHead);
 
-  const run = db.transaction((): LedgerAppend.Outcome => {
+  const run = db.transaction((): LedgerTypes.Outcome => {
     if (head === 0) {
       // First append on a stream materializes its head row at 0 so the CAS
       // below stays a single UPDATE for every append. OR IGNORE makes this

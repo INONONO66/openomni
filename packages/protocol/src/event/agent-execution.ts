@@ -10,51 +10,46 @@ const AgentBase = z.object({
   time: z.number(),
 });
 
-export namespace AgentExecution {
-  export const TurnStart = BusEvent.define(
+export const Events = {
+  TurnStart: BusEvent.define(
     "agent.turn.start",
     AgentBase.extend({
       turnIndex: z.number(),
     }),
     { visibility: "ephemeral" },
-  );
-
-  export const TurnComplete = BusEvent.define(
+  ),
+  TurnComplete: BusEvent.define(
     "agent.turn.complete",
     AgentBase.extend({
       turnIndex: z.number(),
       usage: Token.AgentUsage,
     }),
     { visibility: "llm_reason" },
-  );
-
-  export const BudgetWarning = BusEvent.define(
+  ),
+  BudgetWarning: BusEvent.define(
     "agent.budget.warning",
     AgentBase.extend({
       remaining: z.string(),
       threshold: z.number(),
     }),
     { visibility: "llm_reason" },
-  );
-
-  export const BudgetReassurance = BusEvent.define(
+  ),
+  BudgetReassurance: BusEvent.define(
     "agent.budget.reassurance",
     AgentBase.extend({
       remaining: z.string(),
       threshold: z.number(),
     }),
     { visibility: "ephemeral" },
-  );
-
-  export const Compaction = BusEvent.define(
+  ),
+  Compaction: BusEvent.define(
     "agent.compaction",
     AgentBase.extend({
       messagesBefore: z.number(),
       messagesAfter: z.number(),
     }),
     { visibility: "llm_reason" },
-  );
-
+  ),
   /**
    * The compaction lock bracket. `started` is published before any
    * compaction work; `completed` is the operation's last record on every
@@ -64,7 +59,7 @@ export namespace AgentExecution {
    * fail-closed deny. The existing `agent.compaction` event remains the
    * apply-phase record at the effect seam.
    */
-  export const CompactionStarted = BusEvent.define(
+  CompactionStarted: BusEvent.define(
     "agent.compaction.started",
     AgentBase.extend({
       messagesBefore: z.number(),
@@ -76,9 +71,8 @@ export namespace AgentExecution {
       summarizer: z.boolean(),
     }),
     { visibility: "internal" },
-  );
-
-  export const CompactionCompleted = BusEvent.define(
+  ),
+  CompactionCompleted: BusEvent.define(
     "agent.compaction.completed",
     AgentBase.extend({
       outcome: z.enum(["cut", "reduced", "nothing_reclaimed", "no_user_boundary", "failed"]),
@@ -97,9 +91,8 @@ export namespace AgentExecution {
       error: z.string().optional(),
     }),
     { visibility: "internal" },
-  );
-
-  export const ErrorRetry = BusEvent.define(
+  ),
+  ErrorRetry: BusEvent.define(
     "agent.error.retry",
     AgentBase.extend({
       attempt: z.number(),
@@ -117,5 +110,5 @@ export namespace AgentExecution {
       backoffMs: z.number(),
     }),
     { visibility: "llm_reason" },
-  );
-}
+  ),
+};

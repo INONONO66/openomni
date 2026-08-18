@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
-import {
-  Communication,
-  IngressEvent,
-  type Command,
-  type Ingress,
-  type Wait,
-} from "@openomni/protocol";
+import { Communication, Ingress, type Command, type Wait } from "@openomni/protocol";
 import {
   ActorRegistry,
   BlacklistStore,
@@ -189,7 +183,7 @@ describe("IngressEngine wait routing", () => {
     const order: string[] = [];
     const actualPublish = Bus.publish;
     const publish = spyOn(Bus, "publish").mockImplementation((event, data) => {
-      if (event === IngressEvent.RoutingDecision) order.push("publish");
+      if (event === Ingress.Events.RoutingDecision) order.push("publish");
       actualPublish(event, data);
     });
     let handlerWorkspaceRoot: string | undefined;
@@ -211,7 +205,7 @@ describe("IngressEngine wait routing", () => {
     }
 
     expect(observed.decisions).toHaveLength(1);
-    const decision = IngressEvent.RoutingDecision.schema.parse(observed.decisions[0]);
+    const decision = Ingress.Events.RoutingDecision.schema.parse(observed.decisions[0]);
     expect(decision).toMatchObject({
       stage: "wait_correlation",
       outcome: "route",
@@ -484,7 +478,7 @@ describe("IngressEngine wait routing", () => {
     }
 
     expect(observed.decisions).toHaveLength(1);
-    const decision = IngressEvent.RoutingDecision.schema.parse(observed.decisions[0]);
+    const decision = Ingress.Events.RoutingDecision.schema.parse(observed.decisions[0]);
     expect(decision).toMatchObject({
       stage: "wait_correlation",
       outcome: "route",
@@ -713,7 +707,7 @@ describe("IngressEngine wait routing", () => {
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("route_ambiguous");
     expect(observed.decisions).toHaveLength(1);
-    const decision = IngressEvent.RoutingDecision.schema.parse(observed.decisions[0]);
+    const decision = Ingress.Events.RoutingDecision.schema.parse(observed.decisions[0]);
     expect(decision).toMatchObject({
       stage: "wait_correlation",
       outcome: "ambiguous",
@@ -880,7 +874,7 @@ describe("IngressEngine wait routing", () => {
 
     expect(result).toMatchObject({ kind: "dropped" });
     expect(observed.decisions).toHaveLength(1);
-    const decision = IngressEvent.RoutingDecision.schema.parse(observed.decisions[0]);
+    const decision = Ingress.Events.RoutingDecision.schema.parse(observed.decisions[0]);
     expect(decision).toMatchObject({
       stage: "blacklist",
       outcome: "drop",
@@ -948,7 +942,7 @@ describe("IngressEngine wait routing", () => {
     expect((error as IngressRoutingError).code).toBe("dispatch_failed");
     expect(error?.message).toBe("No dispatch handler registered for worker.complete");
     expect(observed.decisions).toHaveLength(1);
-    const decision = IngressEvent.RoutingDecision.schema.parse(observed.decisions[0]);
+    const decision = Ingress.Events.RoutingDecision.schema.parse(observed.decisions[0]);
     expect(decision).toMatchObject({
       stage: "wait_correlation",
       outcome: "route",

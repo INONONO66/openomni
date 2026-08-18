@@ -25,7 +25,7 @@ export class TelegramClient implements ChannelClient {
 
   async sendTyping(channelId: string, traceId: string): Promise<void> {
     await this.api("sendChatAction", traceId, { chat_id: channelId, action: "typing" }).catch((e) =>
-      this.publish(Operational.Warn, {
+      this.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
         component: "server",

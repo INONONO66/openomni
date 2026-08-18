@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
-import { Bus, BusEvent } from "@openomni/telemetry";
+import { BusEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
 import { GENESIS_SEED, computeEventHash } from "../../src/bus-persistence/hash.js";

@@ -47,7 +47,7 @@ export function registerServerMessaging(input: {
     },
     grants: () => input.grants,
   });
-  Bus.publish(Operational.Info, {
+  Bus.publish(Operational.Events.Info, {
     traceId: input.traceId,
     time: Date.now(),
     component: "server",

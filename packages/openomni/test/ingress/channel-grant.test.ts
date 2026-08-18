@@ -71,8 +71,8 @@ describe("Ingress channel grants", () => {
     const engine = getIngressEngine();
     const projectedTreatments: unknown[] = [];
     const unobserve = Bus.observe((event, data) => {
-      if (event.name !== Operational.Info.name) return;
-      const parsed = Operational.Info.schema.parse(data);
+      if (event.name !== Operational.Events.Info.name) return;
+      const parsed = Operational.Events.Info.schema.parse(data);
       const context = parsed.context;
       if (context === undefined || typeof context !== "object" || Array.isArray(context)) return;
       const audit = (context as Record<string, unknown>).audit;

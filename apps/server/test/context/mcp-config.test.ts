@@ -80,7 +80,7 @@ describe("McpConfigLoader.discover", () => {
 
   it("drops invalid server entries through the protocol MCP schema", async () => {
     const warnings: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
     const dir = join(tempRoot, "invalid-server-entry");
     const openomniDir = join(dir, ".openomni");
     const configPath = join(openomniDir, "mcp.json");
@@ -111,7 +111,7 @@ describe("McpConfigLoader.discover", () => {
 
   it("routes non-array object-format servers through the shared parser", async () => {
     const warnings: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
     const dir = join(tempRoot, "object-format-non-array");
     const openomniDir = join(dir, ".openomni");
     const configPath = join(openomniDir, "mcp.json");

@@ -4,7 +4,7 @@ import {
   type BusEvent,
   Operational,
   WorkerDeliveryError,
-  WorkerDriver,
+  Worker,
   type WorkerBootstrap,
 } from "@openomni/protocol";
 import {
@@ -42,7 +42,7 @@ export type WorkerSupervisorOptions = {
   id: number;
   script: string;
   // The event sink is required on purpose: a defaulted no-op would
-  // silently swallow Operational.Warn — the exact failure mode the
+  // silently swallow Operational.Events.Warn — the exact failure mode the
   // ledger exists to prevent (#477 review W3).
   events: BusEvent.Sink;
   socketDir?: string;
@@ -115,7 +115,7 @@ export class WorkerSupervisor {
       },
     );
     const generation = this.generation;
-    this.events.publish(WorkerDriver.Spawned, {
+    this.events.publish(Worker.Events.Spawned, {
       traceId: this.generationTraceId,
       time: Date.now(),
       workerId: this.id,
@@ -127,7 +127,7 @@ export class WorkerSupervisor {
       const prev = this.client;
       this.client = null;
       prev?.close();
-      this.events.publish(WorkerDriver.Exited, {
+      this.events.publish(Worker.Events.Exited, {
         traceId: this.generationTraceId,
         time: Date.now(),
         workerId: this.id,
@@ -190,7 +190,7 @@ export class WorkerSupervisor {
                   .catch((err) => {
                     // Ledger, not console: swallowing this into stdout is the
                     // exact failure mode the injected sink exists to prevent.
-                    this.events.publish(Operational.Warn, {
+                    this.events.publish(Operational.Events.Warn, {
                       traceId: generationTraceId,
                       time: Date.now(),
                       component: "coordinator",
@@ -231,7 +231,7 @@ export class WorkerSupervisor {
         if (!this.stopping && this.running && this.generation === generation) {
           this.client = c;
           this.generationBecameReady = true;
-          this.events.publish(WorkerDriver.Ready, {
+          this.events.publish(Worker.Events.Ready, {
             traceId: generationTraceId,
             time: Date.now(),
             workerId: this.id,
@@ -257,7 +257,7 @@ export class WorkerSupervisor {
     if (!this.stopping && this.running && this.generation === generation) {
       // doStart() fires this promise without awaiting it, so a throw here would
       // surface as an unhandled rejection; report on the ledger instead.
-      this.events.publish(Operational.Warn, {
+      this.events.publish(Operational.Events.Warn, {
         traceId: generationTraceId,
         time: Date.now(),
         component: "coordinator.worker",
@@ -291,7 +291,7 @@ export class WorkerSupervisor {
     const provedHealthy = this.generationBecameReady && uptimeMs >= FAST_CRASH_THRESHOLD_MS;
     this.consecutiveFastCrashes = provedHealthy ? 1 : this.consecutiveFastCrashes + 1;
     if (this.consecutiveFastCrashes > MAX_CONSECUTIVE_FAST_CRASHES) {
-      this.events.publish(Operational.Warn, {
+      this.events.publish(Operational.Events.Warn, {
         traceId: this.generationTraceId,
         time: Date.now(),
         component: "coordinator.worker",
@@ -306,7 +306,7 @@ export class WorkerSupervisor {
     }
 
     const delayMs = resolveRestartDelay(this.consecutiveFastCrashes);
-    this.events.publish(WorkerDriver.Restarted, {
+    this.events.publish(Worker.Events.Restarted, {
       traceId: this.generationTraceId,
       time: Date.now(),
       workerId: this.id,
@@ -368,7 +368,7 @@ export class WorkerSupervisor {
         // process dies regardless of what the agent loop inside is doing —
         // runaway runs are killed before policy ever sees anything. The kill
         // triggers the normal exited → restart path for the slot.
-        this.events.publish(Operational.Warn, {
+        this.events.publish(Operational.Events.Warn, {
           // The kill is an event OF the run — the same trace its
           // RunSettled{interrupted} carries (D11). The type requires the
           // trace the pool's normalizer already refused to go without; no
@@ -484,7 +484,7 @@ export class WorkerSupervisor {
       proc.kill("SIGTERM");
       const graceMs = workerStopGraceMs();
       if ((await waitForWorkerExit(proc, graceMs)) === "timeout") {
-        this.events.publish(Operational.Warn, {
+        this.events.publish(Operational.Events.Warn, {
           traceId: this.generationTraceId,
           time: Date.now(),
           component: "coordinator.worker",

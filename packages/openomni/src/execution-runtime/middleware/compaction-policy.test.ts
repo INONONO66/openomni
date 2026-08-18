@@ -14,7 +14,7 @@ import { withReplacementPersistence } from "./compaction-policy.js";
 describe("withReplacementPersistence", () => {
   it("warns visibly when effect messages fail to parse (no silent resumability loss)", async () => {
     const warns: Array<{ component: string; msg: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
       warns.push(event as unknown as { component: string; msg: string });
     });
     try {

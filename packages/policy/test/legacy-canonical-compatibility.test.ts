@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type Policy, PolicyDecision, PolicyEvent } from "@openomni/protocol";
+import { Policy, PolicyDecision } from "@openomni/protocol";
 import { type GenericPolicyContext, PolicyEngine } from "@openomni/policy";
 
 interface TestContext extends GenericPolicyContext {
@@ -40,8 +40,8 @@ describe("PolicyEngine canonical point contracts", () => {
     expect(decision.verdict).toBe("deny");
     expect(decision.policyId).toBe("agent.policy.composed");
     expect(decision.reasonCodes).toContain("policy.context_missing");
-    const evaluated = PolicyEvent.Evaluated.schema.parse(
-      events.find(({ name }) => name === PolicyEvent.Evaluated.name)?.data,
+    const evaluated = Policy.Events.Evaluated.schema.parse(
+      events.find(({ name }) => name === Policy.Events.Evaluated.name)?.data,
     );
     expect(evaluated).toMatchObject({
       policyId: "policy.point.contract",
@@ -61,7 +61,7 @@ describe("PolicyEngine canonical point contracts", () => {
     // Then
     expect(decision.verdict).toBe("allow");
     expect(decision.reasonCodes).toEqual([]);
-    expect(events.some(({ name }) => name === PolicyEvent.Evaluated.name)).toBe(false);
+    expect(events.some(({ name }) => name === Policy.Events.Evaluated.name)).toBe(false);
   });
 
   test("enforces required context before invoking middleware at fail-open points", async () => {

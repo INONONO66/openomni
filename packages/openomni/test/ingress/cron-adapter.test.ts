@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { IngressEvent, type Ingress } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { Bus } from "@openomni/telemetry";
 
@@ -49,9 +49,9 @@ describe("CronAdapter.fire", () => {
     expect(capturedEvent?.runtime?.trigger?.id).toBe("job-1");
   });
 
-  it("emits IngressEvent.Received when fired through ingestInternal", async () => {
+  it("emits Ingress.Events.Received when fired through ingestInternal", async () => {
     const received: Array<{ surface: string; mode: string; target?: string }> = [];
-    const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
+    const unsubscribe = Bus.subscribe(Ingress.Events.Received, (event) => {
       received.push(event);
     });
     const engine = createIngressEngine({

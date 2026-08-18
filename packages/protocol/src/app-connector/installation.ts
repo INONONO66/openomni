@@ -23,7 +23,7 @@ export const Consent = z
   .strict();
 export type Consent = z.infer<typeof Consent>;
 
-export const WorkspaceIdentity = z
+const WorkspaceIdentity = z
   .object({
     repoPath: nonEmptyString,
     worktreePath: nonEmptyString,
@@ -31,7 +31,6 @@ export const WorkspaceIdentity = z
     worktreePathHash: nonEmptyString,
   })
   .strict();
-export type WorkspaceIdentity = z.infer<typeof WorkspaceIdentity>;
 
 export const Installation = z
   .object({
@@ -63,10 +62,3 @@ export const Installation = z
     path: ["consent"],
   });
 export type Installation = z.infer<typeof Installation>;
-
-export const VerificationFailureReason = z.enum([
-  "missing_candidate",
-  "detect_failed",
-  "unsupported_version",
-]);
-export type VerificationFailureReason = z.infer<typeof VerificationFailureReason>;

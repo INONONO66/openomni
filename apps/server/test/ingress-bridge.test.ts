@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { Adapter, Tool } from "@openomni/protocol";
+import type { Channel, Tool } from "@openomni/protocol";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
 import { registerAgent } from "../src/agents";
 import { agentMetadata, getAgentDefinition } from "../src/agents/registry";
@@ -33,14 +33,13 @@ function makeProvider(tools: NativeTool[]): ToolProvider {
   };
 }
 
-function makeMessage(): Adapter.InboundMessage {
+function makeMessage(): Channel.InboundMessage {
   return {
     id: "message-1",
     traceId: "trace-test",
     surfaceKey: "discord:guild:channel:dev",
     text: "hello",
     sender: { id: "user-1", name: "User" },
-    media: [{ kind: "image", url: "https://example.test/image.png" }],
     replyToId: "outbound-question",
     threadId: "thread-1",
     raw: {
@@ -79,7 +78,6 @@ describe("ingress bridge transport boundary", () => {
       surfaceKey: "discord:guild:channel:dev",
       kind: "channel",
       sender: message.sender,
-      media: message.media,
       replyToId: "outbound-question",
       threadId: "thread-1",
       raw: message.raw,
