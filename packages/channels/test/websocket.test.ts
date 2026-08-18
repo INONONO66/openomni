@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
-import type { PublishPort } from "../../src/channel/types";
-import { WebSocketHandler } from "../../src/channel/websocket";
+import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
+import type { PublishPort } from "../src/types";
+import { WebSocketHandler } from "../src/websocket";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 

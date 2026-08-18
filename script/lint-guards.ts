@@ -35,7 +35,7 @@ const canonicalPolicyRequiredFiles = new Set([
   "packages/openomni/src/ingress/middleware/ingress-authority.ts",
   "packages/openomni/src/execution-runtime/middleware/tool-permission-policy.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
-  "apps/server/src/channel/authn/decision.ts",
+  "packages/channels/src/authn/decision.ts",
 ]);
 const approvedAuthorizationFiles = new Set(["packages/openomni/src/extension/manager.ts"]);
 
@@ -185,7 +185,7 @@ function validateCanonicalPolicyUsage(filePath: string, source: string): GuardVi
 }
 
 function validateChannelTriggerEvaluation(filePath: string, source: string): GuardViolation[] {
-  if (!filePath.startsWith("apps/server/src/channel/") || !filePath.endsWith("/normalizer.ts")) {
+  if (!filePath.startsWith("packages/channels/src/") || !filePath.endsWith("/normalizer.ts")) {
     return [];
   }
 

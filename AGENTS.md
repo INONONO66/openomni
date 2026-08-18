@@ -6,7 +6,7 @@ Last verified against `origin/main`: 2026-08-19 (paths, dependency graph, and sh
 
 OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 9 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 10 packages and 1 app (Server).
 
 The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). The Owner-directed gateway pivot (channels = perimeter gateway, openomni = brain, SSOT single-ledger storage, engagement machine) is specified in [`docs/gateway-design.md`](docs/gateway-design.md) — a target design; nothing from it is wired yet. ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
@@ -17,7 +17,7 @@ Live delivery state, ordering, and checkpoints belong only in [GitHub #459](http
 ```
 openomni/
 ├── apps/
-│   └── server/          # Hono server — Discord/Telegram/GitHub/WebSocket channels, tool providers, ingress bridge, composition root
+│   └── server/          # Hono server — tool providers, ingress bridge, channel/webhook registration, composition root
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
@@ -32,7 +32,8 @@ openomni/
 │   │       └── mcp/            # McpClient
 │   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
 │   ├── ipc/             # Worker-process IPC transport contract: NDJSON framing, bidirectional Unix-socket client/server, protocol errors — protocol-only deps (#496)
-│   └── coordinator/     # Multiprocess worker driver: on-demand worker pool, supervision — protocol+ipc deps only, ports injected by the composition root
+│   ├── coordinator/     # Multiprocess worker driver: on-demand worker pool, supervision — protocol+ipc deps only, ports injected by the composition root
+│   └── channels/        # Gateway band (stage 1, #551): Discord/Telegram/GitHub/WebSocket drivers + channel authn — {protocol, ipc, policy} deps, publish port injected
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -43,6 +44,7 @@ openomni/
 protocol  ←  policy, telemetry, ipc          (ring 0 → 1)
 telemetry ←  session, llm                     session adds durability
 ipc       ←  coordinator                      process driver, session-free
+protocol, ipc, policy            ←  channels  gateway drivers + authn (#551)
 policy, llm, telemetry           ←  agent     the loop
 everything                       ←  openomni  ←  server
 ```
@@ -62,13 +64,14 @@ package's tests may reach further than its runtime code, and the gate holds
 | `session` | protocol, telemetry |
 | `llm` | protocol, telemetry — `src/` protocol only |
 | `coordinator` | protocol, ipc |
+| `channels` | protocol, ipc, policy — policy confined to `src/authn/` (S8 banding) |
 | `agent` | protocol, policy, llm, telemetry — `src/` protocol, policy, llm |
 | `openomni` | any except itself |
 | `server` | composition root |
 
 `llm` and `agent` no longer reach the ledger at all: `Bus` moved to `telemetry` and the allowlists closed behind it (#606).
 
-`policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is session-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
+`policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is session-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `channels` is the gateway band at stage 1 (#551, [docs/gateway-design.md](docs/gateway-design.md) §1/§9): platform drivers + channel authn, whitelist {protocol, ipc, policy} with policy confined to `src/authn/` by the S8 intra-package banding check (ledger joins at stage 2); it observes through an injected publish port and never imports the kernel or telemetry. `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
 
 ## PACKAGE OWNERSHIP
 
@@ -84,7 +87,8 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
 | `packages/ipc` | Worker-process IPC transport: NDJSON framing, bidirectional Unix-socket client/server (reverse server → owner-device connections included), typed transport errors | Kernel/ledger/policy imports, authorization decisions, run semantics, serializable message schemas (those stay in `protocol`) |
 | `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy, IPC transport internals (moved to `packages/ipc` in #496) |
-| `apps/server` | Runtime host: config/bootstrap, channel adapters, webhook/WebSocket/gateway transport, connector process drivers and stored-installation wiring, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics |
+| `packages/channels` | Gateway band (stage 1): Discord/Telegram/GitHub/WebSocket drivers, envelope normalization, channel authn/trigger judgment, delivery clients | Session content, kernel/brain imports, storage engines, telemetry imports (publish port is injected), routing/perimeter store semantics (arrive at stage 2, #707) |
+| `apps/server` | Runtime host: config/bootstrap, channel registration, webhook/WebSocket/gateway transport wiring, connector process drivers and stored-installation wiring, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics, channel adapter implementations (moved to `packages/channels` in #551) |
 
 ### Messaging Kernel Rule
 
@@ -92,7 +96,7 @@ All durable messaging should flow through an OpenOmni-owned kernel surface. Targ
 
 ```
 raw channel event
-  -> server channel adapter normalizes transport payload
+  -> channels gateway driver (packages/channels, registered by apps/server) normalizes transport payload
   -> openomni messaging kernel receives a canonical inbound message/command
   -> kernel resolves principal, access, correlation, session, target, execution path
   -> kernel projects messages/events and returns response/writeback instructions
@@ -149,7 +153,7 @@ raw channel event
 | `dispatch` tool | `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` | Runtime-to-runtime/system egress command authority and audit boundary |
 | Injection queue | `packages/openomni/src/execution-runtime/injection-queue.ts` | Async response delivery at turn.finish; keyed by runId |
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
-| Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
+| Channel drivers | `packages/channels/src/` | Discord, Telegram, GitHub, WebSocket (gateway band stage 1, #551; registered in `apps/server/src/bootstrap/channels.ts`) |
 | Server inbound bridge | `apps/server/src/ingress/` | Adapter bridge supplying normalized transport facts only (server-side routing back doors were deleted by #485) |
 | Product model | `docs/core-model.md` + `docs/kernel-contract.md` | Resident, Workers, System Governor, controlled inbound authority |
 | Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
-import { ChannelAuthnMiddleware } from "../../src/channel/channel-authn";
+import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
+import { ChannelAuthnMiddleware } from "../src/channel-authn";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 

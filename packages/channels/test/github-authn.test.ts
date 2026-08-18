@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
-import { GitHubAdapter } from "../../src/channel/github/surface";
+import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
+import { GitHubAdapter } from "../src/github/surface";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
