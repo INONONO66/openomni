@@ -1,5 +1,5 @@
 import { Adapter, Operational, PolicyDecision } from "@openomni/protocol";
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "@openomni/protocol";
 import { Dedupe } from "../support/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordGateway } from "./gateway";

@@ -1,4 +1,4 @@
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "@openomni/protocol";
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
