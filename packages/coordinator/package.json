@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@openomni/ipc": "workspace:*",
-    "@openomni/protocol": "workspace:*"
+    "@openomni/protocol": "workspace:*",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
-import type { WorkerManager } from "@openomni/coordinator";
-import { WorkerDeliveryError, type Execution } from "@openomni/protocol";
+import { WorkerDeliveryError, type WorkerManager } from "@openomni/coordinator";
+import type { Execution } from "@openomni/protocol";
 import { createExecutionCoordinator } from "../../src/execution/coordinator";
 
 let mockWorkerManager: WorkerManager;

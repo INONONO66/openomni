@@ -1,4 +1,4 @@
-import type { Policy, Tool, ToolSelection } from "@openomni/protocol";
+import type { Policy, Tool } from "@openomni/protocol";
 
 export type ToolCategory = "system" | "agent" | "mcp";
 export type ToolMetaValue = boolean | ((input: unknown) => boolean);
@@ -29,7 +29,7 @@ export interface NativeTool {
   labels?: readonly string[];
   descriptor?: Policy.Resource.Descriptor;
   source?: ToolSource;
-  category?: ToolSelection.Category;
+  category?: Tool.Category;
   implicitInputs?: Readonly<Record<string, ImplicitInputSource>>;
   execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result>;
 }

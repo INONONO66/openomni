@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { Run } from "@openomni/protocol";
+import { RunEvents } from "../../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
@@ -165,7 +165,7 @@ describe("handleError (error)", () => {
    */
   it("reports the retry reason and backoff on the run's own trace", async () => {
     const retries: Array<Record<string, unknown>> = [];
-    const unsubscribe = Bus.subscribe(Run.Events.ErrorRetry, (event) => {
+    const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, (event) => {
       retries.push(event as unknown as Record<string, unknown>);
     });
     const engine = PolicyEngine.create();
@@ -251,7 +251,7 @@ describe("handleError (error)", () => {
    */
   it("reports the narrowed ceiling on the retry path too", async () => {
     const retries: Array<{ maxAttempts: number }> = [];
-    const unsubscribe = Bus.subscribe(Run.Events.ErrorRetry, (event) => {
+    const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, (event) => {
       retries.push(event as unknown as { maxAttempts: number });
     });
     const engine = PolicyEngine.create();

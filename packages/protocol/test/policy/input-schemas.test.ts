@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Command, Policy, Run } from "../../src/index.js";
+import { Command, Policy } from "../../src/index.js";
 
 const pointIds = [
   "dispatch.action.pre",
@@ -245,13 +245,14 @@ describe("PolicyPoint executable input schemas", () => {
     );
   });
 
-  test("represents max-steps only at the agent lifecycle policy boundary", () => {
+  test("represents max-steps at the agent lifecycle policy boundary", () => {
     const input = { sessionId, runId, runOutcome: { type: "max-steps" } };
 
     expect(Policy.PolicyPoint.InputSchemas["run.lifecycle.post"].safeParse(input).success).toBe(
       true,
     );
-    expect(Run.Outcome.safeParse(input.runOutcome).success).toBe(false);
+    // The canonical-side divergence pin (Run.Outcome rejects "max-steps")
+    // lives with Run.Outcome in packages/llm/test/run-outcome.test.ts (#500 C1).
   });
 
   test("rejects malformed canonical dispatch fields", () => {

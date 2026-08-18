@@ -30,6 +30,7 @@
   "devDependencies": {
     "@openomni/coordinator": "workspace:*",
     "@openomni/ipc": "workspace:*",
+    "@openomni/llm": "workspace:*",
     "@types/bun": "latest"
   }
 }

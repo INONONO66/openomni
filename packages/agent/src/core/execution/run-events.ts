@@ -1,4 +1,5 @@
-import { Run, Operational, PolicyDecision } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
+import { RunEvents } from "./events";
 import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
 import type { RetryReason, TerminalReason } from "../retry";
 import type { AgentResult, AgentStep, TokenUsage } from "../types";
@@ -26,7 +27,7 @@ export function emitTurnStart(
 ): void {
   const turnIndex = state.turnIndex;
   const sessionId = agentBase.sessionId;
-  events.publish(Run.Events.TurnStart, {
+  events.publish(RunEvents.TurnStart, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -41,7 +42,7 @@ export function emitTurnComplete(
   turnUsage: TokenUsage,
 ): void {
   const sessionId = agentBase.sessionId;
-  events.publish(Run.Events.TurnComplete, {
+  events.publish(RunEvents.TurnComplete, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -60,7 +61,7 @@ export function emitBudgetReassurance(
   remaining: string,
   threshold: number,
 ): void {
-  events.publish(Run.Events.BudgetReassurance, {
+  events.publish(RunEvents.BudgetReassurance, {
     ...agentBase,
     time: Date.now(),
     remaining,
@@ -74,7 +75,7 @@ export function emitBudgetWarning(
   remaining: string,
   threshold: number,
 ): void {
-  events.publish(Run.Events.BudgetWarning, {
+  events.publish(RunEvents.BudgetWarning, {
     ...agentBase,
     time: Date.now(),
     remaining,
@@ -114,7 +115,7 @@ export function emitErrorRetry(
   },
 ): void {
   const sessionId = agentBase.sessionId;
-  events.publish(Run.Events.ErrorRetry, {
+  events.publish(RunEvents.ErrorRetry, {
     ...agentBase,
     sessionId,
     time: Date.now(),
@@ -161,7 +162,7 @@ export function emitCompaction(
   messagesBefore: number,
   messagesAfter: number,
 ): void {
-  events.publish(Run.Events.Compaction, {
+  events.publish(RunEvents.Compaction, {
     ...agentBase,
     time: Date.now(),
     messagesBefore,

@@ -1,4 +1,4 @@
-import type { ToolSelection, TraceContext } from "@openomni/protocol";
+import type { Tool, TraceContext } from "@openomni/protocol";
 import { buildToolCatalog, resolveToolSelection } from "../tool/catalog.js";
 import { createToolExecutor } from "../tool/executor.js";
 import type { NativeTool } from "../tool/types.js";
@@ -62,7 +62,7 @@ function childToolRuntime(
 
 function selectChildTools(
   source: ChildAgentRuntimeOptions["parentTools"],
-  selection: ToolSelection.Selection | undefined,
+  selection: Tool.Selection | undefined,
 ): NativeTool[] {
   const parentTools = typeof source === "function" ? source() : source;
   const catalog = buildToolCatalog(

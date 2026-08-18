@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Run } from "@openomni/protocol";
+import { RunEvents } from "../../../src/core/execution/events";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { runAgent } from "../../../src/core/execution/run";
 import type { RunTrace } from "../../../src/core/execution/state";
@@ -19,7 +19,7 @@ import {
 async function observedActorId(trace: RunTrace): Promise<string> {
   const actorIds: string[] = [];
   const stop = Bus.observe((event, payload) => {
-    if (event.name !== Run.Events.TurnStart.name) return;
+    if (event.name !== RunEvents.TurnStart.name) return;
     actorIds.push((payload as { actorId: string }).actorId);
   });
   try {

@@ -397,3 +397,54 @@ describe("Tool source label grammar", () => {
     expect(Tool.sourceFromLabels([])).toBeUndefined();
   });
 });
+
+// #500 C4: folded in from the deleted src/tool-selection/tool-selection.test.ts —
+// the vocabulary now lives on the Tool namespace.
+describe("Tool.Category", () => {
+  test("parses every category", () => {
+    expect(Tool.Category.parse("filesystem")).toBe("filesystem");
+    expect(Tool.Category.parse("execution")).toBe("execution");
+    expect(Tool.Category.parse("delegation")).toBe("delegation");
+    expect(Tool.Category.parse("mcp")).toBe("mcp");
+    expect(Tool.Category.parse("custom")).toBe("custom");
+  });
+
+  test("rejects unknown categories", () => {
+    expect(() => Tool.Category.parse("invalid")).toThrow();
+    expect(() => Tool.Category.parse("filesystem2")).toThrow();
+  });
+});
+
+describe("Tool.Selection", () => {
+  test("parses an all-selection", () => {
+    const parsed = Tool.Selection.parse({ all: true });
+    expect(parsed.all).toBe(true);
+  });
+
+  test("parses category and allow/deny lists", () => {
+    const parsed = Tool.Selection.parse({
+      categories: ["filesystem", "mcp"],
+      allow: ["read"],
+      deny: ["write"],
+    });
+    expect(parsed.categories).toEqual(["filesystem", "mcp"]);
+    expect(parsed.allow).toEqual(["read"]);
+    expect(parsed.deny).toEqual(["write"]);
+  });
+
+  test("round-trips through JSON", () => {
+    const original = Tool.Selection.parse({ all: false, categories: ["execution"] });
+    const reparsed = Tool.Selection.parse(JSON.parse(JSON.stringify(original)));
+    expect(reparsed).toEqual(original);
+  });
+
+  test("rejects invalid categories inside the selection", () => {
+    expect(() => Tool.Selection.parse({ categories: ["invalid"] })).toThrow();
+  });
+
+  test("parses the empty selection", () => {
+    const parsed = Tool.Selection.parse({});
+    expect(parsed.all).toBeUndefined();
+    expect(parsed.categories).toBeUndefined();
+  });
+});

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { Message, Sink, Tool, Transcript } from "@openomni/protocol";
+import type { Message, Tool, Transcript } from "@openomni/protocol";
+import type { Sink } from "../../src/sink";
 import { Bus } from "@openomni/telemetry";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";

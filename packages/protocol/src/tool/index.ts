@@ -133,11 +133,37 @@ export namespace Tool {
   export const Result = z.object({
     id: z.string(),
     toolCallId: z.string(),
+    /**
+     * #500 C4: denormalized tool name, populated by producers that have the
+     * name in hand at result construction. Additive-optional — readers must
+     * tolerate absence (older producers, and paths where only the call id
+     * survives). Also crosses the worker UDS boundary inside the
+     * `worker.tool_call` result frame; an optional added field is a safe wire
+     * evolution there (receivers parse with the same schema).
+     */
+    toolName: z.string().optional(),
     output: z.string(),
     isError: z.boolean().optional(),
     settlement: z.enum(["settled", "unknown"]).optional(),
   });
   export type Result = z.infer<typeof Result>;
+
+  /**
+   * #500 C4: tool-catalog selection vocabulary, folded in from the deleted
+   * `tool-selection/` sibling — one noun namespace for the tool grammar.
+   * Consumed by the openomni tool catalog resolver and
+   * `WorkerBootstrap.AgentDefinition.tools`.
+   */
+  export const Category = z.enum(["filesystem", "execution", "delegation", "mcp", "custom"]);
+  export type Category = z.infer<typeof Category>;
+
+  export const Selection = z.object({
+    all: z.boolean().optional(),
+    categories: z.array(Category).optional(),
+    allow: z.array(z.string()).optional(),
+    deny: z.array(z.string()).optional(),
+  });
+  export type Selection = z.infer<typeof Selection>;
 
   export const Spec = z.object({
     name: z.string(),

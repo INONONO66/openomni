@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { type BusEvent, Operational, WorkerDeliveryError } from "@openomni/protocol";
+import { type BusEvent, Operational } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import { IpcConnectionError, type IpcClient } from "@openomni/ipc";
 import { WorkerSupervisor } from "./supervisor";
 

@@ -3,7 +3,6 @@ import { Execution } from "../execution/index.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
-import { ToolSelection } from "../tool-selection/index.js";
 
 export namespace WorkerBootstrap {
   /**
@@ -13,7 +12,7 @@ export namespace WorkerBootstrap {
    * the #504 dual lane (`permissions` + `policyPlan`) rides the same schema
    * objects the spawn parse enforces. Bootstrap-only extensions: identity
    * (`name`/`description`), a per-agent `model` override (optional here,
-   * required on a spawn), and `tools` as a ToolSelection (resolved to
+   * required on a spawn), and `tools` as a Tool.Selection (resolved to
    * concrete Tool.Spec[] before a run is spawned).
    */
   export const AgentDefinition = Execution.Request.pick({
@@ -25,7 +24,7 @@ export namespace WorkerBootstrap {
     name: z.string(),
     description: z.string(),
     model: Model.Ref.optional(),
-    tools: ToolSelection.Selection,
+    tools: Tool.Selection,
   });
   export type AgentDefinition = z.infer<typeof AgentDefinition>;
 
@@ -33,7 +32,7 @@ export namespace WorkerBootstrap {
     canonicalName: z.string(),
     exposedName: z.string(),
     source: Tool.Source,
-    category: ToolSelection.Category,
+    category: Tool.Category,
     riskTier: Tool.RiskTier,
     spec: Tool.Spec,
     descriptor: Policy.Resource.Descriptor.optional(),

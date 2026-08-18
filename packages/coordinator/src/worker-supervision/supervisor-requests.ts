@@ -251,7 +251,14 @@ function toolCallError(
   message: string,
 ): ToolCallResult {
   const callId = typeof source?.callId === "string" ? source.callId : "invalid";
-  return { id: callId, toolCallId: callId, output: message, isError: true, settlement: "unknown" };
+  return {
+    id: callId,
+    toolCallId: callId,
+    ...(typeof source?.tool === "string" ? { toolName: source.tool } : {}),
+    output: message,
+    isError: true,
+    settlement: "unknown",
+  };
 }
 
 function respondAndForget(

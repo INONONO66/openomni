@@ -84,6 +84,7 @@ export function createOpenSearchNativeTools(): NativeTool[] {
         return {
           id: crypto.randomUUID(),
           toolCallId: call.id,
+          toolName: call.tool,
           output: JSON.stringify(output),
         };
       },
@@ -108,6 +109,7 @@ export function createOpenSearchNativeTools(): NativeTool[] {
         return {
           id: crypto.randomUUID(),
           toolCallId: call.id,
+          toolName: call.tool,
           output: JSON.stringify(output),
         };
       },

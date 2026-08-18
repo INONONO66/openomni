@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Run, BusEvent, Operational } from "@openomni/protocol";
+import { BusEvent, Operational } from "@openomni/protocol";
 import { z } from "zod";
 import {
   collector,
@@ -202,6 +202,21 @@ describe("telemetry scope", () => {
   });
 });
 
+// #500 C1: the agent's run-event descriptors moved into @openomni/agent, which
+// telemetry (ring-1 leaf) cannot import — the span pair uses local test
+// descriptors; this suite never depended on the agent event shape (it casts
+// through `as never`).
+const SpanStart = BusEvent.define(
+  "test.span.start",
+  z.object({
+    traceId: z.string(),
+    sessionId: z.string(),
+    runId: z.string(),
+    time: z.number(),
+    label: z.string(),
+  }),
+);
+
 const SpanEnd = BusEvent.define(
   "test.span.end",
   z.object({
@@ -218,7 +233,7 @@ const TEST_SPAN: SpanPair<
   { readonly label: string },
   { readonly kind: string; readonly elapsedMs: number }
 > = {
-  start: Run.Events.TurnStart as never,
+  start: SpanStart as never,
   end: SpanEnd as never,
   terminal: (outcome, elapsedMs) => ({ kind: outcome.kind, elapsedMs }),
 };
@@ -233,7 +248,7 @@ describe("telemetry span", () => {
       // the throwing case still has to emit its terminal event
     }
     return {
-      starts: sink.named(Run.Events.TurnStart.name).length,
+      starts: sink.named(SpanStart.name).length,
       ends: sink.named(SpanEnd.name) as Array<{ kind: string }>,
     };
   }
@@ -255,7 +270,7 @@ describe("telemetry span", () => {
       return "ok";
     });
 
-    const start = sink.named(Run.Events.TurnStart.name)[0] as {
+    const start = sink.named(SpanStart.name)[0] as {
       spanId: string;
       parentSpanId?: string;
     };

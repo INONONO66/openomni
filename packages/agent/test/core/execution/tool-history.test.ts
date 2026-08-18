@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { Message, Sink } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
+import type { Message } from "@openomni/protocol";
 import type { Provider } from "@openomni/llm";
 import { toModelMessages } from "@openomni/llm/src/message";
 import { ChatAgent } from "../../../src/core/chat-agent";

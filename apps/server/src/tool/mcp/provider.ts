@@ -1,5 +1,5 @@
 import { McpClient } from "@openomni/agent";
-import type { McpServerConfig, Tool } from "@openomni/protocol";
+import type { McpConfig, Tool } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type {
@@ -24,7 +24,7 @@ export class McpToolProvider implements ToolProvider {
 
   constructor(private readonly options: McpToolProviderOptions) {}
 
-  async addServer(config: McpServerConfig): Promise<void> {
+  async addServer(config: McpConfig.ServerConfig): Promise<void> {
     const client =
       this.options.createClient?.(config) ??
       new McpClient(config, { traceId: this.options.traceId, events: Bus });

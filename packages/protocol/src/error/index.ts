@@ -65,42 +65,9 @@ export abstract class NamedError extends Error {
   );
 }
 
-/**
- * Typed rejection taxonomy for the worker driver's `deliver` verb (#462 §4).
- * Callers branch on `data.code`, never on message text.
- */
-export const WorkerDeliveryError = NamedError.create(
-  "WorkerDeliveryError",
-  z.object({
-    message: z.string(),
-    code: z.enum([
-      "queue_full",
-      "shutting_down",
-      "duplicate_run",
-      "slot_wait_timeout",
-      "worker_restarted",
-      "session_mismatch",
-      "wall_time_exceeded",
-      // Supervisor-level rejections (#audit M6): the worker RPCs reject with
-      // these instead of untyped Error/raw IpcConnectionError.
-      "worker_unavailable",
-      "worker_not_ready",
-      "worker_stopped",
-      "ipc_connection_lost",
-    ]),
-    runId: z.string().optional(),
-    sessionId: z.string().optional(),
-  }),
-);
-
-export const APIError = NamedError.create(
-  "APIError",
-  z.object({
-    message: z.string(),
-    statusCode: z.number().optional(),
-    isRetryable: z.boolean(),
-    responseHeaders: z.record(z.string(), z.string()).optional(),
-    responseBody: z.string().optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
-  }),
-);
+// #500 C3: NamedError STAYS here — it is consumed by protocol's own schemas
+// (ledger/schema.ts AdoptError, wait/schema.ts StoreError, communication
+// pending-ask/pending-interaction FrozenError). The concrete errors that
+// lived beside it moved to their caller-proven owners: APIError →
+// @openomni/llm (src/error.ts — llm-only callers), WorkerDeliveryError →
+// @openomni/coordinator (src/error.ts — coordinator + apps/server callers).

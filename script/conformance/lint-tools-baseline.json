@@ -14,12 +14,9 @@
       "mcp",
       "message",
       "model",
-      "run",
-      "sink",
       "storage",
       "token",
       "tool",
-      "tool-selection",
       "trace",
       "worker-bootstrap"
     ]

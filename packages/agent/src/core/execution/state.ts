@@ -1,5 +1,6 @@
 import type { RunInput } from "@openomni/llm";
-import type { Message, Policy, Sink, TraceContext } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
+import type { Message, Policy, TraceContext } from "@openomni/protocol";
 import {
   createBudgetState,
   recordTokenUsage,

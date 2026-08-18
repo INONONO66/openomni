@@ -80,6 +80,8 @@ const toolSpec = z.object({
 const toolResult = z.object({
   id: z.string(),
   toolCallId: z.string(),
+  // #500 C4: additive-optional denormalized tool name, mirrored from Tool.Result.
+  toolName: z.string().optional(),
   output: z.string(),
   isError: z.boolean().optional(),
   settlement: z.enum(["settled", "unknown"]).optional(),

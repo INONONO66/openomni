@@ -1,12 +1,37 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { Run, LlmCall, Tool } from "@openomni/protocol";
+import { BusEvent, LlmCall, Token, Tool } from "@openomni/protocol";
+import { z } from "zod";
 import { Bus } from "@openomni/telemetry";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
 import "../../src/storage/initialize.js";
+
+// #500 C1: the agent's run-event descriptors moved into @openomni/agent, which
+// session (protocol+telemetry only) cannot import. This pipeline suite needs
+// real `agent.*`-named events with the same persistence visibility, so the two
+// it publishes are mirrored locally — the name strings are frozen wire
+// vocabulary (bus_event rows and byCategory derivation key on them).
+const AgentTurnBase = z.object({
+  traceId: z.string(),
+  sessionId: z.string(),
+  agentId: z.string().optional(),
+  runId: z.string().optional(),
+  time: z.number(),
+});
+
+const RunEvents = {
+  TurnStart: BusEvent.define("agent.turn.start", AgentTurnBase.extend({ turnIndex: z.number() }), {
+    visibility: "ephemeral",
+  }),
+  TurnComplete: BusEvent.define(
+    "agent.turn.complete",
+    AgentTurnBase.extend({ turnIndex: z.number(), usage: Token.AgentUsage }),
+    { visibility: "llm_reason" },
+  ),
+};
 
 function db(): Database {
   return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
@@ -41,7 +66,7 @@ describe("Observability Pipeline Integration", () => {
       const runId = "run-pipeline-1";
       const time = Date.UTC(2026, 4, 10, 12, 0, 0);
 
-      Bus.publish(Run.Events.TurnStart, {
+      Bus.publish(RunEvents.TurnStart, {
         traceId: "t1",
         sessionId,
         runId,
@@ -89,7 +114,7 @@ describe("Observability Pipeline Integration", () => {
         durationMs: 200,
         isError: false,
       });
-      Bus.publish(Run.Events.TurnComplete, {
+      Bus.publish(RunEvents.TurnComplete, {
         traceId: "t6",
         sessionId,
         runId,
@@ -192,7 +217,7 @@ describe("Observability Pipeline Integration", () => {
       const sessionA = createSession("session-a");
       const sessionB = createSession("session-b");
 
-      Bus.publish(Run.Events.TurnStart, {
+      Bus.publish(RunEvents.TurnStart, {
         traceId: "a1",
         sessionId: sessionA.id,
         time: Date.now(),
@@ -207,7 +232,7 @@ describe("Observability Pipeline Integration", () => {
         messageCount: 3,
         toolCount: 1,
       });
-      Bus.publish(Run.Events.TurnComplete, {
+      Bus.publish(RunEvents.TurnComplete, {
         traceId: "a3",
         sessionId: sessionA.id,
         time: Date.now(),

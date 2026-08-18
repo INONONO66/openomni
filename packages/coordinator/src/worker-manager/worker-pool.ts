@@ -1,11 +1,5 @@
-import {
-  Ipc,
-  Operational,
-  WorkerDeliveryError,
-  Worker,
-  type Execution,
-  type WorkerBootstrap,
-} from "@openomni/protocol";
+import { Ipc, Operational, Worker, type Execution, type WorkerBootstrap } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import fs from "node:fs";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
 import {

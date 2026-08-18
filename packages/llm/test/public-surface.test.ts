@@ -9,7 +9,8 @@ describe("@openomni/llm root public surface", () => {
     const publicKeys = Object.keys(root).sort();
 
     // Then: only package-level namespaces and entry points are exposed.
-    expect(publicKeys).toEqual(["Auth", "ModelsDev", "Provider", "run"]);
+    // #500 C1: `Run` (Outcome vocabulary) moved here from protocol; `Sink` is type-only.
+    expect(publicKeys).toEqual(["Auth", "ModelsDev", "Provider", "Run", "run"]);
   });
 
   test("does not expose lower-level implementation helpers", async () => {

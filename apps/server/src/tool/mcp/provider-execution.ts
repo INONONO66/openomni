@@ -88,6 +88,7 @@ function publishBlockedResult(input: {
   const result = {
     id: crypto.randomUUID(),
     toolCallId: call.id,
+    toolName: call.tool,
     output: reason,
     isError: true,
   };

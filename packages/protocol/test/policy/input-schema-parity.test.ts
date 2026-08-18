@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Command, Policy, Run, Tool } from "../../src/index.js";
+import { Command, Policy, Tool } from "../../src/index.js";
 
 interface Validator {
   readonly safeParse: (input: unknown) => { readonly success: boolean };
@@ -74,22 +74,6 @@ const parityCases: readonly ParityCase[] = [
     ],
   },
   {
-    name: "Run.Outcome",
-    canonical: Run.Outcome,
-    policy: Policy.PolicyPoint.InputSchemas["run.lifecycle.post"],
-    embed: (runOutcome) => ({ sessionId: "session-1", runId: "run-1", runOutcome }),
-    candidates: [
-      { type: "stop" },
-      { type: "continue" },
-      { type: "error", error: { message: "failed", name: "Error", stack: "stack" } },
-      { type: "invalid" },
-      { type: "error" },
-      { type: "error", error: {} },
-      { type: "error", error: { message: "failed", name: 1 } },
-      { type: "stop", extra: true },
-    ],
-  },
-  {
     name: "Tool.Spec",
     canonical: Tool.Spec,
     policy: Policy.PolicyPoint.InputSchemas["tool.catalog.pre"],
@@ -133,6 +117,9 @@ const parityCases: readonly ParityCase[] = [
       { id: "result-1", toolCallId: "call-1", output: "ok", settlement: "invalid" },
       { id: "result-1", toolCallId: "call-1", output: "ok", isError: "yes" },
       { id: "result-1", toolCallId: "call-1", output: "ok", extra: true },
+      // #500 C4: additive-optional toolName must parse identically at both ends.
+      { id: "result-1", toolCallId: "call-1", toolName: "read", output: "ok" },
+      { id: "result-1", toolCallId: "call-1", toolName: 5, output: "ok" },
     ],
   },
 ];

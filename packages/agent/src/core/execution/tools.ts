@@ -113,6 +113,7 @@ export function createToolExecutor(
     const result: BlockedToolResult = {
       id: crypto.randomUUID(),
       toolCallId: call.id,
+      toolName: call.tool,
       output,
       isError: true,
     };
@@ -199,6 +200,7 @@ export function createToolExecutor(
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
+        toolName: call.tool,
         output: `[Skipped: ${skip.reason ?? PolicyDecision.reason(preDecision, "middleware")}]`,
         isError: false,
       };

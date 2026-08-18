@@ -835,12 +835,6 @@
     "requireApproval",
     "requireApprovalLabels"
   ],
-  "Run.Outcome#0": ["type"],
-  "Run.Outcome#1": ["type"],
-  "Run.Outcome#2": ["type"],
-  "Run.Outcome#3": ["type"],
-  "Run.Outcome#4": ["error", "type"],
-  "Run.RetryPolicy": ["backoffMs", "maxAttempts", "retryOn"],
   "Token.AgentUsage": [
     "cacheReadTokens",
     "cacheWriteTokens",
@@ -874,7 +868,15 @@
   ],
   "Tool.Call": ["id", "input", "tool"],
   "Tool.Config": ["agentTools", "mcpTools", "systemTools", "workspaceRoot"],
-  "Tool.Result": ["id", "isError", "output", "settlement", "toolCallId"],
+  "Tool.Result": [
+    "id",
+    "isError",
+    "output",
+    "settlement",
+    "toolCallId",
+    "toolName"
+  ],
+  "Tool.Selection": ["all", "allow", "categories", "deny"],
   "Tool.Spec": [
     "description",
     "inputSchema",
@@ -887,7 +889,6 @@
   "Tool.State#1": ["input", "status", "time"],
   "Tool.State#2": ["input", "metadata", "output", "status", "time", "title"],
   "Tool.State#3": ["error", "input", "status", "time"],
-  "ToolSelection.Selection": ["all", "allow", "categories", "deny"],
   "Transcript.Fact#0": ["attemptId", "message", "type"],
   "Transcript.Fact#1": ["attemptId", "messageId", "part", "type"],
   "Transcript.Fact#2": [

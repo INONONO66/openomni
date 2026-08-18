@@ -1,10 +1,10 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { BusEvent, McpServerConfig } from "@openomni/protocol";
+import type { BusEvent, McpConfig } from "@openomni/protocol";
 
 export type McpClientHandle = Pick<Client, "connect" | "close" | "listTools" | "callTool">;
 
-export type McpTransportFactory = (config: McpServerConfig) => Transport;
+export type McpTransportFactory = (config: McpConfig.ServerConfig) => Transport;
 
 export interface McpClientDependencies {
   readonly client?: McpClientHandle;

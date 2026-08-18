@@ -1,4 +1,5 @@
-import { Ipc, WorkerDeliveryError } from "@openomni/protocol";
+import { Ipc } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import type { Subprocess } from "bun";
 
 const DEFAULT_WORKER_STOP_GRACE_MS = 5_000;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Execution } from "../execution/index.js";
+import { Tool } from "../tool/index.js";
 import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
 const baseMessage = z.object({
@@ -136,13 +137,13 @@ const methods = {
       input: z.record(z.string(), z.unknown()),
       workspaceRoot: z.string().optional(),
     }),
-    result: z.object({
-      id: z.string(),
-      toolCallId: z.string(),
-      output: z.string(),
-      isError: z.boolean().optional(),
-      settlement: z.enum(["settled", "unknown"]).optional(),
-    }),
+    /**
+     * #500 C4: the result frame IS a Tool.Result — the inline clone had
+     * already drifted once and would again. Referencing the canonical schema
+     * also carries the additive-optional `toolName` across the UDS boundary
+     * (safe wire evolution: optional field, both ends parse Tool.Result).
+     */
+    result: Tool.Result,
   },
   "worker.tool_call_cancel": {
     params: z.object({

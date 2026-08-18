@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { Operational, type McpServerConfig } from "@openomni/protocol";
+import { Operational, type McpConfig } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { loadConfig } from "../src/config";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -58,7 +58,7 @@ describe("config", () => {
 
   it("preserves protocol MCP server fields from the config file", () => {
     const configPath = join(tempDir, "config.json");
-    const servers: McpServerConfig[] = [
+    const servers: McpConfig.ServerConfig[] = [
       {
         name: "remote",
         transport: "streamable-http",
@@ -78,7 +78,7 @@ describe("config", () => {
     const warnings: unknown[] = [];
     const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
     const configPath = join(tempDir, "config.json");
-    const valid: McpServerConfig = {
+    const valid: McpConfig.ServerConfig = {
       name: "valid",
       transport: "stdio",
       command: "node",

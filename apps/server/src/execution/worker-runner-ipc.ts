@@ -113,6 +113,7 @@ export function createMcpProxyProvider(options: {
       return {
         id: callId,
         toolCallId: callId,
+        toolName,
         output: "Tool call aborted",
         isError: true,
       };
@@ -148,6 +149,7 @@ export function createMcpProxyProvider(options: {
       return {
         id: callId,
         toolCallId: callId,
+        toolName,
         output: error instanceof Error ? error.message : String(error),
         isError: true,
         settlement: "unknown",

@@ -1,13 +1,7 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import {
-  type BusEvent,
-  Ipc,
-  Operational,
-  WorkerDeliveryError,
-  Worker,
-  type WorkerBootstrap,
-} from "@openomni/protocol";
+import { type BusEvent, Ipc, Operational, Worker, type WorkerBootstrap } from "@openomni/protocol";
+import { WorkerDeliveryError } from "../error";
 import {
   connectIpcClient,
   IpcConnectionError,

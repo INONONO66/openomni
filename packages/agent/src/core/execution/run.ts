@@ -8,7 +8,7 @@ import {
   handleStop,
 } from "./turn";
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
-import type { Sink } from "@openomni/protocol";
+import type { Sink } from "@openomni/llm";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
