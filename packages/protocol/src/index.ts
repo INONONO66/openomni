@@ -18,6 +18,7 @@ export * from "./mcp/index.js";
 export * from "./adapter/index.js";
 export * from "./actor/index.js";
 export * from "./communication/index.js";
+export * from "./gateway/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
 export * from "./agent/index.js";
