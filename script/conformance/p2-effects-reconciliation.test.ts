@@ -99,6 +99,7 @@ describe("p2 effects conformance (#492)", () => {
     const manifest = new EffectManifest();
     manifest.register({
       kind: "observed",
+      replay: "never",
       execute: (intent) => {
         // Record-before-act: at the moment the driver runs, the intent fact
         // is already durable on the stream.
@@ -168,6 +169,7 @@ describe("p2 effects conformance (#492)", () => {
     const manifest = new EffectManifest();
     manifest.register({
       kind: "count-executions",
+      replay: "never",
       execute: () => {
         executions += 1;
         return { kind: "confirmed", receipt: "first" };

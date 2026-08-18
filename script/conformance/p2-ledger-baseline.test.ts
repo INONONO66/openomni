@@ -1889,6 +1889,7 @@ describe("p2 ledger baseline — effect decision-class facts (intent/outcome)", 
     const manifest = new EffectManifest();
     manifest.register({
       kind: driver.kind,
+      replay: "never",
       execute: driver.execute,
       reconcile: () => ({ kind: "unknown" }),
     });

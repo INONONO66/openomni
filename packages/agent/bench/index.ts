@@ -6,7 +6,7 @@ import { Compaction } from "../src/compaction/compact.ts";
 import { noopSink } from "@openomni/telemetry";
 
 /** The bench stands in for one run. It measures compaction, not reporting. */
-const BENCH_TRACE = { traceId: "trace-agent-bench" };
+const BENCH_TRACE = { traceId: "trace-agent-bench", sessionId: "session-agent-bench" };
 const BENCH_EVENTS = noopSink();
 
 interface BenchmarkResult {
@@ -32,7 +32,9 @@ for (const size of [20, 100, 500]) {
   bench.add(
     `compaction/${size}-messages`,
     async () => {
-      await Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS);
+      await Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS, {
+        trigger: "threshold",
+      });
     },
     { async: true },
   );

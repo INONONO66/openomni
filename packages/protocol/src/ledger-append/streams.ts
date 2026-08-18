@@ -150,6 +150,15 @@ export const EffectIntended = z
     target: z.string().min(1).optional(),
     workItemHash: z.string().min(1).optional(),
     attemptId: z.string().min(1).optional(),
+    /**
+     * Whether a replay/recovery consumer may re-execute this effect ("safe")
+     * or must only read back its recorded outcome ("never"). Written at
+     * record time by the effect service from the driver's declaration — the
+     * one party that knows the effect's nature. Optional ONLY as a
+     * persisted-data boundary: rows recorded before this vocabulary existed
+     * carry no tag, and every consumer must treat absence as "never".
+     */
+    replay: z.enum(["never", "safe"]).optional(),
   })
   .strict();
 export type EffectIntended = z.infer<typeof EffectIntended>;

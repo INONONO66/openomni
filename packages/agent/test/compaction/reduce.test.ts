@@ -109,7 +109,7 @@ describe("elideToolOutputs", () => {
 });
 
 describe("Compaction.compact with elision configured", () => {
-  const trace = { traceId: "trace-reduce" };
+  const trace = { traceId: "trace-reduce", sessionId: "session-reduce" };
 
   it("reduces instead of cutting while there is something to elide", async () => {
     const sink = collector();
@@ -125,6 +125,8 @@ describe("Compaction.compact with elision configured", () => {
       { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
       trace,
       sink,
+
+      { trigger: "threshold" },
     );
 
     expect(result.compacted).toBe(true);
@@ -147,6 +149,8 @@ describe("Compaction.compact with elision configured", () => {
       { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
       trace,
       sink,
+
+      { trigger: "threshold" },
     );
 
     expect(result.compacted).toBe(true);
@@ -199,7 +203,8 @@ describe("Compaction.compact with elision configured", () => {
       { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
       trace,
       sink,
-      10_000, // measured: overage ~9920 tokens; elision nets 439 chars ≈ 110 tokens
+
+      { trigger: "threshold", measuredTokens: 10_000 }, // measured: overage ~9920 tokens; elision nets 439 chars ≈ 110 tokens
     );
 
     expect(result.compacted).toBe(true);
@@ -221,7 +226,8 @@ describe("Compaction.compact with elision configured", () => {
       { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
       trace,
       sink,
-      100, // measured: overage 20 tokens; elision nets 439 chars ≈ 110 tokens
+
+      { trigger: "threshold", measuredTokens: 100 }, // measured: overage 20 tokens; elision nets 439 chars ≈ 110 tokens
     );
 
     expect(result.compacted).toBe(true);

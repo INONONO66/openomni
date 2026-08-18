@@ -27,6 +27,7 @@ afterEach(() => {
 
 /** A programmable driver: `execute`/`reconcile` return whatever is queued, recording calls. */
 class ScriptedDriver implements EffectDriver {
+  readonly replay = "never" as const;
   executeCalls = 0;
   reconcileCalls = 0;
   constructor(

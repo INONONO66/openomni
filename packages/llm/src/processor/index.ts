@@ -139,6 +139,10 @@ export namespace Processor {
         publishStatus(events, sessionID, trace.traceId, "busy");
         let attempt = 0;
         let attemptSeq = 0;
+        // Consecutive instant transport failures (no HTTP status, dead under
+        // the window). Reset by any attempt that reaches the endpoint or
+        // fails slowly — only an unbroken streak declines the retry.
+        let instantFailureStreak = 0;
 
         try {
           while (true) {
@@ -176,6 +180,7 @@ export namespace Processor {
               });
             }
 
+            const attemptStartedAt = Date.now();
             try {
               const stream = await createStream(streamInput);
 
@@ -220,7 +225,13 @@ export namespace Processor {
               return;
             } catch (e: unknown) {
               const apiError = coerceApiError(e);
-              const decision = Retry.decide(attempt + 1, apiError ?? e);
+              instantFailureStreak = Retry.isInstantTransportFailure(
+                apiError ?? e,
+                Date.now() - attemptStartedAt,
+              )
+                ? instantFailureStreak + 1
+                : 0;
+              const decision = Retry.decide(attempt + 1, apiError ?? e, instantFailureStreak);
 
               if (!decision.retry || ++attempt > retryAttemptLimit) {
                 if (!decision.retry && decision.reason !== "non_retryable") {

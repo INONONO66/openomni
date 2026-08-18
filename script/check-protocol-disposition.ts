@@ -56,7 +56,8 @@ const REQUIRED_EVIDENCE_KEYS = [
   "runtimeConsumer",
 ] as const;
 
-const DEFAULT_INVENTORY_PATH = ".omo/evidence/p3/protocol-concept-disposition.json";
+const DEFAULT_INVENTORY_PATH =
+  "packages/protocol/test/concept-diet/protocol-concept-disposition.json";
 const DEFAULT_FIXTURES_DIR = "packages/protocol/test/concept-diet/fixtures";
 
 // ---------------------------------------------------------------------------

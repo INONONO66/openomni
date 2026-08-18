@@ -55,6 +55,42 @@ export namespace AgentExecution {
     { visibility: "llm_reason" },
   );
 
+  /**
+   * The compaction lock bracket. `started` is published before any
+   * compaction work; `completed` is the operation's last record on every
+   * exit path, a summarizer throw included (`outcome: "failed"`). A started
+   * row without a completed row therefore diagnoses a run that died inside
+   * compaction — previously indistinguishable from an unexplained
+   * fail-closed deny. The existing `agent.compaction` event remains the
+   * apply-phase record at the effect seam.
+   */
+  export const CompactionStarted = BusEvent.define(
+    "agent.compaction.started",
+    AgentBase.extend({
+      messagesBefore: z.number(),
+      /** Provider-measured context of the last call; absent when unmeasured. */
+      contextTokens: z.number().optional(),
+      /** What fired the seam: the threshold gate or the loop's window yield. */
+      trigger: z.enum(["threshold", "yield"]),
+      /** Whether a summarizer is configured — the crash-risk half. */
+      summarizer: z.boolean(),
+    }),
+    { visibility: "internal" },
+  );
+
+  export const CompactionCompleted = BusEvent.define(
+    "agent.compaction.completed",
+    AgentBase.extend({
+      outcome: z.enum(["cut", "reduced", "nothing_reclaimed", "no_user_boundary", "failed"]),
+      messagesBefore: z.number(),
+      messagesAfter: z.number(),
+      removedCount: z.number(),
+      elidedChars: z.number(),
+      error: z.string().optional(),
+    }),
+    { visibility: "internal" },
+  );
+
   export const ErrorRetry = BusEvent.define(
     "agent.error.retry",
     AgentBase.extend({
