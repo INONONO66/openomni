@@ -42,8 +42,8 @@ Run memory (volatile):
 
 ## Lifecycle
 
-**Turn settlement (`run.turn.post` timing, loop mechanism — not a policy):**
-- measured ≥ prepare ratio (default 0.65 of window) → fire `prepare()` in the background: single-flight per run, linked to the run's AbortSignal, failure = no candidate (recorded skip, never a run error).
+**Turn settlement (`run.turn.post` timing, per-run policy-factory state):**
+- measured ≥ prepare ratio (default 0.65 of window) → fire `prepare()` in the background: single-flight per run, failure = no candidate reported via `operational.warn` with a consecutive-failure cap that disables speculation for the run (never a run error). No AbortSignal linkage — dispatch contexts are structured-clone frozen, so per-run candidate state simply dies with the run's engine.
 - `prepare()` input = the would-be cut span **minus user messages minus prior summary renders**; the summarizer merges it into the previous anchor (senpi UPDATE contract). Output candidate carries a prefix fingerprint of the history it summarized.
 
 **Apply seam (`run.completion.pre`, threshold ≥ 0.8 or window yield — existing wiring unchanged):**

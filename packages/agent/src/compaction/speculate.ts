@@ -28,11 +28,18 @@ export interface CompactionCandidate {
 }
 
 export interface Speculator {
-  /** Fire-and-forget, single-flight. Never throws; failure = no candidate. */
+  /**
+   * Fire-and-forget, single-flight. Never throws; failure = no candidate,
+   * reported through `onFailure` with the consecutive-failure streak. After
+   * MAX_PREPARE_FAILURES consecutive failures speculation stops for the run
+   * (#724 review M5): the synchronous seam merge remains, and ITS failure
+   * surfaces through the fail-closed bracket — no silent per-turn burn.
+   */
   maybePrepare(
     messages: readonly Message.WithParts[],
     contextTokens: number,
     contextWindowTokens: number,
+    onFailure?: (error: unknown, failStreak: number) => void,
   ): void;
   peek(): CompactionCandidate | undefined;
   /** The seam consumed (promoted or discarded) whatever was pending. */
@@ -40,6 +47,7 @@ export interface Speculator {
 }
 
 export const DEFAULT_PREPARE_RATIO = 0.65;
+const MAX_PREPARE_FAILURES = 2;
 
 function isIdPrefix(spanIds: readonly string[], messages: readonly Message.WithParts[]): boolean {
   if (spanIds.length > messages.length) return false;
@@ -56,9 +64,11 @@ export function createSpeculator(config: {
 }): Speculator {
   let candidate: CompactionCandidate | undefined;
   let inFlight = false;
+  let failStreak = 0;
 
   return {
-    maybePrepare(messages, contextTokens, contextWindowTokens) {
+    maybePrepare(messages, contextTokens, contextWindowTokens, onFailure) {
+      if (failStreak >= MAX_PREPARE_FAILURES) return;
       // A candidate whose span is no longer a live prefix (history was
       // replaced) is dead weight — drop it so a fresh prepare can run.
       if (candidate !== undefined && !isIdPrefix(candidate.spanIds, messages)) {
@@ -74,15 +84,18 @@ export function createSpeculator(config: {
       void config
         .onSummarize(plan.summarizerInput, plan.previousAnchor)
         .then((merged) => {
+          failStreak = 0;
           candidate =
             merged.trim().length > 0 ? { spanIds: plan.spanIds, anchorBody: merged } : undefined;
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           // Absent candidate: the seam falls back to its synchronous merge,
           // which surfaces the same failure through the fail-closed bracket
           // if it repeats there. Nothing to rethrow into — this promise has
-          // no awaiter by design.
+          // no awaiter by design; the streak caps the retry burn.
           candidate = undefined;
+          failStreak += 1;
+          onFailure?.(error, failStreak);
         })
         .finally(() => {
           inFlight = false;

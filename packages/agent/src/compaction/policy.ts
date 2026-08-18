@@ -1,4 +1,4 @@
-import { PolicyDecision, type BusEvent } from "@openomni/protocol";
+import { Operational, PolicyDecision, type BusEvent } from "@openomni/protocol";
 import { Compaction, DEFAULT_PROTECT_RECENT, type CompactionOptions } from "./compact";
 import { DEFAULT_PREPARE_RATIO, createSpeculator, type Speculator } from "./speculate";
 import type { CanonicalPolicyRegistration, PolicyRegistrationFactory } from "../core/policy/types";
@@ -78,7 +78,26 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
       // what a background summarize wants: content it can read while the
       // run moves on.
       if (ctx.pointId === "run.turn.post") {
-        speculator?.maybePrepare(ctx.messages, ctx.contextTokens, contextWindowTokens);
+        speculator?.maybePrepare(
+          ctx.messages,
+          ctx.contextTokens,
+          contextWindowTokens,
+          (error, failStreak) => {
+            // Visible failure (#724 review M5): the burn is capped by the
+            // streak, and the record says when speculation gave up.
+            events.publish(Operational.Warn, {
+              traceId: ctx.traceContext?.traceId ?? "",
+              time: Date.now(),
+              ...(ctx.sessionId === undefined ? {} : { sessionId: ctx.sessionId }),
+              component: "compaction-speculate",
+              msg:
+                failStreak >= 2
+                  ? "prepare failed; speculation disabled for this run"
+                  : "prepare failed; will retry next turn",
+              context: { error: error instanceof Error ? error.message : String(error) },
+            });
+          },
+        );
         return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
@@ -125,9 +144,13 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
           ...(candidate === undefined ? {} : { candidate }),
         },
       );
-      // Whatever the seam saw, it consumed: a promoted candidate is spent,
-      // a discarded one is dead — either way the next prepare starts clean.
-      if (candidate !== undefined) speculator?.consume();
+      // Consume only what the seam actually evaluated (#724 review M2): an
+      // elision-covered round returns before the cut and never judges the
+      // candidate — destroying it there would re-pay the prepare every
+      // elision cycle. A promoted candidate is spent; a discarded one is
+      // dead; an unevaluated one stays for the next seam (staleness is
+      // handled structurally by the prefix check in maybePrepare).
+      if (result.candidate !== undefined) speculator?.consume();
       const candidateReason =
         result.candidate === undefined ? [] : [`compaction_candidate_${result.candidate}`];
       if (!result.compacted) {

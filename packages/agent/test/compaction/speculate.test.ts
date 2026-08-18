@@ -258,4 +258,84 @@ describe("speculative prepare/promote (L4)", () => {
       "compaction_threshold_exceeded",
     );
   });
+
+  it("a promote refused by the progress guard falls back to the synchronous merge (review M1)", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      // The prepared anchor is enormous relative to its tiny span — the
+      // promote cannot shrink the window; the sync merge's anchor is small.
+      return calls === 1 ? "x".repeat(5000) : "sync-anchor";
+    });
+    // Tiny history at prepare time: the candidate span is small, its anchor
+    // render outweighs it.
+    const tiny = [user("q"), assistant("a"), user("t1"), user("t2")];
+    await registration.fn(turnPostCtx(tiny, 70));
+    await Bun.sleep(0);
+    expect(calls).toBe(1);
+
+    // The history grew massively: the candidate's tiny-span promote cannot
+    // shrink the window, but the natural-span merge can. Speculation must
+    // never take that cut away.
+    const grown = [
+      ...tiny,
+      ...Array.from({ length: 8 }, (_unused, index) => assistant(`late-${index}`)),
+      user("tail-q"),
+      assistant("tail-a"),
+    ];
+    const decision = await registration.fn(seamCtx(grown, 95));
+    expect(calls).toBe(2); // synchronous merge ran
+    const reasons = (decision as { reasonCodes?: string[] }).reasonCodes ?? [];
+    expect(reasons).toContain("compaction_candidate_discarded");
+    expect(reasons).toContain("compaction_threshold_exceeded");
+    expect(
+      (decision as { effects: Array<{ type: string }> }).effects.some(
+        (entry) => entry.type === "run.replace_messages",
+      ),
+    ).toBe(true);
+  });
+
+  it("an unevaluated candidate survives a seam that returned before the cut (review M2)", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      return "kept-candidate";
+    });
+    const messages = history();
+    await registration.fn(turnPostCtx(messages, 70));
+    await Bun.sleep(0);
+    expect(calls).toBe(1);
+
+    // A seam that never reaches the candidate branch (history within the
+    // protected tail) must not destroy the candidate.
+    const shortSeam = await registration.fn(seamCtx(messages.slice(0, 2), 85));
+    expect((shortSeam as { reasonCodes?: string[] }).reasonCodes).toContain(
+      "compaction_skipped_nothing_reclaimed",
+    );
+
+    // The next real seam still promotes with zero further model calls.
+    const decision = await registration.fn(seamCtx(messages, 85));
+    expect(calls).toBe(1);
+    expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
+      "compaction_candidate_promoted",
+    );
+  });
+
+  it("stops preparing after the failure streak cap, visibly", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      throw new Error("provider down");
+    });
+    const messages = history();
+    await registration.fn(turnPostCtx(messages, 70));
+    await Bun.sleep(0);
+    await registration.fn(turnPostCtx(messages, 72));
+    await Bun.sleep(0);
+    expect(calls).toBe(2);
+    // Streak cap reached: no more prepares this run.
+    await registration.fn(turnPostCtx(messages, 74));
+    await Bun.sleep(0);
+    expect(calls).toBe(2);
+  });
 });
