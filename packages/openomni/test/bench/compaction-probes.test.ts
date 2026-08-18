@@ -122,7 +122,13 @@ function presenceScore(texts: readonly string[], probes: readonly string[]): num
   return probes.filter((probe) => joined.includes(probe)).length / probes.length;
 }
 
-/** The regenerate-uniform baseline: one paraphrased summary, users included. */
+/**
+ * ILLUSTRATIVE hardcoded baseline modeling the regenerate-everything shape
+ * (#729 review F3): its scores are byte-absent by construction, so the
+ * uniform half of the A/B is an illustration, not a measurement — the
+ * meaningful half is the anchored side, which runs the REAL shipped seam
+ * (guard live, decoration live) and proves the shipped path preserves.
+ */
 function uniformBaseline(history: Message.WithParts[]): Array<{ content: string }> {
   const tail = history.slice(-2);
   return [
@@ -224,6 +230,7 @@ describe("compaction probe bench (L7 — deterministic, seeded)", () => {
     expect(scores.anchored.constraints).toBe(1);
     expect(scores.anchored.goal).toBe(1);
     expect(scores.anchored.artifact).toBe(1); // ledger-derived table (L6)
+    // By construction (illustrative baseline): see uniformBaseline's doc.
     expect(scores.uniform.constraints).toBe(0);
     // The goal sits in the protected tail, which BOTH strategies keep — the
     // A/B differentiator is user text outside the tail (constraints) and the

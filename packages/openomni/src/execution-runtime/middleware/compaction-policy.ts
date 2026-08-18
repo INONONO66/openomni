@@ -221,38 +221,58 @@ function wrapCreated(
 }
 
 /**
- * Multiset containment of user speech: every user-roled text part in the
- * window (anchor renders and policy-injected texts excluded) must consume
- * one byte-identical occurrence from the pre-cut history. Returns the first
- * violating text, or undefined when the window is clean.
+ * Multiset containment of user speech (#729 review F1 — tag-qualified so a
+ * tag cannot launder a paraphrase): every user-roled text part in the
+ * window must consume one byte-identical occurrence from the pre-cut
+ * history UNDER THE SAME TAG — a policy-injected window text only matches a
+ * policy-injected input text. Anchor renders are excluded only when the
+ * window carries AT MOST ONE anchor and it is well-shaped (string
+ * anchorBody + array keptWindow); a second anchor, or an anchor-flagged
+ * part without the record shape, is treated as plain user speech and fails
+ * the byte check if paraphrased. Returns the first violating text, or
+ * undefined when the window is clean.
  */
 function userByteViolation(
   before: readonly Message.WithParts[],
   window: readonly Message.WithParts[],
 ): string | undefined {
   const counts = new Map<string, number>();
-  for (const text of plainUserTexts(before)) {
-    counts.set(text, (counts.get(text) ?? 0) + 1);
+  for (const key of userTextKeys(before)) {
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  for (const text of plainUserTexts(window)) {
-    const remaining = counts.get(text) ?? 0;
-    if (remaining <= 0) return text;
-    counts.set(text, remaining - 1);
+  const windowKeys = userTextKeys(window);
+  for (const key of windowKeys) {
+    const remaining = counts.get(key) ?? 0;
+    if (remaining <= 0) return key.slice(2);
+    counts.set(key, remaining - 1);
   }
   return undefined;
 }
 
-function plainUserTexts(messages: readonly Message.WithParts[]): string[] {
-  const texts: string[] = [];
+function isWellShapedAnchorPart(part: Message.Part): boolean {
+  return (
+    part.type === "text" &&
+    part.metadata?.compactionAnchor === true &&
+    typeof part.metadata?.anchorBody === "string" &&
+    Array.isArray(part.metadata?.keptWindow)
+  );
+}
+
+function userTextKeys(messages: readonly Message.WithParts[]): string[] {
+  // The anchor exemption is earned, not claimed: at most one well-shaped
+  // anchor per side. Everything past that quota is plain user speech.
+  let anchorQuota = 1;
+  const keys: string[] = [];
   for (const message of messages) {
     if (message.info.role !== "user") continue;
     for (const part of message.parts) {
       if (part.type !== "text") continue;
-      if (part.metadata?.compactionAnchor === true || part.metadata?.policyInjected === true) {
+      if (isWellShapedAnchorPart(part) && anchorQuota > 0) {
+        anchorQuota -= 1;
         continue;
       }
-      texts.push(part.text);
+      keys.push(`${part.metadata?.policyInjected === true ? "i:" : "u:"}${part.text}`);
     }
   }
-  return texts;
+  return keys;
 }
