@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787088405390,
+  "lastUpdate": 1787090138132,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -56975,6 +56975,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512366,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5dd274daae49d171895c2e094861556c0c05c8c5",
+          "message": "refactor(ledger): rename @openomni/session to @openomni/ledger (#733)\n\n* refactor(ledger): rename @openomni/session to @openomni/ledger (#502)\n\nHistory-preserving `git mv packages/session packages/ledger` (165 tracked\nfiles, all R-detected; the 18-migration tree moved intact) plus a full\nidentity sweep: package.json name, bun.lock workspace entry/resolutions\n(regenerated), every import across packages/apps/scripts/tests, tsconfig\npaths (verify-tsconfig-inheritance: 29 projects OK), CI (ci.yml test step,\nbenchmark.yml bench cwd, bug-report template), check-deps RULES key\nsession->ledger (+self-test), lint-guards policy-boundary regex, lint-tools\npins, build-dist migration copy, ledger-producer-manifest, conformance\nfixtures/coverage baseline, AGENTS.md dep graphs/tables, and docs\n(implementation-status, architecture, kernel-contract, gateway-design).\nSegmented path in check-ledger-schema-drift.ts (join(root, \"packages\",\n\"session\")) dodged the literal sweep and is fixed + gate rerun green.\n\nMigration resolution proof: at the starting commit\nsqlite-schema-lifecycle.ts resolves MIGRATION_DIR via\njoin(import.meta.dir, \"../../migration\") and SQL names carry no package\nidentity, so the move is transparent. New\npackages/ledger/test/migration-resolution.test.ts bootstraps a fresh\nSQLite db through the moved lookup and asserts _migrations matches the\nshipped 18-directory inventory (4 pass). Full ledger suite 404 pass.\n\nZero-old-identity receipt: script/verify-ledger-rename.ts (new, run in CI\nposture by hand) scans all 1149 tracked files including bun.lock and\nitself — zero `@openomni/session` / `packages/session` strings anywhere;\nold specifier fails resolution from apps/server while @openomni/ledger\nresolves and imports (22 public keys). Pre-move receipt: 336 grep lines /\n167 files (165 tracked + 2 gitignored .turbo logs). Exclusions: none —\nonly .git history retains the old name.\n\nSSOT: packages/ledger/AGENTS.md header now quotes docs/gateway-design.md\nS4 (single storage engine owner). Deferred: public-surface pruning of the\nbarrel (\"retain only the approved surface\") is NOT done here — the rename\nis the deliverable; surface reshaping belongs to gateway stage 2 (#707) /\nSSOT work. TS namespaces `Storage` and `Ledger` (ledger-core) are code\nnames, not package identity, and survive as-is. schema-snapshot untouched.\n\nGates: install (+frozen), build, check-types, tsconfig-inheritance\n(+test), lint (guards/side-effects/ultracite), lint-tools (+self-test),\ncheck-deps (+self-test), import-cycles, dead-exports, coverage-ratchet\nself-test, ledger-schema-drift, build:dist + smoke:dist, turbo test 16/16,\np2-ledger-baseline 46 pass, channels standalone 40 pass, issue-named\nbattery 17 pass.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(ci): wire ledger-rename verifier as reintroduction ratchet\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T06:54:24+09:00",
+          "tree_id": "64cf8301b8875f88a9a4ba16368fa552b14fb95f",
+          "url": "https://github.com/INONONO66/openomni/commit/5dd274daae49d171895c2e094861556c0c05c8c5"
+        },
+        "date": 1787090137531,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 695,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6171,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9797,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16198,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 906,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1569,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1542,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 786,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45478,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2484,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 520624,
             "unit": "ns/op"
           }
         ]
