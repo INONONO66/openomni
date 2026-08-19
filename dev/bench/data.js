@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787104733543,
+  "lastUpdate": 1787105343844,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57431,6 +57431,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 449423,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "549f74010a6b767c3a5a1ce767bee5de13b8ba5b",
+          "message": "feat(openomni): compaction live-quality bench + recorded results (#738)\n\n* feat(openomni): compaction live-quality bench + recorded results\n\nOSS-shaped bench tier at packages/openomni/bench/, peer to test/ — the\ndeterministic CI tier keeps enforcing the byte invariants; this tier\nmeasures what they buy in end-task quality over real data.\n\nLoCoMo-10 through the SHIPPED pipeline (real seam, real anchored merge via\nany OpenAI-compatible endpoint — reference run through the operator token\nhub), graded by a responder reading only each strategy's window, settled by\nnormalized match then a CROSS-MODEL judge against gold answers (same-model\njudging carries self-preference bias). A REAL uniform-regenerate baseline\n(same summarizer model, users included) replaces the strawman; full-history\nis the ceiling; an anchored-dated counterfactual isolates date carriage.\n\nRecorded finding (bench/README.md + #737): temporal grounding does not\nsurvive compaction — c2 accuracy 4.8% vs a 90.5% full-history ceiling; the\ncounterfactual (same pipeline, timestamps in the verbatim lane) recovers\n+20pp overall and 7x on c2 at identical compression, proving the gap is\ndate carriage, not the strategy. With dates carried, anchored beats the\nreal uniform baseline on quality while keeping byte-exact user text; the\nuniform shape still compresses harder — the honest trade until the anchor\nrender carries a recorded timeline (#737).\n\nknip: packages/openomni workspace declares bench run entries (config, not\nbaseline growth); dataset downloads on demand and is never committed;\nfailure dumps land in the gitignored cache for diagnosis.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): bench imports the package barrel, not self-root\n\n* fix(openomni): bench honesty — grader, sampling disclosure, claims\n\nReview round 1 (PASS WITH CHANGES) fixes, plus a grader-corrected rerun as\nthe canonical recorded run:\n\nF3 — grader: short golds (<6 normalized chars) require word-boundary\nequality (demonstrated hazards: 'no' in 'unknown', years inside negations);\ncontainment is now one-directional (gold in response); everything else goes\nto the cross-model judge. Network-level fetch failures retry like error\nbodies (a socket reset killed a paid run mid-way), and the failure dump is\nwritten incrementally per strategy.\n\nF1 — sampling disclosed in README and in the run header: FIRST-5 per conv,\nNOT random, with the measured category skew (sampled c2 42% vs population\n21%; c4 55% -> 4%); per-category columns are the primary reading and the\naggregate is labeled a composition-biased sample statistic.\n\nF2 — the 'anchored beats uniform' claim is retracted: on the corrected\ngrader the uniform baseline leads sampled QA accuracy (48.0% vs 36.0%\ndated). Recorded as Finding 2 with the prompt confound named (only the\nanchored/anchored-dated pair is causally clean) and the integrity-vs-\naccuracy axes separated. Issue #737 corrected in-thread.\n\nF4 — bench/ is now typechecked (tsconfig.test.json include).\nF5 — production fidelity stated precisely: production renders NO\ntimestamps; the bench's assistant headers are a best-case variant, so the\nc2 finding holds a fortiori.\nF6/F8 — prompt confound and harness deviations (speculate:false, forced\ntrigger through the real gate) disclosed in Harness notes.\nF7 — dead byDia removed.\n\nThe c2 collapse and the dated counterfactual REPLICATE on the corrected\ngrader (4.8% vs 85.7% ceiling; x6 recovery at identical compression).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(openomni): align stale timestamp-fidelity sentences (review R2)\n\nThe corrected fidelity note (production renders no timestamps) now also\ngoverns the Dataset section and the dataset.ts comments; the strategy-\nisolation sentence points at Finding 2's prompt-confound caveat.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T02:07:54Z",
+          "tree_id": "d10b8bcc1817846e168e811a5ac44f293874dfd9",
+          "url": "https://github.com/INONONO66/openomni/commit/549f74010a6b767c3a5a1ce767bee5de13b8ba5b"
+        },
+        "date": 1787105343072,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 472,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6262,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10517,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3252,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2459,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1117,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 788,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2348,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522510,
             "unit": "ns/op"
           }
         ]
