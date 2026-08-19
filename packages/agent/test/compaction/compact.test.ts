@@ -472,13 +472,27 @@ describe("Compaction", () => {
       // Summarizer saw assistants only.
       expect(seen).toHaveLength(1);
       expect(seen[0]?.every((m) => m.info.role === "assistant")).toBe(true);
-      // Every user message survives byte-exact, in order, after the anchor.
+      // Every user message survives byte-exact, in order, after the anchor —
+      // each preceded by its policy-injected time marker (#737), which is a
+      // separate part and never touches the user's bytes.
       const texts = result.messages.flatMap((m) =>
         m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
       );
       expect(texts[0]).toContain("anchor-v1");
-      expect(texts[1]).toBe(userText);
-      expect(texts[2]).toBe("u2");
+      expect(texts[1]).toMatch(/^\[recorded \d{4}-\d{2}-\d{2}\]$/);
+      expect(texts[2]).toBe(userText);
+      expect(texts[3]).toMatch(/^\[recorded \d{4}-\d{2}-\d{2}\]$/);
+      expect(texts[4]).toBe("u2");
+      // The marker is tagged, not user speech, and dates the message's own
+      // recorded creation time.
+      const preserved = result.messages[1];
+      const marker = preserved?.parts[0];
+      if (preserved === undefined || marker?.type !== "text") throw new Error("shape");
+      expect(marker.metadata?.policyInjected).toBe(true);
+      expect(marker.metadata?.timeCarriage).toBe(true);
+      expect(marker.text).toBe(
+        `[recorded ${new Date(preserved.info.time.created).toISOString().slice(0, 10)}]`,
+      );
     });
 
     it("threads the previous anchor body through the second cut — no recursive re-summarization", async () => {
@@ -542,15 +556,91 @@ describe("Compaction", () => {
       // replacement record by persisting this message.
       const kept = anchorPart.metadata?.keptWindow;
       if (!Array.isArray(kept)) throw new Error("expected keptWindow");
+      // Time markers are derived render — regenerated from the structured
+      // `time` at every cut — so the record excludes them (#737): recording
+      // them as content would replay them as pseudo-speech after resume.
       expect(kept).toEqual(
         second.messages
           .slice(1)
           .flatMap((m) =>
             m.parts
-              .filter((part): part is Message.TextPart => part.type === "text")
-              .map((part) => ({ role: m.info.role, text: part.text })),
+              .filter(
+                (part): part is Message.TextPart =>
+                  part.type === "text" && part.metadata?.timeCarriage !== true,
+              )
+              .map((part) => ({ role: m.info.role, text: part.text, time: m.info.time.created })),
           ),
       );
+    });
+
+    it("markers are regenerated, never stacked; nudges are not dated (#737)", async () => {
+      const nudge: Message.WithParts = {
+        ...makeUserMessage("[policy] wrap up"),
+      };
+      const nudgePart = nudge.parts[0];
+      if (nudgePart?.type !== "text") throw new Error("shape");
+      nudge.parts = [{ ...nudgePart, metadata: { policyInjected: true } }];
+
+      const first = await Compaction.compact(
+        [
+          makeUserMessage("u0"),
+          nudge,
+          makeAssistantMessage("a1"),
+          makeAssistantMessage("a2"),
+          makeUserMessage("u3"),
+          makeAssistantMessage("a4"),
+        ],
+        { ...opts, onSummarize: async () => "anchor-v1" },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      const markerCount = (message: Message.WithParts): number =>
+        message.parts.filter((p) => p.type === "text" && p.metadata?.timeCarriage === true).length;
+      const u0 = first.messages.find((m) =>
+        m.parts.some((p) => p.type === "text" && p.text === "u0"),
+      );
+      if (u0 === undefined) throw new Error("expected preserved u0");
+      expect(markerCount(u0)).toBe(1);
+      // A wholly-injected nudge is bookkeeping, not speech — never dated.
+      const preservedNudge = first.messages.find((m) =>
+        m.parts.some((p) => p.type === "text" && p.text === "[policy] wrap up"),
+      );
+      if (preservedNudge === undefined) throw new Error("expected preserved nudge");
+      expect(markerCount(preservedNudge)).toBe(0);
+
+      // Second in-run cut over already-stamped messages: the marker is
+      // REPLACED (regenerated from info.time), never accumulated.
+      const second = await Compaction.compact(
+        [
+          ...first.messages,
+          makeAssistantMessage("a5"),
+          makeAssistantMessage("a6"),
+          makeUserMessage("u7"),
+          makeAssistantMessage("a8"),
+        ],
+        { ...opts, onSummarize: async () => "anchor-v2" },
+        trace,
+        Bus,
+        { trigger: "threshold" },
+      );
+      const u0Again = second.messages.find((m) =>
+        m.parts.some((p) => p.type === "text" && p.text === "u0"),
+      );
+      if (u0Again === undefined) throw new Error("expected u0 in second window");
+      expect(markerCount(u0Again)).toBe(1);
+      // And the record never carries a marker: it is derived render.
+      const anchor = second.messages[0]?.parts[0];
+      if (anchor?.type !== "text") throw new Error("shape");
+      const kept = anchor.metadata?.keptWindow;
+      if (!Array.isArray(kept)) throw new Error("expected keptWindow");
+      expect(
+        kept.every(
+          (entry) =>
+            typeof (entry as { time?: unknown }).time === "number" &&
+            !(entry as { text: string }).text.startsWith("[recorded "),
+        ),
+      ).toBe(true);
     });
 
     it("skips the model call when the cut span holds nothing summarizable", async () => {

@@ -100,7 +100,8 @@ describe("anchorSummarizer", () => {
       ],
     };
     const rendered = serializeSpanForSummary([withTool]);
-    expect(rendered).toContain("[tool read call call-7]");
+    // #737: blocks are dated from the recorded creation time.
+    expect(rendered).toMatch(/\[tool read call call-7 — \d{4}-\d{2}-\d{2}\]/);
     expect(rendered).toContain("tool says hi");
   });
 });

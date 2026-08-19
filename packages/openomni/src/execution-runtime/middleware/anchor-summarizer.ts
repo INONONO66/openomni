@@ -34,6 +34,10 @@ const SECTION_TEMPLATE = `## Goal
 ## Key Decisions
 - **[Decision]**: [Brief rationale]
 
+## Timeline & Facts
+- [YYYY-MM-DD — dated events, facts, commitments, and statements worth recalling later. One line per fact, every line anchored to its absolute date. When a speaker dates an event themselves ("in 2019", "when I was 20", "last spring"), record THAT stated time — the event's own date, not the message's. In this section completeness beats brevity: never drop a dated fact to save space.]
+- [Or "(none)"]
+
 ## Next Steps
 1. [Ordered next actions]
 
@@ -41,7 +45,7 @@ const SECTION_TEMPLATE = `## Goal
 - [Data, paths, error messages, or references needed to continue]
 - [Or "(none)"]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`;
+Keep each section concise — except Timeline & Facts, where completeness wins. Preserve exact file paths, function names, error messages, dates, names, and numbers. Resolve relative time ("yesterday", "last week") against the dated message headers into absolute dates — never carry a relative time expression into the checkpoint.`;
 
 const CREATE_PROMPT = `The messages in <conversation> are assistant/tool activity to checkpoint. Produce a structured context checkpoint another LLM will use to continue the work. Do NOT continue the conversation; output ONLY the checkpoint.
 
@@ -70,13 +74,17 @@ export function serializeSpanForSummary(messages: readonly Message.WithParts[]):
   const lines: string[] = [];
   for (const message of messages) {
     if (message.info.role === "user") continue;
+    // #737: every block is dated from the recorded creation time, so the
+    // summarizer can anchor facts to absolute dates (its template demands
+    // it) — a summary that says "yesterday" is stale the day it is written.
+    const date = new Date(message.info.time.created).toISOString().slice(0, 10);
     for (const part of message.parts) {
       if (part.type === "text") {
-        lines.push(`[assistant]\n${part.text}`);
+        lines.push(`[assistant — ${date}]\n${part.text}`);
       } else if (part.type === "tool") {
         const output =
           part.state.status === "completed" ? part.state.output : `(status: ${part.state.status})`;
-        lines.push(`[tool ${part.tool} call ${part.callID}]\n${output}`);
+        lines.push(`[tool ${part.tool} call ${part.callID} — ${date}]\n${output}`);
       }
     }
   }

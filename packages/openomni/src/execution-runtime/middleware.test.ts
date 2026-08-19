@@ -1,6 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine } from "@openomni/agent";
 import { Operational } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { SessionBridge } from "../ingress/session-bridge";
@@ -210,7 +211,10 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     });
     const sessionID = session.id;
 
-    const store = (role: "user" | "assistant", text: string) => {
+    // A fixed PAST date (#737): the assertions below can then tell a marker
+    // derived from the recorded time apart from one stamped with "now".
+    const storedDay = Date.UTC(2023, 4, 8, 13, 56);
+    const store = (role: "user" | "assistant", text: string, createdMs = storedDay) => {
       const id = crypto.randomUUID();
       const info =
         role === "user"
@@ -218,7 +222,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
               id,
               sessionID,
               role,
-              time: { created: Date.now() },
+              time: { created: createdMs },
               agent: "t",
               model: { providerID: "", modelID: "" },
             } as const)
@@ -226,7 +230,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
               id,
               sessionID,
               role,
-              time: { created: Date.now() },
+              time: { created: createdMs },
               parentID: "",
               modelID: "m",
               providerID: "p",
@@ -256,15 +260,19 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     // role/content strings and re-mints message ids — store ids are erased
     // at this seam. Any record keyed on ids would resolve to nothing.
     const rehydrate = () =>
-      SessionBridge.buildDirectMessages(sessionID).map(({ role, content, partMetadata }) => {
+      SessionBridge.buildDirectMessages(sessionID).map(({ role, content, partMetadata, time }) => {
         const id = crypto.randomUUID();
+        // Mirrors toMessagesWithParts → createUserMessage (#737): the
+        // recorded creation time rides through hydration; only a record
+        // without one falls back to "now".
+        const created = time ?? Date.now();
         const info =
           role === "user"
             ? ({
                 id,
                 sessionID,
                 role,
-                time: { created: Date.now() },
+                time: { created },
                 agent: "t",
                 model: { providerID: "", modelID: "" },
               } as const)
@@ -272,7 +280,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
                 id,
                 sessionID,
                 role,
-                time: { created: Date.now() },
+                time: { created },
                 parentID: "",
                 modelID: "m",
                 providerID: "p",
@@ -326,8 +334,16 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
       continuationCount: 0,
       elapsedMs: 0,
     });
-    const applied = decision.effects.some((entry) => entry.type === "run.replace_messages");
-    expect(applied).toBe(true);
+    const applied = decision.effects.find((entry) => entry.type === "run.replace_messages");
+    if (applied?.type !== "run.replace_messages") throw new Error("expected replacement");
+    // #737: in the applied window every preserved user message wears its
+    // recorded date beside it — derived from the STORED time, not today.
+    const appliedTexts = (applied.messages as Message.WithParts[]).flatMap((m) =>
+      m.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])),
+    );
+    const goalAt = appliedTexts.indexOf("the original goal");
+    expect(goalAt).toBeGreaterThan(0);
+    expect(appliedTexts[goalAt - 1]).toBe("[recorded 2023-05-08]");
 
     // Resume AGAIN through the same production-shaped seam: the compacted
     // window must carry the preserved user content byte-exact — not collapse
@@ -347,6 +363,12 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     );
     // Anchor identity survived decoration: the record still carries the raw body.
     expect(window[0]?.partMetadata?.anchorBody).toBe("checkpoint after cut");
+    // Record purity (#737): markers are derived render and never enter the
+    // record — the hydrated window carries the structured time instead, so
+    // resume re-derives markers rather than replaying them as pseudo-speech.
+    expect(window.some((m) => m.content.startsWith("[recorded "))).toBe(false);
+    const hydratedGoal = window.find((m) => m.content === "the original goal");
+    expect(hydratedGoal?.time).toBe(storedDay);
 
     // And the re-hydrated run is itself compact and coherent.
     const secondRun = rehydrate();
@@ -356,10 +378,15 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     // the resume seam — the next compaction merges into the SAME chain
     // (previousAnchor threads through) and the window never stacks stale
     // summary renders as pseudo-user messages.
-    store("user", "second epoch question");
-    store("assistant", `second epoch work\n${"filler ".repeat(60)}`);
-    store("assistant", `second epoch more\n${"filler ".repeat(60)}`);
-    store("assistant", "second epoch answer");
+    // The store lists messages by time_created: production times are
+    // monotonic (ingress stamps "now"), so epoch-2 must sort after the
+    // anchor's persist time. A future offset keeps that shape while staying
+    // a KNOWN epoch the marker assertion can derive its expected date from.
+    const secondDay = Date.now() + 60_000;
+    store("user", "second epoch question", secondDay);
+    store("assistant", `second epoch work\n${"filler ".repeat(60)}`, secondDay);
+    store("assistant", `second epoch more\n${"filler ".repeat(60)}`, secondDay);
+    store("assistant", "second epoch answer", secondDay);
 
     const previousAnchors: Array<string | undefined> = [];
     const registration2 = findRegistration(
@@ -378,7 +405,7 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     if (registration2 === undefined) throw new Error("expected compaction registration");
     const engine2 = PolicyEngine.create({ audit: false });
     engine2.register(registration2);
-    await engine2.dispatchPoint("run.completion.pre", {
+    const decision2 = await engine2.dispatchPoint("run.completion.pre", {
       sessionId: sessionID,
       runId: "run-702-cycle2",
       completionCandidate: { type: "stop" },
@@ -396,6 +423,27 @@ describe("buildWorkerMiddleware injection queue persistence", () => {
     // The merge chain threaded across resume: the second cut saw the first
     // epoch's anchor body as state, not as content.
     expect(previousAnchors).toEqual(["checkpoint after cut"]);
+    // #737 across resume: the second cut stamps the RECORDED dates — a
+    // window that says today's date onto last year's words would be the
+    // exact dishonesty time carriage exists to prevent. And markers never
+    // stack: exactly one per preserved user message, none consecutive.
+    const applied2 = decision2.effects.find((entry) => entry.type === "run.replace_messages");
+    if (applied2?.type !== "run.replace_messages") throw new Error("expected replacement");
+    const texts2 = (applied2.messages as Message.WithParts[]).flatMap((m) =>
+      m.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])),
+    );
+    const goal2At = texts2.indexOf("the original goal");
+    expect(goal2At).toBeGreaterThan(0);
+    expect(texts2[goal2At - 1]).toBe("[recorded 2023-05-08]");
+    const q2At = texts2.indexOf("second epoch question");
+    expect(q2At).toBeGreaterThan(0);
+    expect(texts2[q2At - 1]).toBe(`[recorded ${new Date(secondDay).toISOString().slice(0, 10)}]`);
+    for (let i = 1; i < texts2.length; i += 1) {
+      const both =
+        texts2[i]?.startsWith("[recorded ") === true &&
+        texts2[i - 1]?.startsWith("[recorded ") === true;
+      expect(both).toBe(false);
+    }
     const finalWindow = SessionBridge.buildDirectMessages(sessionID);
     const renders = finalWindow.filter((m) => m.content.startsWith("[Conversation Summary]"));
     expect(renders).toHaveLength(1);

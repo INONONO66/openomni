@@ -1,4 +1,4 @@
-import { createCompactionPolicy } from "@openomni/agent";
+import { createCompactionPolicy, isTimeCarriageMarkerPart } from "@openomni/agent";
 import type { CompactionOptions, PolicyContext, PolicyRegistryInstance } from "@openomni/agent";
 import type { BusEvent } from "@openomni/protocol";
 import { Message, Operational } from "@openomni/protocol";
@@ -278,10 +278,22 @@ function userTextKeys(messages: readonly Message.WithParts[]): string[] {
   const keys: string[] = [];
   for (const message of messages) {
     if (message.info.role !== "user") continue;
+    // Time-carriage markers (#737) are exempt on BOTH sides — they are
+    // minted at every cut, so the window's marker has no input twin. The
+    // exemption is doubly earned: the closed shape (tags + the fixed
+    // `[recorded date]` grammar, checked in the shared core predicate) AND
+    // at most ONE marker per message (the core stamps exactly one; review
+    // #741 F5) — extras and free text wearing the tags stay plain user
+    // speech below.
+    let markerQuota = 1;
     for (const part of message.parts) {
       if (part.type !== "text") continue;
       if (isWellShapedAnchorPart(part) && anchorQuota > 0) {
         anchorQuota -= 1;
+        continue;
+      }
+      if (isTimeCarriageMarkerPart(part) && markerQuota > 0) {
+        markerQuota -= 1;
         continue;
       }
       keys.push(`${part.metadata?.policyInjected === true ? "i:" : "u:"}${part.text}`);

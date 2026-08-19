@@ -147,9 +147,12 @@ describe("worker runtime input messages", () => {
     const session = Session.create({ traceId: "trace-worker-runtime", title: "worker", model });
     addTextMessage(session.id, "user", "do the work");
 
-    expect(buildWorkerInputMessages(session.id, "do the work")).toEqual([
+    // #737: hydrated messages carry the recorded creation time.
+    const messages = buildWorkerInputMessages(session.id, "do the work");
+    expect(messages.map(({ role, content }) => ({ role, content }))).toEqual([
       { role: "user", content: "do the work" },
     ]);
+    expect(typeof messages[0]?.time).toBe("number");
   });
 
   test("falls back to the execution request prompt when projection is empty", () => {
@@ -163,10 +166,13 @@ describe("worker runtime input messages", () => {
     addTextMessage(session.id, "user", "old request");
     addTextMessage(session.id, "assistant", "old answer");
 
-    expect(buildWorkerInputMessages(session.id, "new request")).toEqual([
+    const messages = buildWorkerInputMessages(session.id, "new request");
+    expect(messages.map(({ role, content }) => ({ role, content }))).toEqual([
       { role: "user", content: "old request" },
       { role: "assistant", content: "old answer" },
       { role: "user", content: "new request" },
     ]);
+    // The appended live prompt has no store record yet — no time claimed.
+    expect(messages.at(-1)?.time).toBeUndefined();
   });
 });

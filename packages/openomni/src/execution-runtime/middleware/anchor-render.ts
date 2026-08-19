@@ -101,20 +101,20 @@ function userTexts(messages: readonly Message.WithParts[]): string[] {
   const texts: string[] = [];
   for (const message of messages) {
     if (message.info.role !== "user") continue;
-    // Anchor renders and policy-injected nudges are user-roled; neither is
-    // user speech (#727 review F4 — a budget banner recited as "the user's
-    // goal" is worse than no recitation).
+    // An anchor render is not user speech, whole-message (#727 review F4).
     if (
-      message.parts.some(
-        (part) =>
-          part.type === "text" &&
-          (part.metadata?.compactionAnchor === true || part.metadata?.policyInjected === true),
-      )
+      message.parts.some((part) => part.type === "text" && part.metadata?.compactionAnchor === true)
     ) {
       continue;
     }
     for (const part of message.parts) {
-      if (part.type === "text") texts.push(part.text);
+      if (part.type !== "text") continue;
+      // Part-level for injections (#737): a nudge is wholly injected and
+      // contributes nothing, but a real user message CARRYING an injected
+      // time marker still speaks — the marker must not silence the goal
+      // recitation or turn the message's quotes off.
+      if (part.metadata?.policyInjected === true) continue;
+      texts.push(part.text);
     }
   }
   return texts;

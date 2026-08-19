@@ -4,9 +4,13 @@ export function createUserMessage(
   content: string,
   sessionID: string,
   partMetadata?: Record<string, unknown>,
+  // #737: recorded creation time from the hydration record. Without it a
+  // resumed message wears hydration time, and the next compaction cut would
+  // stamp today's date onto yesterday's words.
+  timeCreated?: number,
 ): Message.WithParts {
   const id = crypto.randomUUID();
-  const now = Date.now();
+  const now = timeCreated ?? Date.now();
   const info: Message.UserMessage = {
     id,
     sessionID,
@@ -33,9 +37,10 @@ export function createAssistantMessage(
   parentID: string,
   sessionID: string,
   partMetadata?: Record<string, unknown>,
+  timeCreated?: number,
 ): Message.WithParts {
   const id = crypto.randomUUID();
-  const now = Date.now();
+  const now = timeCreated ?? Date.now();
   const info: Message.AssistantMessage = {
     id,
     sessionID,

@@ -20,9 +20,11 @@ two-speaker conversations of 400–700 turns across ~19 timestamped sessions,
 with QA pairs annotated with evidence turns. Downloaded on demand to
 `bench/compaction/.cache/` (never committed). Session timestamps are injected
 as assistant-role header turns — LoCoMo speech uses relative time
-("yesterday") and needs them; note that production currently renders NO
-timestamps at all (see Finding 1's fidelity note), so these headers are a
-best-case variant of production.
+("yesterday") and needs them for the `full-history` ceiling to be answerable
+at all. Every turn additionally carries its session's recorded time as
+`Message.info.time` — the field production messages carry — so the shipped
+time-carriage path (#737 fix: per-message `[recorded date]` markers +
+date-headed summarizer input) is exercised as-is, not simulated.
 `speaker_a` maps to `user`: their words are the ones the pipeline must
 preserve verbatim, which is the invariant under test.
 
@@ -35,9 +37,19 @@ preserve verbatim, which is the invariant under test.
 | `anchored-8k` | Same, with the preserve budget tightened to 8k chars — the retention↔compression dial. |
 | `uniform-real` | A **real** (not strawman) regenerate-everything baseline: the *same* summarizer LLM compresses the same span with user turns included — the industry-default shape. |
 
+(`anchored-dated`, kept for continuity with the 2026-08-19 baseline, is the
+old counterfactual: session-timestamp headers riding the user lane. On the
+canonical run it scores 10pp BELOW `anchored` — outside the judge band; the
+user-lane headers consume preserve budget and duplicate the carriage the
+markers already provide, so with time carriage shipped this variant is a
+regression, not a control.)
+
 The anchored strategies and the uniform baseline use the **same summarizer
-model**, so the comparison isolates the *strategy*, not the model — with
-one residual prompt confound, named in Finding 2's caveats.
+model**, so the comparison isolates the *strategy*, not the model. The
+2026-08-19 baseline carried a prompt confound (only the uniform prompt
+instructed date/fact coverage); the #737 fix resolved it — the shipped
+checkpoint template now instructs date anchoring and carries a
+Timeline & Facts section, so both sides state the same coverage intent.
 
 ### Grading
 
@@ -63,7 +75,7 @@ bun run bench/compaction/run.ts --convs 2 --qa-per-conv 3   # smoke
 
 ### Recorded results
 
-Run of 2026-08-19 (grader-corrected rerun — canonical) —
+Run of 2026-08-20 (canonical — after the #737 time-carriage fix) —
 `summarizer=gpt-5-4-mini responder=gpt-5-4 judge=gpt-5-5` (operator token
 hub), 10 conversations × 5 QA, single cut per conversation.
 
@@ -76,52 +88,75 @@ composition-biased sample statistic, kept only for within-run comparison.
 
 | Strategy | sample agg. | c1 single-hop (n=21) | c2 temporal (n=21) | compression |
 | --- | --- | --- | --- | --- |
-| `full-history` (ceiling) | 64.0% | 47.6% | **85.7%** | 0% |
-| `anchored` (shipped, as-is) | 24.0% | 38.1% | **4.8%** | 45.0% |
-| `anchored-dated` (counterfactual) | 36.0% | 38.1% | 28.6% | 43.6% |
-| `anchored-8k` (tight budget) | 16.0% | 14.3% | 0.0% | 72.7% |
-| `uniform-real` (industry default) | 48.0% | 52.4% | 42.9% | 76.4% |
+| `full-history` (ceiling) | 64.0% | 52.4% | **81.0%** | 0% |
+| `anchored` (shipped) | **60.0%** | 57.1% | **71.4%** | 27.2% |
+| `anchored-dated` (legacy counterfactual) | 50.0% | 47.6% | 52.4% | 25.4% |
+| `anchored-8k` (tight budget) | 34.0% | 23.8% | 38.1% | 61.3% |
+| `uniform-real` (industry default) | 44.0% | 47.6% | 38.1% | 73.4% |
 
 (c3 n=6 / c4 n=2 are too small to read. Full rows + the incremental failure
 dump land in `bench/compaction/.cache/last-run.jsonl`.)
 
-### Finding 1: temporal grounding does not survive compaction (#737)
+Ablation, same protocol (aggregate / c2): markers + dated summarizer input
+alone → 48.0% / 52.4%; + summarizer output cap aligned to production
+(6k, was 1500) → 48.0% / 52.4%; + the template's "completeness beats
+brevity" rule for Timeline & Facts → **60.0% / 71.4%**. Date carriage does
+the heavy lifting on c2; the completeness rule recovers the
+speaker-stated past dates ("in 2019") that live outside session time.
+Compression is the honest cost: 45.0% → 27.2% at the default budget — the
+dial is `preserveUserMessageChars` (`anchored-8k` still compresses 61.3%).
 
-The **c2 column**: the shipped anchored window answers temporal questions at
-**4.8%** against an 85.7% full-history ceiling — every "when did X happen"
-becomes UNKNOWN, because preserved user text says "yesterday" and nothing in
-the window says when that was. The counterfactual (`anchored-dated`, the
-SAME pipeline with session timestamps riding the verbatim lane) recovers
-c2 ×6 and +12pp aggregate at identical compression: the gap is **date
-carriage, not the strategy**. Replicated across both recorded runs.
+#### Baseline of 2026-08-19 (before the fix — kept for the record)
 
-Production fidelity note (stated precisely): production renders NO
-timestamps at all — `Message.info.time` exists but nothing carries it into
-the model view — so production is *at or below* the benched condition, and
-the finding holds a fortiori. The bench's assistant-role headers are a
-best-case variant of what production does today.
+| Strategy | sample agg. | c1 (n=21) | c2 (n=21) | compression |
+| --- | --- | --- | --- | --- |
+| `full-history` (ceiling) | 64.0% | 47.6% | 85.7% | 0% |
+| `anchored` (as-was) | 24.0% | 38.1% | **4.8%** | 45.0% |
+| `anchored-dated` (counterfactual) | 36.0% | 38.1% | 28.6% | 43.6% |
+| `anchored-8k` | 16.0% | 14.3% | 0.0% | 72.7% |
+| `uniform-real` | 48.0% | 52.4% | 42.9% | 76.4% |
 
-### Finding 2: on sampled QA accuracy, the uniform baseline currently leads
+Run-to-run judge variance on this sample is ±1–2 items (the ceiling itself
+moved 60.0–64.0% across three otherwise-identical runs); the fix's +18pp
+aggregate and +66.6pp c2 are far outside that band.
 
-On this sample the real regenerate-uniform baseline outscores the shipped
-anchored strategy (48.0% vs 24.0%; vs 36.0% dated), at higher compression.
-Two caveats, then the honest reading:
+### Finding 1: temporal grounding did not survive compaction — found, fixed, re-measured (#737)
 
-- The anchored-vs-uniform comparison carries a **prompt confound**: the
-  uniform prompt explicitly instructs date/fact coverage, while the shipped
-  senpi-shaped checkpoint template (Goal/Progress/Next Steps) is
-  task-oriented with no date instruction and no natural home for narrative
-  facts. Only the `anchored` / `anchored-dated` pair is causally clean.
-- Accuracy and integrity are different axes: the uniform window's user
-  "facts" are paraphrases (the CI tier measures ~1% byte survival), it
-  re-summarizes user text every epoch (drift compounds), and it can offer
-  none of the guarantees the anchored pipeline enforces (byte guard,
-  anchored merge, recall pointers, replacement records).
+The 2026-08-19 baseline's **c2 column**: the then-shipped anchored window
+answered temporal questions at **4.8%** against an 85.7% ceiling — every
+"when did X happen" became UNKNOWN, because preserved user text said
+"yesterday" and nothing in the window said when that was (production then
+carried `Message.info.time` but rendered it nowhere). The dated
+counterfactual proved the gap was **date carriage, not the strategy**.
 
-Reading: for narrative-recall workloads, today's anchored strategy pays its
-integrity guarantees with QA accuracy, and the deficit is concentrated in
-(a) date carriage (#737) and (b) the checkpoint template's weakness at
-narrative facts — both actionable, both now measurable by this bench.
+The #737 fix ships time carriage end-to-end: every cut stamps each
+preserved user message with a `[recorded YYYY-MM-DD]` marker regenerated
+from its recorded time (markers never enter the replacement record — the
+record carries structured `time` per kept entry, and hydration threads it
+back so a resumed cut re-derives dates from the record, not from resume
+time); the summarizer input is date-headed per message; and the checkpoint
+template gains a date-anchored Timeline & Facts section. Re-measured on the
+same protocol: c2 4.8% → **71.4%** (ceiling 81.0%), aggregate 24.0% →
+**60.0%**.
+
+### Finding 2: the 2026-08-19 uniform lead was the confound, and it inverted
+
+The 2026-08-19 baseline recorded the uniform baseline LEADING sampled QA
+accuracy (48.0% vs 24.0%) and named a prompt confound: the uniform prompt
+instructed date/fact coverage while the shipped checkpoint template was
+task-oriented with no date instruction and no home for narrative facts.
+The #737 fix removed exactly that confound (date anchoring + Timeline &
+Facts with completeness-over-brevity) — and the lead inverted: anchored
+**60.0%** vs uniform 44.0%, with byte-exact user text on top (the uniform
+window's user "facts" remain paraphrases the CI tier scores at ~1% byte
+survival). The two axes stayed separate the whole way: integrity never came
+from accuracy, and the accuracy deficit turned out to be prompt- and
+carriage-shaped, not inherent to the anchored design.
+
+Honest residuals: anchored pays ~18pp of compression for the retention
+(27.2% vs uniform's 73.4% on this run — the preserve budget is the dial);
+and uniform's own numbers moved 42.0–48.0% across reruns, so read the gap
+(+16pp), not the decimals.
 
 ### Harness notes
 
@@ -134,6 +169,15 @@ narrative facts — both actionable, both now measurable by this bench.
   real and were fixed after review); everything else goes to the
   cross-model judge. Aggregate numbers are judge-limited: treat single-item
   (2pp) differences as noise.
+- **Responder-prompt disclosure (#741 review F1/F2)**: with the time-carriage
+  fix, the responder instruction gained "resolve relative time using
+  [recorded YYYY-MM-DD] markers and dated summary entries" — the 2026-08-19
+  baseline ran the previous instruction (a no-op there: its windows carried
+  no markers to explain) and the 1500-token summary cap (ablation measured
+  the cap change at 0pp). Production parity for the instruction: the anchor
+  render now ships a one-line marker legend whenever markers were stamped,
+  so a production model is told what the bench's responder is told —
+  model-specific marker comprehension beyond that legend is untested here.
 
 ### Reading the numbers honestly
 
@@ -148,9 +192,9 @@ narrative facts — both actionable, both now measurable by this bench.
 - Single cut per conversation (the window jumps once from full to compacted);
   production interleaves cuts with turns, which the deterministic tier's
   two-cycle tests cover.
-- n=50 QA is a smoke-scale sample: read the large gaps (the c2 collapse, the
-  dated counterfactual), not single-digit differences. The summarizer is
-  deliberately a small model — the realistic cost posture.
+- n=50 QA is a smoke-scale sample: read the large gaps (the baseline's c2
+  collapse, the fix's recovery), not single-digit differences. The
+  summarizer is deliberately a small model — the realistic cost posture.
 - The uniform baseline's accuracy comes WITHOUT any integrity guarantee: its
   user "facts" are paraphrases that the deterministic tier scores at ~1%
   byte survival. Accuracy and integrity are different axes; this bench
