@@ -42,11 +42,18 @@ interface DirectMessage {
    * compact-resume cycle.
    */
   readonly partMetadata?: Record<string, unknown>;
+  /**
+   * Recorded creation time (epoch ms), carried so the rebuilt message keeps
+   * the time the store recorded (#737): a resumed run that re-mints
+   * `info.time.created` would let the next compaction cut stamp hydration
+   * time onto yesterday's words.
+   */
+  readonly time?: number;
 }
 
 function isKeptEntry(
   value: unknown,
-): value is { role: "user" | "assistant"; text: string; policyInjected?: boolean } {
+): value is { role: "user" | "assistant"; text: string; policyInjected?: boolean; time?: unknown } {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as { role?: unknown; text?: unknown };
   return (
@@ -65,6 +72,9 @@ function anchorKeptWindow(entry: StoredMessage): DirectMessage[] | undefined {
       role: item.role,
       content: item.text,
       ...(item.policyInjected === true ? { partMetadata: { policyInjected: true } } : {}),
+      // #737: pre-#737 records carry no time; those entries hydrate exactly
+      // as before (the run re-mints), so old records stay readable.
+      ...(typeof item.time === "number" && Number.isFinite(item.time) ? { time: item.time } : {}),
     }));
   }
   return undefined;
@@ -77,6 +87,7 @@ function pushTextParts(target: DirectMessage[], message: StoredMessage): void {
         role: message.info.role,
         content: part.text,
         ...(part.metadata === undefined ? {} : { partMetadata: part.metadata }),
+        time: message.info.time.created,
       });
     }
   }

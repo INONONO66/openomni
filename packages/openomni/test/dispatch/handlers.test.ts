@@ -161,7 +161,10 @@ describe("built-in dispatch handlers", () => {
 
     expect(resolvedWorkspace).toBe("/workspace/resident");
     expect(executorWorkspace).toBe("/workspace/resident");
-    expect(runInput?.messages).toEqual([{ role: "user", content: "question" }]);
+    const inputMessages = (runInput?.messages ?? []).map(
+      ({ role, content }: { role: string; content: string }) => ({ role, content }),
+    );
+    expect(inputMessages).toEqual([{ role: "user", content: "question" }]);
     expect(Session.getMessages("resident-session").length).toBeGreaterThan(0);
     expect(Session.getMessages("unrelated-dispatch-surface-session")).toHaveLength(0);
     expect(runConfig).toMatchObject({

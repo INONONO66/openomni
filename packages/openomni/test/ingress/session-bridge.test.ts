@@ -85,10 +85,19 @@ describe("SessionBridge", () => {
       const messages = SessionBridge.buildDirectMessages(sessionId);
 
       expect(messages).toHaveLength(4);
-      expect(messages[0]).toEqual({ role: "user", content: "Hello" });
-      expect(messages[1]).toEqual({ role: "assistant", content: "Hi there!" });
-      expect(messages[2]).toEqual({ role: "user", content: "How are you?" });
-      expect(messages[3]).toEqual({ role: "assistant", content: "I'm good!" });
+      // #737: hydration carries the recorded creation time, so a resumed
+      // message keeps the time the store recorded instead of re-minting.
+      const shaped = messages.map(({ role, content, time }) => ({
+        role,
+        content,
+        recorded: typeof time === "number" && Number.isFinite(time),
+      }));
+      expect(shaped).toEqual([
+        { role: "user", content: "Hello", recorded: true },
+        { role: "assistant", content: "Hi there!", recorded: true },
+        { role: "user", content: "How are you?", recorded: true },
+        { role: "assistant", content: "I'm good!", recorded: true },
+      ]);
     });
 
     it("should return empty array for session with no messages", () => {
@@ -242,6 +251,22 @@ describe("SessionBridge", () => {
       const window = SessionBridge.buildDirectMessages(sessionId);
       expect(window).toHaveLength(2);
       expect(window[1]).toEqual({ role: "user", content: "good" });
+    });
+
+    it("kept entries carry the recorded time; pre-#737 records hydrate without one", () => {
+      addAnchor(sessionId, "summary", [
+        { role: "user", text: "dated words", time: Date.UTC(2023, 4, 8) },
+        { role: "assistant", text: "undated reply" },
+      ] as Array<{ role: "user" | "assistant"; text: string }>);
+
+      const messages = SessionBridge.buildDirectMessages(sessionId);
+      const dated = messages.find((m) => m.content === "dated words");
+      expect(dated?.time).toBe(Date.UTC(2023, 4, 8));
+      // A pre-#737 entry has no time: it hydrates exactly as before (the run
+      // re-mints), never a synthetic zero that would render as 1970.
+      const undated = messages.find((m) => m.content === "undated reply");
+      expect(undated).toBeDefined();
+      expect(undated?.time).toBeUndefined();
     });
 
     it("without a record the full history is unchanged", () => {

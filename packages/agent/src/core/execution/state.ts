@@ -23,8 +23,14 @@ function toMessagesWithParts(
     const parentID = output.at(-1)?.info.id ?? "";
     output.push(
       message.role === "user"
-        ? createUserMessage(message.content, source, message.partMetadata)
-        : createAssistantMessage(message.content, parentID, source, message.partMetadata),
+        ? createUserMessage(message.content, source, message.partMetadata, message.time)
+        : createAssistantMessage(
+            message.content,
+            parentID,
+            source,
+            message.partMetadata,
+            message.time,
+          ),
     );
   }
 

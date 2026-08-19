@@ -41,8 +41,11 @@ export async function anchored(
   const registration = buildWorkerMiddleware({
     compaction: {
       contextWindowTokens: 10_000,
+      // Production's anchor completion sets no low output cap; 1500 starved
+      // reasoning-class summarizers (completion tokens include reasoning) and
+      // truncated checkpoints mid-section. Applied to BOTH strategies below.
       summarizeWith: (prompt: string) =>
-        chat({ model: summarizerModel, user: prompt, maxTokens: 1500 }),
+        chat({ model: summarizerModel, user: prompt, maxTokens: 6000 }),
       ...(preserveUserMessageChars === undefined ? {} : { preserveUserMessageChars }),
       speculate: false,
     },
@@ -89,7 +92,7 @@ export async function uniformReal(
   const summary = await chat({
     model: summarizerModel,
     user: `<conversation>\n${serialized}\n</conversation>\n\n${UNIFORM_PROMPT}`,
-    maxTokens: 1500,
+    maxTokens: 6000,
   });
   const texts = [`[Conversation Summary]\n${summary}`, ...windowTexts(tail)];
   return { texts, chars: totalChars(texts) };

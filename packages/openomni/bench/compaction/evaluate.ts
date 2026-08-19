@@ -11,7 +11,7 @@ import { chat } from "./llm";
  *      grading against the gold answer, not against preference.
  */
 
-const RESPONDER_SYSTEM = `You answer questions about a conversation. You are given a possibly-compacted view of that conversation. Answer from the view ONLY, as concisely as possible (a date, a name, a short phrase). Resolve relative time expressions ("yesterday", "last year") to absolute dates using the [Session N — <date>] headers when present. If the view does not contain the answer, reply exactly: UNKNOWN`;
+const RESPONDER_SYSTEM = `You answer questions about a conversation. You are given a possibly-compacted view of that conversation. Answer from the view ONLY, as concisely as possible (a date, a name, a short phrase). Resolve relative time expressions ("yesterday", "last year") to absolute dates using whatever date carriers the view contains: [Session N — <date>] headers, [recorded YYYY-MM-DD] markers beside messages, or dated summary entries. If the view does not contain the answer, reply exactly: UNKNOWN`;
 
 async function respond(
   responderModel: string,
