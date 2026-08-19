@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787144128069,
+  "lastUpdate": 1787146740270,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58115,6 +58115,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516717,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2e9d42054bc5f3f840e7e78f3ebfccc0f8599f7",
+          "message": "chore: CI honesty, dedup, hygiene (audit batch ④) (#745)\n\n* chore: lint whole repo, honest bench/memory gates, drop dead CLI\n\nPost-campaign audit batch (4) — CI honesty + gate staleness.\n\nC1: the \"Static Analysis (lint)\" job ran `turbo run lint`, which only\nvisits packages/*/src (each package's lint script) and silently skips\napps/server (no lint script), script/, qa/, and ~420 test files. Add a\nlint script to apps/server and switch the CI lint step to a repo-wide\n`ultracite check .` (1080 files vs the old ~550). The new surface was\nalready biome-clean (lefthook auto-fixes on commit), so this is pure\ncoverage, no debt.\n\nC2: the benchmark regression gate lives in the `publish` job, which is\nskipped on PRs, so the 15-min bench ran on every PR but could never fail\nit. Stop running it on PRs; keep it on main pushes + workflow_dispatch\nwhere publish (and its threshold) can actually gate.\n\nC3: the two memory-regression suites assert absolute RSS-delta MB after\nBun.gc — too noisy for the blocking Test job (RSS keeps JIT/allocator\npages GC never returns). The openomni one imported no product code\n(measured Bun's allocator) — deleted. The ledger one exercises real\nSession/Storage/Bus code — renamed to *.bench.ts (dropped from `bun test`\nauto-discovery, so the Test job skips it) and run explicitly in the\nbenchmark workflow instead. knip ignores *.bench.ts (run by path, not\nimported). No coverage change (the ledger suite covered no unique lines).\n\nC4: check-protocol-disposition.ts's verify() computed ok = every(r.ok)\nwithout comparing to each fixture's `expect`, so the shipped\nexpect:\"reject\" fixture failed the whole run — the CLI could never exit 0\nand was wired nowhere. dead-surface.test.ts already imports these pure\nfunctions and gates the same ledger self-consistency in CI, so the broken\nstandalone CLI is removed; the pure logic + loaders stay.\n\nC5: lint-guards.ts allowlisted a deleted file\n(openomni/src/extension/manager.ts) and its canonical-policy rules go\nvacuous if a pinned file is renamed. Drop the stale entry and assert every\npinned guard path exists at startup, so a rename fails loud.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor: dedup operational-log envelopes and router test fixture\n\nPost-campaign audit batch (4) — cross-package copy-paste dedup.\n\nC7: 137 src call sites built the operational-log envelope inline as\n`{ traceId, time: Date.now(), component, msg, ... }`, the payload for\nOperational.Events.{Info,Warn,Debug,Error}. Add one builder,\nOperational.envelope(...), next to its LogBase schema in @openomni/protocol\n(the only package every producer already depends on — telemetry is barred\nfrom most producers' src). Migrate apps/server's 64 sites (the highest\ndensity). Pure refactor: the helper stamps the same time: Date.now() and\nonly emits the keys passed, so fields and values are identical. Non-log\nBase payloads (RecoveryCompleted, GovernorIncident, Policy audits, ...)\nwere deliberately left alone. Remaining sites in other packages are a\nmechanical follow-up.\n\nC9: makeInboundEvent was a byte-identical clone in three channels router\nsuites — hoisted into the sibling _router-fixture.ts. The cross-package\nclones (seedPendingInteraction, replyEvent, correlation shared with\nopenomni/server test trees) can't be shared: test dirs are unpublished\nand the dep rules forbid importing across package test trees. Left as-is.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor: drop dead canonical fingerprint helpers and orphan script\n\nPost-campaign audit batch (4) — orphan/dead-code hygiene.\n\nC10: verifier-conformance-canonical.ts still carried the environment-\nfingerprint and nondeterminism-manifest schemas + builders\n(EnvironmentFingerprint{InputSchema,Schema,Contract},\ncreateEnvironmentFingerprint, environmentAggregateFingerprint,\nNondeterminismManifestSchema, hashNondeterminismManifest). Their only\nconsumers were the #493 conformance-replay verifiers deleted in batch (3);\nthe sole remaining reference was a security test using\nEnvironmentFingerprintSchema as a composite-schema specimen. Protocol's\nwork-item/attempt.ts has its OWN separate EnvironmentFingerprint — these\nwere production-dead. Deleted them plus the now-orphaned module-level\nschema consts, trimmed the barrel re-export, and narrowed the security\ntest (no composite public schema remains to probe; JSON-transform +\ntop-level digest specimens still hold the guarantee). Restores the\nopenomni coverage floor batch (3) shrank: 94.63% -> 94.87% (baseline\nratcheted up). Live surface kept: createCanonicalSchemas, canonicalJson,\nhashCanonicalJson, snapshotJsonValue, renderCanonical.\n\nC11: script/report-breadcrumbs.ts (a local-only breadcrumb report wired\ninto no gate, lefthook, or doc) removed. The bench-ledger-append /\nbench-policy-dispatch scripts + their .result.json are kept: docs cite\nthem as reproduction/evidence for shipped benchmark numbers.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T22:37:42+09:00",
+          "tree_id": "5649a0b816867ac67f4c5a2f155a448d411cadae",
+          "url": "https://github.com/INONONO66/openomni/commit/a2e9d42054bc5f3f840e7e78f3ebfccc0f8599f7"
+        },
+        "date": 1787146739133,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 628,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5871,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2505,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2963,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1069,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513656,
             "unit": "ns/op"
           }
         ]
