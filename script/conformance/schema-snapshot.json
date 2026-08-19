@@ -207,6 +207,35 @@
     "target"
   ],
   "CronJob.Target": ["kind", "sessionId"],
+  "Engagement.Create": ["createdAt", "id", "ownerSessionId", "terms", "title"],
+  "Engagement.Record": [
+    "createdAt",
+    "expiresAt",
+    "id",
+    "openWaitIds",
+    "ownerSessionId",
+    "revision",
+    "state",
+    "terms",
+    "title",
+    "updatedAt",
+    "validResponders"
+  ],
+  "Engagement.Terms": [
+    "autoApprove",
+    "deadline",
+    "speakTriggers",
+    "spendCeiling"
+  ],
+  "Engagement.TransitionInput": [
+    "at",
+    "ownerApproved",
+    "reason",
+    "termCrossed",
+    "to",
+    "validResponders",
+    "waitIds"
+  ],
   "Execution.LogEvent": [
     "artifactId",
     "data",
@@ -265,7 +294,27 @@
     "resolutionPolicy",
     "waitId"
   ],
-  "Gateway.Deliver": ["actorContext", "message", "sessionId", "waitContext"],
+  "Gateway.Deliver": [
+    "actorContext",
+    "decision",
+    "event",
+    "message",
+    "sessionId",
+    "waitContext"
+  ],
+  "Gateway.DeliveredEvent": [
+    "activation",
+    "channel",
+    "id",
+    "meta",
+    "mode",
+    "payload",
+    "surface",
+    "target",
+    "traceId",
+    "userId",
+    "workspace"
+  ],
   "Gateway.InboundMessage": [
     "media",
     "messageId",
@@ -914,6 +963,7 @@
   "Wait.Correlation": [
     "channelId",
     "endpointId",
+    "engagementId",
     "externalConversationId",
     "replyToMessageId",
     "threadId",

@@ -117,6 +117,12 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
     coordinator: CoordinatorLike | undefined,
     residentRuntime: Pick<ResidentRuntime, "run"> | undefined,
     signal?: AbortSignal,
+    delivery?: Readonly<{
+      /** #709: the delivery's wait resumption context — rehydration point + engagement id. */
+      waitContext?: Gateway.WaitContext;
+      /** #709: the delivery's perimeter trust verdict — the engagement approval gate's input. */
+      actorTrustTier?: string;
+    }>,
   ): Promise<Ingress.IngressResult> {
     const agentModel = inboundEvent.agent.model;
     const activeTrace = { ...trace, sessionId };
@@ -135,6 +141,8 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       residentRuntime,
       traceContext: activeTrace,
       signal,
+      waitContext: delivery?.waitContext,
+      actorTrustTier: delivery?.actorTrustTier,
     };
 
     if (target.kind === "resident") {
@@ -224,6 +232,14 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
         trace,
         deps.coordinator,
         deps.residentRuntime,
+        undefined,
+        // #709: the seam's waitContext/actorContext verdicts flow to the run —
+        // waitContext.engagementId is the rehydration point, trustTier the
+        // approval gate's input (consumed verbatim, gateway-design §3).
+        {
+          waitContext: delivery.waitContext,
+          actorTrustTier: delivery.actorContext?.trustTier,
+        },
       );
     },
 

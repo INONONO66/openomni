@@ -145,6 +145,21 @@ export namespace Ingress {
       runId: string;
       agentName?: string;
       workspaceRoot?: string;
+      /**
+       * #709: engagement resumption context of the run — present iff the
+       * triggering delivery carried `waitContext.engagementId`. Rides into
+       * tool execution as an executor-owned implicit input (never
+       * model-supplied), the same rail as sessionId.
+       */
+      engagementId?: string;
+      /**
+       * #709: the triggering delivery's perimeter trust verdict
+       * (`actorContext.trustTier`, consumed verbatim per gateway-design §3).
+       * The engagement approval gate reads it; absent for wait resumptions,
+       * anonymous surfaces, and internal runs — which therefore can never
+       * approve.
+       */
+      actorTrustTier?: string;
     }) => (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   };
 

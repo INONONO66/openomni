@@ -18,6 +18,7 @@ src/
 ├── communication/        # PendingAsk / PendingInteraction schemas (transitional names for the Wait primitive, #215)
 ├── cron/                 # Cron job schemas
 ├── dispatch/             # Dispatch.Command / Actions / ActorContext / target schemas
+├── engagement/           # Engagement.Record/Terms/State + pure transition fold + Events (#709 — the delegation machine, gateway-design §5; Tier-2 Owner addition)
 ├── error/                # NamedError factory + built-in error classes (incl. WorkerDeliveryError, #478)
 ├── event/                # Typed event descriptors: agent-execution, ingress, llm, mcp, operational, policy, tool
 ├── gateway/              # Gateway.Deliver / Send / WaitControl contracts + ReplyGrantRule (gateway stage 0, #706 — the channels↔openomni seam)
@@ -116,3 +117,5 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._
 
 _2026-08-19: gateway stage 0 (#706) landed `gateway/` — `Gateway.Deliver`/`Send`/`WaitControl` contracts, `ReplyGrantRule`, perimeter/conduct trust vocabulary (docs/gateway-design.md §2–§3). `openomni/messaging/schema.ts` re-exports the Send vocabulary from here; grant EVALUATION stays above protocol (contract boundary). Wiring lands at gateway stage 2+._
+
+_2026-08-19: gateway stage 4 (#709) landed `engagement/` — the durable delegation machine (gateway-design §5): `Engagement.Record`/`Terms`/`State`, the pure `transition`/`expire` fold (legal edges only; a reported term crossing FORCES `awaiting_user_approval` — the fold takes `termCrossed`/`ownerApproved` as input FACTS and never evaluates money, criteria, or dialogue), `Engagement.Events` (`user_audit` transitions), the `engagement:<id>` stream registry entry, and `Wait.Correlation.engagementId` (resumption context only — never a matching key). Tier-2 Owner addition in docs/core-model.md._

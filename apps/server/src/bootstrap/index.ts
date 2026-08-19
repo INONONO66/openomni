@@ -2,13 +2,14 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Gateway, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, BusPersistence } from "@openomni/ledger";
+import { initialize, BusPersistence, EngagementStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
 import {
   AgentToolProvider,
   createBrainEngine,
   createDefaultDispatchRuntime,
+  createEngagementTools,
   createMessageSendTool,
   CronAdapter,
   CronJobRunner,
@@ -192,8 +193,26 @@ export async function main(options: MainOptions = {}): Promise<void> {
       ...(config.messaging.personaActorId === undefined
         ? {}
         : { personaActorId: config.messaging.personaActorId }),
+      // #709: deterministic engagement ownership fallback — the session's
+      // SOLE active engagement claims an awaited send when the run itself
+      // carries no engagement context. Zero or several → none (never guess).
+      activeEngagementId: (sessionId) => {
+        const active = EngagementStore.list({
+          ownerSessionId: sessionId,
+          states: [...EngagementStore.activeStates],
+        });
+        const [sole, ...rest] = active;
+        return rest.length === 0 ? sole?.id : undefined;
+      },
     }),
   );
+  // #709: the engagement machine's brain-side tools (delegation category —
+  // resident-only via the depth gate). The store is the ledger's brain-domain
+  // surface; the machine records terms and enforces edges, judgment stays in
+  // the LLM (gateway-design §5, non-goal §10).
+  for (const tool of createEngagementTools({ engagements: EngagementStore })) {
+    agentProviderRef.current.register(tool);
+  }
   dispatchRuntimeRef.current = sharedDispatchRuntime;
   // #707: the brain's Deliver consumer resolves the resident AgentDef itself —
   // the SAME construction the channel bridge used to embed per message

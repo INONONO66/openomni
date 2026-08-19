@@ -2,6 +2,7 @@ import type { Actor } from "../actor/index.js";
 import type { AppConnector } from "../app-connector/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
+import type { Engagement } from "../engagement/index.js";
 import type { Ledger } from "../ledger/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
@@ -63,6 +64,25 @@ export namespace Storage {
      * verification stays the #226 offline restore drill.
      */
     verifyTail(): Ledger.ChainBreak[];
+  }
+
+  export interface EngagementListFilter {
+    ownerSessionId?: string;
+    states?: Engagement.State[];
+  }
+
+  /**
+   * Engagement rows (brain surface, #709): the brain is their sole writer.
+   * Same discipline as Wait: INSERT receipt on create, revision
+   * compare-and-set on every transition write.
+   */
+  export interface EngagementSubAdapter {
+    /** INSERT receipt: false when the id already exists. */
+    create(record: Engagement.Record): boolean;
+    get(id: string): Engagement.Record | undefined;
+    list(filter?: EngagementListFilter): Engagement.Record[];
+    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
+    compareAndSet(id: string, expectedRevision: number, record: Engagement.Record): boolean;
   }
 
   export interface WaitSubAdapter {
