@@ -200,6 +200,17 @@ describe("withReplacementPersistence", () => {
     expect((laundered as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_user_byte_guard_refused",
     );
+
+    // The exemption is one marker per message (#741 F5): the core stamps
+    // exactly one, so a second marker-shaped part is not a marker.
+    const doubled = await dispatch([
+      mkUser("u-double", [
+        { text: "[recorded 2023-05-08]", metadata: markerTags },
+        { text: "[recorded 2024-01-01]", metadata: markerTags },
+        { text: "original words" },
+      ]),
+    ]);
+    expect(doubled.effects.some((e) => e.type === "run.replace_messages")).toBe(false);
   });
 
   it("a paraphrase cannot launder through anchor or injected tags (#729 F1)", async () => {

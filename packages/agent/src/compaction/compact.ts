@@ -99,9 +99,24 @@ export function isTimeCarriageMarkerPart(part: Message.Part): boolean {
   );
 }
 
+/** UTC calendar date by design: deterministic across hosts and resumes. The
+ * anchor render's legend states the convention (review #741 F3) — a
+ * host-local render would re-date the same record per machine. */
 function renderTimeMarker(createdMs: number): string {
   return `[recorded ${new Date(createdMs).toISOString().slice(0, 10)}]`;
 }
+
+/**
+ * One-line legend riding the anchor render whenever markers were stamped
+ * (review #741 F1): the bench's responder is told what markers mean, so
+ * production models must be told too — a measurement the product does not
+ * ship is a primed-reader artifact. Render-only: never enters `anchorBody`,
+ * so merge threading and the record are untouched. The literal
+ * "YYYY-MM-DD" does not match the marker grammar, so the legend can never
+ * be mistaken for a marker by the guard or by extraction.
+ */
+const MARKER_LEGEND =
+  "(Messages marked [recorded YYYY-MM-DD] carry the date each message was recorded, in UTC.)";
 
 /** At least one text part that is neither policy-injected nor an anchor
  * render — i.e. the message actually carries user speech worth dating. */
@@ -416,6 +431,9 @@ export namespace Compaction {
               ...(part.metadata?.policyInjected === true ? { policyInjected: true } : {}),
             })),
         );
+        const stampedAny = stampedUsers.some((message) =>
+          message.parts.some(isTimeCarriageMarkerPart),
+        );
         const anchorMessages =
           anchorText === undefined
             ? []
@@ -425,6 +443,7 @@ export namespace Compaction {
                   firstRemoved.info.sessionID,
                   firstRemoved.info.agent,
                   keptWindow,
+                  stampedAny,
                 ),
               ];
         const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
@@ -661,10 +680,11 @@ function buildAnchorMessage(
   sessionID: string,
   agent: string,
   keptWindow: ReadonlyArray<{ role: "user" | "assistant"; text: string; time: number }>,
+  withMarkerLegend: boolean,
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
-  const render = `${ANCHOR_HEADER}${anchorBody}`;
+  const render = `${ANCHOR_HEADER}${anchorBody}${withMarkerLegend ? `\n\n${MARKER_LEGEND}` : ""}`;
   const info: Message.UserMessage = {
     id,
     sessionID,

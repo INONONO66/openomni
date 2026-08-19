@@ -111,6 +111,12 @@ export function buildConversation(
     // own date carriage is the info.time-driven marker path (#737).
     const dateTime = c[`session_${index}_date_time`];
     const epochMs = typeof dateTime === "string" ? parseSessionDate(dateTime) : undefined;
+    // Fail fast (#741 review F4): a header the parser refuses would fall
+    // back to synthetic time and feed the responder a misleading
+    // [recorded 1970-01-01] marker — worse than crashing the bench.
+    if (typeof dateTime === "string" && epochMs === undefined) {
+      throw new Error(`unparseable session date: ${dateTime}`);
+    }
     if (typeof dateTime === "string") {
       turns.push({
         speaker: options?.headerRole === "user" ? c.speaker_a : "__session_header__",

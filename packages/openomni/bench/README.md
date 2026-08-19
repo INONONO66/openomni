@@ -38,8 +38,11 @@ preserve verbatim, which is the invariant under test.
 | `uniform-real` | A **real** (not strawman) regenerate-everything baseline: the *same* summarizer LLM compresses the same span with user turns included — the industry-default shape. |
 
 (`anchored-dated`, kept for continuity with the 2026-08-19 baseline, is the
-old counterfactual: session-timestamp headers riding the user lane. With
-per-message time carriage shipped it adds only noise on top of `anchored`.)
+old counterfactual: session-timestamp headers riding the user lane. On the
+canonical run it scores 10pp BELOW `anchored` — outside the judge band; the
+user-lane headers consume preserve budget and duplicate the carriage the
+markers already provide, so with time carriage shipped this variant is a
+regression, not a control.)
 
 The anchored strategies and the uniform baseline use the **same summarizer
 model**, so the comparison isolates the *strategy*, not the model. The
@@ -166,6 +169,15 @@ and uniform's own numbers moved 42.0–48.0% across reruns, so read the gap
   real and were fixed after review); everything else goes to the
   cross-model judge. Aggregate numbers are judge-limited: treat single-item
   (2pp) differences as noise.
+- **Responder-prompt disclosure (#741 review F1/F2)**: with the time-carriage
+  fix, the responder instruction gained "resolve relative time using
+  [recorded YYYY-MM-DD] markers and dated summary entries" — the 2026-08-19
+  baseline ran the previous instruction (a no-op there: its windows carried
+  no markers to explain) and the 1500-token summary cap (ablation measured
+  the cap change at 0pp). Production parity for the instruction: the anchor
+  render now ships a one-line marker legend whenever markers were stamped,
+  so a production model is told what the bench's responder is told —
+  model-specific marker comprehension beyond that legend is untested here.
 
 ### Reading the numbers honestly
 
