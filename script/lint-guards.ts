@@ -32,7 +32,7 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 // (@openomni/policy, the engine's owner since #498 W1).
 const canonicalPolicyEvaluator = new Set(["packages/policy/src/permission-evaluate.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
-  "packages/openomni/src/ingress/middleware/ingress-authority.ts",
+  "packages/channels/src/router/authority.ts",
   "packages/openomni/src/execution-runtime/middleware/tool-permission-policy.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "packages/channels/src/authn/decision.ts",

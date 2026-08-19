@@ -1,6 +1,9 @@
 import { Events as EventDescriptors } from "./events.js";
 import * as Fold from "./fold.js";
+import * as Matcher from "./matcher.js";
+import * as RequestedAction from "./requested-action.js";
 import * as Schema from "./schema.js";
+import * as Upcast from "./upcast.js";
 
 export namespace Wait {
   export const OwnerKind = Schema.OwnerKind;
@@ -58,6 +61,26 @@ export namespace Wait {
   export const expire = Fold.expire;
   export const cancel = Fold.cancel;
   export const effectiveThreshold = Fold.effectiveThreshold;
+
+  // #707 slice 1 hoists — pure wait-domain folds formerly kernel-side.
+  // The one inbound-action parser shared by ingress and dispatch (#548).
+  export const requestedWaitAction = RequestedAction.requestedWaitAction;
+  export type RequestedWaitAction = RequestedAction.RequestedWaitAction;
+
+  // Read-only Wait views over frozen legacy pending-* rows (#215 upcast).
+  export const waitViewOfPendingInteraction = Upcast.waitViewOfPendingInteraction;
+  export const waitViewOfPendingAsk = Upcast.waitViewOfPendingAsk;
+
+  // THE sender matcher core (#215): pure matching over protocol types; the
+  // delivery-endpoint ActorRegistry resolution stays a caller-side effect
+  // and reaches targetsOfWait as an input.
+  export type ResponderTarget = Matcher.ResponderTarget;
+  export type SenderEvidence = Matcher.SenderEvidence;
+  export const responderCandidates = Matcher.responderCandidates;
+  export const ingressEvidence = Matcher.ingressEvidence;
+  export const dispatchEvidence = Matcher.dispatchEvidence;
+  export const targetsOfPendingInteraction = Matcher.targetsOfPendingInteraction;
+  export const targetsOfWait = Matcher.targetsOfWait;
 
   export const Events = EventDescriptors;
 }

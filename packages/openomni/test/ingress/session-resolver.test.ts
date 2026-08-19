@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
+import { Ingress, extractSurfaceKey } from "@openomni/protocol";
 import { SurfaceKey, Storage, Session } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressSessionResolver } from "../../src/ingress";
@@ -14,6 +15,7 @@ function resolveWithTrace(
 describe("IngressSessionResolver", () => {
   beforeEach(() => {
     Storage.reset();
+    Bus.reset();
     Storage.initialize({ dbPath: ":memory:" });
   });
 
@@ -24,7 +26,7 @@ describe("IngressSessionResolver", () => {
         workspace: "team-a",
         channel: "C123",
       };
-      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const key = extractSurfaceKey(event);
       expect(key).toBe("slack:team-a:C123");
     });
 
@@ -33,7 +35,7 @@ describe("IngressSessionResolver", () => {
         surface: "tui",
         workspace: "/Users/ino/Develop/OpenOmni",
       };
-      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const key = extractSurfaceKey(event);
       expect(key).toBe("tui:/Users/ino/Develop/OpenOmni:");
     });
 
@@ -41,7 +43,7 @@ describe("IngressSessionResolver", () => {
       const event = {
         surface: "tui",
       };
-      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const key = extractSurfaceKey(event);
       expect(key).toBe("tui::");
     });
 
@@ -51,7 +53,7 @@ describe("IngressSessionResolver", () => {
         workspace: "",
         channel: "C123",
       };
-      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const key = extractSurfaceKey(event);
       expect(key).toBe("slack::C123");
     });
 
@@ -61,12 +63,12 @@ describe("IngressSessionResolver", () => {
         workspace: undefined,
         channel: undefined,
       };
-      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const key = extractSurfaceKey(event);
       expect(key).toBe("telegram::");
     });
 
     it("appends explicit ADR-008 target to avoid session collisions", () => {
-      const key = IngressSessionResolver.extractSurfaceKey({
+      const key = extractSurfaceKey({
         surface: "internal",
         workspace: "repo",
         channel: "resident",
@@ -77,7 +79,7 @@ describe("IngressSessionResolver", () => {
     });
 
     it("does not append explicit resident target to preserve existing surface mappings", () => {
-      const key = IngressSessionResolver.extractSurfaceKey({
+      const key = extractSurfaceKey({
         surface: "telegram",
         channel: "123",
         target: { kind: "resident" },
@@ -143,7 +145,7 @@ describe("IngressSessionResolver", () => {
         workspace: "team-a",
         channel: "C123",
       };
-      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const key = extractSurfaceKey(event);
       const competing = Session.create({
         traceId: "trace-resolver-test",
         title: "competing",
@@ -266,6 +268,76 @@ describe("IngressSessionResolver", () => {
 
       expect(result.session.model.providerID).toBe("openai");
       expect(result.session.model.modelID).toBe("gpt-4");
+    });
+  });
+
+  // #707 stage 2: the gateway router mints + claims the resident session
+  // LABEL; the brain owns the ROW and materializes it lazily on first
+  // Deliver, idempotently.
+  describe("materializeResident", () => {
+    const trace = { traceId: "trace-resolver-test" };
+
+    it("creates the session row when absent", () => {
+      const sessionId = crypto.randomUUID();
+
+      const result = IngressSessionResolver.materializeResident(
+        { surface: "slack" },
+        sessionId,
+        trace,
+      );
+
+      expect(result.isNew).toBe(true);
+      expect(result.session.id).toBe(sessionId);
+      expect(result.session.title).toBe("Session from slack");
+      expect(Session.get(sessionId)?.id).toBe(sessionId);
+    });
+
+    it("returns the existing row when present", () => {
+      const sessionId = crypto.randomUUID();
+
+      const first = IngressSessionResolver.materializeResident(
+        { surface: "slack" },
+        sessionId,
+        trace,
+      );
+      const second = IngressSessionResolver.materializeResident(
+        { surface: "slack" },
+        sessionId,
+        trace,
+      );
+
+      expect(first.isNew).toBe(true);
+      expect(second.isNew).toBe(false);
+      expect(second.session.id).toBe(sessionId);
+      expect(Session.list().map((session) => session.id)).toEqual([sessionId]);
+    });
+
+    it("publishes ingress.session.resolved with materialization freshness", async () => {
+      const sessionId = crypto.randomUUID();
+      const resolved: Array<{ sessionId: string; isNew: boolean; target?: string }> = [];
+      const unsubscribe = Bus.subscribe(Ingress.Events.SessionResolved, (event) => {
+        resolved.push(event);
+      });
+
+      try {
+        IngressSessionResolver.materializeResident({ surface: "slack" }, sessionId, trace);
+        IngressSessionResolver.materializeResident({ surface: "slack" }, sessionId, trace);
+        // Bus delivery is queued off the synchronous call path.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      } finally {
+        unsubscribe();
+      }
+
+      expect(
+        resolved.map((entry) => ({
+          sessionId: entry.sessionId,
+          isNew: entry.isNew,
+          target: entry.target,
+        })),
+      ).toEqual([
+        { sessionId, isNew: true, target: "resident" },
+        { sessionId, isNew: false, target: "resident" },
+      ]);
     });
   });
 });

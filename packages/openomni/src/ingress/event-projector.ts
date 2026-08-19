@@ -1,6 +1,7 @@
 import {
   type Ingress,
   Operational,
+  resolveTarget,
   type Message,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
@@ -8,7 +9,6 @@ import { Session } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createIngressAudit, summarizeText } from "./audit-envelope";
 import { extractText } from "./handlers";
-import { resolveTarget } from "./target";
 
 export namespace IngressEventProjector {
   export function project(

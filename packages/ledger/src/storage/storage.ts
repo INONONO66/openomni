@@ -86,11 +86,7 @@ export namespace Storage {
     // Optional here for test fakes only — SurfaceKey operations fail closed
     // (requireSubAdapter throw) when it is missing; production adapters wire
     // it as required (SqliteStorageAdapter).
-    surfaceKey?: {
-      claim(key: string, sessionId: string, expectedSessionId?: string): string;
-      lookup(key: string): string | undefined;
-      listBySession(sessionId: string): string[];
-    };
+    surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;
     artifact?: {
       store(id: string, sessionId: string, meta: string, content: string): void;
       get(id: string): { meta: string; content: string; sessionId: string } | undefined;

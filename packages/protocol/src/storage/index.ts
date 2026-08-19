@@ -75,6 +75,20 @@ export namespace Storage {
     compareAndSet(id: string, expectedRevision: number, record: Wait.Record): boolean;
   }
 
+  /**
+   * Surface-key map rows (perimeter surface, #707): the N:1 surfaceKey →
+   * sessionId claim table. `claim` is compare-and-swap shaped — with
+   * `expectedSessionId` it replaces only while the current owner still equals
+   * it, without it it inserts only when the key is absent — and always returns
+   * the sessionId that owns the key after the attempt. The key format codec
+   * stays `Channel.SurfaceKey`; this is the row surface only.
+   */
+  export interface SurfaceKeySubAdapter {
+    claim(key: string, sessionId: string, expectedSessionId?: string): string;
+    lookup(key: string): string | undefined;
+    listBySession(sessionId: string): string[];
+  }
+
   export interface PendingAskSubAdapter {
     create(record: Communication.PendingAsk.Record): void;
     get(id: string): Communication.PendingAsk.Record | undefined;

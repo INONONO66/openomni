@@ -7,7 +7,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./ledger": "./src/ledger/index.ts",
-    "./messaging": "./src/messaging/index.ts",
     "./projection": "./src/projection/index.ts"
   },
   "scripts": {

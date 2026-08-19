@@ -1,15 +1,15 @@
-import type { Command, Ingress, Model } from "@openomni/protocol";
+import { Wait, type Command, type Ingress, type Model } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import type { ResidentRuntime } from "../../resident/runtime.js";
-import type { AgentResolver, IngressEngine } from "../../ingress/engine.js";
-import { WaitService } from "../../wait/index.js";
+import type { AgentResolver, BrainEngine } from "../../ingress/engine.js";
 import type { DispatchHandler } from "../registry.js";
 
 export interface ResidentDispatchHandlerOptions {
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
   readonly defaultModel?: Model.Ref;
   readonly agentResolver?: AgentResolver;
-  /** Ingress engine instance owning resident execution (#549); fail-closed when absent. */
-  readonly ingress?: Pick<IngressEngine, "ingestInternal">;
+  /** Brain engine instance owning resident execution (#549); fail-closed when absent. */
+  readonly ingress?: Pick<BrainEngine, "ingestInternal">;
 }
 
 function requireResidentRuntime(
@@ -20,8 +20,8 @@ function requireResidentRuntime(
 }
 
 function requireIngress(
-  ingress: Pick<IngressEngine, "ingestInternal"> | undefined,
-): Pick<IngressEngine, "ingestInternal"> {
+  ingress: Pick<BrainEngine, "ingestInternal"> | undefined,
+): Pick<BrainEngine, "ingestInternal"> {
   if (!ingress) throw new Error("dispatch resident handler requires ingress owner");
   return ingress;
 }
@@ -72,17 +72,20 @@ function eventFromCommand(
 // The synchronous resident.ask path resolves inside this one dispatch, so it
 // records Wait.Events.SyncAsk audit events only and never writes a PendingAsk
 // or Wait row (#215 owner decision 2). Historical PendingAsk rows stay
-// readable through the wait/upcast read path.
+// readable through the wait/upcast read path. Bus-only helper — inlined here
+// at #707 stage 2 (the effectful WaitService moved to the gateway router; the
+// sync-ask audit is brain machinery and never touched the wait store).
 function auditSyncAsk(
   command: Command.Request,
   fallbackSessionId: string,
   phase: "opened" | "answered" | "failed",
 ): void {
-  WaitService.auditSyncAsk({
+  Bus.publish(Wait.Events.SyncAsk, {
     dispatchId: command.dispatchId,
     traceId: command.traceId,
     sessionId: command.actor.sessionId ?? command.sessionId ?? fallbackSessionId,
     phase,
+    time: Date.now(),
   });
 }
 

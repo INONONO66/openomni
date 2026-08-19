@@ -4,11 +4,11 @@ import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 let CronAdapter: typeof import("../../src/ingress/cron-adapter").CronAdapter;
-let createIngressEngine: typeof import("../../src/ingress/engine")["createIngressEngine"];
+let createBrainEngine: typeof import("../../src/ingress/engine")["createBrainEngine"];
 
 beforeEach(async () => {
   ({ CronAdapter } = await import("../../src/ingress/cron-adapter"));
-  ({ createIngressEngine } = await import("../../src/ingress/engine"));
+  ({ createBrainEngine } = await import("../../src/ingress/engine"));
   Storage.reset();
   Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
@@ -54,7 +54,7 @@ describe("CronAdapter.fire", () => {
     const unsubscribe = Bus.subscribe(Ingress.Events.Received, (event) => {
       received.push(event);
     });
-    const engine = createIngressEngine({
+    const engine = createBrainEngine({
       agentResolver: {
         resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
       },

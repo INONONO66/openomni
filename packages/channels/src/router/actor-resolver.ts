@@ -1,0 +1,54 @@
+import type { Gateway, Ingress } from "@openomni/protocol";
+import { ActorRegistry } from "@openomni/ledger";
+
+function legacyActorFields(actor: Ingress.Actor | undefined): Ingress.Actor | undefined {
+  if (!actor) return undefined;
+  const legacyActor: Ingress.Actor = {};
+  if (actor.id) legacyActor.id = actor.id;
+  if (actor.role) legacyActor.role = actor.role;
+  return legacyActor;
+}
+
+function externalActorId(event: Gateway.DeliveredEvent): string | undefined {
+  return event.userId;
+}
+
+export function resolveIngressActor(event: Gateway.DeliveredEvent): Gateway.DeliveredEvent {
+  const externalId = externalActorId(event);
+  if (!externalId || !ActorRegistry.isConfigured()) {
+    return {
+      ...event,
+      meta: {
+        ...event.meta,
+        actor: legacyActorFields(event.meta?.actor),
+      },
+    };
+  }
+
+  const resolved = ActorRegistry.resolveEndpoint(event.surface, externalId, event.workspace);
+  if (!resolved) {
+    return {
+      ...event,
+      meta: {
+        ...event.meta,
+        actor: legacyActorFields(event.meta?.actor),
+      },
+    };
+  }
+
+  return {
+    ...event,
+    meta: {
+      ...event.meta,
+      actor: {
+        id: resolved.endpoint.externalId,
+        role: "user",
+        actorId: resolved.identity.id,
+        kind: resolved.identity.kind,
+        trustTier: resolved.identity.trustTier,
+        endpointId: resolved.endpoint.id,
+        endpoint: resolved.endpoint,
+      },
+    },
+  };
+}

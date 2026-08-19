@@ -1,4 +1,4 @@
-import { Channel, type Ingress, type Wait } from "@openomni/protocol";
+import { Channel, type Gateway, type Ingress, type Wait } from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
@@ -79,7 +79,14 @@ export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.Agen
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
-function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
+/**
+ * The resident AgentDef for an external delivery (#707): identical
+ * construction to the pre-flip bridge embedding — same prompt family, same
+ * tool catalog, same per-message freshness — now invoked by the brain's
+ * Deliver consumer through the injected external agent resolver instead of
+ * riding the inbound event across the perimeter.
+ */
+export function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
   const model = deps.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const definition: AgentDefinition = {
     name: "resident",
@@ -151,14 +158,17 @@ function createBaseEvent(
   };
 }
 
-export function buildInboundEvent(
-  message: Channel.InboundMessage,
-  deps: BridgeDeps,
-): Ingress.DirectEvent {
+/**
+ * The gateway-facing inbound event (#707): under the flipped seam the
+ * external path no longer embeds the AgentDef at the bridge — brain material
+ * never rides the perimeter event. The brain's Deliver consumer resolves the
+ * resident agent through the injected resolver built from
+ * `buildResidentAgentDef` above (same resolution, new location).
+ */
+export function buildInboundEvent(message: Channel.InboundMessage): Gateway.DeliveredEvent {
   const descriptor = Channel.SurfaceKey.parse(message.surfaceKey);
   const threadId = message.threadId ?? descriptor.threadId;
   const base = createBaseEvent(message, descriptor, threadId);
-  const agent = buildResidentAgentDef(deps);
 
   return {
     ...base,
@@ -168,6 +178,5 @@ export function buildInboundEvent(
       correlation: actorMessageCorrelation(message, descriptor, threadId),
     },
     mode: "direct",
-    agent,
   };
 }

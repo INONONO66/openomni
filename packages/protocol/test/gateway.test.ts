@@ -14,14 +14,41 @@ const actorContext = {
   origin: { surface: "telegram", externalId: "u-9" },
 } as const;
 
+// Shared minimal routed-event residue: the agent-less DeliveredEvent every
+// Deliver carries since the #707 seam flip.
+const event = {
+  id: "m-1",
+  traceId: "t-1",
+  surface: "telegram",
+  mode: "direct",
+  payload: "hello",
+} as const;
+
+// Shared minimal recorded route.decided fact (surface_default route arm of
+// the RoutingDecision payload union).
+const decision = {
+  traceId: "t-1",
+  time: 1_000,
+  inboundId: "m-1",
+  surface: "telegram",
+  mode: "direct",
+  reason: "surface default",
+  factsUsed: [],
+  stage: "surface_default",
+  outcome: "route",
+  target: "resident",
+} as const;
+
 describe("Gateway.Deliver", () => {
   test("parses a minimal anonymous delivery (no actorId, no waitContext)", () => {
     const parsed = Gateway.Deliver.parse({
       sessionId: "s-1",
       message,
       actorContext,
+      event,
+      decision,
     });
-    expect(parsed.actorContext.actorId).toBeUndefined();
+    expect(parsed.actorContext?.actorId).toBeUndefined();
     expect(parsed.waitContext).toBeUndefined();
   });
 
@@ -31,6 +58,8 @@ describe("Gateway.Deliver", () => {
       message: { ...message, replyToId: "m-0", threadId: "th-1" },
       actorContext: { ...actorContext, actorId: "a-7", trustTier: "collaborator" },
       waitContext: { waitId: "w-1", allowedAction: "report_result", engagementId: "e-1" },
+      event,
+      decision,
     });
     expect(parsed.waitContext?.waitId).toBe("w-1");
   });
@@ -41,6 +70,8 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message,
         actorContext,
+        event,
+        decision,
         smuggled: true,
       }),
     ).toThrow();
@@ -49,6 +80,8 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message,
         actorContext: { ...actorContext, conductOverride: "admin" },
+        event,
+        decision,
       }),
     ).toThrow();
   });
@@ -59,6 +92,8 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message,
         actorContext: { ...actorContext, inboundTreatment: "drop" },
+        event,
+        decision,
       }),
     ).toThrow();
   });
@@ -69,6 +104,8 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message: { ...message, rawPlatformPayload: {} },
         actorContext,
+        event,
+        decision,
       }),
     ).toThrow();
     expect(() =>
@@ -77,6 +114,8 @@ describe("Gateway.Deliver", () => {
         message,
         actorContext,
         waitContext: { waitId: "w-1", allowedAction: "report_result", sessionPeek: true },
+        event,
+        decision,
       }),
     ).toThrow();
   });
@@ -87,12 +126,16 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message: { ...message, media: [{ kind: "image" }] },
         actorContext,
+        event,
+        decision,
       }),
     ).toThrow();
     const ok = Gateway.Deliver.parse({
       sessionId: "s-1",
       message: { ...message, media: [{ kind: "image", url: "https://x/y.png" }] },
       actorContext,
+      event,
+      decision,
     });
     expect(ok.message.media?.length).toBe(1);
   });
@@ -103,6 +146,8 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message,
         actorContext: { ...actorContext, inboundTreatment: "root_access" },
+        event,
+        decision,
       }),
     ).toThrow();
     expect(() =>
@@ -110,15 +155,37 @@ describe("Gateway.Deliver", () => {
         sessionId: "s-1",
         message,
         actorContext: { ...actorContext, trustTier: "manager_i_swear" },
+        event,
+        decision,
       }),
     ).toThrow();
   });
 
-  test("origin is mandatory — a delivery without a taint root is invalid", () => {
+  test("an actorContext without origin is rejected — a tier verdict needs its taint root", () => {
     const { origin: _origin, ...withoutOrigin } = actorContext;
     expect(() =>
-      Gateway.Deliver.parse({ sessionId: "s-1", message, actorContext: withoutOrigin }),
+      Gateway.Deliver.parse({
+        sessionId: "s-1",
+        message,
+        actorContext: withoutOrigin,
+        event,
+        decision,
+      }),
     ).toThrow();
+  });
+
+  test("a Deliver without the recorded decision is rejected", () => {
+    expect(() =>
+      Gateway.Deliver.parse({ sessionId: "s-1", message, actorContext, event }),
+    ).toThrow();
+  });
+
+  test("a parsed DeliveredEvent drops an extraneous embedded agent (brain material never crosses)", () => {
+    const parsed = Gateway.DeliveredEvent.parse({
+      ...event,
+      agent: { model: { provider: "smuggler", id: "smuggled-model" } },
+    });
+    expect("agent" in parsed).toBe(false);
   });
 });
 

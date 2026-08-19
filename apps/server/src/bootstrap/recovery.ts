@@ -1,10 +1,7 @@
 import type { Channel } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import {
-  WaitService,
-  type DefaultDispatchRuntime,
-  type EffectReconciler,
-} from "@openomni/openomni";
+import type { DefaultDispatchRuntime, EffectReconciler } from "@openomni/openomni";
+import { WaitService } from "@openomni/channels";
 import { Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { newTraceId } from "@openomni/telemetry";
@@ -238,7 +235,9 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
       component: "server",
       msg: "recovery skipped the pending-interaction expiry sweep: store frozen (#548), read-time expiry gates frozen rows",
     });
-    const expiredWaits = WaitService.sweepExpired(id);
+    // #707: the wait service lives in the gateway router band; the sweep
+    // publishes its per-corrupt-wait errors through the injected sink.
+    const expiredWaits = WaitService.sweepExpired(id, Bus.publish);
     if (expiredWaits.length > 0) {
       Bus.publish(Operational.Events.Info, {
         traceId: id,

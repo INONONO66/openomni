@@ -63,10 +63,12 @@
       "name": "@openomni/channels",
       "version": "0.0.1",
       "dependencies": {
+        "@openomni/ledger": "workspace:*",
         "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
       },
       "devDependencies": {
+        "@openomni/telemetry": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5",
       },

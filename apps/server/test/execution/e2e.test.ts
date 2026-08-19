@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createIngressEngine, type IngressEngine } from "@openomni/openomni";
-import type { Execution, Ingress } from "@openomni/protocol";
+import { createBrainEngine } from "@openomni/openomni";
+import { createGatewayRouter, type GatewayRouter } from "@openomni/channels";
+import type { Execution, Gateway } from "@openomni/protocol";
 import { ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
@@ -8,7 +9,7 @@ type CoordinatorLike = {
   dispatch(sessionId: string, request: Execution.Request): Promise<Execution.Result>;
 };
 
-function makeDirectEvent(): Ingress.DirectEvent {
+function makeDirectEvent(): Gateway.DeliveredEvent {
   return {
     id: crypto.randomUUID(),
     traceId: "trace-test",
@@ -17,15 +18,21 @@ function makeDirectEvent(): Ingress.DirectEvent {
     payload: "hello",
     target: { kind: "worker" },
     meta: { actor: { role: "user" }, target: { kind: "worker" } },
-    agent: {
-      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-      tools: [],
-    },
   };
 }
 
-function makeEngine(coordinator?: CoordinatorLike): IngressEngine {
-  return createIngressEngine(coordinator === undefined ? {} : { coordinator });
+// #707 stage 2: the external pipeline is the gateway router composed over the
+// brain's Deliver consumer; the AgentDef the old fixture embedded now comes
+// from the injected external agent resolver.
+function makeEngine(coordinator?: CoordinatorLike): GatewayRouter {
+  const brain = createBrainEngine({
+    ...(coordinator === undefined ? {} : { coordinator }),
+    externalAgentResolver: async () => ({
+      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+      tools: [],
+    }),
+  });
+  return createGatewayRouter({ sink: Bus.publish, deliver: brain.deliver });
 }
 
 beforeEach(() => {
