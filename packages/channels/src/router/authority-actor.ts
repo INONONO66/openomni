@@ -1,6 +1,11 @@
-import { Actor, resolveTarget, type Gateway } from "@openomni/protocol";
+import { Actor, type Ingress, resolveTarget, type Gateway } from "@openomni/protocol";
 
-export type ActorRecord = Record<string, unknown>;
+/**
+ * The typed inbound actor (Ingress.MetaSchema `actor`): batch ② commit 2
+ * declared the production meta keys, so authorization reads here take the
+ * typed `Ingress.Actor` instead of an untyped `Record<string, unknown>`.
+ */
+export type ActorRecord = Ingress.Actor;
 
 const workerControlActions = ["spawn", "send", "cancel", "resume", "schedule"] as const;
 export type WorkerControlAction = (typeof workerControlActions)[number];
@@ -17,8 +22,9 @@ export const actionLabels: Record<WorkerControlAction, `action.${WorkerControlAc
 };
 
 export function getActor(event: Gateway.DeliveredEvent): ActorRecord | undefined {
-  const actor = event.meta?.actor;
-  return isRecord(actor) ? actor : undefined;
+  // event.meta.actor is the typed Ingress.Actor (declared field), so this is
+  // typed field access — no untyped record narrowing.
+  return event.meta?.actor;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -26,7 +32,9 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 export function actorRole(actor: ActorRecord | undefined): string {
-  return String(actor?.role ?? actor?.kind ?? actor?.type ?? "").toLowerCase();
+  // Typed field access over Ingress.Actor (role/kind/type are declared
+  // optional strings) — no String() coercion of unknown catchall values.
+  return (actor?.role ?? actor?.kind ?? actor?.type ?? "").toLowerCase();
 }
 
 export function actorTrustTier(actor: ActorRecord | undefined): Actor.TrustTier | undefined {

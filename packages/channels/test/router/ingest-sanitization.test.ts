@@ -41,7 +41,17 @@ describe("ingest trust-boundary sanitization (audit A T2)", () => {
         actor: { role: "user", id: "user-1" },
         channelGrantId: "spoof-grant",
         channelGrantKind: "trusted_channel",
-        pendingAsk: { id: "spoof-ask", status: "open" },
+        // A well-formed but caller-FORGED pendingAsk (batch ② commit 2 declared
+        // the field typed, so the ingest boundary now validates its shape) —
+        // the strip must remove even a valid-looking forge, never trust it.
+        pendingAsk: {
+          id: "spoof-ask",
+          originSessionId: "spoof-session",
+          originActorKind: "resident",
+          targetKind: "resident",
+          status: "open",
+          ambiguous: false,
+        },
       },
     });
 
