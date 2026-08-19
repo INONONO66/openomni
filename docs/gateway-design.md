@@ -70,10 +70,13 @@ Brain-side consumption rules (normative, closes the known gap):
 Grant-write validation (perimeter): a channel grant whose `defaultTier`
 materializes strangers may never carry `inboundTreatment: "full_access"` —
 rejected at grant write, not at delivery time. Deferred to the first
-Owner-write surface (#708): measured at cut, zero production writers exist
+Owner-write surface: measured at cut, zero production writers exist
 for actor/blacklist/channel-grant rows — the sole-writer property is vacuous
 today (recorded), and the rejection has no write seam to attach to until
-that surface lands. Accepted residual: the
+that surface lands. Re-measured at #708: still true — #708's Owner surfaces
+(send grants, reply-grant rules) are config-parsed, not channel-grant row
+writes, so the validation rides to the durable grant/actor store follow-up
+(#709/SSOT). Accepted residual: the
 unconditional recency window (§5) means admitted external text enters run
 context regardless of engagement match; the mitigation is taint framing plus
 the evidence tier, not exclusion.
@@ -323,7 +326,12 @@ inventory above:
   `require()` alike (the static named clause is the only road).
 - The brain-side internal `SurfaceKey.claim` residue rides to #708 (a
   gateway port for internal claims) — Owner-ruled, no concrete breakage,
-  CAS-converged.
+  CAS-converged. **Resolved at #708**: the router exposes
+  `claimSurface(surfaceKey, sessionId, expectedSessionId?)` (CAS receipt =
+  the owner after the attempt), apps/server injects it into the brain
+  engine, and the brain's session resolver fails closed without it — the
+  gateway is now the literal sole WRITER of the surface↔session map
+  (brain-side reads stay recorded residue).
 
 Perimeter stores do NOT move to channels (§4 SSOT): `actor/`, `blacklist/`,
 `channel-grant/`, `wait/` store, `surface-key/`, `pending-ask/`,

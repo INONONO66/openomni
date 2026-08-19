@@ -11,7 +11,7 @@ import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
-import { IngressSessionResolver } from "./session-resolver";
+import { IngressSessionResolver, type SurfaceSessionClaim } from "./session-resolver";
 import { executePendingInteractionDelivery } from "./pending-interaction-delivery";
 import { requireRoutedInternalDecision, resolveAndRecordInternalRoute } from "./internal-route";
 
@@ -40,6 +40,13 @@ export interface BrainEngineDeps {
    * tool catalog, same runtime model resolution) — same behavior, new home.
    */
   readonly externalAgentResolver?: (event: Gateway.DeliveredEvent) => Promise<Ingress.AgentDef>;
+  /**
+   * Gateway port for internal-mode surface↔session stickiness claims (#708,
+   * closing the #707 residue): the composition root binds the router's
+   * `claimSurface`; the brain writes no perimeter surface directly. Absent →
+   * internal resident surface sessions fail closed at claim time.
+   */
+  readonly claimSurface?: SurfaceSessionClaim;
 }
 
 /**
@@ -206,7 +213,8 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
         // Worker placement stays brain judgment: the delivered event carries
         // the pinned activation/target facts and the resolver selects or
         // creates the worker session exactly as before the flip.
-        sessionId = IngressSessionResolver.resolve(resolvedEvent, trace, model).session.id;
+        sessionId = IngressSessionResolver.resolve(resolvedEvent, trace, model, deps.claimSurface)
+          .session.id;
       }
 
       return executeResolved(
@@ -250,10 +258,15 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       );
       publishReceived(resolvedEvent, trace);
       const agentModel = resolvedEvent.agent.model;
-      const { session } = IngressSessionResolver.resolve(resolvedEvent, trace, {
-        providerID: agentModel.provider,
-        modelID: agentModel.id,
-      });
+      const { session } = IngressSessionResolver.resolve(
+        resolvedEvent,
+        trace,
+        {
+          providerID: agentModel.provider,
+          modelID: agentModel.id,
+        },
+        deps.claimSurface,
+      );
       return executeResolved(
         resolvedEvent,
         route.selectedTarget,
