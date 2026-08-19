@@ -177,10 +177,10 @@ describe("IngressEventProjector", () => {
     expect(part.text).toBe("Email body content");
   });
 
-  // batch ② commit 4 (S6): the perimeter's evidence_only verdict must become a
-  // command-authority restriction at the projection seam — the batch-①
-  // recovery floor is only load-bearing once an evidence_only inbound is
-  // framed as an observation the LLM treats as data, not a plain command.
+  // S6 defense-in-depth: the projection seam frames an evidence_only inbound
+  // as an observation the LLM treats as data, not a plain command. The
+  // load-bearing authority cap (deny-all tool permission on evidence_only
+  // runs) lives in execution-runtime/middleware.ts and is tested there.
   it("frames an evidence_only inbound as a system observation, not a command", () => {
     const event: Ingress.InboundEvent = {
       id: "event-evidence",

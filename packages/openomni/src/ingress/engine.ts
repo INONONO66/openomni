@@ -123,10 +123,13 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       /** #709: the delivery's perimeter trust verdict — the engagement approval gate's input. */
       actorTrustTier?: string;
       /**
-       * batch ② commit 4 (S6): the delivery's perimeter inbound treatment
-       * (Gateway.ActorContext.inboundTreatment). Consumed at the projection
-       * seam — an `evidence_only` inbound is framed as an observation, never a
-       * plain command. Consumed verbatim per gateway-design §3.
+       * S6 — the delivery's perimeter inbound treatment
+       * (Gateway.ActorContext.inboundTreatment), consumed verbatim per
+       * gateway-design §3. Two consumers: (1) the HARD authority gate — an
+       * `evidence_only` run's tool permission is forced deny-all so the turn
+       * cannot drive tool use, whatever the plan allows; (2) the projection
+       * seam frames the turn as an observation (defense-in-depth). Together
+       * they make the batch-① recovery floor load-bearing.
        */
       inboundTreatment?: string;
     }>,
@@ -151,6 +154,7 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       signal,
       waitContext: delivery?.waitContext,
       actorTrustTier: delivery?.actorTrustTier,
+      inboundTreatment: delivery?.inboundTreatment,
     };
 
     if (target.kind === "resident") {

@@ -228,10 +228,11 @@ function channelState(
     // full_access; it must never override an inbound already marked
     // evidence_only. A re-injected recovery message (unrecoverable original
     // sender) keeps the evidence_only marker to the brain — a monotonic
-    // downgrade. NOTE: this is correct GROUNDWORK, not yet a closed hole — the
-    // marker becomes protective only once the brain consumes inboundTreatment
-    // as a command-authority restriction (S6, batch ②). Until then the marker
-    // reaches actorContext but no brain path frames the turn as evidence.
+    // downgrade. This is now a CLOSED hole (S6): the brain consumes
+    // inboundTreatment as a hard command-authority restriction — an
+    // evidence_only run's tool permission is forced deny-all
+    // (execution-runtime/middleware.ts) and the projection seam frames the
+    // turn as evidence. The marker is protective, not merely stamped.
     inboundTreatment: inboundEvidenceOnly ? "evidence_only" : resolution.inboundTreatment,
     ...(resolution.grant.defaultTier === undefined
       ? {}

@@ -42,6 +42,12 @@ export namespace IngressHandlers {
     waitContext?: Gateway.WaitContext;
     /** #709: the triggering delivery's perimeter trust verdict (actorContext.trustTier, verbatim). */
     actorTrustTier?: string;
+    /**
+     * S6: the triggering delivery's perimeter inbound treatment
+     * (actorContext.inboundTreatment, verbatim). `evidence_only` forces the
+     * run's tool permission to deny-all — evidence informs, it cannot act.
+     */
+    inboundTreatment?: string;
   }
 
   // ---- observe-only ingress lifecycle events ----
@@ -391,6 +397,7 @@ export namespace IngressHandlers {
       signal: ctx.signal,
       waitContext: ctx.waitContext,
       actorTrustTier: ctx.actorTrustTier,
+      inboundTreatment: ctx.inboundTreatment,
     });
     const output = residentResult.output;
     SessionBridge.storeDirectResult(traceId, ctx.sessionId, output, ctx.event.agent.model);

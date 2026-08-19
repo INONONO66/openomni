@@ -52,6 +52,16 @@ export interface WorkerMiddlewareConfig {
    * trace or not at all — the registry never mints one.
    */
   traceId?: string;
+  /**
+   * S6 hard authority gate — the triggering delivery's perimeter inbound
+   * treatment (Gateway.ActorContext.inboundTreatment, verbatim). When
+   * `"evidence_only"`, this run's tool permission is forced to deny-all,
+   * OVERRIDING whatever `permissions` / the plan's `builtin:tool-permission`
+   * would allow: an untrusted-actor turn (laundered/blacklisted replay,
+   * broadcast stranger) may inform the resident's reasoning but must not drive
+   * tool use. A `full_access`/absent treatment is untouched (acts normally).
+   */
+  inboundTreatment?: string;
   compaction?: WorkerCompactionConfig;
   includeLifecycle?: boolean;
   includeIdle?: boolean;
@@ -66,6 +76,17 @@ export interface WorkerMiddlewareConfig {
  * the server's agent composition sets `permissions` on every AgentDef.
  */
 const FAIL_CLOSED_TOOL_PERMISSION: Policy.Permission = { action: "tool.call", denylist: ["*"] };
+
+/**
+ * S6 hard authority gate: an `evidence_only` inbound caps the run's tool
+ * permission to deny-all, whatever `permissions`/the plan would otherwise
+ * allow. This is the load-bearing half of S6 (the projector's evidence
+ * framing is defense-in-depth): evidence informs the resident's reasoning but
+ * cannot act on that turn.
+ */
+function isEvidenceOnly(config: WorkerMiddlewareConfig): boolean {
+  return config.inboundTreatment === "evidence_only";
+}
 
 export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyEngineRegistration[] {
   const policyPlanMiddleware = config.policyPlan
@@ -147,7 +168,10 @@ function buildLegacyPermissionMiddleware(
     createToolPermissionPolicy({
       // No plan and no legacy permissions: nothing declared a ruleset for
       // this run, so the guard denies every tool instead of allowing all.
-      permission: config.permissions ?? FAIL_CLOSED_TOOL_PERMISSION,
+      // An evidence_only run is capped to deny-all regardless (S6 hard gate).
+      permission: isEvidenceOnly(config)
+        ? FAIL_CLOSED_TOOL_PERMISSION
+        : (config.permissions ?? FAIL_CLOSED_TOOL_PERMISSION),
       events: Bus,
     }),
   ];
@@ -172,11 +196,18 @@ function hydrateToolPermissionConfig(
   plan: Policy.PolicyPlan,
   workerConfig: WorkerMiddlewareConfig,
 ): Policy.PolicyPlan {
+  const evidenceOnly = isEvidenceOnly(workerConfig);
   const fallbackPermission = workerConfig.permissions ?? FAIL_CLOSED_TOOL_PERMISSION;
   let changed = false;
   const policies = plan.policies.map((policy) => {
     if (policy.id !== "builtin:tool-permission") return policy;
     const config = policy.config ?? {};
+    // S6 hard gate: an evidence_only run's tool authority is capped to
+    // deny-all, OVERRIDING whatever ruleset the plan declares.
+    if (evidenceOnly) {
+      changed = true;
+      return { ...policy, config: { ...config, permission: FAIL_CLOSED_TOOL_PERMISSION } };
+    }
     // Keep legacy permissions effective for policy plans that select the
     // builtin guard without owning its config yet. With no legacy permissions
     // either, the absent arm fails CLOSED (deny-all): a plan that selects the

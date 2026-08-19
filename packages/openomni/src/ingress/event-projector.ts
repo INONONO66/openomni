@@ -11,16 +11,18 @@ import { createIngressAudit, summarizeText } from "./audit-envelope";
 import { extractText } from "./handlers";
 
 /**
- * Evidence framing (batch ② commit 4, S6). The perimeter marks the
- * batch-① recovery floor — a re-injected / laundered / blacklisted inbound
- * whose original sender is untrusted — as `inboundTreatment: "evidence_only"`.
- * The projection seam consumes that verdict (perimeter → conduct, consumed
- * verbatim per gateway-design §3) by projecting the turn as a SYSTEM-FRAMED
- * OBSERVATION block, not a plain user command. gateway-design §2a/§5: such a
- * turn "may inform the resident; it may not directly drive tool use with
- * conduct authority above the evidence tier." The delimited frame is what the
- * LLM sees — it turns a would-be top-level command into untrusted data, which
- * is what makes the batch-① floor load-bearing rather than merely stamped.
+ * Evidence framing (S6, DEFENSE-IN-DEPTH). The perimeter marks the batch-①
+ * recovery floor — a re-injected / laundered / blacklisted inbound whose
+ * original sender is untrusted — as `inboundTreatment: "evidence_only"`. The
+ * projection seam consumes that verdict (perimeter → conduct, verbatim per
+ * gateway-design §3) by projecting the turn as a SYSTEM-FRAMED OBSERVATION
+ * block, not a plain user command, so the LLM understands it is data.
+ *
+ * This SOFT frame is NOT the load-bearing gate — a prompt cannot enforce
+ * authority. The HARD gate that actually makes §2a's "may not directly drive
+ * tool use above the evidence tier" true is the tool-permission cap in
+ * execution-runtime/middleware.ts: an evidence_only run's tool permission is
+ * forced deny-all. The frame is the first, cooperative layer beneath it.
  */
 export function frameEvidenceOnlyText(text: string, origin: string): string {
   return (
