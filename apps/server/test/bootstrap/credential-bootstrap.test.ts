@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Command, Execution } from "@openomni/protocol";
-import { createIngressEngine, type NativeTool } from "@openomni/openomni";
+import { createBrainEngine, type NativeTool } from "@openomni/openomni";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 import { assembleBootstrap } from "../../src/bootstrap/worker-bootstrap";
 import type { CustomToolProvider } from "../../src/tool/custom";
@@ -226,7 +226,7 @@ describe("server bootstrap connector endpoint credentials", () => {
         },
       },
       credentials: bootstrap.credentials,
-      ingress: createIngressEngine(),
+      ingress: createBrainEngine(),
     });
     const runtime = owners.connectorEndpointDriver;
     if (runtime === undefined) {

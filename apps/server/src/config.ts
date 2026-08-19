@@ -1,9 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Operational } from "@openomni/protocol";
+import { Gateway, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { SenderTargetGrant } from "@openomni/openomni/messaging";
 import { z } from "zod";
 import { parseMcpServerConfigs, type McpServerConfig } from "./config/mcp-server-config";
 
@@ -60,7 +59,7 @@ export interface ServerConfig {
   github: { secret?: string; token?: string; botUsername?: string; allowedUsers: string[] };
   discord: { token?: string; allowedUsers: string[] };
   /** Existing-agent messaging grants: default EMPTY — every send is denied `ungranted` until a grant is explicitly configured. */
-  messaging: { grants: SenderTargetGrant[] };
+  messaging: { grants: Gateway.SenderTargetGrant[] };
 }
 
 let _config: ServerConfig | null = null;
@@ -86,9 +85,9 @@ function resolveMessagingGrants(
   raw: RawConfig,
   configPath: string,
   traceId: string,
-): SenderTargetGrant[] {
+): Gateway.SenderTargetGrant[] {
   if (raw.messaging?.grants === undefined) return [];
-  const parsed = z.array(SenderTargetGrant).safeParse(raw.messaging.grants);
+  const parsed = z.array(Gateway.SenderTargetGrant).safeParse(raw.messaging.grants);
   if (parsed.success) return parsed.data;
   // Fail closed: a malformed grant list grants nothing.
   Bus.publish(Operational.Events.Warn, {

@@ -1,24 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { DiscordNormalizer } from "@openomni/channels";
-import { Operational, type Ingress } from "@openomni/protocol";
+import { Operational, type Gateway, type Ingress } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createMessageHandler } from "../../src/handler/conversation";
 
-const provider = { listTools: () => [] };
-const deps = {
-  systemProvider: provider,
-  agentProvider: provider,
-  mcpProvider: provider,
-  customProvider: provider,
-  defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-  workspaceRoot: "/workspace",
-};
 const normalizer = new DiscordNormalizer({ botId: "bot-1", triggers: [] });
 
-// The kernel ingress instance is a handler dep (#549); each test supplies its
-// own mock ingest through the deps seam.
+// The gateway router instance is the one handler dep (#549 discipline, #707
+// home); each test supplies its own mock ingest through the deps seam.
 function handlerFor(ingest: (event: unknown) => Promise<Ingress.IngressResult>) {
-  return createMessageHandler({ ...deps, ingress: { ingest } });
+  return createMessageHandler({ ingress: { ingest } });
 }
 
 function ingressResult(output: string): Ingress.IngressResult {
@@ -69,10 +60,13 @@ describe("conversation kernel routing", () => {
 
     // Then
     expect(ingest).toHaveBeenCalledTimes(1);
-    const correlatedEvent = receivedEvent as Ingress.DirectEvent;
+    const correlatedEvent = receivedEvent as Gateway.DeliveredEvent;
     expect(correlatedEvent.meta?.correlation).toMatchObject({
       replyToMessageId: "outbound-question",
     });
+    // #707: the event that crosses the seam is agent-less — brain material
+    // (the AgentDef) is resolved behind the router, never embedded here.
+    expect("agent" in correlatedEvent).toBe(false);
     expect(response).toEqual({ text: "kernel accepted reply" });
   });
 
@@ -90,7 +84,7 @@ describe("conversation kernel routing", () => {
 
     // Then
     expect(ingest).toHaveBeenCalledTimes(1);
-    const unmatchedEvent = receivedEvent as Ingress.DirectEvent;
+    const unmatchedEvent = receivedEvent as Gateway.DeliveredEvent;
     expect(unmatchedEvent.meta?.correlation).not.toHaveProperty("replyToMessageId");
     expect(response).toEqual({ text: "kernel resident response" });
   });

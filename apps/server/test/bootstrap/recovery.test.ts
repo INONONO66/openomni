@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Communication, type Wait } from "@openomni/protocol";
-import {
-  createDefaultDispatchRuntime,
-  WaitService,
-  type DefaultDispatchRuntime,
-} from "@openomni/openomni";
+import { createDefaultDispatchRuntime, type DefaultDispatchRuntime } from "@openomni/openomni";
+import { WaitService } from "@openomni/channels";
 import {
   EffectStore,
   PendingInteractionStore,

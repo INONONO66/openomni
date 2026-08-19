@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { Ingress } from "@openomni/protocol";
-import { ChannelGrantStore, Session, Storage } from "@openomni/ledger";
+import { Ingress, type Gateway } from "@openomni/protocol";
+import { Session, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   defaultRunFn,
@@ -10,16 +10,21 @@ import {
   testState,
 } from "./_llm-mock";
 
-type IngressEngineModule = typeof import("../../src/ingress/engine");
-type IngressEngine = import("../../src/ingress/engine").IngressEngine;
-type IngressEngineDeps = import("../../src/ingress/engine").IngressEngineDeps;
+// #707 stage 2: the brain engine's external entry is `deliver(Gateway.Deliver)`
+// — the gateway router's injected port. These tests hand-build Deliver
+// payloads (openomni tests never import @openomni/channels); routing,
+// channel-grant, and authority behaviors live in the router's own tests.
 
-let createIngressEngine: IngressEngineModule["createIngressEngine"];
+type BrainEngineModule = typeof import("../../src/ingress/engine");
+type BrainEngine = import("../../src/ingress/engine").BrainEngine;
+type BrainEngineDeps = import("../../src/ingress/engine").BrainEngineDeps;
+
+let createBrainEngine: BrainEngineModule["createBrainEngine"];
 let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
-let engine: IngressEngine;
+let engine: BrainEngine;
 
 beforeAll(async () => {
-  ({ createIngressEngine } = await import("../../src/ingress/engine"));
+  ({ createBrainEngine } = await import("../../src/ingress/engine"));
   ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
@@ -35,21 +40,8 @@ beforeEach(() => {
   Storage.reset();
   Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  installChannelGrants();
   engine = makeEngine();
 });
-
-function installChannelGrants() {
-  for (const surface of ["slack", "tui", "internal"]) {
-    ChannelGrantStore.put({
-      id: `grant-${surface}`,
-      surface,
-      kind: "trusted_channel",
-      ...(surface === "internal" ? {} : { defaultTier: "owner" }),
-      createdBy: "act_owner",
-    });
-  }
-}
 
 function testResidentRuntime() {
   return ResidentRuntime.create({
@@ -84,12 +76,74 @@ function testCoordinator() {
   };
 }
 
-function makeEngine(overrides: IngressEngineDeps = {}): IngressEngine {
-  return createIngressEngine({
+function makeEngine(overrides: BrainEngineDeps = {}): BrainEngine {
+  return createBrainEngine({
     residentRuntime: testResidentRuntime(),
     coordinator: testCoordinator(),
+    externalAgentResolver: async () => ({ model: { provider: "test", id: "test-model" } }),
     ...overrides,
   });
+}
+
+/**
+ * A hand-built Gateway.Deliver in the shape the router records for a
+ * surface_default admission: the routed event residue plus the recorded
+ * route.decided fact. Must parse under Gateway.Deliver at the seam.
+ */
+function makeDeliver(
+  options: { id?: string; sessionId?: string; target?: Ingress.Target; payload?: string } = {},
+): Gateway.Deliver {
+  const id = options.id ?? crypto.randomUUID();
+  const payload = options.payload ?? "hello";
+  const target = options.target;
+  const targetLabel =
+    target === undefined || target.kind === "resident"
+      ? "resident"
+      : target.sessionId !== undefined
+        ? `worker-session:${target.sessionId}`
+        : "worker";
+  return {
+    ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
+    message: {
+      messageId: id,
+      traceId: "trace-test",
+      surfaceKey: "tui:/repo:resident",
+      text: payload,
+    },
+    actorContext: {
+      actorId: "act_owner",
+      trustTier: "owner",
+      inboundTreatment: "full_access",
+      origin: { surface: "tui", externalId: "owner-external-id" },
+    },
+    event: {
+      id,
+      traceId: "trace-test",
+      surface: "tui",
+      workspace: "/repo",
+      channel: "resident",
+      mode: "direct",
+      payload,
+      ...(target === undefined ? {} : { target }),
+      meta: { actor: { role: "user", trustTier: "owner" } },
+    },
+    decision: {
+      traceId: "trace-test",
+      time: Date.now(),
+      inboundId: id,
+      surface: "tui",
+      mode: "direct",
+      stage: "surface_default",
+      outcome: "route",
+      target: targetLabel,
+      ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
+      actorId: "act_owner",
+      trustTier: "owner",
+      inboundTreatment: "full_access",
+      reason: "Inbound message routed to the surface session",
+      factsUsed: ["wait:none", `target:${targetLabel}`],
+    },
+  };
 }
 
 async function catchError(promise: Promise<unknown>): Promise<Error | undefined> {
@@ -102,25 +156,11 @@ async function catchError(promise: Promise<unknown>): Promise<Error | undefined>
   }
 }
 
-describe("IngressEngine", () => {
-  it("ingest() with direct mode returns direct result", async () => {
+describe("BrainEngine deliver", () => {
+  it("executes a routed resident delivery through the resident runtime", async () => {
     testState.responseQueue.push("direct response");
 
-    const event: Ingress.InboundEvent = {
-      id: "event-direct-1",
-      traceId: "trace-test",
-      surface: "slack",
-      workspace: "team-a",
-      channel: "C1",
-      mode: "direct",
-      payload: "hello",
-      meta: { actor: { role: "user" } },
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    const result = await engine.ingest(event);
+    const result = await engine.deliver(makeDeliver({ sessionId: crypto.randomUUID() }));
 
     expect(result.mode).toBe("direct");
     if (result.kind === "dropped") throw new Error("shape");
@@ -128,8 +168,8 @@ describe("IngressEngine", () => {
     expect(result.result.finishReason).toBe("stop");
   });
 
-  it("emits canonical target keys for worker ingress events", async () => {
-    testState.responseQueue.push("worker response");
+  it("emits canonical target keys for worker deliveries and dispatches the coordinator", async () => {
+    testState.responseQueue.push("direct response");
     const workerSession = Session.create({
       traceId: "trace-test",
       title: "worker target key test",
@@ -140,202 +180,97 @@ describe("IngressEngine", () => {
       received.push(event);
     });
 
+    let result: Ingress.IngressResult;
     try {
-      await engine.ingest({
-        id: "event-worker-target-key-1",
-        traceId: "trace-test",
-        surface: "slack",
-        workspace: "team-a",
-        channel: "C1",
-        mode: "direct",
-        payload: "hello",
-        target: { kind: "worker", sessionId: workerSession.id },
-        meta: { actor: { role: "user" } },
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      });
+      result = await engine.deliver(
+        makeDeliver({ target: { kind: "worker", sessionId: workerSession.id } }),
+      );
     } finally {
       unsubscribe();
     }
 
     expect(received.at(-1)?.target).toBe(`worker-session:${workerSession.id}`);
-    // D11 keystone pin (#654 review): ingest INHERITS the event's trace —
+    // D11 keystone pin (#654 review): deliver INHERITS the event's trace —
     // reverting the engine to a fresh mint must fail here, not stay green.
     expect(received.at(-1)?.traceId).toBe("trace-test");
+    if (result.kind === "dropped") throw new Error("shape");
+    expect(result.result.output).toBe("direct response");
   });
 
-  it("ingest() with invalid event throws", async () => {
-    const error = await catchError(
-      engine.ingest({
-        id: "invalid-1",
-        surface: "tui",
-        payload: "hello",
-      }),
-    );
-
-    expect(error).toBeDefined();
-  });
-
-  it("rejects missing coordinator through ingress middleware", async () => {
+  it("rejects a worker-target delivery without a coordinator", async () => {
     engine = makeEngine({ coordinator: undefined });
 
     const error = await catchError(
-      engine.ingest({
-        id: "event-no-coordinator-1",
-        traceId: "trace-test",
-        surface: "tui",
-        workspace: "/repo",
-        mode: "direct",
-        target: { kind: "worker" },
-        payload: "hello",
-        meta: { actor: { role: "user" }, target: { kind: "worker", sessionId: "worker-sess-1" } },
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      }),
+      engine.deliver(makeDeliver({ target: { kind: "worker", sessionId: "worker-sess-1" } })),
     );
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain("coordinator is required for worker target");
   });
 
-  it("rejects unauthorized top-level actors before dispatch", async () => {
-    let dispatchCalled = false;
-    engine = makeEngine({
-      coordinator: {
-        async dispatch(_sessionId, request) {
-          dispatchCalled = true;
-          return {
-            runId: request.runId,
-            sessionId: request.sessionId,
-            status: "succeeded" as const,
-            output: "should not dispatch",
-            finishReason: "stop" as const,
-          };
-        },
-      },
-    });
+  it("rejects a resident delivery without a routed sessionId", async () => {
+    const error = await catchError(engine.deliver(makeDeliver()));
 
-    const error = await catchError(
-      engine.ingest({
-        id: "event-unauthorized-1",
-        traceId: "trace-test",
-        surface: "internal",
-        workspace: "/repo",
-        mode: "direct",
-        payload: "spawn top-level work",
-        meta: { actor: { role: "sub_persona", trusted: false } },
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      }),
-    );
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as Error).message).toContain("resident delivery without a routed sessionId");
+  });
+
+  it("rejects delivery when no external agent resolver is configured", async () => {
+    engine = makeEngine({ externalAgentResolver: undefined });
+
+    const error = await catchError(engine.deliver(makeDeliver({ sessionId: crypto.randomUUID() })));
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain(
-      "actor is not authorized to create top-level inbound work",
-    );
-    expect(dispatchCalled).toBe(false);
+    expect((error as Error).message).toContain("external agent resolver not configured");
   });
 
-  it("reuses session for same surface key across calls", async () => {
+  it("rejects a malformed delivery at the seam", async () => {
+    const { decision: _decision, ...withoutDecision } = makeDeliver({
+      sessionId: crypto.randomUUID(),
+    });
+
+    const error = await catchError(engine.deliver(withoutDecision));
+
+    expect(error).toBeDefined();
+  });
+
+  it("reuses one session row across deliveries with the same routed sessionId", async () => {
     testState.responseQueue.push("first response");
     testState.responseQueue.push("second response");
+    const sessionId = crypto.randomUUID();
+    const resolved: Array<{ sessionId: string; isNew: boolean }> = [];
+    const unsubscribe = Bus.subscribe(Ingress.Events.SessionResolved, (event) => {
+      resolved.push(event);
+    });
 
-    const eventA: Ingress.InboundEvent = {
-      id: "event-reuse-1",
-      traceId: "trace-test",
-      surface: "tui",
-      workspace: "/repo",
-      channel: "resident",
-      mode: "direct",
-      payload: "First message",
-      meta: { actor: { role: "user" } },
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    const eventB: Ingress.InboundEvent = {
-      id: "event-reuse-2",
-      traceId: "trace-test",
-      surface: "tui",
-      workspace: "/repo",
-      channel: "resident",
-      mode: "direct",
-      payload: "Second message",
-      meta: { actor: { role: "user" } },
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    const first = await engine.ingest(eventA);
-    const second = await engine.ingest(eventB);
+    let first: Ingress.IngressResult;
+    let second: Ingress.IngressResult;
+    try {
+      first = await engine.deliver(makeDeliver({ sessionId }));
+      second = await engine.deliver(makeDeliver({ sessionId }));
+    } finally {
+      unsubscribe();
+    }
 
     if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
-    expect(first.sessionId).toBe(second.sessionId);
+    expect(first.sessionId).toBe(sessionId);
+    expect(second.sessionId).toBe(sessionId);
+    // Lazy materialization is idempotent: one row, created exactly once.
+    expect(Session.list().map((session) => session.id)).toEqual([sessionId]);
+    expect(resolved.map((entry) => entry.isNew)).toEqual([true, false]);
   });
 
-  it("storage reset clears session mapping state", async () => {
-    testState.responseQueue.push("before reset");
-    testState.responseQueue.push("after reset");
+  it("keeps deliveries with different routed sessionIds in different rows", async () => {
+    testState.responseQueue.push("first response");
+    testState.responseQueue.push("second response");
+    const sessionA = crypto.randomUUID();
+    const sessionB = crypto.randomUUID();
 
-    const event: Ingress.InboundEvent = {
-      id: "event-reset-1",
-      traceId: "trace-test",
-      surface: "tui",
-      workspace: "/repo",
-      mode: "direct",
-      payload: "Before reset",
-      meta: { actor: { role: "user" } },
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    const first = await engine.ingest(event);
-    Storage.reset();
-    Bus.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    installChannelGrants();
-    engine = makeEngine();
-
-    const second = await engine.ingest({
-      ...event,
-      id: "event-reset-2",
-      traceId: "trace-test",
-      payload: "After reset",
-    });
+    const first = await engine.deliver(makeDeliver({ sessionId: sessionA }));
+    const second = await engine.deliver(makeDeliver({ sessionId: sessionB }));
 
     if (first.kind === "dropped" || second.kind === "dropped") throw new Error("shape");
     expect(first.sessionId).not.toBe(second.sessionId);
-  });
-
-  it("ingest() with unknown mode fails external ingress schema validation", async () => {
-    const event = {
-      id: "event-unknown-1",
-      traceId: "trace-test",
-      surface: "tui",
-      workspace: "/repo",
-      mode: "unknown-mode",
-      payload: "test",
-      meta: { actor: { role: "user" } },
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    let caughtError: Error | undefined;
-    try {
-      await engine.ingest(event);
-    } catch (err) {
-      if (!(err instanceof Error)) throw err;
-      caughtError = err;
-    }
-
-    expect(caughtError).toBeInstanceOf(Error);
-    expect(caughtError?.message).toContain("invalid_literal");
+    expect(Session.list()).toHaveLength(2);
   });
 });

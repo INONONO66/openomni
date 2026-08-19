@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
+import { Events as IngressEvents } from "../event/ingress.js";
+import { Ingress } from "../ingress/index.js";
 import { Wait } from "../wait/index.js";
 
 /**
@@ -88,13 +90,42 @@ const WaitContextSchema = z
   })
   .strict();
 
-/** Inbound contract: gateway → brain. The brain needs nothing else to run. */
+/**
+ * The routed inbound event as it crosses the seam (#707 stage-2, measured at
+ * cut): the driver-produced event AFTER perimeter routing (actor resolution,
+ * channel-grant treatment stamping, wait/session pinning) MINUS the
+ * brain-owned `agent` — the AgentDef is brain material and is resolved by the
+ * brain's Deliver consumer, never embedded at the perimeter. This is the
+ * execution-authoritative residue for this stage; the sibling `message` /
+ * `actorContext` fields are the §2a verdict projection of the same delivery.
+ */
+const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
+
+/**
+ * Inbound contract: gateway → brain.
+ *
+ * Stage-2 measurement corrections to the stage-0 draft (#707):
+ * - `sessionId` is optional — it is the gateway's routed session label
+ *   (wait-owner / surface-map / router-minted). Worker-target deliveries
+ *   carry no label: work placement (child/worker session selection) is brain
+ *   judgment (kernel-contract §8.5), so the brain resolves it from the
+ *   pinned event.
+ * - `actorContext` is optional — present for surface-default admissions
+ *   (where the perimeter produced a tier verdict); absent for wait/pending
+ *   resumptions (admission is the correlation itself, asserted via
+ *   `waitContext`) and for legacy anonymous surfaces without an origin id.
+ * - `event` + `decision` carry the routed event residue and the recorded
+ *   route.decided fact — the brain parses all three at the seam.
+ */
 const DeliverSchema = z
   .object({
-    sessionId: z.string().min(1),
+    sessionId: z.string().min(1).optional(),
     message: InboundMessageSchema,
-    actorContext: ActorContextSchema,
+    actorContext: ActorContextSchema.optional(),
     waitContext: WaitContextSchema.optional(),
+    event: DeliveredEventSchema,
+    /** The recorded route.decided fact this delivery executes (record-before-act). */
+    decision: IngressEvents.RoutingDecision.schema,
   })
   .strict();
 
@@ -283,6 +314,9 @@ export namespace Gateway {
 
   export const WaitContext = WaitContextSchema;
   export type WaitContext = z.infer<typeof WaitContextSchema>;
+
+  export const DeliveredEvent = DeliveredEventSchema;
+  export type DeliveredEvent = z.infer<typeof DeliveredEventSchema>;
 
   export const Deliver = DeliverSchema;
   export type Deliver = z.infer<typeof DeliverSchema>;

@@ -1,11 +1,8 @@
-export { createIngressEngine } from "./engine.js";
-export type { AgentResolver, IngressEngine, IngressEngineDeps } from "./engine.js";
+export { createBrainEngine } from "./engine.js";
+export type { AgentResolver, BrainEngine, BrainEngineDeps } from "./engine.js";
 export { IngressSessionResolver } from "./session-resolver.js";
 export { IngressEventProjector } from "./event-projector.js";
 export { SessionBridge } from "./session-bridge.js";
 export { IngressHandlers } from "./handlers.js";
-export { IngressAuthorityMiddleware } from "./middleware/ingress-authority.js";
-export { resolveTarget, targetKey } from "./target.js";
 export { CronAdapter } from "./cron-adapter.js";
 export type { CoordinatorLike } from "./coordinator-like.js";
-export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route.js";

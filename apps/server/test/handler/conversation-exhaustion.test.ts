@@ -1,38 +1,8 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import type { NativeTool, ToolProvider } from "@openomni/openomni";
-import type { Channel, Tool } from "@openomni/protocol";
+import { beforeEach, describe, expect, it } from "bun:test";
+import type { Channel } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createMessageHandler } from "../../src/handler/conversation";
-import type { BridgeDeps } from "../../src/ingress/bridge";
-
-function makeTool(name: string): NativeTool {
-  return {
-    spec: { name, description: `${name} tool`, inputSchema: {} },
-    riskTier: 0,
-    isReadOnly: true,
-    isDestructive: false,
-    isConcurrencySafe: true,
-    execute: mock(async (call: Tool.Call) => ({
-      id: call.id,
-      toolCallId: call.id,
-      output: `${name} result`,
-    })),
-  };
-}
-
-function makeProvider(tools: readonly NativeTool[]): ToolProvider {
-  return {
-    name: "provider",
-    category: "system",
-    listTools: () => [...tools],
-    execute: mock(async (call: Tool.Call) => ({
-      id: call.id,
-      toolCallId: call.id,
-      output: "result",
-    })),
-  };
-}
 
 function makeMessage(text: string): Channel.InboundMessage {
   return {
@@ -45,19 +15,9 @@ function makeMessage(text: string): Channel.InboundMessage {
   };
 }
 
-const bridgeDeps: BridgeDeps = {
-  systemProvider: makeProvider([makeTool("read")]),
-  agentProvider: makeProvider([makeTool("dispatch")]),
-  mcpProvider: makeProvider([]),
-  customProvider: makeProvider([]),
-  defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-  workspaceRoot: "/workspace",
-};
-
-// Ledger commands never reach kernel ingress; the injected instance (#549)
-// fails loudly if they do.
+// Ledger commands never reach kernel ingress; the injected instance (#549,
+// the gateway router since #707) fails loudly if they do.
 const deps = {
-  ...bridgeDeps,
   ingress: {
     ingest: async (): Promise<never> => {
       throw new Error("ingress should not run for task ledger command");

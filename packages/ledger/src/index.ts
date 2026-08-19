@@ -1,6 +1,7 @@
 export { BusPersistence } from "./bus-persistence/index.js";
 export { BusQuery } from "./bus-persistence/query";
 export { Storage, SqliteStorageAdapter, initialize } from "./storage";
+export { LedgerAppend } from "./storage/append-port";
 export { Session } from "./session";
 export { TranscriptStore } from "./session/transcript";
 export { SurfaceKey } from "./surface-key";

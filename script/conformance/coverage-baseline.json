@@ -1,52 +1,57 @@
 {
   "apps/server": {
-    "linesFound": 4731,
-    "linesHit": 4159,
-    "pct": 87.91
+    "linesFound": 4625,
+    "linesHit": 4152,
+    "pct": 89.77
   },
   "packages/agent": {
-    "linesFound": 2594,
-    "linesHit": 2411,
-    "pct": 92.95
+    "linesFound": 2726,
+    "linesHit": 2651,
+    "pct": 97.25
+  },
+  "packages/channels": {
+    "linesFound": 2582,
+    "linesHit": 2397,
+    "pct": 92.84
   },
   "packages/coordinator": {
-    "linesFound": 1045,
-    "linesHit": 836,
-    "pct": 80
+    "linesFound": 1259,
+    "linesHit": 1055,
+    "pct": 83.8
   },
   "packages/ipc": {
-    "linesFound": 330,
-    "linesHit": 268,
-    "pct": 81.21
-  },
-  "packages/llm": {
-    "linesFound": 1994,
-    "linesHit": 1832,
-    "pct": 91.88
-  },
-  "packages/openomni": {
-    "linesFound": 15851,
-    "linesHit": 15153,
-    "pct": 95.6
-  },
-  "packages/policy": {
-    "linesFound": 1430,
-    "linesHit": 1098,
-    "pct": 76.7
-  },
-  "packages/protocol": {
-    "linesFound": 5375,
-    "linesHit": 5228,
-    "pct": 97.27
+    "linesFound": 473,
+    "linesHit": 427,
+    "pct": 90.27
   },
   "packages/ledger": {
-    "linesFound": 5158,
-    "linesHit": 4836,
-    "pct": 93.76
+    "linesFound": 4742,
+    "linesHit": 4557,
+    "pct": 96.1
+  },
+  "packages/llm": {
+    "linesFound": 1912,
+    "linesHit": 1798,
+    "pct": 94.04
+  },
+  "packages/openomni": {
+    "linesFound": 13599,
+    "linesHit": 12963,
+    "pct": 95.32
+  },
+  "packages/policy": {
+    "linesFound": 1621,
+    "linesHit": 1377,
+    "pct": 84.95
+  },
+  "packages/protocol": {
+    "linesFound": 5974,
+    "linesHit": 5835,
+    "pct": 97.67
   },
   "packages/telemetry": {
-    "linesFound": 267,
-    "linesHit": 253,
-    "pct": 94.76
+    "linesFound": 274,
+    "linesHit": 272,
+    "pct": 99.27
   }
 }

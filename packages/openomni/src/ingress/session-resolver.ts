@@ -1,8 +1,12 @@
-import { Channel, Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
+import {
+  Ingress,
+  extractSurfaceKey,
+  resolveTarget,
+  type TraceContext as TraceContextProtocol,
+} from "@openomni/protocol";
 import { Session, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { DEFAULT_DISPATCH_MODEL } from "../dispatch/index.js";
-import { resolveTarget, targetKey } from "./target";
 
 interface ResolvableEvent {
   surface: string;
@@ -28,17 +32,49 @@ interface ResolveResult extends ResolvedSession {
 }
 
 export namespace IngressSessionResolver {
-  // Format: "surface:workspace:channel" for legacy events. Explicit ADR-008 targets append
-  // `target:<target-key>` so resident and worker sessions do not collide.
-  export function extractSurfaceKey(event: ResolvableEvent): string {
-    const parts = [event.surface, event.workspace ?? "", event.channel ?? ""];
-    const target = event.target || event.meta?.target ? resolveTarget(event) : undefined;
-    if (target && target.kind !== "resident") {
-      parts.push("target", targetKey(target));
-    }
-    return Channel.SurfaceKey.create(parts);
+  /**
+   * Lazy materialization of a router-claimed resident session (#707 stage 2):
+   * the gateway minted the sessionId and claimed the surface↔session map
+   * before delivering (record-before-act); the brain owns the session ROW and
+   * creates it on first Deliver, idempotently. A crash between claim and
+   * deliver converges by re-delivery.
+   */
+  export function materializeResident(
+    event: Pick<ResolvableEvent, "surface">,
+    sessionId: string,
+    traceContext: TraceContextProtocol.Type,
+    defaultModel: ModelConfig = {
+      providerID: DEFAULT_DISPATCH_MODEL.provider,
+      modelID: DEFAULT_DISPATCH_MODEL.id,
+    },
+  ): ResolveResult {
+    const { session, created } = Session.materialize({
+      id: sessionId,
+      traceId: traceContext.traceId,
+      title: `Session from ${event.surface}`,
+      model: defaultModel,
+    });
+    Bus.publish(Ingress.Events.SessionResolved, {
+      traceId: traceContext.traceId,
+      sessionId: session.id,
+      isNew: created,
+      target: "resident",
+      time: Date.now(),
+    });
+    return {
+      session,
+      isNew: created,
+      trace: { ...traceContext, sessionId: session.id },
+    };
   }
 
+  /**
+   * The internal-path + worker-placement resolver. The EXTERNAL resident
+   * surface-map ops moved to the gateway router at #707 stage 2; the
+   * resident claim loop below now serves only internal events (cron surface
+   * sessions) — a recorded brain-side write residue on a perimeter surface,
+   * scoped to internal mode which never crosses the perimeter.
+   */
   export function resolve(
     event: ResolvableEvent,
     traceContext: TraceContextProtocol.Type,

@@ -1,11 +1,10 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
-import type { IngressEngine } from "@openomni/openomni";
+import type { GatewayRouter } from "@openomni/channels";
 import type { Ingress } from "@openomni/protocol";
 import { Channel, Operational, WorkItem } from "@openomni/protocol";
 import { hasRetryExhaustionBlocker, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import { resolveRuntimeModel } from "../agents/model-resolution";
-import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
+import { buildInboundEvent } from "../ingress/bridge";
 
 const OPEN_TASK_STATUSES = [
   "pending",
@@ -120,21 +119,17 @@ function listOpenTasks(): string {
 
 async function processMessage(
   message: Channel.InboundMessage,
-  deps: BridgeDeps,
-  ingress: Pick<IngressEngine, "ingest">,
+  ingress: Pick<GatewayRouter, "ingest">,
 ): Promise<string | null> {
   try {
     if (normalizeCommand(message.text) === "show open tasks") {
       if (!canReadTaskLedger(message)) return OPEN_TASKS_UNAUTHORIZED_MESSAGE;
       return listOpenTasks();
     }
-    const event = buildInboundEvent(message, deps);
-    event.agent.model = await resolveRuntimeModel(
-      event.agent.model,
-      message.traceId,
-      deps.defaultModel,
-    );
-    return toResponseText(await ingress.ingest(event));
+    // #707 seam flip: the event carries no AgentDef — the brain's Deliver
+    // consumer resolves the resident agent (including per-message runtime
+    // model resolution) through its injected resolver.
+    return toResponseText(await ingress.ingest(buildInboundEvent(message)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     Bus.publish(Operational.Events.Error, {
@@ -149,9 +144,9 @@ async function processMessage(
   }
 }
 
-export interface MessageHandlerDeps extends BridgeDeps {
-  /** The single kernel ingress instance this handler routes through (#549). */
-  readonly ingress: Pick<IngressEngine, "ingest">;
+export interface MessageHandlerDeps {
+  /** The single gateway router this handler routes through (#549 discipline, #707 home). */
+  readonly ingress: Pick<GatewayRouter, "ingest">;
 }
 
 export function createMessageHandler(deps: MessageHandlerDeps): Channel.MessageHandler {
@@ -163,7 +158,7 @@ export function createMessageHandler(deps: MessageHandlerDeps): Channel.MessageH
     const current: Promise<void> = prev
       .catch(() => undefined)
       .then(async () => {
-        text = await processMessage(message, deps, deps.ingress);
+        text = await processMessage(message, deps.ingress);
       });
     queues.set(key, current);
     try {

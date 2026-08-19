@@ -1,6 +1,6 @@
 # packages/openomni
 
-Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@openomni/ledger`, and `@openomni/protocol` to own messaging/routing, access control, Resident/Worker orchestration, ledger/evidence gates, dispatch, and worker execution tooling. Lower packages provide primitives; this package decides product meaning.
+Product kernel for OpenOmni — the BRAIN plane of [docs/gateway-design.md](../../docs/gateway-design.md) since #707. Builds on `@openomni/agent`, `@openomni/policy`, `@openomni/ledger`, and `@openomni/protocol` to own Resident/Worker orchestration, session content, ledger/evidence gates, dispatch, and worker execution tooling. Perimeter routing (external route resolution, wait correlation/writes, channel/blacklist admission, the send kernel) lives in the gateway (`@openomni/channels`); external events reach this package only through the `Gateway.Deliver` contract (the brain's `deliver` port). openomni never imports channels and channels never imports openomni.
 
 ## Module Map
 
@@ -8,7 +8,7 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 | --- | --- | --- |
 | `src/agents/` | Built-in agent definitions and model-specific prompt variants | `ResidentAgent` |
 | `src/resident/` | Resident runtime lifecycle (in-process execution, direct mode) | `ResidentRuntime` |
-| `src/ingress/` | Current inbound stage: single kernel route resolution, authority facts, projection, resident/direct execution | `IngressEngine`, `resolveRoute`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
+| `src/ingress/` | Brain inbound stage (#707): the gateway's Deliver consumer (lazy session materialization, projection, resident/direct execution, pending-interaction dispatch placement) plus the internal path (cron, dispatch resident.ask) with its own `route.decided` recorder | `BrainEngine`/`createBrainEngine`, `resolveInternalRoute`, `IngressRoutingError`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter` |
 | `src/dispatch/` | Current egress/cross-boundary stage: command authorization, handler routing, PendingInteraction routing, gate-side policy stamping (#479) | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` (+ `BuiltInDispatchOptions.policyResolver`), `DEFAULT_DISPATCH_MODEL` |
 | `src/policy/` | Gate-side policy resolution: actor/target labels → stamped `policyPlan` on spawn requests (production-wired by #479) | `PolicyResolver` |
 | `src/evidence/` | Read-back executors plus scoped deterministic verifier-registry and replay-conformance primitives | `ReadBackExecutor`, `VerifierRegistry`, `VerifierConformance` |
@@ -20,8 +20,8 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 
 - `src/agents/` contains built-in agent definitions. `src/agents/resident/prompt/` holds the Resident system prompt with model-specific variants (Claude, GPT) and a shared builder. `ResidentAgent.getPrompt({ model })` selects the right variant by provider.
 - `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
-- `src/ingress/` uses the shipped single kernel `resolveRoute` pipeline (#464, PR #485) for inbound precedence and decision ownership. The stable package-boundary contract keeps `ingress/`, `dispatch/`, `policy/`, `evidence/`, and the cron/injection parts of `execution-runtime/` in the kernel while `resident/` and `agents/` belong to `apps/server`. OpenOmni owns principal-resolution handoff, access checks, correlation, session/target resolution, projection, writeback, and response routing; package placement does not change that product ownership. Live P3 package work belongs to [#459](https://github.com/INONONO66/openomni/issues/459)'s leaf issues #495–#506; #496 owns the remaining IPC extraction, and #497–#500 plus #506 own the concept diet.
-- `src/ingress/` is the current inbound stage. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the resident/direct handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job, engine)` creates internal events with `surface="cron"` against the injected engine instance (#549).
+- `src/ingress/` consumed the shipped single kernel `resolveRoute` pipeline (#464, PR #485) until gateway stage 2 (#707) promoted the external routing plane (resolve-route external arms, routing-resolution, authority middleware, actor resolver, wait service, messaging kernel) into `@openomni/channels`; the brain keeps the internal arm (`resolveInternalRoute` + its own route.decided recording) and the Deliver consumer. The stable package-boundary contract keeps `ingress/`, `dispatch/`, `policy/`, `evidence/`, and the cron/injection parts of `execution-runtime/` in the kernel while `resident/` and `agents/` belong to `apps/server`. OpenOmni owns principal-resolution handoff, access checks, correlation, session/target resolution, projection, writeback, and response routing; package placement does not change that product ownership. Live P3 package work belongs to [#459](https://github.com/INONONO66/openomni/issues/459)'s leaf issues #495–#506; #496 owns the remaining IPC extraction, and #497–#500 plus #506 own the concept diet.
+- `src/ingress/` is the brain inbound stage. `deliver()` parses `Gateway.Deliver` at the seam, resolves the resident AgentDef through the injected external agent resolver, lazily materializes the routed session row (the gateway minted the label and claimed the surface map before delivering), projects the event into stored messages, then dispatches to the resident/direct handler; pending-interaction deliveries go to dispatch work placement instead (§8.5). `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) which never cross the perimeter. `CronAdapter.fire(job, engine)` creates internal events with `surface="cron"` against the injected engine instance (#549).
 - `src/dispatch/` is the current cross-boundary command stage. `DispatchRuntime.submit()` authorizes commands, routes PendingInteraction replies, invokes registered handlers, and emits audit events. Internal and connector Worker completion handlers reference durable WorkItem-local evidence for each criterion; the kernel resolves and verifies that evidence before both paths converge on the `src/work-item/` admission service. They cannot call Session completion directly.
 - `src/execution-runtime/tool/agent/tools/dispatch.ts` is the `dispatch` tool — the runtime-to-runtime/system egress gate. Worker-to-Resident awaited requests use `resident.ask`; scheduling uses `schedule.create`; cron fire remains internal ingress. `Dispatch.submit()` enforces PolicyEngine authorization and emits Bus audit events. See `src/dispatch/` for the runtime, handlers, and policy.
 - `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
@@ -34,8 +34,8 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 ## Kernel Design Rules
 
 - Messaging/access semantics live here. If a change decides target, session, run, principal, trust, grant, pending correlation, writeback, or response routing, implement it in `openomni`.
-- `ingress/` and `dispatch/` are implementation stages. New cross-boundary routing must not add another server-side or tool-side special case — use the shipped kernel `resolveRoute` pipeline (#464) and the existing dispatch stage.
-- Do not let `apps/server` inspect `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing. Server passes normalized facts; OpenOmni decides.
+- `ingress/` and `dispatch/` are implementation stages. New cross-boundary routing must not add another server-side or tool-side special case — external routing belongs to the gateway router (`@openomni/channels`); brain-side placement uses the existing dispatch stage.
+- Do not let `apps/server` inspect `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing. Server passes normalized facts; the gateway router decides admission/routing and this package decides execution. Brain-side READS of the frozen pending-* stores (dispatch correlation residue) are recorded residue — writer domains are machine-enforced.
 - Do not let `packages/ledger` decide authority or match precedence. It may store and query records; OpenOmni owns lifecycle transitions that have product meaning.
 - Do not let `packages/coordinator` decide actor/session authority. It executes primitive worker-process operations requested by this package.
 - Do not let `packages/agent` grow OpenOmni-specific durable lifecycle. Session-backed worker/background orchestration stays here.
@@ -79,7 +79,7 @@ Consumers should only use `@openomni/openomni` exports:
 
 - Resident agent prompts from `src/agents/`
 - Resident runtime from `src/resident/`
-- Messaging/ingress/dispatch kernel entry points from `src/ingress` and `src/dispatch`
+- Brain ingress/dispatch kernel entry points from `src/ingress` and `src/dispatch` (the send kernel lives in the gateway router since #707)
 
 - Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
 - Scoped verifier-registry and replay-conformance library surfaces from `src/evidence/`; archived replay stays outside these primitives
@@ -87,16 +87,17 @@ Consumers should only use `@openomni/openomni` exports:
 - Windowed Stakes primitive from the dedicated `@openomni/openomni/ledger` subpath; completion consumes its resolver seam while durable-ledger and Voice consumers remain separate work
 
 If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain. The dormant
-`./ledger` and `./messaging` are the two subpath exceptions: `src/ledger/index.ts`
-exports `Stakes` and `./messaging` exports the production send surface without
-widening the root barrel. The deterministic Manual QA drivers (stakes, verifier
-registry, completion admission, existing-agent messaging) live in
-`test/harness/` and are runnable with `bun run packages/openomni/test/harness/<driver>.ts`.
+`./ledger` is the one subpath exception: `src/ledger/index.ts` exports `Stakes`
+without widening the root barrel (the `./messaging` subpath died with #707 —
+the send surface is `@openomni/channels`). The deterministic Manual QA drivers
+(stakes, verifier registry, completion admission) live in `test/harness/`
+(the existing-agent messaging driver moved to `packages/channels/test/harness/`)
+and are runnable with `bun run <package>/test/harness/<driver>.ts`.
 
 ## Extension Points
 
 - Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface; tools should call kernel entry points instead of making routing decisions.
-- Add new messaging flows through the existing `src/ingress/` / `src/dispatch/` stages and the shipped #464 `resolveRoute` pipeline.
+- Add new brain-side flows through the existing `src/ingress/` / `src/dispatch/` stages; perimeter routing/messaging flows belong to the gateway router in `@openomni/channels`.
 - Add Resident/Worker orchestration here when implementing product model contracts: authority checks, self-loop creation, worker delegation, external waits, and distilled writeback are kernel responsibilities.
 - Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 

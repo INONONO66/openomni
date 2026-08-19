@@ -47,9 +47,16 @@ import { join } from "node:path";
 interface LedgerStreamProducer {
   /** Stream class key — must match `Ledger.StreamRegistry`. */
   readonly streamClass: "wait" | "work" | "route" | "command" | "effect";
-  /** Repo-relative path of the ONE module that appends this class's facts. */
-  readonly producer: string;
-  /** Which ledger write APIs the producer uses. */
+  /**
+   * Repo-relative paths of the enumerated modules that append this class's
+   * facts. Every class has exactly one producer except `route`, which split
+   * at the #707 seam flip: the gateway router records external decisions and
+   * the brain records internal ones (cron, dispatch resident.ask) — same
+   * fact type, same stream family, two trust domains that may not import
+   * each other.
+   */
+  readonly producers: readonly string[];
+  /** Which ledger write APIs the producers use. */
   readonly writes: "append" | "append+adoptStream";
 }
 
@@ -67,27 +74,34 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
   streams: [
     {
       streamClass: "wait",
-      producer: "packages/ledger/src/wait/index.ts",
+      producers: ["packages/ledger/src/wait/index.ts"],
       writes: "append+adoptStream",
     },
     {
       streamClass: "work",
-      producer: "packages/ledger/src/work-item/facts.ts",
+      producers: ["packages/ledger/src/work-item/facts.ts"],
       writes: "append+adoptStream",
     },
     {
       streamClass: "route",
-      producer: "packages/openomni/src/ingress/routing-resolution.ts",
+      producers: [
+        // External arm: the gateway router (#707) — route.decided for
+        // channel-admitted events, recorded before anything acts.
+        "packages/channels/src/router/routing-resolution.ts",
+        // Internal arm: the brain's internal path (cron, dispatch
+        // resident.ask) — same fact strings, same stream family.
+        "packages/openomni/src/ingress/internal-route.ts",
+      ],
       writes: "append",
     },
     {
       streamClass: "command",
-      producer: "packages/openomni/src/dispatch/runtime.ts",
+      producers: ["packages/openomni/src/dispatch/runtime.ts"],
       writes: "append",
     },
     {
       streamClass: "effect",
-      producer: "packages/ledger/src/effect/index.ts",
+      producers: ["packages/ledger/src/effect/index.ts"],
       writes: "append",
     },
   ],

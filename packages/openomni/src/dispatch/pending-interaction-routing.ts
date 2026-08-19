@@ -1,29 +1,17 @@
-import { Command, Execution, type Wait } from "@openomni/protocol";
+import { Command, Execution, Wait } from "@openomni/protocol";
 import type { PendingInteractionStore } from "@openomni/ledger";
-import {
-  dispatchEvidence,
-  findWaitCandidates,
-  requestedWaitAction,
-  responderCandidates,
-  targetsOfPendingInteraction,
-} from "../wait/index.js";
+import { findFrozenPendingInteractionMatch } from "./frozen-interaction-correlation.js";
 
-// Correlation lookup is owned by wait/correlation.ts (THE single lookup);
-// this module only routes a single FROZEN legacy PendingInteraction match
+// Correlation lookup semantics are owned by the gateway router's
+// wait/correlation fold; the dispatch plane keeps the frozen
+// PendingInteraction slice of it (./frozen-interaction-correlation.ts,
+// recorded residue — #707) and only routes a single FROZEN legacy match
 // (#548: the store is read-only, served via upcast-on-read) into the
 // canonical dispatch command. It never writes: routing a frozen row leaves
 // the row exactly as persisted. Ambiguity or a non-interaction match leaves
 // the command unrouted, so the default dispatch authority denies it
 // fail-closed (dispatch.pending_interaction.required /
 // dispatch.actor.required).
-function findPendingInteractionMatch(
-  correlation: Wait.Correlation,
-): PendingInteractionStore.Record | undefined {
-  const resolution = findWaitCandidates({ correlation });
-  return resolution.kind === "match" && resolution.candidate.source === "pending_interaction"
-    ? resolution.candidate.record
-    : undefined;
-}
 
 type CanonicalWorkerCompletePayload = Readonly<{
   result: Execution.Result;
@@ -83,7 +71,10 @@ function pendingInteractionSenderMatches(
   match: PendingInteractionStore.Record,
 ): boolean {
   return (
-    responderCandidates(targetsOfPendingInteraction(match), dispatchEvidence(command)).length === 1
+    Wait.responderCandidates(
+      Wait.targetsOfPendingInteraction(match),
+      Wait.dispatchEvidence(command),
+    ).length === 1
   );
 }
 
@@ -95,14 +86,14 @@ export function routePendingInteraction(
   const match =
     pinned ??
     (command.correlation && typeof command.correlation !== "string"
-      ? findPendingInteractionMatch(command.correlation)
+      ? findFrozenPendingInteractionMatch(command.correlation)
       : undefined);
   if (!match) return command;
   if (!pendingInteractionSenderMatches(command, match)) return command;
   // The "invalid" sentinel (explicit but unparseable action) is disallowed
   // like any action outside allowedActions: the command stays unrouted and
   // the default dispatch authority denies it fail-closed.
-  const action = requestedWaitAction(command.payload);
+  const action = Wait.requestedWaitAction(command.payload);
   if (action === "invalid" || !match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
     return Command.Request.parse({

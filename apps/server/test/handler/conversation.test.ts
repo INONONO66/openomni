@@ -1,40 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { NativeTool, ToolProvider } from "@openomni/openomni";
-import type { Channel, Ingress, Tool } from "@openomni/protocol";
+import type { Channel, Ingress } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
 import { Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createMessageHandler } from "../../src/handler/conversation";
-import type { BridgeDeps } from "../../src/ingress/bridge";
 import { completeWorkItem } from "../work-item-completion-fixture";
-
-function makeTool(name: string): NativeTool {
-  return {
-    spec: { name, description: `${name} tool`, inputSchema: {} },
-    riskTier: 0,
-    isReadOnly: true,
-    isDestructive: false,
-    isConcurrencySafe: true,
-    execute: mock(async (call: Tool.Call) => ({
-      id: call.id,
-      toolCallId: call.id,
-      output: `${name} result`,
-    })),
-  };
-}
-
-function makeProvider(tools: readonly NativeTool[]): ToolProvider {
-  return {
-    name: "provider",
-    category: "system",
-    listTools: () => [...tools],
-    execute: mock(async (call: Tool.Call) => ({
-      id: call.id,
-      toolCallId: call.id,
-      output: "result",
-    })),
-  };
-}
 
 function makeMessage(text: string, surfaceKey = "ws:local-test"): Channel.InboundMessage {
   return {
@@ -65,20 +35,12 @@ async function createWorkItem(
   );
 }
 
-const deps: BridgeDeps = {
-  systemProvider: makeProvider([makeTool("read")]),
-  agentProvider: makeProvider([makeTool("dispatch")]),
-  mcpProvider: makeProvider([]),
-  customProvider: makeProvider([]),
-  defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-  workspaceRoot: "/workspace",
-};
-
-// The kernel ingress instance is a handler dep (#549); ledger-command tests
-// default to a fail-loud ingest that must never be reached.
+// The gateway router instance is the one handler dep (#549 discipline, #707
+// home); ledger-command tests default to a fail-loud ingest that must never
+// be reached. The old bridge deps (providers/model) moved behind bootstrap's
+// external agent resolver and no longer touch the handler.
 function handlerFor(ingest?: (event: unknown) => Promise<Ingress.IngressResult>) {
   return createMessageHandler({
-    ...deps,
     ingress: {
       ingest:
         ingest ??

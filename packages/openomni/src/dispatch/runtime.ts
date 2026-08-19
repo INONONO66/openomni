@@ -1,8 +1,7 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import { Command, PolicyDecision as Decision } from "@openomni/protocol";
+import { Command, PolicyDecision as Decision, Wait } from "@openomni/protocol";
 import { PendingInteractionStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import { requestedWaitAction, type RequestedWaitAction } from "../wait/index.js";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
 import { routePendingInteraction } from "./pending-interaction-routing.js";
 import { createDefaultDispatchPolicy, type DispatchPolicyContext } from "./policy.js";
@@ -137,7 +136,7 @@ type PinnedInteractionValidation =
 
 function revalidatePinnedInteraction(
   pinned: PendingInteractionStore.Record,
-  requestedAction: RequestedWaitAction,
+  requestedAction: Wait.RequestedWaitAction,
   now = Date.now(),
 ): PinnedInteractionValidation {
   const current = PendingInteractionStore.get(pinned.id);
@@ -257,7 +256,7 @@ export class DispatchRuntime {
     }
     const trace = { traceId: options.traceId };
     const actor = deriveActorContext(options);
-    const requestedPendingAction = requestedWaitAction(parsed.payload);
+    const requestedPendingAction = Wait.requestedWaitAction(parsed.payload);
     const initialPinnedValidation = pendingInteraction
       ? revalidatePinnedInteraction(pendingInteraction, requestedPendingAction)
       : undefined;

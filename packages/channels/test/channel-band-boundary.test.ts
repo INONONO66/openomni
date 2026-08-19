@@ -23,16 +23,18 @@ const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
 const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/ipc"] as const;
 
 /**
- * Gateway amendment (docs/gateway-design.md §1/§8.2, Owner 2026-08-18/19):
- * perimeter JUDGMENT code may import the shared policy engine — driver code
- * may not (S8 banding; the same rule is enforced repo-wide by
- * script/check-deps.ts). Today the only judgment sites in the band are under
- * `src/authn/`; they travel to the gateway router band at stage 2 (#707),
- * taking this allowance with them. Everything else in src/** stays on the
- * dumb-driver contract {protocol, ipc}.
+ * Gateway amendment (docs/gateway-design.md §1/§8.2, Owner 2026-08-18/19;
+ * stage-2 shape #707): perimeter JUDGMENT code — the gateway router band
+ * (`src/router/`: routing, wait service, send kernel) and the channel authn
+ * sites (`src/authn/`) — may import the shared policy engine and the
+ * ledger's perimeter store surfaces. Driver code may not (S8 banding; the
+ * same rule plus the perimeter-surface pin is enforced repo-wide by
+ * script/check-deps.ts). Everything else in src/** stays on the dumb-driver
+ * contract {protocol, ipc}. Telemetry stays forbidden EVERYWHERE in src/**:
+ * the band observes through the injected `BusEvent.Sink` port only.
  */
-const JUDGMENT_DIR = "src/authn/";
-const JUDGMENT_EXTRA_PACKAGES = ["@openomni/policy"] as const;
+const JUDGMENT_DIRS = ["src/router/", "src/authn/"] as const;
+const JUDGMENT_EXTRA_PACKAGES = ["@openomni/policy", "@openomni/ledger"] as const;
 
 type ScannedSource = Readonly<{ path: string; text: string }>;
 
@@ -93,7 +95,7 @@ function isAllowedSpecifier(specifier: string, path: string): boolean {
     if (specifier === allowed) return true;
     if (specifier.startsWith(`${allowed}/`)) return true;
   }
-  if (path.startsWith(JUDGMENT_DIR)) {
+  if (JUDGMENT_DIRS.some((dir) => path.startsWith(dir))) {
     for (const allowed of JUDGMENT_EXTRA_PACKAGES) {
       if (specifier === allowed) return true;
       if (specifier.startsWith(`${allowed}/`)) return true;
@@ -126,52 +128,69 @@ describe("channels band import boundary", () => {
     expect(detectBandViolations(channelSources())).toEqual([]);
   });
 
-  const violationFixtures = [
+  // Ledger fixtures INVERTED at stage 2 (#707): the same import that is a
+  // violation in a driver file is legal in the router judgment band — the
+  // router is the ledger's sole perimeter writing consumer.
+  const driverOnlyViolationFixtures = [
     [
-      "named session import",
+      "named ledger import in a driver",
       'import { Storage } from "@openomni/ledger";',
       "imports @openomni/ledger",
     ],
     [
-      "type-only session import",
+      "type-only ledger import in a driver",
       'import type { SurfaceKey } from "@openomni/ledger";',
       "imports @openomni/ledger",
     ],
     [
-      "namespace session import",
+      "namespace ledger import in a driver",
       'import * as Session from "@openomni/ledger";',
       "imports @openomni/ledger",
     ],
     [
-      "session re-export",
+      "ledger re-export in a driver",
       'export { SurfaceKey } from "@openomni/ledger";',
       "imports @openomni/ledger",
     ],
     [
-      "dynamic session import",
+      "dynamic ledger import in a driver",
       'const { SurfaceKey } = await import("@openomni/ledger");',
       "imports @openomni/ledger",
     ],
+    [
+      "import-equals require of the ledger in a driver",
+      'import session = require("@openomni/ledger");',
+      "imports @openomni/ledger",
+    ],
+    [
+      "policy import outside the judgment band",
+      'import { evaluatePermission } from "@openomni/policy";',
+      "imports @openomni/policy",
+    ],
+  ] as const;
+
+  for (const [name, text, violation] of driverOnlyViolationFixtures) {
+    it(`detects ${name} (and allows it in the router band)`, () => {
+      const driverPath = "src/synthetic.ts";
+      expect(detectBandViolations([{ path: driverPath, text }])).toContain(
+        `${driverPath}: ${violation}`,
+      );
+      expect(detectBandViolations([{ path: "src/router/synthetic.ts", text }])).toEqual([]);
+    });
+  }
+
+  // Forbidden EVERYWHERE in src/** — including the router judgment band.
+  const everywhereViolationFixtures = [
     [
       "require of the kernel",
       'const oo = require("@openomni/openomni");',
       "imports @openomni/openomni",
     ],
-    [
-      "import-equals require",
-      'import session = require("@openomni/ledger");',
-      "imports @openomni/ledger",
-    ],
     ["arbitrary npm package", 'import { z } from "zod";', "imports zod"],
     [
-      "telemetry import (allowance dropped at extraction)",
+      "telemetry import (observation goes through the injected sink)",
       'import { newTraceId } from "@openomni/telemetry";',
       "imports @openomni/telemetry",
-    ],
-    [
-      "policy import outside the judgment dir",
-      'import { evaluatePermission } from "@openomni/policy";',
-      "imports @openomni/policy",
     ],
     [
       "non-literal dynamic import",
@@ -180,10 +199,15 @@ describe("channels band import boundary", () => {
     ],
   ] as const;
 
-  for (const [name, text, violation] of violationFixtures) {
-    it(`detects ${name}`, () => {
-      const path = "src/synthetic.ts";
-      expect(detectBandViolations([{ path, text }])).toContain(`${path}: ${violation}`);
+  for (const [name, text, violation] of everywhereViolationFixtures) {
+    it(`detects ${name} in every band`, () => {
+      for (const path of [
+        "src/synthetic.ts",
+        "src/router/synthetic.ts",
+        "src/authn/synthetic.ts",
+      ]) {
+        expect(detectBandViolations([{ path, text }])).toContain(`${path}: ${violation}`);
+      }
     });
   }
 
@@ -199,11 +223,26 @@ describe("channels band import boundary", () => {
     expect(detectBandViolations([{ path: "src/synthetic.ts", text }])).toEqual([]);
   });
 
-  it("allows the policy engine only under the authn judgment dir", () => {
+  it("allows the policy engine only under the judgment band (router + authn)", () => {
     const text = 'import { evaluatePermission } from "@openomni/policy";';
     expect(detectBandViolations([{ path: "src/authn/synthetic.ts", text }])).toEqual([]);
+    expect(detectBandViolations([{ path: "src/router/synthetic.ts", text }])).toEqual([]);
     expect(detectBandViolations([{ path: "src/discord/synthetic.ts", text }])).toEqual([
       "src/discord/synthetic.ts: imports @openomni/policy",
     ]);
+  });
+
+  it("allows the ledger only under the judgment band, never in a driver dir", () => {
+    const text = 'import { WaitStore } from "@openomni/ledger";';
+    expect(detectBandViolations([{ path: "src/router/wait/synthetic.ts", text }])).toEqual([]);
+    for (const path of [
+      "src/discord/synthetic.ts",
+      "src/telegram/synthetic.ts",
+      "src/github/synthetic.ts",
+      "src/support/synthetic.ts",
+      "src/websocket.ts",
+    ]) {
+      expect(detectBandViolations([{ path, text }])).toEqual([`${path}: imports @openomni/ledger`]);
+    }
   });
 });
