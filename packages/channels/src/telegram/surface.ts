@@ -65,7 +65,10 @@ export class TelegramAdapter implements Channel.Surface {
       this.client,
       {
         onMessage: (message) => {
-          if (this.dedupe.isDuplicate(String(message.message_id))) return;
+          // D1: message_id is a PER-CHAT counter, so two different chats can
+          // share one id within the dedupe window — key by chat to avoid
+          // silently dropping the second chat's message.
+          if (this.dedupe.isDuplicate(`${message.chat.id}:${message.message_id}`)) return;
           // Origin: the first frame of an inbound telegram message — this ONE
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();

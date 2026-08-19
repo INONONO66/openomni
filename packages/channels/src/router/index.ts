@@ -1,9 +1,11 @@
 import {
   Gateway,
   type Ingress,
+  Operational,
   Wait,
   extractSurfaceKey,
   extractText,
+  newTraceId,
   type BusEvent,
   type Policy,
 } from "@openomni/protocol";
@@ -127,6 +129,61 @@ function stringMeta(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/**
+ * Trust-boundary sanitization at the SINGLE external ingest entry (audit A
+ * T2). A channel-driver event may carry only genuinely-inbound perimeter
+ * facts (surfaceKey, sender, threadId, replyToId, ...). Gateway-DERIVED fields
+ * are minted by the router DURING routing and must never be accepted from the
+ * caller, exactly as `meta.actor` is normalized by resolveIngressActor:
+ *
+ *  - `activation.durableSessionId`: the routed surface/durable session label.
+ *    A caller value would otherwise pin ANY session — routing-resolution
+ *    reads it as the surface session (surface_default) and session-resolver as
+ *    the durable session. Only this field is stripped: the rest of
+ *    `activation` (activationId, ...) is in-process routing residue the
+ *    projection layer already re-derives or drops, and a legitimate caller
+ *    never sets durableSessionId (apps/server ingress/bridge builds none).
+ *  - `meta.channelGrantId` / `meta.channelGrantKind` / `meta.pendingAsk`: the
+ *    channel-grant treatment + pending-ask projections the router stamps
+ *    (authority.applyChannelGrantTreatment / routing-execution). They ride to
+ *    authorization + audit reads on the brain side (event-projector,
+ *    authority-actor).
+ *  - `meta.inboundTreatment`: same class, with ONE carve-out — a caller value
+ *    of "evidence_only" is a harmless self-DOWNGRADE (it can only reduce the
+ *    sender's own influence, never elevate), preserved so a trusted internal
+ *    producer (recovery replay, audit A T1) can re-inject an evidence-only
+ *    message. Any other value ("full_access") is an elevation attempt and is
+ *    stripped.
+ *
+ * Verified no legitimate producer sets these: apps/server ingress/bridge
+ * `buildInboundEvent` builds meta as { actor, surfaceKey, kind, sender,
+ * replyToId, threadId, raw, agentName, correlation } and sets no `activation`.
+ */
+function sanitizeInboundEvent(event: Gateway.DeliveredEvent): Gateway.DeliveredEvent {
+  let next = event;
+  if (event.activation?.durableSessionId !== undefined) {
+    const { durableSessionId: _durableSessionId, ...restActivation } = event.activation;
+    next = { ...next, activation: restActivation };
+  }
+  if (event.meta !== undefined) {
+    const {
+      channelGrantId: _channelGrantId,
+      channelGrantKind: _channelGrantKind,
+      pendingAsk: _pendingAsk,
+      inboundTreatment,
+      ...keptMeta
+    } = event.meta as Ingress.Meta & Record<string, unknown>;
+    next = {
+      ...next,
+      meta: {
+        ...keptMeta,
+        ...(inboundTreatment === "evidence_only" ? { inboundTreatment } : {}),
+      },
+    };
+  }
+  return next;
+}
+
 /** The §2a perimeter-verdict projection of a routed delivery. */
 function actorContextOf(
   event: Gateway.DeliveredEvent,
@@ -229,7 +286,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 
   return {
     async ingest(input: unknown): Promise<Ingress.IngressResult> {
-      const externalEvent = Gateway.DeliveredEvent.parse(input);
+      const externalEvent = sanitizeInboundEvent(Gateway.DeliveredEvent.parse(input));
       const resolvedActorEvent = resolveIngressActor(externalEvent);
       if (resolvedActorEvent.mode !== "direct") {
         throw new TypeError("external ingress actor resolution changed event mode");
@@ -313,7 +370,29 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
     // literal sole writer of the surface↔session map. Same CAS semantics as
     // the router's own resident claim above.
     claimSurface(surfaceKey: string, sessionId: string, expectedSessionId?: string): string {
-      return SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId);
+      const ownerSessionId = SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId);
+      // audit A T3: every internal stickiness claim crossing this port emits a
+      // user-audit-class observation through the injected sink — reusing the
+      // Operational log vocabulary (no new frozen descriptor). The receipt is
+      // the CAS outcome: the owner AFTER the attempt, and whether this claim
+      // won or yielded to a concurrent owner.
+      // TODO(#708 residue): the internal surface-key namespace has no scoping
+      // scheme yet — when one exists, this claim must be scoped to it and
+      // cross-namespace claims rejected here.
+      ports.sink(Operational.Events.Info, {
+        traceId: newTraceId(),
+        time: Date.now(),
+        component: "gateway.router",
+        msg: "surface stickiness claim",
+        context: {
+          surfaceKey,
+          requestedSessionId: sessionId,
+          ...(expectedSessionId === undefined ? {} : { expectedSessionId }),
+          ownerSessionId,
+          won: ownerSessionId === sessionId,
+        },
+      });
+      return ownerSessionId;
     },
   };
 }
