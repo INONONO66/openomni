@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787117156540,
+  "lastUpdate": 1787132424559,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57773,6 +57773,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 519433,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6813ef77b5f41b915a41b7b61487b0518d807f7f",
+          "message": "fix: fail-closed security batch from post-campaign audit (#742)\n\n* fix(openomni,server): fail-closed tool permission, explicit rulesets\n\nAudit batch A items 1-2 (verified at 61e8e396):\n\n- KILL absent-permission allow-all: DEFAULT_TOOL_PERMISSION is gone. Both\n  hydration arms (legacy permissions path and plan-without-config path) and\n  the registry's absent-config default now fall back to the fail-closed\n  deny-all constant.\n- KILL `!toolName -> allow` inside the fail-closed guard: a tool point\n  without a tool name is a malformed context - deny + run.abort.\n- Honest fallout: production declares its ruleset explicitly instead of\n  riding any default. The dispatch gate's PolicyResolver stamps\n  `config.permission` onto the plan's builtin:tool-permission (overridable\n  via create options; rule re-selection preserves the stamped config), and\n  the server's agent composition sets `permissions` on every composed\n  AgentDef (resident included).\n- Tests pin: absent permissions deny, plan-without-config-without-legacy\n  denies, missing toolName denies with run.abort, resolver stamps and\n  preserves the explicit permission.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): unreadable run store derives actor kind unknown\n\nAudit batch A item 3 (verified at 61e8e396): deriveActorContext swallowed\nWorkItemAttemptRun.find read errors as \"no run\", letting the inference\nfall through to the caller-influenced agentName - an unreadable attempt\nrow plus agentName \"resident\" derived a privileged kind the dispatch\ndefault-authority policy allows.\n\nThe lookup now surfaces \"unreadable\" as its own state: inference derives\nkind \"unknown\" with reason \"worker run lookup failed\", and the existing\ndispatch.default-authority policy already denies unknown actors\n(EffectiveAuthority.missingActor, fail-closed) - verified, no policy\nchange needed. An explicitly supplied actorKind remains the runtime\nwiring's own authority; only the inference path fails closed. Trust-tier\nelevation still requires a FOUND run.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): resident sandbox root and identity injection fail closed\n\nAudit batch A items 4-5 (verified at 61e8e396):\n\n- The surface-derived `ctx.event.workspace` no longer falls back into the\n  workspace root (sandbox root / lock key): an externally-influenced\n  surface id must never name the sandbox. Resident runs that need a\n  workspace get it from `agent.toolConfig.workspaceRoot`, which the\n  server composition (ingress bridge) always sets - verified, no\n  production path relied on the fallback.\n- #709 identity injection is factory-only: a run carrying engagement\n  identity context (waitContext.engagementId or actorTrustTier) with only\n  a prebuilt toolExecutor now refuses with the typed\n  ResidentIdentityInjectionError instead of executing engagement-aware\n  tools with stale identity. Production always composes\n  toolExecutorFactory; a prebuilt executor without identity context still\n  runs.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(channels): fail-closed gateway ingest sanitize, claim audit, dedupe\n\nAudit batch A, gateway/channels perimeter:\n\n- T2: sanitize the single external ingest entry. Caller-supplied\n  gateway-derived fields are stripped like meta.actor already is:\n  activation.durableSessionId (would pin ANY session via\n  routing-resolution / session-resolver) and the reserved trust meta keys\n  channelGrantId / channelGrantKind / pendingAsk. meta.inboundTreatment is\n  kept only when it is a self-downgrade to \"evidence_only\"; any elevation\n  (full_access) is stripped. Verified no legitimate producer sets these:\n  apps/server ingress/bridge builds none.\n\n- T1 (router half): monotonic treatment floor. A channel grant may only\n  RAISE a sender to full_access; an inbound already marked evidence_only is\n  never upgraded. This makes the recovery-replay evidence_only marker\n  load-bearing at the routed decision (server half in the next commit).\n\n- T3: claimSurface publishes a user-audit-class observation per internal\n  stickiness claim through the injected sink (reusing Operational vocab, no\n  new frozen descriptor), carrying the CAS receipt; TODO marks the missing\n  internal-key-namespace scope.\n\n- D1: telegram dedupe keys on `${chat.id}:${message_id}` — message_id is a\n  per-chat counter, so two chats at the same id no longer collide.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni,server): fail-closed replay identity, locks, path, orphan\n\nAudit batch A, server + openomni brain:\n\n- T1: the recovery replay's ORIGINAL sender identity is not persisted\n  (Message.UserMessage carries no sender/actorId; the ingress actor audit is\n  lossy observation, not a queryable row), so blacklist/authority cannot be\n  re-evaluated against the real sender. The synthetic \"recovery\" principal\n  would launder a since-blacklisted sender. processRetryQueue now marks the\n  replay evidence_only via a new in-memory Channel.InboundMessage field that\n  ingress/bridge stamps onto meta.inboundTreatment; the gateway floor (prior\n  commit) makes it load-bearing so a laundered replay can never drive\n  top-level command work.\n\n- T4a: an UNREADABLE/corrupt lock owner.json is treated as a live holder\n  (never reaped); the mtime grace applies only to a genuinely-absent owner.\n- T4b: an unreadable/corrupt unsafe marker reads as UNSAFE (fail closed);\n  only a genuinely-absent (ENOENT) marker is safe.\n- T4d: symlink containment resolves the workspace root up front and DENIES\n  when it does not resolve, instead of degrading to a lexical-only check.\n- T6: an asserted parent session id that does not exist now throws, matching\n  the sibling worker/resident durable-session arms (no silent orphan).\n\nT4c (missing-root lock waiver) verified NOT a safe fix and skipped: headless\n(workspace-less) worker runs legitimately execute non-fs mutating tools with\nno root, and the fs-mutation exposure is already fail-closed by T4d.\n\nAlso inlines an unused PolicyResolverOptions export (dead-export residue of\nthe landed permission commit) to keep the ratchet green; logic unchanged.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(openomni): atomic owner.json write, honest evidence_only floor\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T09:39:13Z",
+          "tree_id": "c7c9facfd1bcbcc27a617e75d0124d45bb9d5d01",
+          "url": "https://github.com/INONONO66/openomni/commit/6813ef77b5f41b915a41b7b61487b0518d807f7f"
+        },
+        "date": 1787132423676,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 674,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5896,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2532,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3160,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2521,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15719,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8250,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1097,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 986,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1651,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 51471,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2388,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513780,
             "unit": "ns/op"
           }
         ]
