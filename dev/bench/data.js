@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787100859052,
+  "lastUpdate": 1787104733543,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57317,6 +57317,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518190,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b97932433f6e8200c1c31ea86304520285cc4f1",
+          "message": "feat: message.send over the gateway — as-me outbound goes live (#739)\n\n* feat(openomni): message.send tool over the gateway send port (#708)\n\nThe brain's as-me outbound trigger (gateway stage 3, design §2b): one\nnative tool calling an INJECTED `Gateway.SendInput -> SendReceipt` port\n— the brain never imports channels; the composition root binds the\ngateway send kernel.\n\n- senderId is always the Owner-owned resident persona actor, injected\n  at construction. Persona unset -> typed error result (\"persona not\n  configured\"), fail-closed in-band, never a run-killing throw.\n- `expectReply` expands to a full waitSpec: minted waitId, ownerRef =\n  the CALLING session (executor-injected implicit sessionId — the model\n  cannot spoof it; engagement ownerRef arrives with #709),\n  expectedResponders = [target.actorId], resolutionPolicy first_reply,\n  defaults declared in the spec: expiresInMs 86400000 (24h),\n  allowedActions [\"report_result\"], followUpWindow 0.\n- Denials are RESULTS, not errors: the agent sees `ungranted` etc. and\n  reasons about them; only input/persona/trace failures are isError.\n- Default permission posture: registered like every existing native\n  tool (the resident's default selection spans all categories), but\n  category \"delegation\" so the catalog depth gate strips it from child\n  agents/workers — only the depth-0 resident can speak as-me. riskTier\n  2 (logged tier, future approval gate). The AUTHORITY gate is the\n  Owner grant table: default empty = every send denied `ungranted`.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(channels): scoped grants, reply-grant instances, claim port (#708)\n\nThree router-side pieces of gateway stage 3:\n\n1. Scope-aware grant evaluation (grant.ts): the #718 fail-closed guard\n   made the base evaluator skip replyScope-carrying instances; the\n   router now owns the scope-aware arm. The send kernel evaluates in\n   two phases — no candidate at all denies `ungranted` BEFORE any\n   registry lookup (existing pin preserved); with a reply-scoped\n   candidate the target resolves first, the outbound surface key is\n   derived from the RESOLVED endpoint (channel:externalId — the facts a\n   DeliveryTarget and a resolved inbound endpoint share), and only a\n   scope match grants. Cross-surface use stays refused (pinned).\n\n2. Reply-grant materialization (reply-grant.ts, design §2b stage-0\n   rule): when the router ROUTES a resolved registered actor on a\n   rule-covered channel, it materializes a SenderTargetGrant instance\n   {ruleId, replyScope:{surfaceKey}, expiresAt: at+instanceTtlMs},\n   first-contact only (a live instance never refreshes), bounded by\n   maxLiveInstances counted over LIVE instances per rule — at capacity\n   no instance lands and the refusal is audited (Operational.Warn via\n   the injected sink). RULING receipt: instances are IN-MEMORY on the\n   router for this stage; the durable grant-instance store is the\n   #709/SSOT follow-up. No new persisted surface.\n\n3. `claimSurface(surfaceKey, sessionId, expectedSessionId?)` port on\n   GatewayRouter: CAS receipt = owner after the attempt. The brain's\n   internal-mode (cron stickiness) claims cross this port from now on —\n   sole-writer of the surface map becomes literal (brain side lands in\n   the next commit).\n\nAlso leaves the #219 seam comment on the send path (egress semantics\nevaluate after grant, before delivery — own leaf, not this PR).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): internal surface claims cross gateway port (#708)\n\nCloses the #707 recorded residue: the brain's internal-cron stickiness\nloop wrote SurfaceKey.claim directly (session-resolver). The claim now\ncrosses an injected `SurfaceSessionClaim` port (BrainEngineDeps\n.claimSurface, bound by the composition root to the gateway router's\nclaimSurface) — the gateway is the literal sole WRITER of the\nsurface↔session map. Reads (SurfaceKey.lookup) stay recorded residue.\n\nFail-closed: without the port, a resident surface claim throws instead\nof falling back to a direct ledger write (pinned, incl. no orphan\ncandidate session). Worker placement never claims and needs no port.\n\ndocs/gateway-design.md §6 receipt updated (residue resolved); §2a\ngrant-write-validation receipt re-measured at #708 (still no\nactor/blacklist/channel-grant write seam — rides to #709/SSOT). No\ncheck-deps gate whitelisted the residue, so no gate change.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(server): compose message.send + as-me E2E over the gateway (#708)\n\nComposition (W2) and the issue's real deliverable (W4):\n\n- config: `messaging.personaActorId` (Owner-owned resident persona; a\n  malformed value warns and stays unset — as-me sends keep the typed\n  fail-closed tool result) and `messaging.replyGrantRules`\n  (Gateway.ReplyGrantRule[], malformed list warns and materializes\n  nothing). Both default fail-closed empty/unset.\n- bootstrap: registers the message.send tool on the resident's agent\n  provider with `send: serverMessaging().send` (lazy — the registered\n  router-composed kernel; pre-registration calls keep the typed\n  fail-closed error), feeds replyGrantRules into createGatewayRouter,\n  and injects the router's claimSurface into the brain engine through\n  the same fail-closed ref seam as the other boot cycles.\n- E2E (message-send-pipeline.test.ts, gateway-pipeline patterns): a\n  resident run invokes message.send (awaited) through the REAL tool\n  executor with a granted persona->target -> SendReceipt sent + Wait\n  open (owned by the calling session, correlation re-keyed to the\n  platform message id) -> a driver-shaped reply from the expected\n  responder correlates through router.ingest -> brain deliver fires\n  with waitContext -> the calling session resumes and the Wait\n  resolves. Denial paths: ungranted target (result, not error);\n  reply-scoped instance honored in the initiating container and\n  refused cross-surface; persona unset typed error.\n\nThis closes the product-thesis \"outbound as-me trigger unwired\" gap:\nthe persona actor now has a live, Owner-grant-gated, record-before-act\npath from a resident run to an external counterpart and back.\n\nNon-goals recorded: #219 egress semantics stay a seam comment on the\nsend path; #709 engagement ownerRef + durable grant-instance store.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T10:57:41+09:00",
+          "tree_id": "a16fdbcaa6c72301e7fa45e0b9972e4231785a18",
+          "url": "https://github.com/INONONO66/openomni/commit/3b97932433f6e8200c1c31ea86304520285cc4f1"
+        },
+        "date": 1787104732323,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 360,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4666,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6902,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2143,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2063,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14301,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 780,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1330,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 34068,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 449423,
             "unit": "ns/op"
           }
         ]
