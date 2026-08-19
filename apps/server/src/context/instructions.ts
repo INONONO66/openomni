@@ -52,13 +52,15 @@ export namespace InstructionLoader {
           results.push({ path: join(rulesDir, entry), priority: 15, label: `Rules: ${entry}` });
         }
       } catch {
-        Bus.publish(Operational.Events.Warn, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "failed to read rules dir, skipping",
-          context: { rulesDir },
-        });
+        Bus.publish(
+          Operational.Events.Warn,
+          Operational.envelope({
+            traceId,
+            component: "server",
+            msg: "failed to read rules dir, skipping",
+            context: { rulesDir },
+          }),
+        );
       }
     }
 
@@ -86,13 +88,15 @@ export namespace InstructionLoader {
       try {
         content = readFileSync(file.path, "utf-8");
       } catch {
-        Bus.publish(Operational.Events.Warn, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "failed to read instruction file, skipping",
-          context: { path: file.path },
-        });
+        Bus.publish(
+          Operational.Events.Warn,
+          Operational.envelope({
+            traceId,
+            component: "server",
+            msg: "failed to read instruction file, skipping",
+            context: { path: file.path },
+          }),
+        );
         continue;
       }
 

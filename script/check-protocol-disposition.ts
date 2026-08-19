@@ -19,12 +19,15 @@
  * symbol through the ledger only — so a fixture's verdict is the same before
  * and after any concept-diet deletion lands.
  *
- * Modes:
- *   bun run script/check-protocol-disposition.ts
- *   bun run script/check-protocol-disposition.ts --inventory <path>
- *   bun run script/check-protocol-disposition.ts --fixtures <dir>
- *   bun run script/check-protocol-disposition.ts --fixture <name>
- *   bun run script/check-protocol-disposition.ts --json
+ * This module is pure logic + filesystem loaders. The real gate is
+ * `packages/protocol/test/concept-diet/dead-surface.test.ts`, which imports
+ * these functions and runs in CI's Test job — it asserts each fixture's
+ * verdict against its declared `expect` (a correctly-rejected fixture is a
+ * pass). There is deliberately no standalone CLI: a second entry point would
+ * be a redundant gate over the same ledger self-consistency the test already
+ * checks, and the earlier one exited nonzero unconditionally (its summary
+ * `ok` never compared a fixture result to its `expect`), so it was wired
+ * nowhere and could never pass.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -55,10 +58,6 @@ const REQUIRED_EVIDENCE_KEYS = [
   "snapshotPin",
   "runtimeConsumer",
 ] as const;
-
-const DEFAULT_INVENTORY_PATH =
-  "packages/protocol/test/concept-diet/protocol-concept-disposition.json";
-const DEFAULT_FIXTURES_DIR = "packages/protocol/test/concept-diet/fixtures";
 
 // ---------------------------------------------------------------------------
 // types
@@ -420,108 +419,4 @@ export function loadFixtures(dir: string, only?: string): NamedFixture[] {
         .filter((name) => name.endsWith(".json"))
         .sort((a, b) => a.localeCompare(b));
   return names.map((name) => ({ name, fixture: readFixture(join(dir, name)) }));
-}
-
-// ---------------------------------------------------------------------------
-// CLI
-// ---------------------------------------------------------------------------
-
-interface CliOptions {
-  readonly inventory: string;
-  readonly fixtures: string;
-  readonly fixture?: string;
-  readonly json: boolean;
-}
-
-function parseArgs(argv: readonly string[]): CliOptions {
-  let inventory = DEFAULT_INVENTORY_PATH;
-  let fixtures = DEFAULT_FIXTURES_DIR;
-  let fixture: string | undefined;
-  let json = false;
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    switch (arg) {
-      case "--inventory":
-        i += 1;
-        inventory = argv[i] ?? inventory;
-        break;
-      case "--fixtures":
-        i += 1;
-        fixtures = argv[i] ?? fixtures;
-        break;
-      case "--fixture":
-        i += 1;
-        fixture = argv[i];
-        break;
-      case "--json":
-        json = true;
-        break;
-      default:
-        throw new Error(`unknown flag: ${arg}`);
-    }
-  }
-
-  return { inventory, fixtures, fixture, json };
-}
-
-function reportHuman(summary: VerifierSummary): void {
-  const { inventory, fixtures } = summary;
-  if (inventory.ok) {
-    const counts = DISPOSITIONS.map(
-      (disposition) => `${disposition}=${inventory.counts[disposition]}`,
-    ).join(" ");
-    process.stdout.write(
-      `OK: inventory ${inventory.path} — ${counts}${inventory.tallyMatches ? " (tally matches)" : " (tally MISMATCH)"}\n`,
-    );
-  } else {
-    for (const problem of inventory.problems) {
-      process.stderr.write(`VIOLATION [inventory] ${problem.symbol} — ${problem.issue}\n`);
-    }
-  }
-  if (!inventory.tallyMatches) {
-    process.stderr.write(
-      "VIOLATION [inventory] <tally> — declared tally does not match counted dispositions\n",
-    );
-  }
-
-  for (const result of fixtures) {
-    if (result.ok) {
-      process.stdout.write(
-        `OK: fixture ${result.fixture} — retained (${result.references.length} references, expect=${result.expect})\n`,
-      );
-      continue;
-    }
-    for (const rejection of result.rejections ?? []) {
-      process.stderr.write(
-        `VIOLATION [${rejection.rule}] ${result.fixture}: ${rejection.symbol} — rejected importer surface\n`,
-      );
-    }
-  }
-}
-
-function main(): void {
-  const options = parseArgs(Bun.argv.slice(2));
-  const inventory = readInventory(options.inventory);
-  const fixtures = loadFixtures(options.fixtures, options.fixture);
-  const summary = verify(inventory, fixtures, options.inventory);
-
-  if (options.json) {
-    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
-  } else {
-    reportHuman(summary);
-  }
-
-  // tally mismatch is a ledger defect even though it is not a per-row problem.
-  process.exit(summary.ok && summary.inventory.tallyMatches ? 0 : 1);
-}
-
-if (import.meta.main) {
-  try {
-    main();
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`ERROR: ${message}\n`);
-    process.exit(1);
-  }
 }

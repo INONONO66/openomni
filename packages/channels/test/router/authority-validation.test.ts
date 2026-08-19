@@ -7,6 +7,7 @@ import {
   applyChannelGrantTreatment,
   IngressAuthorityMiddleware,
 } from "../../src/router/authority.js";
+import { makeInboundEvent } from "./_router-fixture.js";
 
 // Moved from openomni test/policy/ingress-authority-validation.test.ts at the
 // #707 seam flip: runRoutedPreRun now parses Gateway.DeliveredEvent (no
@@ -14,16 +15,6 @@ import {
 // check is brain-side (pinned in openomni's engine.test.ts).
 
 type RestrictedTrustTier = "observer" | "collaborator" | "assigned_worker";
-
-function makeInboundEvent(overrides?: Partial<Gateway.DeliveredEvent>): Gateway.DeliveredEvent {
-  return {
-    id: "evt-1",
-    traceId: "trace-test",
-    surface: "test",
-    mode: "direct",
-    ...overrides,
-  } as Gateway.DeliveredEvent;
-}
 
 describe("IngressAuthorityMiddleware trust and validation", () => {
   test("canonical observer trust tier overrides legacy user role", async () => {

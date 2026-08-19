@@ -102,19 +102,21 @@ const TERMINAL_WORK_ITEM_STATUSES = new Set(["completed", "failed", "cancelled"]
 function createEffectEscalation(): EffectEscalation {
   return async (intent, detail, traceId) => {
     const escalation = await recordEscalationBlocker(intent.workItemHash, intent, detail, traceId);
-    Bus.publish(Operational.Events.Error, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: `effect reconciliation exhausted — escalated to Owner: ${intent.effectId}`,
-      context: {
-        effectId: intent.effectId,
-        kind: intent.kind,
-        ...(intent.workItemHash === undefined ? {} : { workItemHash: intent.workItemHash }),
-        blocker: escalation,
-        detail,
-      },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: `effect reconciliation exhausted — escalated to Owner: ${intent.effectId}`,
+        context: {
+          effectId: intent.effectId,
+          kind: intent.kind,
+          ...(intent.workItemHash === undefined ? {} : { workItemHash: intent.workItemHash }),
+          blocker: escalation,
+          detail,
+        },
+      }),
+    );
   };
 }
 

@@ -36,16 +36,18 @@ export async function refreshMcpTools(
         });
       }
     } catch (err) {
-      Bus.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "failed to list tools from mcp server",
-        context: {
-          serverName,
-          err: err instanceof Error ? err.message : String(err),
-        },
-      });
+      Bus.publish(
+        Operational.Events.Warn,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: "failed to list tools from mcp server",
+          context: {
+            serverName,
+            err: err instanceof Error ? err.message : String(err),
+          },
+        }),
+      );
     }
   }
   return tools;

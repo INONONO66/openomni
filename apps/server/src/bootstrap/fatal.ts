@@ -21,13 +21,15 @@ export async function reportFatalAndExit(
     // A boot that dies before BusPersistence.start() publishes into a
     // subscriber-less Bus — stderr is the only outlet that always exists.
     process.stderr.write(`openomni fatal: ${message}\n`);
-    Bus.publish(Operational.Events.Error, {
-      traceId: newTraceId(),
-      time: Date.now(),
-      component: "server",
-      msg: "fatal error",
-      context: { err: error instanceof Error ? error.message : String(error) },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId: newTraceId(),
+        component: "server",
+        msg: "fatal error",
+        context: { err: error instanceof Error ? error.message : String(error) },
+      }),
+    );
     await BusPersistence.flush();
   } catch {
     // The observation row is best-effort on this path.

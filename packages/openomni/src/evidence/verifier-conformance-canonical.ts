@@ -120,12 +120,6 @@ export function createCanonicalSchemas() {
   };
 }
 
-const schemas = createCanonicalSchemas();
-
-const JsonValueSchema = schemas.JsonValueSchema;
-const Sha256DigestSchema = schemas.Sha256DigestSchema;
-const RedactedIdentifierSchema = schemas.RedactedIdentifierSchema;
-
 export function canonicalJson(input: unknown): string {
   return renderCanonical(snapshotJsonValue(input));
 }
@@ -154,113 +148,6 @@ function renderCanonical(value: JsonValue): string {
     fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
   }
   return `{${fields.join(",")}}`;
-}
-
-export const EnvironmentFingerprintInputSchema = snapshotFirstJsonSchema(
-  JsonValueSchema.pipe(
-    z
-      .object({
-        runtimeIdentifiers: z.array(RedactedIdentifierSchema).min(1).max(256),
-        dependencyIdentifiers: z.array(RedactedIdentifierSchema).max(256),
-        environmentIdentifiers: z.array(RedactedIdentifierSchema).max(256),
-      })
-      .strict(),
-  ),
-);
-const EnvironmentFingerprintContract = z
-  .object({
-    version: z.literal("environment-fingerprint-v1"),
-    runtimeFingerprint: Sha256DigestSchema,
-    dependencyFingerprint: Sha256DigestSchema,
-    environmentFingerprint: Sha256DigestSchema,
-    fingerprint: Sha256DigestSchema,
-  })
-  .strict();
-export const EnvironmentFingerprintSchema = snapshotFirstJsonSchema(
-  JsonValueSchema.pipe(EnvironmentFingerprintContract).superRefine((value, context) => {
-    if (value.fingerprint !== environmentAggregateFingerprint(value)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "environment aggregate fingerprint does not match its components",
-      });
-    }
-  }),
-);
-type EnvironmentFingerprint = Readonly<z.infer<typeof EnvironmentFingerprintSchema>>;
-
-export function createEnvironmentFingerprint(input: unknown): EnvironmentFingerprint {
-  const parsed = EnvironmentFingerprintInputSchema.parse(input);
-  const runtimeFingerprint = hashCanonicalJson([...parsed.runtimeIdentifiers].sort());
-  const dependencyFingerprint = hashCanonicalJson([...parsed.dependencyIdentifiers].sort());
-  const environmentFingerprint = hashCanonicalJson([...parsed.environmentIdentifiers].sort());
-  return Object.freeze(
-    EnvironmentFingerprintSchema.parse({
-      version: "environment-fingerprint-v1",
-      runtimeFingerprint,
-      dependencyFingerprint,
-      environmentFingerprint,
-      fingerprint: environmentAggregateFingerprint({
-        version: "environment-fingerprint-v1",
-        runtimeFingerprint,
-        dependencyFingerprint,
-        environmentFingerprint,
-      }),
-    }),
-  );
-}
-
-function environmentAggregateFingerprint(
-  value: Readonly<{
-    version: "environment-fingerprint-v1";
-    runtimeFingerprint: string;
-    dependencyFingerprint: string;
-    environmentFingerprint: string;
-  }>,
-): string {
-  return hashCanonicalJson({
-    version: value.version,
-    runtimeFingerprint: value.runtimeFingerprint,
-    dependencyFingerprint: value.dependencyFingerprint,
-    environmentFingerprint: value.environmentFingerprint,
-  });
-}
-
-export const NondeterminismManifestSchema = snapshotFirstJsonSchema(
-  JsonValueSchema.pipe(
-    z
-      .object({
-        version: z.literal("nondeterminism-manifest-v1"),
-        entries: z
-          .array(
-            z
-              .object({
-                kind: z.enum([
-                  "clock",
-                  "time_zone",
-                  "random",
-                  "model",
-                  "network",
-                  "tool",
-                  "device",
-                  "ordering",
-                  "generated_id",
-                  "environment",
-                  "human",
-                  "source",
-                ]),
-                identifier: RedactedIdentifierSchema,
-                value: JsonValueSchema,
-              })
-              .strict(),
-          )
-          .max(1_024),
-      })
-      .strict(),
-  ),
-);
-
-export function hashNondeterminismManifest(input: unknown): string {
-  return hashCanonicalJson(NondeterminismManifestSchema.parse(input));
 }
 
 function isJsonRecord(value: unknown): value is JsonObject {

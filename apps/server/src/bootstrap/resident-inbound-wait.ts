@@ -105,17 +105,19 @@ export function createResidentInboundWaitHandler(
       try {
         await WorkItemAttemptRun.endWait(sessionId, runId, traceId);
       } catch (releaseError) {
-        Bus.publish(Operational.Events.Warn, {
-          traceId,
-          time: Date.now(),
-          sessionId,
-          component: "server",
-          msg: "inbound-wait release failed; answer kept, blocker ages out",
-          context: {
-            runId,
-            error: releaseError instanceof Error ? releaseError.message : String(releaseError),
-          },
-        });
+        Bus.publish(
+          Operational.Events.Warn,
+          Operational.envelope({
+            traceId,
+            sessionId,
+            component: "server",
+            msg: "inbound-wait release failed; answer kept, blocker ages out",
+            context: {
+              runId,
+              error: releaseError instanceof Error ? releaseError.message : String(releaseError),
+            },
+          }),
+        );
       }
     }
   };

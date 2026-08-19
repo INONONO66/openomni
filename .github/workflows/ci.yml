@@ -43,11 +43,17 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bunx turbo run build --filter=@openomni/protocol
-      - run: bunx turbo run ${{ matrix.task }}
+      - if: matrix.task == 'check-types'
+        run: bunx turbo run check-types
       # script/ lives outside turbo's package graph — typecheck it explicitly
       # (needs the protocol dist built above).
       - if: matrix.task == 'check-types'
         run: bunx tsc -p script/tsconfig.json
+      # turbo run lint only visits packages/*/src (each package's lint script);
+      # it silently skips apps/server, script/, qa/, and every test file. Lint
+      # the WHOLE repo so the ~420 test files + tooling are actually covered.
+      - if: matrix.task == 'lint'
+        run: bunx ultracite check --formatter-enabled=false .
 
   deps:
     name: Dependency Rules

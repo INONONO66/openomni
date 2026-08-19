@@ -16,10 +16,12 @@ export async function connectMcpServers(
   }
 
   await provider.refreshTools();
-  Bus.publish(Operational.Events.Info, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: `mcp connected ${provider.serverCount}/${servers.length} server(s)`,
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: `mcp connected ${provider.serverCount}/${servers.length} server(s)`,
+    }),
+  );
 }

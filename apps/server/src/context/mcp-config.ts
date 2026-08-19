@@ -26,13 +26,15 @@ export namespace McpConfigLoader {
     try {
       parsed = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      Bus.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "failed to parse mcp config",
-        context: { configPath },
-      });
+      Bus.publish(
+        Operational.Events.Warn,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: "failed to parse mcp config",
+          context: { configPath },
+        }),
+      );
       discoverCache.set(workspaceRoot, { result: null });
       return null;
     }
@@ -48,13 +50,15 @@ export namespace McpConfigLoader {
         traceId,
       });
     } else {
-      Bus.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "unexpected format in mcp config",
-        context: { configPath },
-      });
+      Bus.publish(
+        Operational.Events.Warn,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: "unexpected format in mcp config",
+          context: { configPath },
+        }),
+      );
       result = null;
     }
 

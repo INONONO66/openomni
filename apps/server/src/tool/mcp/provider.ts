@@ -34,16 +34,18 @@ export class McpToolProvider implements ToolProvider {
       this.connected.add(config.name);
       this.cachedTools = null;
     } catch (err) {
-      Bus.publish(Operational.Events.Warn, {
-        traceId: this.options.traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "failed to connect to mcp server",
-        context: {
-          name: config.name,
-          err: err instanceof Error ? err.message : String(err),
-        },
-      });
+      Bus.publish(
+        Operational.Events.Warn,
+        Operational.envelope({
+          traceId: this.options.traceId,
+          component: "server",
+          msg: "failed to connect to mcp server",
+          context: {
+            name: config.name,
+            err: err instanceof Error ? err.message : String(err),
+          },
+        }),
+      );
     }
   }
 

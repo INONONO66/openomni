@@ -84,13 +84,15 @@ function loadRaw(configPath: string, traceId: string): RawConfig {
   try {
     return JSON.parse(readFileSync(configPath, "utf-8")) as RawConfig;
   } catch {
-    Bus.publish(Operational.Events.Warn, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "failed to parse config, using defaults",
-      context: { configPath },
-    });
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "failed to parse config, using defaults",
+        context: { configPath },
+      }),
+    );
     return {};
   }
 }
@@ -104,13 +106,15 @@ function resolveMessagingGrants(
   const parsed = z.array(Gateway.SenderTargetGrant).safeParse(raw.messaging.grants);
   if (parsed.success) return parsed.data;
   // Fail closed: a malformed grant list grants nothing.
-  Bus.publish(Operational.Events.Warn, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "invalid messaging.grants config ignored; all existing-agent sends stay denied",
-    context: { configPath, error: parsed.error.message },
-  });
+  Bus.publish(
+    Operational.Events.Warn,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: "invalid messaging.grants config ignored; all existing-agent sends stay denied",
+      context: { configPath, error: parsed.error.message },
+    }),
+  );
   return [];
 }
 
@@ -123,13 +127,15 @@ function resolveReplyGrantRules(
   const parsed = z.array(Gateway.ReplyGrantRule).safeParse(raw.messaging.replyGrantRules);
   if (parsed.success) return parsed.data;
   // Fail closed: a malformed rule list materializes nothing.
-  Bus.publish(Operational.Events.Warn, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "invalid messaging.replyGrantRules config ignored; no reply-grant instances materialize",
-    context: { configPath, error: parsed.error.message },
-  });
+  Bus.publish(
+    Operational.Events.Warn,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: "invalid messaging.replyGrantRules config ignored; no reply-grant instances materialize",
+      context: { configPath, error: parsed.error.message },
+    }),
+  );
   return [];
 }
 
@@ -145,13 +151,15 @@ function resolvePersonaActorId(
   // Fail closed: a malformed persona id configures no persona — the
   // message.send tool keeps returning its typed "persona not configured"
   // result instead of sending under a garbage identity.
-  Bus.publish(Operational.Events.Warn, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "invalid messaging.personaActorId config ignored; as-me sends stay fail-closed",
-    context: { configPath },
-  });
+  Bus.publish(
+    Operational.Events.Warn,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: "invalid messaging.personaActorId config ignored; as-me sends stay fail-closed",
+      context: { configPath },
+    }),
+  );
   return undefined;
 }
 
@@ -160,13 +168,15 @@ function resolve(raw: RawConfig, configPath: string, traceId: string): ServerCon
   const workspaceRoot = raw.workspace?.root;
 
   if (workspaceRoot && !existsSync(workspaceRoot)) {
-    Bus.publish(Operational.Events.Warn, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "workspace root not found",
-      context: { workspaceRoot },
-    });
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "workspace root not found",
+        context: { workspaceRoot },
+      }),
+    );
   }
 
   const model =

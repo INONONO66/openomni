@@ -12,12 +12,14 @@ async function processRetryQueue(
   handler: Channel.MessageHandler,
   traceId: string,
 ): Promise<void> {
-  Bus.publish(Operational.Events.Info, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: `recovery processing ${queue.length} retry item(s)`,
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: `recovery processing ${queue.length} retry item(s)`,
+    }),
+  );
 
   for (const item of queue) {
     try {
@@ -43,22 +45,26 @@ async function processRetryQueue(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      Bus.publish(Operational.Events.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: `recovery retry failed for ${item.messageId}`,
-        context: { err: message },
-      });
+      Bus.publish(
+        Operational.Events.Error,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: `recovery retry failed for ${item.messageId}`,
+          context: { err: message },
+        }),
+      );
     }
   }
 
-  Bus.publish(Operational.Events.Info, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "recovery retry processing complete",
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: "recovery retry processing complete",
+    }),
+  );
 }
 
 export type BootstrapRecoveryInput = Readonly<{
@@ -111,13 +117,15 @@ function recordLedgerChainBreaks(traceId: string): void {
     }
     const breaks = ledger.verifyTail();
     for (const chainBreak of breaks) {
-      Bus.publish(Operational.Events.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: `ledger chain-break detected at boot: ${chainBreak.streamId} seq ${chainBreak.seq} (${chainBreak.code})`,
-        context: { ...chainBreak },
-      });
+      Bus.publish(
+        Operational.Events.Error,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: `ledger chain-break detected at boot: ${chainBreak.streamId} seq ${chainBreak.seq} (${chainBreak.code})`,
+          context: { ...chainBreak },
+        }),
+      );
       // The Governor incident (#510 Done-means): a typed, persisted
       // (NORMAL-durability telemetry) record for the Governor role's
       // post-hoc analysis. Observe-only — it never refuses boot and never
@@ -134,13 +142,15 @@ function recordLedgerChainBreaks(traceId: string): void {
   } catch (error) {
     // Observe-only surface: a verification failure is itself recorded and
     // must not refuse boot any more than a chain-break does.
-    Bus.publish(Operational.Events.Error, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "ledger tail verification failed at boot",
-      context: { error: error instanceof Error ? error.message : String(error) },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "ledger tail verification failed at boot",
+        context: { error: error instanceof Error ? error.message : String(error) },
+      }),
+    );
   }
 }
 
@@ -159,21 +169,25 @@ async function reconcileOutstandingEffects(
 ): Promise<void> {
   try {
     const summary = await effects.reconcile(traceId);
-    Bus.publish(Operational.Events.Info, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: `recovery reconciled ${summary.resolved} of ${summary.scanned} outstanding effect intent(s)`,
-      context: { ...summary },
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: `recovery reconciled ${summary.resolved} of ${summary.scanned} outstanding effect intent(s)`,
+        context: { ...summary },
+      }),
+    );
   } catch (error) {
-    Bus.publish(Operational.Events.Error, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "effect reconciliation failed at boot",
-      context: { error: error instanceof Error ? error.message : String(error) },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "effect reconciliation failed at boot",
+        context: { error: error instanceof Error ? error.message : String(error) },
+      }),
+    );
   }
 }
 
@@ -203,36 +217,42 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
         // recorded head) names its work item in its own Operational.Events.Error —
         // never buried in an aggregate context blob. Boot stays alive.
         for (const failure of receipt.failures) {
-          Bus.publish(Operational.Events.Error, {
-            traceId: id,
-            time: Date.now(),
-            component: "server",
-            msg: `recovery failed to resume recorded WorkItem completion: ${failure.workItemHash}`,
-            context: {
-              workItemHash: failure.workItemHash,
-              admissionId: failure.admissionId,
-              error: failure.error,
-            },
-          });
+          Bus.publish(
+            Operational.Events.Error,
+            Operational.envelope({
+              traceId: id,
+              component: "server",
+              msg: `recovery failed to resume recorded WorkItem completion: ${failure.workItemHash}`,
+              context: {
+                workItemHash: failure.workItemHash,
+                admissionId: failure.admissionId,
+                error: failure.error,
+              },
+            }),
+          );
         }
-        Bus.publish(Operational.Events.Info, {
-          traceId: id,
-          time: Date.now(),
-          component: "server",
-          msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
-          context: {
-            skipped: receipt.skipped,
-            failures: receipt.failures.length,
-          },
-        });
+        Bus.publish(
+          Operational.Events.Info,
+          Operational.envelope({
+            traceId: id,
+            component: "server",
+            msg: `recovery resumed ${receipt.recovered} recorded WorkItem completion(s)`,
+            context: {
+              skipped: receipt.skipped,
+              failures: receipt.failures.length,
+            },
+          }),
+        );
       } catch (error) {
-        Bus.publish(Operational.Events.Error, {
-          traceId: id,
-          time: Date.now(),
-          component: "server",
-          msg: "recovery failed to resume recorded WorkItem completions",
-          context: { error: error instanceof Error ? error.message : String(error) },
-        });
+        Bus.publish(
+          Operational.Events.Error,
+          Operational.envelope({
+            traceId: id,
+            component: "server",
+            msg: "recovery failed to resume recorded WorkItem completions",
+            context: { error: error instanceof Error ? error.message : String(error) },
+          }),
+        );
       }
     }
     // #548: PendingInteractionStore is frozen — the boot expiry sweep is
@@ -240,46 +260,54 @@ export async function runRecovery(input: BootstrapRecoveryInput): Promise<void> 
     // findByCorrelation) gates frozen rows; this receipt records the
     // intentional no-op so recovery stays auditable. Boot-restoration
     // semantics are #217's scope and are untouched here.
-    Bus.publish(Operational.Events.Info, {
-      traceId: id,
-      time: Date.now(),
-      component: "server",
-      msg: "recovery skipped the pending-interaction expiry sweep: store frozen (#548), read-time expiry gates frozen rows",
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId: id,
+        component: "server",
+        msg: "recovery skipped the pending-interaction expiry sweep: store frozen (#548), read-time expiry gates frozen rows",
+      }),
+    );
     // #707: the wait service lives in the gateway router band; the sweep
     // publishes its per-corrupt-wait errors through the injected sink.
     const expiredWaits = WaitService.sweepExpired(id, Bus.publish);
     if (expiredWaits.length > 0) {
-      Bus.publish(Operational.Events.Info, {
-        traceId: id,
-        time: Date.now(),
-        component: "server",
-        msg: `recovery expired ${expiredWaits.length} wait(s)`,
-      });
+      Bus.publish(
+        Operational.Events.Info,
+        Operational.envelope({
+          traceId: id,
+          component: "server",
+          msg: `recovery expired ${expiredWaits.length} wait(s)`,
+        }),
+      );
     }
     // Session TTL expiry: reads (Session.get/list) only filter expired rows;
     // this sweep is the one deliberate deletion point (same seam as the wait
     // sweep above — boot-time only until a periodic scheduler exists).
     const expiredSessions = Session.sweepExpired(id);
     if (expiredSessions.length > 0) {
-      Bus.publish(Operational.Events.Info, {
-        traceId: id,
-        time: Date.now(),
-        component: "server",
-        msg: `recovery removed ${expiredSessions.length} expired session(s)`,
-      });
+      Bus.publish(
+        Operational.Events.Info,
+        Operational.envelope({
+          traceId: id,
+          component: "server",
+          msg: `recovery removed ${expiredSessions.length} expired session(s)`,
+        }),
+      );
     }
 
     const retryQueue = await recoverInterruptedMessages(id);
     if (handler && retryQueue.length > 0) {
       await processRetryQueue(retryQueue, handler, id);
     } else if (retryQueue.length > 0) {
-      Bus.publish(Operational.Events.Warn, {
-        traceId: id,
-        time: Date.now(),
-        component: "server",
-        msg: `recovery ${retryQueue.length} message(s) need retry but no handler available`,
-      });
+      Bus.publish(
+        Operational.Events.Warn,
+        Operational.envelope({
+          traceId: id,
+          component: "server",
+          msg: `recovery ${retryQueue.length} message(s) need retry but no handler available`,
+        }),
+      );
     }
   } finally {
     const durationMs = Date.now() - startTime;

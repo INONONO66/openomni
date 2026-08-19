@@ -24,16 +24,18 @@ export function registerServerMessaging(input: {
   readonly traceId: string;
 }): void {
   composed = input.messaging;
-  Bus.publish(Operational.Events.Info, {
-    traceId: input.traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "existing-agent messaging delivery owner registered",
-    context: {
-      channels: [...input.channels],
-      grantsConfigured: input.grantsConfigured,
-    },
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId: input.traceId,
+      component: "server",
+      msg: "existing-agent messaging delivery owner registered",
+      context: {
+        channels: [...input.channels],
+        grantsConfigured: input.grantsConfigured,
+      },
+    }),
+  );
 }
 
 /**

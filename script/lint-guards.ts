@@ -37,7 +37,7 @@ const canonicalPolicyRequiredFiles = new Set([
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "packages/channels/src/authn/decision.ts",
 ]);
-const approvedAuthorizationFiles = new Set(["packages/openomni/src/extension/manager.ts"]);
+const approvedAuthorizationFiles = new Set<string>([]);
 
 const listMembershipPattern = /\b(?:denylist|allowlist)\s*\??\.\s*includes\s*\(/g;
 const channelNormalizerTriggerPattern = /\bevaluateTriggers\s*\(/g;
@@ -106,7 +106,31 @@ const agentRegistryAssemblyPattern = /\bPolicyRegistry\s*\.\s*create\b|\bdefault
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|ledger))[^"']*["']/g;
 
+/**
+ * File-path allowlists go silently vacuous when a scanned file is renamed or
+ * deleted: `missing-canonical-policy-evaluator` only fires for a path in
+ * `canonicalPolicyRequiredFiles`, so a rename removes the file from the set's
+ * reach and the rule stops checking it with no signal. Assert every pinned
+ * path exists so a rename fails loud here instead (mirrors
+ * lint-side-effects.ts's "Missing hot file" guard).
+ */
+async function verifyPinnedFilesExist(): Promise<void> {
+  const pinned = [
+    ...canonicalPolicyEvaluator,
+    ...canonicalPolicyRequiredFiles,
+    ...approvedAuthorizationFiles,
+  ];
+  for (const filePath of pinned) {
+    if (!(await Bun.file(filePath).exists())) {
+      throw new Error(
+        `Missing pinned guard file: ${filePath} — a rule that keys off this path would silently go vacuous; update lint-guards.ts if the rename/deletion is intentional`,
+      );
+    }
+  }
+}
+
 async function main(): Promise<void> {
+  await verifyPinnedFilesExist();
   const files = await collectSourceFiles();
   const violations: GuardViolation[] = [];
 

@@ -79,19 +79,21 @@ export function createRouter(
     const start = performance.now();
     await next();
     const duration = Math.round(performance.now() - start);
-    Bus.publish(Operational.Events.Info, {
-      traceId: c.get("requestId"),
-      time: Date.now(),
-      component: "server",
-      msg: "http request",
-      context: {
-        method: c.req.method,
-        path: c.req.path,
-        status: c.res.status,
-        durationMs: duration,
-        requestId: c.get("requestId"),
-      },
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId: c.get("requestId"),
+        component: "server",
+        msg: "http request",
+        context: {
+          method: c.req.method,
+          path: c.req.path,
+          status: c.res.status,
+          durationMs: duration,
+          requestId: c.get("requestId"),
+        },
+      }),
+    );
   });
 
   app.get("/health", (c) =>
@@ -126,14 +128,16 @@ export function createRouter(
         chainIntegrity,
       });
     } catch (error) {
-      Bus.publish(Operational.Events.Error, {
-        traceId: c.get("requestId"),
-        time: Date.now(),
-        component: "server",
-        msg: "observability query failed",
-        error: error instanceof Error ? error.message : String(error),
-        context: { sessionId },
-      });
+      Bus.publish(
+        Operational.Events.Error,
+        Operational.envelope({
+          traceId: c.get("requestId"),
+          component: "server",
+          msg: "observability query failed",
+          error: error instanceof Error ? error.message : String(error),
+          context: { sessionId },
+        }),
+      );
       return c.json(
         {
           error: "Observability query unavailable",
@@ -337,17 +341,19 @@ async function respondWithEffectWrite(
         422,
       );
     }
-    Bus.publish(Operational.Events.Error, {
-      traceId: c.get("requestId"),
-      time: Date.now(),
-      component: "server",
-      msg: "admin effect request failed",
-      error: error instanceof Error ? error.message : String(error),
-      context: {
-        path: c.req.path,
-        ...(error instanceof EffectStoreError ? { code: error.code } : {}),
-      },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId: c.get("requestId"),
+        component: "server",
+        msg: "admin effect request failed",
+        error: error instanceof Error ? error.message : String(error),
+        context: {
+          path: c.req.path,
+          ...(error instanceof EffectStoreError ? { code: error.code } : {}),
+        },
+      }),
+    );
     return c.json({ error: "Effect surface unavailable" }, 503);
   }
 }
@@ -356,14 +362,16 @@ function respondWithLedgerRead(c: Context<Env>, read: () => Response): Response 
   try {
     return read();
   } catch (error) {
-    Bus.publish(Operational.Events.Error, {
-      traceId: c.get("requestId"),
-      time: Date.now(),
-      component: "server",
-      msg: "admin ledger query failed",
-      error: error instanceof Error ? error.message : String(error),
-      context: { path: c.req.path },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId: c.get("requestId"),
+        component: "server",
+        msg: "admin ledger query failed",
+        error: error instanceof Error ? error.message : String(error),
+        context: { path: c.req.path },
+      }),
+    );
     return c.json({ error: "Ledger query unavailable" }, 503);
   }
 }
