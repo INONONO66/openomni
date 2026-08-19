@@ -118,7 +118,7 @@ describe("WorkerRun freeze (#510 D2b)", () => {
     expect(WorkerRunStateStore.get("sess-frozen", "run-legacy-store")?.status).toBe("starting");
   });
 
-  test("legacy rows keep answering every read surface after the freeze", () => {
+  test("legacy rows keep answering the get read surface after the freeze", () => {
     seedFrozenRun("sess-frozen", "run-read-1", "succeeded");
     seedFrozenRun("sess-frozen", "run-read-2", "waiting_input");
 
@@ -127,9 +127,6 @@ describe("WorkerRun freeze (#510 D2b)", () => {
     expect(record?.parentSessionId).toBe("parent-sess");
     expect(record?.status).toBe("succeeded");
 
-    expect(WorkerRunStateStore.listBySession("sess-frozen")).toHaveLength(2);
-    expect(WorkerRunStateStore.listByStatus("waiting_input").map((run) => run.runId)).toContain(
-      "run-read-2",
-    );
+    expect(WorkerRunStateStore.get("sess-frozen", "run-read-2")?.status).toBe("waiting_input");
   });
 });

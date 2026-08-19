@@ -61,32 +61,6 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
         .get(sessionId, runId) as WorkerRunStateRow | null;
       return row ? toWorkerRunStateRecord(row) : undefined;
     },
-
-    listBySession: (sessionId: string): WorkerRunStateStore.Record[] => {
-      const rows = db
-        .query(
-          `SELECT run_id, session_id, parent_session_id, agent_name, status, executor_kind, title, prompt,
-                  resume_count, assigned_step_id, error, time_created, time_updated
-           FROM worker_run_state
-           WHERE session_id = ?
-           ORDER BY time_created ASC, rowid ASC`,
-        )
-        .all(sessionId) as WorkerRunStateRow[];
-      return rows.map(toWorkerRunStateRecord);
-    },
-
-    listByStatus: (status: WorkerRunStateStore.Status): WorkerRunStateStore.Record[] => {
-      const rows = db
-        .query(
-          `SELECT run_id, session_id, parent_session_id, agent_name, status, executor_kind, title, prompt,
-                  resume_count, assigned_step_id, error, time_created, time_updated
-           FROM worker_run_state
-           WHERE status = ?
-           ORDER BY time_created ASC, rowid ASC`,
-        )
-        .all(status) as WorkerRunStateRow[];
-      return rows.map(toWorkerRunStateRecord);
-    },
   };
 }
 

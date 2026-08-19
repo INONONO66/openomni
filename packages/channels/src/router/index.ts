@@ -44,7 +44,6 @@ export {
   WaitService,
   type WaitResolution,
 } from "./wait/index.js";
-export { Events as MessagingAuditEvents } from "./messaging/events.js";
 export { resolveSenderTargetGrant } from "./messaging/grant.js";
 export {
   createExistingAgentMessaging,

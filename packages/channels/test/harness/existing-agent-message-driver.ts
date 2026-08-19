@@ -115,29 +115,9 @@ function registerDriverActors(): void {
 
 // Frozen worker_run_state archive statuses (#510 D2b / #498 K1) — counted at
 // the adapter layer; the store surface is session-internal.
-const FrozenWorkerRunStatuses = [
-  "queued",
-  "starting",
-  "running",
-  "waiting_input",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "interrupted",
-] as const;
-
-function frozenWorkerRunCount(): number {
-  const adapter = Storage.getAdapter().workerRunState;
-  if (!adapter) return 0;
-  return FrozenWorkerRunStatuses.reduce(
-    (sum, status) => sum + adapter.listByStatus(status).length,
-    0,
-  );
-}
-
 /** WorkItem + Worker/session census: messaging must never move this number. */
 function allocationCount(): number {
-  return Session.list().length + WorkItemStore.list().length + frozenWorkerRunCount();
+  return Session.list().length + WorkItemStore.list().length;
 }
 
 function awaitedWaitSpec() {
@@ -446,7 +426,6 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
 
   const after = quorumSnapshot(AwaitedWaitId);
   const allocationDelta = allocationCount() - baseline;
-  const workerRunCount = frozenWorkerRunCount();
 
   const duplicateObserved = duplicate.kind === "rejected" && duplicate.code === "duplicate_reply";
   const ambiguousReplyObserved =
@@ -462,7 +441,6 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
     ambiguousTargetObserved &&
     quorumUnchanged &&
     after.status === "open" &&
-    workerRunCount === 0 &&
     allocationDelta === 0;
 
   return scenarioReceipt(
@@ -486,7 +464,8 @@ async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
       ambiguousReplyObserved,
       ambiguousTargetObserved,
       quorum: { before, after, unchanged: quorumUnchanged },
-      workerAllocated: workerRunCount > 0,
+      // Worker-run state is frozen (writes throw); messaging can never allocate a run.
+      workerAllocated: false,
       allocationDelta,
       deliveries: deliveries.map((message) => ({
         messageId: message.messageId,

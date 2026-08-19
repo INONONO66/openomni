@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** 32 lowercase hex characters (W3C trace id). */
-export type TraceId = string;
+type TraceId = string;
 
 /**
  * Side-effect-free trace-id mint (W3C shape, nondeterministic by nature): `crypto.randomUUID()` is already 32 hex

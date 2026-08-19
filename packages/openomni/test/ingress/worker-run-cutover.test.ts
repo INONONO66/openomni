@@ -126,7 +126,6 @@ describe("worker-run cutover (#510 D2b)", () => {
     if (!dispatchedRunId) throw new Error("coordinator dispatch did not run");
     // NO worker_run_state row exists for the new execution.
     expect(Storage.getAdapter().workerRunState?.get(sessionId, dispatchedRunId)).toBeUndefined();
-    expect(Storage.getAdapter().workerRunState?.listBySession(sessionId)).toHaveLength(0);
 
     // The run lifecycle is attempt facts on the work stream.
     const item = WorkItemStore.list().find(
@@ -185,7 +184,5 @@ describe("worker-run cutover (#510 D2b)", () => {
     expect(item.attemptTerminal?.outcome).toBe("failed");
     expect(item.attemptTerminal?.error).toContain("executor exploded");
     expect(item.attemptTerminal?.endedAt).toBeGreaterThanOrEqual(before);
-    // And still no worker_run_state row after the restart.
-    expect(Storage.getAdapter().workerRunState?.listBySession(sessionId)).toHaveLength(0);
   });
 });

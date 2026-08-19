@@ -107,8 +107,6 @@ export namespace WorkerRunStateStore {
     /** @internal Archive seeding only (tests/tooling) — see the adapter module doc. */
     create(sessionId: string, record: CreateRecord): void;
     get(sessionId: string, runId: string): Record | undefined;
-    listBySession(sessionId: string): Record[];
-    listByStatus(status: Status): Record[];
   }
 
   export function create(_sessionId: string, _record: CreateRecord): never {
@@ -136,13 +134,5 @@ export namespace WorkerRunStateStore {
 
   export function get(sessionId: string, runId: string): Record | undefined {
     return requireAdapter().get(sessionId, runId);
-  }
-
-  export function listBySession(sessionId: string): Record[] {
-    return requireAdapter().listBySession(sessionId);
-  }
-
-  export function listByStatus(status: Status): Record[] {
-    return requireAdapter().listByStatus(status);
   }
 }
