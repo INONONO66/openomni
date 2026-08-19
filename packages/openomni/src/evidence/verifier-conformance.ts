@@ -16,26 +16,3 @@ export {
   hashNondeterminismManifest,
   type JsonValue,
 } from "./verifier-conformance-canonical.js";
-export {
-  RecordedCommandSchema,
-  ReplayBindingSchema,
-  ReplayConformanceError,
-  ReplayDivergenceSchema,
-  ReplayKeySchema,
-  ReplayTraceSchema,
-  assertReplayConformance,
-  createReplayKey,
-  substituteRecordedOutputs,
-} from "./verifier-conformance-replay.js";
-export {
-  UpcasterSchema,
-  VersionedEventSchema,
-  upcastOnRead,
-} from "./verifier-conformance-upcast.js";
-export {
-  CommutativeEventSchema,
-  InterleavingPlanSchema,
-  InterleavingReportSchema,
-  fuzzCommutativeInterleavings,
-  type CommutativeEvent,
-} from "./verifier-conformance-interleaving.js";

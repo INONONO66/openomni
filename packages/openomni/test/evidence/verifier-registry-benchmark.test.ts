@@ -12,7 +12,6 @@ describe("verifier registry benchmark evidence", () => {
     const taxonomy = parseObject(benchmark.taxonomy);
     const toolValidity = parseObject(benchmark.toolValidity);
     const surface = parseObject(benchmark.surface);
-    const conformance = parseObject(receipt.conformance);
 
     expect(taxonomy).toMatchObject({
       fixtureCount: 23,
@@ -33,7 +32,6 @@ describe("verifier registry benchmark evidence", () => {
     expect(Number(surface.toolCount)).toBeGreaterThan(0);
     expect(Number(surface.fieldCount)).toBeGreaterThan(0);
     expect(Number(surface.tokenCount)).toBeGreaterThan(0);
-    expect(conformance.commandDivergenceKind).toBe("command_mismatch");
     expect(receipt.exposedActions).toEqual([]);
     expect(receipt.exposedCapabilities).toEqual([]);
   });
