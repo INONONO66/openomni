@@ -4,8 +4,8 @@ import type { NativeTool } from "@openomni/openomni";
 import type { ServerConfig } from "../config";
 
 type WorkerInputMessage =
-  | { role: "user"; content: string; partMetadata?: Record<string, unknown> }
-  | { role: "assistant"; content: string; partMetadata?: Record<string, unknown> };
+  | { role: "user"; content: string; partMetadata?: Record<string, unknown>; time?: number }
+  | { role: "assistant"; content: string; partMetadata?: Record<string, unknown>; time?: number };
 
 function expandRequestedToolNames(tools: Tool.Spec[] | undefined): Set<string> {
   const names = new Set<string>();

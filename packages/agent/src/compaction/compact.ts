@@ -77,6 +77,83 @@ export const DEFAULT_PROTECT_RECENT = 6;
 const DEFAULT_PRESERVE_USER_CHARS = 80_000;
 const ANCHOR_HEADER = "[Conversation Summary]\n";
 
+/**
+ * Time carriage (#737): the one fixed grammar a marker may wear. The whole
+ * design leans on this being a closed shape — the L7 byte guard exempts
+ * marker parts from the multiset check BECAUSE a 21-char `[recorded date]`
+ * line cannot smuggle paraphrased user speech.
+ */
+const TIME_MARKER_RE = /^\[recorded \d{4}-\d{2}-\d{2}\]$/;
+
+/**
+ * Structural marker identity, shared with the L7 byte guard: metadata tags
+ * AND the closed grammar. A part wearing the tags around free text is NOT a
+ * marker — it stays plain user speech and fails the byte check if new.
+ */
+export function isTimeCarriageMarkerPart(part: Message.Part): boolean {
+  return (
+    part.type === "text" &&
+    part.metadata?.timeCarriage === true &&
+    part.metadata?.policyInjected === true &&
+    TIME_MARKER_RE.test(part.text)
+  );
+}
+
+/** UTC calendar date by design: deterministic across hosts and resumes. The
+ * anchor render's legend states the convention (review #741 F3) — a
+ * host-local render would re-date the same record per machine. */
+function renderTimeMarker(createdMs: number): string {
+  return `[recorded ${new Date(createdMs).toISOString().slice(0, 10)}]`;
+}
+
+/**
+ * One-line legend riding the anchor render whenever markers were stamped
+ * (review #741 F1): the bench's responder is told what markers mean, so
+ * production models must be told too — a measurement the product does not
+ * ship is a primed-reader artifact. Render-only: never enters `anchorBody`,
+ * so merge threading and the record are untouched. The literal
+ * "YYYY-MM-DD" does not match the marker grammar, so the legend can never
+ * be mistaken for a marker by the guard or by extraction.
+ */
+const MARKER_LEGEND =
+  "(Messages marked [recorded YYYY-MM-DD] carry the date each message was recorded, in UTC.)";
+
+/** At least one text part that is neither policy-injected nor an anchor
+ * render — i.e. the message actually carries user speech worth dating. */
+function carriesUserSpeech(message: Message.WithParts): boolean {
+  return message.parts.some(
+    (part) =>
+      part.type === "text" &&
+      part.metadata?.policyInjected !== true &&
+      part.metadata?.compactionAnchor !== true,
+  );
+}
+
+/**
+ * Temporal grounding for the preserved-verbatim lane (#737): the bench
+ * showed temporal QA collapsing to 4.8% of the full-history ceiling because
+ * preserved user text says "yesterday" and nothing in the window says when
+ * that was. The marker is REGENERATED from `info.time.created` at every cut
+ * (any stale marker part is replaced, never accumulated — the #722 stacking
+ * class), rides beside the user text as a policy-injected part, and never
+ * enters the record: the replacement record carries the structured `time`
+ * instead, so resume re-derives markers rather than replaying them.
+ */
+function stampTimeMarker(message: Message.WithParts): Message.WithParts {
+  const marker: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID: message.info.sessionID,
+    messageID: message.info.id,
+    type: "text",
+    text: renderTimeMarker(message.info.time.created),
+    metadata: { policyInjected: true, timeCarriage: true },
+  };
+  return {
+    info: message.info,
+    parts: [marker, ...message.parts.filter((part) => !isTimeCarriageMarkerPart(part))],
+  };
+}
+
 export namespace Compaction {
   export function shouldCompact(totalTokens: number, options: ResolvedCompactionOptions): boolean {
     const threshold = resolveThresholdTokens(options);
@@ -314,6 +391,12 @@ export namespace Compaction {
         }
         const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
         if (anchorText === undefined && preservedUsers.length === 0) return undefined;
+        // #737: every preserved user message carries its recorded date into
+        // the window. Nudges and other wholly-injected user-roled messages
+        // are not dated — their time is injection bookkeeping, not speech.
+        const stampedUsers = preservedUsers.map((message) =>
+          carriesUserSpeech(message) ? stampTimeMarker(message) : message,
+        );
         // The replacement record rides ON the anchor (compaction-design L3,
         // #702): the ordered CONTENT kept after the anchor, not ids — message
         // ids do not survive the hydration seam (resume flattens to
@@ -324,17 +407,32 @@ export namespace Compaction {
         // — linear per record, and the newest-user unconditional rule means
         // one oversized user message can ride into every subsequent record by
         // design (user tokens are irreplaceable).
-        const keptWindow = [...preservedUsers, ...keepSpan].flatMap((message) =>
+        const keptWindow = [...stampedUsers, ...keepSpan].flatMap((message) =>
           message.parts
-            .filter((part): part is Message.TextPart => part.type === "text")
+            // Markers never enter the record (#737): they are derived render,
+            // regenerated from the structured `time` below — recording them
+            // as content would replay them as pseudo-speech after resume and
+            // stack one copy per compact-resume cycle (the #722 class).
+            .filter(
+              (part): part is Message.TextPart =>
+                part.type === "text" && !isTimeCarriageMarkerPart(part),
+            )
             .map((part) => ({
               role: message.info.role,
               text: part.text,
+              // #737: recorded creation time, structured — hydration threads
+              // it back into `info.time.created` so the next epoch's cut can
+              // re-derive the marker instead of stamping hydration time onto
+              // yesterday's words.
+              time: message.info.time.created,
               // Provenance survives resume (#727 review): a policy-injected
               // nudge replayed from the record must not become "the user's
               // goal" in a later epoch's decoration.
               ...(part.metadata?.policyInjected === true ? { policyInjected: true } : {}),
             })),
+        );
+        const stampedAny = stampedUsers.some((message) =>
+          message.parts.some(isTimeCarriageMarkerPart),
         );
         const anchorMessages =
           anchorText === undefined
@@ -345,9 +443,10 @@ export namespace Compaction {
                   firstRemoved.info.sessionID,
                   firstRemoved.info.agent,
                   keptWindow,
+                  stampedAny,
                 ),
               ];
-        const compacted = [...anchorMessages, ...preservedUsers, ...keepSpan];
+        const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
         // Progress guard (review #721 M1): the rebuilt window must be strictly
         // smaller than what the seam received, or committing it would count as
         // progress toward the #651 disarm while reclaiming nothing.
@@ -580,11 +679,12 @@ function buildAnchorMessage(
   anchorBody: string,
   sessionID: string,
   agent: string,
-  keptWindow: ReadonlyArray<{ role: "user" | "assistant"; text: string }>,
+  keptWindow: ReadonlyArray<{ role: "user" | "assistant"; text: string; time: number }>,
+  withMarkerLegend: boolean,
 ): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
-  const render = `${ANCHOR_HEADER}${anchorBody}`;
+  const render = `${ANCHOR_HEADER}${anchorBody}${withMarkerLegend ? `\n\n${MARKER_LEGEND}` : ""}`;
   const info: Message.UserMessage = {
     id,
     sessionID,

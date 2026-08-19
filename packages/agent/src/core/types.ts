@@ -44,8 +44,8 @@ export interface ChatAgentInput {
    * stale renders as pseudo-user messages).
    */
   messages: Array<
-    | { role: "user"; content: string; partMetadata?: Record<string, unknown> }
-    | { role: "assistant"; content: string; partMetadata?: Record<string, unknown> }
+    | { role: "user"; content: string; partMetadata?: Record<string, unknown>; time?: number }
+    | { role: "assistant"; content: string; partMetadata?: Record<string, unknown>; time?: number }
   >;
   traceContext?: import("@openomni/protocol").TraceContext.Type;
 }

@@ -21,5 +21,5 @@ export type {
   PolicyRegistryInstance,
 } from "./core/policy";
 export { McpClient } from "./runtime/mcp/index";
-export { createCompactionPolicy } from "./compaction";
+export { createCompactionPolicy, isTimeCarriageMarkerPart } from "./compaction";
 export type { CompactionOptions } from "./compaction";
