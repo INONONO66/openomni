@@ -185,3 +185,105 @@ describe("ResidentRuntime", () => {
     expect(factoryInput?.runId).toBeString();
   });
 });
+
+describe("ResidentRuntime engagement hydration (#709)", () => {
+  beforeEach(() => {
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
+  afterEach(() => {
+    Storage.reset();
+  });
+
+  test("prepends the engagement slice, marks the resumed engagement, threads the implicit context", async () => {
+    const { EngagementStore } = await import("@openomni/ledger");
+    let captured:
+      | {
+          messages: Array<{
+            role: string;
+            content: string;
+            partMetadata?: Record<string, unknown>;
+          }>;
+        }
+      | undefined;
+    let factoryInput: { engagementId?: string; actorTrustTier?: string } | undefined;
+    const manager = ResidentRuntime.create({
+      runAgent: async (_config, input) => {
+        captured = input;
+        return { text: "ok", finishReason: "stop" };
+      },
+    });
+
+    const session = Session.create({
+      traceId: "trace-test",
+      title: "resident-engagement-hydration",
+      model: { providerID: "test", modelID: "fixture" },
+    });
+    const engagement = EngagementStore.open(
+      {
+        id: crypto.randomUUID(),
+        ownerSessionId: session.id,
+        title: "sell bike, floor 50000",
+        terms: { spendCeiling: 50_000 },
+      },
+      "trace-test",
+    );
+
+    await manager.run({
+      sessionId: session.id,
+      traceContext: { traceId: newTraceId() },
+      waitContext: {
+        waitId: "wait-1",
+        allowedAction: "report_result",
+        engagementId: engagement.id,
+      },
+      actorTrustTier: "owner",
+      event: {
+        ...makeEvent(),
+        agent: {
+          model: { provider: "test", id: "fixture" },
+          toolExecutorFactory: (input) => {
+            factoryInput = input;
+            return async (call) => ({
+              id: crypto.randomUUID(),
+              toolCallId: call.id,
+              output: "ok",
+            });
+          },
+        },
+      },
+    });
+
+    const first = captured?.messages[0];
+    expect(first?.role).toBe("user");
+    expect(first?.content).toContain("[engagement context");
+    expect(first?.content).toContain("sell bike, floor 50000");
+    expect(first?.content).toContain("THIS DELIVERY RESUMES THIS ENGAGEMENT");
+    expect(first?.partMetadata).toEqual({ engagementContext: true });
+    expect(factoryInput).toMatchObject({
+      engagementId: engagement.id,
+      actorTrustTier: "owner",
+    });
+  });
+
+  test("stays silent when the session has no engagements", async () => {
+    let captured: { messages: unknown[] } | undefined;
+    const manager = ResidentRuntime.create({
+      runAgent: async (_config, input) => {
+        captured = input;
+        return { text: "ok", finishReason: "stop" };
+      },
+    });
+    const session = Session.create({
+      traceId: "trace-test",
+      title: "resident-no-engagements",
+      model: { providerID: "test", modelID: "fixture" },
+    });
+    await manager.run({
+      sessionId: session.id,
+      traceContext: { traceId: newTraceId() },
+      event: makeEvent(),
+    });
+    expect(captured?.messages).toHaveLength(0);
+  });
+});

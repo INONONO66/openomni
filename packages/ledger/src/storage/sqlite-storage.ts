@@ -19,6 +19,7 @@ import {
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
+import { createSqliteEngagementAdapter } from "./sqlite-engagement-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
@@ -48,6 +49,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
+  readonly engagement: NonNullable<Storage.Adapter["engagement"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
   readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
@@ -91,6 +93,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
+    this.engagement = createSqliteEngagementAdapter(this.db);
     // Decision-class append rides the adapter's own connection so append +
     // projection share one transaction (#510 phase B). The append core keeps
     // owning the SQL (raw prepared statements) — this is wiring only.

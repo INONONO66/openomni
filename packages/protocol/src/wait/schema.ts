@@ -37,6 +37,14 @@ export const Correlation = z
     threadId: z.string().min(1).optional(),
     tokenHash: z.string().min(1).optional(),
     externalConversationId: z.string().min(1).optional(),
+    /**
+     * Engagement resumption context (#709): stamped by an engagement-scoped
+     * awaited send and copied into `Gateway.WaitContext.engagementId` at
+     * delivery. NEVER a matching key — `CorrelationQuery` has no slot for it,
+     * so it cannot influence which wait an inbound message resumes
+     * (gateway-design §5: authority is independent of engagement matching).
+     */
+    engagementId: z.string().min(1).optional(),
   })
   .strict();
 export type Correlation = z.infer<typeof Correlation>;

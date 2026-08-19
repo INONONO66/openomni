@@ -61,12 +61,14 @@ function buildAgentDefFromEntries(
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
     },
-    toolExecutorFactory: ({ sessionId, runId, agentName, workspaceRoot }) =>
+    toolExecutorFactory: ({ sessionId, runId, agentName, workspaceRoot, ...delivery }) =>
       createToolExecutor({
         tools: nativeTools,
         config: {
           workspaceRoot,
-          runtime: { sessionId, runId, agentName, workspaceRoot },
+          // #709: engagementId/actorTrustTier ride the same executor-owned
+          // implicit rail as sessionId — injected, never model-supplied.
+          runtime: { sessionId, runId, agentName, workspaceRoot, ...delivery },
         },
       }),
     ...(deps.providerOptions ? { providerOptions: deps.providerOptions } : {}),

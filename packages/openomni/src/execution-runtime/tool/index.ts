@@ -2,10 +2,13 @@ export {
   AgentToolProvider,
   createChildAgentTool,
   createDispatchTool,
+  createEngagementTools,
   createMessageSendTool,
 } from "./agent/index.js";
 export type {
   DispatchToolRuntime,
+  EngagementPort,
+  EngagementToolsOptions,
   MessageSendPort,
   MessageSendToolOptions,
 } from "./agent/index.js";

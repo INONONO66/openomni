@@ -63,6 +63,7 @@ export {
   createChildAgentRuntime,
   createChildAgentTool,
   createDispatchTool,
+  createEngagementTools,
   createMessageSendTool,
   createToolExecutor,
   resolveMeta,
@@ -87,6 +88,8 @@ export type {
   ChildAgentSpawnInput,
   DelegationPolicyRegistration,
   DispatchToolRuntime,
+  EngagementPort,
+  EngagementToolsOptions,
   MessageSendPort,
   MessageSendToolOptions,
 } from "./execution-runtime";

@@ -41,6 +41,7 @@ src/
 ├── artifact/             # Artifact.store / get — latest-version-wins upsert over SQLite (fail-closed on absent sub-adapter)
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
+├── engagement/           # EngagementStore — durable delegation machine (#709, gateway-design §5): fact-before-projection appends on engagement:<id> streams, typed Engagement.StoreError fail-closed, lazy deadline expiry at hydration (listActive). Brain-domain surface: the brain is its sole writer
 ├── wait/                 # WaitStore — durable Wait contract (#215/#510 B): fact-before-projection appends on wait:<id> streams, typed Wait.StoreError fail-closed, lazy pre-cutover adoption (identity-only genesis)
 ├── effect/               # EffectStore (#492) — intent→terminal-outcome effect ledger on effect:<id> streams; outstandingIntents/terminalIntents reconciliation reads
 ├── work-item/            # WorkItemStore — universal work state engine

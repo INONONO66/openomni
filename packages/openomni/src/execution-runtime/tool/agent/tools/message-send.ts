@@ -16,8 +16,14 @@ import type { NativeTool, ToolExecutionContext } from "../../types.js";
  * denial is a RESULT the agent sees and reasons about, never a thrown error.
  *
  * `expectReply` expands to a full waitSpec whose ownerRef is the CALLING
- * session (`{kind: "session", id: <executor-injected sessionId>}`) — the
- * engagement ownerRef arrives with #709.
+ * session (`{kind: "session", id: <executor-injected sessionId>}`). #709
+ * engagement ownership rides the wait CORRELATION, not the ownerRef:
+ * `Wait.OwnerKind` stays `workItem|session` (routing to the owner session is
+ * unchanged and needs no cross-domain engagement lookup in the router), and
+ * `correlation.engagementId` — resolved from the run's implicit engagement
+ * context, else the session's SOLE active engagement via the injected
+ * lookup — is copied into `Gateway.WaitContext.engagementId` at delivery.
+ * Never a matching key: it cannot influence which wait a reply resumes.
  */
 
 /** Default reply deadline for awaited sends: 24 hours. */
@@ -38,6 +44,13 @@ export type MessageSendToolOptions = Readonly<{
   personaActorId?: string;
   /** Injected clock — messaging never reads the wall clock internally. */
   now?: () => number;
+  /**
+   * #709: deterministic engagement ownership fallback — the id of the
+   * session's SOLE active engagement, undefined when there are zero or
+   * several (the rule never guesses; the run-context engagementId wins when
+   * present). Bound to the ledger EngagementStore by the composition root.
+   */
+  activeEngagementId?: (sessionId: string) => string | undefined;
 }>;
 
 const ExpectReplySchema = z
@@ -61,6 +74,8 @@ const MessageSendInputSchema = z
     expectReply: ExpectReplySchema.optional(),
     /** Executor-injected calling session (implicit input — never model-supplied). */
     sessionId: z.string().min(1).optional(),
+    /** Executor-injected engagement resumption context (implicit input — never model-supplied). */
+    engagementId: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((input, ctx) => {
@@ -117,6 +132,7 @@ const inputSchema = {
       additionalProperties: false,
     },
     sessionId: { type: "string" },
+    engagementId: { type: "string" },
   },
   required: ["target", "body", "operation"],
   additionalProperties: false,
@@ -155,6 +171,7 @@ function buildSendInput(
   personaActorId: string,
   traceId: string,
   sessionId: string | undefined,
+  engagementId: string | undefined,
   at: number,
 ): Gateway.SendInput | { error: string } {
   const base = {
@@ -178,14 +195,16 @@ function buildSendInput(
     ...base,
     waitSpec: {
       waitId: crypto.randomUUID(),
-      // #709 will carry the engagement ownerRef; until then the calling
-      // session owns the Wait.
+      // The calling session owns the Wait (routing unchanged); engagement
+      // ownership rides the correlation as resumption context (#709) and
+      // surfaces as waitContext.engagementId when the reply arrives.
       ownerRef: { kind: "session", id: sessionId },
       allowedActions: [...(input.expectReply?.allowedActions ?? DEFAULT_ALLOWED_ACTIONS)],
       expectedResponders: [input.target.actorId],
       resolutionPolicy: "first_reply",
       expiresAt: at + (input.expectReply?.expiresInMs ?? DEFAULT_EXPECT_REPLY_EXPIRES_IN_MS),
       followUpWindow: input.expectReply?.followUpWindow ?? DEFAULT_FOLLOW_UP_WINDOW_MS,
+      ...(engagementId === undefined ? {} : { correlation: { engagementId } }),
     },
   });
 }
@@ -208,7 +227,7 @@ export function createMessageSendTool(options: MessageSendToolOptions): NativeTo
     isReadOnly: false,
     isDestructive: false,
     isConcurrencySafe: false,
-    implicitInputs: { sessionId: "sessionId" },
+    implicitInputs: { sessionId: "sessionId", engagementId: "engagementId" },
     async execute(call, context?: ToolExecutionContext) {
       const parsed = MessageSendInputSchema.safeParse(call.input);
       if (!parsed.success) {
@@ -232,11 +251,21 @@ export function createMessageSendTool(options: MessageSendToolOptions): NativeTo
             "(server config `messaging.personaActorId`) — as-me sends fail closed",
         );
       }
+      // Engagement ownership (#709), deterministic and judgment-free: the
+      // run's implicit engagementId (waitContext resumption) wins; else the
+      // session's sole active engagement; else none. Ambiguity yields none —
+      // the machine never guesses which delegation a send belongs to.
+      const engagementId =
+        parsed.data.engagementId ??
+        (parsed.data.sessionId === undefined
+          ? undefined
+          : options.activeEngagementId?.(parsed.data.sessionId));
       const sendInput = buildSendInput(
         parsed.data,
         options.personaActorId,
         traceId,
         parsed.data.sessionId,
+        engagementId,
         now(),
       );
       if ("error" in sendInput) return errorResult(call, sendInput.error);
