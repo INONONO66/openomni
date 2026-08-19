@@ -1,9 +1,11 @@
 name: Benchmark
 
+# The regression gate lives in the `publish` job, which only runs on
+# main / workflow_dispatch. On a PR the 15-minute benchmark ran but could
+# never fail the check (publish is skipped), so it was pure theater. Run it
+# only where it can actually gate: main pushes and manual dispatch.
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -63,6 +65,14 @@ jobs:
             cp packages/agent/bench-results/agent.json "bench-results/runs/$run/agent.json"
             cp packages/openomni/bench-results/openomni.json "bench-results/runs/$run/openomni.json"
           done
+
+      # RSS-delta leak guards: absolute-MB assertions after Bun.gc are too
+      # noisy for the blocking Test job (RSS includes JIT/allocator pages GC
+      # never returns), so they live here, off the PR-required path. The file
+      # is named *.bench.ts so `bun test` auto-discovery in the Test job skips
+      # it; it only runs when pointed at explicitly.
+      - name: Memory regression guards (informational)
+        run: bun test ./packages/ledger/test/bench/memory-regression.bench.ts
 
       - name: Summarize benchmark runs
         run: bun run script/summarize-benchmark-runs.ts

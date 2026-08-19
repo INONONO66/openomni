@@ -6,6 +6,7 @@
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "lint": "bunx biome check ./src",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "bun test"
   },
