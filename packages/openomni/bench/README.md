@@ -20,7 +20,9 @@ two-speaker conversations of 400–700 turns across ~19 timestamped sessions,
 with QA pairs annotated with evidence turns. Downloaded on demand to
 `bench/compaction/.cache/` (never committed). Session timestamps are injected
 as assistant-role header turns — LoCoMo speech uses relative time
-("yesterday"), and real agent session logs carry timestamps the same way.
+("yesterday") and needs them; note that production currently renders NO
+timestamps at all (see Finding 1's fidelity note), so these headers are a
+best-case variant of production.
 `speaker_a` maps to `user`: their words are the ones the pipeline must
 preserve verbatim, which is the invariant under test.
 
@@ -34,7 +36,8 @@ preserve verbatim, which is the invariant under test.
 | `uniform-real` | A **real** (not strawman) regenerate-everything baseline: the *same* summarizer LLM compresses the same span with user turns included — the industry-default shape. |
 
 The anchored strategies and the uniform baseline use the **same summarizer
-model**, so the comparison isolates the *strategy*, not the model.
+model**, so the comparison isolates the *strategy*, not the model — with
+one residual prompt confound, named in Finding 2's caveats.
 
 ### Grading
 

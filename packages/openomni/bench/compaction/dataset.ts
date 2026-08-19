@@ -55,11 +55,12 @@ export function buildConversation(
   sessionID: string,
   options?: {
     /**
-     * Where session timestamps live. "assistant" (default) models the
-     * CURRENT production render: timestamps are compressible content and do
-     * not survive an anchored cut. "user" is the counterfactual: timestamps
-     * ride the verbatim-preserved lane — used to isolate the
-     * temporal-grounding gap the 2026-08-19 run found (see bench/README.md).
+     * Where session timestamps live. Production renders NO timestamps at
+     * all; "assistant" (default) is therefore a BEST-CASE variant of
+     * production (compressible content that does not survive an anchored
+     * cut), and "user" is the counterfactual where timestamps ride the
+     * verbatim-preserved lane — used to isolate the temporal-grounding gap
+     * (#737, see bench/README.md).
      */
     readonly headerRole?: "assistant" | "user";
   },
@@ -69,10 +70,10 @@ export function buildConversation(
   for (let index = 1; index < 64; index += 1) {
     const session = c[`session_${index}`];
     if (!Array.isArray(session)) continue;
-    // LoCoMo turns speak in relative time ("yesterday", "last year"); the
-    // session timestamp is part of the record, exactly like real agent
-    // session logs. Injected as an assistant-role header so it is
-    // compressible content, not user-sacred text.
+    // LoCoMo turns speak in relative time ("yesterday", "last year") and
+    // need their session timestamp to be answerable at all. Injected as an
+    // assistant-role header (compressible, not user-sacred) — a best-case
+    // variant of production, which renders no timestamps (#737).
     const dateTime = c[`session_${index}_date_time`];
     if (typeof dateTime === "string") {
       turns.push({
