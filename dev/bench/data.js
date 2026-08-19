@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787138609187,
+  "lastUpdate": 1787144128069,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58001,6 +58001,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524295,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8326c5acdc910ba799ace1f045c7c49f7497f2bb",
+          "message": "chore: remove proven-dead code (audit batch ③) (#744)\n\n* chore(openomni): delete unwired flat-event projection spine (dead)\n\nThe #493 I1 flat-event projection (src/projection/) had exactly one\nconsumer — its own test — reached via the ./projection subpath export.\nNo production module across packages, apps, or scripts imports it. A\ntest-only consumer does not make the code live.\n\nRemove the directory, its sole test, and the ./projection subpath from\nthe package manifest.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(openomni): delete unwired Stakes calculator (dead)\n\nThe ledger Stakes calculator (packages/openomni/src/ledger/, ~1080 LOC)\nhad exactly one non-test production edge: a type-only import\n(CompletionStakesInjection) in completion-admission.ts. The runtime\nstakesResolver was never wired into createWorkItemCompletionGateway —\nthe sole production composition root (dispatch/setup.ts) constructs the\ngateway with only completionWriter/policyEngine/now. Every stakesResolver\ninjection lived in tests, and a test-only consumer does not make code\nlive.\n\nSeverance of the type edge: removed the CompletionStakesResolver port,\nresolveStakes, and the stakesResolver option across\nCompletionDecisionDependencies / service options / gateway options, and\ndropped the fold's optional `stakes` input. The pure fold's asserted-\nresult arm now permanently takes its \"no stakes\" branch (block with\nhigh_risk_asserted + stakes_required), which is exactly the behavior\nproduction already had with no resolver wired. The persisted\nCompletionAdmission.stakesRef protocol field is untouched (kept\noptional); the fold simply never populates it, as before.\n\nRemoved the directory, its ./ledger subpath export, the stakes test\nsuite, and the stakes/completion-admission driver harnesses; retargeted\nthe surviving completion-admission tests onto the permanent no-stakes\nbehavior.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore(openomni): delete dormant #493 conformance-replay cluster (dead)\n\nverifier-conformance-{replay,upcast,interleaving}.ts (~560 LOC) are\nself-documented dormant pending #493, with zero production consumers —\nonly the barrel re-export, a dedicated test suite, and the verifier\nregistry driver self-test exercised them. A test-only consumer does not\nmake code live.\n\nRemoved the three modules, their barrel re-exports in\nverifier-conformance.ts, their tests (conformance-replay/-interleaving),\nand the replay/upcast/interleaving conformance smoke from the registry\ndriver self-test (retargeting the driver/benchmark tests off the removed\n`conformance` receipt fields).\n\nverifier-conformance-canonical.ts survives intact — protocol\nwork-item/attempt.ts:38 still cites its hashCanonicalJson, and\nverifier-registry-core / worker-completion / verifier-sandbox /\nverifier-registry-contract consume its core (hashCanonicalJson,\ncanonicalJson, snapshotJsonValue, createCanonicalSchemas). The now\ninternal-only canonical helpers (snapshotFirst*, standalone Json/digest\nschemas, EnvironmentFingerprint type, freezeJson) were unexported/removed\nto keep the dead-export ratchet green.\n\nopenomni coverage floor moves 95.32% -> 94.63% (deletion of well-covered\ndormant modules); baseline shrunk for openomni only.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore: remove never-written validResponders + dead enforceTimeout\n\nTwo scattered dead surfaces from the post-campaign audit:\n\nvalidResponders (engagement): the Engagement.Record field and its\nTransitionInput input were only ever READ (resident engagement context\nprose, engagement tool output) and accepted by the fold — no production\ntransition ever wrote it; only a protocol test set it. Its docstring\nclaimed a live \"§5 second filter\" that never ran. Removed the field from\nschema.ts / fold.ts, the two read sites, the dead doc, and the test\nwrite; regenerated the Greg Young schema snapshot (surgical — only\nEngagement.Record/TransitionInput lose validResponders).\n\nenforceTimeout (tool-runtime-policy): a second timeout implementation\nwith zero production callers — executor.ts runs its own timeout race and\nonly uses the live TimeoutError class. Removed enforceTimeout + its\nTimeoutOptions interface and the two integration tests that were its only\ncallers; TimeoutError survives.\n\nThe tool-runtime-policy \"policy theater\" (minted allow-decisions) was\nre-examined and SKIPPED: every minted decision is either RETURNED to\npublishPolicyEvaluated (a real observer) or passed to the onDecision\ncallback contract exercised by executor.test.ts and the integration\ntest's \"collects decisions via onDecision callback\" — none is provably\ndiscarded/unobserved, so per the audit's conservative guidance it stays.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore: unexport dead protocol members + drop frozen worker-run reads\n\nPost-campaign audit, member-level dead surface:\n\nprotocol\n- TraceId type: unexported in trace/index.ts. Zero external consumers —\n  @openomni/telemetry defines its own TraceId and imports only newTraceId\n  (which keeps the now-internal type as its return annotation).\n- MessagingAuditEvents: removed the channels router re-export\n  (router/index.ts) — zero consumers repo-wide.\n- Union constituents (Message.StepStart/StepFinishPart, Tool.Config/State,\n  Token.Usage/Count, NamedError.Unknown, AppConnector.Installation-\n  Status/Requires) were re-verified and KEPT: each is a live cross-file\n  production contract or referenced by name in isolation tests, and\n  Token.Usage is a deliberate frozen #498 token->llm split handoff pinned\n  in the schema snapshot.\n\nledger\n- worker-run frozen-store READ methods listBySession/listByStatus: zero\n  production callers (get stays — the live upcast-on-read attempt view).\n  Removed the namespace functions, the Adapter interface members, and the\n  sqlite impl; retargeted the three frozen-read test probes and the\n  channels allocation-census harness (worker-run writes are frozen, so the\n  count is structurally constant and drops out of the delta cleanly).\n- pending-ask get/list: SKIPPED with proof. Both have zero production\n  callers, but removal blast-radiuses into 6+ test files (a dedicated\n  store.test.ts, adapter-direct probes, and band-boundary string fixtures)\n  for two read forwarders on an already-frozen store whose live read\n  (findByCorrelation) stays — not worth the risk.\n- SqliteStorageAdapter: KEPT. Production initialize.ts needs the class and\n  ~16 ledger-internal tests import it by deep path; the cross-package\n  barrel re-export is test-only but there is no test-only subpath\n  convention in this repo to relocate it to, so it stays as-is.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor: reduce ingress authority to the live tier-check (dead)\n\nThe pre-split authority in router/authority-actor.ts + authority.ts carried\nrole fallbacks (resident/user/manager/worker), the control-action machinery\n(getEventAction / normalizeControlAction / inputAction / actionLabels /\nworkerControlActions), and worker-control authority rules 1-6. All were\nUNREACHABLE on every routed path: the sole external producer stamps\nrole:\"user\", and by the time an event reaches the routed pre-run it always\ncarries a resolved trustTier — registry-resolved actor tier or a channel-grant\ndefaultTier materialized by applyChannelGrantTreatment; an untiered actor\nblocks at actor_identity / channel_ceiling in resolve-route before routing\never admits it here. So permissionActor is always a TrustTier enum value\n(never \"worker\"/\"resident\") and eventAction is normally undefined — rules 1-6\nand the role branches never fire.\n\nReduced isAuthorizedTopLevelActor to the pure tier check (top-level tiers\nallow; evidence_only collaborator/observer to a resident target allow; anything\nelse, including untiered, fails closed) and evaluateIngressAuthority to the two\nlive `authorized` rules. The change is fail-closed: an untiered actor now\ndenies where a pre-split role fallback might have allowed — but no routed path\ndelivers an untiered actor here, so production behavior is unchanged. Kept the\nload-bearing tier machinery (getActor, actorTrustTier, top/evidence tier sets,\nresolveTarget, applyChannelGrantTreatment) and rules 7-8. Retargeted the two\nauthority test files off the removed role/worker-control branches onto the\ntier-check contract.\n\nDEFERRED (not in this commit): the router frozen tier serving\npending_ask/pending_interaction. pending_ask has NO TTL — its read gate is\nstatus-only and the store is frozen, so any row left open/ambiguous at freeze\nserves live indefinitely. Drain is unprovable without a runtime DB (none exists\nin the worktree). Deleting the frozen-read code would risk dropping a still-\ncorrelating historical reply. Measurement plan before any deletion, per real\ndeployment DB:\n  SELECT count(*) FROM pending_ask WHERE status IN ('open','ambiguous');  -- must be 0\n  SELECT max(expires_at), max(follow_up_until)\n    FROM pending_interaction WHERE status IN ('open','resolved','follow_up');  -- both < now_ms\nOnly when ask-count is 0 across all deployments and the pending_interaction\nmaxima are already past is the tier provably drained and safe to remove.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T21:54:16+09:00",
+          "tree_id": "0888b5a0fa25751497a7e07ff6fd9e95648ff0da",
+          "url": "https://github.com/INONONO66/openomni/commit/8326c5acdc910ba799ace1f045c7c49f7497f2bb"
+        },
+        "date": 1787144126747,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2401,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1052,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 937,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45921,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2333,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516717,
             "unit": "ns/op"
           }
         ]
