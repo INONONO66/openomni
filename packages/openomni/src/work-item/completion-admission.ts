@@ -3,7 +3,6 @@ import { WorkItem, type Policy } from "@openomni/protocol";
 import { createDurableCompletionResultAuthorityPort } from "../evidence/verifier-recorded-input.js";
 import { Storage, WorkItemStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import type { CompletionStakesInjection } from "../ledger/index.js";
 import {
   evaluateCompletion as foldCompletion,
   type CompletionEvaluationInput,
@@ -326,12 +325,6 @@ type CompletionAuthoritySubject = Readonly<{
   expectedHead: number;
 }>;
 
-export type CompletionStakesResolver = Readonly<{
-  resolve(
-    subject: CompletionAuthoritySubject,
-  ): CompletionStakesInjection | Promise<CompletionStakesInjection>;
-}>;
-
 export type CompletionResultAuthorityCandidate = Readonly<{
   workItemHash: string;
   requestId: string;
@@ -381,7 +374,6 @@ export type CompletionDecision = (
 
 type CompletionDecisionDependencies = Readonly<{
   policyEngine: ReturnType<typeof PolicyEngine.create>;
-  stakesResolver?: CompletionStakesResolver;
   resultAuthorityPort?: CompletionResultAuthorityPort;
   verificationErrorAuthorityPort?: CompletionVerificationErrorAuthorityPort;
   ownerOverrideValidator?: OwnerOverrideValidator;
@@ -394,12 +386,6 @@ type CompletionCandidate = Readonly<{
   reasonCodes: readonly string[];
   assertedCriterionIds: readonly string[];
   proposedFactIds: readonly string[];
-}>;
-
-type CompletionStakesContext = Readonly<{
-  ref: string;
-  valueMilli: number;
-  comparison: "below" | "at" | "above";
 }>;
 
 const EMPTY_POLICY: CompletionPolicy = Object.freeze({
@@ -434,18 +420,13 @@ export function createCompletionDecision(
     const foldInput = completionInput(item, request, now());
     const preAdmission = foldWithAuthorityErrors(foldInput);
     const candidate = completionCandidate(item, request, preAdmission);
-    const stakes = await resolveStakes(
-      dependencies.stakesResolver,
-      authoritySubject(request),
-      candidate,
-    );
     const policyDecision = await dependencies.policyEngine.dispatchPoint("work.complete.pre", {
       workItemHash: request.workItemHash,
       requestId: request.id,
       contractRevision: request.contractRevision,
       basisRef: request.basisRef,
       expectedHead: request.expectedHead,
-      completionCandidate: stakes ? { ...candidate, stakes } : candidate,
+      completionCandidate: candidate,
       unresolvedBlockerIds: item.blockers
         .filter((blocker) => blocker.resolvedAt === undefined)
         .map((blocker) => blocker.id),
@@ -460,7 +441,6 @@ export function createCompletionDecision(
     return foldWithAuthorityErrors({
       ...foldInput,
       policy: completionPolicy(policyDecision),
-      ...(stakes ? { stakes: { ref: stakes.ref, comparison: stakes.comparison } } : {}),
       ...(ownerOverride ? { ownerOverride } : {}),
     });
   };
@@ -746,48 +726,6 @@ function completionPolicy(decision: Policy.PolicyDecision): CompletionPolicy {
   };
 }
 
-async function resolveStakes(
-  resolver: CompletionStakesResolver | undefined,
-  subject: CompletionAuthoritySubject,
-  candidate: CompletionCandidate,
-): Promise<CompletionStakesContext | undefined> {
-  if (!resolver || candidate.assertedCriterionIds.length === 0) {
-    return undefined;
-  }
-  const injection = await resolver.resolve(subject);
-  if (!injection.ok) return undefined;
-  if (
-    injection.context.surface !== "work.complete.pre" ||
-    injection.context.workItemHash !== subject.workItemHash ||
-    injection.context.requestId !== subject.requestId
-  ) {
-    throw new CompletionAdmissionError(
-      "invalid_subject",
-      `Stakes completion subject does not match ${subject.workItemHash}:${subject.requestId}`,
-    );
-  }
-  if (
-    injection.context.contractRevision !== subject.contractRevision ||
-    injection.context.basisRef !== subject.basisRef
-  ) {
-    throw new CompletionAdmissionError(
-      "stale_basis",
-      `Stakes completion basis does not match ${subject.workItemHash}:${subject.requestId}`,
-    );
-  }
-  if (injection.context.expectedHead !== subject.expectedHead) {
-    throw new CompletionAdmissionError(
-      "stale_head",
-      `Stakes completion head does not match ${subject.expectedHead}`,
-    );
-  }
-  return {
-    ref: injection.context.stakes.reference,
-    valueMilli: injection.context.stakes.value,
-    comparison: injection.context.stakes.comparison,
-  };
-}
-
 async function resolveOwnerOverride(
   validator: OwnerOverrideValidator | undefined,
   item: WorkItem.Info,
@@ -924,7 +862,6 @@ type CompletionAdmissionServiceOptions = Readonly<{
   policyEngine?: ReturnType<typeof PolicyEngine.create>;
   resultAuthorityPort?: CompletionResultAuthorityPort;
   verificationErrorAuthorityPort?: CompletionVerificationErrorAuthorityPort;
-  stakesResolver?: CompletionStakesResolver;
   ownerOverrideValidator?: OwnerOverrideValidator;
 }>;
 
@@ -1165,7 +1102,6 @@ function decisionDependencies(
     resultAuthorityPort:
       options.resultAuthorityPort ?? createDurableCompletionResultAuthorityPort(),
     verificationErrorAuthorityPort,
-    stakesResolver: options.stakesResolver,
     ownerOverrideValidator: options.ownerOverrideValidator,
     now: options.now,
   };
@@ -2137,7 +2073,6 @@ type WorkItemCompletionGatewayOptions = Readonly<{
   policyEngine: ReturnType<typeof PolicyEngine.create>;
   resultAuthorityPort?: CompletionResultAuthorityPort;
   verificationErrorAuthorityPort?: CompletionVerificationErrorAuthorityPort;
-  stakesResolver?: CompletionStakesResolver;
   ownerOverrideValidator?: OwnerOverrideValidator;
   now?: () => number;
   reservation?: Readonly<{ ownerId?: string; leaseDurationMs?: number }>;
@@ -2153,7 +2088,6 @@ export function createWorkItemCompletionGateway(
     policyEngine: options.policyEngine,
     resultAuthorityPort: options.resultAuthorityPort,
     verificationErrorAuthorityPort: options.verificationErrorAuthorityPort,
-    stakesResolver: options.stakesResolver,
     ownerOverrideValidator: options.ownerOverrideValidator,
     reservation: {
       ownerId: options.reservation?.ownerId ?? `completion-gateway:${crypto.randomUUID()}`,

@@ -218,8 +218,7 @@
     "state",
     "terms",
     "title",
-    "updatedAt",
-    "validResponders"
+    "updatedAt"
   ],
   "Engagement.Terms": [
     "autoApprove",
@@ -233,7 +232,6 @@
     "reason",
     "termCrossed",
     "to",
-    "validResponders",
     "waitIds"
   ],
   "Execution.LogEvent": [

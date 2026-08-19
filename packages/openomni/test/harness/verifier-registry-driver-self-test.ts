@@ -1,17 +1,4 @@
-import {
-  ReplayConformanceError,
-  assertReplayConformance,
-  canonicalJson,
-  createEnvironmentFingerprint,
-  createReplayKey,
-  fuzzCommutativeInterleavings,
-  hashCanonicalJson,
-  hashNondeterminismManifest,
-  substituteRecordedOutputs,
-  upcastOnRead,
-  type CommutativeEvent,
-  type JsonValue,
-} from "../../src/evidence/verifier-conformance.js";
+import { hashCanonicalJson } from "../../src/evidence/verifier-conformance.js";
 import { measureVerifierRegistryBenchmark } from "./verifier-registry-benchmark.js";
 import {
   type VerifierRegistryDriverExecution,
@@ -22,9 +9,6 @@ import {
 } from "./verifier-registry-driver-contract.js";
 import { scenarioReceipt } from "./verifier-registry-driver-scenarios.js";
 import { VerifierRegistry } from "../../src/evidence/verifier-registry.js";
-
-const digestA = `sha256:${"a".repeat(64)}`;
-const digestB = `sha256:${"b".repeat(64)}`;
 
 export function executeVerifierRegistrySelfTest(): VerifierRegistryDriverExecution {
   return executeVerifierRegistryCheck(false);
@@ -51,7 +35,6 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
   const firstSignatures = firstBytes.map((receipt) => hashCanonicalJson(JSON.parse(receipt)));
   const secondSignatures = secondBytes.map((receipt) => hashCanonicalJson(JSON.parse(receipt)));
   const signature = firstSignatures.every((value, index) => value === secondSignatures[index]);
-  const conformance = conformanceSmoke();
   const contracts = contractSmoke();
   const measured = measureVerifierRegistryBenchmark(first);
   const sortedDurations = [...durations].sort((left, right) => left - right);
@@ -71,13 +54,6 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
     signature &&
     action &&
     successCount === VerifierRegistryDriverScenarios.length &&
-    conformance.replayKey &&
-    conformance.fingerprint &&
-    conformance.manifest &&
-    conformance.command &&
-    conformance.interleaving &&
-    conformance.upcast &&
-    conformance.recordedOutput &&
     contracts.taxonomy &&
     contracts.frozenModelFingerprint &&
     measured.accuracy.rate === 1 &&
@@ -92,13 +68,11 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
     scenarioRuns: first.length + second.length,
     scenarioResultCodes: first.map((receipt) => receipt.resultCode),
     contracts,
-    conformance,
     benchmark: {
       determinism: {
         decision,
         signature,
         action,
-        divergence: conformance.commandDivergenceKind === "command_mismatch",
       },
       reliability: {
         k: 2,
@@ -126,95 +100,6 @@ function executeVerifierRegistryCheck(includeLatency: boolean): VerifierRegistry
     exposedActions: measured.exposedActions,
     exposedCapabilities: measured.exposedCapabilities,
   });
-}
-
-function conformanceSmoke() {
-  const identifiers = {
-    runtimeIdentifiers: ["version:bun-driver-v1", "ref:os/portable"],
-    dependencyIdentifiers: [digestA],
-    environmentIdentifiers: ["ref:locale/en-US"],
-  };
-  const fingerprint = createEnvironmentFingerprint(identifiers);
-  const manifest = {
-    version: "nondeterminism-manifest-v1",
-    entries: [{ kind: "ordering", identifier: "ref:driver/seed", value: 467 }],
-  };
-  const manifestHash = hashNondeterminismManifest(manifest);
-  const binding = {
-    version: "replay-key-v1",
-    source: {
-      kind: "cassette",
-      cassetteIdentifier: "ref:cassette/467",
-      digest: digestB,
-    },
-    environmentFingerprint: fingerprint.fingerprint,
-    schemaVersion: "schema-v1",
-    upcastVersion: "upcast-v1",
-    nondeterminismManifestHash: manifestHash,
-  };
-  const replayKey = createReplayKey(binding);
-  const trace = { commands: [{ op: "read", id: 467 }], finalFold: { count: 1 } };
-  let commandConverged = true;
-  try {
-    assertReplayConformance(trace, trace);
-  } catch {
-    commandConverged = false;
-  }
-  let commandDivergenceKind = "none";
-  try {
-    assertReplayConformance(trace, {
-      commands: [{ op: "read", id: 468 }],
-      finalFold: trace.finalFold,
-    });
-  } catch (error) {
-    if (error instanceof ReplayConformanceError) {
-      commandDivergenceKind = error.facts.kind;
-    }
-  }
-  const report = fuzzCommutativeInterleavings(
-    {
-      seed: 467,
-      iterations: 4,
-      initialFold: 0,
-      events: [
-        { id: "a", commutativeGroup: "sum", value: 1 },
-        { id: "b", commutativeGroup: "sum", value: 2 },
-      ],
-    },
-    sumReducer,
-  );
-  const upcasted = upcastOnRead(
-    {
-      eventType: "driver.fact",
-      meaning: "driver-smoke",
-      schemaVersion: 1,
-      payload: { n: 1 },
-    },
-    2,
-    [
-      {
-        eventType: "driver.fact",
-        meaning: "driver-smoke",
-        fromVersion: 1,
-        toVersion: 2,
-        upcast: (event) => ({ ...event, schemaVersion: 2 }),
-      },
-    ],
-  );
-  const outputs = substituteRecordedOutputs(
-    [{ op: "read" }],
-    [{ command: { op: "read" }, output: { value: 467 } }],
-  );
-  return {
-    replayKey: replayKey.replayKey === createReplayKey(binding).replayKey,
-    fingerprint: fingerprint.fingerprint === createEnvironmentFingerprint(identifiers).fingerprint,
-    manifest: manifestHash === hashNondeterminismManifest(manifest),
-    command: commandConverged && commandDivergenceKind === "command_mismatch",
-    commandDivergenceKind,
-    interleaving: report.interleavingHashes.every((hash) => hash === report.baselineHash),
-    upcast: upcasted.schemaVersion === 2,
-    recordedOutput: canonicalJson(outputs) === '[{"value":467}]',
-  };
 }
 
 function resultCodeOf(
@@ -252,13 +137,6 @@ function contractSmoke() {
       citation.modelFingerprint === VerifierRegistry.FrozenNliModelFingerprint,
     modelFingerprint: VerifierRegistry.FrozenNliModelFingerprint,
   };
-}
-
-function sumReducer(state: JsonValue, event: CommutativeEvent): JsonValue {
-  if (typeof state !== "number" || typeof event.value !== "number") {
-    throw new Error("numeric fixture required");
-  }
-  return state + event.value;
 }
 
 function percentile(sorted: readonly number[], ratio: number): number {

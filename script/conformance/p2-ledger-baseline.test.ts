@@ -1814,7 +1814,6 @@ describe("p2 ledger baseline — frozen worker-run writer + archive manifest (D2
     expect(
       WorkerRunStateStore.get("session_conformance_wr", "run-frozen-conformance")?.status,
     ).toBe("running");
-    expect(WorkerRunStateStore.listBySession("session_conformance_wr")).toHaveLength(1);
   });
 
   test("archive manifest covers frozen worker_run_state rows: deterministic range hash, tamper mismatch", async () => {

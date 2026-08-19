@@ -35,14 +35,10 @@ export namespace EngagementContext {
       record.openWaitIds.length > 0
         ? `open waits: ${record.openWaitIds.join(", ")}`
         : "no open waits";
-    const responders =
-      record.validResponders === undefined || record.validResponders.length === 0
-        ? ""
-        : `; valid responders: ${record.validResponders.join(", ")}`;
     const marker = resumed ? " ← THIS DELIVERY RESUMES THIS ENGAGEMENT" : "";
     return `- [${record.id}] "${record.title}" — state: ${record.state}; terms: ${renderTerms(
       record.terms,
-    )}; ${waits}${responders}${marker}`;
+    )}; ${waits}${marker}`;
   }
 
   /**

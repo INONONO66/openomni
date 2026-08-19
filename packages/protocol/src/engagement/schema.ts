@@ -52,8 +52,6 @@ export const Record = z
     terms: Terms,
     /** Waits that may resume this engagement in its current state. */
     openWaitIds: z.array(z.string().min(1)),
-    /** Valid responders for the current state — everyone else degrades to evidence (§5 second filter). */
-    validResponders: z.array(z.string().min(1)).optional(),
     /** Machine-enforced expiry instant, seeded from terms.deadline at open. */
     expiresAt: z.number().optional(),
     createdAt: z.number(),
@@ -71,7 +69,6 @@ export type Record = z.infer<typeof Record>;
 export const Create = Record.omit({
   state: true,
   openWaitIds: true,
-  validResponders: true,
   expiresAt: true,
   revision: true,
   createdAt: true,

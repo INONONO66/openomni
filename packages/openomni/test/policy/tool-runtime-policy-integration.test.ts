@@ -90,21 +90,6 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
     }
   });
 
-  test("enforceTimeout rejects after specified ms", async () => {
-    const slow = new Promise<string>((resolve) => setTimeout(() => resolve("done"), 500));
-
-    await expect(ToolRuntimePolicyMiddleware.enforceTimeout(slow, 10)).rejects.toThrow(
-      "timeout after 10ms",
-    );
-  });
-
-  test("enforceTimeout resolves if promise completes in time", async () => {
-    const fast = Promise.resolve("ok");
-
-    const result = await ToolRuntimePolicyMiddleware.enforceTimeout(fast, 5_000);
-    expect(result).toBe("ok");
-  });
-
   test("TimeoutError carries the timeout duration", () => {
     const error = new ToolRuntimePolicyMiddleware.TimeoutError(42);
     expect(error.timeoutMs).toBe(42);

@@ -19,7 +19,7 @@ const MAX_JSON_STRING_LENGTH = 1_048_576;
 const MAX_JSON_CODE_UNITS = 7_340_032;
 const forbiddenJsonKeys = new Set(["__proto__", "constructor", "prototype"]);
 
-export function snapshotFirstSchema<Schema extends z.ZodTypeAny>(
+function snapshotFirstSchema<Schema extends z.ZodTypeAny>(
   schema: Schema,
   snapshot: (input: unknown) => unknown,
 ): Schema {
@@ -68,7 +68,7 @@ export function snapshotFirstSchema<Schema extends z.ZodTypeAny>(
   return schema;
 }
 
-export function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Schema): Schema {
+function snapshotFirstJsonSchema<Schema extends z.ZodTypeAny>(schema: Schema): Schema {
   return snapshotFirstSchema(schema, snapshotJsonValue);
 }
 
@@ -122,9 +122,9 @@ export function createCanonicalSchemas() {
 
 const schemas = createCanonicalSchemas();
 
-export const JsonValueSchema = schemas.JsonValueSchema;
-export const Sha256DigestSchema = schemas.Sha256DigestSchema;
-export const RedactedIdentifierSchema = schemas.RedactedIdentifierSchema;
+const JsonValueSchema = schemas.JsonValueSchema;
+const Sha256DigestSchema = schemas.Sha256DigestSchema;
+const RedactedIdentifierSchema = schemas.RedactedIdentifierSchema;
 
 export function canonicalJson(input: unknown): string {
   return renderCanonical(snapshotJsonValue(input));
@@ -154,10 +154,6 @@ function renderCanonical(value: JsonValue): string {
     fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
   }
   return `{${fields.join(",")}}`;
-}
-
-export function freezeJson(value: JsonValue): JsonValue {
-  return snapshotJsonValue(value);
 }
 
 export const EnvironmentFingerprintInputSchema = snapshotFirstJsonSchema(
@@ -190,7 +186,7 @@ export const EnvironmentFingerprintSchema = snapshotFirstJsonSchema(
     }
   }),
 );
-export type EnvironmentFingerprint = Readonly<z.infer<typeof EnvironmentFingerprintSchema>>;
+type EnvironmentFingerprint = Readonly<z.infer<typeof EnvironmentFingerprintSchema>>;
 
 export function createEnvironmentFingerprint(input: unknown): EnvironmentFingerprint {
   const parsed = EnvironmentFingerprintInputSchema.parse(input);

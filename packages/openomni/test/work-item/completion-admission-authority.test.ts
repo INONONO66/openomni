@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision, WorkItem } from "@openomni/protocol";
-import * as Ledger from "../../src/ledger/index.js";
 import {
   CompletionAdmissionError,
   completionRequestRoot,
@@ -216,54 +215,6 @@ function admissionInput(overrides: Readonly<Record<string, unknown>> = {}) {
   };
 }
 
-function stakesInjection(
-  subjectOverrides: Readonly<Record<string, unknown>> = {},
-  high = true,
-): Ledger.CompletionStakesInjection {
-  const window = Ledger.Stakes.createWindow({
-    ownerKey: "owner:authority",
-    windowId: "window:authority",
-    openedAt: 1,
-    closesAt: 10,
-  });
-  const stakes = Ledger.Stakes.compute(
-    {
-      actionId: "action:authority",
-      ownerKey: window.ownerKey,
-      windowRef: window.windowRef,
-      ledgerObservedAt: 2,
-      facts: {
-        irreversibleChangeCount: high ? 10 : 0,
-        externalSurfaceCount: high ? 10 : 0,
-        spendMicros: high ? 100_000_000 : 0,
-        budgetReservedMicros: high ? 100_000_000 : 0,
-        outreachRecipientCount: high ? 10 : 0,
-        contentFingerprints: [
-          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        ],
-      },
-    },
-    {
-      window,
-      actions: [],
-      knownFingerprints: [],
-    },
-  );
-  return {
-    ok: true,
-    context: {
-      surface: "work.complete.pre",
-      workItemHash: "wi_authority",
-      requestId: "request:completion",
-      contractRevision: "contract:v1",
-      basisRef: "basis:v1",
-      expectedHead: 2,
-      stakes,
-      ...subjectOverrides,
-    },
-  } as Ledger.CompletionStakesInjection;
-}
-
 function createPolicyEngine(
   options: Readonly<{
     allowAsserted?: boolean;
@@ -334,7 +285,6 @@ function createPolicyEngine(
 
 type ResolverDependencies = Readonly<{
   policyEngine: ReturnType<typeof PolicyEngine.create>;
-  stakesResolver?: Readonly<{ resolve(subject: unknown): unknown }>;
   resultAuthorityPort?: Readonly<{ validate(candidate: unknown): unknown }>;
   ownerOverrideValidator?: (candidate: unknown) => boolean | Promise<boolean>;
   now?: () => number;
@@ -418,7 +368,7 @@ describe("completion admission authority resolver", () => {
     expect(WorkItem.CompletionAdmission.safeParse(admissionInput()).success).toBe(true);
   });
 
-  test("the closure dispatches policy and applies criterion-scoped asserted allowance", async () => {
+  test("the closure dispatches the actual policy point with the completion candidate", async () => {
     let dispatchedContext: unknown;
     const policyEngine = createPolicyEngine({
       allowAsserted: true,
@@ -429,12 +379,12 @@ describe("completion admission authority resolver", () => {
 
     const admission = await resolveAdmission({
       policyEngine,
-      stakesResolver: { resolve: () => stakesInjection({}, false) },
       now: () => 10,
     });
 
     expect(dispatchedContext).toMatchObject(policyContext());
-    expect(admission?.decision).toBe("admit");
+    // An asserted result has no independent risk gate, so it always blocks.
+    expect(admission?.decision).toBe("block");
     expect(admission?.policyRef).toBe("agent.policy.composed");
   });
 
@@ -530,9 +480,8 @@ describe("completion admission authority resolver", () => {
     expect(await resolveErrorCode(item(), candidate)).toBe("invalid_verifier");
   });
 
-  test("rejects a hostile verified result before Stakes and policy", async () => {
+  test("rejects a hostile verified result before authority and policy", async () => {
     let portCalls = 0;
-    let stakesCalls = 0;
     let policyCalls = 0;
     const candidate = request({ results: [hostileVerifiedResult()] });
 
@@ -543,12 +492,6 @@ describe("completion admission authority resolver", () => {
           policyCalls += 1;
         },
       }),
-      stakesResolver: {
-        resolve() {
-          stakesCalls += 1;
-          return stakesInjection();
-        },
-      },
       resultAuthorityPort: {
         validate() {
           portCalls += 1;
@@ -559,7 +502,6 @@ describe("completion admission authority resolver", () => {
 
     expect(code).toBe("invalid_verifier");
     expect(portCalls).toBe(0);
-    expect(stakesCalls).toBe(0);
     expect(policyCalls).toBe(0);
   });
 
@@ -660,30 +602,17 @@ describe("completion admission authority resolver", () => {
     expect(code).toBe("invalid_verifier");
   });
 
-  test("acquires Stakes before policy and includes the typed kernel value in the candidate", async () => {
-    const order: string[] = [];
+  test("includes the completion candidate in the dispatched policy context", async () => {
     let dispatchedContext: unknown;
-    const injection = stakesInjection();
     const policyEngine = createPolicyEngine({
       allowAsserted: true,
       observe: (context) => {
-        order.push("policy");
         dispatchedContext = context;
       },
     });
 
-    const admission = await resolveAdmission({
-      policyEngine,
-      stakesResolver: {
-        resolve() {
-          order.push("stakes");
-          return injection;
-        },
-      },
-      now: () => 10,
-    });
+    const admission = await resolveAdmission({ policyEngine, now: () => 10 }, item(), request());
 
-    expect(order).toEqual(["stakes", "policy"]);
     expect(dispatchedContext).toMatchObject({
       completionCandidate: {
         effectiveResultIds: ["result:one"],
@@ -691,28 +620,15 @@ describe("completion admission authority resolver", () => {
         reasonCodes: ["high_risk_asserted", "stakes_required"],
         assertedCriterionIds: [criterion.id],
         proposedFactIds: ["result:one"],
-        stakes: {
-          ref: injection.ok ? injection.context.stakes.reference : "unreachable",
-          valueMilli: injection.ok ? injection.context.stakes.value : -1,
-          comparison: injection.ok ? injection.context.stakes.comparison : "below",
-        },
       },
     });
-    expect(admission?.decision).toBe("escalate");
+    expect(admission?.decision).toBe("block");
   });
 
-  test("does not acquire Stakes when the pre-fold has no asserted result", async () => {
-    let resolverCalls = 0;
-
+  test("admits a verified pre-fold result without a risk gate", async () => {
     const admission = await resolveAdmission(
       {
         policyEngine: createPolicyEngine(),
-        stakesResolver: {
-          resolve() {
-            resolverCalls += 1;
-            return stakesInjection();
-          },
-        },
         resultAuthorityPort: { validate: () => ({ ok: true }) },
         now: () => 10,
       },
@@ -720,62 +636,20 @@ describe("completion admission authority resolver", () => {
       request({ observations: [observation()], results: [verifiedResult()] }),
     );
 
-    expect(resolverCalls).toBe(0);
     expect(admission?.decision).toBe("admit");
     expect(admission?.stakesRef).toBeUndefined();
   });
 
-  test("acquires Stakes for an asserted criterion not allowed by policy", async () => {
-    let resolvedSubject: unknown;
-
+  test("blocks an asserted criterion regardless of policy, leaving stakesRef unset", async () => {
     const admission = await resolveAdmission(
-      {
-        policyEngine: createPolicyEngine(),
-        stakesResolver: {
-          resolve(subject: unknown) {
-            resolvedSubject = subject;
-            return stakesInjection();
-          },
-        },
-        now: () => 10,
-      },
+      { policyEngine: createPolicyEngine({ allowAsserted: true }), now: () => 10 },
       item(),
       request(),
     );
 
-    expect(resolvedSubject).toMatchObject({
-      workItemHash: "wi_authority",
-      requestId: "request:completion",
-      contractRevision: "contract:v1",
-      basisRef: "basis:v1",
-      expectedHead: 2,
-    });
-    expect(admission?.decision).toBe("escalate");
-    expect(admission?.stakesRef).toStartWith("sha256:");
-  });
-
-  test.each([
-    ["surface", "invalid_subject", { surface: "authorized_voice" }],
-    ["workItemHash", "invalid_subject", { workItemHash: "wi_other" }],
-    ["requestId", "invalid_subject", { requestId: "request:other" }],
-    ["contractRevision", "stale_basis", { contractRevision: "contract:other" }],
-    ["basisRef", "stale_basis", { basisRef: "basis:other" }],
-    ["expectedHead", "stale_head", { expectedHead: 3 }],
-  ] as const)("rejects a same-hash Stakes success with mismatched %s before policy", async (_field, expectedCode, contextOverrides) => {
-    let policyCalls = 0;
-
-    const code = await resolveErrorCode(item(), request(), {
-      policyEngine: createPolicyEngine({
-        allowAsserted: true,
-        observe: () => {
-          policyCalls += 1;
-        },
-      }),
-      stakesResolver: { resolve: () => stakesInjection(contextOverrides) },
-    });
-
-    expect(code).toBe(expectedCode);
-    expect(policyCalls).toBe(0);
+    expect(admission?.decision).toBe("block");
+    expect(admission?.reasonCodes).toContain("high_risk_asserted");
+    expect(admission?.stakesRef).toBeUndefined();
   });
 
   test("blocks an asserted criterion not allowed by policy when Stakes is not injected", async () => {
@@ -881,14 +755,15 @@ describe("completion admission authority resolver", () => {
     const admission = await resolveAdmission(
       {
         policyEngine: createPolicyEngine({ allowAsserted: true }),
-        stakesResolver: { resolve: () => stakesInjection({}, false) },
         now: () => 10,
       },
       itemWithOwnerReservation(candidate),
       candidate,
     );
 
-    expect(admission?.decision).toBe("admit");
+    // Without a validator the Owner override is ignored; the asserted result
+    // then folds normally and blocks.
+    expect(admission?.decision).toBe("block");
     expect(admission?.ownerOverrideReceiptRef).toBeUndefined();
   });
 
@@ -1183,14 +1058,15 @@ describe("completion admission authority resolver", () => {
     const admission = await resolveAdmission(
       {
         policyEngine: createPolicyEngine({ allowAsserted: true }),
-        stakesResolver: { resolve: () => stakesInjection({}, false) },
         now: () => 10,
       },
       currentItem,
       request(),
     );
 
-    expect(admission?.decision).toBe("admit");
+    // The current asserted result still folds (its id stays effective) even
+    // though, with no risk gate, an asserted result blocks.
+    expect(admission?.decision).toBe("block");
     expect(admission?.effectiveResultIds).toContain("result:one");
   });
 
@@ -1256,7 +1132,6 @@ describe("completion admission authority resolver", () => {
       resolveAdmission(
         {
           policyEngine: createPolicyEngine({ allowAsserted: true }),
-          stakesResolver: { resolve: () => stakesInjection({}, false) },
           now: () => 10,
         },
         currentItem,
@@ -1286,7 +1161,6 @@ describe("completion admission authority resolver", () => {
       resolveAdmission(
         {
           policyEngine: createPolicyEngine({ allowAsserted: true }),
-          stakesResolver: { resolve: () => stakesInjection({}, false) },
           now: () => 10,
         },
         currentItem,
@@ -1365,7 +1239,7 @@ describe("completion admission authority resolver", () => {
     };
     const inputWithResolver = {
       ...foldInput,
-      stakesResolver: { resolve: () => (resolverCalls += 1) },
+      resultAuthorityPort: { validate: () => (resolverCalls += 1) },
     };
 
     expect(
