@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, extractText, Ingress } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { ActorRegistry, WaitStore } from "@openomni/ledger";
 import {
   createMappedOwnerSession,
@@ -13,16 +13,17 @@ import {
 
 /**
  * Deliver-contract projection invariant (#707 review NIT): the §2a verdict
- * fields (message / actorContext / waitContext / sessionId) are DERIVED
- * from the same recorded decision + routed event the brain executes via
- * `event` + `decision`. This suite pins the two representations to each
- * other so they cannot silently diverge — an actorContext that disagrees
- * with its decision would be a forged perimeter verdict.
+ * fields (actorContext / waitContext / sessionId) are DERIVED from the same
+ * recorded decision + routed event the brain executes via `event` +
+ * `decision`. This suite pins the two representations to each other so they
+ * cannot silently diverge — an actorContext that disagrees with its decision
+ * would be a forged perimeter verdict. (batch ② commit 3 dropped the
+ * write-only `message` projection.)
  */
 describe("Gateway.Deliver projection ≡ decision invariant", () => {
   beforeEach(resetRouterState);
 
-  test("a surface-default admission projects actorContext and message from the recorded decision", async () => {
+  test("a surface-default admission projects actorContext from the recorded decision", async () => {
     registerOwnerDm();
     const mapped = createMappedOwnerSession();
 
@@ -49,13 +50,6 @@ describe("Gateway.Deliver projection ≡ decision invariant", () => {
     });
     expect(decision.trustTier).toBe("owner");
     expect(decision.inboundTreatment).toBe("full_access");
-    // The message block is the event's projection — same identity, same text.
-    expect(delivery.message).toEqual({
-      messageId: delivery.event.id,
-      traceId: delivery.event.traceId,
-      surfaceKey: extractSurfaceKey(delivery.event),
-      text: extractText(delivery.event.payload),
-    });
     // The routed label is the decision's session.
     expect(delivery.sessionId).toBe(mapped.id);
     expect(decision.sessionId).toBe(mapped.id);

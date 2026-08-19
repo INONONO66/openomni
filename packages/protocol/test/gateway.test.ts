@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Gateway } from "../src/gateway/index.js";
 
-const message = {
-  messageId: "m-1",
-  traceId: "t-1",
-  surfaceKey: "telegram:bot:chat:123",
-  text: "hello",
-};
-
 const actorContext = {
   trustTier: "observer",
   inboundTreatment: "evidence_only",
@@ -43,7 +36,6 @@ describe("Gateway.Deliver", () => {
   test("parses a minimal anonymous delivery (no actorId, no waitContext)", () => {
     const parsed = Gateway.Deliver.parse({
       sessionId: "s-1",
-      message,
       actorContext,
       event,
       decision,
@@ -55,7 +47,6 @@ describe("Gateway.Deliver", () => {
   test("parses a wait resumption with waitContext", () => {
     const parsed = Gateway.Deliver.parse({
       sessionId: "s-1",
-      message: { ...message, replyToId: "m-0", threadId: "th-1" },
       actorContext: { ...actorContext, actorId: "a-7", trustTier: "collaborator" },
       waitContext: { waitId: "w-1", allowedAction: "report_result", engagementId: "e-1" },
       event,
@@ -68,7 +59,6 @@ describe("Gateway.Deliver", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message,
         actorContext,
         event,
         decision,
@@ -78,7 +68,6 @@ describe("Gateway.Deliver", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message,
         actorContext: { ...actorContext, conductOverride: "admin" },
         event,
         decision,
@@ -90,7 +79,6 @@ describe("Gateway.Deliver", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message,
         actorContext: { ...actorContext, inboundTreatment: "drop" },
         event,
         decision,
@@ -98,20 +86,10 @@ describe("Gateway.Deliver", () => {
     ).toThrow();
   });
 
-  test("nested strictness: message and waitContext reject unknown fields", () => {
+  test("nested strictness: waitContext rejects unknown fields", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message: { ...message, rawPlatformPayload: {} },
-        actorContext,
-        event,
-        decision,
-      }),
-    ).toThrow();
-    expect(() =>
-      Gateway.Deliver.parse({
-        sessionId: "s-1",
-        message,
         actorContext,
         waitContext: { waitId: "w-1", allowedAction: "report_result", sessionPeek: true },
         event,
@@ -120,31 +98,10 @@ describe("Gateway.Deliver", () => {
     ).toThrow();
   });
 
-  test("media reference needs a url or filename; kind alone is not addressable", () => {
-    expect(() =>
-      Gateway.Deliver.parse({
-        sessionId: "s-1",
-        message: { ...message, media: [{ kind: "image" }] },
-        actorContext,
-        event,
-        decision,
-      }),
-    ).toThrow();
-    const ok = Gateway.Deliver.parse({
-      sessionId: "s-1",
-      message: { ...message, media: [{ kind: "image", url: "https://x/y.png" }] },
-      actorContext,
-      event,
-      decision,
-    });
-    expect(ok.message.media?.length).toBe(1);
-  });
-
   test("rejects an out-of-enum treatment or trust tier", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message,
         actorContext: { ...actorContext, inboundTreatment: "root_access" },
         event,
         decision,
@@ -153,7 +110,6 @@ describe("Gateway.Deliver", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message,
         actorContext: { ...actorContext, trustTier: "manager_i_swear" },
         event,
         decision,
@@ -166,7 +122,6 @@ describe("Gateway.Deliver", () => {
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
-        message,
         actorContext: withoutOrigin,
         event,
         decision,
@@ -175,9 +130,7 @@ describe("Gateway.Deliver", () => {
   });
 
   test("a Deliver without the recorded decision is rejected", () => {
-    expect(() =>
-      Gateway.Deliver.parse({ sessionId: "s-1", message, actorContext, event }),
-    ).toThrow();
+    expect(() => Gateway.Deliver.parse({ sessionId: "s-1", actorContext, event })).toThrow();
   });
 
   test("a parsed DeliveredEvent drops an extraneous embedded agent (brain material never crosses)", () => {

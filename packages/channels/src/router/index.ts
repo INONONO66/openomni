@@ -4,7 +4,6 @@ import {
   Operational,
   Wait,
   extractSurfaceKey,
-  extractText,
   newTraceId,
   type BusEvent,
   type Policy,
@@ -125,10 +124,6 @@ function claimResidentSurfaceSession(surfaceKey: string): string {
   return SurfaceKey.claim(surfaceKey, minted);
 }
 
-function stringMeta(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
 /**
  * Trust-boundary sanitization at the SINGLE external ingest entry (audit A
  * T2). A channel-driver event may carry only genuinely-inbound perimeter
@@ -215,22 +210,9 @@ function buildDelivery(
   waitContext: Gateway.WaitContext | undefined,
   sessionId: string | undefined,
 ): Gateway.Deliver {
-  const message: Gateway.InboundMessage = {
-    messageId: event.id,
-    traceId: event.traceId,
-    surfaceKey: stringMeta(event.meta?.surfaceKey) ?? extractSurfaceKey(event),
-    text: extractText(event.payload),
-    ...(stringMeta(event.meta?.threadId) === undefined
-      ? {}
-      : { threadId: stringMeta(event.meta?.threadId) }),
-    ...(stringMeta(event.meta?.replyToId) === undefined
-      ? {}
-      : { replyToId: stringMeta(event.meta?.replyToId) }),
-  };
   const actorContext = actorContextOf(event, decision);
   return Gateway.Deliver.parse({
     ...(sessionId === undefined ? {} : { sessionId }),
-    message,
     ...(actorContext === undefined ? {} : { actorContext }),
     ...(waitContext === undefined ? {} : { waitContext }),
     event,

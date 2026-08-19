@@ -49,33 +49,6 @@ const ActorContextSchema = z
   })
   .strict();
 
-/** Wire-shape media reference (no raw bytes at this seam). */
-const MediaSchema = z
-  .object({
-    kind: z.enum(["image", "file", "audio", "video"]),
-    url: z.string().min(1).optional(),
-    mimeType: z.string().min(1).optional(),
-    filename: z.string().min(1).optional(),
-  })
-  .strict()
-  .refine((media) => media.url !== undefined || media.filename !== undefined, {
-    message: "a media reference needs at least a url or a filename",
-  });
-
-/** The normalized message a channel driver produced from a platform payload. */
-const InboundMessageSchema = z
-  .object({
-    messageId: z.string().min(1),
-    /** Minted at the driver's first frame (D11 origin), carried unchanged. */
-    traceId: z.string().min(1),
-    surfaceKey: z.string().min(1),
-    text: z.string(),
-    media: z.array(MediaSchema).optional(),
-    threadId: z.string().min(1).optional(),
-    replyToId: z.string().min(1).optional(),
-  })
-  .strict();
-
 /**
  * Present iff this delivery resumed an open Wait. The expected-responder
  * gate (§2a-1) has already run perimeter-side: a correlated message from a
@@ -96,8 +69,8 @@ const WaitContextSchema = z
  * channel-grant treatment stamping, wait/session pinning) MINUS the
  * brain-owned `agent` — the AgentDef is brain material and is resolved by the
  * brain's Deliver consumer, never embedded at the perimeter. This is the
- * execution-authoritative residue for this stage; the sibling `message` /
- * `actorContext` fields are the §2a verdict projection of the same delivery.
+ * execution-authoritative residue for this stage; the sibling `actorContext`
+ * field is the §2a verdict projection of the same delivery.
  */
 const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
 
@@ -120,7 +93,6 @@ const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
 const DeliverSchema = z
   .object({
     sessionId: z.string().min(1).optional(),
-    message: InboundMessageSchema,
     actorContext: ActorContextSchema.optional(),
     waitContext: WaitContextSchema.optional(),
     event: DeliveredEventSchema,
@@ -305,12 +277,6 @@ export namespace Gateway {
 
   export const ActorContext = ActorContextSchema;
   export type ActorContext = z.infer<typeof ActorContextSchema>;
-
-  export const Media = MediaSchema;
-  export type Media = z.infer<typeof MediaSchema>;
-
-  export const InboundMessage = InboundMessageSchema;
-  export type InboundMessage = z.infer<typeof InboundMessageSchema>;
 
   export const WaitContext = WaitContextSchema;
   export type WaitContext = z.infer<typeof WaitContextSchema>;
