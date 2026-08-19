@@ -46,7 +46,17 @@ export function createToolPermissionPolicy(
     fn: async (ctx) => {
       const toolName = ctx.toolName;
       const toolInput = ctx.toolInput;
-      if (!toolName) return PolicyDecision.allow({ policyId: "guardrail.permission" });
+      // A tool point without a tool name is a malformed context, not a free
+      // pass: inside a fail-closed guard the unidentifiable call denies and
+      // aborts the run (audit batch A — the `!toolName → allow` arm was the
+      // one input an adversary controls end-to-end).
+      if (!toolName) {
+        return PolicyDecision.deny({
+          policyId: "guardrail.permission",
+          reasonCodes: ["tool_permission_missing_tool_name"],
+          effects: [{ type: "run.abort", reason: "tool_permission_missing_tool_name" }],
+        });
+      }
 
       const normalizedPermission: Policy.Permission = config.permission.action
         ? config.permission
@@ -110,7 +120,11 @@ export function registerToolPermission(
   registry.register("builtin:tool-permission", (config) =>
     createToolPermissionPolicy({
       ...ToolPermissionConfigSchema.parse(
-        config === undefined ? { permission: { action: "tool.call" } } : config,
+        // Absent config fails CLOSED (audit batch A): a plan that selects the
+        // guard without owning a ruleset denies every tool — an explicit
+        // ruleset comes from the plan config or the gate's resolver stamp,
+        // never from an implicit allow-all default here.
+        config === undefined ? { permission: { action: "tool.call", denylist: ["*"] } } : config,
       ),
       events,
     }),

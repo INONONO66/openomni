@@ -175,13 +175,18 @@ describe("createToolPermissionPolicy", () => {
     expect(verdict.reasonCodes).toContain("allowlist_empty");
   });
 
-  it("continue — no toolName in context", async () => {
+  it("abort — no toolName in context fails closed (audit batch A)", async () => {
     const mw = createToolPermissionPolicy({
       events: Bus,
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(baseCtx());
-    expect(verdict.verdict).toBe("allow");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("tool_permission_missing_tool_name");
+    expect(verdict.effects).toContainEqual({
+      type: "run.abort",
+      reason: "tool_permission_missing_tool_name",
+    });
   });
 
   it("continue — wildcard allowlist allows everything", async () => {

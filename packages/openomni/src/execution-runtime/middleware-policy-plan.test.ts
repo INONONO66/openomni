@@ -176,6 +176,22 @@ describe("buildWorkerMiddleware policy plan path", () => {
     });
   });
 
+  // Audit batch A: a plan that selects the guard with NO config and NO
+  // legacy permissions denies every tool — the absent arm never mints an
+  // implicit allow-all.
+  it("fails closed when the plan omits tool permission config and no legacy permissions exist", async () => {
+    const policyPlan: Policy.PolicyPlan = {
+      policies: [{ id: "builtin:tool-permission", required: true }],
+      labels: ["security"],
+    };
+
+    const registrations = buildWorkerMiddleware({ policyPlan });
+    const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+    await expect(invokeTool(toolPermission, "any_tool")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
+
   it("fails closed for malformed explicit policyPlan permission config", async () => {
     const permissions = { action: "tool.call", allowlist: ["tool:legacy"] };
 
