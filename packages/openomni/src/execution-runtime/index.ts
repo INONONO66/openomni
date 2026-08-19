@@ -21,6 +21,7 @@ export {
   buildToolCatalog,
   createChildAgentTool,
   createDispatchTool,
+  createEngagementTools,
   createMessageSendTool,
   createToolExecutor,
   resolveMeta,
@@ -39,6 +40,8 @@ export type {
   ToolRiskTier,
   ToolSource,
   DispatchToolRuntime,
+  EngagementPort,
+  EngagementToolsOptions,
   MessageSendPort,
   MessageSendToolOptions,
 } from "./tool/index.js";

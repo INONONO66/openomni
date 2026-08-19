@@ -46,17 +46,18 @@ function makeTool(overrides: Partial<MessageSendToolOptions> = {}) {
 }
 
 describe("message.send tool", () => {
-  test("declares the conservative posture: agent source, tier 2, delegation category, implicit sessionId", () => {
+  test("declares the conservative posture: agent source, tier 2, delegation category, implicit sessionId/engagementId", () => {
     const { tool } = makeTool();
     expect(tool.spec.name).toBe("message.send");
     expect(tool.riskTier).toBe(2);
     expect(tool.category).toBe("delegation");
-    expect(tool.implicitInputs).toEqual({ sessionId: "sessionId" });
-    // The implicit slot is stripped from the public schema — the model never
-    // sees (or spoofs) the session identity field.
+    expect(tool.implicitInputs).toEqual({ sessionId: "sessionId", engagementId: "engagementId" });
+    // The implicit slots are stripped from the public schema — the model never
+    // sees (or spoofs) the session/engagement identity fields.
     const properties = (tool.spec.inputSchema as { properties: Record<string, unknown> })
       .properties;
     expect(properties.sessionId).toBeUndefined();
+    expect(properties.engagementId).toBeUndefined();
   });
 
   test("fire_and_forget builds a persona-sender SendInput without a waitSpec", async () => {
@@ -278,5 +279,42 @@ describe("message.send tool", () => {
 
     expect(result.isError).toBe(true);
     expect(result.output).toContain("sends fail closed");
+  });
+});
+
+describe("message.send engagement ownership (#709)", () => {
+  const awaitedCall = (extra: Record<string, unknown> = {}) =>
+    makeCall({
+      target: { actorId: "actor:target" },
+      body: "still available?",
+      operation: "awaited",
+      sessionId: "session-caller",
+      ...extra,
+    });
+
+  test("the run's implicit engagementId stamps the wait correlation; ownerRef stays session", async () => {
+    const { tool, sends } = makeTool();
+    const result = await tool.execute(awaitedCall({ engagementId: "eng-1" }), context);
+    expect(result.isError).toBeUndefined();
+    expect(sends[0]?.waitSpec?.ownerRef).toEqual({ kind: "session", id: "session-caller" });
+    expect(sends[0]?.waitSpec?.correlation).toEqual({ engagementId: "eng-1" });
+  });
+
+  test("falls back to the injected sole-active-engagement lookup when the run carries none", async () => {
+    const { tool, sends } = makeTool({ activeEngagementId: () => "eng-sole" });
+    await tool.execute(awaitedCall(), context);
+    expect(sends[0]?.waitSpec?.correlation).toEqual({ engagementId: "eng-sole" });
+  });
+
+  test("the run context WINS over the fallback lookup", async () => {
+    const { tool, sends } = makeTool({ activeEngagementId: () => "eng-other" });
+    await tool.execute(awaitedCall({ engagementId: "eng-run" }), context);
+    expect(sends[0]?.waitSpec?.correlation).toEqual({ engagementId: "eng-run" });
+  });
+
+  test("no engagement context and no unambiguous fallback → no correlation stamped", async () => {
+    const { tool, sends } = makeTool({ activeEngagementId: () => undefined });
+    await tool.execute(awaitedCall(), context);
+    expect(sends[0]?.waitSpec?.correlation).toBeUndefined();
   });
 });

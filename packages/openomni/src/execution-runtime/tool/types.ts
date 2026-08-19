@@ -9,13 +9,23 @@ export type ToolRiskTier = Tool.RiskTier;
 // Tier 2: bash — logged, future approval gate
 // Tier 3: reserved
 
-export type ImplicitInputSource = "sessionId" | "runId" | "agentName" | "workspaceRoot";
+export type ImplicitInputSource =
+  | "sessionId"
+  | "runId"
+  | "agentName"
+  | "workspaceRoot"
+  | "engagementId"
+  | "actorTrustTier";
 
 export interface ToolRuntimeContext {
   readonly sessionId: string;
   readonly runId: string;
   readonly agentName?: string;
   readonly workspaceRoot?: string;
+  /** #709: engagement resumption context — set iff the triggering delivery carried waitContext.engagementId. */
+  readonly engagementId?: string;
+  /** #709: the triggering delivery's perimeter trust verdict (actorContext.trustTier) — the engagement approval gate's input. */
+  readonly actorTrustTier?: string;
 }
 
 export type ToolExecutionContext = Tool.ExecutionContext;

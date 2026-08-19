@@ -1,9 +1,14 @@
 import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
-import { Ingress, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
+import {
+  Ingress,
+  type Gateway,
+  type TraceContext as TraceContextProtocol,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { createAnchorCompletion } from "../execution-runtime/middleware/anchor-completion";
 import { SessionBridge } from "../ingress/session-bridge";
+import { EngagementContext } from "./engagement-context";
 
 export type ResidentLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "releasing";
 
@@ -12,6 +17,20 @@ export interface ResidentRunContext {
   readonly event: Ingress.ResolvedInboundEvent;
   readonly traceContext?: TraceContextProtocol.Type;
   readonly signal?: AbortSignal;
+  /**
+   * #709: the triggering delivery's wait resumption context, verbatim from
+   * Gateway.Deliver. `engagementId` marks the crash-safe resume point — the
+   * run hydrates that engagement's state and the executor injects the id
+   * into engagement-aware tools.
+   */
+  readonly waitContext?: Gateway.WaitContext;
+  /**
+   * #709: the triggering delivery's perimeter trust verdict
+   * (actorContext.trustTier, consumed verbatim per gateway-design §3) — the
+   * engagement approval gate's input. Absent for wait resumptions, anonymous
+   * admissions, and internal runs.
+   */
+  readonly actorTrustTier?: string;
 }
 
 export interface ResidentRunResult {
@@ -114,6 +133,10 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
         runId,
         agentName: extractAgentName(ctx.event),
         workspaceRoot,
+        // #709: executor-owned implicit context — the tools see these as
+        // injected fields the model can never forge.
+        engagementId: ctx.waitContext?.engagementId,
+        actorTrustTier: ctx.actorTrustTier,
       })
     : ctx.event.agent.toolExecutor;
   const agent = ctx.event.agent as RuntimeAgentDef;
@@ -326,10 +349,32 @@ export class ResidentRuntime {
       const messages = SessionBridge.buildDirectMessages(ctx.sessionId).filter(
         (message) => message.role === "user" || message.role === "assistant",
       );
+      // #709 hydration (gateway-design §5): the engagement slice — active
+      // delegations + the resumed engagement when this delivery carries
+      // waitContext.engagementId — prepends as a machine-side context block.
+      // Run-input only, never persisted to the session. The transcript
+      // itself is still hydrated in FULL (no recency window exists yet) —
+      // narrowing it is a recorded follow-up, not this change.
+      const engagementBlock = EngagementContext.buildBlock({
+        sessionId: ctx.sessionId,
+        traceId: traceContext.traceId,
+        resumedEngagementId: ctx.waitContext?.engagementId,
+      });
+      const hydrated =
+        engagementBlock === undefined
+          ? messages
+          : [
+              {
+                role: "user" as const,
+                content: engagementBlock,
+                partMetadata: { engagementContext: true },
+              },
+              ...messages,
+            ];
       activation.lifecycle = "active";
       const agentConfig = buildResidentAgentConfig(ctx, runId);
       const result = await this.runAgent(agentConfig, {
-        messages,
+        messages: hydrated,
         traceContext,
       });
       activation.lastUsedAt = Date.now();

@@ -132,6 +132,10 @@ function resolveImplicitValue(
       return runtime.agentName;
     case "workspaceRoot":
       return runtime.workspaceRoot;
+    case "engagementId":
+      return runtime.engagementId;
+    case "actorTrustTier":
+      return runtime.actorTrustTier;
   }
 }
 

@@ -4,6 +4,7 @@ import {
   extractText,
   resolveTarget,
   type Execution,
+  type Gateway,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { WorkItemAttemptRun, WorkItemStore } from "@openomni/ledger";
@@ -37,6 +38,10 @@ export namespace IngressHandlers {
      * not serializable, so it travels the call path, never the event.
      */
     signal?: AbortSignal;
+    /** #709: the triggering delivery's wait resumption context (Gateway.Deliver.waitContext, verbatim). */
+    waitContext?: Gateway.WaitContext;
+    /** #709: the triggering delivery's perimeter trust verdict (actorContext.trustTier, verbatim). */
+    actorTrustTier?: string;
   }
 
   // ---- observe-only ingress lifecycle events ----
@@ -384,6 +389,8 @@ export namespace IngressHandlers {
       event: ctx.event,
       traceContext: ctx.traceContext,
       signal: ctx.signal,
+      waitContext: ctx.waitContext,
+      actorTrustTier: ctx.actorTrustTier,
     });
     const output = residentResult.output;
     SessionBridge.storeDirectResult(traceId, ctx.sessionId, output, ctx.event.agent.model);
