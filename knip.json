@@ -44,6 +44,14 @@
     "packages/protocol": {
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/openomni": {
+      "entry": [
+        "src/index.ts",
+        "bench/**/run.ts",
+        "src/**/*.test.ts",
+        "test/**/*.test.ts"
+      ]
     }
   }
 }
