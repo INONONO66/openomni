@@ -161,10 +161,12 @@ describe("ResidentRuntime", () => {
       traceContext: { traceId: newTraceId() },
       event: {
         ...makeEvent(),
-        workspace: "/tmp/openomni-workspace",
+        // Surface-derived field: must NOT become the workspace root.
+        workspace: "/tmp/surface-influenced-namespace",
         meta: { target: { kind: "resident" }, agentName: "resident-worker" },
         agent: {
           model: { provider: "test", id: "fixture" },
+          toolConfig: { workspaceRoot: "/tmp/openomni-workspace" },
           toolExecutorFactory: (input) => {
             factoryInput = input;
             return async (call) => ({
@@ -183,6 +185,91 @@ describe("ResidentRuntime", () => {
       workspaceRoot: "/tmp/openomni-workspace",
     });
     expect(factoryInput?.runId).toBeString();
+  });
+
+  // Audit batch A: `event.workspace` is a surface-derived identifier — an
+  // externally-influenced field must never become the sandbox root/lock key.
+  test("never falls back to the surface event workspace as workspace root", async () => {
+    let factoryInput: { workspaceRoot?: string } | undefined;
+    const manager = ResidentRuntime.create({
+      runAgent: async () => ({ text: "ok", finishReason: "stop" }),
+    });
+
+    await manager.run({
+      sessionId: "resident-surface-workspace",
+      traceContext: { traceId: newTraceId() },
+      event: {
+        ...makeEvent(),
+        workspace: "/tmp/surface-influenced-namespace",
+        agent: {
+          model: { provider: "test", id: "fixture" },
+          toolExecutorFactory: (input) => {
+            factoryInput = input;
+            return async (call) => ({
+              id: crypto.randomUUID(),
+              toolCallId: call.id,
+              output: "ok",
+            });
+          },
+        },
+      },
+    });
+
+    expect(factoryInput).toBeDefined();
+    expect(factoryInput?.workspaceRoot).toBeUndefined();
+  });
+
+  // Audit batch A (#709): identity injection is factory-only. A prebuilt
+  // executor cannot receive engagementId/actorTrustTier — a run that carries
+  // them must refuse rather than execute engagement-aware tools with stale
+  // identity.
+  test("refuses a prebuilt toolExecutor when the run carries identity context", async () => {
+    const manager = ResidentRuntime.create({
+      runAgent: async () => ({ text: "must never run", finishReason: "stop" }),
+    });
+
+    await expect(
+      manager.run({
+        sessionId: "resident-prebuilt-identity",
+        traceContext: { traceId: newTraceId() },
+        actorTrustTier: "owner",
+        event: {
+          ...makeEvent(),
+          agent: {
+            model: { provider: "test", id: "fixture" },
+            toolExecutor: async (call) => ({
+              id: crypto.randomUUID(),
+              toolCallId: call.id,
+              output: "ok",
+            }),
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ name: "ResidentIdentityInjectionError" });
+  });
+
+  test("a prebuilt toolExecutor without identity context still runs", async () => {
+    const manager = ResidentRuntime.create({
+      runAgent: async () => ({ text: "ok", finishReason: "stop" }),
+    });
+
+    const result = await manager.run({
+      sessionId: "resident-prebuilt-plain",
+      traceContext: { traceId: newTraceId() },
+      event: {
+        ...makeEvent(),
+        agent: {
+          model: { provider: "test", id: "fixture" },
+          toolExecutor: async (call) => ({
+            id: crypto.randomUUID(),
+            toolCallId: call.id,
+            output: "ok",
+          }),
+        },
+      },
+    });
+
+    expect(result.output).toBe("ok");
   });
 });
 
