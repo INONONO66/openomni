@@ -227,8 +227,11 @@ function channelState(
     // Treatment floor (audit A T1): a channel grant can only RAISE a sender to
     // full_access; it must never override an inbound already marked
     // evidence_only. A re-injected recovery message (unrecoverable original
-    // sender) is thereby framed as evidence, never a command, even on a
-    // full_access trusted channel — a monotonic downgrade.
+    // sender) keeps the evidence_only marker to the brain — a monotonic
+    // downgrade. NOTE: this is correct GROUNDWORK, not yet a closed hole — the
+    // marker becomes protective only once the brain consumes inboundTreatment
+    // as a command-authority restriction (S6, batch ②). Until then the marker
+    // reaches actorContext but no brain path frames the turn as evidence.
     inboundTreatment: inboundEvidenceOnly ? "evidence_only" : resolution.inboundTreatment,
     ...(resolution.grant.defaultTier === undefined
       ? {}

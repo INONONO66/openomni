@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sleepAbortable, throwIfAborted } from "./workspace-lock-abort.js";
 import {
@@ -122,11 +122,19 @@ export async function acquireExternal(
       mkdirSync(path);
       try {
         throwIfAborted(signal);
+        // Atomic owner publish (audit A T4a): write a temp file inside the
+        // already-won lock dir, then rename it into place. A hard crash
+        // mid-acquisition therefore leaves EITHER no OWNER_FILE (→ "missing",
+        // grace-reapable) or an unpublished ".tmp" — never a half-written
+        // OWNER_FILE. So "unreadable" can only mean genuine corruption/EACCES
+        // (fail-closed-live), and a crash can never deadlock the lock.
+        const tmpPath = join(path, `${OWNER_FILE}.tmp`);
         writeFileSync(
-          join(path, OWNER_FILE),
+          tmpPath,
           JSON.stringify({ runId, pid: process.pid, acquiredAt: Date.now() }),
           "utf-8",
         );
+        renameSync(tmpPath, join(path, OWNER_FILE));
         return;
       } catch (error) {
         removeLockDir(workspace);

@@ -168,6 +168,22 @@ describe("WorkspaceLock fail-closed lock/unsafe reads (audit A T4a/T4b)", () => 
     WorkspaceLock.release(workspace, "probe");
   });
 
+  test("crash before the atomic rename (only a .tmp remains) is grace-reapable, not a deadlock (T4a)", async () => {
+    const workspace = makeWorkspace();
+    const dir = join(LOCK_ROOT, lockKey(workspace));
+    mkdirSync(dir, { recursive: true });
+    // Simulate a hard crash mid-acquisition: the temp owner was written but
+    // never renamed into OWNER_FILE. Only the leftover ".tmp" exists; there is
+    // NO OWNER_FILE. Atomic publish guarantees this is the only crash shape —
+    // readOwner sees "missing", so the mtime grace must still reap it.
+    writeFileSync(join(dir, `${OWNER_FILE}.tmp`), '{"runId":"dead","pid":999999}', "utf-8");
+    const old = new Date(Date.now() - 10 * STALE_GRACE_MS);
+    utimesSync(dir, old, old);
+
+    await WorkspaceLock.acquire(workspace, "probe", 500);
+    WorkspaceLock.release(workspace, "probe");
+  });
+
   test("reads an unreadable/corrupt unsafe marker as UNSAFE (T4b)", async () => {
     const workspace = makeWorkspace();
     mkdirSync(LOCK_ROOT, { recursive: true });
