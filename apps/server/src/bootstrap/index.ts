@@ -104,12 +104,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
     idleTimeoutMs: Number(process.env.OPENOMNI_RESIDENT_IDLE_TIMEOUT_MS ?? 30_000),
   });
 
-  Bus.publish(Operational.Events.Info, {
-    traceId: bootTraceId,
-    time: Date.now(),
-    component: "server",
-    msg: "server running in coordinator mode",
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId: bootTraceId,
+      component: "server",
+      msg: "server running in coordinator mode",
+    }),
+  );
   const workerScript =
     options.workerScript ?? join(import.meta.dir, "../execution/worker-entry.ts");
   const customProvider = new CustomToolProvider();
@@ -273,19 +275,23 @@ export async function main(options: MainOptions = {}): Promise<void> {
   const routingHandler = model ? createMessageHandler({ ingress: gatewayRouter }) : undefined;
 
   if (model) {
-    Bus.publish(Operational.Events.Info, {
-      traceId: bootTraceId,
-      time: Date.now(),
-      component: "server",
-      msg: `server using model: ${model.providerID}/${model.id}`,
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId: bootTraceId,
+        component: "server",
+        msg: `server using model: ${model.providerID}/${model.id}`,
+      }),
+    );
   } else {
-    Bus.publish(Operational.Events.Warn, {
-      traceId: bootTraceId,
-      time: Date.now(),
-      component: "server",
-      msg: "server no model credentials found; realtime surfaces disabled",
-    });
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId: bootTraceId,
+        component: "server",
+        msg: "server no model credentials found; realtime surfaces disabled",
+      }),
+    );
   }
 
   const { channels, wsHandler, githubWebhookHandler } = createChannelAdapters(
@@ -306,12 +312,14 @@ export async function main(options: MainOptions = {}): Promise<void> {
   });
 
   if (hasAnyChannel && !routingHandler) {
-    Bus.publish(Operational.Events.Warn, {
-      traceId: bootTraceId,
-      time: Date.now(),
-      component: "server",
-      msg: "server channel credentials found but no model credentials; channels disabled",
-    });
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId: bootTraceId,
+        component: "server",
+        msg: "server channel credentials found but no model credentials; channels disabled",
+      }),
+    );
   }
 
   const traceId = bootTraceId;
@@ -359,26 +367,32 @@ export async function main(options: MainOptions = {}): Promise<void> {
   });
 
   if (channels.length === 0) {
-    Bus.publish(Operational.Events.Info, {
-      traceId: bootTraceId,
-      time: Date.now(),
-      component: "server",
-      msg: "server no external channels configured; web and websocket endpoints only",
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId: bootTraceId,
+        component: "server",
+        msg: "server no external channels configured; web and websocket endpoints only",
+      }),
+    );
   }
 
-  Bus.publish(Operational.Events.Info, {
-    traceId: bootTraceId,
-    time: Date.now(),
-    component: "server",
-    msg: `server listening on http://${config.server.host}:${server.port}`,
-  });
-  Bus.publish(Operational.Events.Info, {
-    traceId: bootTraceId,
-    time: Date.now(),
-    component: "server",
-    msg: `server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`,
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId: bootTraceId,
+      component: "server",
+      msg: `server listening on http://${config.server.host}:${server.port}`,
+    }),
+  );
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId: bootTraceId,
+      component: "server",
+      msg: `server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`,
+    }),
+  );
 
   const cronRunner = CronJobRunner.start({
     fire: async (job, jobTraceId) => {

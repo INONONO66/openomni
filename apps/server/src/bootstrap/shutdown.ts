@@ -32,12 +32,14 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
     shuttingDown = true;
 
     const traceId = deps.traceId ?? newTraceId();
-    Bus.publish(Operational.Events.Info, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "server shutting down",
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "server shutting down",
+      }),
+    );
 
     Bus.publish(Operational.Events.ShutdownInitiated, {
       traceId,
@@ -78,13 +80,15 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
         storage.close();
       }
     } catch (err) {
-      Bus.publish(Operational.Events.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "server error during shutdown",
-        context: { err: String(err) },
-      });
+      Bus.publish(
+        Operational.Events.Error,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: "server error during shutdown",
+          context: { err: String(err) },
+        }),
+      );
       // The publish above lands after the try-body's flush (or before any
       // flush ran, when the throw came earlier) — without its own barrier the
       // exit below discards the queued row. After stop() there is no

@@ -28,6 +28,23 @@ export const ownerEvent = {
   meta: { actor: { role: "user" } },
 } satisfies Gateway.DeliveredEvent;
 
+/**
+ * Minimal inbound delivered-event builder for router tests. The three router
+ * suites (policy-deny-wins, middleware-integration, authority-validation) each
+ * carried a byte-identical copy; this is the one home.
+ */
+export function makeInboundEvent(
+  overrides?: Partial<Gateway.DeliveredEvent>,
+): Gateway.DeliveredEvent {
+  return {
+    id: "evt-1",
+    traceId: "trace-test",
+    surface: "test",
+    mode: "direct",
+    ...overrides,
+  } as Gateway.DeliveredEvent;
+}
+
 /** Every delivery the router handed to the brain stub in the current test. */
 export const deliveries: Gateway.Deliver[] = [];
 

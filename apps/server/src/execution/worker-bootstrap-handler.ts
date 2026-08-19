@@ -77,32 +77,36 @@ export namespace WorkerBootstrapHandler {
         workerId: options.workerId,
         authToken: options.ipcAuthToken,
       });
-      Bus.publish(Operational.Events.Info, {
-        traceId: newTraceId(),
-        time: Date.now(),
-        component: "server",
-        msg: "worker bootstrap received",
-        context: {
-          workerId: options.workerId,
-          agents: bootstrap.agents.length,
-          runtimeTools: bootstrap.toolCatalog.length,
-        },
-      });
+      Bus.publish(
+        Operational.Events.Info,
+        Operational.envelope({
+          traceId: newTraceId(),
+          component: "server",
+          msg: "worker bootstrap received",
+          context: {
+            workerId: options.workerId,
+            agents: bootstrap.agents.length,
+            runtimeTools: bootstrap.toolCatalog.length,
+          },
+        }),
+      );
       options.respond({ ok: true });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       options.state.rejectReady(error);
       options.respond({ ok: false, error: error.message });
-      Bus.publish(Operational.Events.Error, {
-        traceId: newTraceId(),
-        time: Date.now(),
-        component: "server",
-        msg: "worker bootstrap failed",
-        context: {
-          workerId: options.workerId,
-          err: error.message,
-        },
-      });
+      Bus.publish(
+        Operational.Events.Error,
+        Operational.envelope({
+          traceId: newTraceId(),
+          component: "server",
+          msg: "worker bootstrap failed",
+          context: {
+            workerId: options.workerId,
+            err: error.message,
+          },
+        }),
+      );
     }
   }
 

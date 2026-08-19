@@ -132,14 +132,16 @@ async function processMessage(
     return toResponseText(await ingress.ingest(buildInboundEvent(message)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    Bus.publish(Operational.Events.Error, {
-      // D11: the failing ingest belongs to the inbound message's trace.
-      traceId: message.traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "ingress error",
-      context: { msg },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        // D11: the failing ingest belongs to the inbound message's trace.
+        traceId: message.traceId,
+        component: "server",
+        msg: "ingress error",
+        context: { msg },
+      }),
+    );
     return `Error: ${msg}`;
   }
 }

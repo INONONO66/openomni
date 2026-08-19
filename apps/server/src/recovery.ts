@@ -19,12 +19,14 @@ export interface RecoveryItem {
 export async function recoverInterruptedMessages(traceId: string): Promise<RecoveryItem[]> {
   const retryQueue: RecoveryItem[] = [];
 
-  Bus.publish(Operational.Events.Info, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "checking for interrupted messages",
-  });
+  Bus.publish(
+    Operational.Events.Info,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: "checking for interrupted messages",
+    }),
+  );
 
   try {
     const adapter = Storage.get();
@@ -40,26 +42,30 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
     const interrupted = [...processing, ...received];
 
     if (interrupted.length === 0) {
-      Bus.publish(Operational.Events.Info, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "no interrupted messages found",
-      });
+      Bus.publish(
+        Operational.Events.Info,
+        Operational.envelope({
+          traceId,
+          component: "server",
+          msg: "no interrupted messages found",
+        }),
+      );
       return retryQueue;
     }
 
-    Bus.publish(Operational.Events.Info, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "found interrupted messages",
-      context: {
-        total: interrupted.length,
-        processing: processing.length,
-        received: received.length,
-      },
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "found interrupted messages",
+        context: {
+          total: interrupted.length,
+          processing: processing.length,
+          received: received.length,
+        },
+      }),
+    );
 
     let recovered = 0;
 
@@ -74,25 +80,29 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
         if (hasAssistantAfter) {
           Session.updateMessageStatus(messageId, "completed");
           recovered++;
-          Bus.publish(Operational.Events.Info, {
-            traceId,
-            time: Date.now(),
-            component: "server",
-            msg: "marked message as completed",
-            context: { messageId },
-          });
+          Bus.publish(
+            Operational.Events.Info,
+            Operational.envelope({
+              traceId,
+              component: "server",
+              msg: "marked message as completed",
+              context: { messageId },
+            }),
+          );
           continue;
         }
 
         const session = Session.get(sessionId);
         if (!session) {
-          Bus.publish(Operational.Events.Warn, {
-            traceId,
-            time: Date.now(),
-            component: "server",
-            msg: "session not found, skipping message",
-            context: { sessionId, messageId },
-          });
+          Bus.publish(
+            Operational.Events.Warn,
+            Operational.envelope({
+              traceId,
+              component: "server",
+              msg: "session not found, skipping message",
+              context: { sessionId, messageId },
+            }),
+          );
           Session.updateMessageStatus(messageId, "received");
           continue;
         }
@@ -101,13 +111,15 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
         const textPart = parts.find((p): p is Message.TextPart => p.type === "text");
 
         if (!textPart?.text) {
-          Bus.publish(Operational.Events.Warn, {
-            traceId,
-            time: Date.now(),
-            component: "server",
-            msg: "no text found for message, skipping retry",
-            context: { messageId },
-          });
+          Bus.publish(
+            Operational.Events.Warn,
+            Operational.envelope({
+              traceId,
+              component: "server",
+              msg: "no text found for message, skipping retry",
+              context: { messageId },
+            }),
+          );
           Session.updateMessageStatus(messageId, "received");
           continue;
         }
@@ -124,39 +136,47 @@ export async function recoverInterruptedMessages(traceId: string): Promise<Recov
           text: textPart.text,
           resumeExisting: true,
         });
-        Bus.publish(Operational.Events.Info, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "queued message for retry",
-          context: { messageId },
-        });
+        Bus.publish(
+          Operational.Events.Info,
+          Operational.envelope({
+            traceId,
+            component: "server",
+            msg: "queued message for retry",
+            context: { messageId },
+          }),
+        );
       } catch (err) {
-        Bus.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "error processing message",
-          context: { messageId, err: String(err) },
-        });
+        Bus.publish(
+          Operational.Events.Error,
+          Operational.envelope({
+            traceId,
+            component: "server",
+            msg: "error processing message",
+            context: { messageId, err: String(err) },
+          }),
+        );
       }
     }
 
-    Bus.publish(Operational.Events.Info, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "recovery done",
-      context: { recovered, queued: retryQueue.length, total: processing.length },
-    });
+    Bus.publish(
+      Operational.Events.Info,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "recovery done",
+        context: { recovered, queued: retryQueue.length, total: processing.length },
+      }),
+    );
   } catch (err) {
-    Bus.publish(Operational.Events.Error, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "recovery failed",
-      context: { err: String(err) },
-    });
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "recovery failed",
+        context: { err: String(err) },
+      }),
+    );
   }
 
   return retryQueue;

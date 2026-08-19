@@ -72,13 +72,15 @@ export function createContextMiddleware(
         // someone must be able to see why. Non-Errors stay rethrown — an
         // exotic throw is a bug, not a degraded assembly.
         if (error instanceof Error) {
-          Bus.publish(Operational.Events.Warn, {
-            traceId,
-            time: Date.now(),
-            component: "server.context",
-            msg: "context assembly failed — run continues without it",
-            context: { error: error.message },
-          });
+          Bus.publish(
+            Operational.Events.Warn,
+            Operational.envelope({
+              traceId,
+              component: "server.context",
+              msg: "context assembly failed — run continues without it",
+              context: { error: error.message },
+            }),
+          );
           return PolicyDecision.allow({ policyId: "server.context" });
         }
         throw error;

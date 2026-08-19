@@ -118,32 +118,36 @@ export async function resolveRuntimeModel(
     : "model not in provider catalog";
 
   if (defaultModel && defaultModel.provider === model.provider) {
-    Bus.publish(Operational.Events.Warn, {
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "model resolution failed, falling back to default",
+        context: {
+          reason,
+          provider: model.provider,
+          id: model.id,
+          fallback: defaultModel.id,
+        },
+      }),
+    );
+    return defaultModel;
+  }
+
+  Bus.publish(
+    Operational.Events.Warn,
+    Operational.envelope({
       traceId,
-      time: Date.now(),
       component: "server",
-      msg: "model resolution failed, falling back to default",
+      msg: "model resolution failed, passing through unresolved",
       context: {
         reason,
         provider: model.provider,
         id: model.id,
-        fallback: defaultModel.id,
       },
-    });
-    return defaultModel;
-  }
-
-  Bus.publish(Operational.Events.Warn, {
-    traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "model resolution failed, passing through unresolved",
-    context: {
-      reason,
-      provider: model.provider,
-      id: model.id,
-    },
-  });
+    }),
+  );
   return model;
 }
 
@@ -166,13 +170,15 @@ export async function resolveDefaultProviderModel(
     return resolveCatalogModel(preferred.id, models) ?? preferred;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    Bus.publish(Operational.Events.Warn, {
-      traceId,
-      time: Date.now(),
-      component: "server",
-      msg: "failed to resolve model",
-      context: { msg },
-    });
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "failed to resolve model",
+        context: { msg },
+      }),
+    );
     return undefined;
   }
 }

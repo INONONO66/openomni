@@ -66,17 +66,19 @@ function publishInvalidMcpConfigWarning(
     readonly error: string;
   }>,
 ): void {
-  Bus.publish(Operational.Events.Warn, {
-    traceId: options.traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "invalid mcp server config ignored",
-    context: {
-      source: options.source,
-      ...(options.configPath !== undefined && { configPath: options.configPath }),
-      rejected,
-    },
-  });
+  Bus.publish(
+    Operational.Events.Warn,
+    Operational.envelope({
+      traceId: options.traceId,
+      component: "server",
+      msg: "invalid mcp server config ignored",
+      context: {
+        source: options.source,
+        ...(options.configPath !== undefined && { configPath: options.configPath }),
+        rejected,
+      },
+    }),
+  );
 }
 
 function readMcpServerName(entry: unknown): { readonly name?: string } {

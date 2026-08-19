@@ -14,6 +14,30 @@ const LogBase = Base.extend({
 });
 
 export namespace Operational {
+  /** Fields a producer supplies for an operational log envelope. */
+  export interface LogFields {
+    readonly traceId: string;
+    readonly component: string;
+    readonly msg: string;
+    readonly sessionId?: string;
+    readonly context?: Readonly<Record<string, unknown>>;
+    readonly error?: string;
+  }
+
+  /**
+   * Builds a `LogBase` operational envelope, stamping `time: Date.now()` at
+   * the call site. Replaces the inline `{ traceId, time: Date.now(),
+   * component, msg }` literal repeated across producers with a single shape
+   * that lives next to the schema. Only the keys passed are emitted (an
+   * absent optional is never injected as `undefined`), so it is a drop-in for
+   * the literals — same fields, same values.
+   */
+  export function envelope<Fields extends LogFields>(
+    fields: Fields,
+  ): Fields & { readonly time: number } {
+    return { ...fields, time: Date.now() };
+  }
+
   export namespace Events {
     export const Debug = BusEvent.define("operational.debug", LogBase, { visibility: "ephemeral" });
 

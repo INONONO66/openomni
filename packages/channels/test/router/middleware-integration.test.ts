@@ -1,20 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { Gateway, Policy } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 import { IngressAuthorityMiddleware } from "../../src/router/authority.js";
+import { makeInboundEvent } from "./_router-fixture.js";
 
 // Moved from openomni test/policy/middleware-integration.test.ts at the #707
 // seam flip: runRoutedPreRun parses Gateway.DeliveredEvent (no brain-owned
 // `agent`) and takes no coordinator — presence checks are brain-side.
-
-function makeInboundEvent(overrides?: Partial<Gateway.DeliveredEvent>): Gateway.DeliveredEvent {
-  return {
-    id: "evt-1",
-    traceId: "trace-test",
-    surface: "test",
-    mode: "direct",
-    ...overrides,
-  } as Gateway.DeliveredEvent;
-}
 
 // Authorization is a pure trust-tier check: the pre-split role fallbacks and
 // worker-control action rules were unreachable (every routed pre-run event
