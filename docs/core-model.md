@@ -151,7 +151,7 @@ Flow: external message → ingress resolves the actor → the Resident judges *d
 
 **Tier 1 (philosophy, exactly ten):** Actor, Gate, Ledger, Evidence, Stakes, Owner, Resident, Worker, Jester, Governor.
 
-**Tier 2 (specification):** authority profile and its fields (TrustTier, Grant, SocialBudget, voice register, Blacklist), ActorIdentity, Endpoint, Channel, Surface, Gateway (the perimeter seam — Owner addition 2026-08-19, [gateway-design.md](gateway-design.md)), Command, Lane, Subagent, Policy and policy points, Wait, Session, Transcript, WorkItem, CompletionReport, Receipt, Memory, Outcome, Voice.
+**Tier 2 (specification):** authority profile and its fields (TrustTier, Grant, SocialBudget, voice register, Blacklist), ActorIdentity, Endpoint, Channel, Surface, Gateway (the perimeter seam — Owner addition 2026-08-19, [gateway-design.md](gateway-design.md)), Command, Lane, Subagent, Policy and policy points, Wait, Engagement (the durable delegation state machine — Owner addition 2026-08-19, [gateway-design.md §5](gateway-design.md)), Session, Transcript, WorkItem, CompletionReport, Receipt, Memory, Outcome, Voice.
 
 **Tier 3 (implementation):** packages and modules — see [Architecture](architecture.md). `IngressEngine`, `DispatchRuntime`, `DispatchHandler`, `ActorRegistry`, `EventProjector`, `Connector` are module names, never concepts.
 

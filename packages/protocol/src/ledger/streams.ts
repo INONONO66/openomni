@@ -90,6 +90,15 @@ export const StreamRegistry = {
     factTypes: ["command.authorized", "command.denied"],
     status: "shipped",
   },
+  engagement: {
+    stream: "engagement:<engagementId>",
+    heads: "revision-bound (expectedHead = revision before the transition)",
+    conflictMeans:
+      "duplicate create = stream exists = typed duplicate; stale head = typed revision_conflict",
+    factTypes: ["engagement.opened", "engagement.transitioned", "engagement.expired"],
+    status:
+      "shipped (#709 — writer at ledger engagement/index.ts; brain sole writer, gateway-design §4/§5)",
+  },
   effect: {
     stream: "effect:<effectId>",
     heads: "intent at seq 1 (effectId is the idempotency key), exactly one outcome fact after",
