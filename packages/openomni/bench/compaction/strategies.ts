@@ -1,7 +1,7 @@
 import { PolicyEngine } from "@openomni/agent";
 import { Session, Storage } from "@openomni/ledger";
 import type { Message } from "@openomni/protocol";
-import { buildWorkerMiddleware } from "../../src/index";
+import { buildWorkerMiddleware } from "@openomni/openomni";
 import { chat } from "./llm";
 
 /**
