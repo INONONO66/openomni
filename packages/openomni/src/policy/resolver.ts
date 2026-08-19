@@ -112,15 +112,11 @@ class StaticPolicyResolver implements PolicyResolverInstance {
   }
 }
 
-export interface PolicyResolverOptions {
-  /** The gate's tool-permission ruleset stamped onto every resolved plan. */
-  readonly toolPermission?: Policy.Permission;
-}
-
 export namespace PolicyResolver {
   export function create(
     rules: readonly PolicyResolverRule[] = [],
-    options: PolicyResolverOptions = {},
+    /** `toolPermission`: the gate's ruleset stamped onto every resolved plan. */
+    options: { readonly toolPermission?: Policy.Permission } = {},
   ): PolicyResolverInstance {
     return new StaticPolicyResolver(rules, options.toolPermission ?? GATE_DEFAULT_TOOL_PERMISSION);
   }

@@ -120,6 +120,25 @@ describe("IngressSessionResolver", () => {
       );
     });
 
+    it("throws for an asserted parent session id that does not exist (audit A T6)", () => {
+      expect(() =>
+        resolveWithTrace({
+          surface: "resident-worker-tool",
+          target: { kind: "worker", parentSessionId: "missing-parent" },
+        }),
+      ).toThrow("worker parent session not found: missing-parent");
+    });
+
+    it("throws for an asserted parent via actor.sessionId that does not exist (audit A T6)", () => {
+      expect(() =>
+        resolveWithTrace({
+          surface: "resident-worker-tool",
+          target: { kind: "worker" },
+          meta: { actor: { sessionId: "missing-actor-parent" } },
+        }),
+      ).toThrow("worker parent session not found: missing-actor-parent");
+    });
+
     it("creates new session for new surface key", () => {
       const event = {
         surface: "slack",

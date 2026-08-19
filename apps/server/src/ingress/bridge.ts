@@ -166,6 +166,12 @@ function createBaseEvent(
       replyToId: message.replyToId,
       threadId,
       raw: message.raw,
+      // audit A T1: a trusted internal producer (recovery replay) may mark a
+      // re-injected message evidence_only; the gateway floors its routed
+      // treatment. Absent for normal traffic.
+      ...(message.inboundTreatment === undefined
+        ? {}
+        : { inboundTreatment: message.inboundTreatment }),
     },
   };
 }

@@ -115,6 +115,21 @@ describe("ingress bridge transport boundary", () => {
     expect(correlation.threadId).toBe("descriptor-thread");
   });
 
+  it("stamps meta.inboundTreatment from a message marked evidence_only (audit A T1)", () => {
+    const message = makeMessage();
+    message.inboundTreatment = "evidence_only";
+
+    const event = buildInboundEvent(message);
+
+    expect(event.meta?.inboundTreatment).toBe("evidence_only");
+  });
+
+  it("leaves meta.inboundTreatment absent for normal (unmarked) traffic", () => {
+    const event = buildInboundEvent(makeMessage());
+
+    expect(event.meta?.inboundTreatment).toBeUndefined();
+  });
+
   it("prefers an explicit message thread hint over a conflicting descriptor hint", () => {
     const message = makeMessage();
     message.surfaceKey = "discord:guild:channel:dev:thread:descriptor-thread";

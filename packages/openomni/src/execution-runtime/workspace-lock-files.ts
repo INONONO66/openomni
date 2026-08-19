@@ -59,16 +59,45 @@ function readOwnerMeta(workspace: string): LockOwnerMeta | undefined {
   }
 }
 
+type OwnerRead =
+  | { readonly status: "valid"; readonly meta: LockOwnerMeta }
+  /** No owner file yet (ENOENT): a lock dir created but not stamped, or a pre-owner-format lock. */
+  | { readonly status: "missing" }
+  /** Owner file present but unreadable/unparseable — its holder may be live. */
+  | { readonly status: "unreadable" };
+
+function readOwner(workspace: string): OwnerRead {
+  let raw: string;
+  try {
+    raw = readFileSync(ownerFilePath(workspace), "utf-8");
+  } catch (error) {
+    return errnoCode(error) === "ENOENT" ? { status: "missing" } : { status: "unreadable" };
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isLockOwnerMeta(parsed) ? { status: "valid", meta: parsed } : { status: "unreadable" };
+  } catch {
+    return { status: "unreadable" };
+  }
+}
+
 function removeLockDir(workspace: string): void {
   rmSync(lockPath(workspace), { recursive: true, force: true });
 }
 
 function shouldReapStaleLock(workspace: string): boolean {
-  const meta = readOwnerMeta(workspace);
-  if (meta) {
-    return !isProcessAlive(meta.pid);
+  const owner = readOwner(workspace);
+  if (owner.status === "valid") {
+    return !isProcessAlive(owner.meta.pid);
+  }
+  if (owner.status === "unreadable") {
+    // Fail closed (audit A T4a): an owner file we cannot read or parse may
+    // belong to a LIVE holder — treat it as live and never reap it on the
+    // mtime grace path. Grace applies ONLY to a genuinely-absent owner file.
+    return false;
   }
 
+  // status === "missing": no owner file at all — the mtime grace decides.
   try {
     const ageMs = Date.now() - statSync(lockPath(workspace)).mtimeMs;
     return ageMs >= STALE_GRACE_MS;

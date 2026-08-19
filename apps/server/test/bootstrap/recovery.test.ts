@@ -431,6 +431,57 @@ describe("server recovery", () => {
     ]);
   });
 
+  it("marks replayed interrupted messages evidence_only (audit A T1: unrecoverable sender)", async () => {
+    const session = Session.create({
+      traceId: "trace-retry-evidence",
+      title: "surface:retry-evidence",
+      model: { providerID: "test", modelID: "test" },
+    });
+    Session.addMessage(
+      session.id,
+      {
+        id: "msg-retry-evidence",
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "server-test",
+        model: { providerID: "test", modelID: "test" },
+      },
+      { status: "processing" },
+    );
+    Session.addPart("msg-retry-evidence", {
+      id: "part-retry-evidence",
+      sessionID: session.id,
+      messageID: "msg-retry-evidence",
+      type: "text",
+      text: "please finish this",
+    });
+
+    const replayed: Array<{ sender: { id: string; name?: string }; inboundTreatment?: string }> =
+      [];
+    await runRecovery({
+      handler: async (message) => {
+        replayed.push({ sender: message.sender, inboundTreatment: message.inboundTreatment });
+        return null;
+      },
+      traceId: "trace-retry-evidence",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [],
+        }),
+      },
+    });
+
+    // The original sender is not persisted, so the replay cannot re-key the
+    // blacklist/authority — it is marked evidence_only so it can never drive
+    // top-level command work under the synthetic "recovery" principal.
+    expect(replayed).toEqual([
+      { sender: { id: "recovery", name: "recovery" }, inboundTreatment: "evidence_only" },
+    ]);
+  });
+
   it("swallows a throwing retry handler and finishes recovery", async () => {
     const session = Session.create({
       traceId: "trace-retry-throw",

@@ -34,19 +34,39 @@ function isUnsafeWorkspace(value: unknown): value is UnsafeWorkspace {
   );
 }
 
+function errnoCode(error: unknown): string | undefined {
+  if (error instanceof Error && "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return undefined;
+}
+
 export function readUnsafeMeta(workspace: string): UnsafeWorkspace | undefined {
   const local = unsafe.get(workspace);
   if (local) return local;
+  let raw: string;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(unsafeFilePath(workspace), "utf-8"));
-    const state = isUnsafeWorkspace(parsed)
-      ? parsed
-      : { reason: "invalid unsafe marker", markedAt: Date.now() };
-    unsafe.set(workspace, state);
-    return state;
-  } catch {
-    return undefined;
+    raw = readFileSync(unsafeFilePath(workspace), "utf-8");
+  } catch (error) {
+    // A genuinely-absent marker (ENOENT) is safe. Any OTHER read failure
+    // (EACCES, EIO, ...) means a marker may exist that we cannot read — fail
+    // closed as unsafe (audit A T4b). Not cached: a transient IO error must
+    // not poison the workspace permanently.
+    if (errnoCode(error) === "ENOENT") return undefined;
+    return { reason: "unreadable unsafe marker", markedAt: Date.now() };
   }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Present but corrupt marker — fail closed as unsafe (not cached).
+    return { reason: "corrupt unsafe marker", markedAt: Date.now() };
+  }
+  const state = isUnsafeWorkspace(parsed)
+    ? parsed
+    : { reason: "invalid unsafe marker", markedAt: Date.now() };
+  unsafe.set(workspace, state);
+  return state;
 }
 
 export function unsafeWorkspaceError(workspace: string, state: UnsafeWorkspace): Error {

@@ -29,6 +29,17 @@ async function processRetryQueue(
         surfaceKey: item.surfaceKey,
         text: item.text,
         sender: { id: "recovery", name: "recovery" },
+        // audit A T1: the ORIGINAL sender identity is NOT persisted
+        // (Message.UserMessage carries no sender/actorId, and the ingress
+        // actor audit is lossy observation — not a durable queryable row), so
+        // the router's blacklist/authority cannot be re-evaluated against the
+        // real sender. Replaying under the synthetic "recovery" principal
+        // would launder a since-blacklisted sender past the actor-scoped
+        // blacklist. Mark the replay evidence_only: the gateway floors its
+        // routed treatment (channel grants downgrade, never upgrade, a marked
+        // inbound), so the brain frames it as evidence and it can never drive
+        // top-level command work under a laundered identity.
+        inboundTreatment: "evidence_only",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

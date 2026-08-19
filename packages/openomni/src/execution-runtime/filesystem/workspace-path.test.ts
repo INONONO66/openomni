@@ -74,6 +74,13 @@ describe("resolveContainedPath", () => {
       rmSync(symlinkPath);
     }
   });
+
+  it("denies (never degrades to lexical) when the workspace root does not resolve (audit A T4d)", () => {
+    const missingRoot = join(tmpdir(), `workspace-missing-root-${crypto.randomUUID()}`);
+    expect(() => resolveContainedPath(missingRoot, "file.txt")).toThrow(
+      "Workspace root does not resolve",
+    );
+  });
 });
 
 describe("resolveContainedPathForCreate", () => {
@@ -111,5 +118,12 @@ describe("resolveContainedPathForCreate", () => {
       rmSync(symlinkPath);
       rmSync(escapeTarget, { recursive: true });
     }
+  });
+
+  it("denies (never degrades to lexical) when the workspace root does not resolve (audit A T4d)", () => {
+    const missingRoot = join(tmpdir(), `workspace-missing-create-${crypto.randomUUID()}`);
+    expect(() => resolveContainedPathForCreate(missingRoot, "nested/new.txt")).toThrow(
+      "Workspace root does not resolve",
+    );
   });
 });

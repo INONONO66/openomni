@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Tool } from "@openomni/protocol";
@@ -7,6 +7,8 @@ import { createToolExecutor } from "./tool/executor.js";
 import { bashTool } from "./tool/builtins/bash.js";
 import type { NativeTool } from "./tool/types.js";
 import { WorkspaceLock } from "./workspace-lock.js";
+import { lockKey } from "./workspace-lock-files.js";
+import { LOCK_ROOT, OWNER_FILE, STALE_GRACE_MS } from "./workspace-lock-types.js";
 
 /**
  * The trace the real caller attaches to every tool call. The executor inherits
@@ -131,6 +133,54 @@ describe("WorkspaceLock", () => {
 
     await WorkspaceLock.acquire(workspace, "probe-settled-first", 50);
     WorkspaceLock.release(workspace, "probe-settled-first");
+  });
+});
+
+describe("WorkspaceLock fail-closed lock/unsafe reads (audit A T4a/T4b)", () => {
+  test("does NOT reap a stale lock whose owner file is unreadable/corrupt (T4a)", async () => {
+    const workspace = makeWorkspace();
+    const dir = join(LOCK_ROOT, lockKey(workspace));
+    mkdirSync(dir, { recursive: true });
+    // Owner file present but unparseable — its holder may be live.
+    writeFileSync(join(dir, OWNER_FILE), "{ this is not json", "utf-8");
+    // Age the dir far past the grace: the OLD mtime-grace path WOULD reap it.
+    const old = new Date(Date.now() - 10 * STALE_GRACE_MS);
+    utimesSync(dir, old, old);
+
+    try {
+      const blocked = await WorkspaceLock.acquire(workspace, "probe", 60).catch((error) => error);
+      expect(blocked).toBeInstanceOf(Error);
+      expect((blocked as Error).message).toContain("workspace lock timeout");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("still reaps a stale lock whose owner file is genuinely absent (grace intact)", async () => {
+    const workspace = makeWorkspace();
+    const dir = join(LOCK_ROOT, lockKey(workspace));
+    mkdirSync(dir, { recursive: true });
+    const old = new Date(Date.now() - 10 * STALE_GRACE_MS);
+    utimesSync(dir, old, old);
+
+    // No owner.json → the mtime grace legitimately reaps: acquire succeeds.
+    await WorkspaceLock.acquire(workspace, "probe", 500);
+    WorkspaceLock.release(workspace, "probe");
+  });
+
+  test("reads an unreadable/corrupt unsafe marker as UNSAFE (T4b)", async () => {
+    const workspace = makeWorkspace();
+    mkdirSync(LOCK_ROOT, { recursive: true });
+    const marker = join(LOCK_ROOT, `${lockKey(workspace)}.unsafe.json`);
+    writeFileSync(marker, "{ corrupt unsafe marker", "utf-8");
+
+    try {
+      const blocked = await WorkspaceLock.acquire(workspace, "probe", 60).catch((error) => error);
+      expect(blocked).toBeInstanceOf(Error);
+      expect((blocked as Error).message).toContain("workspace marked unsafe");
+    } finally {
+      rmSync(marker, { force: true });
+    }
   });
 });
 
