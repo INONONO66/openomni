@@ -9,6 +9,7 @@ import {
   AgentToolProvider,
   createBrainEngine,
   createDefaultDispatchRuntime,
+  createMessageSendTool,
   CronAdapter,
   CronJobRunner,
   ResidentRuntime,
@@ -16,7 +17,11 @@ import {
   type BrainEngine,
   type DispatchRuntime,
 } from "@openomni/openomni";
-import { createGatewayRouter, type ChannelDeliveryRoute } from "@openomni/channels";
+import {
+  createGatewayRouter,
+  type ChannelDeliveryRoute,
+  type GatewayRouter,
+} from "@openomni/channels";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/mcp-config";
 import { createMessageHandler } from "../handler/conversation";
@@ -29,7 +34,7 @@ import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { assembleEffectRuntime } from "./effects";
 import { createServerDispatchOwners } from "./dispatch-owners";
-import { registerServerMessaging } from "./messaging";
+import { registerServerMessaging, serverMessaging } from "./messaging";
 import { connectMcpServers } from "./mcp";
 import { runRecovery, startInboundSurfacesAfterRecovery } from "./recovery";
 import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
@@ -174,6 +179,21 @@ export async function main(options: MainOptions = {}): Promise<void> {
   agentProviderRef.current = new AgentToolProvider({
     dispatchRuntime: sharedDispatchRuntime,
   });
+  // #708: the brain's as-me outbound trigger. The send port is the server's
+  // registered messaging seam (lazy: registration happens after the router
+  // composes below; a call before that keeps the typed fail-closed error).
+  // Default posture: the tool is cataloged (delegation category — the depth
+  // gate keeps it resident-only), but authority stays with the Owner: no
+  // `messaging.personaActorId` → typed "persona not configured" result, and
+  // grants default empty → every send denied `ungranted`.
+  agentProviderRef.current.register(
+    createMessageSendTool({
+      send: (input) => serverMessaging().send(input),
+      ...(config.messaging.personaActorId === undefined
+        ? {}
+        : { personaActorId: config.messaging.personaActorId }),
+    }),
+  );
   dispatchRuntimeRef.current = sharedDispatchRuntime;
   // #707: the brain's Deliver consumer resolves the resident AgentDef itself —
   // the SAME construction the channel bridge used to embed per message
@@ -195,12 +215,22 @@ export async function main(options: MainOptions = {}): Promise<void> {
         return agentDef;
       }
     : undefined;
+  // The engine claims internal (cron-stickiness) surface sessions through
+  // the gateway router's port (#708); the router is composed just below, so
+  // the claim crosses the same fail-closed ref seam as the other cycles.
+  const gatewayRouterRef: { current?: GatewayRouter } = {};
   const ingressEngine = createBrainEngine({
     coordinator,
     residentRuntime,
     agentResolver: residentAgentResolver,
     dispatchRuntime: sharedDispatchRuntime,
     ...(externalAgentResolver === undefined ? {} : { externalAgentResolver }),
+    claimSurface: (surfaceKey, sessionId, expectedSessionId) => {
+      if (!gatewayRouterRef.current) {
+        throw new Error("gateway router is not configured — surface claims fail closed");
+      }
+      return gatewayRouterRef.current.claimSurface(surfaceKey, sessionId, expectedSessionId);
+    },
   });
   ingressEngineRef.current = ingressEngine;
 
@@ -216,8 +246,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
     messaging: {
       deliveryRoutes,
       grants: () => config.messaging.grants,
+      replyGrantRules: () => config.messaging.replyGrantRules,
     },
   });
+  gatewayRouterRef.current = gatewayRouter;
 
   const routingHandler = model ? createMessageHandler({ ingress: gatewayRouter }) : undefined;
 

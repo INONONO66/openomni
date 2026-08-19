@@ -4,12 +4,23 @@ import { SurfaceKey, Storage, Session } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressSessionResolver } from "../../src/ingress";
 
-/** resolve() with the test trace context; model stays on the resolver default unless given. */
+/**
+ * resolve() with the test trace context; model stays on the resolver default
+ * unless given. The claim port mirrors the composition root (#708): the
+ * gateway router's claimSurface is SurfaceKey.claim — the brain src itself no
+ * longer holds the write.
+ */
 function resolveWithTrace(
   event: Parameters<typeof IngressSessionResolver.resolve>[0],
   model?: Parameters<typeof IngressSessionResolver.resolve>[2],
 ) {
-  return IngressSessionResolver.resolve(event, { traceId: "trace-resolver-test" }, model);
+  return IngressSessionResolver.resolve(
+    event,
+    { traceId: "trace-resolver-test" },
+    model,
+    (surfaceKey, sessionId, expectedSessionId) =>
+      SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId),
+  );
 }
 
 describe("IngressSessionResolver", () => {
@@ -243,6 +254,32 @@ describe("IngressSessionResolver", () => {
 
       expect(result2.isNew).toBe(true);
       expect(sessionId1).not.toBe(sessionId2);
+    });
+
+    it("fails closed when the claim port is absent — the brain never writes the surface map directly (#708)", () => {
+      expect(() =>
+        IngressSessionResolver.resolve(
+          { surface: "slack", workspace: "team-a", channel: "C123" },
+          { traceId: "trace-resolver-test" },
+        ),
+      ).toThrow("surface claim port not configured");
+      // Fail-closed means no side effects either: no orphan candidate session.
+      expect(Session.list()).toEqual([]);
+    });
+
+    it("worker placement needs no claim port — only resident surface stickiness claims", () => {
+      const parent = Session.create({
+        traceId: "trace-resolver-test",
+        title: "parent",
+        model: { providerID: "test", modelID: "fixture" },
+      });
+
+      const result = IngressSessionResolver.resolve(
+        { surface: "resident-worker-tool", target: { kind: "worker", parentSessionId: parent.id } },
+        { traceId: "trace-resolver-test" },
+      );
+
+      expect(result.session.parentSessionId).toBe(parent.id);
     });
 
     it("fails closed when worker target session is missing", () => {
