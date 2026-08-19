@@ -283,4 +283,9 @@ export namespace Ingress {
   export const routeStreamId = RouteRecord.routeStreamId;
   export const routeDecidedFact = RouteRecord.routeDecidedFact;
   export const routeDecisionsEquivalent = RouteRecord.routeDecisionsEquivalent;
+
+  /** batch ② commit 4 — the route_correction (route.not_delivered) fact helpers. */
+  export const ROUTE_NOT_DELIVERED_FACT_TYPE = RouteRecord.ROUTE_NOT_DELIVERED_FACT_TYPE;
+  export const routeCorrectionStreamId = RouteRecord.routeCorrectionStreamId;
+  export const routeNotDeliveredFact = RouteRecord.routeNotDeliveredFact;
 }

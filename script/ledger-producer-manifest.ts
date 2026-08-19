@@ -46,7 +46,14 @@ import { join } from "node:path";
 
 interface LedgerStreamProducer {
   /** Stream class key — must match `Ledger.StreamRegistry`. */
-  readonly streamClass: "wait" | "work" | "route" | "command" | "effect" | "engagement";
+  readonly streamClass:
+    | "wait"
+    | "work"
+    | "route"
+    | "route_correction"
+    | "command"
+    | "effect"
+    | "engagement";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
    * facts. Every class has exactly one producer except `route`, which split
@@ -92,6 +99,16 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
         // resident.ask) — same fact strings, same stream family.
         "packages/openomni/src/ingress/internal-route.ts",
       ],
+      writes: "append",
+    },
+    {
+      // batch ② commit 4 — the route.decided ledger-lie correction. A routed
+      // wait-correlated delivery rejected fail-closed at the wait fold records
+      // route.not_delivered on the separate route_correction stream. Sole
+      // producer: the gateway router's wait execution (external arm only —
+      // the brain's internal path retires wait correlation).
+      streamClass: "route_correction",
+      producers: ["packages/channels/src/router/routing-execution.ts"],
       writes: "append",
     },
     {

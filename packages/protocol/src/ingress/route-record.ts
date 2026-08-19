@@ -43,6 +43,25 @@ export function routeDecidedFact(streamId: string, decision: RoutingDecisionPayl
   return { streamId, type: ROUTE_DECIDED_FACT_TYPE, data: decision };
 }
 
+/** The ONE `route.not_delivered` correction fact type string — shared so it cannot drift. */
+export const ROUTE_NOT_DELIVERED_FACT_TYPE = "route.not_delivered";
+
+// The route_correction owner-stream key (batch ② commit 4): the SAME scope +
+// inbound id as the route decision it corrects, on a distinct class prefix so
+// the route stream's single-fact route.decided replay gate is untouched.
+export function routeCorrectionStreamId(scope: RouteStreamScope): string {
+  const component = (value: string | undefined) => encodeURIComponent(value ?? "");
+  return `route_correction:${component(scope.surface)}:${component(scope.workspace)}:${component(scope.channel)}:${component(scope.id)}`;
+}
+
+/** The ledger append input for a `route.not_delivered` correction fact. */
+export function routeNotDeliveredFact(
+  streamId: string,
+  correction: Ledger.RouteNotDelivered,
+): Ledger.Input {
+  return { streamId, type: ROUTE_NOT_DELIVERED_FACT_TYPE, data: correction };
+}
+
 // Replay equivalence gate (#510 review fix F2): a cas_conflict means this
 // inbound was ALREADY decided. The recorded decision and the fresh one must
 // agree on every execution-shaping field — stage, outcome, target, sessionId,

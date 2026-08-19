@@ -46,6 +46,9 @@ export namespace Ledger {
   export const RouteDecided = Streams.RouteDecided;
   export type RouteDecided = Streams.RouteDecided;
 
+  export const RouteNotDelivered = Streams.RouteNotDelivered;
+  export type RouteNotDelivered = Streams.RouteNotDelivered;
+
   export const CommandAuthorized = Streams.CommandAuthorized;
   export type CommandAuthorized = Streams.CommandAuthorized;
 

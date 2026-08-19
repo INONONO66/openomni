@@ -82,6 +82,21 @@ export const StreamRegistry = {
     factTypes: ["route.decided"],
     status: "shipped",
   },
+  route_correction: {
+    // batch ② commit 4: the route stream records the routing DECISION; when a
+    // routed wait-correlated delivery is then rejected fail-closed at the wait
+    // fold (a non-responder must not resume a wait — gateway-design §2a-1),
+    // route.decided already says outcome:route but the delivery never
+    // happened. This SEPARATE single-fact stream corrects the ledger without
+    // touching the route stream's single-fact route.decided replay gate.
+    stream:
+      'route_correction:<uriencoded surface>:<uriencoded workspace ?? "">:<uriencoded channel ?? "">:<uriencoded inboundEventId>',
+    heads: "single-fact (expectedHead 0, seq 1)",
+    conflictMeans:
+      "inbound already corrected as not-delivered — an idempotent redelivery of the same rejected wait reply; the recorded route.not_delivered fact stands, no second fact",
+    factTypes: ["route.not_delivered"],
+    status: "shipped",
+  },
   command: {
     stream: "command:<dispatchId>",
     heads: "single-fact (expectedHead 0, seq 1)",
@@ -117,6 +132,21 @@ export const StreamRegistry = {
  */
 export const RouteDecided: z.ZodType<RoutingDecisionPayload> = IngressEvents.RoutingDecision.schema;
 export type RouteDecided = RoutingDecisionPayload;
+
+/**
+ * `route.not_delivered` fact data (batch ② commit 4): the correcting fact for
+ * a routed wait-correlated inbound whose reply was rejected fail-closed at the
+ * wait fold and dropped. Recorded on the `route_correction:<scope>:<id>`
+ * stream so the ledger reflects the non-delivery the route.decided fact would
+ * otherwise misreport as a completed route.
+ */
+export const RouteNotDelivered = z
+  .object({
+    inboundId: z.string().min(1),
+    reason: z.string().min(1),
+  })
+  .strict();
+export type RouteNotDelivered = z.infer<typeof RouteNotDelivered>;
 
 /**
  * #498 A2 historical upcast — command verdict facts recorded before the

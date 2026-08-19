@@ -616,6 +616,7 @@
     "traceId",
     "trustTier"
   ],
+  "Ledger.RouteNotDelivered": ["inboundId", "reason"],
   "McpConfig.ServerConfig#0": [
     "args",
     "command",

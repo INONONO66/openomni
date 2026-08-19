@@ -122,6 +122,13 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       waitContext?: Gateway.WaitContext;
       /** #709: the delivery's perimeter trust verdict — the engagement approval gate's input. */
       actorTrustTier?: string;
+      /**
+       * batch ② commit 4 (S6): the delivery's perimeter inbound treatment
+       * (Gateway.ActorContext.inboundTreatment). Consumed at the projection
+       * seam — an `evidence_only` inbound is framed as an observation, never a
+       * plain command. Consumed verbatim per gateway-design §3.
+       */
+      inboundTreatment?: string;
     }>,
   ): Promise<Ingress.IngressResult> {
     const agentModel = inboundEvent.agent.model;
@@ -132,6 +139,7 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       sessionId,
       { providerID: agentModel.provider, modelID: agentModel.id },
       activeTrace,
+      delivery?.inboundTreatment,
     );
 
     const handlerContext = {
@@ -239,6 +247,7 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
         {
           waitContext: delivery.waitContext,
           actorTrustTier: delivery.actorContext?.trustTier,
+          inboundTreatment: delivery.actorContext?.inboundTreatment,
         },
       );
     },
