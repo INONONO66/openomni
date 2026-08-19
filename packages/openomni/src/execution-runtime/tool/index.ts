@@ -2,8 +2,13 @@ export {
   AgentToolProvider,
   createChildAgentTool,
   createDispatchTool,
+  createMessageSendTool,
 } from "./agent/index.js";
-export type { DispatchToolRuntime } from "./agent/index.js";
+export type {
+  DispatchToolRuntime,
+  MessageSendPort,
+  MessageSendToolOptions,
+} from "./agent/index.js";
 export { buildToolCatalog, resolveCategory, resolveToolSelection } from "./catalog.js";
 export { Tool, resolveMeta } from "./define.js";
 export { createToolExecutor } from "./executor.js";

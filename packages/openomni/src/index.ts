@@ -63,6 +63,7 @@ export {
   createChildAgentRuntime,
   createChildAgentTool,
   createDispatchTool,
+  createMessageSendTool,
   createToolExecutor,
   resolveMeta,
   resolveCategory,
@@ -86,6 +87,8 @@ export type {
   ChildAgentSpawnInput,
   DelegationPolicyRegistration,
   DispatchToolRuntime,
+  MessageSendPort,
+  MessageSendToolOptions,
 } from "./execution-runtime";
 
 // Evidence conformance vocabulary (#493-owned dormant replay types ride this
