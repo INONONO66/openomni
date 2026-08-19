@@ -232,6 +232,73 @@ describe("config", () => {
     expect(config.server.wsToken).toBe("env-ws-token");
   });
 
+  it("parses messaging.personaActorId and replyGrantRules; defaults stay fail-closed empty (#708)", () => {
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        messaging: {
+          personaActorId: "actor:persona",
+          replyGrantRules: [
+            {
+              id: "rule-1",
+              senderId: "actor:persona",
+              surface: "telegram",
+              operations: ["awaited"],
+              instanceTtlMs: 60_000,
+              maxLiveInstances: 3,
+              createdBy: "owner",
+            },
+          ],
+        },
+      }),
+    );
+
+    const config = loadConfig("trace-test", configPath);
+    expect(config.messaging.personaActorId).toBe("actor:persona");
+    expect(config.messaging.replyGrantRules).toHaveLength(1);
+    expect(config.messaging.replyGrantRules[0]).toMatchObject({ id: "rule-1" });
+
+    const emptyPath = join(tempDir, "empty.json");
+    writeFileSync(emptyPath, JSON.stringify({}));
+    const empty = loadConfig("trace-test", emptyPath);
+    expect(empty.messaging.personaActorId).toBeUndefined();
+    expect(empty.messaging.replyGrantRules).toEqual([]);
+    expect(empty.messaging.grants).toEqual([]);
+  });
+
+  it("drops malformed persona/reply-grant config fail-closed with a warning (#708)", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        messaging: {
+          personaActorId: "",
+          replyGrantRules: [{ id: "rule-broken" }],
+        },
+      }),
+    );
+
+    const config = loadConfig("trace-test", configPath);
+    await flushBus();
+    unsubscribe();
+
+    expect(config.messaging.personaActorId).toBeUndefined();
+    expect(config.messaging.replyGrantRules).toEqual([]);
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid messaging.personaActorId config ignored; as-me sends stay fail-closed",
+      }),
+    );
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid messaging.replyGrantRules config ignored; no reply-grant instances materialize",
+      }),
+    );
+  });
+
   it("returns undefined when neither config file nor env var is set", () => {
     delete process.env.TELEGRAM_BOT_TOKEN;
     delete process.env.DISCORD_BOT_TOKEN;

@@ -39,7 +39,7 @@ const serverConfig: ServerConfig = {
   telegram: { allowedUsers: [] },
   github: { allowedUsers: [] },
   discord: { allowedUsers: [] },
-  messaging: { grants: [] },
+  messaging: { grants: [], replyGrantRules: [] },
 };
 
 const originalBeginWait = WorkItemAttemptRun.beginWait;
