@@ -8,7 +8,12 @@ import {
 import { ActorRegistry } from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
 import { Events } from "./events.js";
-import { resolveSenderTargetGrant } from "./grant.js";
+import {
+  deliverySurfaceKey,
+  hasScopedSenderTargetCandidate,
+  resolveScopedSenderTargetGrant,
+  resolveSenderTargetGrant,
+} from "./grant.js";
 
 type DeliveryTarget = Gateway.DeliveryTarget;
 type MessageDenialCode = Gateway.MessageDenialCode;
@@ -159,13 +164,21 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
   async function send(rawInput: SendInput): Promise<SendReceipt> {
     const input = SendInput.parse(rawInput);
-    const grant = resolveSenderTargetGrant(ports.grants(), {
+    const grants = ports.grants();
+    const claim = {
       senderId: input.senderId,
       targetActorId: input.target.actorId,
       operation: input.operation,
       at: input.at,
-    });
-    if (grant === undefined) {
+    };
+    // Scope-aware arm (#708): a rule-materialized instance carries a
+    // replyScope that can only be checked against the RESOLVED delivery
+    // endpoint, so with a candidate present the target resolves first and
+    // the scope check follows. With no candidate the denial stays
+    // `ungranted` BEFORE any registry lookup — an ungranted sender learns
+    // nothing from the registry (pinned by the send suite).
+    let grant = resolveSenderTargetGrant(grants, claim);
+    if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
       return deny(
         input,
         "ungranted",
@@ -176,6 +189,23 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     if (!resolution.ok) {
       return deny(input, resolution.code, resolution.reason);
     }
+    if (grant === undefined) {
+      const surfaceKey = deliverySurfaceKey(resolution.target);
+      grant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
+      if (grant === undefined) {
+        // Cross-surface use of a reply-scoped instance fails closed: the
+        // instance authorizes replies INTO the initiating container only.
+        return deny(
+          input,
+          "ungranted",
+          `reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container`,
+        );
+      }
+    }
+
+    // #219 seam: egress semantics (social budget, notify|converse class
+    // split, 봉수 escalation counting) evaluate HERE — after grant, before
+    // the wait record and the delivery effect. Own leaf, not this PR.
 
     let wait: Wait.Record | undefined;
     if (input.operation === "awaited") {
