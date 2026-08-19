@@ -88,13 +88,15 @@ The gateway resolves **physical context** only, by deterministic precedence:
 1. **Wait correlation** (strongest): reply/thread/message ids match an open
    Wait **and the resolved sender is one of the Wait's
    `expectedResponders`** → that Wait's owner session, with `waitContext`
-   attached. The responder gate is perimeter-side and runs BEFORE
-   `waitContext` attachment (preserves the
+   attached. The responder gate runs in the wait fold (`attachReply`, the
    pinned-target invariant of the wait matcher core — protocol vocabulary
-   since the #707 slice-1 hoist): a correlated message from a
-   non-responder never carries `waitContext` — it degrades to an ordinary
-   delivery on the container session (rule 3) so a third party replying into
-   an awaited thread cannot hijack the wait.
+   since the #707 slice-1 hoist): a correlated message from a non-responder is
+   **rejected fail-closed** (typed `wait_reply_rejected`; the message is
+   dropped) so a third party replying into an awaited thread cannot resume or
+   hijack the wait. Because the routing decision was already recorded with
+   `outcome: route` before the fold ran, the rejection appends a correcting
+   `route.not_delivered` fact on the separate `route_correction:<scope>:<id>`
+   stream — the ledger reflects the non-delivery, never a completed route.
 2. **Thread inheritance**: a new thread container inherits the session (and
    engagement linkage, if any) of its origin message — the parent message id
    is platform fact, not judgment. The thread's own surfaceKey is then bound

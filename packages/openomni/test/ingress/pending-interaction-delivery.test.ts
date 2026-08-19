@@ -107,12 +107,6 @@ function delivery(
 ): Gateway.Deliver {
   return {
     sessionId,
-    message: {
-      messageId: event.id,
-      traceId: event.traceId,
-      surfaceKey: `${event.surface}::${event.channel ?? ""}`,
-      text: typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload),
-    },
     event,
     decision: pendingInteractionDecision(event, sessionId, runId, pendingInteractionId),
   };

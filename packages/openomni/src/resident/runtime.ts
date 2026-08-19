@@ -31,6 +31,15 @@ export interface ResidentRunContext {
    * admissions, and internal runs.
    */
   readonly actorTrustTier?: string;
+  /**
+   * S6: the triggering delivery's perimeter inbound treatment
+   * (actorContext.inboundTreatment, consumed verbatim per gateway-design §3).
+   * `evidence_only` forces this run's tool permission to deny-all — the run
+   * may reason over the evidence but cannot drive tool use with authority
+   * above the evidence tier. Absent for internal runs and full_access
+   * deliveries (which act normally).
+   */
+  readonly inboundTreatment?: string;
 }
 
 export interface ResidentRunResult {
@@ -193,6 +202,9 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
     middleware: buildWorkerMiddleware({
       traceId: ctx.traceContext?.traceId,
       permissions: ctx.event.agent.permissions,
+      // S6 hard gate: an evidence_only delivery caps this run's tool authority
+      // to deny-all, overriding whatever permissions/plan would allow.
+      ...(ctx.inboundTreatment === undefined ? {} : { inboundTreatment: ctx.inboundTreatment }),
       ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
       compaction: {
         summarizeWith: createAnchorCompletion({

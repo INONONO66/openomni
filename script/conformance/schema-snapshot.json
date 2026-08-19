@@ -298,7 +298,6 @@
     "actorContext",
     "decision",
     "event",
-    "message",
     "sessionId",
     "waitContext"
   ],
@@ -315,16 +314,6 @@
     "userId",
     "workspace"
   ],
-  "Gateway.InboundMessage": [
-    "media",
-    "messageId",
-    "replyToId",
-    "surfaceKey",
-    "text",
-    "threadId",
-    "traceId"
-  ],
-  "Gateway.Media": ["filename", "kind", "mimeType", "url"],
   "Gateway.MessageTarget": ["actorId", "endpointId"],
   "Gateway.Origin": ["externalId", "surface"],
   "Gateway.ReplyGrantRule": [
@@ -442,7 +431,21 @@
     "userId",
     "workspace"
   ],
-  "Ingress.MetaSchema": ["actor", "target"],
+  "Ingress.MetaSchema": [
+    "actor",
+    "agentName",
+    "channelGrantId",
+    "channelGrantKind",
+    "correlation",
+    "inboundTreatment",
+    "kind",
+    "pendingAsk",
+    "replyToId",
+    "sender",
+    "surfaceKey",
+    "target",
+    "threadId"
+  ],
   "Ingress.TargetSchema": ["kind", "parentSessionId", "sessionId", "workerId"],
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
@@ -613,6 +616,7 @@
     "traceId",
     "trustTier"
   ],
+  "Ledger.RouteNotDelivered": ["inboundId", "reason"],
   "McpConfig.ServerConfig#0": [
     "args",
     "command",

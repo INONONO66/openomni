@@ -59,6 +59,57 @@ describe("buildWorkerMiddleware backward compatibility", () => {
   });
 });
 
+// S6 (batch ② commit 5): an evidence_only inbound is a HARD authority cap, not
+// merely a prompt frame — the run's tool permission is forced deny-all,
+// overriding whatever permissions/plan would allow. A full_access delivery is
+// untouched (no over-close).
+describe("buildWorkerMiddleware S6 evidence_only hard tool-authority gate", () => {
+  const permissions = { action: "tool.call", allowlist: ["tool:read"] };
+
+  it("caps a legacy-permission run to deny-all when evidence_only; full_access acts normally", async () => {
+    // Control: full_access lets the allow-listed tool through.
+    const allowed = findRegistration(
+      buildWorkerMiddleware({ permissions, inboundTreatment: "full_access" }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(allowed, "tool:read")).resolves.toMatchObject({ verdict: "allow" });
+
+    // Hard gate: the SAME allow-listed tool is denied on an evidence_only run.
+    const gated = findRegistration(
+      buildWorkerMiddleware({ permissions, inboundTreatment: "evidence_only" }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(gated, "tool:read")).resolves.toMatchObject({ verdict: "deny" });
+  });
+
+  it("overrides a policy plan that would allow the tool when evidence_only", async () => {
+    const plan = {
+      policies: [
+        {
+          id: "builtin:tool-permission",
+          required: true,
+          config: { permission: { action: "tool.call", allowlist: ["tool:read"] } },
+        },
+      ],
+      labels: [],
+    };
+
+    // Control: without the evidence_only cap the plan allows the tool.
+    const planned = findRegistration(
+      buildWorkerMiddleware({ policyPlan: plan }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(planned, "tool:read")).resolves.toMatchObject({ verdict: "allow" });
+
+    // Hard gate overrides the plan's ruleset.
+    const gated = findRegistration(
+      buildWorkerMiddleware({ policyPlan: plan, inboundTreatment: "evidence_only" }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(gated, "tool:read")).resolves.toMatchObject({ verdict: "deny" });
+  });
+});
+
 describe("buildWorkerMiddleware injection queue persistence", () => {
   it("emits a queued response when history persistence throws a non-Error value", async () => {
     const queue = InjectionQueue.create();

@@ -15,12 +15,6 @@ import { ResidentRuntime } from "../../src/resident/runtime";
 function residentDeliver(id: string, sessionId: string): Gateway.Deliver {
   return {
     sessionId,
-    message: {
-      messageId: id,
-      traceId: "trace-test",
-      surfaceKey: "tui:/repo:resident",
-      text: "hello",
-    },
     event: {
       id,
       traceId: "trace-test",

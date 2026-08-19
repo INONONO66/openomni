@@ -779,9 +779,8 @@ describe("GatewayRouter durable wait routing", () => {
     registerResponder("actor-intruder", "intruder-2");
     openSessionWait("wait-intruder", { expectedResponders: ["actor-someone-else"] });
 
-    const error = await captureError(
-      kernelRouter().ingest({ ...replyEvent("inbound-wait-intruder"), userId: "intruder-2" }),
-    );
+    const intruderEvent = { ...replyEvent("inbound-wait-intruder"), userId: "intruder-2" };
+    const error = await captureError(kernelRouter().ingest(intruderEvent));
 
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
@@ -789,6 +788,18 @@ describe("GatewayRouter durable wait routing", () => {
     const record = WaitStore.get("wait-intruder");
     expect(record).toMatchObject({ status: "open" });
     expect(record?.replies).toHaveLength(0);
+
+    // Ledger-lie correction (batch ② commit 4): route.decided already recorded
+    // outcome:route for this correlated reply, but the fold rejected it
+    // fail-closed. The route stream keeps its single route.decided fact…
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    expect(ledger.headFact(Ingress.routeStreamId(intruderEvent))?.type).toBe("route.decided");
+    // …and the correcting route.not_delivered fact lands on the separate
+    // single-fact route_correction stream, reflecting the non-delivery.
+    const correction = ledger.headFact(Ingress.routeCorrectionStreamId(intruderEvent));
+    expect(correction?.type).toBe("route.not_delivered");
+    expect(correction?.seq).toBe(1);
   });
 
   test("blocks a disallowed action on a matched durable wait instead of surface routing", async () => {

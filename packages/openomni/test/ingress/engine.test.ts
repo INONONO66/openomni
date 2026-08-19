@@ -104,12 +104,6 @@ function makeDeliver(
         : "worker";
   return {
     ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
-    message: {
-      messageId: id,
-      traceId: "trace-test",
-      surfaceKey: "tui:/repo:resident",
-      text: payload,
-    },
     actorContext: {
       actorId: "act_owner",
       trustTier: "owner",

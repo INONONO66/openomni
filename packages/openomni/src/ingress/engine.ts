@@ -122,6 +122,16 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       waitContext?: Gateway.WaitContext;
       /** #709: the delivery's perimeter trust verdict — the engagement approval gate's input. */
       actorTrustTier?: string;
+      /**
+       * S6 — the delivery's perimeter inbound treatment
+       * (Gateway.ActorContext.inboundTreatment), consumed verbatim per
+       * gateway-design §3. Two consumers: (1) the HARD authority gate — an
+       * `evidence_only` run's tool permission is forced deny-all so the turn
+       * cannot drive tool use, whatever the plan allows; (2) the projection
+       * seam frames the turn as an observation (defense-in-depth). Together
+       * they make the batch-① recovery floor load-bearing.
+       */
+      inboundTreatment?: string;
     }>,
   ): Promise<Ingress.IngressResult> {
     const agentModel = inboundEvent.agent.model;
@@ -132,6 +142,7 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       sessionId,
       { providerID: agentModel.provider, modelID: agentModel.id },
       activeTrace,
+      delivery?.inboundTreatment,
     );
 
     const handlerContext = {
@@ -143,6 +154,7 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
       signal,
       waitContext: delivery?.waitContext,
       actorTrustTier: delivery?.actorTrustTier,
+      inboundTreatment: delivery?.inboundTreatment,
     };
 
     if (target.kind === "resident") {
@@ -239,6 +251,7 @@ export function createBrainEngine(deps: BrainEngineDeps = {}): BrainEngine {
         {
           waitContext: delivery.waitContext,
           actorTrustTier: delivery.actorContext?.trustTier,
+          inboundTreatment: delivery.actorContext?.inboundTreatment,
         },
       );
     },

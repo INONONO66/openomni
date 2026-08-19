@@ -6,7 +6,7 @@ import {
   targetKey,
   type Actor,
 } from "@openomni/protocol";
-import { BlacklistStore, Storage, SurfaceKey } from "@openomni/ledger";
+import { BlacklistStore, LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
 /**
@@ -179,32 +179,15 @@ function blacklistState(
   };
 }
 
-// Route owner-stream key (#510 review fix F1): the stream identity carries
-// the surface + workspace + channel scope, each component URI-encoded
-// (delimiter safety) — byte-identical to the gateway router's external
-// stream key so internal and external decisions share ONE stream family.
-function routeStreamId(event: Ingress.InternalEvent): string {
-  const component = (value: string | undefined) => encodeURIComponent(value ?? "");
-  return `route:${component(event.surface)}:${component(event.workspace)}:${component(event.channel)}:${component(event.id)}`;
-}
-
-// Replay equivalence gate (#510 review fix F2) — see the gateway router's
-// twin: a cas_conflict means this inbound was ALREADY decided; the recorded
-// and fresh decisions must agree on every execution-shaping field before the
-// redelivery may proceed.
-function routeDecisionsEquivalent(
-  recorded: Ingress.RoutingDecisionPayload,
-  fresh: Ingress.RoutingDecisionPayload,
-): boolean {
-  return (
-    recorded.stage === fresh.stage &&
-    recorded.outcome === fresh.outcome &&
-    recorded.target === fresh.target &&
-    recorded.sessionId === fresh.sessionId &&
-    recorded.runId === fresh.runId &&
-    recorded.pendingInteractionId === fresh.pendingInteractionId
-  );
-}
+// The route owner-stream key (#510 F1) and the replay equivalence gate
+// (#510 F2) are the PURE parts of this recorder, hoisted to protocol
+// (`Ingress.routeStreamId` / `Ingress.routeDecisionsEquivalent` /
+// `Ingress.routeDecidedFact`) — byte-identical to the gateway router's
+// external arm so internal and external decisions share ONE stream family
+// and cannot drift. Only the append below stays per-side; it now records
+// through the SAME scoped `LedgerAppend.port()` surface the router uses
+// (ledger-audit finding: internal-route must use the port, not raw
+// `Storage.get().ledger`) and throws the brain-local typed error.
 
 // #510 C3 ruling 1 — the routing decision is a decision-class fact on the
 // single-fact owner stream (expectedHead 0), awaited durably BEFORE anything
@@ -214,7 +197,7 @@ function recordRouteDecided(
   streamId: string,
   decision: Ingress.RoutingDecisionPayload,
 ): Ingress.RoutingDecisionPayload {
-  const ledger = Storage.get().ledger;
+  const ledger = LedgerAppend.port();
   if (!ledger) {
     throw new IngressRoutingError(
       "route_record_failed",
@@ -224,7 +207,7 @@ function recordRouteDecided(
   }
   let appended: ReturnType<typeof ledger.append>;
   try {
-    appended = ledger.append({ streamId, type: "route.decided", data: decision }, 0);
+    appended = ledger.append(Ingress.routeDecidedFact(streamId, decision), 0);
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
@@ -236,7 +219,7 @@ function recordRouteDecided(
   let recorded: Ingress.RoutingDecisionPayload;
   try {
     const fact = ledger.headFact(streamId);
-    if (fact === undefined || fact.type !== "route.decided") {
+    if (fact === undefined || fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
       throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
     }
     recorded = Ingress.Events.RoutingDecision.schema.parse(fact.data);
@@ -247,7 +230,7 @@ function recordRouteDecided(
       decision,
     );
   }
-  if (!routeDecisionsEquivalent(recorded, decision)) {
+  if (!Ingress.routeDecisionsEquivalent(recorded, decision)) {
     throw new IngressRoutingError(
       "route_replay_divergent",
       `redelivered inbound diverges from its recorded routing decision: recorded ${recorded.stage}/${recorded.outcome}, fresh ${decision.stage}/${decision.outcome}`,
@@ -288,7 +271,7 @@ export function resolveAndRecordInternalRoute(
       },
     ),
   );
-  const effective = recordRouteDecided(routeStreamId(event), decision);
+  const effective = recordRouteDecided(Ingress.routeStreamId(event), decision);
   // Observe-only projection — strictly after the append; lossy by contract.
   Bus.publish(Ingress.Events.RoutingDecision, effective);
   return { decision: effective, selectedTarget };
