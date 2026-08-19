@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787105343844,
+  "lastUpdate": 1787109458305,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57545,6 +57545,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 522510,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "61e8e3967816d433f630835312cc75769a55db8b",
+          "message": "feat: engagement machine — durable delegation state (#740)\n\n* feat(protocol): engagement machine schema + transition fold (#709)\n\nGateway stage 4, E1 — the durable delegation object (gateway-design §5):\n\n- Engagement.Record: id, ownerSessionId, one-line title, state\n  (planning|awaiting_external|deliberating|awaiting_user_approval|acting|\n  done|aborted|expired), Terms (spendCeiling/autoApprove/deadline/\n  speakTriggers — extensible strict object), openWaitIds, validResponders,\n  expiresAt seeded from terms.deadline, revision (CAS, head==revision from\n  birth per the Wait precedent).\n- Pure transition fold: legal edges only per the §5 diagram; a REPORTED\n  term crossing (\"termCrossed\" is an input fact) forces\n  awaiting_user_approval; acting-from-awaiting_user_approval demands the\n  ownerApproved input fact; expiry is the machine's own edge from\n  terms.deadline. Illegal moves are typed rejections.\n- Engagement.Events via BusEvent.define — transitions are user_audit (the\n  delegation safety mechanism is Owner-visible by construction).\n- Storage.EngagementSubAdapter interface (ledger implements in E2);\n  engagement:<id> StreamRegistry entry (revision-bound).\n- Wait.Correlation gains optional engagementId: resumption context only,\n  NEVER a matching key (CorrelationQuery has no slot), so engagement\n  matching can never redirect a wait (§5 quality-soft rule).\n- core-model Tier-2 Owner addition: Engagement (receipt inline, the\n  Gateway precedent), schema snapshot regenerated (purely additive).\n\nDesign non-goal restated: this is the FSM of authority and resumption,\nNOT dialogue — the machine records terms and enforces edges; judgment\n(prices, criteria, negotiation) stays in the LLM. No content FSM.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(ledger): engagement store append-before-CAS + migration 0020 (#709)\n\nGateway stage 4, E2 — the brain-domain engagement surface, following the\nWorkItem/Wait ledger precedent EXACTLY (not the bus-events-only floor):\n\n- EngagementStore: every state change appends a decision-class fact on the\n  owner stream engagement:<id> BEFORE the projection CAS, both inside one\n  sync immediate storage transaction (no record, no action); head ==\n  revision from birth (opened at seq 1, revision 1). No adoption path —\n  the stream class is born with the table, pre-cutover rows are\n  impossible.\n- Facts carry identity/edge shape only: the delegation title, transition\n  reasons, and terms text stay OUT of the immutable hash chain (erasable\n  Owner content); the projection row and the lossy user_audit Bus events\n  carry them, published only after commit.\n- listActive(ownerSessionId): the hydration read — lazy deadline expiry\n  folds due engagements to expired (with their fact) at the next\n  hydration, no sweeper daemon.\n- Migration 0020_engagement (data JSON + owner/state/expiry projection\n  columns), sqlite sub-adapter (INSERT receipt + revision CAS,\n  parse-don't-cast reads), Storage.Adapter.engagement wiring, CLEAR_ORDER.\n- Producer manifest: engagement stream class, exactly one producer\n  (ledger engagement/index.ts); p2 archive-manifest sourceSchemaVersion\n  pin advanced to 0020.\n\nThe gateway may NOT consume this surface (S8 named-surface pin unchanged)\n— the brain is the sole writer per gateway-design §4/§5.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(openomni): engagement tools, approval gate, run hydration (#709)\n\nGateway stage 4, E3 — brain wiring for the engagement machine:\n\nengagementId end-to-end (the chosen minimal path):\n- message.send resolves engagement ownership deterministically — the run's\n  implicit engagementId (waitContext resumption) wins, else the session's\n  SOLE active engagement via the injected lookup, else none (ambiguity\n  never guesses) — and stamps it into waitSpec.correlation.engagementId.\n  ownerRef stays {kind:\"session\"}: Wait.OwnerKind is unchanged, routing to\n  the owner session needs no cross-domain engagement lookup in the router.\n- The gateway router copies wait.correlation.engagementId opaquely into\n  Gateway.WaitContext at delivery (waitContextOf); it is not a correlation\n  MATCHING key, so it can never redirect a delivery (§5 quality-soft).\n\nDeliver → run threading (new implicit rails, the sessionId pattern):\n- engine.deliver forwards waitContext + actorContext.trustTier into the\n  handler context → ResidentRunContext → toolExecutorFactory ctx →\n  ToolRuntimeContext → executor-owned implicit inputs (engagementId,\n  actorTrustTier) — injected, stripped from public schemas, never\n  model-suppliable.\n\nEngagement tools (delegation category, resident-only via the depth gate):\n- engagement.open(title, terms?) — records the delegation verbatim.\n- engagement.transition(id, to, reason, termCrossed?, waitIds?) — the LLM\n  declares moves; the machine enforces edges. EXACT approval gate: the\n  awaiting_user_approval→acting edge passes ownerApproved to the fold iff\n  the TRIGGERING delivery's actorContext.trustTier is owner|co_owner (the\n  Owner said yes in-channel); wait resumptions/anonymous/internal runs\n  carry no tier and can never approve. Rejections are results, not throws.\n- engagement.list() — the session's active delegations.\n\nHydration (§5): the resident run prepends the engagement slice — active\nengagements (title/state/terms/open waits) with the resumed engagement\nmarked when the delivery carries waitContext.engagementId (crash-safe\nresume point) — as a run-input-only context block. Recorded follow-up,\nNOT changed here: the transcript itself is still hydrated in full;\nthe §5 bounded recency window does not exist yet.\n\nNon-goal restated: no content FSM — the machine records terms and\nenforces edges; price/criteria/negotiation judgment stays in the LLM.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): 중고나라 engagement scenario end to end (#709)\n\nGateway stage 4, E4 — the campaign's origin scenario composed over the\nreal router + real brain engine + real tool executors (built by the\nagent's toolExecutorFactory, so engagementId/actorTrustTier ride the\nproduction implicit-input seam from Gateway.Deliver into the tools):\n\nOwner delegates (\"sell bike, floor 50000\") → engagement.open →\nmessage.send awaited (sole-active-engagement fallback stamps the wait's\ncorrelation.engagementId; ownerRef stays session) → buyer replies →\nDeliver carries waitContext.engagementId → run context hydrates the\nengagement slice with the resumed marker → LLM reports the below-floor\noffer as a term crossing → forced awaiting_user_approval → the\nwait-resumption run CANNOT approve (no perimeter tier verdict) → an\nowner-tier in-channel inbound approves → acting → done.\n\nAlso pinned: illegal transition typed-rejected (planning→done); lazy\ndeadline expiry at hydration (overdue delegation leaves the active slice\nand lands its expiry fact, no sweeper); a session without engagements\nhydrates no slice and message.send stamps nothing.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(ledger): tolerate concurrent lazy-expiry CAS conflicts\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T03:16:19Z",
+          "tree_id": "3d55544fdd7b2e74eee641a017eac8ada1f46f06",
+          "url": "https://github.com/INONONO66/openomni/commit/61e8e3967816d433f630835312cc75769a55db8b"
+        },
+        "date": 1787109457502,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5891,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2839,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2432,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15372,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1553,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1622,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46930,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2415,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524895,
             "unit": "ns/op"
           }
         ]
