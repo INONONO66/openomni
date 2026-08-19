@@ -70,13 +70,7 @@ type FoldInput = CompletionEvaluationInput;
 type InputOptions = Partial<
   Pick<
     FoldInput,
-    | "durableFacts"
-    | "proposedFacts"
-    | "blockers"
-    | "currentAttempt"
-    | "policy"
-    | "stakes"
-    | "ownerOverride"
+    "durableFacts" | "proposedFacts" | "blockers" | "currentAttempt" | "policy" | "ownerOverride"
   >
 > &
   Readonly<{ criteria?: readonly WorkItem.Criterion[] }>;
@@ -125,7 +119,6 @@ function input(options: InputOptions = {}): FoldInput {
     blockers: options.blockers ?? [],
     currentAttempt: options.currentAttempt ?? 2,
     policy: options.policy ?? defaultPolicy,
-    ...(options.stakes ? { stakes: options.stakes } : {}),
     ...(options.ownerOverride ? { ownerOverride: options.ownerOverride } : {}),
   };
 }
@@ -511,12 +504,15 @@ describe("completion admission pure fold", () => {
     );
   });
 
+  // With the stakes calculator retired, an asserted (self-claimed) result has
+  // no independent risk gate: it always blocks with high_risk_asserted +
+  // stakes_required, regardless of the policy's allowedAssertedCriterionIds.
   const assertedCases = [
-    ["explicitly authorized", [lowCriterion.id], "admit"],
-    ["not criterion-authorized", [], "block"],
+    ["with an empty allow-list", []],
+    ["even when the criterion is policy-allowed", [lowCriterion.id]],
   ] as const;
-  for (const [name, allowedAssertedCriterionIds, decision] of assertedCases) {
-    test(`${name} asserted result uses resolved criterion-scoped policy`, () => {
+  for (const [name, allowedAssertedCriterionIds] of assertedCases) {
+    test(`asserted result permanently blocks ${name}`, () => {
       const policy = {
         policyRef: "policy:completion:v1",
         verdict: "allow",
@@ -529,63 +525,15 @@ describe("completion admission pure fold", () => {
           criteria: [lowCriterion],
           proposedFacts: oneCriterionFacts("asserted"),
           policy,
-          stakes: { ref: "stakes:trusted-low", comparison: "below" },
         }),
       );
 
-      expect(admission.decision).toBe(decision);
-      if (decision === "admit") {
-        expect(admission.residualRisks).toEqual(["claimant-only evidence"]);
-      }
+      expect(admission.decision).toBe("block");
+      expect(admission.reasonCodes).toContain("high_risk_asserted");
+      expect(admission.reasonCodes).toContain("stakes_required");
+      expect(admission.reasonCodes).not.toContain("low_risk_asserted_allowed");
     });
   }
-
-  const stakesCases = [
-    ["without trusted Stakes", undefined, "block"],
-    ["with trusted Stakes", { ref: "stakes:trusted", comparison: "above" }, "escalate"],
-  ] as const;
-  for (const [name, stakes, decision] of stakesCases) {
-    test(`high-risk asserted result ${name}`, () => {
-      const highResult = result("result:high:asserted", highCriterion.id, "asserted");
-      const proposedFacts = proposed({
-        observations: [observationFor(highResult)],
-        results: [highResult],
-      });
-      const foldInput = stakes
-        ? input({ criteria: [highCriterion], proposedFacts, stakes })
-        : input({ criteria: [highCriterion], proposedFacts });
-
-      expect(evaluate(foldInput).decision).toBe(decision);
-    });
-  }
-
-  test("high Stakes escalates an asserted result even when policy allows that criterion", () => {
-    const highResult = result("result:high:policy-allowed", highCriterion.id, "asserted");
-    const proposedFacts = proposed({
-      observations: [observationFor(highResult)],
-      results: [highResult],
-    });
-    const policy = {
-      ...defaultPolicy,
-      allowedAssertedCriterionIds: [highCriterion.id],
-    } satisfies ResolvedPolicy;
-
-    const admission = evaluate(
-      input({
-        criteria: [highCriterion],
-        proposedFacts,
-        policy,
-        stakes: {
-          ref: "stakes:trusted-high",
-          comparison: "above",
-        },
-      }),
-    );
-
-    expect(admission.decision).toBe("escalate");
-    expect(admission.reasonCodes).toContain("high_risk_asserted");
-    expect(admission.reasonCodes).not.toContain("low_risk_asserted_allowed");
-  });
 
   const blockerCases = [
     ["active", undefined, "block"],

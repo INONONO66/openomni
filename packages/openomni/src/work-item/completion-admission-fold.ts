@@ -36,10 +36,6 @@ export type CompletionEvaluationInput = Readonly<{
   blockers: readonly WorkItem.Blocker[];
   currentAttempt: number;
   policy: CompletionPolicy;
-  stakes?: Readonly<{
-    ref: string;
-    comparison: "below" | "at" | "above";
-  }>;
   ownerOverride?: OwnerOverride;
 }>;
 
@@ -140,7 +136,6 @@ export function evaluateCompletion(input: CompletionEvaluationInput): WorkItem.C
     reasonCodes: state.reasonCodes,
     residualRisks: state.residualRisks,
     policyRef: input.policy.policyRef,
-    stakesRef: input.stakes?.ref,
     ownerOverrideReceiptRef: input.ownerOverride?.receiptRef,
     expectedHead: input.expectedHead,
     recordedHead: input.expectedHead + 1,
@@ -303,7 +298,7 @@ function foldRequiredCriteria(input: CompletionEvaluationInput, facts: FoldFacts
       continue;
     }
     state.effectiveResultIds.push(selected.id);
-    foldSelectedResult(criterion, selected, input, state);
+    foldSelectedResult(criterion, selected, state);
   }
   return state;
 }
@@ -311,7 +306,6 @@ function foldRequiredCriteria(input: CompletionEvaluationInput, facts: FoldFacts
 function foldSelectedResult(
   criterion: WorkItem.Criterion,
   result: WorkItem.CriterionResult,
-  input: CompletionEvaluationInput,
   state: FoldState,
 ): void {
   switch (result.value) {
@@ -328,32 +322,17 @@ function foldSelectedResult(
       state.hasBlockingResult = true;
       return;
     case "asserted":
+      // No stakes calculator is wired in production (the ledger stakes seam
+      // was retired): an asserted (self-claimed) result can never be gated by
+      // an independent risk assessment, so it always blocks — the permanent
+      // "no stakes" arm that already governed production.
       state.residualRisks.push(...result.residualRisks);
-      if (input.stakes?.comparison === "at" || input.stakes?.comparison === "above") {
-        addUnique(state.unresolvedCriterionIds, criterion.id);
-        state.highRiskAsserted = true;
-        addUnique(state.reasonCodes, "high_risk_asserted");
-        return;
-      }
-      if (
-        input.stakes?.comparison === "below" &&
-        input.policy.allowedAssertedCriterionIds.includes(criterion.id)
-      ) {
-        addUnique(state.reasonCodes, "low_risk_asserted_allowed");
-        return;
-      }
       addUnique(state.unresolvedCriterionIds, criterion.id);
-      if (input.stakes?.comparison === "below") {
-        addUnique(state.reasonCodes, "low_risk_asserted_not_allowed");
-        state.hasBlockingResult = true;
-        return;
-      }
       state.highRiskAsserted = true;
       addUnique(state.reasonCodes, "high_risk_asserted");
-      if (!input.stakes) {
-        addUnique(state.reasonCodes, "stakes_required");
-        state.hasBlockingResult = true;
-      }
+      addUnique(state.reasonCodes, "stakes_required");
+      state.hasBlockingResult = true;
+      return;
   }
 }
 

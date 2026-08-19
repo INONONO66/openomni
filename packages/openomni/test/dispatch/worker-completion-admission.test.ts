@@ -8,7 +8,6 @@ import {
   type ConnectorCompletionOptions,
   projectConnectorCompletion as projectConnectorCompletionProduction,
 } from "../../src/dispatch/handlers/connector-completion-projector.js";
-import { Stakes } from "../../src/ledger/index.js";
 import {
   reflectCoordinatorResult as reflectCoordinatorResultProduction,
   type WorkerCompletionOptions,
@@ -21,7 +20,6 @@ import {
   createCompletionAdmissionService,
   reserveCompletionRequest,
   type CompletionAdmissionService,
-  type CompletionStakesResolver,
 } from "../../src/work-item/completion-admission.js";
 
 const NOW = 1_000;
@@ -33,7 +31,6 @@ const WORKER_SESSION_ID = "session:completion-admission";
 type CompletionServiceOverrides = Readonly<{
   policyEngine?: ReturnType<typeof PolicyEngine.create>;
   ownerId?: string;
-  stakesResolver?: CompletionStakesResolver;
   now?: () => number;
 }>;
 
@@ -43,7 +40,6 @@ function completionService(overrides: CompletionServiceOverrides = {}): Completi
     policyEngine: overrides.policyEngine ?? COMPLETION_POLICY_ENGINE,
     now: overrides.now ?? Date.now,
     ...(overrides.ownerId === undefined ? {} : { ownerId: overrides.ownerId }),
-    ...(overrides.stakesResolver === undefined ? {} : { stakesResolver: overrides.stakesResolver }),
   });
 }
 
@@ -68,15 +64,11 @@ type ReflectOptions = Omit<WorkerCompletionOptions, "completionService" | "verif
   Readonly<{
     completionService?: CompletionAdmissionService;
     completionPolicyEngine?: ReturnType<typeof PolicyEngine.create>;
-    stakesResolver?: CompletionStakesResolver;
     verifierRegistry?: WorkerCompletionOptions["verifierRegistry"];
   }>;
 
 function completionServiceFor(
-  options: Pick<
-    ReflectOptions,
-    "completionService" | "completionPolicyEngine" | "stakesResolver" | "now"
-  >,
+  options: Pick<ReflectOptions, "completionService" | "completionPolicyEngine" | "now">,
 ): CompletionAdmissionService {
   return (
     options.completionService ??
@@ -84,7 +76,6 @@ function completionServiceFor(
       ...(options.completionPolicyEngine === undefined
         ? {}
         : { policyEngine: options.completionPolicyEngine }),
-      ...(options.stakesResolver === undefined ? {} : { stakesResolver: options.stakesResolver }),
       ...(options.now === undefined ? {} : { now: options.now }),
     })
   );
@@ -108,7 +99,6 @@ function reflectCoordinatorResult(
 ) {
   const {
     completionPolicyEngine: _policyEngine,
-    stakesResolver: _stakesResolver,
     completionService: _completionService,
     ...rest
   } = options;
@@ -128,14 +118,10 @@ function projectConnectorCompletion(
   workItemHash: string,
   result: Execution.Result,
   options: Omit<ConnectorCompletionOptions, "completionService" | "verifierRegistry"> &
-    Pick<
-      ReflectOptions,
-      "completionService" | "completionPolicyEngine" | "stakesResolver" | "verifierRegistry"
-    >,
+    Pick<ReflectOptions, "completionService" | "completionPolicyEngine" | "verifierRegistry">,
 ) {
   const {
     completionPolicyEngine: _policyEngine,
-    stakesResolver: _stakesResolver,
     completionService: _completionService,
     ...rest
   } = options;
@@ -2177,34 +2163,8 @@ describe("worker completion admission convergence", () => {
     expect(stored?.completionFacts.admissions).toEqual([]);
   });
 
-  test("carries kernel-computed Stakes into asserted-result escalation", async () => {
+  test("blocks an asserted worker result with no risk gate and leaves stakesRef unset", async () => {
     const item = await startedItem("internal_chat_agent");
-    const window = Stakes.createWindow({
-      ownerKey: "owner:worker-completion",
-      windowId: "window:worker-completion",
-      openedAt: 1,
-      closesAt: 10,
-    });
-    const stakes = Stakes.compute(
-      {
-        actionId: "action:worker-completion",
-        ownerKey: window.ownerKey,
-        windowRef: window.windowRef,
-        ledgerObservedAt: 2,
-        facts: {
-          irreversibleChangeCount: 10,
-          externalSurfaceCount: 10,
-          spendMicros: 100_000_000,
-          budgetReservedMicros: 100_000_000,
-          outreachRecipientCount: 10,
-          contentFingerprints: [
-            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          ],
-        },
-      },
-      { window, actions: [], knownFingerprints: [] },
-    );
-    let resolvedSubject: unknown;
 
     const reflection = await reflectCoordinatorResult(
       item.workItemId,
@@ -2216,28 +2176,17 @@ describe("worker completion admission convergence", () => {
       ),
       {
         sourceOrigin: { source: "internal_worker" },
-        stakesResolver: {
-          resolve(subject) {
-            resolvedSubject = subject;
-            return {
-              ok: true,
-              context: { surface: "work.complete.pre", ...subject, stakes },
-            };
-          },
-        },
         now: () => NOW,
       },
     );
 
     const stored = WorkItemStore.get(item.workItemId);
-    expect(resolvedSubject).toMatchObject({ workItemHash: item.workItemId });
     expect(reflection.completionBlocked).toBe(true);
     expect(stored?.completionFacts.results[0]).toMatchObject({ value: "asserted" });
     expect("checkedPredicate" in (stored?.completionFacts.results[0] ?? {})).toBe(false);
-    expect(stored?.completionFacts.admissions[0]).toMatchObject({
-      decision: "escalate",
-      stakesRef: stakes.reference,
-    });
+    expect(stored?.completionFacts.admissions[0]).toMatchObject({ decision: "block" });
+    expect(stored?.completionFacts.admissions[0]?.stakesRef).toBeUndefined();
+    expect(stored?.completionFacts.admissions[0]?.reasonCodes).toContain("stakes_required");
     expect(stored?.completionTerminalReceipt).toBeUndefined();
   });
 });
