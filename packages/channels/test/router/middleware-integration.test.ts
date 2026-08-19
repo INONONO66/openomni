@@ -6,8 +6,6 @@ import { IngressAuthorityMiddleware } from "../../src/router/authority.js";
 // seam flip: runRoutedPreRun parses Gateway.DeliveredEvent (no brain-owned
 // `agent`) and takes no coordinator — presence checks are brain-side.
 
-type WorkerControlTestAction = "cancel" | "resume" | "schedule";
-
 function makeInboundEvent(overrides?: Partial<Gateway.DeliveredEvent>): Gateway.DeliveredEvent {
   return {
     id: "evt-1",
@@ -18,10 +16,14 @@ function makeInboundEvent(overrides?: Partial<Gateway.DeliveredEvent>): Gateway.
   } as Gateway.DeliveredEvent;
 }
 
+// Authorization is a pure trust-tier check: the pre-split role fallbacks and
+// worker-control action rules were unreachable (every routed pre-run event
+// carries a resolved trustTier by routing time) and were removed. An untiered
+// actor — whatever its self-reported role or action — fails closed here.
 describe("IngressAuthorityMiddleware integration", () => {
-  test("allows user actor to create top-level inbound work", async () => {
+  test("allows a top-level trust-tier actor to create inbound work", async () => {
     const event = makeInboundEvent({
-      meta: { actor: { role: "user" } },
+      meta: { actor: { actorId: "act_owner", trustTier: "owner" } },
     });
 
     const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
@@ -30,51 +32,13 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.mode).toBe("direct");
   });
 
-  test("allows resident actor", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "resident" } },
-    });
-
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
-
-    expect(result.event.id).toBe("evt-1");
-  });
-
-  test("denies worker actor action spawn", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "worker" }, action: "spawn" },
-    });
-
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
-      "worker cannot spawn workers",
-    );
-  });
-
-  test("allows resident actor action spawn", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "resident" }, action: "spawn" },
-    });
-
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
-
-    expect(result.event.id).toBe("evt-1");
-  });
-
-  test("allows worker actor action send to worker target", async () => {
-    const event = makeInboundEvent({
-      target: { kind: "worker", sessionId: "worker-session-1" },
-      meta: { actor: { role: "worker" }, action: "send" },
-    });
-
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
-
-    expect(result.target.kind).toBe("worker");
-  });
-
-  test("allows worker actor action send to resident target", async () => {
+  test("allows an evidence_only collaborator delivered to the resident", async () => {
     const event = makeInboundEvent({
       target: { kind: "resident" },
-      meta: { actor: { role: "worker" }, action: "send" },
+      meta: {
+        actor: { actorId: "act_collab", trustTier: "collaborator" },
+        inboundTreatment: "evidence_only",
+      },
     });
 
     const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
@@ -82,50 +46,40 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.target.kind).toBe("resident");
   });
 
-  test.each([
-    "cancel",
-    "resume",
-    "schedule",
-  ] as const)("denies worker actor action %s", async (action: WorkerControlTestAction) => {
+  test("denies an untiered actor regardless of self-reported role", async () => {
     const event = makeInboundEvent({
-      meta: { actor: { role: "worker" }, action },
+      meta: { actor: { role: "user" } },
     });
 
     await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
-      `worker cannot ${action} workers`,
+      "not authorized to create top-level inbound work",
     );
   });
 
-  test.each([
-    "cancel",
-    "resume",
-    "schedule",
-  ] as const)("allows resident actor action %s", async (action: WorkerControlTestAction) => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "resident" }, action },
-    });
-
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
-
-    expect(result.event.id).toBe("evt-1");
-  });
-
-  test("adds action labels to authority policy decisions", async () => {
-    const decisions: Policy.PolicyDecision[] = [];
+  test("denies an untiered worker-role actor with a control action", async () => {
     const event = makeInboundEvent({
       meta: { actor: { role: "worker" }, action: "spawn" },
     });
 
-    await expect(
-      IngressAuthorityMiddleware.runRoutedPreRun({
-        event,
-        onDecision: (decision) => {
-          decisions.push(decision);
-        },
-      }),
-    ).rejects.toThrow("worker cannot spawn workers");
+    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
+      "not authorized to create top-level inbound work",
+    );
+  });
 
-    expect(decisions.some((decision) => decision.factsUsed?.includes("action.spawn"))).toBe(true);
+  test("fans the authority decision to the observer with the trust label", async () => {
+    const decisions: Policy.PolicyDecision[] = [];
+    const event = makeInboundEvent({
+      meta: { actor: { actorId: "act_owner", trustTier: "owner" } },
+    });
+
+    await IngressAuthorityMiddleware.runRoutedPreRun({
+      event,
+      onDecision: (decision) => {
+        decisions.push(decision);
+      },
+    });
+
+    expect(decisions.some((decision) => decision.factsUsed?.includes("trust.owner"))).toBe(true);
   });
 
   test("denies untrusted sub-persona actor", async () => {

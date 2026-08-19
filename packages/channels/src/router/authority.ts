@@ -9,14 +9,7 @@ import {
 } from "@openomni/protocol";
 import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
 import type { ChannelGrantStore } from "@openomni/ledger";
-import {
-  actionLabels,
-  actorRole,
-  actorTrustTier,
-  getActor,
-  getEventAction,
-  isAuthorizedTopLevelActor,
-} from "./authority-actor";
+import { actorTrustTier, getActor, isAuthorizedTopLevelActor } from "./authority-actor";
 
 interface PreRunContext {
   readonly event: unknown;
@@ -48,54 +41,6 @@ function notifyDecision(
 const authorityInputRules = [
   {
     toolPattern: "",
-    field: "actionPermission",
-    pattern: "^worker\\.spawn$",
-    action: "deny",
-    reason: "worker cannot spawn workers",
-    priority: 4,
-  },
-  {
-    toolPattern: "",
-    field: "actionPermission",
-    pattern: "^worker\\.cancel$",
-    action: "deny",
-    reason: "worker cannot cancel workers",
-    priority: 4,
-  },
-  {
-    toolPattern: "",
-    field: "actionPermission",
-    pattern: "^worker\\.resume$",
-    action: "deny",
-    reason: "worker cannot resume workers",
-    priority: 4,
-  },
-  {
-    toolPattern: "",
-    field: "actionPermission",
-    pattern: "^worker\\.schedule$",
-    action: "deny",
-    reason: "worker cannot schedule workers",
-    priority: 4,
-  },
-  {
-    toolPattern: "",
-    field: "actionPermission",
-    pattern: "^resident\\.(spawn|send|cancel|resume|schedule)$",
-    action: "allow",
-    reason: "resident authorized for worker control action",
-    priority: 3,
-  },
-  {
-    toolPattern: "",
-    field: "actionPermission",
-    pattern: "^worker\\.send$",
-    action: "allow",
-    reason: "worker authorized to send worker messages",
-    priority: 3,
-  },
-  {
-    toolPattern: "",
     field: "authorized",
     pattern: "^true$",
     action: "allow",
@@ -115,18 +60,13 @@ const authorityInputRules = [
 function evaluateIngressAuthority(event: Gateway.DeliveredEvent): Policy.PolicyDecision {
   const target = resolveTarget(event);
   const actor = getActor(event);
-  const role = actorRole(actor);
   const trustTier = actorTrustTier(actor);
-  const permissionActor = trustTier ?? role;
-  const eventAction = getEventAction(event);
   const action = target.kind === "worker" ? "ingress.worker.deliver" : "ingress.top_level.create";
   const resource = `ingress.${event.surface}.${targetKey(target)}`;
   const resourceLabels = [
     `surface.${event.surface}`,
     `target.${target.kind}`,
-    ...(role ? [`actor.${role}`] : []),
     ...(trustTier ? [`trust.${trustTier}`] : []),
-    ...(eventAction ? [actionLabels[eventAction]] : []),
   ];
   const decision = decisionFromEvaluation(
     evaluatePermission(
@@ -140,10 +80,9 @@ function evaluateIngressAuthority(event: Gateway.DeliveredEvent): Policy.PolicyD
         resourceLabels,
         actor,
         input: {
-          actionPermission: eventAction ? `${permissionActor}.${eventAction}` : "",
           authorized: String(isAuthorizedTopLevelActor(event)),
         },
-        metadata: { action: eventAction, mode: event.mode, surface: event.surface, target },
+        metadata: { mode: event.mode, surface: event.surface, target },
       },
     ),
   );

@@ -119,7 +119,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
   test("allows an explicit resident target", async () => {
     const event = makeInboundEvent({
       target: { kind: "resident" },
-      meta: { actor: { role: "user" } },
+      meta: { actor: { role: "user", actorId: "act_owner", trustTier: "owner" } },
     });
 
     const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
@@ -145,7 +145,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
   test("collects policy decisions via onDecision callback", async () => {
     const decisions: Policy.PolicyDecision[] = [];
     const event = makeInboundEvent({
-      meta: { actor: { role: "user" } },
+      meta: { actor: { role: "user", actorId: "act_owner", trustTier: "owner" } },
     });
 
     await IngressAuthorityMiddleware.runRoutedPreRun({
@@ -165,7 +165,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
   test("routed pre-run never re-runs blacklist or channel-grant checks", async () => {
     const decisions: Policy.PolicyDecision[] = [];
     const event = makeInboundEvent({
-      meta: { actor: { role: "user" } },
+      meta: { actor: { role: "user", actorId: "act_owner", trustTier: "owner" } },
     });
 
     await IngressAuthorityMiddleware.runRoutedPreRun({
