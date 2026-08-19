@@ -438,7 +438,7 @@ function channelsRouterLedgerViolations(filePath: string, source: string): strin
     /import\s+(?:type\s+)?(?:\*\s+as\s+\w+|\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']@openomni\/ledger["']/g;
   const exportStarPattern = /export\s*\*\s*(?:as\s+\w+\s*)?from\s*["']@openomni\/ledger["']/g;
   const dynamicPattern =
-    /(?:import\s*\(\s*|require\s*\(\s*)["']@openomni\/ledger(?:\/[^"']*)?["']/g;
+    /(?:import\s*\(\s*|require\s*\(\s*)["'`]@openomni\/ledger(?:\/[^"'`]*)?["'`]/g;
   for (const match of source.matchAll(namedPattern)) {
     const names = (match[1] ?? "")
       .split(",")
