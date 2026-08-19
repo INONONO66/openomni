@@ -1,6 +1,15 @@
 import type { Policy } from "@openomni/protocol";
 
-const defaultPolicyIds = ["builtin:tool-permission", "builtin:idle-nudge"];
+/**
+ * The gate's explicit tool-permission ruleset for spawned runs (#462 §7,
+ * audit batch A). This allow-by-default decision used to live as an implicit
+ * hydration fallback deep in the execution runtime; the runtime now fails
+ * CLOSED on an absent permission, so the gate DECLARES its ruleset here and
+ * stamps it into the plan, where it is recorded and auditable. Deployments
+ * that want a tighter default pass `toolPermission` to
+ * {@link PolicyResolver.create}.
+ */
+const GATE_DEFAULT_TOOL_PERMISSION: Policy.Permission = { action: "tool.call" };
 
 type LabelInput = string | Policy.LabelEntry;
 
@@ -62,19 +71,36 @@ function addPolicies(
 ): void {
   for (const id of policyIds) {
     const existing = plan.get(id);
-    plan.set(id, { id, required: existing?.required || required });
+    // Rules carry ids only — a rule re-selecting a default policy must not
+    // strip the config the default entry declared (the stamped permission).
+    plan.set(id, {
+      id,
+      required: existing?.required || required,
+      ...(existing?.config === undefined ? {} : { config: existing.config }),
+    });
   }
 }
 
 class StaticPolicyResolver implements PolicyResolverInstance {
-  constructor(private readonly rules: readonly PolicyResolverRule[]) {}
+  constructor(
+    private readonly rules: readonly PolicyResolverRule[],
+    private readonly toolPermission: Policy.Permission,
+  ) {}
 
   resolve(context: ResolverContext): Policy.PolicyPlan {
     const labels = uniqueLabels(context);
     const labelSet = new Set(labels);
     const policies = new Map<string, Policy.PolicyPlan["policies"][number]>();
 
-    addPolicies(policies, defaultPolicyIds, true);
+    // The default guard set travels WITH its config: downstream hydration
+    // fails closed on an absent permission, so the plan must carry the
+    // gate's explicit ruleset instead of relying on any runtime default.
+    policies.set("builtin:tool-permission", {
+      id: "builtin:tool-permission",
+      required: true,
+      config: { permission: this.toolPermission },
+    });
+    policies.set("builtin:idle-nudge", { id: "builtin:idle-nudge", required: true });
 
     for (const rule of this.rules) {
       if (matchesLabels(rule.match, labelSet)) {
@@ -87,7 +113,11 @@ class StaticPolicyResolver implements PolicyResolverInstance {
 }
 
 export namespace PolicyResolver {
-  export function create(rules: readonly PolicyResolverRule[] = []): PolicyResolverInstance {
-    return new StaticPolicyResolver(rules);
+  export function create(
+    rules: readonly PolicyResolverRule[] = [],
+    /** `toolPermission`: the gate's ruleset stamped onto every resolved plan. */
+    options: { readonly toolPermission?: Policy.Permission } = {},
+  ): PolicyResolverInstance {
+    return new StaticPolicyResolver(rules, options.toolPermission ?? GATE_DEFAULT_TOOL_PERMISSION);
   }
 }

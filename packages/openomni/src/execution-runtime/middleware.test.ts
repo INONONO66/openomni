@@ -47,6 +47,16 @@ describe("buildWorkerMiddleware backward compatibility", () => {
       verdict: "deny",
     });
   });
+
+  // Audit batch A: an ABSENT permission is a composition bug, never an
+  // implicit allow-all — nothing declared a ruleset, so every tool denies.
+  it("fails closed when no permissions and no policy plan are composed", async () => {
+    const registrations = buildWorkerMiddleware({});
+    const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+    await expect(invokeTool(toolPermission, "any_tool")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
 });
 
 describe("buildWorkerMiddleware injection queue persistence", () => {

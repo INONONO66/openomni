@@ -117,6 +117,13 @@ export namespace IngressSessionResolver {
           (typeof event.meta?.actor?.sessionId === "string"
             ? event.meta.actor.sessionId
             : undefined);
+        // Fail closed (audit A T6): an ASSERTED parent session id that does
+        // not exist must throw, matching the sibling worker/resident
+        // durable-session arms above — never silently fall through to a fresh
+        // orphan root session.
+        if (parentSessionId !== undefined && !Session.get(parentSessionId)) {
+          throw new Error(`worker parent session not found: ${parentSessionId}`);
+        }
         session =
           parentSessionId && Session.get(parentSessionId)
             ? Session.createChild({

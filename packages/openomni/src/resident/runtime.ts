@@ -125,20 +125,58 @@ function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
   return ChatAgent.create(config).run(input);
 }
 
+/**
+ * #709 identity injection is factory-only (audit batch A): a run that carries
+ * engagement identity context (a resumed engagementId or the delivery's
+ * perimeter trust verdict) MUST reach the tools through the executor factory.
+ * A prebuilt `toolExecutor` cannot receive per-run identity — running anyway
+ * would execute engagement-aware tools with stale (or absent) identity, so
+ * the composition refuses instead.
+ */
+export class ResidentIdentityInjectionError extends Error {
+  constructor() {
+    super(
+      "resident run carries engagement identity context (engagementId/actorTrustTier) but the " +
+        "composed agent supplies a prebuilt toolExecutor that cannot receive it; compose " +
+        "toolExecutorFactory instead",
+    );
+    this.name = "ResidentIdentityInjectionError";
+  }
+}
+
+function resolveResidentToolExecutor(
+  ctx: ResidentRunContext,
+  runId: string,
+  workspaceRoot: string | undefined,
+): ChatAgentConfig["toolExecutor"] {
+  if (ctx.event.agent.toolExecutorFactory) {
+    return ctx.event.agent.toolExecutorFactory({
+      sessionId: ctx.sessionId,
+      runId,
+      agentName: extractAgentName(ctx.event),
+      workspaceRoot,
+      // #709: executor-owned implicit context — the tools see these as
+      // injected fields the model can never forge.
+      engagementId: ctx.waitContext?.engagementId,
+      actorTrustTier: ctx.actorTrustTier,
+    });
+  }
+  const carriesIdentity =
+    ctx.waitContext?.engagementId !== undefined || ctx.actorTrustTier !== undefined;
+  if (ctx.event.agent.toolExecutor && carriesIdentity) {
+    throw new ResidentIdentityInjectionError();
+  }
+  return ctx.event.agent.toolExecutor;
+}
+
 function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatAgentConfig {
-  const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot ?? ctx.event.workspace;
-  const toolExecutor = ctx.event.agent.toolExecutorFactory
-    ? ctx.event.agent.toolExecutorFactory({
-        sessionId: ctx.sessionId,
-        runId,
-        agentName: extractAgentName(ctx.event),
-        workspaceRoot,
-        // #709: executor-owned implicit context — the tools see these as
-        // injected fields the model can never forge.
-        engagementId: ctx.waitContext?.engagementId,
-        actorTrustTier: ctx.actorTrustTier,
-      })
-    : ctx.event.agent.toolExecutor;
+  // The sandbox root / lock key comes from the COMPOSED agent config only.
+  // `ctx.event.workspace` is a surface-derived identifier (an inbound event
+  // field the perimeter influences) and must never become the workspace root
+  // (audit batch A) — resident runs that need one get it from
+  // `agent.toolConfig.workspaceRoot`, which the server composition sets.
+  const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot;
+  const toolExecutor = resolveResidentToolExecutor(ctx, runId, workspaceRoot);
   const agent = ctx.event.agent as RuntimeAgentDef;
 
   return {

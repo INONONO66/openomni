@@ -58,8 +58,14 @@ export interface WorkerMiddlewareConfig {
   injectionQueue?: InjectionQueue.Instance;
 }
 
+/**
+ * The ONLY permission this module ever mints (audit batch A): an absent
+ * permission is a composition bug, never an implicit allow-all. Production
+ * paths declare their ruleset explicitly — the dispatch gate's PolicyResolver
+ * stamps `config.permission` onto the plan's `builtin:tool-permission`, and
+ * the server's agent composition sets `permissions` on every AgentDef.
+ */
 const FAIL_CLOSED_TOOL_PERMISSION: Policy.Permission = { action: "tool.call", denylist: ["*"] };
-const DEFAULT_TOOL_PERMISSION: Policy.Permission = { action: "tool.call" };
 
 export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyEngineRegistration[] {
   const policyPlanMiddleware = config.policyPlan
@@ -139,7 +145,9 @@ function buildLegacyPermissionMiddleware(
 ): PolicyEngineRegistration[] {
   return [
     createToolPermissionPolicy({
-      permission: config.permissions ?? DEFAULT_TOOL_PERMISSION,
+      // No plan and no legacy permissions: nothing declared a ruleset for
+      // this run, so the guard denies every tool instead of allowing all.
+      permission: config.permissions ?? FAIL_CLOSED_TOOL_PERMISSION,
       events: Bus,
     }),
   ];
@@ -164,13 +172,15 @@ function hydrateToolPermissionConfig(
   plan: Policy.PolicyPlan,
   workerConfig: WorkerMiddlewareConfig,
 ): Policy.PolicyPlan {
-  const fallbackPermission = workerConfig.permissions ?? DEFAULT_TOOL_PERMISSION;
+  const fallbackPermission = workerConfig.permissions ?? FAIL_CLOSED_TOOL_PERMISSION;
   let changed = false;
   const policies = plan.policies.map((policy) => {
     if (policy.id !== "builtin:tool-permission") return policy;
     const config = policy.config ?? {};
     // Keep legacy permissions effective for policy plans that select the
-    // builtin guard without owning its config yet.
+    // builtin guard without owning its config yet. With no legacy permissions
+    // either, the absent arm fails CLOSED (deny-all): a plan that selects the
+    // guard without a ruleset gets no implicit allow-all.
     // A present-but-invalid permission is treated as explicit and fails closed.
     if ("permission" in config) {
       if (Policy.Permission.safeParse(config.permission).success) return policy;

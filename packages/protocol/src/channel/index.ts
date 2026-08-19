@@ -48,6 +48,15 @@ export namespace Channel {
     threadId?: string;
     /** Raw platform payload for escape-hatch access */
     raw?: unknown;
+    /**
+     * Trust DOWNGRADE for a re-injected inbound (audit A T1): a trusted
+     * internal producer (boot recovery replay) marks a message whose original
+     * sender identity is unrecoverable, so the gateway floors its routed
+     * treatment to evidence_only and the brain frames it as evidence, never a
+     * command. Absent for normal channel traffic; only "evidence_only" is
+     * expressible — this can downgrade, never elevate.
+     */
+    inboundTreatment?: "evidence_only";
   }
 
   export interface OutboundMessage {

@@ -3,14 +3,18 @@ import { realpathSync } from "node:fs";
 
 export function resolveContainedPath(workspaceRoot: string, inputPath: string): string {
   const root = resolve(workspaceRoot);
+  // Fail closed (audit A T4d): the root must itself resolve to a real path
+  // BEFORE any containment check — otherwise symlink containment silently
+  // degrades to a lexical-only check when the root is missing.
+  const realRoot = realRootOrThrow(root);
   const resolved = resolve(root, inputPath);
   assertInsideRoot(resolved, root);
 
   try {
-    assertRealpathContained(resolved, root);
+    assertRealpathContained(resolved, realRoot);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    assertRealpathContained(dirname(resolved), root);
+    assertRealpathContained(dirname(resolved), realRoot);
   }
 
   return resolved;
@@ -18,11 +22,12 @@ export function resolveContainedPath(workspaceRoot: string, inputPath: string): 
 
 export function resolveContainedPathForCreate(workspaceRoot: string, inputPath: string): string {
   const root = resolve(workspaceRoot);
+  const realRoot = realRootOrThrow(root);
   const resolved = resolve(root, inputPath);
   assertInsideRoot(resolved, root);
 
   try {
-    assertRealpathContained(resolved, root);
+    assertRealpathContained(resolved, realRoot);
     return resolved;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
@@ -31,7 +36,7 @@ export function resolveContainedPathForCreate(workspaceRoot: string, inputPath: 
   let parent = dirname(resolved);
   while (parent !== root) {
     try {
-      assertRealpathContained(parent, root);
+      assertRealpathContained(parent, realRoot);
       return resolved;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
@@ -50,10 +55,22 @@ function assertInsideRoot(resolved: string, root: string): void {
   }
 }
 
-function assertRealpathContained(target: string, root: string): void {
+/**
+ * The real (symlink-resolved) workspace root, or a hard failure. A root that
+ * cannot be resolved must never let containment fall back to a lexical-only
+ * check (audit A T4d) — deny instead.
+ */
+function realRootOrThrow(root: string): string {
+  try {
+    return realpathSync(root);
+  } catch {
+    throw new Error(`Workspace root does not resolve — path containment fails closed: ${root}`);
+  }
+}
+
+function assertRealpathContained(target: string, realRoot: string): void {
   const realTarget = realpathSync(target);
-  const realRoot = realpathSync(root);
   if (realTarget !== realRoot && !realTarget.startsWith(`${realRoot}/`)) {
-    throw new Error(`Path escapes workspace root via symlink: ${root}`);
+    throw new Error(`Path escapes workspace root via symlink: ${realRoot}`);
   }
 }

@@ -240,7 +240,13 @@ describe("worker.spawn dispatch gate", () => {
     expect(requests).toHaveLength(1);
     const plan = requests[0]?.policyPlan;
     expect(plan).toBeDefined();
-    expect(plan?.policies).toContainEqual({ id: "builtin:tool-permission", required: true });
+    // Audit batch A: the spawned plan carries the gate's EXPLICIT permission
+    // ruleset — the execution runtime fails closed on an absent one.
+    expect(plan?.policies).toContainEqual({
+      id: "builtin:tool-permission",
+      required: true,
+      config: { permission: { action: "tool.call" } },
+    });
     expect(plan?.policies).toContainEqual({ id: "builtin:idle-nudge", required: true });
     expect(plan?.labels).toEqual(expect.arrayContaining(["trusted", "web-search"]));
   });

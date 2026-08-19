@@ -1,4 +1,4 @@
-import { Channel, type Gateway, type Ingress, type Wait } from "@openomni/protocol";
+import { Channel, type Gateway, type Ingress, type Policy, type Wait } from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
@@ -26,6 +26,16 @@ type ToolListProvider = Pick<McpToolProvider, "listTools">;
 function sanitizeToolName(name: string): string {
   return name.replace(/\./g, "_");
 }
+
+/**
+ * The server's explicit tool-permission ruleset for composed agents (audit
+ * batch A): the execution runtime fails CLOSED on an absent permission, so
+ * the composition layer must declare its decision. Allow-by-default is that
+ * decision here — the tool surface is already constrained by the catalog
+ * selection above, and a definition that wants a tighter ruleset declares
+ * its own `permissions`.
+ */
+const DEFAULT_AGENT_TOOL_PERMISSION: Policy.Permission = { action: "tool.call" };
 
 function selectToolEntries(definition: AgentDefinition, deps: BridgeDeps) {
   const catalog = buildToolCatalog([
@@ -56,7 +66,7 @@ function buildAgentDefFromEntries(
     systemPrompt: definition.systemPrompt,
     tools: specs,
     budget: definition.budget,
-    permissions: definition.permissions,
+    permissions: definition.permissions ?? DEFAULT_AGENT_TOOL_PERMISSION,
     policyPlan: definition.policyPlan,
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
@@ -156,6 +166,12 @@ function createBaseEvent(
       replyToId: message.replyToId,
       threadId,
       raw: message.raw,
+      // audit A T1: a trusted internal producer (recovery replay) may mark a
+      // re-injected message evidence_only; the gateway floors its routed
+      // treatment. Absent for normal traffic.
+      ...(message.inboundTreatment === undefined
+        ? {}
+        : { inboundTreatment: message.inboundTreatment }),
     },
   };
 }

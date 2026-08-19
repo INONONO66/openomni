@@ -24,7 +24,11 @@ describe("PolicyResolver", () => {
 
     expect(plan).toEqual({
       policies: [
-        { id: "builtin:tool-permission", required: true },
+        {
+          id: "builtin:tool-permission",
+          required: true,
+          config: { permission: { action: "tool.call" } },
+        },
         { id: "builtin:idle-nudge", required: true },
         { id: "policy:trusted-surface", required: true },
       ],
@@ -32,7 +36,7 @@ describe("PolicyResolver", () => {
     });
   });
 
-  it("always includes default backward-compatible policies", () => {
+  it("always includes default policies WITH the gate's explicit tool permission", () => {
     const resolver = PolicyResolver.create([]);
 
     const plan = resolver.resolve({
@@ -42,10 +46,37 @@ describe("PolicyResolver", () => {
       surfaceLabels: [],
     });
 
+    // Audit batch A: the plan CARRIES the gate's ruleset — downstream
+    // hydration fails closed on an absent permission, so an id-only entry
+    // would deny every tool.
     expect(plan.policies).toEqual([
-      { id: "builtin:tool-permission", required: true },
+      {
+        id: "builtin:tool-permission",
+        required: true,
+        config: { permission: { action: "tool.call" } },
+      },
       { id: "builtin:idle-nudge", required: true },
     ]);
+  });
+
+  it("stamps an injected tool permission and keeps it when a rule re-selects the guard", () => {
+    const resolver = PolicyResolver.create(
+      [{ match: { any: ["risk.high"] }, policies: ["builtin:tool-permission"], required: true }],
+      { toolPermission: { action: "tool.call", allowlist: ["tool:read"] } },
+    );
+
+    const plan = resolver.resolve({
+      actorLabels: [],
+      agentLabels: [],
+      runLabels: ["risk.high"],
+      surfaceLabels: [],
+    });
+
+    expect(plan.policies).toContainEqual({
+      id: "builtin:tool-permission",
+      required: true,
+      config: { permission: { action: "tool.call", allowlist: ["tool:read"] } },
+    });
   });
 
   it("matches all, any, and none label clauses", () => {

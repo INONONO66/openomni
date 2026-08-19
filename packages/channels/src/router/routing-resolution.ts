@@ -199,7 +199,10 @@ function selectedRouteTarget(
 
 type ChannelResolution = ReturnType<typeof ChannelGrantStore.resolve>;
 
-function channelState(resolution: ChannelResolution): RouteState["channel"] {
+function channelState(
+  resolution: ChannelResolution,
+  inboundEvidenceOnly: boolean,
+): RouteState["channel"] {
   if (resolution === undefined) return undefined;
   if (resolution.inboundTreatment === "drop" || resolution.grant.kind === "blocked_channel") {
     return {
@@ -221,7 +224,15 @@ function channelState(resolution: ChannelResolution): RouteState["channel"] {
   return {
     id: resolution.grant.id,
     kind: "trusted_channel",
-    inboundTreatment: resolution.inboundTreatment,
+    // Treatment floor (audit A T1): a channel grant can only RAISE a sender to
+    // full_access; it must never override an inbound already marked
+    // evidence_only. A re-injected recovery message (unrecoverable original
+    // sender) keeps the evidence_only marker to the brain — a monotonic
+    // downgrade. NOTE: this is correct GROUNDWORK, not yet a closed hole — the
+    // marker becomes protective only once the brain consumes inboundTreatment
+    // as a command-authority restriction (S6, batch ②). Until then the marker
+    // reaches actorContext but no brain path frames the turn as evidence.
+    inboundTreatment: inboundEvidenceOnly ? "evidence_only" : resolution.inboundTreatment,
     ...(resolution.grant.defaultTier === undefined
       ? {}
       : { defaultTier: resolution.grant.defaultTier }),
@@ -330,7 +341,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     workspace: event.workspace,
     channel: event.channel,
   });
-  const channel = channelState(channelResolution);
+  const channel = channelState(channelResolution, event.meta?.inboundTreatment === "evidence_only");
   const actor = actorState(event);
   const resolvedDecision = resolveRoute(
     {
