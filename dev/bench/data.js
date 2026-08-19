@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787094973951,
+  "lastUpdate": 1787100859052,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57203,6 +57203,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513196,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6d76c7e285af79dd7c9d8069cf7a1510b245e63",
+          "message": "refactor(channels): promote gateway router — perimeter moves (#736)\n\n* refactor(protocol): hoist pure wait/target parts for gateway (#707)\n\nSlice 1 of gateway stage 2: protocol hoists + design-doc corrections\nthat unblock the big move. Pure moves only — zero behavior change,\nwire/persisted untouched, protocol gains only pure functions/types.\n\nP1 — wait domain hoists to protocol/src/wait/:\n- requested-action.ts moved verbatim (Wait.requestedWaitAction); one\n  parser still serves ingress resolve-route and brain dispatch.\n- upcast.ts moved verbatim (Wait.waitViewOfPending{Interaction,Ask});\n  correlation.ts re-points to the protocol views.\n- matcher.ts SPLIT: the pure core (ResponderTarget/SenderEvidence,\n  matchesTarget rules, responderCandidates, ingressEvidence,\n  dispatchEvidence, targetsOfPendingInteraction, targetsOfWait) is\n  protocol; targetsOfWait now takes the caller-resolved deliveryActorId\n  as an INPUT and keeps the fail-closed unresolvable-delivery rule\n  inside the pure fold. The ActorRegistry.getEndpoint read stays\n  kernel-side as a thin effectful wrapper (openomni/src/wait/matcher.ts)\n  that resolves and delegates.\n- correlation.ts/lifecycle.ts stay put (slice 2), imports re-pointed.\n\nP2 — ingress/target.ts hoisted to protocol/src/ingress/target.ts\n(pure resolveTarget/targetKey over Ingress types); all seven openomni\nconsumers re-pointed, tests moved to protocol.\n\nP3 — the one missing perimeter row surface: the inline surfaceKey\nsub-adapter type in ledger storage.ts becomes\nStorage.SurfaceKeySubAdapter in protocol (zero shape change).\n\nP4 — gateway-design.md measured-at-cut receipts: event-projector\nreclassified brain-side (S1), session-resolver and routing-execution\nsplit, internal-mode resolver stays brain, wait-module hoist recorded,\nchannels raw-Storage banding deferred to slice 2, §2a grant-write\nvalidation deferred to #708 (vacuous sole-writer, recorded).\n\nTests move with the code (protocol gains requested-action/target/\nmatcher-pure/upcast suites; openomni keeps the registry-anchored\nwrapper suite). Vocab: existing Wait/Ingress domains only, no new\nnamespace, no zod schema moved — schema snapshot untouched.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(channels): promote gateway router — perimeter moves (#707)\n\nSlice 2 of gateway stage 2: the perimeter router moves into\npackages/channels AND the seam flips in the same commit (openomni may\nnever import channels, so the tree cannot build any other way). Wire\nand persisted vocabulary are byte-frozen throughout: route.decided\nstream ids and decision payloads (same factsUsed, same reasons),\nmessaging.sent/denied, ingress.* event names, wait rows, surface-key\nrow values.\n\nM1 — moved to packages/channels/src/router/ (12 src files):\nresolve-route (external arms only), routing-resolution (sink-injected\npublish; ledger append for route.decided unchanged), the wait/\npending_ask arms of routing-execution (incl. WaitService attachReply/\nexpire writes), authority middleware (coordinator-presence check cut\nout), authority-actor, actor-resolver, wait/{correlation,lifecycle,\nmatcher}, messaging/{send,events,grant}. Bus.publish became the\ninjected BusEvent.Sink port everywhere (llm/agent precedent);\nmessaging gained a required publish port. ONE construction entry:\ncreateGatewayRouter({ sink, deliver, onPolicyDecision?, messaging?\n{deliveryRoutes, grants} }). Router ledger imports are direct but\npinned to the perimeter surfaces (see M5). Per the session ruling the\nrouter mints the resident sessionId (opaque label) and claims the\nsurface map BEFORE deliver; the messaging Gateway.* re-export bridge\ndied (consumers use protocol Gateway.*; resolveSenderTargetGrant +\nreplyScope guard live in router/messaging/grant.ts). The\nmessaging.sent/denied descriptors are protocol vocabulary now\n(gateway/events.ts) — the router band defines no zod schemas; names\nbyte-frozen.\n\nM2 — brain side (packages/openomni): engine.ts became\ncreateBrainEngine → { deliver, ingestInternal }. deliver() parses\nGateway.Deliver at the seam, resolves the resident AgentDef through\nthe injected externalAgentResolver, runs the coordinator-presence\ncheck for worker targets (same message, new home), lazily\nmaterializes the routed resident session (Session.materialize,\nidempotent create-if-absent; crash between claim and deliver\nconverges by re-delivery), keeps worker placement in\nIngressSessionResolver.resolve, then projection + handlers unchanged.\nThe pending-interaction arm stayed brain-side\n(pending-interaction-delivery.ts, dispatch work placement §8.5).\ndispatch/pending-interaction-routing consumes protocol pure parts +\nfrozen-store reads via ledger (frozen-interaction-correlation.ts,\nwait-tier shadow preserved — recorded residue). resident.ts inlines\nthe sync-ask audit as a Bus-only helper (no WaitService import).\nextractText and extractSurfaceKey hoisted to protocol (both sides\nshare one byte-frozen fold).\n\nM3 — internal resolver: ingress/internal-route.ts carries the\ninternal arm of resolveRoute (same fact strings incl. \"wait:none\",\nsame route:<scope> stream, same expectedHead-0 append + replay\nequivalence gate). Internal wait correlation is retired (structurally\ndead: fresh UUIDs cannot match frozen externalMessageIds); the brain\nkeeps the resident surface-claim loop for internal cron stickiness\n(recorded residue, documented in session-resolver).\n\nM4 — apps/server composition: bootstrap constructs\ncreateGatewayRouter({ sink: Bus.publish, deliver: brainEngine.deliver,\nmessaging: {deliveryRoutes, grants: config.messaging.grants} }); the\nadapters' routingHandler targets router.ingest; registerServerMessaging\nbecame the registry seam over the router-composed send kernel (same\nconfig source, same fail-closed missing-route error, same boot\nreceipt event). Cron fire + dispatch resident.ask keep calling\nbrainEngine.ingestInternal. bootstrap/recovery re-points sweepExpired\nto the channels WaitService (sink arg = Bus.publish); config.ts takes\nSenderTargetGrant from protocol Gateway.\n  Direct-mode preservation: buildInboundEvent no longer embeds the\nAgentDef — buildResidentAgentDef is exported and wrapped, together\nwith the per-message resolveRuntimeModel call conversation.ts used to\nmake, into the externalAgentResolver injected into the brain engine:\nsame resident construction (same prompt family, tool catalog,\nworkspaceRoot source), same per-message freshness, new location.\nhandleDirect behavior is otherwise untouched: the delivered event is\nthe pre-flip post-pin event verbatim (target/activation pins ride it),\nso worker cancel/delivery/background dispatch see identical inputs.\n\nM5 — channels evolution: manifest gains @openomni/ledger (+ telemetry\nfor tests only — the llm/agent precedent; srcAllowedDeps stays\n{protocol, ipc, policy, ledger}). check-deps S8 evolved: judgment\nband = src/router/ + src/authn/ (policy + ledger allowed; the authn\ndir stayed put — the widened-band option keeps the driver→authn edge\nhonest), driver→router relative edges banned (package barrel\nexempted as the composition export surface), and a named-import scan\npins router ledger imports to the perimeter surfaces only\n(ActorRegistry, BlacklistStore, ChannelGrantStore, WaitStore,\nSurfaceKey, PendingAskStore, PendingInteractionStore, Storage) with\nnamespace/default imports refused; 13 new self-test discriminations.\nBand test fixtures inverted per plan: ledger legal under src/router/,\nstill a violation in every driver dir; telemetry forbidden everywhere.\n\nM6 — tests: ~35 files moved/split. Router suites (kernel-routing,\naccess, waits router-half, persistence, actor-resolver, blacklist,\nchannel-grant, integration, routing-pipeline/precedence, authority/\nmiddleware/no-bypass/deny-wins, wait/, messaging/, the existing-agent\nharness driver) live under packages/channels/test/ with the brain as\na deliver-port stub (test/router/_router-fixture.ts). Brain-side\nsuites stay in openomni (engine deliver-consumer tests,\nengine-internal incl. the salvaged cron case, pending-interaction\ndelivery half, internal-route unit, session-resolver + materialize,\ndispatch, cron). The composed seam is pinned in\napps/server/test/ingress/gateway-pipeline.test.ts; p2-ledger-baseline\nre-composes router+brain. Coverage baseline regenerated (stale-floor\nshrink + the new channels entry, 92.84%); CI gains the channels\ncoverage step.\n\nMeasured deltas / deviations (recorded in docs/gateway-design.md §6):\n- Gateway.Deliver evolved to its measured shape: sessionId and\n  actorContext optional; event (routed event minus AgentDef) and\n  decision (the recorded route.decided fact) added. In-process\n  contract only — nothing persisted changed.\n- Migration 0019 drops the surface_key→session FK (a §4-forbidden\n  cross-domain invariant that made claim-before-deliver physically\n  impossible). Row values unchanged; expired-session map entries now\n  converge by re-materialization instead of cascade deletion (ledger\n  cascade test re-pinned to the new domain rule).\n- ledger-producer-manifest: the route stream class now enumerates two\n  producers (router external arm, brain internal arm) — same fact\n  type, two trust domains that cannot import each other.\n- Ordering note: authority evaluation now precedes the\n  coordinator-presence check (middleware → brain move); both still\n  precede any session/projection work.\n\nZero-old receipts: rg over packages/apps/script finds no\ncreateIngressEngine/IngressEngine, no @openomni/openomni/messaging,\nno openomni src/wait|src/messaging|ingress/{resolve-route,\nrouting-resolution,routing-execution,middleware} paths; the openomni\nbarrel sheds createIngressEngine/IngressAuthorityMiddleware/\nWaitService and the ./messaging subpath. openomni→channels and\nchannels→openomni imports: 0 (machine-checked).\n\nVerified green: turbo build, turbo check-types (+ script tsconfig),\ncheck-deps (+23 self-tests), lint guards/side-effects/ultracite,\nlint-tools (+ self-test, schema snapshot), import-cycles,\ndead-exports ratchet, coverage ratchet (+ self-test), full turbo test\n(16/16; openomni 1016, channels 185, server 438, ledger 404,\nprotocol 593), conformance incl. p2-ledger-baseline (46) and\np2-effects, channels standalone test+build, verify-ledger-rename,\ntsconfig-inheritance (+ test), protocol disposition.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(channels): close S8 pin bypasses — dynamic, re-export, Storage\n\nAdversarial review of c5bdc477 found three roads around the S8\nrouter↔ledger surface pin. All three are closed with red proofs; the\nrouter code path is behavior-identical (same fail-closed errors, same\nrecorded facts).\n\n1. Dynamic-import evasion: `await import(\"@openomni/ledger\")` (and\n   `require(...)`, including subpaths) matched neither pin pattern —\n   full brain-surface access from the judgment band with zero\n   violations. channelsRouterLedgerViolations now refuses dynamic\n   loads outright: the static named clause is the only road.\n\n2. Re-export laundering: `export { Session } from \"@openomni/ledger\"`\n   matched neither pattern. The named pin now covers\n   `export {…} from` clauses (validated against the same perimeter\n   surface set) and refuses `export * from` wholesale re-exports, so a\n   router barrel cannot launder brain surfaces to relative importers.\n   (The band gate and the package-level scans already caught\n   export-from via their `from`-clause/AST matching — only the\n   surface pin was blind.)\n\n3. `Storage` master key: `Storage` was in the router allowlist, and\n   `Storage.get()` reaches every brain surface. The router now touches\n   the ledger through two scoped surfaces and `Storage` is REMOVED\n   from the allowlist:\n   - `LedgerAppend` (new packages/ledger/src/storage/append-port.ts,\n     barrel-exported): exactly the append + headFact pair — the #510\n     record-before-act write and its replay read. Returns undefined on\n     a missing sub-adapter so routing-resolution keeps its own typed\n     route_record_failed fail-closed error.\n   - `ActorRegistry.isConfigured()` (new): the presence probe the\n     actor resolver used the raw adapter for; the legacy pass-through\n     behavior is unchanged.\n   gateway-design §6's \"named perimeter surfaces plus a scoped append\n   port\" is now literally true.\n\nSelf-tests: +8 discriminations (dynamic import, require, dynamic\nsubpath, brain-surface re-export, legal perimeter re-export,\nwholesale re-export, Storage-in-router violation, legal LedgerAppend)\n— 31 total hold.\n\nAlso:\n- docs/gateway-design.md §6 receipt: recorded the scoped-port\n  literalization and that the brain-side internal SurfaceKey.claim\n  residue rides to #708 (gateway port for internal claims) —\n  Owner-ruled, no concrete breakage, CAS-converged. channels AGENTS.md\n  surface list updated (Storage → LedgerAppend + the four refused\n  load shapes).\n- New seam test packages/channels/test/router/deliver-contract.test.ts\n  pinning the Deliver projection invariant: message/actorContext/\n  waitContext/sessionId are derived from the SAME decision+event the\n  brain consumes (actorContext ≡ decision projection; wait resumption\n  carries waitContext from the decision facts and NO tier verdict) —\n  the two representations cannot silently diverge.\n\nVerified green: check-deps + self-test (31), turbo build +\ncheck-types + script tsconfig, lint guards/side-effects/ultracite,\nlint-tools (+ self-test), import-cycles, dead-exports ratchet,\nconformance incl. p2-ledger-baseline, full turbo test 16/16\n(channels standalone 187 pass + build), coverage ratchet\n(ledger 96.04% within tolerance), verify-ledger-rename,\ntsconfig-inheritance.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(deps): dynamic-load gate catches template-literal specifiers\n\n* test(ipc): cover server edge branches — ratchet restore\n\n* test(ipc): de-flake reconnect assertion with poll-retry\n\n* test(ipc): deterministic client-to-server reconnect assertion\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T00:52:56Z",
+          "tree_id": "4e29d650707b2d39b8f78a492dd60909bea2592c",
+          "url": "https://github.com/INONONO66/openomni/commit/a6d76c7e285af79dd7c9d8069cf7a1510b245e63"
+        },
+        "date": 1787100857723,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 636,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9621,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8166,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 964,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1561,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47364,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2339,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518190,
             "unit": "ns/op"
           }
         ]
