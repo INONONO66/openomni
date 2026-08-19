@@ -34,12 +34,22 @@ function normalize(value: string): string {
     .trim();
 }
 
-/** Cheap settle: gold contained in response (or vice versa) after normalization. */
+/**
+ * Cheap settle: containment after normalization — but short golds ("No",
+ * "two", "2022") are containment hazards (#738 review F3: "no" ⊂ "unknown",
+ * years ⊂ negations), so golds under 6 normalized chars require exact
+ * word-boundary equality and everything else goes to the judge. Containment
+ * is also one-directional (gold ⊆ response): a one-word partial response
+ * must not auto-grade against a multi-part gold.
+ */
 function normalizedMatch(gold: string, response: string): boolean {
   const g = normalize(gold);
   const r = normalize(response);
   if (g.length === 0 || r.length === 0) return false;
-  return r.includes(g) || g.includes(r);
+  if (g.length < 6) {
+    return r === g || r.split(" ").includes(g);
+  }
+  return r.includes(g);
 }
 
 const JUDGE_SYSTEM = `You grade answers against a gold reference. Reply with exactly one word: CORRECT if the answer conveys the same fact as the gold reference (paraphrase, formatting, and partial dates count as correct when unambiguous), INCORRECT otherwise. An answer of UNKNOWN is INCORRECT unless the gold reference itself indicates the question is unanswerable.`;

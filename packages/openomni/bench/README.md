@@ -60,40 +60,77 @@ bun run bench/compaction/run.ts --convs 2 --qa-per-conv 3   # smoke
 
 ### Recorded results
 
-Run of 2026-08-19 — `summarizer=gpt-5-4-mini responder=gpt-5-4 judge=gpt-5-5`
-(operator token hub), 10 conversations × 5 QA (n=50, category 5 excluded),
-single cut per conversation:
+Run of 2026-08-19 (grader-corrected rerun — canonical) —
+`summarizer=gpt-5-4-mini responder=gpt-5-4 judge=gpt-5-5` (operator token
+hub), 10 conversations × 5 QA, single cut per conversation.
 
-| Strategy | QA accuracy | c1 single-hop | c2 temporal | compression |
+**Sampling disclosure:** QA are the FIRST 5 eligible per conversation
+(dataset order, category 5 excluded), NOT random. The sample is
+category-skewed vs the eligible population: sampled c1 42% / c2 42% /
+c3 12% / c4 4% against population c1 18% / c2 21% / c3 6% / c4 55%. The
+per-category columns are the primary reading; the aggregate column is a
+composition-biased sample statistic, kept only for within-run comparison.
+
+| Strategy | sample agg. | c1 single-hop (n=21) | c2 temporal (n=21) | compression |
 | --- | --- | --- | --- | --- |
-| `full-history` (ceiling) | **68.0%** | 57.1% | 90.5% | 0% |
-| `anchored` (shipped, as-is) | 22.0% | 33.3% | **4.8%** | 45.0% |
-| `anchored-dated` (counterfactual) | **42.0%** | 52.4% | 33.3% | 44.0% |
-| `anchored-8k` (tight budget) | 18.0% | 19.0% | 0.0% | 72.7% |
-| `uniform-real` (industry default) | 40.0% | 47.6% | 28.6% | 75.6% |
+| `full-history` (ceiling) | 64.0% | 47.6% | **85.7%** | 0% |
+| `anchored` (shipped, as-is) | 24.0% | 38.1% | **4.8%** | 45.0% |
+| `anchored-dated` (counterfactual) | 36.0% | 38.1% | 28.6% | 43.6% |
+| `anchored-8k` (tight budget) | 16.0% | 14.3% | 0.0% | 72.7% |
+| `uniform-real` (industry default) | 48.0% | 52.4% | 42.9% | 76.4% |
 
-(c3 multi-hop n=6 and c4 open-domain n=2 are too small to read; full
-per-conversation rows and the failure dump land in
-`bench/compaction/.cache/last-run.jsonl` on every run.)
+(c3 n=6 / c4 n=2 are too small to read. Full rows + the incremental failure
+dump land in `bench/compaction/.cache/last-run.jsonl`.)
 
-### The finding: temporal grounding does not survive compaction
+### Finding 1: temporal grounding does not survive compaction (#737)
 
-The headline is not the ranking — it is the **c2 column**. With session
-timestamps modeled the way the shipped render treats them (compressible
-content), the anchored window answers temporal questions at **4.8%** against
-the full-history ceiling of 90.5%: every "when did X happen" becomes
-UNKNOWN, because the preserved user text says "yesterday" and nothing in the
-window says when "yesterday" was. The counterfactual (`anchored-dated`) is
-the SAME pipeline with timestamps riding the verbatim lane: +20pp overall,
-c2 ×7 — proving the gap is **date carriage, not the strategy**.
+The **c2 column**: the shipped anchored window answers temporal questions at
+**4.8%** against an 85.7% full-history ceiling — every "when did X happen"
+becomes UNKNOWN, because preserved user text says "yesterday" and nothing in
+the window says when that was. The counterfactual (`anchored-dated`, the
+SAME pipeline with session timestamps riding the verbatim lane) recovers
+c2 ×6 and +12pp aggregate at identical compression: the gap is **date
+carriage, not the strategy**. Replicated across both recorded runs.
 
-With dates carried, the anchored strategy beats the real uniform baseline on
-quality (42.0% vs 40.0%, and 52.4% vs 47.6% on single-hop) while keeping the
-guarantees the uniform shape structurally cannot offer (byte-exact user
-text, verified by the deterministic tier; the uniform summary paraphrases
-user speech and re-summarizes it every epoch). The uniform baseline does
-compress harder (75.6% vs 44.0%) — that is the honest trade until the
-anchored render carries a dated timeline, tracked as a production gap.
+Production fidelity note (stated precisely): production renders NO
+timestamps at all — `Message.info.time` exists but nothing carries it into
+the model view — so production is *at or below* the benched condition, and
+the finding holds a fortiori. The bench's assistant-role headers are a
+best-case variant of what production does today.
+
+### Finding 2: on sampled QA accuracy, the uniform baseline currently leads
+
+On this sample the real regenerate-uniform baseline outscores the shipped
+anchored strategy (48.0% vs 24.0%; vs 36.0% dated), at higher compression.
+Two caveats, then the honest reading:
+
+- The anchored-vs-uniform comparison carries a **prompt confound**: the
+  uniform prompt explicitly instructs date/fact coverage, while the shipped
+  senpi-shaped checkpoint template (Goal/Progress/Next Steps) is
+  task-oriented with no date instruction and no natural home for narrative
+  facts. Only the `anchored` / `anchored-dated` pair is causally clean.
+- Accuracy and integrity are different axes: the uniform window's user
+  "facts" are paraphrases (the CI tier measures ~1% byte survival), it
+  re-summarizes user text every epoch (drift compounds), and it can offer
+  none of the guarantees the anchored pipeline enforces (byte guard,
+  anchored merge, recall pointers, replacement records).
+
+Reading: for narrative-recall workloads, today's anchored strategy pays its
+integrity guarantees with QA accuracy, and the deficit is concentrated in
+(a) date carriage (#737) and (b) the checkpoint template's weakness at
+narrative facts — both actionable, both now measurable by this bench.
+
+### Harness notes
+
+- `speculate: false` in the bench (production speculates by default; same
+  template, different call timing — no window-content difference for a
+  single forced cut) and the trigger is forced via a synthetic
+  measured-tokens value through the REAL threshold gate.
+- Grader: normalized containment settles easy matches (short golds require
+  word-boundary equality — containment hazards like "no" ⊂ "unknown" are
+  real and were fixed after review); everything else goes to the
+  cross-model judge. Aggregate numbers are judge-limited: treat single-item
+  (2pp) differences as noise.
 
 ### Reading the numbers honestly
 
@@ -110,8 +147,7 @@ anchored render carries a dated timeline, tracked as a production gap.
   two-cycle tests cover.
 - n=50 QA is a smoke-scale sample: read the large gaps (the c2 collapse, the
   dated counterfactual), not single-digit differences. The summarizer is
-  deliberately a small model — the realistic cost posture; a stronger
-  summarizer lifts the anchored/uniform pair together, not their ordering.
+  deliberately a small model — the realistic cost posture.
 - The uniform baseline's accuracy comes WITHOUT any integrity guarantee: its
   user "facts" are paraphrases that the deterministic tier scores at ~1%
   byte survival. Accuracy and integrity are different axes; this bench

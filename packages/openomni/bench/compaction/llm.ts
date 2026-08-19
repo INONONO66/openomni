@@ -39,20 +39,38 @@ function track(model: string, u: { prompt_tokens?: number; completion_tokens?: n
 }
 
 export async function chat(options: ChatOptions, attempt = 0): Promise<string> {
-  const response = await fetch(`${BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: options.model,
-      max_tokens: options.maxTokens ?? 512,
-      messages: [
-        ...(options.system ? [{ role: "system", content: options.system }] : []),
-        { role: "user", content: options.user },
-      ],
-    }),
-    signal: AbortSignal.timeout(180_000),
-  });
-  const body = (await response.json()) as {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${API_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: options.model,
+        max_tokens: options.maxTokens ?? 512,
+        messages: [
+          ...(options.system ? [{ role: "system", content: options.system }] : []),
+          { role: "user", content: options.user },
+        ],
+      }),
+      signal: AbortSignal.timeout(180_000),
+    });
+  } catch (error) {
+    // Network-level failures (ECONNRESET, timeout) retry like error bodies
+    // (#738 rerun: a socket reset killed a paid run at conversation 2).
+    if (attempt < 3) {
+      await Bun.sleep(2500 * (attempt + 1));
+      return chat(options, attempt + 1);
+    }
+    throw error;
+  }
+  const raw = await response.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = { error: { message: `non-JSON response: ${raw.slice(0, 120)}` } };
+  }
+  const body = parsed as {
     choices?: Array<{ message?: { content?: string } }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number };
     error?: { message?: string; code?: string };

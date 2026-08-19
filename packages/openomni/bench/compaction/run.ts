@@ -90,6 +90,28 @@ for (const conv of data) {
     console.error(`[${conv.sample_id}] grading ${name} (${window.chars} chars)…`);
     const graded = await mapLimit(qa, 4, (q) => grade(MODELS, window.texts, q));
     strategies.push({ name, window, graded });
+    // Incremental dump (#738 review F9): a mid-run failure must not lose
+    // hundreds of paid gradings.
+    const lines = graded.map((g) =>
+      JSON.stringify({
+        conv: conv.sample_id,
+        strategy: name,
+        category: g.qa.category,
+        question: g.qa.question,
+        gold: g.qa.answer,
+        response: g.response,
+        correct: g.correct,
+        settledBy: g.settledBy,
+      }),
+    );
+    const dumpPath = new URL("./.cache/last-run.jsonl", import.meta.url).pathname;
+    const existing =
+      rows.length === 0 && strategies.length === 1
+        ? ""
+        : await Bun.file(dumpPath)
+            .text()
+            .catch(() => "");
+    await Bun.write(dumpPath, `${existing}${existing.length > 0 ? "\n" : ""}${lines.join("\n")}`);
   }
   rows.push({
     sampleId: conv.sample_id,
@@ -105,7 +127,11 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 console.log(
   `\nmodels: summarizer=${MODELS.summarizer} responder=${MODELS.responder} judge=${MODELS.judge}`,
 );
-console.log(`sample: ${rows.length} conversations × ${QA_PER_CONV} QA (category 5 excluded)\n`);
+const sampledCats = rows.flatMap((r) => r.strategies[0]?.graded.map((g) => g.qa.category) ?? []);
+const catCounts = [1, 2, 3, 4].map((c) => `c${c}=${sampledCats.filter((x) => x === c).length}`);
+console.log(
+  `sample: ${rows.length} conversations × ${QA_PER_CONV} QA (category 5 excluded; FIRST-${QA_PER_CONV} per conv, NOT random — sampled ${catCounts.join(" ")})\n`,
+);
 console.log(`conv | turns | full-chars | ${names.map((n) => `${n}: acc chars`).join(" | ")}`);
 for (const row of rows) {
   const cells = row.strategies.map((s) => {
@@ -145,26 +171,6 @@ for (const name of names) {
   });
   console.log(`${name.padEnd(13)} ${cats.join("  ")}`);
 }
-
-// Failure dump for diagnosis (gitignored cache dir).
-const dump = rows.flatMap((r) =>
-  r.strategies.flatMap((s) =>
-    s.graded.map((g) => ({
-      conv: r.sampleId,
-      strategy: s.name,
-      category: g.qa.category,
-      question: g.qa.question,
-      gold: g.qa.answer,
-      response: g.response,
-      correct: g.correct,
-      settledBy: g.settledBy,
-    })),
-  ),
-);
-await Bun.write(
-  new URL("./.cache/last-run.jsonl", import.meta.url).pathname,
-  dump.map((d) => JSON.stringify(d)).join("\n"),
-);
 
 console.log("\nLLM usage:");
 for (const [model, u] of Object.entries(usage)) {

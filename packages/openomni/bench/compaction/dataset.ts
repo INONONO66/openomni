@@ -41,8 +41,6 @@ export async function loadDataset(): Promise<LocomoConversation[]> {
 export interface BuiltConversation {
   readonly sampleId: string;
   readonly messages: Message.WithParts[];
-  /** dia_id → mapped role + verbatim text (for evidence checks). */
-  readonly byDia: ReadonlyMap<string, { role: "user" | "assistant"; text: string }>;
   readonly qa: readonly LocomoQA[];
 }
 
@@ -85,10 +83,8 @@ export function buildConversation(
     }
     turns.push(...(session as LocomoTurn[]));
   }
-  const byDia = new Map<string, { role: "user" | "assistant"; text: string }>();
   const messages: Message.WithParts[] = turns.map((turn, index) => {
     const role = turn.speaker === c.speaker_a ? ("user" as const) : ("assistant" as const);
-    byDia.set(turn.dia_id, { role, text: turn.text });
     const id = `m-${index}`;
     return {
       info:
@@ -117,5 +113,5 @@ export function buildConversation(
       parts: [{ id: `${id}-t`, sessionID, messageID: id, type: "text" as const, text: turn.text }],
     };
   });
-  return { sampleId: conv.sample_id, messages, byDia, qa: conv.qa };
+  return { sampleId: conv.sample_id, messages, qa: conv.qa };
 }
