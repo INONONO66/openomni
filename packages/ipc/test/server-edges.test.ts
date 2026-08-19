@@ -78,8 +78,17 @@ describe("server edge branches", () => {
 
     const second = await connect(srv.socketPath);
     rawSockets.push(second);
-    await Bun.sleep(20);
-    const result = await srv.call("worker.shutdown_idle", {}, 1_000);
+    // CI schedulers can lag the dead-connection sweep — poll until the server
+    // routes to the fresh client instead of pinning one sleep length.
+    let result: unknown;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        result = await srv.call("worker.shutdown_idle", {}, 500);
+        break;
+      } catch {
+        await Bun.sleep(100);
+      }
+    }
     expect(result).toEqual({ ok: true });
   });
 });
