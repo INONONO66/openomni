@@ -355,11 +355,12 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
  * The perimeter store surfaces the gateway router may name from
  * @openomni/ledger (docs/gateway-design.md §4/§6): actors, blacklist,
  * channel grants, waits, the surface↔session map, the frozen pending-*
- * stores, and the Storage entry whose scoped ledger append records
- * route.decided. Brain surfaces (Session, WorkItem*, transcript, artifact,
- * worker-run/grant, effect, …) are NOT reachable from the router — the
- * gateway selects sessions but never reads or writes session content (S1),
- * and domain isolation inside the one DB is by store surface (S2).
+ * stores, and the SCOPED append port (append + headFact — never the master
+ * `Storage` entry, whose adapter reaches every brain surface). Brain
+ * surfaces (Session, WorkItem*, transcript, artifact, worker-run/grant,
+ * effect, …) are NOT reachable from the router — the gateway selects
+ * sessions but never reads or writes session content (S1), and domain
+ * isolation inside the one DB is by store surface (S2).
  */
 const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "ActorRegistry",
@@ -369,7 +370,7 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "SurfaceKey",
   "PendingAskStore",
   "PendingInteractionStore",
-  "Storage",
+  "LedgerAppend",
 ]);
 
 function isChannelsJudgmentPath(filePath: string): boolean {
@@ -421,16 +422,23 @@ function isChannelsDriverRouterEdge(filePath: string, importPath: string): boole
 
 /**
  * S8 router↔ledger surface pin (#707): a judgment-band file importing
- * @openomni/ledger may name ONLY the perimeter surfaces. Namespace/default
- * imports are refused outright — they would reach every brain surface the
- * named-import scan pins out.
+ * @openomni/ledger may name ONLY the perimeter surfaces, through static
+ * named `import`/`export … from` clauses. Everything else is refused
+ * outright — namespace/default imports, `export *` re-exports, dynamic
+ * `import(...)`, and `require(...)` would all reach (or launder to relative
+ * importers) every brain surface the named scan pins out. The named clause
+ * is the ONLY road.
  */
 function channelsRouterLedgerViolations(filePath: string, source: string): string[] {
   if (!isChannelsJudgmentPath(filePath)) return [];
   const violations: string[] = [];
-  const namedPattern = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@openomni\/ledger["']/g;
+  const namedPattern =
+    /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@openomni\/ledger["']/g;
   const broadPattern =
     /import\s+(?:type\s+)?(?:\*\s+as\s+\w+|\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']@openomni\/ledger["']/g;
+  const exportStarPattern = /export\s*\*\s*(?:as\s+\w+\s*)?from\s*["']@openomni\/ledger["']/g;
+  const dynamicPattern =
+    /(?:import\s*\(\s*|require\s*\(\s*)["']@openomni\/ledger(?:\/[^"']*)?["']/g;
   for (const match of source.matchAll(namedPattern)) {
     const names = (match[1] ?? "")
       .split(",")
@@ -447,7 +455,7 @@ function channelsRouterLedgerViolations(filePath: string, source: string): strin
       if (name.length > 0 && !CHANNELS_ROUTER_LEDGER_SURFACES.has(name)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
-          `VIOLATION: ${filePath}:${line} imports ledger surface ${name} — S8: the gateway router may name only the perimeter store surfaces (${[...CHANNELS_ROUTER_LEDGER_SURFACES].join(", ")}), never brain surfaces`,
+          `VIOLATION: ${filePath}:${line} names ledger surface ${name} — S8: the gateway router may name only the perimeter store surfaces (${[...CHANNELS_ROUTER_LEDGER_SURFACES].join(", ")}), never brain surfaces`,
         );
       }
     }
@@ -456,6 +464,18 @@ function channelsRouterLedgerViolations(filePath: string, source: string): strin
     const line = lineNumberForOffset(source, match.index);
     violations.push(
       `VIOLATION: ${filePath}:${line} uses a namespace/default import of @openomni/ledger — S8: the gateway router must name the perimeter surfaces explicitly`,
+    );
+  }
+  for (const match of source.matchAll(exportStarPattern)) {
+    const line = lineNumberForOffset(source, match.index);
+    violations.push(
+      `VIOLATION: ${filePath}:${line} re-exports @openomni/ledger wholesale — S8: a router barrel may not launder brain surfaces to relative importers`,
+    );
+  }
+  for (const match of source.matchAll(dynamicPattern)) {
+    const line = lineNumberForOffset(source, match.index);
+    violations.push(
+      `VIOLATION: ${filePath}:${line} loads @openomni/ledger dynamically — S8: the static named-import pin is the only road to the ledger from the router band`,
     );
   }
   return violations;
@@ -878,6 +898,62 @@ function selfTest(): void {
       channelsRouterLedgerViolations(
         "packages/openomni/src/ingress/engine.ts",
         'import { Session } from "@openomni/ledger";',
+      ).length === 0,
+    ],
+    [
+      "S8: a dynamic ledger import cannot bypass the surface pin",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/routing-resolution.ts",
+        'const ledger = await import("@openomni/ledger");',
+      ).length === 1,
+    ],
+    [
+      "S8: a require of the ledger cannot bypass the surface pin",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/actor-resolver.ts",
+        'const ledger = require("@openomni/ledger");',
+      ).length === 1,
+    ],
+    [
+      "S8: a dynamic ledger SUBPATH import is pinned too",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/index.ts",
+        'const s = await import("@openomni/ledger/session");',
+      ).length === 1,
+    ],
+    [
+      "S8: a brain-surface re-export cannot launder past the pin",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/index.ts",
+        'export { Session } from "@openomni/ledger";',
+      ).length === 1,
+    ],
+    [
+      "S8: a perimeter-surface re-export stays legal",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/index.ts",
+        'export { WaitStore } from "@openomni/ledger";',
+      ).length === 0,
+    ],
+    [
+      "S8: a wholesale ledger re-export is refused",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/index.ts",
+        'export * from "@openomni/ledger";',
+      ).length === 1,
+    ],
+    [
+      "S8: the master Storage entry is not a router surface",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/routing-resolution.ts",
+        'import { Storage } from "@openomni/ledger";',
+      ).length === 1,
+    ],
+    [
+      "S8: the scoped append port is the legal decision-record road",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/routing-resolution.ts",
+        'import { LedgerAppend } from "@openomni/ledger";',
       ).length === 0,
     ],
   ];

@@ -1,5 +1,5 @@
 import type { Gateway, Ingress } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/ledger";
+import { ActorRegistry } from "@openomni/ledger";
 
 function legacyActorFields(actor: Ingress.Actor | undefined): Ingress.Actor | undefined {
   if (!actor) return undefined;
@@ -15,7 +15,7 @@ function externalActorId(event: Gateway.DeliveredEvent): string | undefined {
 
 export function resolveIngressActor(event: Gateway.DeliveredEvent): Gateway.DeliveredEvent {
   const externalId = externalActorId(event);
-  if (!externalId || !Storage.get().actorRegistry) {
+  if (!externalId || !ActorRegistry.isConfigured()) {
     return {
       ...event,
       meta: {

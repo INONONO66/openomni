@@ -315,6 +315,15 @@ inventory above:
   moved suites observe it; `src/**` stays sink-injected and machine-checked.
 - **messaging.sent/denied descriptors are protocol vocabulary** (the router
   band defines no zod schemas); names byte-frozen.
+- **The scoped append port is literal**: the router reaches the ledger's
+  decision-append surface through `LedgerAppend` (append + headFact only)
+  and probes registry presence through `ActorRegistry.isConfigured` — the
+  master `Storage` entry is not a router surface, and the S8 pin refuses
+  namespace/default imports, wholesale re-exports, dynamic `import()`, and
+  `require()` alike (the static named clause is the only road).
+- The brain-side internal `SurfaceKey.claim` residue rides to #708 (a
+  gateway port for internal claims) — Owner-ruled, no concrete breakage,
+  CAS-converged.
 
 Perimeter stores do NOT move to channels (§4 SSOT): `actor/`, `blacklist/`,
 `channel-grant/`, `wait/` store, `surface-key/`, `pending-ask/`,

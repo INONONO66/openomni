@@ -9,7 +9,7 @@ import {
   type BusEvent,
   type Communication,
 } from "@openomni/protocol";
-import { BlacklistStore, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
+import { BlacklistStore, ChannelGrantStore, LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { applyChannelGrantTreatment } from "./authority.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findWaitCandidates, type WaitResolution } from "./wait/index.js";
@@ -421,7 +421,9 @@ function recordRouteDecided(
   streamId: string,
   decision: Ingress.RoutingDecisionPayload,
 ): Ingress.RoutingDecisionPayload {
-  const ledger = Storage.get().ledger;
+  // Scoped append port (#707 S8): append + headFact only — the router never
+  // holds the master Storage entry (S1/S2: brain surfaces stay unreachable).
+  const ledger = LedgerAppend.port();
   if (!ledger) {
     throw new IngressRoutingError(
       "route_record_failed",
