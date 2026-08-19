@@ -76,19 +76,17 @@ describe("server edge branches", () => {
     first.destroy(new Error("simulated transport failure"));
     await Bun.sleep(30);
 
+    // Client→server direction is deterministic (no active-connection routing):
+    // the fresh client sends a request and must get the handler's response,
+    // proving the abrupt first-client death left the server serving.
     const second = await connect(srv.socketPath);
     rawSockets.push(second);
-    // CI schedulers can lag the dead-connection sweep — poll until the server
-    // routes to the fresh client instead of pinning one sleep length.
-    let result: unknown;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        result = await srv.call("worker.shutdown_idle", {}, 500);
-        break;
-      } catch {
-        await Bun.sleep(100);
-      }
-    }
-    expect(result).toEqual({ ok: true });
+    const reply = new Promise<string>((resolve) => {
+      second.once("data", (chunk) => resolve(String(chunk)));
+    });
+    second.write(`${JSON.stringify(Ipc.createRequest("worker.shutdown_idle", {}))}\n`);
+    const frame = JSON.parse(await reply);
+    expect(frame.type).toBe("response");
+    expect(frame.result).toEqual({ ok: true });
   });
 });
